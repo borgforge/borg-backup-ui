@@ -1,0 +1,41 @@
+# borg_backup_ui.conf – Konfiguration für den Borg Backup Web-UI Server
+# Kopiere diese Datei nach borg_backup_ui.conf und passe die Werte an.
+
+# ── Server ──────────────────────────────────────────────────────────────────
+
+# TCP-Port auf dem der HTTP-Server lauscht
+PORT=8765
+
+# Bind-Adresse (0.0.0.0 = alle Interfaces, 127.0.0.1 = nur lokal)
+BIND=0.0.0.0
+
+# ── Pfade ────────────────────────────────────────────────────────────────────
+
+# Basisverzeichnis der Betriebsdaten-Installation (enthält config/)
+BACKUP_SCRIPTS_DIR=/boot/config/borg-backup
+# Vor Migration (user.scripts-Struktur):
+# BACKUP_SCRIPTS_DIR=/boot/config/plugins/user.scripts/scripts/borg-backup
+# Entwicklung (lokaler Pfad):
+# BACKUP_SCRIPTS_DIR=/home/user/IdeaProjects/unraid-backup
+
+# Verzeichnis mit den Laufzeit-Skripten der UI (z. B. borg_restore_test.py)
+BORG_SCRIPTS_DIR=/boot/config/plugins/borg-backup-ui/runtime/scripts
+# Vor Migration (user.scripts-Struktur):
+# BORG_SCRIPTS_DIR=/boot/config/plugins/user.scripts/scripts
+# Entwicklung:
+# BORG_SCRIPTS_DIR=/home/user/IdeaProjects/borg-backup-ui/runtime/scripts
+
+# Laufzeit-Status-Verzeichnis (Fallback).
+# Im Normalfall wird STATUS_DIR aus BACKUP_SCRIPTS_DIR/config/backup.conf gelesen.
+STATUS_DIR=/mnt/user/backup-status
+
+# ── Entwicklung ──────────────────────────────────────────────────────────────
+
+# DEV_MODE=true → nutzt test-data/ aus BACKUP_SCRIPTS_DIR anstelle von STATUS_DIR
+# Wird automatisch gesetzt wenn --dev übergeben wird
+# DEV_MODE=false
+
+# ── UI Session ───────────────────────────────────────────────────────────────
+
+# Session-Timeout in Minuten (Users-Auth)
+# UI_SESSION_TIMEOUT_MINUTES=30

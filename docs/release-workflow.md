@@ -1,0 +1,196 @@
+# Release-Workflow
+
+Dieses Repository entwickelt das Unraid-Plugin als Hauptprodukt. Praktische Tests
+auf Unraid sind nur mit einer gebauten Plugin-Version sinnvoll moeglich.
+
+## Codex-Startregel
+
+Wenn Codex an Plugin-Code arbeitet, zuerst `AGENTS.md` und diese Datei lesen.
+Danach gilt:
+
+- Jede Aenderung braucht ein Issue, auch Kleinstkorrekturen, Doku und Tooling.
+- Issue-Nummer, Nutzerwirkung und Changelog-Relevanz vor der Umsetzung klaeren.
+- Codeaenderung fertigstellen und fokussiert testen.
+- Changelog-Eintrag unter `###NEXT###` in `borg-backup-ui.plg` ergaenzen.
+- `./plugin/build.sh` ausfuehren.
+- Geaenderte Plugin-Dateien und neues `releases/borg-backup-ui-<version>.txz` im Abschluss nennen.
+- Merge Request vorbereiten oder erstellen, sofern nicht explizit anders vereinbart.
+
+Der `###NEXT###`-Block ist fuer nutzerrelevante Release Notes gedacht und soll
+kurz bleiben. Technische Detailhistorie gehoert bei Bedarf nach
+`docs/changelog.md`.
+
+Changelog-Eintraege sollen Issue-Referenzen enthalten, sofern vorhanden. Die
+Entscheidung, ob `borg-backup-ui.plg`, `docs/changelog.md` oder beides gepflegt
+wird, richtet sich nach Nutzerwirkung und Issue-Labels.
+
+## Branch und Merge Request
+
+- Codex arbeitet lokal auf `main`, solange nichts anderes explizit gefordert ist.
+- Fuer den eigentlichen Merge Request kann ein Feature-, Fix- oder Cleanup-Branch noetig sein.
+- `main` ist die Zielbranch fuer Merge Requests.
+- Vor einem Merge Request muss `./plugin/mr-preflight.sh` erfolgreich laufen.
+
+## Test-Channel und Go-Live
+
+Der stabile Installationskanal zeigt auf `main`. Damit eine Version zuerst auf
+einem eigenen Unraid-System getestet werden kann, gibt es zusaetzlich den
+Branch `test-channel` mit einem separaten Manifest:
+
+```text
+https://gitlab.thetwist.de/tsteinbe/borg-backup-ui/-/raw/test-channel/borg-backup-ui-test.plg
+```
+
+Der Test-Channel ist nur fuer eigene Testsysteme gedacht. Er darf unfertige
+Builds enthalten und ist nicht die Freigabe fuer andere Nutzer.
+Der Branch enthaelt absichtlich nur Testmanifest und Release-Paket, nicht den
+kompletten Quellcode oder die komplette Git-Historie.
+
+### Testversion bereitstellen
+
+Auf dem Arbeitsbranch:
+
+```bash
+./plugin/deploy-test.sh [version]
+```
+
+Das Skript:
+
+- baut die aktuelle Arbeitskopie mit `plugin/build.sh`
+- erzeugt `borg-backup-ui-test.plg`
+- kopiert Manifest und Release-Paket in den Branch `test-channel`
+- pusht den Test-Channel
+- laesst den Arbeitsbranch mit den gebauten Stable-Dateien fuer den spaeteren MR stehen
+
+Die Version kann explizit angegeben werden. Ohne Angabe wird ein Zeitstempel im
+Format `YYYY.MM.DD.HHMM` verwendet.
+
+### Go-Live vorbereiten
+
+Nach erfolgreichem Test auf Unraid:
+
+1. Arbeitsbranch pruefen und die durch den Test-Build entstandenen Dateien committen.
+2. Keine neue Version bauen, damit exakt das getestete Paket freigegeben wird.
+3. Go-Live-MR erstellen:
+
+```bash
+./plugin/promote-release.sh <version>
+```
+
+Das Skript pusht den aktuellen Branch und erstellt oder zeigt den passenden
+Merge Request gegen `main`. Vor dem Merge muss weiterhin gelten:
+
+```bash
+./plugin/mr-preflight.sh
+```
+
+Erst der Merge nach `main` ist die Freigabe fuer den stabilen Kanal.
+
+### Status pruefen
+
+```bash
+./plugin/release-status.sh
+```
+
+Das Skript zeigt lokale Version, `origin/main`, `origin/test-channel`, lokale
+Release-Artefakte und offene Merge Requests.
+
+### Test-Channel-Deploy pruefen
+
+Nach jedem Test-Channel-Deploy muss das erzeugte Remote-Manifest direkt
+geprueft werden:
+
+```bash
+git fetch origin test-channel
+git show origin/test-channel:borg-backup-ui-test.plg
+git show origin/test-channel:releases/borg-backup-ui-<version>.txz >/dev/null
+```
+
+Dabei pruefen:
+
+- `version` entspricht der getesteten Version
+- `pluginURL` zeigt auf `/-/raw/test-channel/borg-backup-ui-test.plg`
+- `pkgurl` zeigt auf `/-/raw/test-channel/releases/borg-backup-ui-<version>.txz`
+- `MD5` ist gesetzt und passt zum neu gebauten Paket
+- `borg-backup-ui-test.plg` enthaelt keine durch `sed` verdoppelten XML-Entities
+
+Wichtig: In `sed`-Replacement-Strings ist `&` ein Sonderzeichen fuer den
+vollstaendigen Treffer. XML-Entities wie `&gitlab;`, `&name;` und `&version;`
+muessen escaped werden oder aus einem Template kommen.
+
+Nach `deploy-test.sh` immer den Arbeitsbaum pruefen:
+
+```bash
+git status --short
+```
+
+Wenn der Test-Deploy nur den Test-Channel aktualisieren sollte, lokale
+Stable-Build-Dateien wie `borg-backup-ui.plg`, `borg_backup_ui.py` und
+`releases/borg-backup-ui-<version>.txz` nicht ungeprueft in einen MR uebernehmen.
+
+## Wann ist ein Build erforderlich?
+
+Ein neuer Plugin-Build ist erforderlich, sobald Plugin-Code geaendert wird.
+Dazu zaehlen insbesondere:
+
+- `borg_backup_ui.py`
+- `api/*.py`
+- `runtime/**`
+- `ui/**`
+- `plugin/*.page`
+- `plugin/rc.borg_backup_ui`
+- `borg_backup_ui.conf.example`
+- `borg-backup-ui.plg`
+
+In diesem Fall ausfuehren:
+
+```bash
+./plugin/build.sh
+```
+
+Fuer neue Releases muss `borg-backup-ui.plg` genau einen `###NEXT###`-Block
+enthalten. `plugin/build.sh` ersetzt diesen Block durch die neue Version und
+bricht ab, wenn dadurch doppelte Changelog-Versionen entstehen wuerden.
+
+Fuer Rebuilds einer bereits getesteten Version darf `###NEXT###` fehlen, wenn
+der passende `###<version>###`-Block bereits im Changelog vorhanden ist.
+
+Der Build aktualisiert typischerweise:
+
+- `borg_backup_ui.py`
+- `borg-backup-ui.plg`
+- `releases/borg-backup-ui-<version>.txz`
+
+Diese Dateien gehoeren dann mit in denselben Commit oder zumindest in denselben
+Branch, damit der MR auf Unraid installierbar und testbar ist.
+
+## Wann ist kein Build erforderlich?
+
+Kein neuer Plugin-Build ist erforderlich bei reinen Repo- oder
+Dokumentationsaenderungen, zum Beispiel:
+
+- `docs/**`
+- `AGENTS.md`
+- `.gitignore`
+- Analyse- und Konzeptdokumente
+- Tests oder Preflight-Skripte ohne Aenderung am ausgelieferten Plugin-Code
+- Entfernen von versehentlich getrackten Build- oder Bytecode-Artefakten
+
+## Release-Artefakt-Aufbewahrung
+
+Im Repository werden nur die letzten 5 Plugin-Release-Pakete unter `releases/`
+behalten. Aeltere `borg-backup-ui-*.txz`-Artefakte sollen in einem
+Aufraeum-MR entfernt werden, sobald neuere Releases erfolgreich getestet und
+gemergt sind.
+
+## Preflight
+
+`./plugin/mr-preflight.sh` prueft:
+
+- nicht auf `main` oder `master` zu arbeiten
+- Python-Syntax
+- `pytest -q`
+- Delta gegen `origin/main`
+- Release-Build-Regel fuer Plugin-Codeaenderungen
+- ob der Branch auf GitLab existiert
+- ob lokaler und remote Branch synchron sind

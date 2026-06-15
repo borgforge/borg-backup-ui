@@ -1,0 +1,89 @@
+################################################################################
+# Borg Backup UI - backup.conf.example
+# Standalone runtime defaults for first install
+################################################################################
+
+# =============================================================================
+# DATA DIRECTORIES (required)
+# =============================================================================
+# Pflichtfeld: Hauptverzeichnis fuer Betriebsdaten.
+# Beispiel: /mnt/user/borg-backup-ui
+GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"
+
+# Wird von der UI automatisch aus GLOBAL_DATA_DIR abgeleitet.
+GLOBAL_LOG_DIR="${GLOBAL_DATA_DIR}/logs"
+STATUS_DIR="${GLOBAL_DATA_DIR}/status"
+RESTORE_TEST_STATUS_DIR="${GLOBAL_DATA_DIR}/restore-status"
+GLOBAL_LOG_RETENTION_DAYS=30
+
+# =============================================================================
+# BORG / PERFORMANCE
+# =============================================================================
+GLOBAL_BORG_CACHE_BASE="/mnt/cache/borg-cache"
+GLOBAL_BORG_CHECKPOINT_INTERVAL=1800
+GLOBAL_BORG_CHECK_INTERVAL_DAYS=30
+# Laufzeit-Guard für lange Borg-Prozesse.
+# 0 = bewusst unbegrenzt (empfohlen für große Initial-Backups mit langsamen Uploads).
+# Bei Wert > 0 wird nach N Stunden erst SIGTERM, dann nach 30s SIGKILL gesendet.
+BORG_MAX_RUNTIME_HOURS="0"
+
+# Erlaubte Restore-Zielwurzeln (komma-separiert, absolute Pfade).
+# Default bleibt /mnt/user.
+RESTORE_ALLOWED_ROOTS="/mnt/user"
+
+# =============================================================================
+# E-MAIL (optional)
+# =============================================================================
+GLOBAL_MAIL_RECIPIENT=""
+GLOBAL_MAIL_SENDER=""
+GLOBAL_SMTP_HOST=""
+GLOBAL_SMTP_PORT="587"
+GLOBAL_SMTP_USER=""
+GLOBAL_SMTP_PASSWORD=""
+GLOBAL_SMTP_USE_TLS="true"
+
+# =============================================================================
+# CREDENTIALS / ACCESS
+# =============================================================================
+BORG_SSH_KEY="/root/.ssh/id_rsa"
+
+USB_MOUNT_PATH="/mnt/disks/USB"
+STORAGEBOX_HOST=""
+STORAGEBOX_PORT="23"
+STORAGEBOX_USER=""
+STORAGEBOX_BASE_PATH="/./backup"
+
+# =============================================================================
+# DOCKER / VM HANDLING
+# =============================================================================
+DOCKER_STOP_TIMEOUT="60"
+DOCKER_STOP_WAIT="5"
+DOCKER_START_WAIT="5"
+
+VM_SHUTDOWN_TIMEOUT="120"
+VM_SHUTDOWN_WARNING_MINUTES="5"
+VM_STARTUP_WAIT="60"
+
+ABORT_ON_PARITY_CHECK="true"
+
+# =============================================================================
+# RESTORE TESTS / WEEKLY REPORT
+# =============================================================================
+RESTORE_TEST_LEVEL="2"
+RESTORE_TEST_INTERVAL_DAYS="30"
+RESTORE_TEST_LOCATION="local"
+RESTORE_TEST_FORCE_CHUNK_TYPES="vms,photos"
+RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB="500"
+RESTORE_TEST_MIN_COVERAGE="5"
+RESTORE_TEST_MAX_ENTRIES="1000"
+RESTORE_TEST_SAMPLE_SIZE="5"
+RESTORE_TEST_BORG_TIMEOUT="240"
+RESTORE_TEST_DRY_RUN_TIMEOUT="0"
+RESTORE_TEST_DRY_RUN_CHUNK_SIZE="100"
+RESTORE_TEST_DRY_RUN_MAX_FILES="1000"
+RESTORE_TEST_LEVEL3_LEGACY_SAMPLING="false"
+
+WEEKLY_REPORT_ENABLED="false"
+WEEKLY_REPORT_DAY="1"
+WEEKLY_REPORT_TIME="09:00"
+WEEKLY_REPORT_RECIPIENT=""

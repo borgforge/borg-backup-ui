@@ -1,0 +1,3346 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// SETTINGS PAGE
+// ══════════════════════════════════════════════════════════════════════════════
+
+window.BBUI = window.BBUI || {};
+window.BBUI.settingsState = window.BBUI.settingsState || {
+  loaded: false,
+  dirty: false,
+  activeTab: 'general',
+  storageboxFlash: null,
+  storageboxPubVisible: false,
+  storageboxConnOk: null,
+  storageboxConnMsg: '',
+  storageboxLastCheckAt: '',
+  storageboxChecks: null,
+  transferJobsPreview: null,
+  transferJobsBundleText: '',
+  transferJobsSecurePayloadB64: '',
+  transferJobsSecurePassword: '',
+  transferJobsSecureMode: false,
+  transferSettingsMode: 'merge',
+  transferSecretsPreview: null,
+  transferSecretsPayloadB64: '',
+  transferSecretsPassword: '',
+  transferProfileSecretsPreview: null,
+  transferProfileSecretsPayloadB64: '',
+  transferProfileSecretsPassword: '',
+  storageDeploySessionId: '',
+  storageDeployPollTimer: null,
+  storageboxProfileKey: '',
+  smbCleanupKeys: [],
+  smbSecretCleanupKeys: [],
+  authStatus: null,
+  authUsers: [],
+};
+const settingsState = window.BBUI.settingsState;
+
+function getSettingsTabs() {
+  const tabs = [
+  { key: 'general', label: 'Allgemein' },
+  { key: 'users', label: 'Benutzer' },
+  { key: 'backup', label: 'Backup' },
+  { key: 'restore', label: 'Restore' },
+  { key: 'usb', label: 'USB-Profile' },
+  { key: 'smb', label: 'SMB-Profile' },
+  { key: 'storagebox', label: 'SSH-Profile' },
+  { key: 'transfer', label: 'Import / Export' },
+  { key: 'advanced', label: 'Erweitert' },
+  ];
+  const auth = settingsState.authStatus || {};
+  const isAdmin = String(auth.current_role || '').toLowerCase() === 'admin';
+  if (!isAdmin || String(auth.auth_mode || '') !== 'users') {
+    return tabs.filter((t) => t.key !== 'users');
+  }
+  return tabs;
+}
+
+async function refreshSettings() {
+  hideEl('settings-message');
+  _renderSettingsLoading();
+  try {
+    const [res, verRes, healthRes, authRes] = await Promise.all([
+      fetch('/api/settings'),
+      fetch('/api/version'),
+      fetch('/api/system-health'),
+      fetch('/api/auth/status'),
+    ]);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    settingsState.authStatus = authRes.ok ? await authRes.json() : null;
+    const auth = settingsState.authStatus || {};
+    const isAdminUsersMode = String(auth.current_role || '').toLowerCase() === 'admin' && String(auth.auth_mode || '') === 'users';
+    if (isAdminUsersMode) {
+      try {
+        const uRes = await fetch('/api/auth/users');
+        const uData = uRes.ok ? await uRes.json() : { users: [] };
+        settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
+      } catch (_) {
+        settingsState.authUsers = [];
+      }
+    } else {
+      settingsState.authUsers = [];
+    }
+    if (settingsState.storageboxConnOk === null && data?.storagebox_setup) {
+      settingsState.storageboxConnOk = !!data.storagebox_setup.auth_ok;
+      settingsState.storageboxConnMsg = String(data.storagebox_setup.message || '');
+    }
+    const health = healthRes.ok ? await healthRes.json() : null;
+    renderSettings(data, health);
+    settingsState.smbCleanupKeys = [];
+    settingsState.smbSecretCleanupKeys = [];
+    settingsState.loaded = true;
+    settingsState.dirty = false;
+    _updateUnsavedChangesUi();
+    document.getElementById('settings-save-btn')?.removeAttribute('disabled');
+    if (verRes.ok) {
+      const ver = await verRes.json();
+      _applyVersionInfo(ver.version, ver.author, ver.borg_version);
+    }
+  } catch (err) {
+    showMsg('settings-message', 'error', `Fehler: ${err.message}`);
+  }
+}
+
+function _renderSettingsLoading() {
+  const el = document.getElementById('settings-content');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Einstellungen werden aktualisiert
+      </div>
+      <div class="settings-body">
+        <div class="status-message empty-state">Systemzustand und Einstellungen werden neu geladen...</div>
+      </div>
+    </div>
+  `;
+}
+
+function _applyVersionInfo(version, author, borgVersion) {
+  const el = document.getElementById('app-version-info');
+  if (el) el.innerHTML = `<span class="app-version">v${escHtml(version)}</span><span class="app-author">${escHtml(author)}</span>`;
+  const aboutEl = document.getElementById('settings-about-version');
+  if (aboutEl) aboutEl.textContent = version;
+  const borgEl = document.getElementById('settings-about-borg-version');
+  if (borgEl) borgEl.textContent = borgVersion || '—';
+}
+
+function renderSettings(data, systemHealth) {
+  const pathEl = document.getElementById('settings-conf-path');
+  if (pathEl) pathEl.textContent = data.conf_file ? `Config: ${data.conf_file}` : '';
+
+  const el = document.getElementById('settings-content');
+  if (!el) return;
+
+  const tabs = getSettingsTabs();
+  el.innerHTML = `
+    <div class="settings-tabs">
+      ${tabs.map((t) => `<button class="settings-tab-btn ${settingsState.activeTab === t.key ? 'active' : ''}" data-settings-tab="${t.key}">${t.label}</button>`).join('')}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'general' ? '' : 'hidden'}" data-settings-panel="general">
+      ${renderSettingsSystemHealth(systemHealth)}
+      ${renderSettingsGeneral(data.general || {})}
+      ${renderSettingsSMTP(data.smtp || {})}
+      ${renderSettingsAbout()}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'usb' ? '' : 'hidden'}" data-settings-panel="usb">
+      ${renderSettingsUsbProfiles(data.usb_profiles || [])}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'smb' ? '' : 'hidden'}" data-settings-panel="smb">
+      ${renderSettingsSmbProfiles(data.smb_profiles || [])}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'backup' ? '' : 'hidden'}" data-settings-panel="backup">
+      ${renderSettingsDockerVMs(data.docker || {}, data.vms || {})}
+      ${renderSettingsWeeklyReport(data.weekly_report || {})}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'restore' ? '' : 'hidden'}" data-settings-panel="restore">
+      ${renderSettingsRestoreTests(data.restore_tests || {})}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'storagebox' ? '' : 'hidden'}" data-settings-panel="storagebox">
+      ${renderSettingsStorageProfiles(data.storage_profiles || [])}
+      ${renderSettingsStorageboxSetup(data.storagebox_setup || {}, data.storage_profiles || [])}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'transfer' ? '' : 'hidden'}" data-settings-panel="transfer">
+      ${renderSettingsTransferTools()}
+      ${renderSettingsConfigBackups()}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'advanced' ? '' : 'hidden'}" data-settings-panel="advanced">
+      ${renderSettingsPerRepoPassphrases(data.per_repo_passphrases || [])}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'users' ? '' : 'hidden'}" data-settings-panel="users">
+      ${renderSettingsUsers()}
+    </div>
+  `;
+  const themeSel = document.getElementById('ui-theme-select');
+  const getThemePref = window.BBUI?.components?.theme?.getStoredThemePreference;
+  if (themeSel && typeof getThemePref === 'function') {
+    themeSel.value = getThemePref();
+  }
+  refreshSettingsConfigBackups();
+  _updateUnsavedChangesUi();
+}
+
+function normalizeUsbProfileRows(rows) {
+  const out = [];
+  const seen = new Set();
+  (rows || []).forEach((r, idx) => {
+    const name = String(r?.name || '').trim();
+    const mount_path = String(r?.mount_path || '').trim();
+    if (!name || !mount_path) return;
+    let key = String(r?.key || '').trim().toLowerCase();
+    if (!key) key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `usb-${idx + 1}`;
+    while (seen.has(key)) key = `${key}-${idx + 1}`;
+    seen.add(key);
+    out.push({ key, name, mount_path });
+  });
+  return out;
+}
+
+function getUsbProfilesFromDom() {
+  const rows = [];
+  document.querySelectorAll('#usb-profiles-rows .usb-profile-row').forEach((row, idx) => {
+    rows.push({
+      key: row.dataset.profileKey || `usb-${idx + 1}`,
+      name: row.querySelector('[data-usb-profile-name]')?.value || '',
+      mount_path: row.querySelector('[data-usb-profile-path]')?.value || '',
+    });
+  });
+  return normalizeUsbProfileRows(rows);
+}
+
+function syncUsbProfilesHiddenInput() {
+  const hidden = document.getElementById('usb-profiles-json');
+  if (!hidden) return;
+  hidden.value = JSON.stringify(getUsbProfilesFromDom());
+}
+
+function onUsbProfileInputChanged() {
+  syncUsbProfilesHiddenInput();
+  markSettingsDirty();
+}
+
+function addUsbProfileRow(row = {}) {
+  const box = document.getElementById('usb-profiles-rows');
+  if (!box) return;
+  const key = String(row.key || '').trim();
+  const name = String(row.name || '').trim();
+  const path = String(row.mount_path || '').trim();
+  const wrap = document.createElement('div');
+  wrap.className = 'usb-profile-row';
+  if (key) wrap.dataset.profileKey = key;
+  wrap.innerHTML = `
+    <input class="form-input" type="text" data-usb-profile-name placeholder="USB-Drive-A" value="${escHtml(name)}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
+    <input class="form-input mono" type="text" data-usb-profile-path placeholder="/mnt/disks/DEIN_DRIVE" value="${escHtml(path)}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
+    <span class="usb-profile-state text-muted" data-usb-profile-state>Ungeprüft</span>
+    <button type="button" class="btn btn-danger btn-sm" data-settings-action="usb-profile-remove">Entfernen</button>
+  `;
+  box.appendChild(wrap);
+}
+
+function renderSettingsUsbProfiles(rows) {
+  const normalized = normalizeUsbProfileRows(rows);
+  const content = normalized.map((r) => `
+    <div class="usb-profile-row" data-profile-key="${escHtml(r.key || '')}">
+      <input class="form-input" type="text" data-usb-profile-name placeholder="USB-Drive-A" value="${escHtml(r.name || '')}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-usb-profile-path placeholder="/mnt/disks/DEIN_DRIVE" value="${escHtml(r.mount_path || '')}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
+      <span class="usb-profile-state text-muted" data-usb-profile-state>Ungeprüft</span>
+      <button type="button" class="btn btn-danger btn-sm" data-settings-action="usb-profile-remove">Entfernen</button>
+    </div>
+  `).join('');
+  return settingsCard('USB-Profile',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><path d="M12 3v4"/><path d="M10 3h4"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/></svg>`,
+    `<div class="settings-body">
+      <div class="text-muted" style="font-size:12px;margin-bottom:10px">
+        Definiert auswählbare USB-Ziele für den Wizard. Der Repository-Pfad wird aus Profil + Job-Typ zusammengesetzt.
+      </div>
+      <div id="usb-profiles-rows" style="display:grid;gap:8px">
+        ${content}
+      </div>
+      <input type="hidden" id="usb-profiles-json" data-key="USB_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-check">Status prüfen</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-add">USB-Profil hinzufügen</button>
+      </div>
+      <div id="usb-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
+      ${normalized.length === 0 ? '<div class="status-message warning" style="margin-top:10px">Noch kein USB-Profil vorhanden. USB-Location im Wizard bleibt gesperrt, bis mindestens ein Profil angelegt ist.</div>' : ''}
+    </div>`);
+}
+
+function normalizeStorageProfileRows(rows) {
+  const out = [];
+  const seen = new Set();
+  (rows || []).forEach((r, idx) => {
+    const name = String(r?.name || '').trim();
+    const host = String(r?.host || '').trim();
+    const user = String(r?.user || '').trim();
+    const port = String(r?.port || '23').trim() || '23';
+    const base_path = String(r?.base_path || '/./backup').trim() || '/./backup';
+    const target_type = String(r?.target_type || 'storagebox').trim().toLowerCase() || 'storagebox';
+    const ssh_key_path = String(r?.ssh_key_path || '').trim();
+    const jobs_count = Number(r?.jobs_count || 0);
+    const job_refs = Array.isArray(r?.job_refs) ? r.job_refs.map((v) => String(v || '')).filter(Boolean) : [];
+    if (!name || !host || !user || !base_path) return;
+    let key = String(r?.key || '').trim().toLowerCase();
+    if (!key) key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `storage-${idx + 1}`;
+    while (seen.has(key)) key = `${key}-${idx + 1}`;
+    seen.add(key);
+    out.push({ key, name, host, port, user, base_path, target_type, ssh_key_path, jobs_count, job_refs });
+  });
+  return out;
+}
+
+function getStorageProfilesFromDom() {
+  const rows = [];
+  document.querySelectorAll('#storage-profiles-rows .storage-profile-row').forEach((row, idx) => {
+    const item = {
+      key: row.dataset.profileKey || `storage-${idx + 1}`,
+      name: row.querySelector('[data-storage-profile-name]')?.value || '',
+      host: row.querySelector('[data-storage-profile-host]')?.value || '',
+      port: row.querySelector('[data-storage-profile-port]')?.value || '23',
+      user: row.querySelector('[data-storage-profile-user]')?.value || '',
+      base_path: row.querySelector('[data-storage-profile-base-path]')?.value || '/./backup',
+      target_type: row.querySelector('[data-storage-profile-target-type]')?.value || 'storagebox',
+      ssh_key_path: row.querySelector('[data-storage-profile-ssh-key]')?.value || '',
+    };
+    const hasMeaningfulInput = ['key', 'name', 'host', 'user', 'base_path', 'ssh_key_path'].some((k) => String(item[k] || '').trim());
+    if (hasMeaningfulInput) rows.push(item);
+  });
+  return rows;
+}
+
+function syncStorageProfilesHiddenInput() {
+  const hidden = document.getElementById('storage-profiles-json');
+  if (!hidden) return;
+  hidden.value = JSON.stringify(getStorageProfilesFromDom());
+}
+
+function onStorageProfileInputChanged() {
+  syncStorageProfilesHiddenInput();
+  markSettingsDirty();
+}
+
+function addStorageProfileRow(row = {}) {
+  const box = document.getElementById('storage-profiles-rows');
+  if (!box) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'storage-profile-row';
+  const key = String(row.key || '').trim().toLowerCase();
+  const name = String(row.name || '').trim();
+  const host = String(row.host || '').trim();
+  const port = String(row.port || '23').trim() || '23';
+  const user = String(row.user || '').trim();
+  const basePath = String(row.base_path || '/./backup').trim() || '/./backup';
+  const targetType = String(row.target_type || 'storagebox').trim().toLowerCase() || 'storagebox';
+  const sshKeyPath = String(row.ssh_key_path || '').trim();
+  if (key) wrap.dataset.profileKey = key;
+  wrap.dataset.storageJobsCount = String(Number(row.jobs_count || 0));
+  wrap.dataset.storageJobRefs = Array.isArray(row.job_refs) ? row.job_refs.join(', ') : '';
+  wrap.innerHTML = `
+    <input class="form-input" type="text" data-storage-profile-name placeholder="Storagebox-1" value="${escHtml(name)}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+    <input class="form-input mono" type="text" data-storage-profile-host placeholder="u12345.your-storagebox.de" value="${escHtml(host)}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+    <input class="form-input mono" type="number" data-storage-profile-port placeholder="23" value="${escHtml(port)}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+    <input class="form-input mono" type="text" data-storage-profile-user placeholder="u12345" value="${escHtml(user)}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+    <input class="form-input mono" type="text" data-storage-profile-base-path placeholder="./backup" value="${escHtml(basePath)}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+    <input class="form-input mono" type="text" data-storage-profile-ssh-key placeholder="/root/.ssh/id_ed25519_storagebox" value="${escHtml(sshKeyPath)}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+    <select class="form-select" data-storage-profile-target-type onchange="onStorageProfileInputChanged()">
+      <option value="storagebox" ${targetType === 'storagebox' ? 'selected' : ''}>Storagebox</option>
+      <option value="synology" ${targetType === 'synology' ? 'selected' : ''}>Synology</option>
+      <option value="generic" ${targetType === 'generic' ? 'selected' : ''}>Generic SSH</option>
+    </select>
+    <span class="text-muted" style="font-size:12px">Jobs: ${Number(row.jobs_count || 0)}</span>
+    <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">Entfernen</button>
+  `;
+  box.appendChild(wrap);
+}
+
+function renderSettingsStorageProfiles(rows) {
+  const normalized = normalizeStorageProfileRows(rows);
+  const content = normalized.map((r) => `
+    <div class="storage-profile-row" data-profile-key="${escHtml(r.key || '')}" data-storage-jobs-count="${Number(r.jobs_count || 0)}" data-storage-job-refs="${escHtml((r.job_refs || []).join(', '))}">
+      <input class="form-input" type="text" data-storage-profile-name placeholder="Storagebox-1" value="${escHtml(r.name || '')}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+      <input class="form-input mono" type="text" data-storage-profile-host placeholder="u12345.your-storagebox.de" value="${escHtml(r.host || '')}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+      <input class="form-input mono" type="number" data-storage-profile-port placeholder="23" value="${escHtml(r.port || '23')}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+      <input class="form-input mono" type="text" data-storage-profile-user placeholder="u12345" value="${escHtml(r.user || '')}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+      <input class="form-input mono" type="text" data-storage-profile-base-path placeholder="./backup" value="${escHtml(r.base_path || '/./backup')}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+      <input class="form-input mono" type="text" data-storage-profile-ssh-key placeholder="/root/.ssh/id_ed25519_storagebox" value="${escHtml(r.ssh_key_path || '')}" onchange="onStorageProfileInputChanged()" oninput="onStorageProfileInputChanged()">
+      <select class="form-select" data-storage-profile-target-type onchange="onStorageProfileInputChanged()">
+        <option value="storagebox" ${String(r.target_type || 'storagebox') === 'storagebox' ? 'selected' : ''}>Storagebox</option>
+        <option value="synology" ${String(r.target_type || '') === 'synology' ? 'selected' : ''}>Synology</option>
+        <option value="generic" ${String(r.target_type || '') === 'generic' ? 'selected' : ''}>Generic SSH</option>
+      </select>
+      <span class="text-muted" style="font-size:12px">Jobs: ${Number(r.jobs_count || 0)}</span>
+      <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">Entfernen</button>
+    </div>
+  `).join('');
+  return settingsCard('Storage-Profile',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M3 12h18M3 19h18"/></svg>`,
+    `<div class="settings-body">
+      <div class="text-muted" style="font-size:12px;margin-bottom:10px">
+        Mehrere SSH-Storage-Ziele für Location=Storagebox. Jobs referenzieren ein Profil per Schlüssel.
+      </div>
+      <div id="storage-profiles-rows" style="display:grid;gap:8px">
+        ${content}
+      </div>
+      <input type="hidden" id="storage-profiles-json" data-key="STORAGE_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="storage-profile-add">Storage-Profil hinzufügen</button>
+      </div>
+      <div id="storage-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
+    </div>`);
+}
+
+function normalizeSmbProfileRows(rows) {
+  const out = [];
+  const seen = new Set();
+  (rows || []).forEach((r, idx) => {
+    const name = String(r?.name || '').trim();
+    const server = String(r?.server || '').trim();
+    const share = String(r?.share || '').trim();
+    const mount_path = String(r?.mount_path || '').trim();
+    const username = String(r?.username || '').trim();
+    const vers = String(r?.vers || '').trim() || '3.0';
+    const sec = String(r?.sec || '').trim();
+    const smb_password = String(r?.smb_password || '').trim();
+    const password_set = !!r?.password_set;
+    const jobs_count = Number(r?.jobs_count || 0);
+    const job_refs = Array.isArray(r?.job_refs) ? r.job_refs.map((v) => String(v || '')).filter(Boolean) : [];
+    if (!name || !server || !share || !mount_path || !username) return;
+    let key = String(r?.key || '').trim().toLowerCase();
+    if (!key) key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `smb-${idx + 1}`;
+    while (seen.has(key)) key = `${key}-${idx + 1}`;
+    seen.add(key);
+    out.push({ key, name, server, share, mount_path, username, vers, sec, smb_password, password_set, jobs_count, job_refs });
+  });
+  return out;
+}
+
+function getSmbProfilesFromDom() {
+  const rows = [];
+  document.querySelectorAll('#smb-profiles-rows .smb-profile-row').forEach((row, idx) => {
+    rows.push({
+      key: row.dataset.profileKey || `smb-${idx + 1}`,
+      name: row.querySelector('[data-smb-profile-name]')?.value || '',
+      server: row.querySelector('[data-smb-profile-server]')?.value || '',
+      share: row.querySelector('[data-smb-profile-share]')?.value || '',
+      mount_path: row.querySelector('[data-smb-profile-path]')?.value || '',
+      username: row.querySelector('[data-smb-profile-username]')?.value || '',
+      vers: row.querySelector('[data-smb-profile-vers]')?.value || '',
+      sec: row.querySelector('[data-smb-profile-sec]')?.value || '',
+      smb_password: row.querySelector('[data-smb-profile-password]')?.value || '',
+      password_set: row.querySelector('[data-smb-profile-password-set]')?.value === 'true',
+    });
+  });
+  return normalizeSmbProfileRows(rows);
+}
+
+function syncSmbProfilesHiddenInput() {
+  const hidden = document.getElementById('smb-profiles-json');
+  if (!hidden) return;
+  hidden.value = JSON.stringify(getSmbProfilesFromDom());
+}
+
+function onSmbProfileInputChanged() {
+  syncSmbProfilesHiddenInput();
+  markSettingsDirty();
+}
+
+function addSmbProfileRow(row = {}) {
+  const box = document.getElementById('smb-profiles-rows');
+  if (!box) return;
+  const key = String(row.key || '').trim();
+  const name = String(row.name || '').trim();
+  const server = String(row.server || '').trim();
+  const share = String(row.share || '').trim();
+  const path = String(row.mount_path || '').trim();
+  const username = String(row.username || '').trim();
+  const vers = String(row.vers || '').trim() || '3.0';
+  const sec = String(row.sec || '').trim();
+  const passwordSet = !!row.password_set;
+  const jobsCount = Number(row.jobs_count || 0);
+  const wrap = document.createElement('div');
+  wrap.className = 'smb-profile-row';
+  if (key) wrap.dataset.profileKey = key;
+  wrap.innerHTML = `
+    <div class="smb-profile-main">
+      <input class="form-input" type="text" data-smb-profile-name placeholder="Profilname (z. B. NAS-A)" value="${escHtml(name)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-server placeholder="Host/IP (z. B. 192.168.178.50)" value="${escHtml(server)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-share placeholder="Share (z. B. backup)" value="${escHtml(share)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(path)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-username placeholder="Benutzer" value="${escHtml(username)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="password" data-smb-profile-password placeholder="${passwordSet ? 'Passwort gesetzt (nur bei Änderung neu eingeben)' : 'Passwort eingeben'}" value="" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">Optionen</button>
+      <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">Entfernen</button>
+      <span class="text-muted" style="font-size:12px">Jobs: ${jobsCount}</span>
+    </div>
+    <div class="smb-profile-optional hidden" data-smb-profile-optional>
+      <input class="form-input mono" type="text" data-smb-profile-vers placeholder="SMB-Version (z. B. 3.0)" value="${escHtml(vers)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-sec placeholder="Security (optional, z. B. ntlmssp)" value="${escHtml(sec)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+    </div>
+    <div class="smb-profile-checks hidden" data-smb-profile-checks></div>
+    <input type="hidden" data-smb-profile-password-set value="${passwordSet ? 'true' : 'false'}">
+  `;
+  box.appendChild(wrap);
+}
+
+function renderSettingsSmbProfiles(rows) {
+  const normalized = normalizeSmbProfileRows(rows);
+  const content = normalized.map((r) => `
+    <div class="smb-profile-row" data-profile-key="${escHtml(r.key || '')}" data-smb-jobs-count="${Number(r.jobs_count || 0)}" data-smb-job-refs="${escHtml((r.job_refs || []).join(', '))}">
+      <div class="smb-profile-main">
+        <input class="form-input" type="text" data-smb-profile-name placeholder="Profilname (z. B. NAS-A)" value="${escHtml(r.name || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-server placeholder="Host/IP (z. B. 192.168.178.50)" value="${escHtml(r.server || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-share placeholder="Share (z. B. backup)" value="${escHtml(r.share || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(r.mount_path || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-username placeholder="Benutzer" value="${escHtml(r.username || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="password" data-smb-profile-password placeholder="${r.password_set ? 'Passwort gesetzt (nur bei Änderung neu eingeben)' : 'Passwort eingeben'}" value="" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">Optionen</button>
+        <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">Entfernen</button>
+        <span class="text-muted" style="font-size:12px">Jobs: ${Number(r.jobs_count || 0)}</span>
+      </div>
+      <div class="smb-profile-optional hidden" data-smb-profile-optional>
+        <input class="form-input mono" type="text" data-smb-profile-vers placeholder="SMB-Version (z. B. 3.0)" value="${escHtml(r.vers || '3.0')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-sec placeholder="Security (optional, z. B. ntlmssp)" value="${escHtml(r.sec || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      </div>
+      <div class="smb-profile-checks hidden" data-smb-profile-checks></div>
+      <input type="hidden" data-smb-profile-password-set value="${r.password_set ? 'true' : 'false'}">
+    </div>
+  `).join('');
+  return settingsCard('SMB-Profile',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v10H3z"/><path d="M7 7V5h10v2"/><path d="M7 12h.01"/><path d="M11 12h.01"/><path d="M15 12h.01"/></svg>`,
+    `<div class="settings-body">
+      <div class="text-muted" style="font-size:12px;margin-bottom:10px">
+        Definiert SMB-Mount-Profile mit Benutzer + Passwort. Passwort wird als Secret-Datei gespeichert.
+      </div>
+      <div id="smb-profiles-rows" style="display:grid;gap:8px">
+        ${content}
+      </div>
+      <input type="hidden" id="smb-profiles-json" data-key="SMB_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-check">Status prüfen</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-add">SMB-Profil hinzufügen</button>
+      </div>
+      <div id="smb-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
+      ${normalized.length === 0 ? '<div class="status-message warning" style="margin-top:10px">Noch kein SMB-Profil vorhanden.</div>' : ''}
+    </div>`);
+}
+
+function _renderSmbChecksHtml(r) {
+  const c = r?.checks || {};
+  const steps = [
+    { label: 'SMB-Port erreichbar (445)', ok: !!c.port_ok, msg: String(c.port_msg || '') },
+    { label: 'Authentifizierung OK', ok: !!c.auth_ok, msg: String(c.auth_msg || '') },
+    { label: 'Temporärer Mount möglich', ok: !!c.mount_ok, msg: !!c.mount_ok ? String(c.mount_msg || '') : 'SMB Test-Mount fehlgeschlagen' },
+    { label: 'Share gefunden', ok: !!c.share_ok, msg: String(c.share_msg || '') },
+    { label: 'Schreibtest OK', ok: !!c.write_ok, msg: String(c.write_msg || '') },
+    { label: 'Unmount OK', ok: !!c.unmount_ok, msg: String(c.unmount_msg || '') },
+  ];
+  let blocked = false;
+  const line = (label, ok, msg) => {
+    if (blocked) {
+      return `<div class="smb-check-row skip"><span>${escHtml(label)}</span><span>Nicht getestet</span></div>`;
+    }
+    const message = String(msg || '').trim();
+    if (ok) {
+      return `<div class="smb-check-row ok"><span>${escHtml(label)}</span><span>OK${message ? ` - ${escHtml(message)}` : ''}</span></div>`;
+    }
+    if (message) {
+      blocked = true;
+      return `<div class="smb-check-row bad"><span>${escHtml(label)}</span><span>Fehler - ${escHtml(message)}</span></div>`;
+    }
+    return `<div class="smb-check-row skip"><span>${escHtml(label)}</span><span>Nicht getestet</span></div>`;
+  };
+  const rows = steps.map((s) => line(s.label, s.ok, s.msg)).join('');
+  return `
+    <div class="smb-check-grid">
+      ${rows}
+    </div>
+    ${r?.message ? `<details class="smb-check-details"><summary>Details anzeigen</summary><pre>${escHtml(String(r.message || ''))}</pre></details>` : ''}
+  `;
+}
+
+function _renderStorageboxChecksHtml(payload) {
+  if (!payload || !Array.isArray(payload.rows) || payload.rows.length === 0) return '';
+  const rows = payload.rows.map((row) => {
+    const ok = !!row?.ok;
+    const label = String(row?.label || '');
+    const msg = String(row?.message || '');
+    return `<div class="smb-check-row ${ok ? 'ok' : 'fail'}"><span>${escHtml(label)}</span><span>${ok ? 'OK' : 'Fehler'}${msg ? ` - ${escHtml(msg)}` : ''}</span></div>`;
+  }).join('');
+  const details = String(payload.details || '').trim();
+  return `
+    <div class="smb-check-grid">
+      ${rows}
+    </div>
+    ${details ? `<details class="smb-check-details"><summary>Details anzeigen</summary><pre>${escHtml(details)}</pre></details>` : ''}
+  `;
+}
+
+function renderSettingsSystemHealth(data) {
+  const cifsState = String(data?.checks?.cifs_state || '').toLowerCase();
+  const cifsDetail = cifsState === 'loaded'
+    ? 'Kernel-Modul geladen'
+    : (cifsState === 'available' ? 'Kernel-Modul verfügbar (lädt beim ersten Mount)' : 'cifs fehlt');
+  const perms = data?.secrets_permissions || {};
+  const permDetail = perms.ok
+    ? (perms.message || 'Alle geprüften Dateien auf 600')
+    : ((Array.isArray(perms.bad_files) && perms.bad_files.length)
+      ? perms.bad_files.map((f) => `${f.path} (${f.mode})`).join(' | ')
+      : (perms.message || 'Dateirechte prüfen'));
+  const checks = [
+    ['Data-Root', data?.checks?.data_root_ok, data?.paths?.data_root || '—'],
+    ['Jobs-Pfad', data?.checks?.jobs_path_ok, data?.paths?.jobs || '—'],
+    ['Secrets-Pfad', data?.checks?.secrets_path_ok, data?.paths?.secrets || '—'],
+    ['mount/umount verfügbar', data?.checks?.mount_bin_ok, `${data?.paths?.mount_bin || '—'} | ${data?.paths?.umount_bin || '—'}`],
+    ['CIFS-Unterstützung', data?.checks?.cifs_supported, cifsDetail],
+    ['Secret-Dateirechte', data?.checks?.secrets_permissions_ok, permDetail],
+  ];
+  const migrationSummary = _buildMigrationSummary(data || {});
+  const lastEffectiveTs = _formatHealthTimestamp(migrationSummary.lastEffectiveRun) || 'keine Änderungen protokolliert';
+  const registrySummary = data?.migration_registry?.summary && typeof data.migration_registry.summary === 'object'
+    ? data.migration_registry.summary
+    : {};
+  const registryItems = Array.isArray(data?.migration_registry?.items) ? data.migration_registry.items : [];
+  const registryActionItems = _migrationRegistryActionItems(registryItems);
+  const jobHealth = data?.job_health && typeof data.job_health === 'object' ? data.job_health : {};
+  const jobSummary = jobHealth.summary && typeof jobHealth.summary === 'object' ? jobHealth.summary : {};
+  const jobItems = Array.isArray(jobHealth.items) ? jobHealth.items : [];
+  const jobFailed = Number(jobSummary.failed || 0);
+  const failedChecks = checks.filter(([, ok]) => !ok).length;
+  const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.deprecated_key_candidates || 0);
+  const overallOk = failedChecks === 0 && migrationSummary.state !== 'Fehlgeschlagen' && registryAttention === 0 && jobFailed === 0;
+  const technicalRows = [
+    ['Migration-State', data?.paths?.migration_state_file || '—'],
+    ['Migration-Log', data?.paths?.migration_log_file || '—'],
+    ['Geprüfte Secret-Dateien', String(perms.checked_files_count ?? 0)],
+  ];
+
+  return settingsCard('Systemzustand & Migration',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+    `<div class="settings-body">
+      <div class="system-health-overview ${overallOk ? 'ok' : 'bad'}">
+        <div>
+          <div class="system-health-overview-title">${overallOk ? 'Systemzustand OK' : 'Prüfung benötigt Aufmerksamkeit'}</div>
+          <div class="system-health-overview-subtitle">${overallOk ? 'Alle Systemprüfungen sind erfolgreich.' : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed)}</div>
+        </div>
+        <span class="system-health-badge ${overallOk ? 'ok' : 'bad'}">${overallOk ? 'OK' : 'Prüfen'}</span>
+      </div>
+
+      <div class="system-health-block">
+        <div class="system-health-block-title">System</div>
+        <div class="system-health-grid">${_renderSystemHealthRows(checks)}</div>
+      </div>
+
+      <div class="system-health-block">
+        <div class="system-health-block-title">Jobs</div>
+        ${_renderJobHealthOverview(jobSummary, jobItems)}
+      </div>
+
+      <div class="system-health-block">
+        <div class="system-health-block-title">Letzter Migrationslauf</div>
+        <div class="migration-status-grid">
+          <div>
+            <span class="system-health-name">Letzter Lauf</span>
+            <strong>${escHtml(migrationSummary.lastRun)}</strong>
+          </div>
+          <div>
+            <span class="system-health-name">Letzte echte Migration</span>
+            <strong>${escHtml(lastEffectiveTs)}</strong>
+          </div>
+          <div>
+            <span class="system-health-name">Status</span>
+            <span class="system-health-badge ${migrationSummary.state === 'Fehlgeschlagen' ? 'bad' : 'ok'}">${escHtml(migrationSummary.state)}</span>
+          </div>
+        </div>
+        <div class="migration-summary">
+          <div><strong>Grund:</strong> ${escHtml(migrationSummary.reason)}</div>
+          <div><strong>Aktionen:</strong> ${migrationSummary.actions.length ? migrationSummary.actions.map((a) => escHtml(a)).join(' · ') : 'keine'}</div>
+          ${migrationSummary.errors ? `<div class="system-health-error"><strong>Fehler:</strong> ${escHtml(migrationSummary.errors)}</div>` : ''}
+        </div>
+      </div>
+
+      <div class="system-health-block">
+        <div class="system-health-block-title">Initiales Setup, Konfiguration & Wartung</div>
+        ${_renderMigrationRegistryOverview(registrySummary, registryActionItems)}
+      </div>
+
+      <details class="system-health-technical">
+        <summary>Technische Details</summary>
+        <div class="system-health-grid">
+          ${technicalRows.map(([name, detail]) => `
+            <div class="system-health-row neutral">
+              <span class="system-health-name">${escHtml(name)}</span>
+              <span class="system-health-state">•</span>
+              <span class="system-health-detail">${escHtml(String(detail || '—'))}</span>
+            </div>
+          `).join('')}
+        </div>
+        ${registryItems.length ? `
+          <div class="migration-registry-list">
+            ${_renderMigrationRegistryGroups(registryItems)}
+          </div>
+        ` : ''}
+        ${migrationSummary.techMsg ? `<pre class="system-health-tech-msg">${escHtml(migrationSummary.techMsg)}</pre>` : ''}
+      </details>
+    </div>`);
+}
+
+function _formatHealthTimestamp(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) return d.toLocaleString('de-DE');
+  } catch (_) {}
+  return raw;
+}
+
+function _renderSystemHealthRows(rows) {
+  const icon = (ok) => ok ? '✓' : '✗';
+  const cls = (ok) => ok ? 'ok' : 'bad';
+  return rows.map(([name, ok, detail]) => `
+    <div class="system-health-row ${cls(!!ok)}">
+      <span class="system-health-name">${escHtml(name)}</span>
+      <span class="system-health-state">${icon(!!ok)}</span>
+      <span class="system-health-detail">${escHtml(String(detail || '—'))}</span>
+    </div>
+  `).join('');
+}
+
+function _formatMigrationRegistrySummary(summary) {
+  const total = Number(summary?.total || 0);
+  if (!total) return 'keine Registry-Daten';
+  const parts = [
+    `${total} Einträge`,
+    `${Number(summary?.pending || 0)} offen`,
+    `${Number(summary?.failed || 0)} fehlerhaft`,
+  ];
+  const deprecated = Number(summary?.deprecated_key_candidates || 0);
+  if (deprecated > 0) parts.push(`${deprecated} Cleanup-Kandidaten`);
+  return parts.join(', ');
+}
+
+function _systemHealthAttentionText(failedChecks, registryAttention, jobFailed = 0) {
+  const parts = [];
+  if (failedChecks > 0) parts.push(`${failedChecks} Systemprüfung(en) mit Fehlerstatus`);
+  if (jobFailed > 0) parts.push(`${jobFailed} Job-Prüfung(en) mit Fehlerstatus`);
+  if (registryAttention > 0) parts.push(`${registryAttention} Konfigurations-/Wartungspunkt(e) offen`);
+  return parts.join(' · ') || 'Prüfung benötigt Aufmerksamkeit.';
+}
+
+function _renderJobHealthOverview(summary, items) {
+  const total = Number(summary?.total || 0);
+  const failed = Number(summary?.failed || 0);
+  const warnings = Number(summary?.warnings || 0);
+  const ok = Number(summary?.ok || 0);
+  const problemItems = (Array.isArray(items) ? items : []).filter((item) => String(item?.state || '') !== 'ok');
+  const hasProblems = failed > 0 || warnings > 0;
+  return `
+    <div class="migration-overview-grid">
+      ${_renderMigrationMetric('Jobs', total, 'neutral')}
+      ${_renderMigrationMetric('OK', ok, 'ok')}
+      ${_renderMigrationMetric('Warnungen', warnings, warnings > 0 ? 'warn' : 'ok')}
+      ${_renderMigrationMetric('Fehlerhaft', failed, failed > 0 ? 'bad' : 'ok')}
+    </div>
+    <div class="migration-action-panel ${hasProblems ? 'attention' : 'ok'}">
+      <div class="migration-action-title">${hasProblems ? 'Job-Prüfungen mit Handlungsbedarf' : 'Job-Prüfungen OK'}</div>
+      ${hasProblems ? _renderJobHealthProblems(problemItems) : '<div class="migration-action-empty">Repo-URI, Quellpfade, Passphrase- und Profilreferenzen sind lokal plausibel.</div>'}
+    </div>
+  `;
+}
+
+function _renderJobHealthProblems(items) {
+  if (!items.length) return '<div class="migration-action-empty">Keine Details vorhanden.</div>';
+  return `<div class="migration-action-list">${items.map((item) => {
+    const errors = Array.isArray(item?.errors) ? item.errors : [];
+    const warnings = Array.isArray(item?.warnings) ? item.warnings : [];
+    const details = errors.concat(warnings).map((v) => String(v || '').trim()).filter(Boolean).join(' · ');
+    return `
+      <div class="migration-action-row ${escHtml(String(item?.state || 'bad'))}">
+        <div>
+          <strong>${escHtml(String(item?.name || item?.job_key || 'Job'))}</strong>
+          <span>${escHtml(details || 'Prüfung fehlgeschlagen')}</span>
+        </div>
+      </div>
+    `;
+  }).join('')}</div>`;
+}
+
+function _migrationRegistryActionItems(items) {
+  return items.filter((item) => {
+    const status = String(item?.status || '').trim();
+    return status === 'pending' || status === 'failed';
+  });
+}
+
+function _renderMigrationRegistryOverview(summary, actionItems) {
+  const total = Number(summary?.total || 0);
+  if (!total) return '<div class="migration-action-empty">Keine Registry-Daten vorhanden.</div>';
+  const pending = Number(summary?.pending || 0);
+  const failed = Number(summary?.failed || 0);
+  const cleanup = Number(summary?.deprecated_key_candidates || 0);
+  const hasAction = actionItems.length > 0 || cleanup > 0;
+  return `
+    <div class="migration-overview-grid">
+      ${_renderMigrationMetric('Einträge', total, 'neutral')}
+      ${_renderMigrationMetric('Offen', pending, pending > 0 ? 'warn' : 'ok')}
+      ${_renderMigrationMetric('Fehlerhaft', failed, failed > 0 ? 'bad' : 'ok')}
+      ${_renderMigrationMetric('Cleanup-Kandidaten', cleanup, cleanup > 0 ? 'warn' : 'ok')}
+    </div>
+    <div class="migration-action-panel ${hasAction ? 'attention' : 'ok'}">
+      <div class="migration-action-title">${hasAction ? 'Offene Punkte' : 'Keine Aktion erforderlich'}</div>
+      ${hasAction ? _renderMigrationActionList(actionItems, cleanup) : '<div class="migration-action-empty">Setup, Schema-Abgleich und Cleanup sind aktuell ohne Handlungsbedarf.</div>'}
+    </div>
+  `;
+}
+
+function _renderMigrationMetric(label, value, tone) {
+  return `
+    <div class="migration-metric ${escHtml(tone)}">
+      <span>${escHtml(label)}</span>
+      <strong>${Number(value || 0)}</strong>
+    </div>
+  `;
+}
+
+function _renderMigrationActionList(actionItems, cleanupCount) {
+  const rows = actionItems.map((item) => _renderMigrationActionItem(item)).join('');
+  const cleanupHint = cleanupCount > 0 && !actionItems.some((item) => String(item?.id || '') === 'legacy_deprecated_keys_cleanup_v1')
+    ? `<div class="migration-action-row pending"><div><strong>Deprecated backup.conf Cleanup</strong><span>${cleanupCount} Kandidat(en) vorhanden</span></div></div>`
+    : '';
+  return `<div class="migration-action-list">${rows}${cleanupHint}</div>`;
+}
+
+function _renderMigrationActionItem(item) {
+  const status = String(item?.status || 'unknown').trim();
+  const title = String(item?.title || item?.id || 'Eintrag').trim();
+  const reason = String(item?.reason || '').trim();
+  const details = item?.details && typeof item.details === 'object' ? item.details : {};
+  const count = Number(details.candidate_count || details.missing_count || 0);
+  const suffix = count > 0 ? ` · ${count} betroffen` : '';
+  const canApplyPlan = String(item?.id || '') === 'legacy_deprecated_keys_cleanup_v1' && count > 0;
+  return `
+    <div class="migration-action-row ${escHtml(status)}">
+      <div>
+        <strong>${escHtml(title)}</strong>
+        <span>${escHtml(_migrationRegistryStatusLabel(status))}${escHtml(suffix)}${reason ? `: ${escHtml(reason)}` : ''}</span>
+      </div>
+      ${canApplyPlan ? `<button class="btn btn-secondary btn-sm migration-action-button" data-settings-action="legacy-cleanup-apply" data-candidate-count="${Number(count || 0)}">Cleanup auskommentieren</button>` : ''}
+    </div>
+  `;
+}
+
+function _migrationRegistryStatusLabel(status) {
+  const raw = String(status || 'unknown').trim();
+  const labels = {
+    applied: 'angewendet',
+    pending: 'offen',
+    failed: 'fehlerhaft',
+    not_needed: 'nicht nötig',
+    unknown: 'unbekannt',
+  };
+  return labels[raw] || raw;
+}
+
+function _renderMigrationRegistryItem(item) {
+  const status = String(item?.status || 'unknown').trim();
+  const stage = String(item?.stage || 'active').trim();
+  const statusLabel = _migrationRegistryStatusLabel(status);
+  const plannedSuffix = stage === 'planned' && status !== 'not_needed' ? ' · geplant' : '';
+  const title = String(item?.title || item?.id || 'Migration').trim();
+  const id = String(item?.id || '').trim();
+  const reason = String(item?.reason || '').trim();
+  const details = item?.details && typeof item.details === 'object' ? item.details : {};
+  const candidates = Array.isArray(details.candidate_keys) ? details.candidate_keys : [];
+  const plan = details?.dry_run_plan && typeof details.dry_run_plan === 'object' ? details.dry_run_plan : null;
+  const planCandidateCount = Number(plan?.candidate_count || 0);
+  const planText = plan && planCandidateCount > 0
+    ? `Dry-Run: ${Number(plan.candidate_count || 0)} Keys ${plan.mode === 'remove' ? 'entfernen' : 'auskommentieren'}; Backup/Rollback vorgesehen.`
+    : '';
+  return `
+    <div class="migration-registry-item ${escHtml(status)}">
+      <div class="migration-registry-head">
+        <strong>${escHtml(title)}</strong>
+        <span>${escHtml(statusLabel)}${plannedSuffix}</span>
+      </div>
+      ${id ? `<div class="migration-registry-id">${escHtml(id)}</div>` : ''}
+      ${reason ? `<div>${escHtml(reason)}</div>` : ''}
+      ${planText ? `<div class="migration-registry-plan">${escHtml(planText)}</div>` : ''}
+      ${candidates.length ? `<div class="migration-registry-id">Deprecated: ${candidates.map((row) => escHtml(String(row?.key || ''))).filter(Boolean).join(', ')}</div>` : ''}
+    </div>
+  `;
+}
+
+function _renderMigrationRegistryGroups(items) {
+  const groups = [
+    ['setup', 'Initiales Setup'],
+    ['config', 'Konfiguration'],
+    ['planned_migration', 'Geplante Migrationen'],
+  ];
+  return groups.map(([category, title]) => {
+    const rows = items.filter((item) => String(item?.category || 'setup') === category);
+    if (!rows.length) return '';
+    return `
+      <div class="migration-registry-group">
+        <div class="migration-registry-group-title">${escHtml(title)}</div>
+        ${rows.map(_renderMigrationRegistryItem).join('')}
+      </div>
+    `;
+  }).join('');
+}
+
+function _buildMigrationSummary(data) {
+  const summary = data?.migration_summary && typeof data.migration_summary === 'object' ? data.migration_summary : null;
+  if (summary) {
+    const errors = Array.isArray(summary.errors)
+      ? summary.errors.map((v) => String(v || '').trim()).filter(Boolean).join(' · ')
+      : String(summary.errors || '').trim();
+    const actions = Array.isArray(summary.actions)
+      ? summary.actions.map((v) => String(v || '').trim()).filter(Boolean)
+      : [];
+    return {
+      state: String(summary.state || summary.status || '—').trim() || '—',
+      lastRun: _formatHealthTimestamp(summary.last_run) || '—',
+      lastEffectiveRun: String(summary.last_effective_run || '').trim(),
+      reason: String(summary.reason || '—').trim() || '—',
+      errors,
+      actions,
+      techMsg: String(summary.technical_message || '').trim(),
+    };
+  }
+  const lastEvent = data?.migration_log?.last_event && typeof data.migration_log.last_event === 'object'
+    ? data.migration_log.last_event
+    : (data?.last_migration || {});
+  const tsRaw = String(lastEvent?.timestamp || '').trim();
+  if (!tsRaw) {
+    return {
+      state: 'Noch kein Lauf',
+      lastRun: '—',
+      lastEffectiveRun: '',
+      reason: 'Noch kein Migrationslauf protokolliert',
+      errors: '',
+      actions: [],
+      techMsg: '',
+    };
+  }
+  const lastRun = _formatHealthTimestamp(tsRaw);
+
+  const ok = !!lastEvent?.success;
+  const reasonText = String(lastEvent?.reason_text || '').trim();
+  const reasonCode = String(lastEvent?.reason_code || '').trim();
+  const msg = String(lastEvent?.message || '').trim();
+  const details = (lastEvent?.details && typeof lastEvent.details === 'object') ? lastEvent.details : {};
+  const storage = (details?.storage_paths && typeof details.storage_paths === 'object') ? details.storage_paths : {};
+  const actions = [];
+  const moved = Number(storage?.moved || 0);
+  const moveErrors = Number(storage?.move_errors || 0);
+  if (moved > 0) actions.push(`${moved} Elemente verschoben`);
+  if (storage?.changed === true) actions.push('Storage-Pfade aktualisiert');
+  if (storage?.settings_changed === true) actions.push('Profileinstellungen angepasst');
+  if (storage?.forced_conf_write === true) actions.push('backup.conf korrigiert');
+  const jobs = (details?.jobs_layout && typeof details.jobs_layout === 'object') ? details.jobs_layout : {};
+  if (String(jobs?.status || '').toLowerCase() === 'ok') actions.push('Job-Layout geprüft');
+  const errors = moveErrors > 0 ? `${moveErrors} Verschiebe-Fehler` : (!ok ? 'Migration fehlgeschlagen' : '');
+  const reason = reasonText || (
+    reasonCode === 'storage_paths_changed'
+      ? 'Änderung des Cache/Remotes inkl. backup.conf-Anpassung'
+      : (reasonCode === 'no_changes' ? 'Keine Änderungen nötig' : (ok ? 'Migration ausgeführt' : 'Migration mit Fehlern'))
+  );
+  return {
+    state: ok ? 'Erfolgreich' : 'Fehlgeschlagen',
+    lastRun,
+    lastEffectiveRun: String(data?.migration_log?.last_effective_event?.timestamp || '').trim(),
+    reason,
+    errors,
+    actions,
+    techMsg: msg,
+  };
+}
+
+function renderSettingsGeneral(g) {
+  const hint = !((g.GLOBAL_DATA_DIR || '').trim())
+    ? `<div class="status-message warning" style="grid-column:1/-1">
+         Bitte Hauptverzeichnis für Betriebsdaten setzen. Ohne GLOBAL_DATA_DIR sind Start-Aktionen gesperrt.
+       </div>`
+    : '';
+  return settingsCard('Allgemein',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    `<div class="settings-body two-col">
+      ${hint}
+      ${fmono('GLOBAL_DATA_DIR', 'Hauptverzeichnis (Pflicht)', g.GLOBAL_DATA_DIR, g.GLOBAL_DATA_DIR_SUGGESTION || '/mnt/user/borg-backup-ui')}
+      ${fmonoRO('GLOBAL_LOG_DIR (abgeleitet)', g.GLOBAL_LOG_DIR || '')}
+      ${fmonoRO('STATUS_DIR (abgeleitet)', g.STATUS_DIR || '')}
+      ${fmonoRO('RESTORE_TEST_STATUS_DIR (abgeleitet)', g.RESTORE_TEST_STATUS_DIR || '')}
+      <div class="form-group">
+        <label class="form-label">UI-Theme</label>
+        <select class="form-select" id="ui-theme-select">
+          <option value="dark">Dunkel</option>
+          <option value="light">Hell</option>
+          <option value="system">System</option>
+        </select>
+      </div>
+      ${fnum('GLOBAL_LOG_RETENTION_DAYS', 'Log-Aufbewahrung (Tage)', g.GLOBAL_LOG_RETENTION_DAYS)}
+      ${fmono('GLOBAL_BORG_CACHE_BASE', 'Borg Cache-Verzeichnis', g.GLOBAL_BORG_CACHE_BASE)}
+      ${fnum('GLOBAL_BORG_CHECK_INTERVAL_DAYS', 'Check-Intervall (Tage)', g.GLOBAL_BORG_CHECK_INTERVAL_DAYS)}
+      <label class="form-checkbox-row" style="grid-column:1/-1">
+        <input type="checkbox" data-key="ABORT_ON_PARITY_CHECK"
+          ${g.ABORT_ON_PARITY_CHECK === 'true' ? 'checked' : ''}
+          onchange="markSettingsDirty()">
+        Backup abbrechen wenn Parity-Check läuft
+      </label>
+    </div>`);
+}
+
+function renderSettingsUsers() {
+  const rows = Array.isArray(settingsState.authUsers) ? settingsState.authUsers : [];
+  const timeout = String(settingsState.authStatus?.session_timeout_minutes || '30');
+  const currentUser = String(settingsState.authStatus?.current_user || '').trim();
+  const currentRole = String(settingsState.authStatus?.current_role || '').trim().toLowerCase();
+  const ownSessions = Number(settingsState.authStatus?.active_sessions_own || 0);
+  const totalSessionsRaw = settingsState.authStatus?.active_sessions_total;
+  const totalSessions = totalSessionsRaw === null || totalSessionsRaw === undefined ? null : Number(totalSessionsRaw || 0);
+  return settingsCard('Benutzerverwaltung',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>`,
+    `<div class="settings-body">
+      <div style="display:grid;grid-template-columns:1fr;gap:8px;align-items:end;margin-bottom:10px">
+        <div class="form-group">
+          <label class="form-label">Session-Timeout (Minuten)</label>
+          <input class="form-input" type="number" min="5" data-key="UI_SESSION_TIMEOUT_MINUTES" value="${escHtml(timeout)}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span class="text-muted" style="font-size:12px">
+            Angemeldet: <strong>${escHtml(currentUser || '—')}</strong>${currentRole ? ` (${escHtml(currentRole)})` : ''}
+            · Aktive Sessions: <strong>${ownSessions}</strong>${totalSessions !== null ? ` · Gesamt: <strong>${totalSessions}</strong>` : ''}
+          </span>
+          <button class="btn btn-secondary btn-sm" data-settings-action="user-change-own-password">Eigenes Passwort ändern</button>
+          <button class="btn btn-secondary btn-sm" data-settings-action="user-logout-own-sessions">Meine Sessions abmelden</button>
+          ${currentRole === 'admin' ? '<button class="btn btn-secondary btn-sm" data-settings-action="user-logout-all-sessions">Alle Sessions abmelden</button>' : ''}
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 1.2fr 1fr auto;gap:8px;align-items:end">
+        <div class="form-group"><label class="form-label">Benutzername</label><input id="user-new-name" class="form-input" type="text" placeholder="newuser"></div>
+        <div class="form-group"><label class="form-label">Rolle</label><select id="user-new-role" class="form-select"><option value="viewer">viewer</option><option value="operator">operator</option><option value="admin">admin</option></select></div>
+        <div class="form-group"><label class="form-label">Passwort</label><input id="user-new-password" class="form-input" type="password" placeholder="mind. 12 Zeichen"></div>
+        <button class="btn btn-secondary btn-sm" data-settings-action="user-create">Anlegen</button>
+      </div>
+      <div id="users-msg" class="status-message hidden" style="margin-top:8px"></div>
+      <table class="settings-table" style="margin-top:10px">
+        <thead><tr><th>Benutzer</th><th>Rolle</th><th>Aktiv</th><th>Letzter Login</th><th>Aktionen</th></tr></thead>
+        <tbody>
+          ${rows.map((u) => `<tr data-user-name="${escHtml(u.username)}">
+            <td>${escHtml(u.username)}</td>
+            <td><select class="form-select" data-user-role style="width:130px">
+              ${['viewer','operator','admin'].map((r) => `<option value="${r}" ${String(u.role||'')===r?'selected':''}>${r}</option>`).join('')}
+            </select></td>
+            <td><input type="checkbox" data-user-enabled ${u.enabled ? 'checked' : ''}></td>
+            <td>${escHtml(u.last_login_at || '—')}</td>
+            <td style="display:flex;gap:6px">
+              <button class="btn btn-secondary btn-sm" data-settings-action="user-save">Speichern</button>
+              <button class="btn btn-secondary btn-sm" data-settings-action="user-reset-password">Passwort</button>
+              <button class="btn btn-secondary btn-sm" data-settings-action="user-deactivate">Deaktivieren</button>
+              <button class="btn btn-danger btn-sm" data-settings-action="user-delete">Löschen</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`);
+}
+
+function renderSettingsConfigBackups() {
+  return settingsCard('Config-Backups & Rollback',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 3"/></svg>`,
+    `<div class="settings-body">
+      <div class="text-muted" style="font-size:12px;margin-bottom:10px">
+        Beim Speichern der Einstellungen wird automatisch ein Backup von <code>backup.conf</code> erstellt.
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button class="btn btn-secondary btn-sm" data-settings-action="delete-backups-keep-latest">Alle außer neuestes löschen</button>
+      </div>
+      <div id="settings-config-backups-msg" class="status-message hidden"></div>
+      <div id="settings-config-backups-list">
+        <div class="loading-spinner"><div class="spinner"></div><span>Lade Config-Backups...</span></div>
+      </div>
+      <div id="settings-config-backups-diff" class="hidden" style="margin-top:10px"></div>
+    </div>`);
+}
+
+function renderSettingsTransferTools() {
+  const jobsPreview = settingsState.transferJobsPreview;
+  const profileSecretsPreview = settingsState.transferProfileSecretsPreview;
+  return settingsCard('Import / Export',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    `<div class="settings-body">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+        Verschlüsselter Transfer: Jobs + Passphrases sowie SMB/SSH-Profile + Credentials/Keys.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-support-bundle">Supportpaket erstellen</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-jobs-secure">Jobs+Passphrases Export</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-secure-select-file">Jobs+Passphrases Vorschau</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-apply" ${jobsPreview ? '' : 'disabled'}>Jobs+Passphrases Importieren</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-profile-secrets">Profile+Secrets Export</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-select-file">Profile+Secrets Vorschau</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-apply" ${profileSecretsPreview ? '' : 'disabled'}>Profile+Secrets Importieren</button>
+      </div>
+      <div id="settings-transfer-msg" class="status-message hidden"></div>
+      <div id="settings-transfer-preview-jobs" style="margin-top:10px">
+        ${jobsPreview ? renderJobsImportPreview(jobsPreview) : ''}
+      </div>
+      <div id="settings-transfer-preview-profile-secrets" style="margin-top:10px">
+        ${profileSecretsPreview ? renderProfileSecretsImportPreview(profileSecretsPreview) : ''}
+      </div>
+    </div>`);
+}
+
+function renderJobsImportPreview(d) {
+  const rows = Array.isArray(d?.jobs) ? d.jobs : [];
+  const sp = d?.settings_preview || null;
+  if (!rows.length && !(sp && sp.present)) return '';
+  const stats = rows.reduce((acc, r) => {
+    const c = String(r?.conflict || 'new');
+    acc.total += 1;
+    if (c === 'new') acc.new += 1;
+    else if (c === 'exists') acc.exists += 1;
+    else if (c === 'invalid') acc.invalid += 1;
+    else acc.other += 1;
+    return acc;
+  }, { total: 0, new: 0, exists: 0, invalid: 0, other: 0 });
+  const settingsBlock = sp && sp.present ? `
+    <div class="text-muted" style="font-size:12px;margin:10px 0 6px 0">Settings-Import (SMB/USB-Profile)</div>
+    <div class="status-message info" style="margin:0 0 8px 0">
+      Profile im Bundle: ${Number(sp.profiles_total || 0)} · Modus:
+      <select class="form-select" id="settings-import-mode" style="width:220px;display:inline-block;margin-left:6px">
+        <option value="merge" ${settingsState.transferSettingsMode === 'merge' ? 'selected' : ''}>merge (neu + Konflikte skip)</option>
+        <option value="replace" ${settingsState.transferSettingsMode === 'replace' ? 'selected' : ''}>replace (komplett ersetzen)</option>
+        <option value="ignore" ${settingsState.transferSettingsMode === 'ignore' ? 'selected' : ''}>ignore (nicht übernehmen)</option>
+      </select>
+    </div>
+    <table class="settings-table" style="margin-bottom:8px">
+      <thead><tr><th>Scope</th><th>Profil</th><th>Status</th><th>Jobs</th><th>Konfliktmodus</th></tr></thead>
+      <tbody>
+        ${[...(sp.usb || []).map(r => ({...r, scope:'usb'})), ...(sp.smb || []).map(r => ({...r, scope:'smb'}))].map((r) => {
+          const modeKey = `${r.scope}:${r.key}`;
+          const jobs = r.scope === 'smb' ? Number(r.jobs_count || 0) : 0;
+          const refs = r.scope === 'smb' && Array.isArray(r.job_refs) && r.job_refs.length ? ` title="${escHtml(r.job_refs.join('\n'))}"` : '';
+          return `<tr>
+            <td>${r.scope.toUpperCase()}</td>
+            <td>${escHtml(r.name || r.key)}</td>
+            <td>${escHtml(r.status || 'new')}</td>
+            <td${refs}>${jobs || '—'}</td>
+            <td>${r.status === 'conflict' ? `<select class="form-select" data-settings-profile-mode="${escHtml(modeKey)}" style="width:140px"><option value="skip" selected>skip</option><option value="overwrite">overwrite</option><option value="rename">rename</option></select>` : '—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  ` : '';
+  return `
+    ${settingsBlock}
+    <div class="text-muted" style="font-size:12px;margin-bottom:8px">Jobs-Import Vorschau (${rows.length})${Number(d?.passphrase_count || 0) ? ` · Passphrases im Paket: ${Number(d.passphrase_count)}` : ''}</div>
+    <div class="status-message info" style="margin:0 0 8px 0">
+      Gesamt: ${stats.total} · Neu: ${stats.new} · Bereits vorhanden: ${stats.exists} · Ungültig: ${stats.invalid}${stats.other ? ` · Sonstige: ${stats.other}` : ''}
+    </div>
+    <table class="settings-table">
+      <thead><tr><th>Import</th><th>Name</th><th>Typ</th><th>Location</th><th>Schedule</th><th>Features</th><th>Job</th><th>Passphrase</th><th>Modus</th></tr></thead>
+      <tbody>
+      ${rows.map((r, idx) => {
+        const feats = `${r?.features?.docker ? 'docker ' : ''}${r?.features?.vm ? 'vm' : ''}`.trim() || '—';
+        const sch = r?.schedule?.cron ? `${r.schedule.cron}${r?.schedule?.enabled ? '' : ' (off)'}` : '—';
+        const pp = ({
+          present_match: 'vorhanden',
+          present_mismatch: 'abweichend',
+          present: 'vorhanden',
+          missing: 'fehlt',
+          unknown: 'unbekannt',
+        })[r?.passphrase?.status || 'unknown'] || 'unbekannt';
+        return `<tr>
+          <td><input type="checkbox" data-job-preview-select="${idx}" ${r.conflict === 'invalid' ? 'disabled' : 'checked'}></td>
+          <td>${escHtml(r.name || r.job_key || '')}</td>
+          <td>${escHtml(r.backup_type || '—')}</td>
+          <td>${escHtml(r.location || '—')}</td>
+          <td>${escHtml(sch)}</td>
+          <td>${escHtml(feats)}</td>
+          <td>${escHtml(r.conflict || 'new')}</td>
+          <td>${escHtml(pp)}</td>
+          <td>
+            <select class="form-select" data-job-preview-mode="${idx}" style="width:140px">
+              ${['skip','overwrite','rename'].map(m => `<option value="${m}" ${(r.suggested_mode || 'skip') === m ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderSecretsImportPreview(d) {
+  const rows = Array.isArray(d?.files) ? d.files : [];
+  if (!rows.length) return '';
+  const stats = rows.reduce((acc, r) => {
+    const s = String(r?.status || 'unknown');
+    acc.total += 1;
+    if (s === 'present_mismatch') acc.mismatch += 1;
+    else if (s === 'present_match' || s === 'present') acc.present += 1;
+    else if (s === 'missing') acc.missing += 1;
+    else acc.unknown += 1;
+    return acc;
+  }, { total: 0, present: 0, mismatch: 0, missing: 0, unknown: 0 });
+  return `
+    <div class="text-muted" style="font-size:12px;margin:12px 0 8px 0">Passphrase-Import Vorschau (${rows.length})</div>
+    <div class="status-message info" style="margin:0 0 8px 0">
+      Gesamt: ${stats.total} · Vorhanden: ${stats.present} · Abweichend: ${stats.mismatch} · Fehlend: ${stats.missing}${stats.unknown ? ` · Unbekannt: ${stats.unknown}` : ''}
+    </div>
+    <table class="settings-table">
+      <thead><tr><th>Import</th><th>Datei</th><th>Status</th></tr></thead>
+      <tbody>
+      ${rows.map((r, idx) => `<tr>
+        <td><input type="checkbox" data-secret-preview-select="${idx}" checked></td>
+        <td><code style="font-size:12px">${escHtml(r.name || '')}</code></td>
+        <td>${escHtml(({
+          present_match: 'vorhanden',
+          present_mismatch: 'abweichend',
+          present: 'vorhanden',
+          missing: 'fehlt',
+          unknown: 'unbekannt',
+        })[r.status || 'unknown'] || 'unbekannt')}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderProfileSecretsImportPreview(d) {
+  const rows = Array.isArray(d?.entries) ? d.entries : [];
+  const options = d?.profile_options || {};
+  const sp = d?.settings_preview || null;
+  if (!rows.length) return '';
+  const stats = rows.reduce((acc, r) => {
+    const s = String(r?.status || 'unknown');
+    acc.total += 1;
+    if (s === 'present_match') acc.match += 1;
+    else if (s === 'present_mismatch') acc.mismatch += 1;
+    else if (s === 'profile_missing') acc.profile_missing += 1;
+    else if (s === 'missing') acc.missing += 1;
+    else acc.other += 1;
+    return acc;
+  }, { total: 0, match: 0, mismatch: 0, profile_missing: 0, missing: 0, other: 0 });
+  const label = (s) => ({
+    present_match: 'vorhanden',
+    present_mismatch: 'abweichend',
+    profile_missing: 'Profil fehlt',
+    missing: 'fehlt',
+    unknown: 'unbekannt',
+  }[s] || 'unbekannt');
+  const settingsRows = sp ? [
+    ...((sp.smb || []).map((r) => ({ scope: 'smb', ...r }))),
+    ...((sp.storage || []).map((r) => ({ scope: 'storage', ...r }))),
+  ] : [];
+  const settingsBlock = sp && sp.present ? `
+    <div class="text-muted" style="font-size:12px;margin:10px 0 6px 0">Profile im Paket (${Number(sp.profiles_total || 0)})</div>
+    <div class="status-message info" style="margin:0 0 8px 0">
+      Profilmodus:
+      <select class="form-select" id="profile-secrets-settings-mode" style="width:220px;display:inline-block;margin-left:6px">
+        <option value="merge" selected>merge (neu + Konflikte skip)</option>
+        <option value="replace">replace (komplett ersetzen)</option>
+        <option value="ignore">ignore (nicht übernehmen)</option>
+      </select>
+    </div>
+    <table class="settings-table" style="margin-bottom:8px">
+      <thead><tr><th>Scope</th><th>Profil</th><th>Status</th></tr></thead>
+      <tbody>
+        ${settingsRows.map((r) => `<tr>
+          <td>${escHtml(String(r.scope || '').toUpperCase())}</td>
+          <td>${escHtml(r.name || r.key || '')}</td>
+          <td>${escHtml(r.status || 'new')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  ` : '';
+  return `
+    ${settingsBlock}
+    <div class="text-muted" style="font-size:12px;margin:12px 0 8px 0">Profile+Secrets Vorschau (${rows.length})</div>
+    <div class="status-message info" style="margin:0 0 8px 0">
+      Gesamt: ${stats.total} · Vorhanden: ${stats.match} · Abweichend: ${stats.mismatch} · Fehlend: ${stats.missing} · Profil fehlt: ${stats.profile_missing}${stats.other ? ` · Sonstige: ${stats.other}` : ''}
+    </div>
+    <table class="settings-table">
+      <thead><tr><th>Import</th><th>Typ</th><th>Profil</th><th>Ziel-Profil</th><th>Secret</th><th>Status</th><th>Zielpfad</th></tr></thead>
+      <tbody>
+      ${rows.map((r, idx) => {
+        const pType = String(r.profile_type || '').toLowerCase();
+        const candidates = Array.isArray(options[pType]) ? options[pType] : [];
+        const selectedTarget = candidates.includes(r.profile_key) ? r.profile_key : (candidates[0] || '');
+        const selectHtml = `<select class="form-select" data-profile-secret-target="${idx}" style="width:150px">${candidates.map((k) => `<option value="${escHtml(k)}" ${k === selectedTarget ? 'selected' : ''}>${escHtml(k)}</option>`).join('')}</select>`;
+        return `<tr>
+        <td><input type="checkbox" data-profile-secret-preview-select="${idx}" ${String(r.status) === 'profile_missing' ? 'disabled' : 'checked'}></td>
+        <td>${escHtml(String(r.profile_type || '').toUpperCase())}</td>
+        <td><code style="font-size:12px">${escHtml(r.profile_key || '')}</code></td>
+        <td>${candidates.length ? selectHtml : '—'}</td>
+        <td>${escHtml(r.secret_type || '')}</td>
+        <td>${escHtml(label(String(r.status || 'unknown')))}</td>
+        <td><code style="font-size:12px">${escHtml(r.target_path || '')}</code></td>
+      </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function _downloadTextFile(filename, content, mime = 'application/json;charset=utf-8') {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'download.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function _pickFileText(accept = '') {
+  return new Promise((resolve, reject) => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    if (accept) inp.accept = accept;
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return reject(new Error('Keine Datei ausgewählt'));
+      const r = new FileReader();
+      r.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+      r.onload = () => resolve({ name: f.name || '', content: String(r.result || '') });
+      r.readAsText(f);
+    };
+    inp.click();
+  });
+}
+
+function _pickFileBufferAsBase64(accept = '') {
+  return new Promise((resolve, reject) => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    if (accept) inp.accept = accept;
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return reject(new Error('Keine Datei ausgewählt'));
+      const r = new FileReader();
+      r.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+      r.onload = () => {
+        const buf = new Uint8Array(r.result);
+        let s = '';
+        for (let i = 0; i < buf.length; i++) s += String.fromCharCode(buf[i]);
+        resolve({ name: f.name || '', payload_b64: btoa(s) });
+      };
+      r.readAsArrayBuffer(f);
+    };
+    inp.click();
+  });
+}
+
+async function _pickFileViaUiDialog(cfg) {
+  const ok = await _openSettingsDialog({
+    title: cfg?.title || 'Datei auswählen',
+    message: cfg?.message || 'Bitte eine Datei auswählen.',
+    confirmText: cfg?.confirmText || 'Datei wählen',
+  });
+  if (!ok) return null;
+  const picked = cfg?.binary ? await _pickFileBufferAsBase64(cfg?.accept || '') : await _pickFileText(cfg?.accept || '');
+  const name = String(picked?.name || '');
+  const prefix = String(cfg?.namePrefix || '').trim();
+  if (prefix && !name.startsWith(prefix)) {
+    throw new Error(`Falscher Dateityp: erwartet ${prefix}*`);
+  }
+  return picked;
+}
+
+function _openSettingsDialog(cfg) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('settings-dialog-modal');
+    const title = document.getElementById('settings-dialog-title');
+    const desc = document.getElementById('settings-dialog-description');
+    const inputWrap = document.getElementById('settings-dialog-input-wrap');
+    const inputLabel = document.getElementById('settings-dialog-input-label');
+    const input = document.getElementById('settings-dialog-input');
+    const okBtn = document.getElementById('settings-dialog-confirm-btn');
+    const cancelBtn = document.getElementById('settings-dialog-cancel-btn');
+    const closeBtn = document.getElementById('settings-dialog-close-btn');
+    if (!modal || !title || !desc || !inputWrap || !inputLabel || !input || !okBtn || !cancelBtn || !closeBtn) return resolve(null);
+
+    title.textContent = cfg?.title || 'Bestätigung';
+    if (cfg?.html) {
+      desc.innerHTML = String(cfg.html);
+    } else {
+      desc.textContent = cfg?.message || '';
+    }
+    const needInput = !!cfg?.input;
+    inputWrap.classList.toggle('hidden', !needInput);
+    inputLabel.textContent = cfg?.input?.label || '';
+    input.type = cfg?.input?.type || 'text';
+    input.value = cfg?.input?.value || '';
+    input.placeholder = cfg?.input?.placeholder || '';
+    okBtn.textContent = cfg?.confirmText || 'Bestätigen';
+    okBtn.className = `btn ${cfg?.confirmClass || 'btn-primary'}`;
+    const validate = cfg?.input?.validate || (() => true);
+    const update = () => { okBtn.disabled = needInput ? !validate(input.value) : false; };
+    update();
+
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      modal.classList.add('hidden');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      closeBtn.removeEventListener('click', onCancel);
+      modal.removeEventListener('click', onBackdrop);
+      input.removeEventListener('input', update);
+      input.removeEventListener('keydown', onEnter);
+      resolve(val);
+    };
+    const resolveValue = typeof cfg?.resolveValue === 'function'
+      ? cfg.resolveValue
+      : (() => (needInput ? input.value : true));
+    const onOk = () => finish(resolveValue({ modal, input }));
+    const onCancel = () => finish(null);
+    const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
+    const onEnter = (e) => {
+      if (e.key === 'Enter' && !okBtn.disabled) {
+        e.preventDefault();
+        onOk();
+      }
+    };
+
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+    closeBtn.addEventListener('click', onCancel);
+    modal.addEventListener('click', onBackdrop);
+    input.addEventListener('input', update);
+    input.addEventListener('keydown', onEnter);
+    modal.classList.remove('hidden');
+    if (needInput) setTimeout(() => input.focus(), 0);
+  });
+}
+
+async function exportJobsBundle() {
+  hideEl('settings-transfer-msg');
+  try {
+    const res = await fetch('/api/settings/jobs-export');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    _downloadTextFile(data.filename || 'bbui-jobs-export.json', data.bundle_text || JSON.stringify(data.bundle || {}, null, 2));
+    showMsg('settings-transfer-msg', 'success', `Export erstellt (${data.job_count || 0} Jobs).`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Export fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function exportJobsBundleSecure() {
+  hideEl('settings-transfer-msg');
+  try {
+    const password = await _openSettingsDialog({
+      title: 'Jobs+Passphrases exportieren',
+      message: 'Passwort für verschlüsseltes Jobs-Paket eingeben.',
+      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
+      confirmText: 'Export starten',
+    });
+    if (!password) return;
+    const res = await fetch('/api/settings/jobs-export-secure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    const bytes = atob(data.payload_b64 || '');
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = data.filename || 'bbui-jobs-secure.jobs.enc';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showMsg('settings-transfer-msg', 'success', `Verschlüsselter Jobs-Export erstellt (${data.job_count || 0} Jobs, ${data.passphrase_count || 0} Passphrases).`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Verschlüsselter Jobs-Export fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function exportSupportBundle() {
+  hideEl('settings-transfer-msg');
+  try {
+    const res = await fetch('/api/settings/support-bundle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    const bytes = atob(data.payload_b64 || '');
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = data.filename || 'borg-backup-ui-support.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showMsg('settings-transfer-msg', 'success', `Supportpaket erstellt (${data.file_count || 0} Dateien).`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Supportpaket fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function applyLegacyCleanupFromSettings(el) {
+  const count = Number(el?.dataset?.candidateCount || 0);
+  const confirm = await _openSettingsDialog({
+    title: 'Legacy-Cleanup anwenden',
+    html: `<p>Es werden ${escHtml(String(count))} aktive Legacy-/Deprecated-Zeilen in <code>backup.conf</code> auskommentiert. Vorher wird automatisch ein Config-Backup erstellt.</p><p>Zum Fortfahren bitte <strong>AUSKOMMENTIEREN</strong> eingeben.</p>`,
+    confirmText: 'Auskommentieren',
+    confirmClass: 'btn-danger',
+    input: {
+      label: 'Bestätigung',
+      placeholder: 'AUSKOMMENTIEREN',
+      validate: (value) => String(value || '').trim() === 'AUSKOMMENTIEREN',
+    },
+    resolveValue: ({ input }) => String(input.value || '').trim(),
+  });
+  if (confirm !== 'AUSKOMMENTIEREN') return;
+  try {
+    const res = await fetch('/api/settings/legacy-cleanup-apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'comment_out', confirm }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    showMsg('settings-message', 'success', `${data.message || 'Legacy-Cleanup angewendet.'}${data.backup ? ` Backup: ${data.backup}` : ''}`);
+    await refreshSettings();
+    await refreshSettingsConfigBackups();
+  } catch (err) {
+    showMsg('settings-message', 'error', `Legacy-Cleanup fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importJobsBundle(dryRun) {
+  hideEl('settings-transfer-msg');
+  try {
+    const picked = await _pickFileText();
+    const text = picked.content;
+    const modeRaw = await _openSettingsDialog({
+      title: 'Jobs importieren',
+      message: 'Import-Modus eingeben: skip, overwrite oder rename',
+      input: { label: 'Import-Modus', value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
+      confirmText: dryRun ? 'Prüfen' : 'Importieren',
+    });
+    if (!modeRaw) return;
+    const mode = modeRaw.trim();
+    const res = await fetch('/api/settings/jobs-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bundle_text: text, mode, dry_run: !!dryRun }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    const lines = (data.report || []).slice(0, 10).map(r => `${r.job_key || '-'} -> ${r.new_job_key || r.job_key || '-'} [${r.status}]`);
+    const summary = `Jobs: ${data.imported_count || 0}, Schedules: ${data.scheduled_count || 0}`;
+    const suffix = lines.length ? `\n${lines.join('\n')}` : '';
+    showMsg('settings-transfer-msg', dryRun ? 'warning' : 'success', `${dryRun ? 'Prüfung OK' : 'Import OK'}: ${summary}${suffix}`);
+    if (!dryRun) await refreshSettings();
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Import fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importJobsPreviewSelectFile() {
+  hideEl('settings-transfer-msg');
+  try {
+    const picked = await _pickFileViaUiDialog({
+      title: 'Jobs-Datei wählen',
+      message: 'Bitte die exportierte Jobs-Bundle-Datei auswählen.',
+      confirmText: 'Datei öffnen',
+      binary: false,
+    });
+    if (!picked) return;
+    const text = picked.content;
+    const res = await fetch('/api/settings/jobs-import-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bundle_text: text }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    settingsState.transferJobsBundleText = text;
+    settingsState.transferJobsSecureMode = false;
+    settingsState.transferJobsSecurePayloadB64 = '';
+    settingsState.transferJobsSecurePassword = '';
+    settingsState.transferJobsPreview = data;
+    settingsState.transferSettingsMode = 'merge';
+    await refreshSettings();
+    showMsg('settings-transfer-msg', 'success', `Vorschau geladen: ${data.job_count || 0} Jobs (${picked.name || 'Datei'})`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Vorschau fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importJobsSecurePreviewSelectFile() {
+  hideEl('settings-transfer-msg');
+  try {
+    const picked = await _pickFileViaUiDialog({
+      title: 'Verschlüsselte Jobs-Datei wählen',
+      message: 'Bitte die verschlüsselte Jobs-Datei auswählen.',
+      confirmText: 'Datei öffnen',
+      binary: true,
+      accept: '.jobs.enc,application/octet-stream',
+      namePrefix: 'bbui-jobs-secure-',
+    });
+    if (!picked) return;
+    const password = await _openSettingsDialog({
+      title: 'Verschlüsselte Jobs Vorschau',
+      message: 'Passwort für Jobs-Datei eingeben.',
+      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: 'Vorschau laden',
+    });
+    if (!password) return;
+    const payload_b64 = picked.payload_b64;
+    const res = await fetch('/api/settings/jobs-import-secure-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, payload_b64 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    settingsState.transferJobsBundleText = '';
+    settingsState.transferJobsSecureMode = true;
+    settingsState.transferJobsSecurePayloadB64 = payload_b64;
+    settingsState.transferJobsSecurePassword = password;
+    settingsState.transferJobsPreview = data;
+    settingsState.transferProfileSecretsPreview = null;
+    settingsState.transferProfileSecretsPayloadB64 = '';
+    settingsState.transferProfileSecretsPassword = '';
+    settingsState.transferSettingsMode = 'merge';
+    await refreshSettings();
+    showMsg('settings-transfer-msg', 'success', `Vorschau geladen: ${data.job_count || 0} Jobs (${picked.name || 'Datei'})`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Vorschau fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importJobsApplySelected() {
+  hideEl('settings-transfer-msg');
+  try {
+    const preview = settingsState.transferJobsPreview;
+    const hasPayload = settingsState.transferJobsSecureMode
+      ? !!settingsState.transferJobsSecurePayloadB64
+      : !!settingsState.transferJobsBundleText;
+    if (!preview || !hasPayload) throw new Error('Keine Job-Vorschau vorhanden');
+    const selected = [];
+    const perMode = {};
+    const perProfileMode = {};
+    (preview.jobs || []).forEach((r, idx) => {
+      const cb = document.querySelector(`[data-job-preview-select="${idx}"]`);
+      const modeSel = document.querySelector(`[data-job-preview-mode="${idx}"]`);
+      if (cb?.checked) {
+        selected.push(r.job_key);
+        if (modeSel?.value) perMode[r.job_key] = modeSel.value;
+      }
+    });
+    if (!selected.length) throw new Error('Keine Jobs ausgewählt');
+    const settingsModeEl = document.getElementById('settings-import-mode');
+    const settingsMode = String(settingsModeEl?.value || settingsState.transferSettingsMode || 'merge').trim().toLowerCase();
+    document.querySelectorAll('[data-settings-profile-mode]').forEach((el) => {
+      const k = String(el.getAttribute('data-settings-profile-mode') || '').trim();
+      const v = String(el.value || 'skip').trim().toLowerCase();
+      if (k) perProfileMode[k] = v;
+    });
+    const existsCnt = selected.filter((key) => {
+      const row = (preview.jobs || []).find((r) => r.job_key === key);
+      return String(row?.conflict || '') === 'exists';
+    }).length;
+    const ok = await _openSettingsDialog({
+      title: 'Jobs importieren',
+      message: `Auswahl: ${selected.length} Job(s)${existsCnt ? `, davon ${existsCnt} bereits vorhanden` : ''}. Import jetzt starten?`,
+      confirmText: 'Import starten',
+    });
+    if (!ok) return;
+    let importJobs = true;
+    let importPassphrases = true;
+    if (settingsState.transferJobsSecureMode) {
+      const scope = await _openSettingsDialog({
+        title: 'Import-Inhalt',
+        html: `
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="both" checked> Jobs und Passphrases</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="jobs_only"> Nur Jobs</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="passphrases_only"> Nur Passphrases</label>
+          </div>
+        `,
+        confirmText: 'Weiter',
+        resolveValue: ({ modal }) => {
+          const checked = modal?.querySelector('input[name="jobs-secure-scope"]:checked');
+          return String(checked?.value || 'both');
+        },
+      });
+      if (!scope) return;
+      importJobs = scope !== 'passphrases_only';
+      importPassphrases = scope !== 'jobs_only';
+    }
+    const endpoint = settingsState.transferJobsSecureMode ? '/api/settings/jobs-import-secure' : '/api/settings/jobs-import';
+    const body = settingsState.transferJobsSecureMode ? {
+      password: settingsState.transferJobsSecurePassword,
+      payload_b64: settingsState.transferJobsSecurePayloadB64,
+      mode: 'skip',
+      dry_run: false,
+      selected_jobs: selected,
+      per_job_mode: perMode,
+      settings_mode: settingsMode,
+      per_profile_mode: perProfileMode,
+      import_jobs: importJobs,
+      import_passphrases: importPassphrases,
+    } : {
+      bundle_text: settingsState.transferJobsBundleText,
+      mode: 'skip',
+      dry_run: false,
+      selected_jobs: selected,
+      per_job_mode: perMode,
+      settings_mode: settingsMode,
+      per_profile_mode: perProfileMode,
+    };
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    const report = Array.isArray(data?.report) ? data.report : [];
+    const byStatus = report.reduce((acc, r) => {
+      const s = String(r?.status || 'unknown');
+      acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {});
+    const detail = Object.keys(byStatus).length
+      ? ` · ${Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(', ')}`
+      : '';
+    const srep = data?.settings_report || null;
+    const stext = srep ? ` · Settings(${srep.mode}): ${srep.applied || 0} angewendet, Konflikte ${srep.conflicts || 0}${data?.settings_backup ? `, Backup: ${data.settings_backup}` : ''}` : '';
+    const ppText = Number(data?.restored_passphrases || 0) ? ` · Passphrases: ${Number(data.restored_passphrases)} wiederhergestellt` : '';
+    showMsg('settings-transfer-msg', 'success', `Import OK: ${data.imported_count || 0} Jobs, ${data.scheduled_count || 0} Schedules${detail}${stext}${ppText}`);
+    settingsState.transferJobsPreview = null;
+    settingsState.transferJobsBundleText = '';
+    settingsState.transferJobsSecurePayloadB64 = '';
+    settingsState.transferJobsSecurePassword = '';
+    settingsState.transferJobsSecureMode = false;
+    await refreshSettings();
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Import fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function exportSecretsBackup() {
+  hideEl('settings-transfer-msg');
+  try {
+    const password = await _openSettingsDialog({
+      title: 'Passphrase-Backup exportieren',
+      message: 'Passwort für verschlüsseltes Backup eingeben.',
+      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
+      confirmText: 'Export starten',
+    });
+    if (!password) return;
+    const res = await fetch('/api/settings/secrets-backup-export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    const bytes = atob(data.payload_b64 || '');
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = data.filename || 'bbui-secrets-backup.enc';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showMsg('settings-transfer-msg', 'success', `Passphrase-Backup erstellt (${data.count || 0} Dateien).`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Passphrase-Backup fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importSecretsBackup() {
+  hideEl('settings-transfer-msg');
+  try {
+    const password = await _openSettingsDialog({
+      title: 'Passphrase-Backup importieren',
+      message: 'Passwort für Backup-Datei eingeben.',
+      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: 'Weiter',
+    });
+    if (!password) return;
+    const picked = await _pickFileViaUiDialog({
+      title: 'Passphrase-Backup wählen',
+      message: 'Bitte die verschlüsselte Passphrase-Backup-Datei auswählen.',
+      confirmText: 'Datei öffnen',
+      binary: true,
+    });
+    if (!picked) return;
+    const fileText = picked.payload_b64;
+    const modeRaw = await _openSettingsDialog({
+      title: 'Import-Modus',
+      message: 'Umgang mit bestehenden Dateien: skip, overwrite oder rename',
+      input: { label: 'Import-Modus', value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
+      confirmText: 'Import starten',
+    });
+    if (!modeRaw) return;
+    const mode = modeRaw.trim();
+    const res = await fetch('/api/settings/secrets-backup-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, payload_b64: fileText, mode }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    showMsg('settings-transfer-msg', 'success', `Passphrase-Import OK: ${data.restored_count || 0} Dateien wiederhergestellt.`);
+    await refreshSettings();
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Passphrase-Import fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importSecretsPreviewSelectFile() {
+  hideEl('settings-transfer-msg');
+  try {
+    const password = await _openSettingsDialog({
+      title: 'Passphrase-Backup Vorschau',
+      message: 'Passwort für Backup-Datei eingeben.',
+      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: 'Weiter',
+    });
+    if (!password) return;
+    const picked = await _pickFileViaUiDialog({
+      title: 'Passphrase-Backup wählen',
+      message: 'Bitte die verschlüsselte Backup-Datei für die Vorschau auswählen.',
+      confirmText: 'Datei öffnen',
+      binary: true,
+    });
+    if (!picked) return;
+    const payload_b64 = picked.payload_b64;
+    const res = await fetch('/api/settings/secrets-backup-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, payload_b64 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    settingsState.transferSecretsPreview = data;
+    settingsState.transferSecretsPayloadB64 = payload_b64;
+    settingsState.transferSecretsPassword = password;
+    await refreshSettings();
+    showMsg('settings-transfer-msg', 'success', `Vorschau geladen: ${data.count || 0} Passphrase-Dateien (${picked.name || 'Datei'})`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Secrets-Vorschau fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importSecretsApplySelected() {
+  hideEl('settings-transfer-msg');
+  try {
+    const preview = settingsState.transferSecretsPreview;
+    if (!preview || !settingsState.transferSecretsPayloadB64 || !settingsState.transferSecretsPassword) {
+      throw new Error('Keine Secrets-Vorschau vorhanden');
+    }
+    const selected = [];
+    (preview.files || []).forEach((r, idx) => {
+      const cb = document.querySelector(`[data-secret-preview-select="${idx}"]`);
+      if (cb?.checked) selected.push(r.name);
+    });
+    if (!selected.length) throw new Error('Keine Passphrase-Dateien ausgewählt');
+    const modeRaw = await _openSettingsDialog({
+      title: 'Import-Modus',
+      message: 'Umgang mit bestehenden Dateien: skip, overwrite oder rename',
+      input: { label: 'Import-Modus', value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
+      confirmText: 'Import starten',
+    });
+    if (!modeRaw) return;
+    const mismatchCnt = (preview.files || []).filter((r) => selected.includes(r.name) && String(r.status || '') === 'present_mismatch').length;
+    const ok = await _openSettingsDialog({
+      title: 'Passphrases importieren',
+      message: `Auswahl: ${selected.length} Datei(en), Modus: ${modeRaw.trim()}${mismatchCnt ? `, abweichend: ${mismatchCnt}` : ''}. Import jetzt starten?`,
+      confirmText: 'Import starten',
+    });
+    if (!ok) return;
+    const res = await fetch('/api/settings/secrets-backup-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        password: settingsState.transferSecretsPassword,
+        payload_b64: settingsState.transferSecretsPayloadB64,
+        mode: modeRaw.trim(),
+        selected_names: selected,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    showMsg('settings-transfer-msg', 'success', `Passphrase-Import OK: ${data.restored_count || 0} Dateien`);
+    settingsState.transferSecretsPreview = null;
+    settingsState.transferSecretsPayloadB64 = '';
+    settingsState.transferSecretsPassword = '';
+    await refreshSettings();
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Passphrase-Import fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function exportProfileSecretsBackup() {
+  hideEl('settings-transfer-msg');
+  try {
+    const password = await _openSettingsDialog({
+      title: 'Profile+Secrets exportieren',
+      message: 'Passwort für verschlüsseltes Secrets-Paket eingeben.',
+      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
+      confirmText: 'Export starten',
+    });
+    if (!password) return;
+    const res = await fetch('/api/settings/profile-secrets-export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    const bytes = atob(data.payload_b64 || '');
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = data.filename || 'bbui-profile-secrets.profiles.enc';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showMsg('settings-transfer-msg', 'success', `Profile+Secrets exportiert (${data.count || 0} Einträge).`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Profile+Secrets Export fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importProfileSecretsPreviewSelectFile() {
+  hideEl('settings-transfer-msg');
+  try {
+    const picked = await _pickFileViaUiDialog({
+      title: 'Profile+Secrets wählen',
+      message: 'Bitte die verschlüsselte Profile+Secrets-Datei auswählen.',
+      confirmText: 'Datei öffnen',
+      binary: true,
+      accept: '.profiles.enc,application/octet-stream',
+      namePrefix: 'bbui-profile-secrets-',
+    });
+    if (!picked) return;
+    const password = await _openSettingsDialog({
+      title: 'Profile+Secrets Vorschau',
+      message: 'Passwort für Secrets-Datei eingeben.',
+      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: 'Vorschau laden',
+    });
+    if (!password) return;
+    const payload_b64 = picked.payload_b64;
+    const res = await fetch('/api/settings/profile-secrets-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, payload_b64 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    settingsState.transferProfileSecretsPreview = data;
+    settingsState.transferProfileSecretsPayloadB64 = payload_b64;
+    settingsState.transferProfileSecretsPassword = password;
+    settingsState.transferJobsPreview = null;
+    settingsState.transferJobsBundleText = '';
+    settingsState.transferJobsSecurePayloadB64 = '';
+    settingsState.transferJobsSecurePassword = '';
+    settingsState.transferJobsSecureMode = false;
+    await refreshSettings();
+    showMsg('settings-transfer-msg', 'success', `Vorschau geladen: ${data.count || 0} Profile+Secrets (${picked.name || 'Datei'})`);
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Profile+Secrets Vorschau fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function importProfileSecretsApplySelected() {
+  hideEl('settings-transfer-msg');
+  try {
+    const preview = settingsState.transferProfileSecretsPreview;
+    if (!preview || !settingsState.transferProfileSecretsPayloadB64 || !settingsState.transferProfileSecretsPassword) {
+      throw new Error('Keine Profile+Secrets Vorschau vorhanden');
+    }
+    const selected = [];
+    const profileMap = {};
+    (preview.entries || []).forEach((r, idx) => {
+      const cb = document.querySelector(`[data-profile-secret-preview-select="${idx}"]`);
+      if (cb?.checked) {
+        const entryId = `${String(r.profile_type || '').toLowerCase()}:${String(r.profile_key || '').toLowerCase()}:${String(r.secret_type || '')}`;
+        selected.push(entryId);
+        const targetSel = document.querySelector(`[data-profile-secret-target="${idx}"]`);
+        const mapped = String(targetSel?.value || '').trim().toLowerCase();
+        if (mapped) profileMap[entryId] = mapped;
+      }
+    });
+    if (!selected.length) throw new Error('Keine Profile+Secrets ausgewählt');
+    const modeRaw = await _openSettingsDialog({
+      title: 'Import-Modus',
+      message: 'Umgang mit bestehenden Dateien: skip oder overwrite',
+      input: { label: 'Import-Modus', value: 'skip', placeholder: 'skip | overwrite', validate: (v) => ['skip', 'overwrite'].includes((v || '').trim()) },
+      confirmText: 'Import starten',
+    });
+    if (!modeRaw) return;
+    const settingsModeEl = document.getElementById('profile-secrets-settings-mode');
+    const settingsMode = String(settingsModeEl?.value || 'merge').trim().toLowerCase();
+    const res = await fetch('/api/settings/profile-secrets-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        password: settingsState.transferProfileSecretsPassword,
+        payload_b64: settingsState.transferProfileSecretsPayloadB64,
+        mode: modeRaw.trim(),
+        settings_mode: settingsMode,
+        selected_entries: selected,
+        profile_map: profileMap,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    showMsg('settings-transfer-msg', 'success', `Profile+Secrets Import OK: ${data.restored_count || 0} Dateien`);
+    settingsState.transferProfileSecretsPreview = null;
+    settingsState.transferProfileSecretsPayloadB64 = '';
+    settingsState.transferProfileSecretsPassword = '';
+    await refreshSettings();
+  } catch (err) {
+    showMsg('settings-transfer-msg', 'error', `Profile+Secrets Import fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function refreshSettingsConfigBackups() {
+  const el = document.getElementById('settings-config-backups-list');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/settings/backup-history');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const rows = data.backups || [];
+    if (!rows.length) {
+      el.innerHTML = `<div class="text-muted" style="font-size:13px">Noch keine Config-Backups vorhanden.</div>`;
+      return;
+    }
+    el.innerHTML = `
+      <table class="settings-table">
+        <thead><tr><th>Datei</th><th>Grund</th><th>Geändert</th><th>Größe</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${escHtml(r.name)}</td>
+              <td>${escHtml(r.reason || '—')}</td>
+              <td>${new Date((r.mtime || 0) * 1000).toLocaleString('de-DE')}</td>
+              <td>${_fmtBytes(Number(r.size || 0))}</td>
+              <td style="text-align:right">
+                <button class="btn btn-secondary btn-sm" data-settings-action="diff-config-backup" data-backup-name="${escHtml(r.name)}">Diff</button>
+                <button class="btn btn-secondary btn-sm" data-settings-action="restore-config-backup" data-backup-name="${escHtml(r.name)}">Wiederherstellen</button>
+                <button class="btn btn-secondary btn-sm" data-settings-action="delete-config-backup" data-backup-name="${escHtml(r.name)}">Löschen</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    el.innerHTML = `<div class="status-message error-state">Fehler beim Laden: ${escHtml(err.message || String(err))}</div>`;
+  }
+}
+
+async function restoreSettingsConfigBackup(name) {
+  if (!name) return;
+  const ok = await _openSettingsDialog({
+    title: 'Backup wiederherstellen',
+    message: `${name}\n\nDie aktuelle backup.conf wird vorher zusätzlich gesichert.`,
+    confirmText: 'Wiederherstellen',
+  });
+  if (!ok) return;
+  hideEl('settings-config-backups-msg');
+  try {
+    const res = await fetch('/api/settings/backup-restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    showMsg('settings-config-backups-msg', 'success', `Wiederhergestellt: ${name}`);
+    await refreshSettings();
+  } catch (err) {
+    showMsg('settings-config-backups-msg', 'error', `Restore fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function diffSettingsConfigBackup(name) {
+  if (!name) return;
+  hideEl('settings-config-backups-msg');
+  const box = document.getElementById('settings-config-backups-diff');
+  if (box) {
+    box.className = '';
+    box.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>Lade Diff...</span></div>`;
+  }
+  try {
+    const res = await fetch('/api/settings/backup-diff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, context_lines: 3 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!box) return;
+    if (!data.changed) {
+      box.innerHTML = `<div class="status-message success">Keine Unterschiede zwischen aktiver backup.conf und ${escHtml(name)}.</div>`;
+      return;
+    }
+    const rows = Array.isArray(data.side_by_side) ? data.side_by_side : [];
+    const leftTitle = 'Aktive backup.conf';
+    const rightTitle = `Backup: ${name}`;
+    const lineNo = (n) => (Number.isInteger(n) ? String(n) : '');
+    const sideRows = rows.map((r) => `
+      <tr class="sbs-${escHtml(String(r.tag || 'equal'))}">
+        <td class="sbs-ln">${escHtml(lineNo(r.left_no))}</td>
+        <td class="sbs-code"><code>${escHtml(r.left || '')}</code></td>
+        <td class="sbs-ln">${escHtml(lineNo(r.right_no))}</td>
+        <td class="sbs-code"><code>${escHtml(r.right || '')}</code></td>
+      </tr>
+    `).join('');
+    const unifiedFallback = String(data.diff || '').trim();
+    box.innerHTML = `
+      <div class="text-muted" style="font-size:12px;margin-bottom:6px">Diff: aktiv → Backup (${escHtml(name)})</div>
+      <div class="settings-sbs-wrap">
+        <table class="settings-sbs-table">
+          <thead>
+            <tr>
+              <th class="sbs-ln">#</th><th>${escHtml(leftTitle)}</th>
+              <th class="sbs-ln">#</th><th>${escHtml(rightTitle)}</th>
+            </tr>
+          </thead>
+          <tbody>${sideRows}</tbody>
+        </table>
+      </div>
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;color:var(--text-muted)">Unified Diff anzeigen</summary>
+        <pre class="log-output" style="max-height:240px;overflow:auto">${escHtml(unifiedFallback)}</pre>
+      </details>
+    `;
+  } catch (err) {
+    if (box) {
+      box.innerHTML = `<div class="status-message error-state">Diff fehlgeschlagen: ${escHtml(err.message || String(err))}</div>`;
+    }
+  }
+}
+
+async function deleteSettingsConfigBackup(name) {
+  if (!name) return;
+  const ok = await _openSettingsDialog({
+    title: 'Backup löschen',
+    message: name,
+    confirmText: 'Löschen',
+  });
+  if (!ok) return;
+  hideEl('settings-config-backups-msg');
+  try {
+    const res = await fetch('/api/settings/backup-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    showMsg('settings-config-backups-msg', 'success', `Gelöscht: ${name}`);
+    await refreshSettingsConfigBackups();
+  } catch (err) {
+    showMsg('settings-config-backups-msg', 'error', `Löschen fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function deleteConfigBackupsKeepLatest() {
+  const ok = await _openSettingsDialog({
+    title: 'Backups aufräumen',
+    message: 'Alle Config-Backups außer dem neuesten löschen?',
+    confirmText: 'Aufräumen',
+  });
+  if (!ok) return;
+  hideEl('settings-config-backups-msg');
+  try {
+    const res = await fetch('/api/settings/backup-delete-keep-latest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    const count = Number(data.deleted_count || 0);
+    const kept = data.kept ? `, behalten: ${data.kept}` : '';
+    showMsg('settings-config-backups-msg', 'success', `Gelöscht: ${count}${kept}`);
+    await refreshSettingsConfigBackups();
+  } catch (err) {
+    showMsg('settings-config-backups-msg', 'error', `Aufräumen fehlgeschlagen: ${err.message}`);
+  }
+}
+
+function renderSettingsSMTP(s) {
+  const passwordSet = String(s.GLOBAL_SMTP_PASSWORD_SET || 'false') === 'true';
+  return settingsCard('E-Mail (SMTP)',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
+    `<div class="settings-body two-col">
+      ${ftext('GLOBAL_MAIL_RECIPIENT', 'Empfänger', s.GLOBAL_MAIL_RECIPIENT)}
+      ${ftext('GLOBAL_MAIL_SENDER', 'Absender', s.GLOBAL_MAIL_SENDER)}
+      ${ftext('GLOBAL_SMTP_HOST', 'SMTP-Host', s.GLOBAL_SMTP_HOST)}
+      ${fnum('GLOBAL_SMTP_PORT', 'SMTP-Port', s.GLOBAL_SMTP_PORT)}
+      ${ftext('GLOBAL_SMTP_USER', 'SMTP-Benutzer', s.GLOBAL_SMTP_USER)}
+      ${fpwd('GLOBAL_SMTP_PASSWORD', passwordSet ? 'SMTP-Passwort (gesetzt)' : 'SMTP-Passwort', '')}
+      <label class="form-checkbox-row" style="grid-column:1/-1">
+        <input type="checkbox" data-key="GLOBAL_SMTP_USE_TLS"
+          ${s.GLOBAL_SMTP_USE_TLS === 'true' ? 'checked' : ''}
+          onchange="markSettingsDirty()">
+        TLS/STARTTLS verwenden
+      </label>
+      <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;margin-top:4px">
+        <button class="btn btn-secondary btn-sm" id="smtp-test-btn" data-settings-action="send-test-email">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+          Test-E-Mail senden
+        </button>
+        <span id="smtp-test-result" style="font-size:13px"></span>
+      </div>
+    </div>`);
+}
+
+async function sendTestEmail() {
+  const btn    = document.getElementById('smtp-test-btn');
+  const result = document.getElementById('smtp-test-result');
+  if (!btn || !result) return;
+  btn.classList.add('loading');
+  result.textContent = '';
+  result.style.color = '';
+
+  const recipient = document.querySelector('[data-key="GLOBAL_MAIL_RECIPIENT"]')?.value?.trim() || '';
+
+  try {
+    const res  = await fetch('/api/settings/test-smtp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient }),
+    });
+    const data = await res.json();
+    result.textContent = data.message || (data.success ? 'Gesendet.' : 'Fehler.');
+    result.style.color = data.success ? 'var(--success)' : 'var(--error)';
+  } catch (err) {
+    result.textContent = `Fehler: ${err.message}`;
+    result.style.color = 'var(--error)';
+  } finally {
+    btn.classList.remove('loading');
+  }
+}
+
+function renderSettingsPerRepoPassphrases(list) {
+  const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M12 15h8M16 12v6"/></svg>`;
+  if (!list.length) {
+    return settingsCard('Per-Repo Passphrasen', icon,
+      `<div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">Noch keine per-Repo Passphrasen vorhanden. Werden beim Anlegen eines neuen Jobs mit Verschlüsselung automatisch erstellt.</p></div>`);
+  }
+  const rows = list.map(p => {
+    const d = new Date(p.mtime * 1000);
+    const ts = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+    return `<tr>
+      <td><code style="font-size:12px">${p.type_id}</code></td>
+      <td style="font-size:12px;color:var(--text-secondary)">${p.path}</td>
+      <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${ts}</td>
+    </tr>`;
+  }).join('');
+  return settingsCard('Per-Repo Passphrasen', icon,
+    `<div class="settings-body">
+      <table class="settings-table">
+        <thead><tr><th>Typ</th><th>Pfad (Flash)</th><th>Geändert</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`);
+}
+
+function renderSettingsStorageboxSetup(s, storageProfiles = []) {
+  const profiles = normalizeStorageProfileRows(storageProfiles || []);
+  if (!settingsState.storageboxProfileKey) {
+    settingsState.storageboxProfileKey = String(s?.profile_key || profiles[0]?.key || '').trim().toLowerCase();
+  }
+  const selectedKey = settingsState.storageboxProfileKey;
+  const profileOptions = profiles.map((p) => {
+    const label = `${p.name} (${p.host})`;
+    return `<option value="${escHtml(p.key)}" ${selectedKey === p.key ? 'selected' : ''}>${escHtml(label)}</option>`;
+  }).join('');
+  const pubBtnLabel = settingsState.storageboxPubVisible ? 'Public Key ausblenden' : 'Public Key anzeigen';
+  return settingsCard('SSH Setup & Check',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+    `<div class="settings-body">
+      <div class="form-group" style="margin-top:-2px;margin-bottom:8px">
+        <label class="form-label">Profil</label>
+        <select class="form-select" id="storagebox-profile-select" onchange="onStorageboxProfileSelectChanged()">
+          ${profileOptions}
+        </select>
+      </div>
+      <div class="smb-profile-checks ${settingsState.storageboxChecks ? '' : 'hidden'}" data-storagebox-checks style="margin-top:8px">
+        ${settingsState.storageboxChecks ? _renderStorageboxChecksHtml(settingsState.storageboxChecks) : ''}
+      </div>
+      <div class="storagebox-actions">
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-status">Status prüfen</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-generate">Key erzeugen</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-public">${pubBtnLabel}</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-deploy">Key deployen</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-test">Verbindung testen</button>
+      </div>
+      <div id="storagebox-setup-msg" class="status-message hidden" style="margin-top:10px"></div>
+      <textarea id="storagebox-public-key" class="form-input mono ${settingsState.storageboxPubVisible ? '' : 'hidden'}" style="margin-top:8px;min-height:84px" readonly></textarea>
+    </div>`);
+}
+
+function renderSettingsRetention(rows) {
+  const header = ['Typ', 'Täglich', 'Wöchentl.', 'Monatl.', 'Jährl.'];
+  const thead = `<tr>${header.map(h => `<th>${h}</th>`).join('')}</tr>`;
+  const tbody = rows.map(r => `
+    <tr>
+      <td class="type-cell">${capitalize(r.type)}</td>
+      ${['daily','weekly','monthly','yearly'].map(p => `
+        <td><input class="retention-input form-input"
+          type="number" min="0" max="999"
+          data-key="RETENTION_${r.conf_prefix}_${p.toUpperCase()}"
+          value="${escHtml(r[p])}"
+          onchange="markSettingsDirty()">
+        </td>`).join('')}
+    </tr>`).join('');
+
+  return settingsCard('Retention (Aufbewahrung)',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    `<div class="settings-body" style="padding:0">
+      <table class="retention-table" style="margin:0">
+        <thead>${thead}</thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>`);
+}
+
+function renderSettingsCompression(rows) {
+  const options = ['lz4','zstd,1','zstd,3','zstd,6','zstd,9','zstd,22','zlib','lzma','none'];
+  const content = rows.map(r => `
+    <div class="compression-row">
+      <span class="compression-type">${capitalize(r.type)}</span>
+      <select class="form-select" style="width:160px"
+        data-key="${r.conf_key}" onchange="markSettingsDirty()">
+        ${options.map(o => `<option value="${o}" ${r.value===o?'selected':''}>${o}</option>`).join('')}
+      </select>
+    </div>`).join('');
+
+  return settingsCard('Kompression',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`,
+    `<div class="settings-body">${content}</div>`);
+}
+
+function renderSettingsRestoreTests(rt) {
+  const levelOpts = ['1','2','3'].map(v =>
+    `<option value="${v}" ${(rt.RESTORE_TEST_LEVEL||'2')===v?'selected':''}>${v}</option>`
+  ).join('');
+  const locOpts = ['local','usb','smb','storagebox','all'].map(v =>
+    `<option value="${v}" ${(rt.RESTORE_TEST_LOCATION||'local')===v?'selected':''}>${locLabel(v)}</option>`
+  ).join('');
+  return settingsCard('Restore Tests',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>`,
+    `<div class="settings-body">
+      <h4 class="settings-subtitle">Basis</h4>
+      <div class="two-col">
+        <div class="form-group">
+          <label class="form-label">Standard Test-Level</label>
+          <select class="form-select" data-key="RESTORE_TEST_LEVEL" onchange="markSettingsDirty()">${levelOpts}</select>
+        </div>
+        ${fnum('RESTORE_TEST_INTERVAL_DAYS', 'Intervall (Tage)', rt.RESTORE_TEST_INTERVAL_DAYS || '30')}
+        <div class="form-group">
+          <label class="form-label">Standard Location</label>
+          <select class="form-select" data-key="RESTORE_TEST_LOCATION" onchange="markSettingsDirty()">${locOpts}</select>
+        </div>
+      </div>
+
+      <h4 class="settings-subtitle">Strategie Dry-Run</h4>
+      <div class="two-col">
+        ${ftext('RESTORE_TEST_FORCE_CHUNK_TYPES', 'Chunk-Modus erzwingen für Typen (CSV)', rt.RESTORE_TEST_FORCE_CHUNK_TYPES || 'vms,photos')}
+        ${fnum('RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB', 'Ab Größe (GB) direkt Chunk-Modus', rt.RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB || '500')}
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:-6px">
+        Beispiel Typen: <code>vms,photos</code>. Wert <code>0</code> bei Größe deaktiviert die automatische Umschaltung.
+      </div>
+
+      <h4 class="settings-subtitle">Limits &amp; Performance</h4>
+      <div class="two-col">
+        ${fnum('RESTORE_TEST_MIN_COVERAGE', 'Mindest-Coverage (%)', rt.RESTORE_TEST_MIN_COVERAGE || '5')}
+        ${fnum('RESTORE_TEST_MAX_ENTRIES', 'Max. Einträge je Test', rt.RESTORE_TEST_MAX_ENTRIES || '1000')}
+        ${fnum('RESTORE_TEST_SAMPLE_SIZE', 'Level-3 Sample-Dateien', rt.RESTORE_TEST_SAMPLE_SIZE || '5')}
+        ${fnum('RESTORE_TEST_BORG_TIMEOUT', 'Borg Standard Timeout (s)', rt.RESTORE_TEST_BORG_TIMEOUT || '240')}
+        ${fnum('RESTORE_TEST_DRY_RUN_TIMEOUT', 'Dry-Run Timeout (s, 0 = aus)', rt.RESTORE_TEST_DRY_RUN_TIMEOUT || '0')}
+        ${fnum('RESTORE_TEST_DRY_RUN_CHUNK_SIZE', 'Chunk-Größe (Dateien)', rt.RESTORE_TEST_DRY_RUN_CHUNK_SIZE || '100')}
+        ${fnum('RESTORE_TEST_DRY_RUN_MAX_FILES', 'Max. Dry-Run Dateien (Fallback/Chunk)', rt.RESTORE_TEST_DRY_RUN_MAX_FILES || '1000')}
+      </div>
+      <label class="form-checkbox-row" style="margin-top:10px">
+        <input type="checkbox" data-key="RESTORE_TEST_LEVEL3_LEGACY_SAMPLING"
+          ${(rt.RESTORE_TEST_LEVEL3_LEGACY_SAMPLING || 'false') === 'true' ? 'checked' : ''}
+          onchange="markSettingsDirty()">
+        Level-3 Legacy-Sampling verwenden (Stichprobe aus bis zu 1000 Archiv-Dateien)
+      </label>
+    </div>`);
+}
+
+function renderSettingsDockerVMs(docker, vms) {
+  return settingsCard('Docker &amp; VMs',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>`,
+    `<div class="settings-body two-col">
+      ${fnum('DOCKER_STOP_TIMEOUT', 'Docker Stop Timeout (s)', docker.DOCKER_STOP_TIMEOUT)}
+      ${fnum('DOCKER_STOP_WAIT', 'Docker Stop Wartezeit (s)', docker.DOCKER_STOP_WAIT)}
+      ${fnum('DOCKER_START_WAIT', 'Docker Start Wartezeit (s)', docker.DOCKER_START_WAIT)}
+      <div></div>
+      ${fnum('VM_SHUTDOWN_TIMEOUT', 'VM Shutdown Timeout (s)', vms.VM_SHUTDOWN_TIMEOUT)}
+      ${fnum('VM_SHUTDOWN_WARNING_MINUTES', 'VM Warnung (Minuten)', vms.VM_SHUTDOWN_WARNING_MINUTES)}
+      ${fnum('VM_STARTUP_WAIT', 'VM Start Wartezeit (s)', vms.VM_STARTUP_WAIT)}
+    </div>`);
+}
+
+function renderSettingsWeeklyReport(wr) {
+  const enabled = (wr.WEEKLY_REPORT_ENABLED || 'false') === 'true';
+  const dayOpts = [
+    ['0','Montag'], ['1','Dienstag'], ['2','Mittwoch'], ['3','Donnerstag'],
+    ['4','Freitag'], ['5','Samstag'], ['6','Sonntag'],
+  ].map(([v, l]) => `<option value="${v}" ${(wr.WEEKLY_REPORT_DAY||'1')===v?'selected':''}>${l}</option>`).join('');
+
+  return settingsCard('Wöchentlicher Status-Report',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+    `<div class="settings-body">
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-checkbox-row">
+          <input type="checkbox" data-key="WEEKLY_REPORT_ENABLED" onchange="markSettingsDirty()" ${enabled?'checked':''}>
+          Report aktivieren
+        </label>
+      </div>
+      <div class="two-col">
+        <div class="form-group">
+          <label class="form-label">Wochentag</label>
+          <select class="form-select" data-key="WEEKLY_REPORT_DAY" onchange="markSettingsDirty()">${dayOpts}</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Uhrzeit</label>
+          <input type="time" class="form-input" data-key="WEEKLY_REPORT_TIME" value="${escHtml(wr.WEEKLY_REPORT_TIME||'09:00')}" oninput="markSettingsDirty()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Empfänger</label>
+          <input type="email" class="form-input" data-key="WEEKLY_REPORT_RECIPIENT" value="${escHtml(wr.WEEKLY_REPORT_RECIPIENT||'')}" placeholder="Standard: GLOBAL_MAIL_RECIPIENT" oninput="markSettingsDirty()">
+        </div>
+      </div>
+      <div id="weekly-report-message" class="status-message hidden" style="margin-top:12px"></div>
+      <div style="margin-top:12px">
+        <button class="btn btn-secondary" id="weekly-report-send-btn" data-settings-action="send-weekly-report">Jetzt senden</button>
+      </div>
+    </div>`);
+}
+
+async function onSettingsContentClick(event) {
+  const tabBtn = event.target.closest('[data-settings-tab]');
+  if (tabBtn) {
+    if (settingsState.dirty) {
+      const discard = await _openSettingsDialog({
+        title: 'Ungespeicherte Änderungen',
+        message: 'Du hast ungespeicherte Änderungen. Beim Tab-Wechsel gehen sie verloren.',
+        confirmText: 'Verwerfen & wechseln',
+        confirmClass: 'btn-danger',
+      });
+      if (!discard) return;
+      await refreshSettings();
+    }
+    const tab = tabBtn.dataset.settingsTab || 'general';
+    settingsState.activeTab = tab;
+    document.querySelectorAll('#settings-content [data-settings-tab]').forEach((b) => b.classList.toggle('active', b === tabBtn));
+    document.querySelectorAll('#settings-content [data-settings-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.settingsPanel !== tab));
+    return;
+  }
+  const el = event.target.closest('[data-settings-action]');
+  if (!el) return;
+  const action = el.dataset.settingsAction || '';
+  if (action === 'delete-backups-keep-latest') return deleteConfigBackupsKeepLatest();
+  if (action === 'export-jobs') return exportJobsBundle();
+  if (action === 'export-jobs-secure') return exportJobsBundleSecure();
+  if (action === 'import-jobs-select-file') return importJobsPreviewSelectFile();
+  if (action === 'import-jobs-secure-select-file') return importJobsSecurePreviewSelectFile();
+  if (action === 'import-jobs-apply') return importJobsApplySelected();
+  if (action === 'import-jobs-dry-run') return importJobsBundle(true);
+  if (action === 'import-jobs') return importJobsBundle(false);
+  if (action === 'export-secrets') return exportSecretsBackup();
+  if (action === 'import-secrets-select-file') return importSecretsPreviewSelectFile();
+  if (action === 'import-secrets-apply') return importSecretsApplySelected();
+  if (action === 'import-secrets') return importSecretsBackup();
+  if (action === 'export-profile-secrets') return exportProfileSecretsBackup();
+  if (action === 'import-profile-secrets-select-file') return importProfileSecretsPreviewSelectFile();
+  if (action === 'import-profile-secrets-apply') return importProfileSecretsApplySelected();
+  if (action === 'export-support-bundle') return exportSupportBundle();
+  if (action === 'legacy-cleanup-apply') return applyLegacyCleanupFromSettings(el);
+  if (action === 'diff-config-backup') return diffSettingsConfigBackup(el.dataset.backupName || '');
+  if (action === 'restore-config-backup') return restoreSettingsConfigBackup(el.dataset.backupName || '');
+  if (action === 'delete-config-backup') return deleteSettingsConfigBackup(el.dataset.backupName || '');
+  if (action === 'send-test-email') return sendTestEmail();
+  if (action === 'send-weekly-report') return sendWeeklyReport();
+  if (action === 'storagebox-key-status') return storageboxKeyStatus();
+  if (action === 'storagebox-key-generate') return storageboxKeyGenerate();
+  if (action === 'storagebox-key-public') return storageboxKeyPublic();
+  if (action === 'storagebox-key-deploy') return storageboxKeyDeploy();
+  if (action === 'storagebox-test') return storageboxTest();
+  if (action === 'usb-profile-add') {
+    addUsbProfileRow();
+    onUsbProfileInputChanged();
+    return;
+  }
+  if (action === 'usb-profile-check') return checkUsbProfilesStatus();
+  if (action === 'usb-profile-remove') {
+    const row = event.target.closest('.usb-profile-row');
+    if (row) row.remove();
+    onUsbProfileInputChanged();
+    return;
+  }
+  if (action === 'smb-profile-add') {
+    addSmbProfileRow({ username: '', password_set: false });
+    onSmbProfileInputChanged();
+    return;
+  }
+  if (action === 'smb-profile-check') return checkSmbProfilesStatus();
+  if (action === 'smb-profile-toggle-options') {
+    const row = event.target.closest('.smb-profile-row');
+    const opts = row?.querySelector('[data-smb-profile-optional]');
+    if (opts) opts.classList.toggle('hidden');
+    return;
+  }
+  if (action === 'smb-profile-remove') {
+    const row = event.target.closest('.smb-profile-row');
+    const jobsCount = Number(row?.dataset?.smbJobsCount || 0);
+    if (jobsCount > 0) {
+      const refs = String(row?.dataset?.smbJobRefs || '').trim();
+      await _openSettingsDialog({
+        title: 'SMB-Profil kann nicht entfernt werden',
+        message: `Es wird noch von ${jobsCount} Job(s) genutzt.${refs ? `\n\nJobs:\n${refs}` : ''}`,
+        confirmText: 'OK',
+      });
+      showMsg('smb-profiles-msg', 'warning', `Profil wird noch von ${jobsCount} Job(s) genutzt.${refs ? ` (${refs})` : ''}`);
+      return;
+    }
+    const profileKey = String(row?.dataset?.profileKey || '').trim().toLowerCase();
+    if (!profileKey) return;
+    const confirmedRemove = await _openSettingsDialog({
+      title: 'SMB-Profil entfernen',
+      html: `
+        <div class="modal-info-item warning" style="margin-top:8px">
+          SMB-Profil wird aus der UI entfernt. Repository-Daten bleiben erhalten.
+        </div>
+        <label class="form-checkbox-row" style="margin-top:10px">
+          <input type="checkbox" id="smb-remove-unmount-first" checked>
+          Wenn gemountet zuerst unmounten
+        </label>
+        <label class="form-checkbox-row" style="margin-top:8px">
+          <input type="checkbox" id="smb-remove-mountpoint-cleanup">
+          Mountpunkt löschen (nur wenn leer und nicht gemountet)
+        </label>
+        <label class="form-checkbox-row" style="margin-top:8px">
+          <input type="checkbox" id="smb-remove-secret-cleanup">
+          Credentials-Datei löschen (.smb-&lt;key&gt;.cred)
+        </label>
+      `,
+      input: {
+        label: `Zur Bestätigung "${profileKey}" eingeben:`,
+        value: '',
+        placeholder: profileKey,
+        validate: (v) => String(v || '').trim() === profileKey,
+      },
+      confirmText: 'Entfernen',
+      confirmClass: 'btn-danger',
+      resolveValue: ({ modal }) => ({
+        confirmed: true,
+        unmountFirst: !!modal.querySelector('#smb-remove-unmount-first')?.checked,
+        cleanupMountpoint: !!modal.querySelector('#smb-remove-mountpoint-cleanup')?.checked,
+        cleanupSecret: !!modal.querySelector('#smb-remove-secret-cleanup')?.checked,
+      }),
+    });
+    if (!confirmedRemove || !confirmedRemove.confirmed) return;
+    settingsState.smbCleanupKeys = settingsState.smbCleanupKeys.filter((k) => k !== profileKey);
+    settingsState.smbSecretCleanupKeys = settingsState.smbSecretCleanupKeys.filter((k) => k !== profileKey);
+    if (confirmedRemove.cleanupMountpoint) settingsState.smbCleanupKeys.push(profileKey);
+    if (confirmedRemove.cleanupSecret) settingsState.smbSecretCleanupKeys.push(profileKey);
+
+    if (confirmedRemove.unmountFirst) {
+      try {
+        const res = await fetch('/api/storage/smb-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile_key: profileKey, action: 'unmount' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error || data.message || `HTTP ${res.status}`);
+        }
+      } catch (err) {
+        showMsg('smb-profiles-msg', 'error', `Unmount vor Entfernen fehlgeschlagen: ${err.message}`);
+        return;
+      }
+    }
+
+    if (row) row.remove();
+    onSmbProfileInputChanged();
+    await saveSettings();
+    return;
+  }
+  if (action === 'storage-profile-add') {
+    addStorageProfileRow({ target_type: 'storagebox', port: '23', base_path: './backup' });
+    onStorageProfileInputChanged();
+    return;
+  }
+  if (action === 'storage-profile-remove') {
+    const row = event.target.closest('.storage-profile-row');
+    const jobsCount = Number(row?.dataset?.storageJobsCount || 0);
+    if (jobsCount > 0) {
+      const refs = String(row?.dataset?.storageJobRefs || '').trim();
+      await _openSettingsDialog({
+        title: 'Storage-Profil kann nicht entfernt werden',
+        message: `Es wird noch von ${jobsCount} Job(s) genutzt.${refs ? `\n\nJobs:\n${refs}` : ''}`,
+        confirmText: 'OK',
+      });
+      showMsg('storage-profiles-msg', 'warning', `Profil wird noch von ${jobsCount} Job(s) genutzt.${refs ? ` (${refs})` : ''}`);
+      return;
+    }
+    if (row) row.remove();
+    onStorageProfileInputChanged();
+    return;
+  }
+  if (action === 'user-create') return createUserFromSettings();
+  if (action === 'user-save') {
+    const row = event.target.closest('tr[data-user-name]');
+    if (row) return updateUserFromRow(row);
+    return;
+  }
+  if (action === 'user-reset-password') {
+    const row = event.target.closest('tr[data-user-name]');
+    if (row) return resetUserPasswordFromRow(row);
+    return;
+  }
+  if (action === 'user-delete') {
+    const row = event.target.closest('tr[data-user-name]');
+    if (row) return deleteUserFromRow(row);
+    return;
+  }
+  if (action === 'user-deactivate') {
+    const row = event.target.closest('tr[data-user-name]');
+    if (row) return deactivateUserFromRow(row);
+    return;
+  }
+  if (action === 'user-change-own-password') return changeOwnPasswordFromSettings();
+  if (action === 'user-logout-own-sessions') return logoutOwnSessionsFromSettings();
+  if (action === 'user-logout-all-sessions') return logoutAllSessionsFromSettings();
+}
+
+async function createUserFromSettings() {
+  const name = (document.getElementById('user-new-name')?.value || '').trim();
+  const role = (document.getElementById('user-new-role')?.value || 'viewer').trim();
+  const password = (document.getElementById('user-new-password')?.value || '');
+  try {
+    const res = await fetch('/api/auth/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: name, role, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    showMsg('users-msg', 'success', `Benutzer ${name} angelegt.`);
+    await refreshSettings();
+  } catch (err) {
+    showMsg('users-msg', 'error', `Anlegen fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function updateUserFromRow(row) {
+  const username = String(row.dataset.userName || '').trim();
+  const role = String(row.querySelector('[data-user-role]')?.value || '').trim();
+  const enabled = !!row.querySelector('[data-user-enabled]')?.checked;
+  try {
+    const res = await fetch('/api/auth/users', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, role, enabled }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    showMsg('users-msg', 'success', `Benutzer ${username} aktualisiert.`);
+    await refreshSettings();
+  } catch (err) {
+    showMsg('users-msg', 'error', `Update fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function resetUserPasswordFromRow(row) {
+  const username = String(row.dataset.userName || '').trim();
+  const value = await _openSettingsDialog({
+    title: 'Passwort zurücksetzen',
+    input: {
+      label: `Neues Passwort für ${username}:`,
+      value: '',
+      type: 'password',
+      validate: (v) => String(v || '').length >= 12,
+    },
+    confirmText: 'Setzen',
+  });
+  if (!value) return;
+  try {
+    const res = await fetch('/api/auth/users/password-reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: String(value) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    showMsg('users-msg', 'success', `Passwort für ${username} aktualisiert.`);
+  } catch (err) {
+    showMsg('users-msg', 'error', `Passwort-Reset fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function deleteUserFromRow(row) {
+  const username = String(row.dataset.userName || '').trim();
+  if (!username) return;
+  const isEnabled = !!row.querySelector('[data-user-enabled]')?.checked;
+  const ok = await _openSettingsDialog({
+    title: 'Benutzer hart löschen',
+    html: `
+      <div class="modal-info-item warning" style="margin-top:8px">
+        Der Benutzer wird dauerhaft entfernt (inkl. Zuordnung in der Benutzerliste).
+      </div>
+      <div class="modal-info-item info" style="margin-top:8px">
+        Empfehlung: Für regulären Offboarding-Fall zuerst <strong>Deaktivieren</strong> verwenden.
+      </div>
+      ${isEnabled ? '<div class="modal-info-item warning" style="margin-top:8px">Benutzer ist aktuell aktiv.</div>' : ''}
+    `,
+    input: {
+      label: `Zur Bestätigung "${username}" eingeben:`,
+      value: '',
+      placeholder: username,
+      validate: (v) => String(v || '').trim() === username,
+    },
+    confirmText: 'Löschen',
+    confirmClass: 'btn-danger',
+  });
+  if (!ok) return;
+  try {
+    const res = await fetch('/api/auth/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    showMsg('users-msg', 'success', `Benutzer ${username} gelöscht.`);
+    await refreshSettings();
+  } catch (err) {
+    showMsg('users-msg', 'error', `Löschen fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function deactivateUserFromRow(row) {
+  const username = String(row.dataset.userName || '').trim();
+  const role = String(row.querySelector('[data-user-role]')?.value || '').trim();
+  if (!username) return;
+  try {
+    const res = await fetch('/api/auth/users', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, role, enabled: false }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    showMsg('users-msg', 'success', `Benutzer ${username} deaktiviert.`);
+    await refreshSettings();
+  } catch (err) {
+    showMsg('users-msg', 'error', `Deaktivieren fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function changeOwnPasswordFromSettings() {
+  const currentUser = String(settingsState.authStatus?.current_user || '').trim();
+  const values = await _openSettingsDialog({
+    title: 'Eigenes Passwort ändern',
+    html: `
+      <div class="form-group"><label class="form-label">Aktuelles Passwort</label><input id="pwd-current" class="form-input" type="password"></div>
+      <div class="form-group"><label class="form-label">Neues Passwort (mind. 12 Zeichen)</label><input id="pwd-new" class="form-input" type="password"></div>
+      <div class="form-group"><label class="form-label">Neues Passwort bestätigen</label><input id="pwd-new-confirm" class="form-input" type="password"></div>
+    `,
+    confirmText: 'Passwort ändern',
+    resolveValue: ({ modal }) => ({
+      current_password: String(modal.querySelector('#pwd-current')?.value || ''),
+      new_password: String(modal.querySelector('#pwd-new')?.value || ''),
+      new_password_confirm: String(modal.querySelector('#pwd-new-confirm')?.value || ''),
+    }),
+  });
+  if (!values) return;
+  try {
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    showMsg('users-msg', 'success', `Passwort für ${currentUser || 'aktuellen Benutzer'} geändert.`);
+  } catch (err) {
+    showMsg('users-msg', 'error', `Passwort ändern fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function logoutOwnSessionsFromSettings() {
+  const ok = await _openSettingsDialog({
+    title: 'Eigene Sessions abmelden',
+    message: 'Alle Sessions des aktuellen Benutzers beenden?',
+    confirmText: 'Abmelden',
+  });
+  if (!ok) return;
+  try {
+    const res = await fetch('/api/auth/logout-all-sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'current' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    window.location.href = '/login';
+  } catch (err) {
+    showMsg('users-msg', 'error', `Sessions abmelden fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function logoutAllSessionsFromSettings() {
+  const ok = await _openSettingsDialog({
+    title: 'Alle Sessions abmelden',
+    message: 'Wirklich alle aktiven Sessions aller Benutzer beenden?',
+    confirmText: 'Alle abmelden',
+    confirmClass: 'btn-danger',
+  });
+  if (!ok) return;
+  try {
+    const res = await fetch('/api/auth/logout-all-sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'all' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    window.location.href = '/login';
+  } catch (err) {
+    showMsg('users-msg', 'error', `Alle Sessions abmelden fehlgeschlagen: ${err.message}`);
+  }
+}
+
+async function checkUsbProfilesStatus() {
+  const profiles = getUsbProfilesFromDom();
+  const msgEl = document.getElementById('usb-profiles-msg');
+  if (!profiles.length) {
+    showMsg('usb-profiles-msg', 'warning', 'Keine USB-Profile zum Prüfen vorhanden.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/settings/usb-profiles-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profiles }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const rows = Array.isArray(data?.results) ? data.results : [];
+    const rowEls = document.querySelectorAll('#usb-profiles-rows .usb-profile-row');
+    rowEls.forEach((rowEl, idx) => {
+      const stateEl = rowEl.querySelector('[data-usb-profile-state]');
+      if (!stateEl) return;
+      const r = rows[idx];
+      if (!r) {
+        stateEl.textContent = 'Ungeprüft';
+        stateEl.className = 'usb-profile-state text-muted';
+        return;
+      }
+      if (r.ok) {
+        stateEl.textContent = 'OK';
+        stateEl.className = 'usb-profile-state text-success';
+      } else {
+        stateEl.textContent = `Fehler: ${r.message || 'unbekannt'}`;
+        stateEl.className = 'usb-profile-state text-danger';
+      }
+    });
+    const okCount = rows.filter((r) => r.ok).length;
+    const failCount = rows.length - okCount;
+    showMsg('usb-profiles-msg', failCount ? 'warning' : 'success', `Prüfung abgeschlossen: ${okCount} OK, ${failCount} Fehler.`);
+  } catch (err) {
+    if (msgEl) showMsg('usb-profiles-msg', 'error', `Fehler: ${err.message}`);
+  }
+}
+
+async function checkSmbProfilesStatus() {
+  const profiles = getSmbProfilesFromDom();
+  const msgEl = document.getElementById('smb-profiles-msg');
+  if (!profiles.length) {
+    showMsg('smb-profiles-msg', 'warning', 'Keine SMB-Profile zum Prüfen vorhanden.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/settings/smb-profiles-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profiles }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const rows = Array.isArray(data?.results) ? data.results : [];
+    const rowEls = document.querySelectorAll('#smb-profiles-rows .smb-profile-row');
+    rowEls.forEach((rowEl, idx) => {
+      const r = rows[idx];
+      if (!r) {
+        const checksEl = rowEl.querySelector('[data-smb-profile-checks]');
+        if (checksEl) {
+          checksEl.classList.add('hidden');
+          checksEl.innerHTML = '';
+        }
+        return;
+      }
+      const checksEl = rowEl.querySelector('[data-smb-profile-checks]');
+      if (checksEl) {
+        checksEl.classList.remove('hidden');
+        checksEl.innerHTML = _renderSmbChecksHtml(r);
+      }
+    });
+    const okCount = rows.filter((r) => r.ok).length;
+    const failCount = rows.length - okCount;
+    showMsg('smb-profiles-msg', failCount ? 'warning' : 'success', `Prüfung abgeschlossen: ${okCount} OK, ${failCount} Fehler.`);
+  } catch (err) {
+    if (msgEl) showMsg('smb-profiles-msg', 'error', `Fehler: ${err.message}`);
+  }
+}
+
+async function _storageboxCall(action, body = {}) {
+  const profileKey = String(settingsState.storageboxProfileKey || '').trim().toLowerCase();
+  const payload = { ...body };
+  if (profileKey) payload.profile_key = profileKey;
+  const res = await fetch(`/api/storagebox/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function onStorageboxProfileSelectChanged() {
+  const sel = document.getElementById('storagebox-profile-select');
+  settingsState.storageboxProfileKey = String(sel?.value || '').trim().toLowerCase();
+  settingsState.storageboxChecks = null;
+  storageboxKeyStatus();
+}
+
+function _storageboxShow(msg, ok = true) {
+  if (ok) {
+    hideEl('storagebox-setup-msg');
+    return;
+  }
+  showMsg('storagebox-setup-msg', 'error', msg);
+}
+
+function _storageboxSetFlash(msg, ok) {
+  settingsState.storageboxFlash = { msg, ok: !!ok };
+}
+
+function _storageboxApplyFlash() {
+  if (!settingsState.storageboxFlash) return;
+  const { msg, ok } = settingsState.storageboxFlash;
+  _storageboxShow(msg, ok);
+  settingsState.storageboxFlash = null;
+}
+
+async function _storageboxRefreshWithFlash(msg, ok = true) {
+  settingsState.storageboxPubVisible = false;
+  _storageboxSetFlash(msg, ok);
+  await refreshSettings();
+  _storageboxApplyFlash();
+}
+
+async function storageboxKeyStatus() {
+  hideEl('storagebox-setup-msg');
+  try {
+    const key = await _storageboxCall('key-status');
+    settingsState.storageboxChecks = {
+      rows: [
+        { label: 'SSH-Key vorhanden', ok: !!key.key_exists, message: key.key_exists ? 'Key-Datei gefunden' : 'Key-Datei fehlt' },
+        { label: 'Public Key vorhanden', ok: !!key.pub_exists, message: key.pub_exists ? 'Public-Key-Datei gefunden' : 'Public-Key-Datei fehlt' },
+      ],
+      details: key.key_path ? `Key-Pfad: ${key.key_path}` : '',
+    };
+    settingsState.storageboxLastCheckAt = new Date().toISOString();
+    await refreshSettings();
+  } catch (e) {
+    _storageboxShow(`Fehler: ${e.message}`, false);
+  }
+}
+
+async function storageboxKeyGenerate() {
+  hideEl('storagebox-setup-msg');
+  try {
+    const d = await _storageboxCall('key-generate');
+    await _storageboxRefreshWithFlash(d.message || 'Key erzeugt', true);
+  } catch (e) { _storageboxShow(`Fehler: ${e.message}`, false); }
+}
+
+async function storageboxKeyPublic() {
+  hideEl('storagebox-setup-msg');
+  try {
+    if (settingsState.storageboxPubVisible) {
+      settingsState.storageboxPubVisible = false;
+      const taHide = document.getElementById('storagebox-public-key');
+      if (taHide) taHide.classList.add('hidden');
+      const btnHide = document.querySelector('[data-settings-action="storagebox-key-public"]');
+      if (btnHide) btnHide.textContent = 'Public Key anzeigen';
+      _storageboxShow('Public Key ausgeblendet');
+      return;
+    }
+    const d = await _storageboxCall('key-public');
+    const ta = document.getElementById('storagebox-public-key');
+    if (ta) {
+      ta.value = d.public_key || '';
+      ta.classList.remove('hidden');
+    }
+    settingsState.storageboxPubVisible = true;
+    const btn = document.querySelector('[data-settings-action="storagebox-key-public"]');
+    if (btn) btn.textContent = 'Public Key ausblenden';
+    _storageboxShow(`Public Key geladen (${d.pub_path || ''})`);
+  } catch (e) { _storageboxShow(`Fehler: ${e.message}`, false); }
+}
+
+async function storageboxKeyDeploy() {
+  try {
+    hideEl('storagebox-setup-msg');
+    const d = await _storageboxCall('deploy/start', {});
+    openStorageDeployModal(d.session_id, d.target_type || 'generic');
+  } catch (e) {
+    _storageboxShow(`Fehler: ${e.message}`, false);
+  }
+}
+
+function closeStorageDeployModal() {
+  const m = document.getElementById('storage-deploy-modal');
+  if (m) m.classList.add('hidden');
+  if (settingsState.storageDeployPollTimer) {
+    clearInterval(settingsState.storageDeployPollTimer);
+    settingsState.storageDeployPollTimer = null;
+  }
+}
+
+async function openStorageDeployModal(sessionId, targetType) {
+  settingsState.storageDeploySessionId = String(sessionId || '');
+  const modal = document.getElementById('storage-deploy-modal');
+  const out = document.getElementById('storage-deploy-output');
+  const hint = document.getElementById('storage-deploy-target-hint');
+  const input = document.getElementById('storage-deploy-input');
+  const sendBtn = document.getElementById('storage-deploy-send-btn');
+  const cancelBtn = document.getElementById('storage-deploy-cancel-btn');
+  const okBtn = document.getElementById('storage-deploy-ok-btn');
+  if (!modal || !out || !hint || !input || !sendBtn || !cancelBtn || !okBtn) return;
+
+  out.textContent = '';
+  hint.textContent = 'SSH-Key Deploy Session';
+  input.value = '';
+  sendBtn.disabled = false;
+  cancelBtn.disabled = false;
+  okBtn.disabled = false;
+  modal.classList.remove('hidden');
+
+  const poll = async () => {
+    if (!settingsState.storageDeploySessionId) return;
+    try {
+      const st = await fetch(`/api/storagebox/deploy/state?session_id=${encodeURIComponent(settingsState.storageDeploySessionId)}`).then((r) => r.json());
+      out.textContent = String(st.output || '');
+      out.scrollTop = out.scrollHeight;
+      const done = ['success', 'error', 'canceled', 'timeout'].includes(String(st.status || ''));
+      if (done) {
+        clearInterval(settingsState.storageDeployPollTimer);
+        settingsState.storageDeployPollTimer = null;
+        sendBtn.disabled = true;
+        cancelBtn.disabled = true;
+        const ok = st.status === 'success';
+        _storageboxShow(ok ? 'Key-Deploy erfolgreich abgeschlossen.' : `Key-Deploy beendet: ${st.status}`, ok);
+      }
+    } catch (_) {}
+  };
+
+  if (settingsState.storageDeployPollTimer) clearInterval(settingsState.storageDeployPollTimer);
+  settingsState.storageDeployPollTimer = setInterval(poll, 700);
+  poll();
+}
+
+async function storageDeploySendInput() {
+  const sid = settingsState.storageDeploySessionId;
+  const input = document.getElementById('storage-deploy-input');
+  if (!sid || !input) return;
+  const text = String(input.value || '');
+  if (!text) return;
+  try {
+    const res = await _storageboxCall('deploy/input', { session_id: sid, text });
+    if (res && res.sent === false) {
+      _storageboxShow(`Eingabe nicht gesendet (Session-Status: ${res.status || 'unbekannt'})`, false);
+      return;
+    }
+    input.value = '';
+  } catch (e) {
+    _storageboxShow(`Fehler: ${e.message}`, false);
+  }
+}
+
+async function storageDeployCancel() {
+  const sid = settingsState.storageDeploySessionId;
+  // UI sofort schließen, unabhängig vom Backend-Response
+  closeStorageDeployModal();
+  settingsState.storageDeploySessionId = '';
+  if (!sid) return;
+  try {
+    await _storageboxCall('deploy/cancel', { session_id: sid });
+  } catch (_) {}
+}
+
+async function storageboxTest() {
+  hideEl('storagebox-setup-msg');
+  try {
+    const d = await _storageboxCall('test');
+    settingsState.storageboxConnOk = !!d.success;
+    settingsState.storageboxConnMsg = d.message || '';
+    const details = String(d.details || '').trim();
+    settingsState.storageboxChecks = {
+      rows: [
+        { label: 'SSH-Verbindung', ok: d?.steps?.ssh_ok === true, message: d?.steps?.ssh_ok === true ? 'SSH erreichbar' : (d?.steps?.ssh_ok === false ? 'SSH fehlgeschlagen' : 'Nicht geprüft') },
+        { label: 'Borg verfügbar', ok: d?.steps?.borg_ok === true, message: d?.steps?.borg_ok === true ? 'Borg vorhanden' : (d?.steps?.borg_ok === false ? 'Borg fehlt/Fehler' : 'Nicht geprüft') },
+        { label: 'Repository-Pfad gefunden', ok: d?.steps?.path_exists === true, message: d?.steps?.path_exists === true ? 'Pfad vorhanden' : (d?.steps?.path_exists === false ? 'Pfad fehlt' : 'Nicht geprüft') },
+        { label: 'Schreibtest', ok: d?.steps?.path_writable === true, message: d?.steps?.path_writable === true ? 'Schreibzugriff erfolgreich' : (d?.steps?.path_writable === false ? 'Schreibzugriff fehlgeschlagen' : 'Nicht geprüft') },
+      ],
+      details: details || String(d.message || ''),
+    };
+    settingsState.storageboxLastCheckAt = new Date().toISOString();
+    await refreshSettings();
+  } catch (e) { _storageboxShow(`Fehler: ${e.message}`, false); }
+}
+
+async function sendWeeklyReport() {
+  const btn = document.getElementById('weekly-report-send-btn');
+  if (btn) btn.disabled = true;
+  hideEl('weekly-report-message');
+  const recipInput = document.querySelector('[data-key="WEEKLY_REPORT_RECIPIENT"]');
+  const recipient = recipInput ? recipInput.value.trim() : '';
+  try {
+    const res = await fetch('/api/settings/weekly-report/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient }),
+    });
+    const data = await res.json();
+    showMsg('weekly-report-message', data.success ? 'success' : 'error', data.message);
+  } catch (err) {
+    showMsg('weekly-report-message', 'error', `Fehler: ${err.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Settings-Formular-Hilfsfunktionen ─────────────────────────────────────────
+
+function renderSettingsAbout() {
+  return settingsCard('Über Borg Backup UI',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    `<div class="settings-body">
+      <div class="about-grid">
+        <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">—</span></div>
+        <div class="about-row"><span class="about-label">Borg Version</span><span class="about-value" id="settings-about-borg-version">—</span></div>
+        <div class="about-row"><span class="about-label">Autor</span><span class="about-value">Thorsten Steinberg</span></div>
+        <div class="about-row"><span class="about-label">Lizenz</span><span class="about-value">MIT</span></div>
+        <div class="about-row">
+          <span class="about-label">Drittanbieter-Lizenzen</span>
+          <span class="about-value">
+            BorgBackup (BSD-3-Clause),
+            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">Original-Lizenz</a>
+          </span>
+        </div>
+        <div class="about-row"><span class="about-label">Repository</span><span class="about-value"><a href="https://gitlab.thetwist.de/tsteinbe/borg-backup-ui" target="_blank" class="about-link">gitlab.thetwist.de/tsteinbe/borg-backup-ui</a></span></div>
+      </div>
+    </div>`);
+}
+
+function settingsCard(title, icon, body) {
+  return `<div class="settings-section">
+    <div class="settings-section-header">${icon} ${title}</div>
+    ${body}
+  </div>`;
+}
+
+function ftext(key, label, value) {
+  return `<div class="form-group">
+    <label class="form-label">${label}</label>
+    <input class="form-input" type="text" data-key="${key}"
+      value="${escHtml(value || '')}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
+  </div>`;
+}
+
+function fpwd(key, label, value) {
+  return `<div class="form-group">
+    <label class="form-label">${label}</label>
+    <input class="form-input" type="password" data-key="${key}"
+      value="${escHtml(value || '')}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
+  </div>`;
+}
+
+function fnum(key, label, value) {
+  return `<div class="form-group">
+    <label class="form-label">${label}</label>
+    <input class="form-input" type="number" min="0" data-key="${key}"
+      value="${escHtml(value || '')}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
+  </div>`;
+}
+
+function fmono(key, label, value, placeholder = '') {
+  return `<div class="form-group" style="grid-column:1/-1">
+    <label class="form-label">${label}</label>
+    <input class="form-input mono" type="text" data-key="${key}"
+      value="${escHtml(value || '')}" placeholder="${escHtml(placeholder || '')}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
+  </div>`;
+}
+
+function fmonoRO(label, value) {
+  return `<div class="form-group" style="grid-column:1/-1">
+    <label class="form-label">${label}</label>
+    <input class="form-input mono" type="text" value="${escHtml(value || '')}" readonly>
+  </div>`;
+}
+
+function markSettingsDirty() {
+  settingsState.dirty = true;
+  _updateUnsavedChangesUi();
+}
+
+function _updateUnsavedChangesUi() {
+  const btn = document.getElementById('settings-save-btn');
+  if (!btn) return;
+  btn.classList.toggle('btn-save-dirty', !!settingsState.dirty);
+}
+
+async function canLeaveSettingsPage() {
+  if (!settingsState.dirty) return true;
+  const discard = await _openSettingsDialog({
+    title: 'Ungespeicherte Änderungen',
+    message: 'Es gibt ungespeicherte Änderungen. Seite wirklich verlassen?',
+    confirmText: 'Verlassen',
+    confirmClass: 'btn-danger',
+  });
+  if (!discard) return false;
+  await refreshSettings();
+  return true;
+}
+
+window.canLeaveSettingsPage = canLeaveSettingsPage;
+
+if (!window.__bbuiSettingsBeforeUnloadBound) {
+  window.addEventListener('beforeunload', (event) => {
+    if (!settingsState.dirty) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+  window.__bbuiSettingsBeforeUnloadBound = true;
+}
+
+async function saveSettings() {
+  syncUsbProfilesHiddenInput();
+  syncSmbProfilesHiddenInput();
+  syncStorageProfilesHiddenInput();
+  const updates = {};
+  document.querySelectorAll('#settings-content [data-key]').forEach(el => {
+    const key = el.dataset.key;
+    if (el.type === 'checkbox') {
+      updates[key] = el.checked ? 'true' : 'false';
+    } else {
+      updates[key] = el.value;
+    }
+  });
+  if (!String(updates.GLOBAL_DATA_DIR || '').trim()) {
+    showMsg('settings-message', 'error', 'GLOBAL_DATA_DIR ist Pflicht. Bitte Hauptverzeichnis eintragen.');
+    return;
+  }
+  updates.GLOBAL_DATA_DIR = String(updates.GLOBAL_DATA_DIR).trim();
+  if (updates.UI_SESSION_TIMEOUT_MINUTES !== undefined) {
+    const t = Number(updates.UI_SESSION_TIMEOUT_MINUTES);
+    updates.UI_SESSION_TIMEOUT_MINUTES = String(Number.isFinite(t) ? Math.max(5, Math.floor(t)) : 30);
+  }
+
+  const btn = document.getElementById('settings-save-btn');
+  if (btn) btn.classList.add('loading');
+  hideEl('settings-message');
+
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        updates,
+        smb_cleanup_keys: settingsState.smbCleanupKeys || [],
+        smb_secret_cleanup_keys: settingsState.smbSecretCleanupKeys || [],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    settingsState.dirty = false;
+    _updateUnsavedChangesUi();
+    const dd = data?.data_dirs;
+    if (data?.data_dir_initialized && dd && dd.logs && dd.status && dd.restore_status) {
+      showMsg(
+        'settings-message',
+        'success',
+        `Einstellungen gespeichert. Verzeichnisse aktiv: ${dd.logs}, ${dd.status}, ${dd.restore_status}`
+      );
+    } else {
+      showMsg('settings-message', 'success', 'Einstellungen gespeichert.');
+    }
+    if (data?.smb_cleanup && Array.isArray(data.smb_cleanup.removed) && data.smb_cleanup.removed.length) {
+      const removed = data.smb_cleanup.removed.map((r) => r.path).filter(Boolean).join(', ');
+      showMsg('settings-message', 'success', `Einstellungen gespeichert. SMB-Mountpunkte entfernt: ${removed}`);
+    }
+    if (data?.smb_secret_cleanup && Array.isArray(data.smb_secret_cleanup.removed) && data.smb_secret_cleanup.removed.length) {
+      const removedSecrets = data.smb_secret_cleanup.removed.map((r) => r.path).filter(Boolean).join(', ');
+      showMsg('settings-message', 'success', `SMB-Credentials entfernt: ${removedSecrets}`);
+    }
+    settingsState.smbCleanupKeys = [];
+    settingsState.smbSecretCleanupKeys = [];
+    if (window.BBUI?.core?.invalidateSetupStatusCache) {
+      window.BBUI.core.invalidateSetupStatusCache();
+    }
+    await refreshSettingsConfigBackups();
+    await window.BBUI.core.updateDataDirWarning();
+  } catch (err) {
+    showMsg('settings-message', 'error', `Fehler: ${err.message}`);
+  } finally {
+    if (btn) btn.classList.remove('loading');
+  }
+}

@@ -1,0 +1,15 @@
+# Build-Artefakte
+plugin/build/
+plugin/build/*.txz
+plugin/build/pkg/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Entwicklungs-Notizen
+CONTEXT.md
+
+# Lokale Release-/Test-Channel-Arbeitsdateien
+.release-tmp/

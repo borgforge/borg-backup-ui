@@ -1,0 +1,321 @@
+Menu="Utilities:8"
+Type="xmenu"
+Title="Borg Backup UI"
+Icon="plugin-icon.png"
+Description="Web-Oberfläche für Borg Backup – Dashboard, Jobs, Storage, History, Restore-Tests und Einstellungen. Benötigt Python 3 for Unraid."
+Markdown="false"
+---
+<?PHP
+$PLUGIN_DIR = "/boot/config/plugins/borg-backup-ui";
+$CONF_FILE  = "$PLUGIN_DIR/borg_backup_ui.conf";
+$PIDFILE    = "/var/run/borg_backup_ui.pid";
+$RC         = "/etc/rc.d/rc.borg_backup_ui";
+
+function bbui_is_running($pidfile) {
+  if (!file_exists($pidfile)) return false;
+  $pid = trim(file_get_contents($pidfile));
+  return $pid && file_exists("/proc/$pid");
+}
+
+function bbui_read_conf($file) {
+  $conf = ['PORT' => '8765', 'BIND' => '0.0.0.0'];
+  if (!file_exists($file)) return $conf;
+  foreach (file($file, FILE_IGNORE_NEW_LINES) as $line) {
+    $line = trim($line);
+    if ($line === '' || $line[0] === '#') continue;
+    if (preg_match('/^([A-Z_]+)=(.*)$/', $line, $m)) $conf[$m[1]] = $m[2];
+  }
+  return $conf;
+}
+
+function bbui_write_conf($file, $port, $bind) {
+  if (!file_exists($file)) {
+    file_put_contents($file, "PORT=$port\nBIND=$bind\n");
+    return;
+  }
+  $lines = file($file, FILE_IGNORE_NEW_LINES);
+  $port_set = $bind_set = false;
+  foreach ($lines as &$line) {
+    if (preg_match('/^PORT=/', $line)) { $line = "PORT=$port"; $port_set = true; }
+    if (preg_match('/^BIND=/', $line)) { $line = "BIND=$bind"; $bind_set = true; }
+  }
+  if (!$port_set) $lines[] = "PORT=$port";
+  if (!$bind_set) $lines[] = "BIND=$bind";
+  file_put_contents($file, implode("\n", $lines) . "\n");
+}
+
+function bbui_python_runtime_status() {
+  $path = trim((string)shell_exec("command -v python3 2>/dev/null"));
+  $status = [
+    'ok' => false,
+    'path' => $path,
+    'version' => '',
+    'reason' => '',
+    'min_version' => '3.10',
+  ];
+  if ($path === '') {
+    $status['reason'] = 'Python 3 nicht gefunden.';
+    return $status;
+  }
+  if (!is_executable($path)) {
+    $status['reason'] = "python3 ist nicht ausführbar: $path";
+    return $status;
+  }
+  $cmd = escapeshellarg($path) . " -c " . escapeshellarg("import sys; print('.'.join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)") . " 2>/dev/null";
+  $lines = [];
+  $rc = 1;
+  exec($cmd, $lines, $rc);
+  $version = trim((string)($lines[0] ?? ''));
+  $status['version'] = $version;
+  if ($version === '') {
+    $status['reason'] = "Python-Version konnte nicht ermittelt werden.";
+    return $status;
+  }
+  if ($rc !== 0) {
+    $status['reason'] = "Python $version ist zu alt. Erforderlich ist Python 3.10 oder neuer.";
+    return $status;
+  }
+  $status['ok'] = true;
+  return $status;
+}
+
+// Version from .plg file
+$version = '';
+$plg = "/boot/config/plugins/borg-backup-ui.plg";
+if (file_exists($plg)) {
+  $plg_content = file_get_contents($plg);
+  if (preg_match('/<!ENTITY version\s+"([^"]+)"/', $plg_content, $m)) $version = $m[1];
+}
+
+// Aktionen via GET-Parameter (Unraid fängt form-POST ab und öffnet neues Fenster)
+// Kein sleep() hier – JS zeigt Loading-State und lädt nach Delay neu
+$action = $_GET['action'] ?? ($_POST['action'] ?? '');
+$python_status = bbui_python_runtime_status();
+$python_ok = $python_status['ok'];
+$warn_msg = '';
+
+if (($action === 'start' || $action === 'restart') && !$python_ok) {
+  $warn_msg = $python_status['reason'] . " Bitte zuerst das Plugin 'Python 3 for Unraid' installieren oder aktualisieren.";
+} elseif ($action === 'start') {
+  shell_exec("$RC start >/dev/null 2>&1 &");
+} elseif ($action === 'stop') {
+  shell_exec("$RC stop >/dev/null 2>&1 &");
+} elseif ($action === 'restart') {
+  shell_exec("$RC restart >/dev/null 2>&1 &");
+} elseif ($action === 'apply' || $action === 'default') {
+  if ($action === 'default') {
+    $port = '8765'; $bind = '0.0.0.0';
+  } else {
+    $port = intval($_POST['PORT'] ?? 8765);
+    $bind = in_array($_POST['BIND'] ?? '', ['0.0.0.0', '127.0.0.1']) ? $_POST['BIND'] : '0.0.0.0';
+    if ($port < 1 || $port > 65535) $port = 8765;
+  }
+  bbui_write_conf($CONF_FILE, $port, $bind);
+  shell_exec("$RC restart >/dev/null 2>&1 &");
+}
+
+$running = bbui_is_running($PIDFILE);
+$conf    = bbui_read_conf($CONF_FILE);
+$port    = $conf['PORT'];
+$bind    = $conf['BIND'];
+$ip      = $_SERVER['SERVER_ADDR'];
+$ui_url  = "http://$ip:$port";
+?>
+<style>
+.bbui-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  margin: 16px 0;
+  overflow: hidden;
+}
+.bbui-section-header {
+  background: rgba(255,255,255,0.05);
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #ccc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.bbui-body { padding: 18px 20px; }
+.bbui-status {
+  font-size: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bbui-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.bbui-dot.running  { background: #26c238; box-shadow: 0 0 6px #26c238; }
+.bbui-dot.stopped  { background: #e86060; }
+.bbui-dot.pending  { background: #f0a500; box-shadow: 0 0 6px #f0a500; animation: bbui-pulse 0.8s infinite alternate; }
+@keyframes bbui-pulse { from { opacity: 1; } to { opacity: 0.3; } }
+.bbui-version { color: #888; font-size: 12px; }
+.bbui-btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.bbui-btn {
+  padding: 6px 16px;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  color: #ddd;
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bbui-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.bbui-btn.primary { background: #1e70bf; border-color: #1e70bf; color: #fff; }
+.bbui-btn.primary:hover { background: #2480d4; }
+.bbui-btn.danger  { border-color: #c0392b; color: #e86060; }
+.bbui-btn.danger:hover  { background: rgba(192,57,43,0.15); }
+.bbui-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bbui-table td { padding: 8px 12px 8px 0; vertical-align: middle; }
+.bbui-table td:first-child { color: #aaa; width: 140px; }
+.bbui-input {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  color: #ddd;
+  padding: 5px 10px;
+  font-size: 13px;
+  width: 160px;
+}
+.bbui-select {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  color: #ddd;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+.bbui-alert {
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid #d39e2f;
+  background: rgba(211, 158, 47, 0.12);
+  color: #f3d28a;
+  margin-bottom: 14px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.bbui-runtime {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: rgba(255,255,255,0.03);
+}
+.bbui-runtime.ok { border-color: rgba(38,194,56,0.35); }
+.bbui-runtime.warn { border-color: #d39e2f; background: rgba(211, 158, 47, 0.12); color: #f3d28a; }
+.bbui-runtime code { color: inherit; }
+</style>
+
+<!-- Service Control -->
+<div class="bbui-section">
+  <div class="bbui-section-header">
+    ⚙ Service Control
+  </div>
+  <div class="bbui-body">
+    <div class="bbui-runtime <?= $python_ok ? 'ok' : 'warn' ?>">
+      <strong>Python Runtime:</strong>
+      <?php if ($python_ok): ?>
+        OK, Python <?= htmlspecialchars($python_status['version']) ?> unter <code><?= htmlspecialchars($python_status['path']) ?></code>
+      <?php else: ?>
+        <?= htmlspecialchars($python_status['reason']) ?><br>
+        Für die Borg Backup UI wird <strong>Python 3.10 oder neuer</strong> benötigt.
+        Offizielle Voraussetzung: <strong>Python 3 for Unraid</strong> über die Unraid-Apps installieren oder aktualisieren.
+      <?php endif; ?>
+    </div>
+
+    <?php if ($warn_msg): ?>
+      <div class="bbui-alert"><?= htmlspecialchars($warn_msg) ?></div>
+    <?php endif; ?>
+
+
+    <div class="bbui-status">
+      <span class="bbui-dot <?= $running ? 'running' : 'stopped' ?>" id="bbui-dot"></span>
+      <strong id="bbui-status-text"><?= $running ? 'RUNNING' : 'STOPPED' ?></strong>
+      <?php if ($version): ?>
+        <span class="bbui-version">v<?= htmlspecialchars($version) ?></span>
+      <?php endif ?>
+    </div>
+
+    <div class="bbui-btn-row" id="bbui-open-row">
+      <?php if ($running): ?>
+        <a href="<?= htmlspecialchars($ui_url) ?>" target="_blank" class="bbui-btn primary">
+          &#10149; Borg Backup UI öffnen
+        </a>
+      <?php endif ?>
+    </div>
+
+    <br>
+
+    <div class="bbui-btn-row" id="bbui-ctrl-btns">
+      <?php if ($running): ?>
+        <button type="button" class="bbui-btn danger" onclick="bbui_action('stop')">&#9632; Stop</button>
+        <button type="button" class="bbui-btn"        onclick="bbui_action('restart')" <?= $python_ok ? '' : 'disabled title="Python 3 fehlt oder ist zu alt"' ?>>&#8635; Restart</button>
+      <?php else: ?>
+        <button type="button" class="bbui-btn primary" onclick="bbui_action('start')" <?= $python_ok ? '' : 'disabled title="Python 3 fehlt oder ist zu alt"' ?>>&#9654; Start</button>
+      <?php endif ?>
+    </div>
+
+    <script>
+    function bbui_action(action) {
+      var labels = {start:'STARTING...', stop:'STOPPING...', restart:'RESTARTING...'};
+      document.getElementById('bbui-dot').className = 'bbui-dot pending';
+      document.getElementById('bbui-status-text').textContent = labels[action] || '...';
+      document.getElementById('bbui-ctrl-btns').innerHTML = '<span style="color:#888;font-size:13px">&#8987; Bitte warten...</span>';
+      document.getElementById('bbui-open-row').innerHTML = '';
+      fetch('?action=' + action, {credentials: 'same-origin'}).catch(function(){});
+      setTimeout(function(){ location.reload(); }, action === 'restart' ? 2500 : 1500);
+    }
+    </script>
+
+  </div>
+</div>
+
+<!-- Configuration -->
+<div class="bbui-section">
+  <div class="bbui-section-header">
+    &#128295; Configuration
+  </div>
+  <div class="bbui-body">
+    <form method="POST">
+      <input type="hidden" name="action" value="apply">
+      <table class="bbui-table">
+        <tr>
+          <td>Port</td>
+          <td>
+            <input class="bbui-input" type="number" name="PORT"
+              value="<?= htmlspecialchars($port) ?>" min="1" max="65535">
+          </td>
+        </tr>
+        <tr>
+          <td>Bind Address</td>
+          <td>
+            <select class="bbui-select" name="BIND">
+              <option value="0.0.0.0"   <?= $bind === '0.0.0.0'   ? 'selected' : '' ?>>0.0.0.0 &nbsp;(alle Interfaces)</option>
+              <option value="127.0.0.1" <?= $bind === '127.0.0.1' ? 'selected' : '' ?>>127.0.0.1 &nbsp;(nur lokal)</option>
+            </select>
+          </td>
+        </tr>
+      </table>
+      <br>
+      <div class="bbui-btn-row">
+        <button type="submit"                         class="bbui-btn primary">&#10003; Apply</button>
+        <button type="submit" name="action" value="default" class="bbui-btn">&#8635; Default</button>
+      </div>
+    </form>
+  </div>
+</div>

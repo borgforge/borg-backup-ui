@@ -1,0 +1,138 @@
+#!/bin/bash
+# rc.borg_backup_ui – Start/Stop-Skript für Unraid
+# Wird aufgerufen von /boot/config/go beim Systemstart.
+
+PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
+PIDFILE="/var/run/borg_backup_ui.pid"
+LOGFILE="/var/log/borg_backup_ui.log"
+BORG_BUNDLE_DIR="${PLUGIN_DIR}/runtime/bin/borg"
+BORG_BUNDLE_VERSIONED="${BORG_BUNDLE_DIR}/borg-linux-glibc231-x86_64-1.4.4"
+BORG_BUNDLE_PLAIN="${BORG_BUNDLE_DIR}/borg"
+BORG_STAGE_BIN="/usr/local/bin/borg"
+BORG_LINK_BIN="/usr/bin/borg"
+MIN_PYTHON_MAJOR=3
+MIN_PYTHON_MINOR=10
+
+python_runtime_status() {
+  PY_BIN="$(command -v python3 || true)"
+  if [ -z "$PY_BIN" ]; then
+    echo "FEHLER: python3 nicht gefunden. Bitte Plugin 'Python 3 for Unraid' installieren." >> "$LOGFILE"
+    return 1
+  fi
+  if [ ! -x "$PY_BIN" ]; then
+    echo "FEHLER: python3 ist nicht ausfuehrbar: $PY_BIN" >> "$LOGFILE"
+    return 1
+  fi
+  PY_VERSION="$("$PY_BIN" -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null)"
+  PY_RC=$?
+  if [ "$PY_RC" -ne 0 ]; then
+    echo "FEHLER: Python ${PY_VERSION:-unbekannt} ist zu alt. Erforderlich ist Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR} oder neuer. Bitte Plugin 'Python 3 for Unraid' aktualisieren." >> "$LOGFILE"
+    return 1
+  fi
+  echo "$PY_BIN"
+  return 0
+}
+
+start() {
+  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    echo "Borg Backup UI bereits gestartet (PID: $(cat "$PIDFILE"))"
+    return 0
+  fi
+
+  if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
+    echo "FEHLER: ${PLUGIN_DIR}/borg_backup_ui.py nicht gefunden" >&2
+    return 1
+  fi
+
+  # Prefer bundled Borg binary when available (no symlink requirement on flash FS).
+  if [ -f "${BORG_BUNDLE_VERSIONED}" ]; then
+    chmod +x "${BORG_BUNDLE_VERSIONED}" 2>/dev/null || true
+  fi
+  if [ -f "${BORG_BUNDLE_PLAIN}" ]; then
+    chmod +x "${BORG_BUNDLE_PLAIN}" 2>/dev/null || true
+  fi
+
+  BORG_BIN=""
+  if [ -x "${BORG_BUNDLE_PLAIN}" ]; then
+    BORG_BIN="${BORG_BUNDLE_PLAIN}"
+  elif [ -x "${BORG_BUNDLE_VERSIONED}" ]; then
+    BORG_BIN="${BORG_BUNDLE_VERSIONED}"
+  elif [ -f "${BORG_BUNDLE_PLAIN}" ]; then
+    cp -f "${BORG_BUNDLE_PLAIN}" "${BORG_STAGE_BIN}" 2>/dev/null || true
+    chmod 755 "${BORG_STAGE_BIN}" 2>/dev/null || true
+    [ -x "${BORG_STAGE_BIN}" ] && BORG_BIN="${BORG_STAGE_BIN}"
+  elif [ -f "${BORG_BUNDLE_VERSIONED}" ]; then
+    cp -f "${BORG_BUNDLE_VERSIONED}" "${BORG_STAGE_BIN}" 2>/dev/null || true
+    chmod 755 "${BORG_STAGE_BIN}" 2>/dev/null || true
+    [ -x "${BORG_STAGE_BIN}" ] && BORG_BIN="${BORG_STAGE_BIN}"
+  fi
+
+  if [ -n "${BORG_BIN}" ]; then
+    # Ensure command name "borg" exists in /usr/local/bin even when bundle file is versioned.
+    if [ "${BORG_BIN}" != "${BORG_STAGE_BIN}" ]; then
+      cp -f "${BORG_BIN}" "${BORG_STAGE_BIN}" 2>/dev/null || true
+      chmod 755 "${BORG_STAGE_BIN}" 2>/dev/null || true
+      [ -x "${BORG_STAGE_BIN}" ] && BORG_BIN="${BORG_STAGE_BIN}"
+    fi
+    export PATH="/usr/local/bin:${BORG_BUNDLE_DIR}:$PATH"
+    # Make borg callable in interactive shells, also repair broken /usr/bin/borg links.
+    if [ -L "${BORG_LINK_BIN}" ] && [ ! -e "${BORG_LINK_BIN}" ]; then
+      rm -f "${BORG_LINK_BIN}" 2>/dev/null || true
+    fi
+    if [ -x "${BORG_STAGE_BIN}" ] && [ -w "/usr/bin" ]; then
+      ln -sfn "${BORG_STAGE_BIN}" "${BORG_LINK_BIN}" 2>/dev/null || true
+      if [ ! -x "${BORG_LINK_BIN}" ]; then
+        cp -f "${BORG_STAGE_BIN}" "${BORG_LINK_BIN}" 2>/dev/null || true
+        chmod 755 "${BORG_LINK_BIN}" 2>/dev/null || true
+      fi
+    fi
+    echo "Borg Binary: ${BORG_BIN}"
+  else
+    echo "WARNUNG: Gebuendelte Borg-Binary nicht gefunden, nutze System-PATH."
+  fi
+  echo "Starte Borg Backup UI..."
+  PY_BIN="$(python_runtime_status)"
+  if [ -z "$PY_BIN" ]; then
+    return 1
+  fi
+  echo "Python Runtime: ${PY_BIN}" >> "$LOGFILE"
+  "$PY_BIN" "${PLUGIN_DIR}/borg_backup_ui.py" >> "$LOGFILE" 2>&1 &
+  echo $! > "$PIDFILE"
+  echo "Borg Backup UI gestartet (PID: $!)"
+}
+
+stop() {
+  if [ -f "$PIDFILE" ]; then
+    PID=$(cat "$PIDFILE")
+    if kill -0 "$PID" 2>/dev/null; then
+      kill "$PID"
+      sleep 1
+      kill -0 "$PID" 2>/dev/null && kill -9 "$PID" 2>/dev/null
+      echo "Borg Backup UI gestoppt"
+    else
+      echo "Borg Backup UI läuft nicht"
+    fi
+    rm -f "$PIDFILE"
+  else
+    echo "Borg Backup UI läuft nicht"
+  fi
+}
+
+status() {
+  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    echo "Borg Backup UI läuft (PID: $(cat "$PIDFILE"))"
+  else
+    echo "Borg Backup UI läuft nicht"
+  fi
+}
+
+case "$1" in
+  start)   start ;;
+  stop)    stop ;;
+  restart) stop; sleep 1; start ;;
+  status)  status ;;
+  *)
+    echo "Verwendung: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

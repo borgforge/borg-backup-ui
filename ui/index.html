@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Borg Backup Manager</title>
+  <link rel="icon" type="image/png" sizes="16x16" href="/ui/assets/favicon-16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/ui/assets/favicon-32.png">
+  <link rel="icon" type="image/png" href="/ui/assets/favicon.png">
+  <link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <img class="logo-icon logo-image" src="/ui/assets/app-icon.png" alt="" aria-hidden="true">
+      <span class="logo-text">
+        <span class="logo-title">Borg Backup</span>
+        <span class="logo-subtitle">UI</span>
+      </span>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item active" data-page="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span>Dashboard</span>
+      </li>
+      <li class="nav-item" data-page="jobs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span>Jobs</span>
+      </li>
+      <li class="nav-item" data-page="storage">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/>
+          <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+          <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
+        </svg>
+        <span>Storage</span>
+      </li>
+      <li class="nav-item" data-page="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>History</span>
+      </li>
+      <li class="nav-item" data-page="berichte">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6" y1="20" x2="6" y2="14"/>
+        </svg>
+        <span>Berichte</span>
+      </li>
+      <li class="nav-item" data-page="restore">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/>
+          <polyline points="12 13 12 17"/><polyline points="10 15 12 17 14 15"/>
+        </svg>
+        <span>Browse &amp; Restore</span>
+      </li>
+      <li class="nav-item" data-page="restore-tests">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+        </svg>
+        <span>Restore Tests</span>
+      </li>
+      <li class="nav-item" data-page="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span>Einstellungen</span>
+      </li>
+      <li class="nav-item" data-page="hilfe">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.09 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span>Hilfe</span>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <button class="sidebar-health-indicator unknown" id="sidebar-system-health" data-core-action="goto-settings" title="Systemzustand prüfen">
+        <span class="sidebar-health-dot"></span>
+        <span class="sidebar-health-copy">
+          <span class="sidebar-health-title">Systemstatus</span>
+          <span class="sidebar-health-detail">unbekannt</span>
+        </span>
+      </button>
+      <button class="btn btn-secondary btn-sm" id="auth-logout-btn" style="width:100%;justify-content:center;margin-bottom:8px">
+        Abmelden
+      </button>
+      <div id="auth-current-user" class="app-author" style="margin-bottom:6px"></div>
+      <span id="server-time"></span>
+      <div id="app-version-info" class="app-version-info"></div>
+    </div>
+  </nav>
+
+  <!-- Mobile Nav Backdrop -->
+  <div class="mobile-backdrop" id="mobile-backdrop"></div>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+      <button class="hamburger-btn" id="mobile-nav-toggle-btn" aria-label="Menü">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <span class="mobile-header-title">Borg Backup</span>
+    </div>
+
+    <!-- Dashboard Page -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <div>
+          <h1>Dashboard</h1>
+          <p class="page-subtitle">Backup-Übersicht</p>
+        </div>
+        <div class="header-actions">
+          <span id="last-refresh" class="refresh-label"></span>
+          <button class="btn btn-secondary" id="refresh-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Aktualisieren
+          </button>
+        </div>
+      </div>
+      <div class="dashboard-summary-section">
+        <div class="dashboard-summary-title">Backup-Läufe</div>
+        <div id="summary-bar" class="summary-bar"></div>
+      </div>
+      <div class="dashboard-summary-section">
+        <div class="dashboard-summary-title">Restore-Nachweis</div>
+        <div id="restore-summary-bar" class="summary-bar"></div>
+      </div>
+      <div id="dashboard-data-dir-warning" class="status-message hidden"></div>
+      <div id="dashboard-system-warning" class="status-message hidden"></div>
+      <div id="status-message" class="status-message hidden"></div>
+      <div id="backup-grid" class="backup-grid">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <span>Lade Backup-Status...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Jobs Page -->
+    <div id="page-jobs" class="page">
+      <div class="page-header">
+        <div>
+          <h1>Jobs</h1>
+          <p class="page-subtitle">Backup-Jobs starten und überwachen</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" id="jobs-refresh-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Aktualisieren
+          </button>
+          <button class="btn btn-primary" id="jobs-new-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Neuer Job
+          </button>
+        </div>
+      </div>
+
+      <div id="jobs-message" class="status-message hidden"></div>
+      <div id="jobs-data-dir-warning" class="status-message hidden"></div>
+      <div id="jobs-grid" class="backup-grid">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <span>Lade Jobs...</span>
+        </div>
+      </div>
+
+      <!-- Log Panel (wird eingeblendet wenn Job läuft) -->
+      <div id="log-panel" class="log-panel hidden">
+        <div class="log-panel-header">
+          <div class="log-panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span id="log-panel-title-text">Log-Ausgabe</span>
+          </div>
+          <div class="log-panel-actions">
+            <span id="log-status-badge" class="badge"></span>
+            <button class="btn btn-secondary btn-sm" id="jobs-log-clear-btn">Leeren</button>
+            <button class="btn btn-secondary btn-sm" id="jobs-log-close-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <pre id="log-output" class="log-output"></pre>
+        <div id="log-scroll-hint" class="log-scroll-hint">
+          <button id="jobs-log-scroll-end-btn">&#8595; Zum Ende springen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Storage Page -->
+    <div id="page-storage" class="page">
+      <div class="page-header">
+        <div>
+          <h1>Storage</h1>
+          <p class="page-subtitle">Borg Repositories verwalten</p>
+        </div>
+      </div>
+      <div id="storage-message" class="status-message hidden"></div>
+      <div id="storage-content">
+        <div class="loading-spinner"><div class="spinner"></div><span>Lade Repositories...</span></div>
+      </div>
+
+      <!-- Borg Check Card -->
+      <div class="check-card" id="storage-check-card">
+        <div class="check-card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          <span>Manueller Borg Check</span>
+        </div>
+        <div class="check-card-body">
+          <div class="check-row">
+            <select id="check-job-select" class="form-input check-select">
+              <option value="">— Job wählen —</option>
+            </select>
+            <select id="check-level-select" class="form-input check-level-select">
+              <option value="quick">Schnell</option>
+              <option value="verbose">Verbose</option>
+              <option value="verify_data">Verify Data</option>
+            </select>
+            <span id="check-mode-badge" class="check-mode-badge hidden" aria-live="polite">Hohe Last</span>
+            <button class="btn btn-primary" id="check-run-btn">
+              Check starten
+            </button>
+          </div>
+          <div id="check-mode-hint" class="check-mode-hint"></div>
+          <div id="check-message" class="status-message hidden"></div>
+          <div id="check-log-panel" class="check-log-panel hidden">
+            <div class="check-log-toolbar">
+              <span id="check-log-status" class="check-log-status"></span>
+              <div class="check-log-actions">
+                <button class="btn btn-secondary btn-sm" id="check-clear-log-btn">Leeren</button>
+                <button class="check-close-btn" id="check-close-log-btn" title="Schließen" aria-label="Schließen">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <pre id="check-log-output" class="log-output check-log-output"></pre>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- History Page -->
+    <div id="page-history" class="page">
+      <div class="page-header">
+        <div>
+          <h1>History</h1>
+          <p class="page-subtitle">Alle Backup-Läufe</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" id="history-refresh-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Aktualisieren
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="history-filters">
+        <select class="history-filter-select" id="history-filter-type">
+          <option value="">Alle Typen</option>
+          <option value="flash">Flash</option>
+          <option value="appdata">Appdata</option>
+          <option value="photos">Photos</option>
+          <option value="vms">VMs</option>
+          <option value="sonstiges">Sonstiges</option>
+          <option value="custom">Custom</option>
+        </select>
+        <select class="history-filter-select" id="history-filter-location">
+          <option value="">Alle Locations</option>
+          <option value="local">Lokal</option>
+          <option value="usb">USB</option>
+          <option value="smb">SMB</option>
+          <option value="storagebox">Storagebox</option>
+          <option value="custom">Custom</option>
+        </select>
+        <select class="history-filter-select" id="history-filter-status">
+          <option value="">Alle Status</option>
+          <option value="success">Erfolg</option>
+          <option value="skipped">Übersprungen</option>
+          <option value="warning">Warnung</option>
+          <option value="error">Fehler</option>
+        </select>
+        <span id="history-count" class="history-count-label"></span>
+      </div>
+
+      <div id="history-message" class="status-message hidden"></div>
+      <div id="history-content">
+        <div class="loading-spinner"><div class="spinner"></div><span>Lade History...</span></div>
+      </div>
+    </div>
+
+    <!-- Berichte Page -->
+    <div id="page-berichte" class="page">
+      <div class="page-header">
+        <div>
+          <h1>Berichte</h1>
+          <p class="page-subtitle">Historische Auswertung der Backup-Jobs</p>
+        </div>
+        <div class="header-actions">
+          <select id="bericht-job-sel" class="restore-select" style="min-width:240px">
+            <option value="">— Job wählen —</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="bericht-msg" class="status-message hidden"></div>
+
+      <div id="bericht-empty" class="page-empty-state">
+        <svg class="page-empty-state-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+          <rect x="2" y="2" width="20" height="20" rx="3"/>
+          <line x1="7" y1="20" x2="7" y2="13"/>
+          <line x1="12" y1="20" x2="12" y2="7"/>
+          <line x1="17" y1="20" x2="17" y2="10"/>
+        </svg>
+        <div class="page-empty-state-title">Kein Job ausgewählt</div>
+        <div class="page-empty-state-desc">Wähle oben einen Backup-Job aus, um historische Statistiken, Laufzeiten und Diagramme anzuzeigen.</div>
+        <div class="page-empty-state-steps">
+          <div class="page-empty-state-step">
+            <div class="page-empty-state-step-num">1</div>
+            <div class="page-empty-state-step-text">Job aus der Liste auswählen</div>
+          </div>
+          <div class="page-empty-state-step">
+            <div class="page-empty-state-step-num">2</div>
+            <div class="page-empty-state-step-text">Statistiken &amp; Charts werden geladen</div>
+          </div>
+          <div class="page-empty-state-step">
+            <div class="page-empty-state-step-num">3</div>
+            <div class="page-empty-state-step-text">Optional: Borg Repository Info laden</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="bericht-body" style="display:none">
+        <!-- Summary Cards -->
+        <div class="repo-stats-cards" style="margin-bottom:24px">
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Läufe gesamt</div>
+            <div class="repo-stat-value" id="br-runs">—</div>
+          </div>
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Erfolgreich</div>
+            <div class="repo-stat-value" id="br-success">—</div>
+          </div>
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Ø Dauer</div>
+            <div class="repo-stat-value" id="br-avg-dur">—</div>
+          </div>
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Repo-Größe (aktuell)</div>
+            <div class="repo-stat-value" id="br-repo-size">—</div>
+          </div>
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Datenmenge (original)</div>
+            <div class="repo-stat-value" id="br-orig-size">—</div>
+          </div>
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Neue Daten (letzter Lauf)</div>
+            <div class="repo-stat-value" id="br-dedup">—</div>
+          </div>
+        </div>
+        <div id="br-restore-verification" class="status-message hidden"></div>
+
+        <div class="repo-stats-cards" style="margin-bottom:24px">
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Zuwachs 7 Tage</div>
+            <div class="repo-stat-value" id="br-growth-7d">—</div>
+          </div>
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Zuwachs 30 Tage</div>
+            <div class="repo-stat-value" id="br-growth-30d">—</div>
+          </div>
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Ø Zuwachs/Tag</div>
+            <div class="repo-stat-value" id="br-growth-avg-day">—</div>
+          </div>
+          <div class="repo-stat-card">
+            <div class="repo-stat-label">Letzter Zuwachs</div>
+            <div class="repo-stat-value" id="br-growth-last">—</div>
+          </div>
+        </div>
+
+        <!-- Borg Repo Info (on demand) -->
+        <div class="bericht-borginfo-section">
+          <div class="bericht-borginfo-header">
+            <div>
+              <div class="bericht-borginfo-title">Borg Repository Info</div>
+              <div class="bericht-borginfo-hint">Präzise Deduplizierungsstatistiken direkt aus dem Repository (borg info)</div>
+            </div>
+            <button class="btn btn-secondary" id="bericht-borginfo-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+              Laden
+            </button>
+          </div>
+          <div id="bericht-borginfo-msg" class="status-message hidden"></div>
+          <div id="bericht-borginfo-cards" style="display:none" class="repo-stats-cards">
+            <div class="repo-stat-card">
+              <div class="repo-stat-label">Alle Archive (unkomprimiert)</div>
+              <div class="repo-stat-value" id="bi-total-size">—</div>
+            </div>
+            <div class="repo-stat-card">
+              <div class="repo-stat-label">Komprimiert</div>
+              <div class="repo-stat-value" id="bi-csize">—</div>
+            </div>
+            <div class="repo-stat-card">
+              <div class="repo-stat-label">Auf Disk (dedupliziert)</div>
+              <div class="repo-stat-value" id="bi-unique">—</div>
+            </div>
+            <div class="repo-stat-card">
+              <div class="repo-stat-label">Echte Einsparung</div>
+              <div class="repo-stat-value" id="bi-savings">—</div>
+            </div>
+            <div class="repo-stat-card">
+              <div class="repo-stat-label">Archive</div>
+              <div class="repo-stat-value" id="bi-count">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Repo-Größe über Zeit -->
+        <div class="card bericht-chart-card">
+          <div class="repo-stats-chart-title">Repository-Größe über Zeit</div>
+          <div id="bericht-size-chart" class="rs-chart-scroll"></div>
+        </div>
+
+        <!-- Neue Daten pro Lauf -->
+        <div class="card bericht-chart-card">
+          <div class="repo-stats-chart-title">Neue unique Daten pro Lauf (Dedupliziert)</div>
+          <div id="bericht-dedup-chart" class="rs-chart-scroll"></div>
+        </div>
+
+        <!-- Dauer pro Lauf -->
+        <div class="card bericht-chart-card">
+          <div class="repo-stats-chart-title">Dauer pro Lauf</div>
+          <div id="bericht-dur-chart" class="rs-chart-scroll"></div>
+        </div>
+
+        <!-- Status-Verlauf -->
+        <div class="card bericht-chart-card">
+          <div class="repo-stats-chart-title">Status-Verlauf (pro Monat)</div>
+          <div id="bericht-status-chart" class="rs-chart-scroll"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Browse & Restore Page -->
+    <div id="page-restore" class="page">
+      <div class="page-header">
+        <div>
+          <h1>Browse &amp; Restore</h1>
+          <p class="page-subtitle">Geführter Assistent in festen Schritten</p>
+        </div>
+      </div>
+
+      <div id="restore-stepper" class="history-filters" style="margin-bottom:10px">
+        <span class="history-type-badge" id="restore-step-badge-1">1 Job</span>
+        <span class="history-type-badge" id="restore-step-badge-2">2 Archiv</span>
+        <span class="history-type-badge" id="restore-step-badge-3">3 Auswahl</span>
+        <span class="history-type-badge" id="restore-step-badge-4">4 Ziel &amp; Modus</span>
+        <span class="history-type-badge" id="restore-step-badge-5">5 Prüfen &amp; Start</span>
+      </div>
+
+      <div id="restore-msg" class="restore-msg hidden"></div>
+
+      <div id="restore-empty" class="page-empty-state">
+        <svg class="page-empty-state-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          <circle cx="11" cy="14" r="3"/>
+          <line x1="16" y1="19" x2="13.5" y2="16.5"/>
+        </svg>
+        <div class="page-empty-state-title">Start über Schritt 1</div>
+        <div class="page-empty-state-desc">Wähle zuerst einen Job. Danach führt dich der Assistent durch alle Schritte.</div>
+      </div>
+
+      <div id="restore-wizard" class="card" style="display:none">
+        <div class="settings-body two-col" style="padding-top:10px">
+          <div class="form-group" style="grid-column:1/-1" id="restore-step-panel-1">
+            <label class="form-label">1. Job auswählen</label>
+            <select id="restore-job-sel" class="restore-select">
+              <option value="">— Job wählen —</option>
+            </select>
+            <div class="text-muted" style="font-size:12px;margin-top:8px">Nur Backup-Jobs werden angezeigt.</div>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1; display:none" id="restore-step-panel-2">
+            <label class="form-label">2. Archiv auswählen</label>
+            <select id="restore-archive-sel" class="restore-select">
+              <option value="">— Archiv wählen —</option>
+            </select>
+          </div>
+
+          <div style="grid-column:1/-1; display:none" id="restore-step-panel-3">
+            <div class="repo-stats-chart-title">3. Auswahl</div>
+            <div id="restore-browser">
+              <div class="restore-breadcrumb" id="restore-breadcrumb"></div>
+              <div id="restore-filelist"></div>
+            </div>
+            <div class="text-muted" style="font-size:12px;margin-top:8px">
+              Hinweis: Symbol <strong>⬇</strong> lädt eine Datei sofort herunter. Symbol <strong>✓</strong> wählt Datei oder Verzeichnis für die Wiederherstellung aus. Es ist immer nur <strong>eine</strong> Auswahl gleichzeitig möglich.
+            </div>
+            <div class="status-message" style="margin-top:10px">
+              <strong>Auswahl</strong><br>
+              Typ: <span id="restore-selected-type">—</span><br>
+              Pfad: <span id="restore-selected-path">—</span><br>
+              Hinweis: <span id="restore-selected-hint">—</span><br>
+              <button class="btn btn-secondary btn-sm" id="restore-clear-selection-btn" style="margin-top:8px">Auswahl entfernen</button>
+            </div>
+          </div>
+
+          <div style="grid-column:1/-1; display:none" id="restore-step-panel-4">
+            <div class="repo-stats-chart-title">4. Ziel &amp; Modus</div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label class="form-label">Quellpfad (Archiv)</label>
+              <input id="restore-source-path" class="form-input mono" type="text" readonly value="">
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label class="form-label">Zielordner</label>
+              <input id="restore-target-path" class="form-input mono" type="text" placeholder="/mnt/user/" list="restore-target-suggestions" autocomplete="off">
+              <datalist id="restore-target-suggestions"></datalist>
+              <div class="text-muted" style="font-size:12px;margin-top:6px">Vorschlag: <code>/mnt/user/restore</code></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Konfliktstrategie</label>
+              <select id="restore-conflict-mode" class="form-input">
+                <option value="skip">Nicht überschreiben</option>
+                <option value="overwrite">Ersetzen</option>
+                <option value="rename">Umbenennen (Zeitstempel)</option>
+              </select>
+            </div>
+            <label class="form-checkbox-row" style="align-self:end; margin-bottom:8px">
+              <input id="restore-dry-run" type="checkbox" checked>
+              Testlauf (keine Änderungen)
+            </label>
+            <label class="form-checkbox-row" style="grid-column:1/-1">
+              <input id="restore-preserve-owner" type="checkbox">
+              Original Owner/Group beibehalten
+            </label>
+          </div>
+
+          <div style="grid-column:1/-1; display:none" id="restore-step-panel-5">
+            <div class="repo-stats-chart-title">5. Prüfen &amp; Start</div>
+            <div class="status-message">
+              <strong>Aktuelle Auswahl</strong><br>
+              Job: <span id="restore-summary-job">—</span> ·
+              Archiv: <span id="restore-summary-archive">—</span> ·
+              Element: <span id="restore-summary-count">0</span> ·
+              Zielordner: <span id="restore-summary-target">—</span>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
+              <button class="btn btn-secondary btn-sm" id="restore-start-btn" disabled>Wiederherstellen starten</button>
+            </div>
+            <label class="form-checkbox-row" style="margin-top:10px">
+              <input id="restore-confirm-check" type="checkbox">
+              Zusammenfassung geprüft – Wiederherstellung ausführen
+            </label>
+            <div id="restore-assist-msg" class="status-message hidden"></div>
+            <pre id="restore-precheck-output" class="log-output" style="max-height:260px; min-height:100px"></pre>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top:none; padding-top:0">
+          <button class="btn btn-secondary btn-sm" id="restore-step-back-btn" disabled>Zurück</button>
+          <button class="btn btn-primary btn-sm" id="restore-step-next-btn">Weiter</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restore Tests Page -->
+    <div id="page-restore-tests" class="page">
+      <div class="page-header">
+        <div>
+          <h1>Restore Tests</h1>
+          <p class="page-subtitle">Verifizierung der Wiederherstellbarkeit</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" id="restore-tests-refresh-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Aktualisieren
+          </button>
+          <button class="btn btn-primary" id="rt-run-btn" title="Startet nur fällige geplante Tests (nicht alle Jobs).">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Fällige Tests jetzt ausführen
+          </button>
+        </div>
+      </div>
+      <div id="restore-tests-message" class="status-message hidden"></div>
+      <div class="segmented-control" style="margin-bottom:12px">
+        <button type="button" class="segmented-btn active" id="rt-subtab-plan-btn">Planung &amp; Policy</button>
+        <button type="button" class="segmented-btn" id="rt-subtab-reports-btn">Prüfberichte</button>
+      </div>
+      <div class="restore-tests-hint" style="margin-bottom:12px">
+        <div class="restore-tests-hint-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 16v-4"/>
+            <path d="M12 8h.01"/>
+          </svg>
+          Hinweise zu Restore-Tests
+        </div>
+        <p class="restore-tests-hint-text">
+          Restore-Tests können je nach Archivgröße und Dateityp lange dauern.
+        </p>
+        <ul class="restore-tests-hint-list">
+          <li>bis 100 GB: ca. 5–20 min</li>
+          <li>100–500 GB: ca. 20–60 min</li>
+          <li>500 GB–1 TB: ca. 45–150 min</li>
+          <li>&gt; 1 TB: ca. 1.5–4+ h</li>
+        </ul>
+        <p class="restore-tests-hint-text" style="margin:0">
+          Hinweis: Die zentrale Steuerung erfolgt in „Planung &amp; Policy pro Job“. Diese Seite führt
+          den fälligen Plan aus und zeigt die Ergebnisse.
+        </p>
+      </div>
+
+      <div class="card" id="restore-tests-plan" style="margin-bottom:12px">
+        <div class="card-header">
+          <h3>Planung &amp; Policy pro Job</h3>
+        </div>
+        <div class="card-body">
+          <div id="restore-tests-plan-summary" class="muted" style="font-size:12px;margin-bottom:8px"></div>
+          <div id="restore-tests-plan-content">
+            <div class="loading-spinner"><div class="spinner"></div><span>Lade Plan...</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card hidden" id="restore-tests-reports" style="margin-bottom:12px">
+        <div class="card-header">
+          <h3>Prüfberichte</h3>
+        </div>
+        <div class="card-body">
+          <div id="restore-tests-reports-filters" class="restore-reports-filters">
+            <input type="text" id="rt-report-filter-job" class="form-input" placeholder="Job filtern (Name/Key)">
+            <select id="rt-report-filter-location" class="form-select">
+              <option value="all">Alle Standorte</option>
+            </select>
+            <select id="rt-report-filter-status" class="form-select">
+              <option value="all">Alle Status</option>
+              <option value="success">Verifiziert</option>
+              <option value="failed">Fehlgeschlagen</option>
+              <option value="unavailable">Nicht verfügbar</option>
+              <option value="stale">Überfällig</option>
+            </select>
+            <select id="rt-report-filter-range" class="form-select">
+              <option value="all">Gesamter Zeitraum</option>
+              <option value="7">Letzte 7 Tage</option>
+              <option value="30">Letzte 30 Tage</option>
+              <option value="90">Letzte 90 Tage</option>
+            </select>
+            <label class="form-checkbox-row" style="margin:0">
+              <input type="checkbox" id="rt-report-filter-problem">
+              Nur fehlgeschlagen/überfällig
+            </label>
+          </div>
+          <div id="restore-tests-summary" class="summary-bar hidden"></div>
+          <div id="restore-tests-content">
+            <div class="loading-spinner"><div class="spinner"></div><span>Lade Prüfberichte...</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RT Live-Log Panel -->
+      <div id="rt-log-panel" class="log-panel hidden">
+        <div class="log-panel-header">
+          <div class="log-panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span>Restore Test Log</span>
+          </div>
+          <div class="log-panel-actions">
+            <span id="rt-log-status-badge" class="badge"></span>
+            <button class="btn btn-secondary btn-sm" id="rt-log-close-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <pre id="rt-log-output" class="log-output"></pre>
+      </div>
+    </div>
+
+    <!-- Settings Page -->
+    <div id="page-settings" class="page">
+      <div class="page-header">
+        <div>
+          <h1>Einstellungen</h1>
+          <p class="page-subtitle">backup.conf bearbeiten</p>
+        </div>
+        <div class="header-actions">
+          <span id="settings-conf-path" class="refresh-label"></span>
+          <button class="btn btn-primary" id="settings-save-btn" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Speichern
+          </button>
+        </div>
+      </div>
+      <div id="settings-message" class="status-message hidden"></div>
+      <div id="settings-setup-warning" class="status-message hidden"></div>
+      <div id="settings-content">
+        <div class="loading-spinner"><div class="spinner"></div><span>Lade Einstellungen...</span></div>
+      </div>
+    </div>
+
+    <!-- Hilfe / Doku Page -->
+    <div id="page-hilfe" class="page">
+      <div class="page-header">
+        <div>
+          <h1>Hilfe &amp; Dokumentation</h1>
+          <p class="page-subtitle">Bedienung, Troubleshooting und visuelle Anleitungen</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" id="help-refresh-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Aktualisieren
+          </button>
+        </div>
+      </div>
+      <div id="help-message" class="status-message hidden"></div>
+      <div id="help-content" class="help-doc">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <span>Lade Dokumentation...</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Restore Confirm Modal -->
+<div id="restore-confirm-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Restore bestätigen</h3>
+      <button class="modal-close" id="restore-confirm-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="text-muted" style="margin-top:0">Bitte Angaben prüfen und Restore bestätigen.</p>
+      <pre id="restore-confirm-summary" class="log-output" style="max-height:220px;min-height:120px"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="restore-confirm-cancel-btn">Abbrechen</button>
+      <button class="btn btn-primary" id="restore-confirm-start-btn">Restore starten</button>
+    </div>
+  </div>
+</div>
+
+<!-- Restore Download Confirm Modal -->
+<div id="restore-download-confirm-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Großen Download bestätigen</h3>
+      <button class="modal-close" id="restore-download-confirm-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="restore-download-confirm-message" style="margin-top:0"></p>
+      <div class="status-message warning">Hinweis: Bei großen Downloads kann der Browser länger blockieren.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="restore-download-confirm-cancel-btn">Abbrechen</button>
+      <button class="btn btn-primary" id="restore-download-confirm-start-btn">Download starten</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div id="confirm-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Job starten</h3>
+      <button class="modal-close" id="confirm-modal-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="modal-description"></p>
+      <div id="modal-info" class="modal-info-list"></div>
+      <div id="modal-passphrase-delete-wrap" class="hidden" style="margin-top:12px">
+        <label class="form-checkbox-row">
+          <input type="checkbox" id="modal-delete-passphrase">
+          Passphrase-Datei ebenfalls löschen
+          <span id="modal-delete-passphrase-path" style="font-size:11px;color:var(--text-muted);display:block;margin-left:22px"></span>
+        </label>
+      </div>
+      <div id="modal-confirm-input-wrap" class="hidden" style="margin-top:14px">
+        <label class="form-label" id="modal-confirm-input-label"></label>
+        <input class="form-input" type="text" id="modal-confirm-input" autocomplete="off">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="confirm-modal-cancel-btn">Abbrechen</button>
+      <button class="btn btn-primary" id="modal-confirm-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Jetzt starten
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="settings-dialog-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="settings-dialog-title">Eingabe</h3>
+      <button class="modal-close" id="settings-dialog-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="settings-dialog-description"></p>
+      <div id="settings-dialog-input-wrap" class="hidden" style="margin-top:14px">
+        <label class="form-label" id="settings-dialog-input-label"></label>
+        <input class="form-input" type="text" id="settings-dialog-input" autocomplete="off">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="settings-dialog-cancel-btn">Abbrechen</button>
+      <button class="btn btn-primary" id="settings-dialog-confirm-btn">Bestätigen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Storage Key Deploy Modal -->
+<div id="storage-deploy-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>SSH Key Deploy</h3>
+      <button class="modal-close" id="storage-deploy-close-btn" onclick="closeStorageDeployModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-hint" id="storage-deploy-target-hint" style="margin-bottom:8px"></div>
+      <pre id="storage-deploy-output" class="log-output" style="max-height:260px;min-height:120px"></pre>
+      <div class="form-group" style="margin-top:10px">
+        <label class="form-label">Eingabe (z. B. Passwort)</label>
+        <input class="form-input" type="password" id="storage-deploy-input" autocomplete="off" placeholder="Passwort eingeben und senden">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="storage-deploy-send-btn">Senden</button>
+      <button class="btn btn-secondary" id="storage-deploy-cancel-btn" onclick="storageDeployCancel()">Abbrechen</button>
+      <button class="btn btn-primary" id="storage-deploy-ok-btn" onclick="closeStorageDeployModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Storage Test Details Modal -->
+<div id="storage-test-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Storage Test-Details</h3>
+      <button class="modal-close" id="storage-test-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <pre id="storage-test-modal-output" class="log-output" style="max-height:300px;min-height:120px"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="storage-test-copy-btn">Kopieren</button>
+      <button class="btn btn-primary" id="storage-test-ok-btn">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Job Wizard Modal -->
+<div id="wizard-modal" class="modal-backdrop hidden">
+  <div class="modal modal-wizard">
+    <div class="modal-header">
+      <h3 id="wizard-modal-title">Neuer Backup-Job</h3>
+      <button class="modal-close" id="wizard-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Stepper -->
+    <div class="wizard-stepper">
+      <div class="wizard-step active" id="wstep-dot-1">
+        <div class="wizard-step-dot">1</div>
+        <div class="wizard-step-label">Grunddaten</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step" id="wstep-dot-2">
+        <div class="wizard-step-dot">2</div>
+        <div class="wizard-step-label">Quellen &amp; Ziel</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step" id="wstep-dot-3">
+        <div class="wizard-step-dot">3</div>
+        <div class="wizard-step-label">Retention</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step" id="wstep-dot-4">
+        <div class="wizard-step-dot">4</div>
+        <div class="wizard-step-label">Passphrase</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step" id="wstep-dot-5">
+        <div class="wizard-step-dot">5</div>
+        <div class="wizard-step-label">Beschreibung</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step" id="wstep-dot-6">
+        <div class="wizard-step-dot">6</div>
+        <div class="wizard-step-label">Zeitplan</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step" id="wstep-dot-7">
+        <div class="wizard-step-dot">7</div>
+        <div class="wizard-step-label">Flow-Vorschau</div>
+      </div>
+    </div>
+
+    <div class="wizard-body">
+
+      <!-- Step 1: Grunddaten -->
+      <div id="wizard-step-1" class="wizard-step-body">
+        <div id="wizard-error-1" class="status-message error hidden"></div>
+        <div class="settings-body two-col wizard-step1-layout">
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label">Job-Name <span class="form-hint">(Anzeigename)</span></label>
+            <input class="form-input" type="text" id="wiz-job-name"
+              placeholder="z.B. Borg Backup (Meine Daten)">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Typ-ID <span class="form-hint">(nur a–z, 0–9, _)</span></label>
+            <input class="form-input mono" type="text" id="wiz-type-id"
+              placeholder="z.B. meinedaten">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Icon</label>
+            <select class="form-select" id="wiz-icon">
+              <option value="">Automatisch (Typ)</option>
+              <option value="flash">Flash</option>
+              <option value="appdata">Appdata</option>
+              <option value="photos">Fotos</option>
+              <option value="vms">VMs</option>
+              <option value="sonstiges">Sonstiges</option>
+              <option value="docker">Docker</option>
+              <option value="folder">Ordner</option>
+              <option value="cloud">Cloud</option>
+              <option value="archive">Archiv</option>
+              <option value="database">Datenbank</option>
+              <option value="server">Server</option>
+              <option value="home">Home</option>
+              <option value="music">Musik</option>
+              <option value="video">Video</option>
+              <option value="documents">Dokumente</option>
+              <option value="code">Code</option>
+              <option value="camera">Kamera</option>
+              <option value="usb">USB</option>
+              <option value="shield">Sicherheit</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Icon-Farbe</label>
+            <select class="form-select" id="wiz-icon-color">
+              <option value="">Automatisch (Typ)</option>
+              <option value="blue">Blau</option>
+              <option value="indigo">Indigo</option>
+              <option value="purple">Lila</option>
+              <option value="pink">Pink</option>
+              <option value="green">Grün</option>
+              <option value="lime">Lime</option>
+              <option value="violet">Violett</option>
+              <option value="amber">Amber</option>
+              <option value="orange">Orange</option>
+              <option value="red">Rot</option>
+              <option value="rose">Rose</option>
+              <option value="teal">Türkis</option>
+              <option value="cyan">Cyan</option>
+              <option value="gray">Grau</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Vorschau</label>
+            <div class="wizard-icon-preview" id="wiz-icon-preview" title="Icon-Vorschau">
+              <div class="type-icon type-icon-sonstiges" id="wiz-icon-preview-box"></div>
+              <span id="wiz-icon-preview-label">Automatisch</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Location <span class="form-hint">(Alias/Profil)</span></label>
+            <select class="form-select" id="wiz-location">
+              <option value="local">Lokal</option>
+              <option value="usb">USB</option>
+              <option value="smb">SMB</option>
+              <option value="storagebox">Storagebox</option>
+            </select>
+          </div>
+          <div class="wizard-feature-grid" style="grid-column:1/-1">
+            <div class="form-group wizard-feature-box">
+              <label class="form-label">Docker-Container stoppen <span class="form-hint">(für Appdata-Backups)</span></label>
+              <label class="form-checkbox-row">
+                <input type="checkbox" id="wiz-use-docker">
+                Docker vor dem Backup stoppen und danach starten
+              </label>
+            </div>
+            <div class="form-group wizard-feature-box">
+              <label class="form-label">VMs herunterfahren <span class="form-hint">(für VM-Backups)</span></label>
+              <label class="form-checkbox-row">
+                <input type="checkbox" id="wiz-use-vm">
+                Laufende VMs vor dem Backup herunterfahren und danach starten
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Quellen & Ziel -->
+      <div id="wizard-step-2" class="wizard-step-body hidden">
+        <div id="wizard-error-2" class="status-message error hidden"></div>
+        <div class="settings-body">
+          <div class="form-group">
+            <label class="form-label">Quellpfade <span class="form-hint">(Autocomplete ab /mnt, Enter zum Übernehmen)</span></label>
+            <input class="form-input mono" type="text" id="wiz-source-path-input" placeholder="/mnt/user/...">
+            <div id="wiz-source-path-suggest" class="wizard-path-suggest hidden"></div>
+            <div id="wiz-source-path-list" class="wizard-path-list"></div>
+            <textarea class="form-input path-list-input hidden" id="wiz-source-paths" rows="4"
+              placeholder="/mnt/user/data/&#10;/mnt/user/documents/"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Repository-Pfad</label>
+            <input class="form-input mono" type="text" id="wiz-repo-path"
+              placeholder="/mnt/backup/borg-backup-meinedaten">
+            <div id="wiz-storagebox-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
+          </div>
+          <div class="form-group hidden" id="wiz-usb-profile-group">
+            <label class="form-label">USB-Profil</label>
+            <select class="form-select" id="wiz-usb-profile"></select>
+            <div id="wiz-usb-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
+          </div>
+          <div class="form-group hidden" id="wiz-smb-profile-group">
+            <label class="form-label">SMB-Profil</label>
+            <select class="form-select" id="wiz-smb-profile"></select>
+            <div id="wiz-smb-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
+          </div>
+          <div class="form-group hidden" id="wiz-storage-profile-group">
+            <label class="form-label">Storage-Profil</label>
+            <select class="form-select" id="wiz-storage-profile"></select>
+            <div id="wiz-storage-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
+          </div>
+          <div class="form-group hidden" id="wiz-smb-mount-options-group">
+            <label class="form-label">SMB-Mount-Optionen</label>
+            <label class="form-checkbox-row">
+              <input type="checkbox" id="wiz-smb-mount-before-run" checked>
+              SMB vor dem Backup mounten
+            </label>
+            <label class="form-checkbox-row" style="margin-top:6px">
+              <input type="checkbox" id="wiz-smb-unmount-after-run" checked>
+              SMB nach dem Backup unmounten
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kompression</label>
+            <select class="form-select" id="wiz-compression">
+              <option value="lz4">lz4 (schnell, Standard)</option>
+              <option value="zstd,1">zstd,1</option>
+              <option value="zstd,3">zstd,3</option>
+              <option value="zstd,6">zstd,6</option>
+              <option value="zstd,9">zstd,9</option>
+              <option value="none">none (keine Kompression)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Verschlüsselung <span class="form-hint">(für borg init)</span></label>
+            <select class="form-select" id="wiz-encryption">
+              <option value="repokey-blake2">repokey-blake2 (empfohlen)</option>
+              <option value="repokey">repokey</option>
+              <option value="keyfile-blake2">keyfile-blake2</option>
+              <option value="keyfile">keyfile</option>
+              <option value="none">none (keine Verschlüsselung)</option>
+            </select>
+          </div>
+        </div>
+        <div class="wizard-step-scroll-hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <polyline points="7 10 12 15 17 10"></polyline>
+          </svg>
+          Weitere Einstellungen unten
+        </div>
+      </div>
+
+      <!-- Step 3: Retention -->
+      <div id="wizard-step-3" class="wizard-step-body hidden">
+        <div id="wizard-error-3" class="status-message error hidden"></div>
+        <div class="settings-body two-col">
+          <div class="form-group">
+            <label class="form-label">Täglich behalten</label>
+            <input class="form-input" type="number" min="0" id="wiz-keep-daily" value="7">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Wöchentlich behalten</label>
+            <input class="form-input" type="number" min="0" id="wiz-keep-weekly" value="4">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Monatlich behalten</label>
+            <input class="form-input" type="number" min="0" id="wiz-keep-monthly" value="6">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Jährlich behalten</label>
+            <input class="form-input" type="number" min="0" id="wiz-keep-yearly" value="3">
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Passphrase -->
+      <div id="wizard-step-4" class="wizard-step-body hidden">
+        <div id="wizard-error-4" class="status-message error hidden"></div>
+
+        <!-- shown when passphrase file already exists -->
+        <div id="wizard-passphrase-conflict" class="hidden">
+          <div class="status-message warning passphrase-conflict-box">
+            <strong>Passphrase-Datei existiert bereits</strong>
+            <span id="wizard-passphrase-conflict-path" style="font-size:12px;display:block;margin-top:2px;opacity:.8"></span>
+            <div class="passphrase-conflict-btns">
+              <button class="btn btn-secondary btn-sm" id="wiz-keep-btn">Vorhandene behalten</button>
+              <button class="btn btn-sm btn-danger-sm" id="wiz-replace-btn">Neue Passphrase setzen</button>
+            </div>
+            <div id="wizard-passphrase-keep-confirm" class="passphrase-keep-confirm hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>
+              Vorhandene Passphrase wird beibehalten
+            </div>
+          </div>
+          <div id="wizard-passphrase-replace-warning" class="status-message error hidden passphrase-warning">
+            <strong>Achtung:</strong> Eine neue Passphrase macht das vorhandene Repository dauerhaft unlesbar!
+          </div>
+        </div>
+
+        <div id="wizard-passphrase-form" class="settings-body">
+          <div class="form-group">
+            <label class="form-label">Passphrase <span class="form-hint">(wird in <code>/boot/config/borg-backup/secrets/.borg-passphrase-&lt;typ&gt;_&lt;location&gt;</code> gespeichert)</span></label>
+            <div class="passphrase-input-wrap">
+              <input class="form-input mono" type="password" id="wiz-passphrase"
+                placeholder="Passphrase eingeben oder generieren"
+                autocomplete="new-password">
+              <button class="btn btn-secondary btn-sm" type="button"
+                id="wiz-passphrase-toggle">Anzeigen</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="passphrase-actions">
+              <button class="btn btn-secondary btn-sm" type="button" id="wiz-generate-btn">
+                Zufällig generieren
+              </button>
+              <button class="btn btn-secondary btn-sm" type="button"
+                id="wiz-copy-btn" disabled>
+                Kopieren
+              </button>
+            </div>
+          </div>
+          <div class="status-message warning passphrase-warning">
+            <strong>Wichtig:</strong> Speichere die Passphrase sicher. Ohne sie sind verschlüsselte Backups nicht wiederherstellbar.
+          </div>
+        </div><!-- /#wizard-passphrase-form -->
+      </div>
+
+      <!-- Step 5: Beschreibung -->
+      <div id="wizard-step-5" class="wizard-step-body hidden">
+        <div id="wizard-error-5" class="status-message error hidden"></div>
+        <div class="settings-body">
+          <div class="form-group">
+            <label class="form-label wizard-label-inline">
+              <span>Beschreibung <span class="form-hint">(optional)</span></span>
+              <button type="button" class="wizard-help-btn" id="wiz-description-help-btn" title="Markdown-Hilfe" aria-label="Markdown-Hilfe">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+              </button>
+            </label>
+            <div class="form-hint" style="margin:0 0 6px 0">Das Feld Beschreibung erlaubt Markdown.</div>
+            <textarea class="form-input path-list-input" id="wiz-description" rows="6"
+              placeholder="z.B. **Paperless**&#10;- Appdata sichern&#10;- Ziel: /mnt/backup/borg-backup-meinedaten"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 6: Zeitplan (optional) -->
+      <div id="wizard-step-6" class="wizard-step-body hidden">
+        <div id="wizard-error-6" class="status-message error hidden"></div>
+        <div class="settings-body">
+          <div class="schedule-toggle-row">
+            <span class="schedule-field-label">Zeitplan aktivieren</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="wiz-sched-enabled">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="schedule-field-row">
+            <span class="schedule-field-label">Häufigkeit</span>
+            <div class="freq-btn-group">
+              <button class="freq-btn" data-wiz-freq="daily">Täglich</button>
+              <button class="freq-btn" data-wiz-freq="weekly">Wöchentlich</button>
+              <button class="freq-btn" data-wiz-freq="monthly">Monatlich</button>
+              <button class="freq-btn" data-wiz-freq="custom">Benutzerdefiniert</button>
+            </div>
+          </div>
+          <div class="schedule-field-row" id="wiz-sched-time-row">
+            <span class="schedule-field-label">Uhrzeit</span>
+            <div class="time-picker">
+              <input type="number" id="wiz-sched-hour"   class="time-input" min="0" max="23" value="3">
+              <span class="time-sep">:</span>
+              <input type="number" id="wiz-sched-minute" class="time-input" min="0" max="59" value="0">
+            </div>
+          </div>
+          <div class="schedule-field-row hidden" id="wiz-sched-dow-row">
+            <span class="schedule-field-label">Wochentag</span>
+            <div class="dow-btn-group">
+              <button class="dow-btn" data-wiz-dow="1">Mo</button>
+              <button class="dow-btn" data-wiz-dow="2">Di</button>
+              <button class="dow-btn" data-wiz-dow="3">Mi</button>
+              <button class="dow-btn" data-wiz-dow="4">Do</button>
+              <button class="dow-btn" data-wiz-dow="5">Fr</button>
+              <button class="dow-btn" data-wiz-dow="6">Sa</button>
+              <button class="dow-btn" data-wiz-dow="0">So</button>
+            </div>
+          </div>
+          <div class="schedule-field-row hidden" id="wiz-sched-dom-row">
+            <span class="schedule-field-label">Tag des Monats</span>
+            <div class="dom-picker">
+              <input type="number" id="wiz-sched-dom" class="time-input dom-input"
+                     min="1" max="28" value="1">
+              <span class="schedule-field-hint">Hinweis: Max. 28 um Monatsfehler zu vermeiden</span>
+            </div>
+          </div>
+          <div class="schedule-field-row hidden" id="wiz-sched-custom-row">
+            <span class="schedule-field-label">Cron-Ausdruck</span>
+            <div class="custom-cron-wrap">
+              <input type="text" id="wiz-sched-cron-custom" class="cron-input"
+                     placeholder="0 3 * * *">
+              <span class="schedule-field-hint">Format: Minute Stunde Tag Monat Wochentag</span>
+            </div>
+          </div>
+          <div class="schedule-next-run" id="wiz-sched-next-run">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span id="wiz-sched-next-run-text">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 7: Flow-Vorschau & Speichern -->
+      <div id="wizard-step-7" class="wizard-step-body hidden">
+        <div id="wizard-error-7" class="status-message error hidden"></div>
+        <div id="wizard-preview-loading" class="loading-spinner hidden">
+          <div class="spinner"></div><span>Lade Flow-Vorschau...</span>
+        </div>
+        <div id="wizard-preview-wrap" class="hidden">
+          <div class="wizard-preview-info">
+            Runner: <code id="wizard-preview-filename"></code>
+          </div>
+          <div id="wizard-preview-mode-info" class="wizard-preview-mode-info"></div>
+          <div id="wizard-remote-repo-status" class="status-message hidden"></div>
+          <pre id="wizard-preview-code" class="code-preview"></pre>
+          <div id="wizard-remote-init-confirm-wrap" class="hidden" style="margin-top:10px">
+            <label class="form-checkbox-row">
+              <input type="checkbox" id="wiz-remote-init-confirm">
+              Remote-Repository bei Bedarf anlegen bestätigen
+            </label>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.wizard-body -->
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="wizard-back-btn" style="display:none">Zurück</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-secondary" id="wizard-cancel-btn">Abbrechen</button>
+      <button class="btn btn-primary" id="wizard-next-btn">Weiter</button>
+      <button class="btn btn-primary hidden" id="wizard-save-btn" data-step="7">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Speichern
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="wizard-help-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Beschreibung: Markdown-Hilfe</h3>
+      <button class="modal-close" id="wizard-help-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="text-muted" style="margin-top:0">Unterstützt werden normale Markdown-Basics:</p>
+      <ul style="margin-left:18px;color:var(--text-secondary);font-size:13px;line-height:1.5">
+        <li><code>**fett**</code> für Fettdruck</li>
+        <li><code>*kursiv*</code> für Kursiv</li>
+        <li><code>- Punkt 1</code> für Listen</li>
+        <li>Absätze durch Leerzeilen trennen</li>
+      </ul>
+      <p class="text-muted" style="margin-top:10px">Beispiel:</p>
+      <pre class="log-output" style="max-height:180px;min-height:120px">**Borg Backup - Fotos**
+
+Backup der wichtigsten Fotoverzeichnisse.
+
+- Quelle: /mnt/user/Photos
+- Ziel: storagebox</pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="wizard-help-ok-btn">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Modal -->
+<div id="schedule-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="schedule-modal-title">Zeitplan</h3>
+      <button class="modal-close" id="schedule-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Enable toggle -->
+      <div class="schedule-toggle-row">
+        <span class="schedule-field-label">Zeitplan aktivieren</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="schedule-enabled">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Frequency presets -->
+      <div class="schedule-field-row">
+        <span class="schedule-field-label">Häufigkeit</span>
+        <div class="freq-btn-group">
+          <button class="freq-btn" data-freq="daily">Täglich</button>
+          <button class="freq-btn" data-freq="weekly">Wöchentlich</button>
+          <button class="freq-btn" data-freq="monthly">Monatlich</button>
+          <button class="freq-btn" data-freq="custom">Benutzerdefiniert</button>
+        </div>
+      </div>
+
+      <!-- Time picker (daily / weekly / monthly) -->
+      <div class="schedule-field-row" id="schedule-time-row">
+        <span class="schedule-field-label">Uhrzeit</span>
+        <div class="time-picker">
+          <input type="number" id="schedule-hour"   class="time-input" min="0" max="23" value="3">
+          <span class="time-sep">:</span>
+          <input type="number" id="schedule-minute" class="time-input" min="0" max="59" value="0">
+        </div>
+      </div>
+
+      <!-- Weekday picker (weekly) -->
+      <div class="schedule-field-row hidden" id="schedule-dow-row">
+        <span class="schedule-field-label">Wochentag</span>
+        <div class="dow-btn-group">
+          <button class="dow-btn" data-dow="1">Mo</button>
+          <button class="dow-btn" data-dow="2">Di</button>
+          <button class="dow-btn" data-dow="3">Mi</button>
+          <button class="dow-btn" data-dow="4">Do</button>
+          <button class="dow-btn" data-dow="5">Fr</button>
+          <button class="dow-btn" data-dow="6">Sa</button>
+          <button class="dow-btn" data-dow="0">So</button>
+        </div>
+      </div>
+
+      <!-- Day of month picker (monthly) -->
+      <div class="schedule-field-row hidden" id="schedule-dom-row">
+        <span class="schedule-field-label">Tag des Monats</span>
+        <div class="dom-picker">
+          <input type="number" id="schedule-dom" class="time-input dom-input"
+                 min="1" max="28" value="1">
+          <span class="schedule-field-hint">Hinweis: Max. 28 um Monatsfehler zu vermeiden</span>
+        </div>
+      </div>
+
+      <!-- Custom cron expression -->
+      <div class="schedule-field-row hidden" id="schedule-custom-row">
+        <span class="schedule-field-label">Cron-Ausdruck</span>
+        <div class="custom-cron-wrap">
+          <input type="text" id="schedule-cron-custom" class="cron-input"
+                 placeholder="0 3 * * *">
+          <span class="schedule-field-hint">Format: Minute Stunde Tag Monat Wochentag</span>
+        </div>
+      </div>
+
+      <!-- Next run preview -->
+      <div class="schedule-next-run" id="schedule-next-run">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span id="schedule-next-run-text">—</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger-sm" id="schedule-delete-btn" style="margin-right:auto">Löschen</button>
+      <button class="btn btn-secondary" id="schedule-cancel-btn">Abbrechen</button>
+      <button class="btn btn-primary" id="schedule-save-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log Viewer Modal -->
+<div id="log-viewer-modal" class="modal-backdrop hidden">
+  <div class="modal modal-log">
+    <div class="modal-header">
+      <h3 id="log-viewer-title">Log-Datei</h3>
+      <button class="modal-close" id="log-viewer-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div id="log-viewer-body" class="log-viewer-body">
+      <div class="loading-spinner"><div class="spinner"></div><span>Lade Log...</span></div>
+    </div>
+  </div>
+</div>
+
+<script src="/ui/js/app-main.js"></script>
+</body>
+</html>
