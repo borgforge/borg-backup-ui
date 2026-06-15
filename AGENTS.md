@@ -134,6 +134,22 @@ Bereits gemergte Branches nicht weiterverwenden.
 
 Nach Codeaenderungen Pull Request vorbereiten oder erstellen, sofern nicht explizit anders vereinbart.
 
+## Branch Protection
+
+`main` ist durch ein GitHub Branch Ruleset geschuetzt.
+
+Erwartete Regeln:
+
+* keine Force Pushes auf `main`
+* kein Loeschen von `main`
+* Aenderungen an `main` nur ueber Pull Requests
+* offene PR-Konversationen muessen vor dem Merge aufgeloest sein
+* Required Status Checks erst aktivieren, wenn GitHub Actions/CI definiert sind
+
+Der Branch `test-channel` ist ein Sonderbranch und wird nicht durch dieselben
+Regeln wie `main` geschuetzt. Er wird ausschliesslich ueber
+`./plugin/deploy-test.sh <version>` aktualisiert.
+
 ## Sprache und Kommunikation
 
 Die direkte Kommunikation mit dem Repository-Maintainer erfolgt auf Deutsch.
