@@ -134,6 +134,27 @@ Bereits gemergte Branches nicht weiterverwenden.
 
 Nach Codeaenderungen Pull Request vorbereiten oder erstellen, sofern nicht explizit anders vereinbart.
 
+## Sprache und Kommunikation
+
+Die direkte Kommunikation mit dem Repository-Maintainer erfolgt auf Deutsch.
+
+GitHub-Artefakte werden auf Englisch formuliert:
+
+* Issue-Titel und Issue-Beschreibungen
+* Pull-Request-Titel und Pull-Request-Beschreibungen
+* Commit-Messages
+* Review-Kommentare
+* Labels und Milestones
+
+Ausnahmen nur, wenn der Nutzer ausdruecklich Deutsch fuer ein GitHub-Artefakt
+verlangt.
+
+Oeffentliche Installations- oder Release-URLs werden nicht in README-Dateien
+oder oeffentlicher Nutzerdokumentation beworben, bis die Veroeffentlichung ueber
+Unraid Community Apps freigegeben ist. Vorher erforderlich sind insbesondere
+Zweisprachigkeit Deutsch/Englisch und definierte manuelle Maintests auf einem
+frischen System.
+
 ## Repository-Plattform
 
 Dieses Repository wird auf GitHub betrieben.
