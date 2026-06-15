@@ -220,6 +220,20 @@ Wenn Plugin-Code geaendert wurde:
 3. Release-Artefakt aktualisieren
 4. Release-Ergebnis pruefen
 
+Ausnahme fuer ausdruecklich freigegebene Umbrella-Features:
+
+* Schrittweise Teil-PRs duerfen Plugin-Code ohne Release-Artefakt aendern,
+  wenn der Nutzer dies fuer das Umbrella-Feature freigegeben hat.
+* Aktuell gilt diese Ausnahme fuer die Zweisprachigkeit aus Issue `#11`.
+* Der PR muss dokumentieren, dass der Release-Build bewusst auf den finalen
+  Feature-Abschluss verschoben wird.
+* Preflight muss in diesem Fall explizit mit
+  `BORG_UI_ALLOW_DEFERRED_RELEASE=1 ./plugin/mr-preflight.sh` ausgefuehrt
+  werden.
+* Bugfixes, Security-Fixes, Maintenance-Releases und finale Feature-Releases
+  bleiben von dieser Ausnahme unberuehrt und benoetigen weiterhin Build,
+  Changelog, Release-Artefakt und Test-Channel-Schritte.
+
 Unter `releases/` bleiben in `main` ausschliesslich die letzten 5
 `borg-backup-ui-*.txz`-Release-Artefakte.
 

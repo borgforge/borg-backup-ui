@@ -35,6 +35,7 @@ echo "==> Prüfe Release-Regel für Plugin-Code"
 changed_files="$(git diff --name-only "${base_ref}...HEAD")"
 plugin_code_changed=0
 release_build_changed=0
+deferred_release_allowed="${BORG_UI_ALLOW_DEFERRED_RELEASE:-0}"
 
 while IFS= read -r file; do
   case "${file}" in
@@ -49,7 +50,10 @@ while IFS= read -r file; do
   esac
 done <<< "${changed_files}"
 
-if [[ "${plugin_code_changed}" -eq 1 && "${release_build_changed}" -eq 0 ]]; then
+if [[ "${plugin_code_changed}" -eq 1 && "${release_build_changed}" -eq 0 && "${deferred_release_allowed}" == "1" ]]; then
+  echo "Hinweis: Plugin-Code wurde geändert, aber kein Release-Build ist im Branch enthalten."
+  echo "        Release-Build ist fuer ein freigegebenes Umbrella-Feature bewusst aufgeschoben."
+elif [[ "${plugin_code_changed}" -eq 1 && "${release_build_changed}" -eq 0 ]]; then
   echo "Fehler: Plugin-Code wurde geändert, aber kein Release-Build ist im Branch enthalten."
   echo "Bitte ./plugin/build.sh ausführen und die entstehenden Änderungen committen."
   echo "Erwartet werden typischerweise:"

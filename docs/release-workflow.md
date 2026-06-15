@@ -148,6 +148,36 @@ In diesem Fall ausfuehren:
 ./plugin/build.sh
 ```
 
+### Deferred release build for approved umbrella features
+
+The default rule remains strict: plugin-code changes require a release build in
+the same branch.
+
+For explicitly approved umbrella features, incremental pull requests may defer
+the release build until the feature is complete. This is intended for large
+user-facing work that would otherwise create half-finished release artifacts.
+
+Current approved umbrella feature:
+
+- German and English localization, tracked by issue `#11`
+
+Rules for deferred release-build PRs:
+
+- Use one branch and one PR per sub-issue.
+- Keep `main` functional after every merge.
+- Do not update `borg-backup-ui.plg`, `borg_backup_ui.py`, or
+  `releases/borg-backup-ui-*.txz` solely to create a partial feature release.
+- Document in the PR that the release build is intentionally deferred.
+- Run preflight explicitly with:
+
+```bash
+BORG_UI_ALLOW_DEFERRED_RELEASE=1 ./plugin/mr-preflight.sh
+```
+
+Bug fixes, security fixes, maintenance releases, and final feature-release PRs
+must still include the normal changelog, build, release artifact, and
+test-channel workflow.
+
 Fuer neue Releases muss `borg-backup-ui.plg` genau einen `###NEXT###`-Block
 enthalten. `plugin/build.sh` ersetzt diesen Block durch die neue Version und
 bricht ab, wenn dadurch doppelte Changelog-Versionen entstehen wuerden.
