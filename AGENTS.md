@@ -327,6 +327,61 @@ Vor Abschluss nennen:
 
 ---
 
+## GitHub-Konfiguration
+
+Für dieses Repository kann optional eine lokale GitHub-Konfigurationsdatei verwendet werden:
+
+```text
+/env/github_borg-backup-ui.env
+```
+
+Diese Datei befindet sich außerhalb des Repositorys und darf niemals in Git eingecheckt werden.
+
+Sie kann Informationen wie folgende enthalten:
+
+* GitHub Organisation
+* Repository-Name
+* SSH-Remote
+* GitHub Token für borg-codex-bot
+* Standard-Branch
+
+Die Datei dient ausschließlich lokalen Entwicklungs- und Automatisierungszwecken.
+
+## borg-codex-bot
+
+Der Benutzer `borg-codex-bot` darf für dieses Repository verwendet werden.
+
+Erlaubt:
+
+* Issues erstellen und aktualisieren
+* Pull Requests erstellen und aktualisieren
+* Kommentare auf Issues und Pull Requests erstellen
+* Branches für Entwicklungsarbeiten anlegen
+* Änderungen committen und pushen
+
+Nicht erlaubt:
+
+* Direktes Arbeiten auf `main`
+* Direktes Pushen auf `main`
+* Löschen von Repositorys
+* Ändern von Repository-Einstellungen
+* Umgehen des Pull-Request-Prozesses
+
+## Entwicklungsworkflow
+
+Änderungen erfolgen grundsätzlich nach folgendem Ablauf:
+
+1. Bestehendes Issue verwenden oder neues Issue erstellen
+2. Feature-Branch anlegen
+3. Implementierung durchführen
+4. Tests ausführen
+5. Pull Request erstellen
+6. Nach Review mergen
+
+Direkte Änderungen auf `main` sind nicht zulässig.
+
+---
+
 ## Definition of Done
 
 Die Aufgabe ist abgeschlossen wenn:
