@@ -1,0 +1,127 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name      "borg-backup-ui">
+<!ENTITY author    "Thorsten Steinberg">
+<!ENTITY version   "2026.06.15.1213">
+<!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
+<!ENTITY bootdir   "/boot/config/plugins/&name;">
+<!ENTITY pkgurl    "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/releases/&name;-&version;.txz">
+]>
+
+<PLUGIN name="&name;"
+        author="&author;"
+        version="&version;"
+        pluginURL="&pluginURL;"
+        description="TEST CHANNEL - Web UI for Borg Backup. Install this only on test systems."
+        icon="plugin-icon.png">
+
+<CHANGES>
+<![CDATA[
+###2026.06.15.1213###
+- Aktueller Stand (#60):
+  - Wochenbericht zeigt die Erfolgsquote der letzten 7 Tage statt der historischen Gesamtquote.
+  - Wochenbericht enthaelt den aktuellen Mailkopf, sortierte Job-Uebersicht und fokussierte Log-Hinweise.
+  - Restore-Test-Berichte und Plugin-UI entsprechen dem aktuellen stabilen Unraid-Plugin-Stand.
+  - Vollstaendige technische Historie wurde nach docs/changelog.md ausgelagert.
+]]>
+</CHANGES>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════
+  Step 1 – Download and install the plugin package
+  The .txz contains:
+    /boot/config/plugins/borg-backup-ui/      → App files (persistent on flash)
+    /etc/rc.d/rc.borg_backup_ui               → Start/stop script
+    /usr/local/emhttp/plugins/borg-backup-ui/ → Unraid plugin metadata
+  ══════════════════════════════════════════════════════════════════════════
+-->
+<FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<URL>&pkgurl;</URL>
+<MD5>2397f2417422196dc7f94d5747ceb2af</MD5>
+</FILE>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════
+  Step 2 – Post-install: autostart + initial launch
+  ══════════════════════════════════════════════════════════════════════════
+-->
+<FILE Name="/tmp/borg-backup-ui-install.sh" Run="/bin/bash">
+<INLINE>
+#!/bin/bash
+PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
+GO_FILE="/boot/config/go"
+
+# Create default config if none exists yet
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.conf" ]; then
+  cp "${PLUGIN_DIR}/borg_backup_ui.conf.example" \
+     "${PLUGIN_DIR}/borg_backup_ui.conf" 2>/dev/null || true
+  echo "Created borg_backup_ui.conf from template."
+fi
+
+# Register autostart in /boot/config/go (once)
+if ! grep -q "rc.borg_backup_ui" "${GO_FILE}" 2>/dev/null; then
+  echo ""                                    >> "${GO_FILE}"
+  echo "# Borg Backup UI"                   >> "${GO_FILE}"
+  echo "/etc/rc.d/rc.borg_backup_ui start"  >> "${GO_FILE}"
+  echo "Autostart registered in ${GO_FILE}."
+fi
+
+# Copy restore-test script to scripts/ (if phase-1 migration was done)
+# Bootstrap borg-backup runtime directories
+BORG_BASE="/boot/config/borg-backup"
+mkdir -p "${BORG_BASE}/config/jobs" "${BORG_BASE}/locks" "${BORG_BASE}/scripts"
+
+# Legacy cleanup: old external runtime lib is no longer used.
+if [ -d "${BORG_BASE}/lib" ]; then
+  rm -rf "${BORG_BASE}/lib" 2>/dev/null || true
+fi
+
+# Copy standalone backup.conf.example into runtime config path
+cp -f "${PLUGIN_DIR}/runtime/config/backup.conf.example" "${BORG_BASE}/config/backup.conf.example" 2>/dev/null || true
+if [ ! -f "${BORG_BASE}/config/backup.conf" ]; then
+  cp -f "${BORG_BASE}/config/backup.conf.example" "${BORG_BASE}/config/backup.conf" 2>/dev/null || true
+fi
+
+# Copy restore-test script into runtime scripts path
+cp -f "${PLUGIN_DIR}/runtime/scripts/borg_restore_test.py"          "${BORG_BASE}/scripts/" 2>/dev/null || true
+cp -f "${PLUGIN_DIR}/runtime/scripts/borg_restore_test.description" "${BORG_BASE}/scripts/" 2>/dev/null || true
+
+# Stop any running instance, then start fresh
+/etc/rc.d/rc.borg_backup_ui stop 2>/dev/null || true
+sleep 1
+/etc/rc.d/rc.borg_backup_ui start
+
+# Cleanup local release artifacts: keep current + previous, delete older ones
+RELEASE_DIR="${PLUGIN_DIR}"
+if [ -d "${RELEASE_DIR}" ]; then
+  _keep=0
+  ls -1t "${RELEASE_DIR}"/borg-backup-ui-*.txz 2>/dev/null | while IFS= read -r _old; do
+    _keep=$((_keep + 1))
+    if [ "${_keep}" -gt 2 ]; then
+      rm -f "${_old}" 2>/dev/null || true
+    fi
+  done
+fi
+
+rm -f /tmp/borg-backup-ui-install.sh
+</INLINE>
+</FILE>
+
+<FILE Name="/tmp/borg-backup-ui-remove.sh" Run="/bin/bash" Method="remove">
+<INLINE>
+#!/bin/bash
+GO_FILE="/boot/config/go"
+
+# Stop the service
+/etc/rc.d/rc.borg_backup_ui stop 2>/dev/null || true
+
+# Remove autostart from /boot/config/go
+sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
+sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
+
+rm -f /tmp/borg-backup-ui-remove.sh
+</INLINE>
+</FILE>
+
+</PLUGIN>
