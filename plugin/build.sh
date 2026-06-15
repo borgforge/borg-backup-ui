@@ -11,7 +11,7 @@
 #   3. git add releases/<name>-<version>.txz borg-backup-ui.plg borg_backup_ui.py
 #   4. git commit -m "Release <version>"
 #   5. git push
-#   6. ./plugin/mr-preflight.sh   # verhindert "MR enthält keine Änderungen"
+#   6. ./plugin/mr-preflight.sh   # verhindert "PR enthält keine Änderungen"
 #
 # Das erzeugte .txz enthält:
 #   boot/config/plugins/borg-backup-ui/   → persistente App-Dateien (Flash)
@@ -137,7 +137,7 @@ ${NAME}: und Einstellungen. Kein pip, nur Python 3 Standard-Library.
 ${NAME}:
 ${NAME}: Autor: Thorsten Steinberg
 ${NAME}: Version: ${VERSION}
-${NAME}: https://gitlab.thetwist.de/tsteinbe/borg-backup-ui
+${NAME}: https://github.com/borgforge/borg-backup-ui
 ${NAME}:
 ${NAME}:
 EOF
@@ -189,4 +189,4 @@ echo "     git add releases/${NAME}-${VERSION}.txz ${NAME}.plg borg_backup_ui.py
 echo "     git commit -m 'Release ${VERSION} – <Kurzbeschreibung>'"
 echo "     git push"
 echo "  2. Plugin-URL in Unraid:"
-echo "     https://gitlab.thetwist.de/tsteinbe/borg-backup-ui/-/raw/main/${NAME}.plg"
+echo "     https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/${NAME}.plg"

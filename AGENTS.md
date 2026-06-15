@@ -136,31 +136,28 @@ Nach Codeaenderungen Pull Request vorbereiten oder erstellen, sofern nicht expli
 
 ## Repository-Plattform
 
-Dieses Repository wird aktuell auf GitLab betrieben.
+Dieses Repository wird auf GitHub betrieben.
 
 Remote:
 
-* origin fetch/push zeigt auf GitLab.
+* origin fetch/push zeigt auf GitHub.
+* Erwartetes Repository: `borgforge/borg-backup-ui`.
 
 Codex-Regel:
 
-* Wenn `origin` auf GitLab zeigt: `glab mr ...` verwenden.
-* Wenn `origin` auf GitHub zeigt: `gh pr ...` verwenden.
-* Bei Unklarheit zuerst `git remote -v` pruefen und nachfragen.
+* Fuer Issues und Pull Requests `gh ...` verwenden.
+* Vor Remote-Arbeiten zuerst `git remote -v` pruefen.
+* Wenn `origin` nicht auf GitHub zeigt oder nicht zu `borgforge/borg-backup-ui`
+  passt, nachfragen statt auf einer anderen Plattform weiterzuarbeiten.
 
-Falls GitHub verwendet wird:
+Pull Requests werden erstellt mit:
 
 ```bash
 gh pr create
 ```
 
-Falls GitLab verwendet wird:
-
-```bash
-glab mr create
-```
-
-Vor Erstellung eines Pull Requests bzw. Merge Requests pruefen, ob bereits ein offener Request fuer den aktuellen Branch existiert.
+Vor Erstellung eines Pull Requests pruefen, ob bereits ein offener Pull Request
+fuer den aktuellen Branch existiert.
 
 Beschreibungen ASCII-sicher formulieren:
 
@@ -191,7 +188,7 @@ Unter `releases/` bleiben in `main` ausschliesslich die letzten 5
 
 Wenn ein neues Release-Artefakt hinzukommt und dadurch mehr als 5 Pakete
 vorhanden waeren, das aelteste Release-Artefakt im selben Release- oder
-Aufraeum-MR entfernen.
+Aufraeum-PR entfernen.
 
 ---
 
@@ -212,7 +209,7 @@ Vor Beginn einer Aenderung muss klar sein:
 Wenn kein passendes Issue existiert, zuerst ein Issue erstellen oder den Nutzer
 bitten, ein Issue anzulegen.
 
-Commits, Merge Requests, `borg-backup-ui.plg`-Eintraege und
+Commits, Pull Requests, `borg-backup-ui.plg`-Eintraege und
 `docs/changelog.md`-Eintraege sollen die Issue-Nummer nennen, sofern vorhanden.
 
 Empfohlene Labels/Tags:
@@ -319,7 +316,7 @@ Vor Abschluss nennen:
 
 * Branch
 * Commit
-* Pull Request oder Merge Request
+* Pull Request
 * Release-Version
 * Testergebnis
 * Preflight-Ergebnis
