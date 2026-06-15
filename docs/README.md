@@ -1,41 +1,43 @@
 # borg-backup-ui
 
-Web-UI fuer Borg Backup auf Unraid. Das Plugin nutzt nur die Python-Standardbibliothek,
-benoetigt auf Unraid aber eine installierte Python-3-Runtime.
+Web UI for Borg Backup on Unraid. The plugin uses only the Python standard
+library, but requires an installed Python 3 runtime on Unraid.
 
-## Zweck
+## Purpose
 
-`borg-backup-ui` bietet eine zentrale Oberflaeche fuer:
+`borg-backup-ui` provides a central interface for:
 
-- Backup-Jobs (Wizard + Ausfuehrung)
-- Storage / Manueller Borg Check
-- History / Berichte
-- Browse & Restore
-- Restore-Tests
-- Einstellungen (inkl. Systemzustand & Migration)
+- backup jobs (wizard and execution)
+- storage and manual Borg checks
+- history and reports
+- browse and restore
+- restore tests
+- settings, including system status and migration
 
-## Laufzeit-Architektur
+## Runtime Architecture
 
-- UI/Server: `borg_backup_ui.py` (Python stdlib HTTP-Server)
-- API-Module: `api/`
-- Frontend: `ui/`
-- Runtime-Code: `runtime/`
+- UI/server: `borg_backup_ui.py` (Python standard-library HTTP server)
+- API modules: `api/`
+- frontend: `ui/`
+- runtime code: `runtime/`
   - `runtime/lib/`
   - `runtime/scripts/`
   - `runtime/config/`
-  - `runtime/bin/borg/` (gebuendelte Borg-Binary)
+  - `runtime/bin/borg/` (bundled Borg binary)
 
-## Laufzeit-Voraussetzung
+## Runtime Requirement
 
-- Python 3.10 oder neuer.
-- Empfohlen und offiziell vorausgesetzt auf Unraid: `Python 3 for Unraid` aus den Community Applications.
-- Die Unraid-Control-Page prueft Pfad und Version von `python3` und deaktiviert Start/Restart, wenn die Runtime fehlt oder zu alt ist.
+- Python 3.10 or newer.
+- Recommended and officially required on Unraid: `Python 3 for Unraid` from
+  Community Applications.
+- The Unraid control page checks the `python3` path and version, and disables
+  start/restart actions when the runtime is missing or too old.
 
-## Zielpfade auf Unraid
+## Target Paths on Unraid
 
-- Plugin-Code:
+- Plugin code:
   - `/boot/config/plugins/borg-backup-ui/`
-- Betriebsdaten:
+- Runtime data:
   - `/boot/config/borg-backup/`
     - `config/backup.conf`
     - `config/jobs/`
@@ -43,15 +45,16 @@ benoetigt auf Unraid aber eine installierte Python-3-Runtime.
     - `locks/`
     - `scripts/`
 
-Hinweis: Logs/Status/Restore-Status liegen unter dem in den Einstellungen gesetzten `GLOBAL_DATA_DIR`.
+Logs, status files, and restore status files are stored below the
+`GLOBAL_DATA_DIR` configured in the settings.
 
-## Start / Stop
+## Start and Stop
 
-Das Plugin nutzt:
+The plugin uses:
 
 - `plugin/rc.borg_backup_ui`
 
-Typische Kommandos auf Unraid:
+Typical commands on Unraid:
 
 ```bash
 /etc/rc.d/rc.borg_backup_ui start
@@ -60,78 +63,55 @@ Typische Kommandos auf Unraid:
 /etc/rc.d/rc.borg_backup_ui status
 ```
 
-Logfile:
+Log file:
 
 - `/var/log/borg_backup_ui.log`
 
-## First-Install Verhalten
+## First-Install Behavior
 
-Beim Start werden fehlende Basisverzeichnisse unter `/boot/config/borg-backup` automatisch angelegt:
+On startup, missing base directories below `/boot/config/borg-backup` are
+created automatically:
 
 - `config/`, `config/jobs/`, `secrets/`, `locks/`, `scripts/`
 
-Wenn `config/backup.conf` fehlt, wird aus `runtime/config/backup.conf.example` initialisiert.
+If `config/backup.conf` is missing, it is initialized from
+`runtime/config/backup.conf.example`.
 
-## Migration (Bestandsinstallationen)
+## Migration for Existing Installations
 
-Die App fuehrt eine idempotente Migration aus:
+The app runs an idempotent migration for:
 
-- Job-Metadaten auf `/boot/config/borg-backup/config/jobs`
-- Secrets auf `/boot/config/borg-backup/secrets`
-- Anpassung von Passphrase-Pfaden in Job-Metadaten und `backup.conf`
+- job metadata to `/boot/config/borg-backup/config/jobs`
+- secrets to `/boot/config/borg-backup/secrets`
+- passphrase paths in job metadata and `backup.conf`
 
-Der letzte Migrationsstatus wird gespeichert in:
+The latest migration status is stored in:
 
 - `/boot/config/borg-backup/config/migration-state.json`
 
-## Build / Release
+## Build and Release
 
-Release bauen:
+Build a release:
 
 ```bash
 ./plugin/build.sh
 ```
 
-Der Build:
+The build:
 
-- setzt `APP_VERSION` in `borg_backup_ui.py`
-- aktualisiert Version + MD5 in `borg-backup-ui.plg`
-- erzeugt `releases/borg-backup-ui-<version>.txz`
+- sets `APP_VERSION` in `borg_backup_ui.py`
+- updates version and MD5 in `borg-backup-ui.plg`
+- creates `releases/borg-backup-ui-<version>.txz`
 
-## Entwicklung
+## Development
 
-Syntaxcheck (Beispiel):
+Syntax check example:
 
 ```bash
 python3 -m py_compile borg_backup_ui.py api/*.py runtime/scripts/*.py
 ```
 
-## Security-Entscheidung: HTTPS (P2-6)
+## License
 
-Stand 2026-05-30:
-
-- HTTPS/TLS im eingebauten HTTP-Server (`SSL_CERT`/`SSL_KEY`) ist bewusst **zurueckgestellt**.
-- Grund: aktueller Betrieb nur im **lokalen Netz** oder per **VPN**.
-- Prioritaet liegt zunaechst auf funktionaler Stabilitaet und Abschluss der verbleibenden Review-Punkte.
-
-Geplanter spaeterer Schritt:
-
-- Umsetzung von P2-6 mit optionalem TLS im Server plus Hinweis im UI bei unverschluesseltem Zugriff.
-
-## Troubleshooting
-
-- **HTTP 500 bei `/api/jobs` oder `/api/status`**:
-  - `/var/log/borg_backup_ui.log` pruefen
-  - Runtime-Struktur unter `/boot/config/plugins/borg-backup-ui/runtime/` verifizieren
-- **Jobs fehlen in der UI**:
-  - `config/jobs` unter `/boot/config/borg-backup/config/jobs` pruefen
-- **Passphrase-Probleme**:
-  - Dateien unter `/boot/config/borg-backup/secrets` pruefen
-- **Borg nicht gefunden**:
-  - gebuendelte Binary in `runtime/bin/borg/` pruefen
-  - rc-restart ausfuehren
-
-## Lizenz
-
-- Projekt: MIT
-- BorgBackup: BSD-3-Clause (Drittanbieterlizenz)
+- Project: MIT
+- BorgBackup: BSD-3-Clause (third-party license)
