@@ -5,7 +5,7 @@
 # pushes only the test manifest plus release package to the test-channel branch.
 # The test-channel branch intentionally does not contain the full source tree or
 # history. The current branch remains the source of truth for the later go-live
-# MR.
+# PR.
 
 set -euo pipefail
 
@@ -45,8 +45,8 @@ mkdir -p "$TMP_ROOT"
 TMP_PLG="$(mktemp "${TMP_ROOT}/${NAME}-test.XXXXXX.plg")"
 cp "${REPO_DIR}/${NAME}.plg" "$TMP_PLG"
 sed -i.bak \
-  -e "s|<!ENTITY pluginURL \"[^\"]*\">|<!ENTITY pluginURL \"\\&gitlab;/-/raw/${TEST_BRANCH}/\\&name;-test.plg\">|" \
-  -e "s|<!ENTITY pkgurl    \"[^\"]*\">|<!ENTITY pkgurl    \"\\&gitlab;/-/raw/${TEST_BRANCH}/releases/\\&name;-\\&version;.txz\">|" \
+  -e "s|<!ENTITY pluginURL \"[^\"]*\">|<!ENTITY pluginURL \"https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/\\&name;-test.plg\">|" \
+  -e "s|<!ENTITY pkgurl    \"[^\"]*\">|<!ENTITY pkgurl    \"https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/releases/\\&name;-\\&version;.txz\">|" \
   -e "s|description=\"[^\"]*\"|description=\"TEST CHANNEL - Web UI for Borg Backup. Install this only on test systems.\"|" \
   -e "s|<MD5>[^<]*</MD5>|<MD5>${MD5}</MD5>|" \
   "$TMP_PLG"
@@ -89,7 +89,7 @@ cat <<EOF
 
 Fertig.
 Test-Plugin-URL:
-  https://gitlab.thetwist.de/tsteinbe/borg-backup-ui/-/raw/${TEST_BRANCH}/${NAME}-test.plg
+  https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/${NAME}-test.plg
 
 Getestete Version:
   ${VERSION}

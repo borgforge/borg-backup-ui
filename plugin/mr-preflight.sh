@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Preflight check before creating/pushing an MR.
+# Preflight check before creating/pushing a PR.
 # Usage:
 #   ./plugin/mr-preflight.sh
 
@@ -27,7 +27,7 @@ fi
 
 echo "==> Prüfe Diff gegen ${base_ref}"
 if git diff --quiet "${base_ref}...HEAD"; then
-  echo "Fehler: Kein Delta gegen ${base_ref}. Ein MR hätte keine Änderungen."
+  echo "Fehler: Kein Delta gegen ${base_ref}. Ein PR haette keine Aenderungen."
   exit 1
 fi
 

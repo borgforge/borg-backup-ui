@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prepare the current branch for go-live by pushing it and opening/reusing a MR.
+# Prepare the current branch for go-live by pushing it and opening/reusing a PR.
 #
 # This script does not rebuild. It expects the branch to already contain the
 # tested version and release artifact produced by plugin/deploy-test.sh.
@@ -23,7 +23,7 @@ if [ -z "$BRANCH" ]; then
 fi
 
 if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
-  echo "ERROR: Go-live-MR bitte von einem Feature-/Fix-Branch erstellen, nicht von ${BRANCH}." >&2
+  echo "ERROR: Go-live-PR bitte von einem Feature-/Fix-Branch erstellen, nicht von ${BRANCH}." >&2
   exit 1
 fi
 
@@ -49,21 +49,21 @@ fi
 
 git -C "$REPO_DIR" push -u origin "$BRANCH"
 
-if command -v glab >/dev/null 2>&1; then
-  EXISTING="$(glab mr list --source-branch "$BRANCH" 2>/dev/null || true)"
-  if printf '%s\n' "$EXISTING" | grep -q '![0-9]'; then
-    echo "==> Vorhandener Merge Request:"
+if command -v gh >/dev/null 2>&1; then
+  EXISTING="$(gh pr list --head "$BRANCH" --base main 2>/dev/null || true)"
+  if printf '%s\n' "$EXISTING" | grep -q '^[0-9]'; then
+    echo "==> Vorhandener Pull Request:"
     printf '%s\n' "$EXISTING"
   else
-    glab mr create \
-      --source-branch "$BRANCH" \
-      --target-branch main \
+    gh pr create \
+      --head "$BRANCH" \
+      --base main \
       --title "Promote ${VERSION} to stable" \
-      --description $'Promotes a tested Borg Backup UI build to the stable channel.\n\nChanges:\n- Release artifact '"${VERSION}"$' is included.\n- borg-backup-ui.plg points to the tested version.\n- Source and shipped package are promoted together.\n\nTests:\n- Tested via test-channel before go-live.\n- Run ./plugin/mr-preflight.sh before merge.'
+      --body $'Promotes a tested Borg Backup UI build to the stable channel.\n\nChanges:\n- Release artifact '"${VERSION}"$' is included.\n- borg-backup-ui.plg points to the tested version.\n- Source and shipped package are promoted together.\n\nTests:\n- Tested via test-channel before go-live.\n- Run ./plugin/mr-preflight.sh before merge.'
   fi
 else
   cat <<EOF
-glab nicht gefunden. Erstelle den Merge Request manuell:
+gh nicht gefunden. Erstelle den Pull Request manuell:
   Source: ${BRANCH}
   Target: main
   Title : Promote ${VERSION} to stable

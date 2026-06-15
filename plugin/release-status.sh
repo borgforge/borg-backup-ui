@@ -39,8 +39,8 @@ else
   echo "  noch nicht angelegt"
 fi
 
-if command -v glab >/dev/null 2>&1; then
+if command -v gh >/dev/null 2>&1; then
   echo
-  echo "Offene Merge Requests:"
-  glab mr list || true
+  echo "Offene Pull Requests:"
+  gh pr list || true
 fi
