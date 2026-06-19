@@ -1,11 +1,19 @@
 // ══════════════════════════════════════════════════════════════════════════════
+
+window.BBUI = window.BBUI || {};
+window.BBUI.reportState = window.BBUI.reportState || { data: null, job: null, borgInfo: null, borgInfoLoaded: false };
+const reportState = window.BBUI.reportState;
+
+function reportsT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(`reports.${key}`, params) || `reports.${key}`;
+}
 // BERICHTE PAGE
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function berichtInit() {
   const sel = document.getElementById('bericht-job-sel');
   if (!sel) return;
-  sel.innerHTML = '<option value="">— Job wählen —</option>';
+  sel.innerHTML = `<option value="">${escHtml(reportsT('selectJob'))}</option>`;
   document.getElementById('bericht-body').style.display = 'none';
   document.getElementById('bericht-empty').style.display = '';
   _berichtMsg('');
@@ -18,7 +26,7 @@ async function berichtInit() {
       sel.appendChild(opt);
     }
   } catch (e) {
-    _berichtMsg('Fehler beim Laden der Jobs: ' + e.message, true);
+    _berichtMsg(reportsT('jobsLoadError', { message: e.message }), true);
   }
 }
 
@@ -28,26 +36,34 @@ async function berichtLoad() {
   _berichtMsg('');
   _berichtRestoreVerification('');
   if (!jobKey) {
+    reportState.data = null;
+    reportState.job = null;
+    reportState.borgInfo = null;
+    reportState.borgInfoLoaded = false;
     document.getElementById('bericht-empty').style.display = '';
     return;
   }
   document.getElementById('bericht-empty').style.display = 'none';
-  _berichtMsg('Lade Bericht...');
+  _berichtMsg(reportsT('loading'));
   try {
     const [reportRes, jobsRes] = await Promise.all([
       fetch(`/api/reports/data?job=${encodeURIComponent(jobKey)}`),
       fetch('/api/jobs'),
     ]);
     const data = await reportRes.json();
-    if (data.error) { _berichtMsg('Fehler: ' + data.error, true); return; }
+    if (data.error) { _berichtMsg(reportsT('error', { message: data.error }), true); return; }
     const jobsData = jobsRes.ok ? await jobsRes.json() : { jobs: [] };
     const selected = (jobsData.jobs || []).find((j) => String(j.key) === String(jobKey));
-    _berichtRestoreVerification(selected || null);
+    reportState.data = data;
+    reportState.job = selected || null;
+    reportState.borgInfo = null;
+    reportState.borgInfoLoaded = false;
+    _berichtRestoreVerification(reportState.job);
     _berichtMsg('');
     _berichtRender(data);
     document.getElementById('bericht-body').style.display = '';
   } catch (e) {
-    _berichtMsg('Fehler: ' + e.message, true);
+    _berichtMsg(reportsT('error', { message: e.message }), true);
   }
 }
 
@@ -62,7 +78,9 @@ function _berichtRender(d) {
   _berichtRenderGrowthCards(d.runs || []);
 
   document.getElementById('bericht-borginfo-cards').style.display = 'none';
-  document.getElementById('bericht-borginfo-btn').disabled = false;
+  const borgInfoButton = document.getElementById('bericht-borginfo-btn');
+  borgInfoButton.disabled = false;
+  borgInfoButton.textContent = reportsT('load');
   _berichtBorgInfoMsg('');
 
   _berichtSizeChart(d.runs || []);
@@ -96,7 +114,7 @@ function _berichtRenderGrowthCards(runs) {
   document.getElementById('br-growth-7d').textContent = _fmtDelta(g7);
   const g30El = document.getElementById('br-growth-30d');
   const gAvgEl = document.getElementById('br-growth-avg-day');
-  const daysHint = gAvgDays > 0 ? `seit ${gAvgDays} Tagen` : 'seit — Tagen';
+  const daysHint = gAvgDays > 0 ? reportsT('sinceDays', { days: gAvgDays }) : reportsT('sinceUnknownDays');
   if (g30El) {
     const main = g30 == null ? '—' : _fmtDelta(g30);
     g30El.textContent = '';
@@ -109,7 +127,7 @@ function _berichtRenderGrowthCards(runs) {
     g30El.append(hintEl);
   }
   if (gAvgEl) {
-    const main = gAvg == null ? '—' : `${_fmtDelta(gAvg)}/Tag`;
+    const main = gAvg == null ? '—' : reportsT('perDay', { value: _fmtDelta(gAvg) });
     gAvgEl.textContent = '';
     gAvgEl.append(document.createTextNode(main));
     gAvgEl.append(document.createElement('br'));
@@ -175,11 +193,11 @@ function _berichtSizeChart(runs) {
     const dDay = prev ? (r.repository_size - prev.repository_size) : null;
     const dWeek = prevWeek ? (r.repository_size - prevWeek.repository_size) : null;
     const tooltip = [
-      `Datum: ${r.date || '—'}`,
-      `Repo-Größe: ${_fmtBytes(r.repository_size || 0)}`,
-      `Delta Vortag: ${_fmtDelta(dDay)}`,
-      `Delta Vorwoche: ${_fmtDelta(dWeek)}`,
-      `Status: ${r.status || 'unknown'}`
+      reportsT('tooltipDate', { value: r.date || '—' }),
+      reportsT('tooltipRepoSize', { value: _fmtBytes(r.repository_size || 0) }),
+      reportsT('tooltipPreviousDayDelta', { value: _fmtDelta(dDay) }),
+      reportsT('tooltipPreviousWeekDelta', { value: _fmtDelta(dWeek) }),
+      reportsT('tooltipStatus', { value: _reportStatusLabel(r.status) })
     ].join('\n');
     const clr = r.status === 'error'
       ? 'var(--error)'
@@ -223,9 +241,9 @@ function _berichtDurChart(runs) {
     const prev = i > 0 ? pts[i - 1] : null;
     const dDay = prev ? (r.duration_seconds - prev.duration_seconds) : null;
     const tooltip = [
-      `Datum: ${r.date || '—'}`,
-      `Dauer: ${_fmtDuration(r.duration_seconds || 0)}`,
-      `Delta Vortag: ${dDay == null ? '—' : _fmtDuration(Math.abs(dDay))}`
+      reportsT('tooltipDate', { value: r.date || '—' }),
+      reportsT('tooltipDuration', { value: _fmtDuration(r.duration_seconds || 0) }),
+      reportsT('tooltipPreviousDayDelta', { value: dDay == null ? '—' : _fmtDuration(Math.abs(dDay)) })
     ].join('\n');
     bars += `<rect x="${x}" y="${y}" width="${BAR_W}" height="${barH}" rx="2" class="rs-bar" opacity="0.8"><title>${escHtml(tooltip)}</title></rect>`;
     const mm = r.date ? r.date.substring(5, 7) : '';
@@ -265,9 +283,9 @@ function _berichtDedupChart(runs) {
     const prev = i > 0 ? pts[i - 1] : null;
     const dDay = prev ? (r.deduplicated_size - prev.deduplicated_size) : null;
     const tooltip = [
-      `Datum: ${r.date || '—'}`,
-      `Neue Daten: ${_fmtBytes(r.deduplicated_size || 0)}`,
-      `Delta Vortag: ${_fmtDelta(dDay)}`
+      reportsT('tooltipDate', { value: r.date || '—' }),
+      reportsT('tooltipNewData', { value: _fmtBytes(r.deduplicated_size || 0) }),
+      reportsT('tooltipPreviousDayDelta', { value: _fmtDelta(dDay) })
     ].join('\n');
     bars += `<rect x="${x}" y="${y}" width="${BAR_W}" height="${barH}" rx="2" fill="var(--success)" opacity="0.8"><title>${escHtml(tooltip)}</title></rect>`;
     const mm = r.date ? r.date.substring(5, 7) : '';
@@ -307,11 +325,11 @@ function _berichtStatusChart(monthly) {
       { val: m.success, color: 'var(--success)' },
     ];
     const tooltip = [
-      `Monat: ${m.month || '—'}`,
-      `Erfolg: ${m.success || 0}`,
-      `Warnung: ${m.warning || 0}`,
-      `Fehler: ${m.error || 0}`,
-      `Gesamt: ${total || 0}`
+      reportsT('tooltipMonth', { value: m.month || '—' }),
+      reportsT('tooltipSuccess', { value: m.success || 0 }),
+      reportsT('tooltipWarning', { value: m.warning || 0 }),
+      reportsT('tooltipError', { value: m.error || 0 }),
+      reportsT('tooltipTotal', { value: total || 0 })
     ].join('\n');
     for (const seg of segments) {
       if (!seg.val) continue;
@@ -334,7 +352,7 @@ function _berichtStatusChart(monthly) {
 }
 
 function _noData() {
-  return '<div style="color:var(--text-muted);padding:20px 0;text-align:center;font-size:13px">Keine Daten</div>';
+  return `<div style="color:var(--text-muted);padding:20px 0;text-align:center;font-size:13px">${escHtml(reportsT('noData'))}</div>`;
 }
 
 function _fmtBytes(b) {
@@ -342,7 +360,11 @@ function _fmtBytes(b) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
-  return b.toFixed(i > 0 ? 1 : 0) + '\u00a0' + units[i];
+  const locale = window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
+  return Number(b).toLocaleString(locale, {
+    minimumFractionDigits: i > 0 ? 1 : 0,
+    maximumFractionDigits: i > 0 ? 1 : 0,
+  }) + '\u00a0' + units[i];
 }
 
 function _fmtDuration(secs) {
@@ -375,16 +397,16 @@ function _berichtRestoreVerification(job) {
   }
   const status = String(job.restore_verification_status || '').toLowerCase();
   const map = {
-    verified: { cls: 'success-state', text: 'Restore-Nachweis: verifiziert' },
-    stale: { cls: 'warning-state', text: 'Restore-Nachweis: überfällig' },
-    failed: { cls: 'error-state', text: 'Restore-Nachweis: fehlgeschlagen' },
-    never: { cls: 'warning-state', text: 'Restore-Nachweis: noch offen' },
-    not_required: { cls: 'empty-state', text: 'Restore-Nachweis: nicht geplant' },
+    verified: { cls: 'success-state', text: reportsT('restoreVerified') },
+    stale: { cls: 'warning-state', text: reportsT('restoreOverdue') },
+    failed: { cls: 'error-state', text: reportsT('restoreFailed') },
+    never: { cls: 'warning-state', text: reportsT('restorePending') },
+    not_required: { cls: 'empty-state', text: reportsT('restoreNotScheduled') },
   };
   const item = map[status] || map.never;
   const details = [
-    job.restore_verification_last_test_date ? `Letzter Test: ${job.restore_verification_last_test_date}` : '',
-    job.restore_verification_valid_until ? `Gültig bis: ${job.restore_verification_valid_until}` : '',
+    job.restore_verification_last_test_date ? reportsT('lastTest', { value: job.restore_verification_last_test_date }) : '',
+    job.restore_verification_valid_until ? reportsT('validUntil', { value: job.restore_verification_valid_until }) : '',
   ].filter(Boolean).join(' · ');
   el.className = `status-message ${item.cls}`;
   el.textContent = details ? `${item.text} · ${details}` : item.text;
@@ -395,31 +417,59 @@ async function berichtLoadBorgInfo() {
   if (!jobKey) return;
   const btn = document.getElementById('bericht-borginfo-btn');
   btn.disabled = true;
-  btn.textContent = 'Lädt…';
-  _berichtBorgInfoMsg('Frage borg info ab…');
+  btn.textContent = reportsT('loadingShort');
+  _berichtBorgInfoMsg(reportsT('queryingBorgInfo'));
   document.getElementById('bericht-borginfo-cards').style.display = 'none';
   try {
     const data = await (await fetch(`/api/restore/repo-stats?job=${encodeURIComponent(jobKey)}`)).json();
-    if (data.error) { _berichtBorgInfoMsg('Fehler: ' + data.error, true); btn.disabled = false; btn.textContent = 'Laden'; return; }
+    if (data.error) { _berichtBorgInfoMsg(reportsT('error', { message: data.error }), true); btn.disabled = false; btn.textContent = reportsT('load'); return; }
+    reportState.borgInfo = data;
+    reportState.borgInfoLoaded = true;
     _berichtBorgInfoMsg('');
-    const fmt = _fmtBytes;
-    const savings = data.total_size > 0
-      ? Math.round((1 - data.unique_csize / data.total_size) * 100) + '%'
-      : '—';
-    document.getElementById('bi-total-size').textContent = fmt(data.total_size);
-    document.getElementById('bi-csize').textContent      = fmt(data.total_csize);
-    document.getElementById('bi-unique').textContent     = fmt(data.unique_csize);
-    document.getElementById('bi-savings').textContent    = savings;
-    document.getElementById('bi-count').textContent      = data.archive_count;
-    document.getElementById('bericht-borginfo-cards').style.display = '';
-    btn.textContent = 'Aktualisieren';
+    _berichtRenderBorgInfo(data);
+    btn.textContent = reportsT('refresh');
     btn.disabled = false;
   } catch (e) {
-    _berichtBorgInfoMsg('Fehler: ' + e.message, true);
+    _berichtBorgInfoMsg(reportsT('error', { message: e.message }), true);
     btn.disabled = false;
-    btn.textContent = 'Laden';
+    btn.textContent = reportsT('load');
   }
 }
+
+function _berichtRenderBorgInfo(data) {
+  if (!data) return;
+  const savings = data.total_size > 0
+    ? Math.round((1 - data.unique_csize / data.total_size) * 100) + '%'
+    : '—';
+  document.getElementById('bi-total-size').textContent = _fmtBytes(data.total_size);
+  document.getElementById('bi-csize').textContent = _fmtBytes(data.total_csize);
+  document.getElementById('bi-unique').textContent = _fmtBytes(data.unique_csize);
+  document.getElementById('bi-savings').textContent = savings;
+  document.getElementById('bi-count').textContent = data.archive_count;
+  document.getElementById('bericht-borginfo-cards').style.display = '';
+}
+
+function _reportStatusLabel(status) {
+  return {
+    success: reportsT('statusSuccess'),
+    warning: reportsT('statusWarning'),
+    skipped: reportsT('statusSkipped'),
+    error: reportsT('statusError'),
+    unknown: reportsT('statusUnknown'),
+  }[String(status || '').toLowerCase()] || status || reportsT('statusUnknown');
+}
+
+window.addEventListener?.('bbui:language-changed', () => {
+  const selectPlaceholder = document.querySelector('#bericht-job-sel option[value=""]');
+  if (selectPlaceholder) selectPlaceholder.textContent = reportsT('selectJob');
+  if (reportState.data) {
+    _berichtRender(reportState.data);
+    _berichtRestoreVerification(reportState.job);
+    if (reportState.borgInfoLoaded) _berichtRenderBorgInfo(reportState.borgInfo);
+  }
+  const button = document.getElementById('bericht-borginfo-btn');
+  if (button) button.textContent = reportState.borgInfoLoaded ? reportsT('refresh') : reportsT('load');
+});
 
 function _berichtBorgInfoMsg(msg, isError) {
   const el = document.getElementById('bericht-borginfo-msg');

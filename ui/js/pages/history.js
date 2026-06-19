@@ -4,6 +4,14 @@ window.BBUI = window.BBUI || {};
 window.BBUI.historyState = window.BBUI.historyState || { loaded: false, data: null, page: 1, perPage: 20 };
 const historyState = window.BBUI.historyState;
 
+function historyT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(`history.${key}`, params) || `history.${key}`;
+}
+
+function historyLocale() {
+  return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
+}
+
 async function refreshHistory() {
   const btn = document.getElementById('history-refresh-btn');
   if (btn) btn.disabled = true;
@@ -28,7 +36,7 @@ async function refreshHistory() {
     renderHistory(data);
     hideEl('history-message');
   } catch (e) {
-    showMsg('history-message', 'error', 'Fehler: ' + e.message);
+    showMsg('history-message', 'error', historyT('error', { message: e.message }));
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -42,13 +50,13 @@ function applyHistoryFilters() {
 
 function renderHistory(data) {
   const countEl = document.getElementById('history-count');
-  if (countEl) countEl.textContent = `${data.total} Einträge`;
+  if (countEl) countEl.textContent = historyT('entryCount', { count: data.total });
 
   const el = document.getElementById('history-content');
   if (!el) return;
 
   if (!data.entries || data.entries.length === 0) {
-    el.innerHTML = `<div class="history-empty">Keine Backup-Einträge gefunden.</div>`;
+    el.innerHTML = `<div class="history-empty">${escHtml(historyT('empty'))}</div>`;
     return;
   }
 
@@ -63,13 +71,13 @@ function renderHistory(data) {
       <thead>
         <tr>
           <th></th>
-          <th>Datum / Zeit</th>
-          <th>Typ</th>
-          <th>Ort</th>
-          <th>Dauer</th>
-          <th>Originalgröße</th>
-          <th>Dedupliziert</th>
-          <th>Status</th>
+          <th>${escHtml(historyT('dateTime'))}</th>
+          <th>${escHtml(historyT('type'))}</th>
+          <th>${escHtml(historyT('location'))}</th>
+          <th>${escHtml(historyT('duration'))}</th>
+          <th>${escHtml(historyT('originalSize'))}</th>
+          <th>${escHtml(historyT('deduplicated'))}</th>
+          <th>${escHtml(historyT('status'))}</th>
         </tr>
       </thead>
       <tbody id="history-tbody">
@@ -77,16 +85,16 @@ function renderHistory(data) {
       </tbody>
     </table>
     <div class="history-pagination" style="display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-top:10px">
-      <span style="color:var(--text-muted);font-size:12px">Seite ${page} / ${totalPages}</span>
-      <button class="btn btn-secondary btn-sm" data-history-action="page-prev" ${prevDisabled}>Zurück</button>
-      <button class="btn btn-secondary btn-sm" data-history-action="page-next" ${nextDisabled}>Weiter</button>
+      <span style="color:var(--text-muted);font-size:12px">${escHtml(historyT('page', { page, totalPages }))}</span>
+      <button class="btn btn-secondary btn-sm" data-history-action="page-prev" ${prevDisabled}>${escHtml(historyT('previous'))}</button>
+      <button class="btn btn-secondary btn-sm" data-history-action="page-next" ${nextDisabled}>${escHtml(historyT('next'))}</button>
     </div>`;
 }
 
 function renderHistoryRow(e, idx) {
   if (e.entry_kind === 'restore_test_report') return renderRestoreReportRow(e, idx);
   const detailReason = e.skip_reason_text
-    ? `Übersprungen: ${e.skip_reason_text}`
+    ? historyT('skippedReason', { reason: e.skip_reason_text })
     : '';
   const detailError = e.error_message || detailReason;
   const statusBadge = `<span class="history-status-badge ${e.status}">${historyStatusLabel(e.status)}</span>`;
@@ -100,7 +108,7 @@ function renderHistoryRow(e, idx) {
       <td><svg class="history-chevron" id="chev-${idx}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></td>
       <td style="white-space:nowrap;color:var(--text-primary)">${escHtml(e.date)} <span style="color:var(--text-muted)">${escHtml(e.time)}</span></td>
       <td><span class="history-type-badge">${escHtml(typeLabel)}</span></td>
-      <td><span class="history-loc-chip ${locClass}">${escHtml(locLabel(e.location))}</span></td>
+      <td><span class="history-loc-chip ${locClass}">${escHtml(historyLocationLabel(e.location))}</span></td>
       <td>${escHtml(e.duration_fmt || '–')}</td>
       <td>${escHtml(e.original_size_fmt || '–')}</td>
       <td>${escHtml(e.deduplicated_size_fmt || '–')}</td>
@@ -108,22 +116,22 @@ function renderHistoryRow(e, idx) {
     </tr>
     <tr id="${detailId}" class="history-detail-row" style="display:none">
       <td colspan="8">
-        ${detailError ? `<div class="history-error-msg">${e.status === 'skipped' ? '' : 'Fehler: '}${escHtml(detailError)}</div>` : ''}
+        ${detailError ? `<div class="history-error-msg">${e.status === 'skipped' ? '' : escHtml(historyT('errorPrefix'))}${escHtml(detailError)}</div>` : ''}
         <div class="history-detail-panel">
-          ${detailGroup('Archiv', e.archive_name)}
-          ${detailGroup('Komprimiert', e.compressed_size_fmt)}
-          ${detailGroup('Repository-Größe', e.repository_size_fmt)}
-          ${detailGroup('Dateien', e.files_count != null ? e.files_count.toLocaleString('de-DE') : null)}
-          ${detailGroup('Exit-Code', e.exit_code != null ? String(e.exit_code) : null)}
-          ${detailGroup('Letzter Check', e.repository_check_date)}
-          ${detailGroup('Nächster Check', e.repository_next_check)}
-          ${detailGroup('Check-Status', e.repository_check_status)}
+          ${detailGroup(historyT('archive'), e.archive_name)}
+          ${detailGroup(historyT('compressed'), e.compressed_size_fmt)}
+          ${detailGroup(historyT('repositorySize'), e.repository_size_fmt)}
+          ${detailGroup(historyT('files'), e.files_count != null ? e.files_count.toLocaleString(historyLocale()) : null)}
+          ${detailGroup(historyT('exitCode'), e.exit_code != null ? String(e.exit_code) : null)}
+          ${detailGroup(historyT('lastCheck'), e.repository_check_date)}
+          ${detailGroup(historyT('nextCheck'), e.repository_next_check)}
+          ${detailGroup(historyT('checkStatus'), e.repository_check_status)}
           ${e.log_file ? `
           <div class="history-detail-group">
-            <div class="history-detail-label">Log-Datei</div>
+            <div class="history-detail-label">${escHtml(historyT('logFile'))}</div>
             <div class="history-detail-value" style="display:flex;align-items:center;gap:8px">
               <span style="color:var(--text-muted);font-size:11px" title="${escHtml(e.log_file)}">${escHtml(e.log_file.split('/').pop())}</span>
-              <button class="btn btn-secondary btn-sm" data-history-action="open-log" data-log-file="${escHtml(e.log_file)}">Öffnen</button>
+              <button class="btn btn-secondary btn-sm" data-history-action="open-log" data-log-file="${escHtml(e.log_file)}">${escHtml(historyT('open'))}</button>
             </div>
           </div>` : ''}
         </div>
@@ -137,7 +145,7 @@ function renderRestoreReportRow(e, idx) {
   const statusBadge = `<span class="history-status-badge ${e.status}">${historyStatusLabel(e.status)}</span>`;
   const locClass = e.location || '';
   const cov = Number(e.coverage_percent || 0);
-  const covTxt = Number.isFinite(cov) ? `${cov.toFixed(1).replace('.', ',')}%` : '0,0%';
+  const covTxt = Number.isFinite(cov) ? `${cov.toLocaleString(historyLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : `0${historyLocale() === 'de-DE' ? ',' : '.'}0%`;
   const detailError = e.failure_hint || e.error_message || '';
 
   return `
@@ -145,7 +153,7 @@ function renderRestoreReportRow(e, idx) {
       <td><svg class="history-chevron" id="chev-${idx}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></td>
       <td style="white-space:nowrap;color:var(--text-primary)">${escHtml(e.date || '—')} <span style="color:var(--text-muted)">${escHtml(e.time || '')}</span></td>
       <td><span class="history-type-badge">RESTORE TEST</span></td>
-      <td><span class="history-loc-chip ${locClass}">${escHtml(locLabel(e.location))}</span></td>
+      <td><span class="history-loc-chip ${locClass}">${escHtml(historyLocationLabel(e.location))}</span></td>
       <td>${escHtml(e.duration_fmt || '–')}</td>
       <td>—</td>
       <td>${escHtml(covTxt)}</td>
@@ -153,19 +161,19 @@ function renderRestoreReportRow(e, idx) {
     </tr>
     <tr id="${detailId}" class="history-detail-row" style="display:none">
       <td colspan="8">
-        ${detailError ? `<div class="history-error-msg">Fehler: ${escHtml(detailError)}</div>` : ''}
+        ${detailError ? `<div class="history-error-msg">${escHtml(historyT('errorPrefix'))}${escHtml(detailError)}</div>` : ''}
         <div class="history-detail-panel">
-          ${detailGroup('Report-ID', e.report_id)}
-          ${detailGroup('Job', e.job_key)}
-          ${detailGroup('Archiv', e.archive_name)}
-          ${detailGroup('Standort', e.location)}
-          ${detailGroup('Level', e.test_level != null ? `L${e.test_level}` : null)}
-          ${detailGroup('Start', e.start_ts)}
-          ${detailGroup('Ende', e.end_ts || e.timestamp)}
-          ${detailGroup('Gesamtstatus', e.overall_status || historyStatusLabel(e.status))}
-          ${detailGroup('Gültig bis', e.valid_until)}
-          ${detailGroup('Abdeckung', `${covTxt}${e.coverage_basis ? ` (${e.coverage_basis})` : ''}`)}
-          ${detailGroup('Fehlercode', e.failure_code)}
+          ${detailGroup(historyT('reportId'), e.report_id)}
+          ${detailGroup(historyT('job'), e.job_key)}
+          ${detailGroup(historyT('archive'), e.archive_name)}
+          ${detailGroup(historyT('locationDetail'), historyLocationLabel(e.location))}
+          ${detailGroup(historyT('level'), e.test_level != null ? `L${e.test_level}` : null)}
+          ${detailGroup(historyT('start'), e.start_ts)}
+          ${detailGroup(historyT('end'), e.end_ts || e.timestamp)}
+          ${detailGroup(historyT('overallStatus'), e.overall_status || historyStatusLabel(e.status))}
+          ${detailGroup(historyT('validUntil'), e.valid_until)}
+          ${detailGroup(historyT('coverage'), `${covTxt}${e.coverage_basis ? ` (${e.coverage_basis})` : ''}`)}
+          ${detailGroup(historyT('failureCode'), e.failure_code)}
         </div>
         ${renderRestoreReportSteps(e.steps)}
       </td>
@@ -180,7 +188,7 @@ function renderRestoreReportSteps(steps) {
     const dur = ms > 0 ? `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)}s` : '—';
     const label = restoreStepLabel(String(s.step_id || ''));
     const st = String(s.status || '').toLowerCase();
-    const statusText = st === 'passed' ? 'OK' : (st === 'failed' ? 'Fehler' : (st === 'not_tested' ? 'Nicht geprüft' : st));
+    const statusText = st === 'passed' ? historyT('stepPassed') : (st === 'failed' ? historyT('stepFailed') : (st === 'not_tested' ? historyT('stepNotTested') : st));
     return `<tr>
       <td>${i + 1}</td>
       <td>${escHtml(label)}</td>
@@ -192,9 +200,9 @@ function renderRestoreReportSteps(steps) {
   }).join('');
   return `
     <div style="margin-top:10px">
-      <div class="history-detail-label" style="margin-bottom:6px">Prüfschritte</div>
+      <div class="history-detail-label" style="margin-bottom:6px">${escHtml(historyT('testSteps'))}</div>
       <table class="history-table" style="margin-bottom:0">
-        <thead><tr><th>#</th><th>Schritt</th><th>Status</th><th>Dauer</th><th>Hinweis</th><th>Befehl</th></tr></thead>
+        <thead><tr><th>#</th><th>${escHtml(historyT('step'))}</th><th>${escHtml(historyT('status'))}</th><th>${escHtml(historyT('duration'))}</th><th>${escHtml(historyT('note'))}</th><th>${escHtml(historyT('command'))}</th></tr></thead>
         <tbody>${list}</tbody>
       </table>
     </div>`;
@@ -246,20 +254,29 @@ function detailGroup(label, value) {
 }
 
 function historyStatusLabel(s) {
-  return { success: 'Erfolg', skipped: 'Übersprungen', warning: 'Warnung', error: 'Fehler' }[s] || s;
+  return { success: historyT('statusSuccess'), skipped: historyT('statusSkipped'), warning: historyT('statusWarning'), error: historyT('statusError') }[s] || s;
 }
 
 function historyTypeLabel(t) {
-  return { flash: 'FLASH', appdata: 'APPDATA', photos: 'PHOTOS', VMs: 'VMs', vms: 'VMs', sonstiges: 'SONST.', restore_test: 'RESTORE TEST' }[t] || (t || '').toUpperCase();
+  return { flash: 'FLASH', appdata: 'APPDATA', photos: 'PHOTOS', VMs: 'VMs', vms: 'VMs', sonstiges: historyT('otherShort'), restore_test: 'RESTORE TEST' }[t] || (t || '').toUpperCase();
+}
+
+function historyLocationLabel(location) {
+  const key = { local: 'jobs.locationLocal', usb: 'jobs.locationUsb', smb: 'jobs.locationSmb', storagebox: 'jobs.locationStoragebox' }[location];
+  return key ? window.BBUI?.components?.i18n?.t?.(key) || location : location || '–';
 }
 
 function restoreStepLabel(stepId) {
   return {
-    repo_reachable: 'Repository erreichbar',
-    archive_readable: 'Archiv lesbar',
-    metadata_check: 'Metadaten-Check',
-    restore_probe: 'Stichprobe Restore',
-    integrity_check: 'Integritätsvergleich',
-    cleanup: 'Cleanup Testdaten',
+    repo_reachable: historyT('stepRepoReachable'),
+    archive_readable: historyT('stepArchiveReadable'),
+    metadata_check: historyT('stepMetadataCheck'),
+    restore_probe: historyT('stepRestoreProbe'),
+    integrity_check: historyT('stepIntegrityCheck'),
+    cleanup: historyT('stepCleanup'),
   }[stepId] || stepId;
 }
+
+window.addEventListener?.('bbui:language-changed', () => {
+  if (historyState.loaded && historyState.data) renderHistory(historyState.data);
+});
