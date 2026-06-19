@@ -1,0 +1,33 @@
+{
+  "app": {
+    "title": "Borg Backup Manager"
+  },
+  "language": {
+    "label": "Language",
+    "german": "German",
+    "english": "English"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "jobs": "Jobs",
+    "storage": "Storage",
+    "history": "History",
+    "reports": "Reports",
+    "restore": "Browse & Restore",
+    "restoreTests": "Restore Tests",
+    "settings": "Settings",
+    "help": "Help",
+    "mobileMenu": "Menu"
+  },
+  "sidebar": {
+    "checkSystemHealth": "Check system health",
+    "systemStatus": "System status",
+    "unknown": "unknown",
+    "healthOpen": "{count} item(s) open",
+    "healthAttention": "System health needs attention. Click to review.",
+    "healthOk": "all OK",
+    "healthOkTitle": "System health OK",
+    "healthUnavailable": "System health could not be loaded.",
+    "logout": "Log out"
+  }
+}

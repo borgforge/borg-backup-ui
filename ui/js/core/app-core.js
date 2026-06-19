@@ -135,6 +135,10 @@ function _setSidebarSystemHealth(tone, text, title = '') {
   if (label) label.textContent = text;
 }
 
+function _sidebarTranslation(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(key, params) || key;
+}
+
 async function updateSidebarSystemHealth(force = false) {
   const el = document.getElementById('sidebar-system-health');
   if (!el || state.currentRole !== 'admin') return;
@@ -149,12 +153,24 @@ async function updateSidebarSystemHealth(force = false) {
     }
     const count = _systemHealthAttentionCount(data);
     if (count > 0) {
-      _setSidebarSystemHealth('warn', `${count} Punkt(e) offen`, 'Systemzustand benötigt Aufmerksamkeit. Klicken zum Prüfen.');
+      _setSidebarSystemHealth(
+        'warn',
+        _sidebarTranslation('sidebar.healthOpen', { count }),
+        _sidebarTranslation('sidebar.healthAttention'),
+      );
     } else {
-      _setSidebarSystemHealth('ok', 'alles OK', 'Systemzustand OK');
+      _setSidebarSystemHealth(
+        'ok',
+        _sidebarTranslation('sidebar.healthOk'),
+        _sidebarTranslation('sidebar.healthOkTitle'),
+      );
     }
   } catch {
-    _setSidebarSystemHealth('unknown', 'unbekannt', 'Systemzustand konnte nicht geladen werden.');
+    _setSidebarSystemHealth(
+      'unknown',
+      _sidebarTranslation('sidebar.unknown'),
+      _sidebarTranslation('sidebar.healthUnavailable'),
+    );
   }
 }
 
@@ -268,3 +284,5 @@ window.BBUI.core.applySetupNavLock = applySetupNavLock;
 window.BBUI.core.applyDataDirActionGates = applyDataDirActionGates;
 window.BBUI.core.invalidateSetupStatusCache = invalidateSetupStatusCache;
 window.BBUI.core.updateSidebarSystemHealth = updateSidebarSystemHealth;
+
+window.addEventListener('bbui:language-changed', () => updateSidebarSystemHealth(true));

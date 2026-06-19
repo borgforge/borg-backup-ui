@@ -31,13 +31,13 @@
           <rect x="3" y="14" width="7" height="7" rx="1"/>
           <rect x="14" y="14" width="7" height="7" rx="1"/>
         </svg>
-        <span>Dashboard</span>
+        <span data-i18n="nav.dashboard">Dashboard</span>
       </li>
       <li class="nav-item" data-page="jobs">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
-        <span>Jobs</span>
+        <span data-i18n="nav.jobs">Jobs</span>
       </li>
       <li class="nav-item" data-page="storage">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -45,41 +45,41 @@
           <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
           <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
         </svg>
-        <span>Storage</span>
+        <span data-i18n="nav.storage">Storage</span>
       </li>
       <li class="nav-item" data-page="history">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>
           <polyline points="12 6 12 12 16 14"/>
         </svg>
-        <span>History</span>
+        <span data-i18n="nav.history">History</span>
       </li>
       <li class="nav-item" data-page="berichte">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
           <line x1="6" y1="20" x2="6" y2="14"/>
         </svg>
-        <span>Berichte</span>
+        <span data-i18n="nav.reports">Berichte</span>
       </li>
       <li class="nav-item" data-page="restore">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/>
           <polyline points="12 13 12 17"/><polyline points="10 15 12 17 14 15"/>
         </svg>
-        <span>Browse &amp; Restore</span>
+        <span data-i18n="nav.restore">Browse &amp; Restore</span>
       </li>
       <li class="nav-item" data-page="restore-tests">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
         </svg>
-        <span>Restore Tests</span>
+        <span data-i18n="nav.restoreTests">Restore Tests</span>
       </li>
       <li class="nav-item" data-page="settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
-        <span>Einstellungen</span>
+        <span data-i18n="nav.settings">Einstellungen</span>
       </li>
       <li class="nav-item" data-page="hilfe">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -87,20 +87,27 @@
           <path d="M9.09 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3"/>
           <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
-        <span>Hilfe</span>
+        <span data-i18n="nav.help">Hilfe</span>
       </li>
     </ul>
 
     <div class="sidebar-footer">
-      <button class="sidebar-health-indicator unknown" id="sidebar-system-health" data-core-action="goto-settings" title="Systemzustand prüfen">
+      <button class="sidebar-health-indicator unknown" id="sidebar-system-health" data-core-action="goto-settings" title="Systemzustand prüfen" data-i18n-title="sidebar.checkSystemHealth">
         <span class="sidebar-health-dot"></span>
         <span class="sidebar-health-copy">
-          <span class="sidebar-health-title">Systemstatus</span>
-          <span class="sidebar-health-detail">unbekannt</span>
+          <span class="sidebar-health-title" data-i18n="sidebar.systemStatus">Systemstatus</span>
+          <span class="sidebar-health-detail" data-i18n="sidebar.unknown">unbekannt</span>
         </span>
       </button>
+      <label class="sidebar-language" for="ui-language-select">
+        <span data-i18n="language.label">Sprache</span>
+        <select id="ui-language-select" data-i18n-aria-label="language.label" aria-label="Sprache">
+          <option value="de" data-i18n="language.german">Deutsch</option>
+          <option value="en" data-i18n="language.english">English</option>
+        </select>
+      </label>
       <button class="btn btn-secondary btn-sm" id="auth-logout-btn" style="width:100%;justify-content:center;margin-bottom:8px">
-        Abmelden
+        <span data-i18n="sidebar.logout">Abmelden</span>
       </button>
       <div id="auth-current-user" class="app-author" style="margin-bottom:6px"></div>
       <span id="server-time"></span>
@@ -116,7 +123,7 @@
 
     <!-- Mobile Header -->
     <div class="mobile-header">
-      <button class="hamburger-btn" id="mobile-nav-toggle-btn" aria-label="Menü">
+      <button class="hamburger-btn" id="mobile-nav-toggle-btn" aria-label="Menü" data-i18n-aria-label="nav.mobileMenu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
           <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
         </svg>

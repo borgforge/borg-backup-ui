@@ -14,20 +14,26 @@
 ## UX/Produktentscheidung
 1. Standardwert bei Neuinstallation: `de`.
 2. Bestehende Installationen ohne gesetzte Sprache: Fallback `de`.
-3. Sprache wird zentral gespeichert in `backup.conf`:
+3. Die dauerhafte globale Sprache wird in einer spaeteren Teilumsetzung zentral
+   in `backup.conf` gespeichert:
    - `UI_LANGUAGE=de` oder `UI_LANGUAGE=en`
-4. Wechsel in Einstellungen wirkt:
+4. Die Infrastruktur aus Issue `#12` speichert die UI-Auswahl zunaechst lokal
+   unter `borg-backup-ui.language`. Die Settings-Umsetzung ersetzt diese
+   Zwischenloesung durch die globale Konfiguration.
+5. Wechsel in Einstellungen wirkt:
    - Sofort für UI (nach Reload oder dynamischem Re-Render)
    - Für neue Logs ab nächstem Joblauf
-5. Alte Logs bleiben in bisheriger Sprache erhalten.
+6. Alte Logs bleiben in bisheriger Sprache erhalten.
 
 ## Architektur
 
 ### 1) Zentrale i18n-Schicht UI
-- Neue Datei z. B. `ui/i18n.js`:
-  - `const I18N = { de: {...}, en: {...} }`
-  - `function t(key, params={})`
-  - Fallback-Kette: `selected -> de -> key`
+- `ui/js/components/i18n.js` stellt die Funktionen `t()`, `setLanguage()` und
+  `translate()` bereit.
+- `ui/i18n/de.json` und `ui/i18n/en.json` enthalten die Ressourcen.
+- Markup kann Text und Attribute ueber `data-i18n*` referenzieren.
+- Dynamisch eingefuegte markierte Elemente werden ebenfalls uebersetzt.
+- Fallback-Kette: `selected -> de -> key`.
 - UI-Rendering in `ui/app.js`:
   - harte Texte durch `t("...")` ersetzen
   - Navigation, Buttons, Dialoge, Tabellenköpfe, Statusmeldungen
@@ -72,9 +78,11 @@ Konvention:
 ## Migrationsplan
 
 ### Phase A: Grundlage
-1. `UI_LANGUAGE` in Config + Settings-Select.
-2. UI-i18n-Layer (`t()`) einführen.
-3. Top-20 UI-Texte umstellen (Navigation, Seitenheader, Hauptbuttons).
+1. UI-i18n-Layer (`t()`) und Sprachressourcen einführen.
+2. Auswahl lokal speichern, bis die Settings-Anbindung umgesetzt ist.
+3. Navigation und Sidebar als kleine Referenzflaeche umstellen.
+4. `UI_LANGUAGE` in Config und Settings-Select in der zugeordneten
+   Teilumsetzung ergänzen.
 
 ### Phase B: Vollständige UI
 1. Alle statischen UI-Texte ersetzen.
@@ -96,9 +104,21 @@ Konvention:
   - Sprache de/en wechseln -> UI neu rendern -> Texte korrekt.
   - Job starten in de/en -> neue Logdatei in korrekter Sprache.
   - Restore-Test starten in de/en -> Status/Logs korrekt.
-- Automatisiert (später):
-  - Unit-Test `t()`/`tr()` Fallback.
-  - Lint-Script: fehlende Keys de/en.
+- Automatisiert:
+  - Ressourcen muessen gueltiges JSON enthalten.
+  - Deutsche und englische Schluessel muessen identisch sein.
+  - Im HTML referenzierte Schluessel muessen in beiden Ressourcen existieren.
+  - Der deutsche Fallback darf nicht durch Browser-Spracherkennung ersetzt
+    werden.
+
+## Wiederholbares Hardcode-Audit
+- Jede Seitenmigration sucht in den zugeordneten HTML- und JavaScript-Dateien
+  nach sichtbaren Texten und ueberfuehrt sie domaenenweise.
+- Vor Abschluss des Umbrella-Issues prueft Issue `#25` alle UI-Dateien erneut.
+- Hilfreiche Ausgangssuche:
+  `rg -n "textContent|innerHTML|placeholder|title=|aria-label|>[^<]+<" ui`
+- Externe Borg-, SSH- und Betriebssystemausgaben werden dabei nicht als eigene
+  UI-Texte bewertet.
 
 ## Risiken & Gegenmaßnahmen
 - Risiko: Inkonsistente Texte bei gemischter Hardcode/i18n-Nutzung.
@@ -109,11 +129,12 @@ Konvention:
   - Maßnahme: klar trennen zwischen internen und externen Meldungen.
 
 ## Offene Entscheidungen
-1. Sofortiger Live-Switch ohne Reload oder einfacher Full-Refresh nach Speichern?
-2. Soll `UI_LANGUAGE` auch E-Mail-Report-Texte steuern?
-3. Soll Sprache pro Benutzer oder global (aktuell global) sein?
+1. Soll `UI_LANGUAGE` auch E-Mail-Report-Texte steuern?
+2. Soll Sprache langfristig global bleiben oder pro Benutzer gelten?
 
 ## Empfohlener Start
-- Zuerst `UI_LANGUAGE` + UI-Navigation/Settings/Restore-Tests umstellen.
-- Danach Logs in Restore-Test und Runner.
+- Nach der Infrastruktur aus Issue `#12` die Seiten schrittweise und
+  domaenenweise umstellen.
+- Danach `UI_LANGUAGE` global anbinden sowie Logs in Restore-Test und Runner
+  umstellen.
 - So ist der sichtbare Mehrwert früh da, mit kontrolliertem Risiko.
