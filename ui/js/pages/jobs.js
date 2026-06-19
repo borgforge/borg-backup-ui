@@ -25,6 +25,19 @@ window.BBUI.scheduleModalState = window.BBUI.scheduleModalState || {
 };
 const scheduleModalState = window.BBUI.scheduleModalState;
 
+function jobsT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(key, params) || key;
+}
+
+function jobsLocationLabel(location) {
+  return {
+    local: jobsT('jobs.locationLocal'),
+    usb: jobsT('jobs.locationUsb'),
+    smb: jobsT('jobs.locationSmb'),
+    storagebox: jobsT('jobs.locationStoragebox'),
+  }[location] || location || '–';
+}
+
 function _coreSchedules() {
   return window.BBUI.core.getSchedulesData();
 }
@@ -83,7 +96,7 @@ async function refreshJobs() {
     jobsState.loaded = true;
     renderJobsGrid(jobsState.jobs);
   } catch (err) {
-    showJobsError(`Fehler beim Laden: ${err.message}`);
+    showJobsError(jobsT('jobs.loadError', { message: err.message }));
   } finally {
     if (btn) btn.classList.remove('loading');
   }
@@ -154,7 +167,7 @@ function renderJobsGrid(jobs) {
   if (!jobs || jobs.length === 0) {
     if (jobsNewBtn) jobsNewBtn.classList.add('hidden');
     el.innerHTML = '';
-    showJobsEmpty('Noch keine Backup-Jobs vorhanden.<br><button class="btn btn-primary btn-sm" id="jobs-empty-create-btn" data-jobs-action="open-wizard" style="margin-top:10px">Ersten Job erstellen</button>');
+    showJobsEmpty(`${jobsT('jobs.empty')}<br><button class="btn btn-primary btn-sm" id="jobs-empty-create-btn" data-jobs-action="open-wizard" style="margin-top:10px">${jobsT('jobs.createFirst')}</button>`);
     // Defensive fallback: keep direct binding in case delegated handlers are unavailable.
     document.getElementById('jobs-empty-create-btn')?.addEventListener('click', openWizard);
     return;
@@ -181,7 +194,7 @@ function renderJobsGrid(jobs) {
     .filter(loc => groups[loc].length > 0)
     .map(loc => `
       <div class="jobs-location-group">
-        <div class="jobs-location-header">${locLabel(loc)}</div>
+        <div class="jobs-location-header">${jobsLocationLabel(loc)}</div>
         <div class="jobs-group-grid">${groups[loc].map(renderJobCard).join('')}</div>
         <div class="group-log-slot" id="log-slot-${loc}"></div>
       </div>`)
@@ -190,7 +203,7 @@ function renderJobsGrid(jobs) {
   if (utilityJobs.length > 0) {
     html += `
       <div class="jobs-location-group">
-        <div class="jobs-location-header">Weitere Skripte</div>
+        <div class="jobs-location-header">${jobsT('jobs.otherScripts')}</div>
         <div class="jobs-group-grid">${utilityJobs.map(renderJobCard).join('')}</div>
         <div class="group-log-slot" id="log-slot-utility"></div>
       </div>`;
@@ -225,9 +238,7 @@ function renderJobCard(job) {
   const iconColorKey = resolveJobIconColor(job);
   const iconColorClass = iconColorKey ? ` type-icon-color-${iconColorKey}` : '';
 
-  const locLabel = {
-    local: 'Local', usb: 'USB', smb: 'SMB', storagebox: 'Storagebox',
-  }[job.location] || job.location;
+  const locationName = jobsLocationLabel(job.location);
 
   const schedules = _coreSchedules();
   const sched = schedules[job.key];
@@ -258,8 +269,8 @@ function renderJobCard(job) {
     .filter((v) => v !== '');
   const policyHtml = (job.compression || retention.length === 4)
     ? `<div class="job-policy">
-         ${job.compression ? `<span>Comp: <code>${escHtml(job.compression)}</code></span>` : ''}
-         ${retention.length === 4 ? `<span>Ret: <code>${escHtml(retention.join('/'))}</code></span>` : ''}
+         ${job.compression ? `<span>${jobsT('jobs.compressionShort')} <code>${escHtml(job.compression)}</code></span>` : ''}
+         ${retention.length === 4 ? `<span>${jobsT('jobs.retentionShort')} <code>${escHtml(retention.join('/'))}</code></span>` : ''}
        </div>`
     : '';
   const schedHtml = (job.enabled === false) ? '' : (sched
@@ -268,19 +279,19 @@ function renderJobCard(job) {
            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
          </svg>
          ${schedActive
-           ? (nextRun ? `Nächster Lauf: ${fmtDateShort(nextRun)}` : sched.cron)
-           : 'Zeitplan deaktiviert'}
+           ? (nextRun ? jobsT('jobs.nextRun', { date: fmtDateShort(nextRun) }) : sched.cron)
+           : jobsT('jobs.scheduleDisabled')}
        </div>`
     : '');
 
   const lastRunHtml = job.last_status
     ? `<div class="job-last-run">
-         Letzter Lauf: <span>${job.last_time_ago || '—'}</span>
+         ${jobsT('jobs.lastRun')} <span>${job.last_time_ago || '—'}</span>
          <span class="badge ${job.last_status}" style="margin-left:6px;vertical-align:middle">
            <span class="badge-dot"></span>${statusLabel(job.last_status)}
          </span>
        </div>`
-    : `<div class="job-last-run">Noch kein Backup durchgeführt</div>`;
+    : `<div class="job-last-run">${jobsT('jobs.neverRun')}</div>`;
   const verificationHtml = renderJobRestoreVerification(job);
 
   const startDisabled = !_isDataDirReady();
@@ -288,14 +299,14 @@ function renderJobCard(job) {
   const actionHtml = isRunning
     ? `<div class="running-indicator">
          <span class="running-dot"></span>
-         Läuft...
-         <button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-key="${escHtml(job.key)}">Log anzeigen</button>
+         ${jobsT('jobs.running')}
+         <button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-key="${escHtml(job.key)}">${jobsT('jobs.showLog')}</button>
        </div>`
-    : `<button class="btn btn-primary" data-jobs-action="start-job" data-job-key="${escHtml(job.key)}" ${effectiveStartDisabled ? `disabled title="${job.enabled === false ? 'Job ist deaktiviert.' : 'Bitte zuerst GLOBAL_DATA_DIR in Einstellungen setzen.'}"` : ''}>
+    : `<button class="btn btn-primary" data-jobs-action="start-job" data-job-key="${escHtml(job.key)}" ${effectiveStartDisabled ? `disabled title="${job.enabled === false ? jobsT('jobs.disabled') : jobsT('jobs.dataDirRequired')}"` : ''}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
            <polygon points="5 3 19 12 5 21 5 3"/>
          </svg>
-         Starten
+         ${jobsT('jobs.startAction')}
        </button>`;
 
   return `
@@ -308,9 +319,9 @@ function renderJobCard(job) {
           </div>
         </div>
         <div class="job-card-badges">
-          <span class="loc-badge ${locClass}">${locLabel}</span>
+          <span class="loc-badge ${locClass}">${locationName}</span>
           <div class="job-card-menu">
-            <button class="job-menu-btn" data-jobs-action="toggle-menu" data-job-key="${escHtml(job.key)}" title="Optionen">
+            <button class="job-menu-btn" data-jobs-action="toggle-menu" data-job-key="${escHtml(job.key)}" title="${jobsT('jobs.options')}" aria-label="${jobsT('jobs.options')}">
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                 <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
               </svg>
@@ -321,21 +332,21 @@ function renderJobCard(job) {
                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                        <polyline points="20 6 9 17 4 12"></polyline>
                      </svg>
-                     In Wizard übernehmen
+                     ${jobsT('jobs.adoptLegacy')}
                    </button>`
                 : `<button class="job-menu-item" data-jobs-action="edit-job" data-job-key="${escHtml(job.key)}">
                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                        <path d="M12 20h9"/>
                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
                      </svg>
-                     Job bearbeiten
+                     ${jobsT('jobs.edit')}
                    </button>`
               }
               ${job.enabled === false ? '' : `<button class="job-menu-item ${schedActive ? 'sched-active' : ''}" data-jobs-action="show-schedule" data-job-key="${escHtml(job.key)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                 </svg>
-                Zeitplan${schedActive ? ' <span class="menu-active-dot"></span>' : ''}
+                ${jobsT('jobs.schedule')}${schedActive ? ' <span class="menu-active-dot"></span>' : ''}
               </button>`}
               <button class="job-menu-item" data-jobs-action="toggle-enabled" data-job-key="${escHtml(job.key)}" data-job-enabled="${job.enabled === false ? 'false' : 'true'}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -343,7 +354,7 @@ function renderJobCard(job) {
                     ? '<path d="M12 2v20"/><path d="M2 12h20"/>'
                     : '<polyline points="20 6 9 17 4 12"/>'}
                 </svg>
-                ${job.enabled === false ? 'Job aktivieren' : 'Job deaktivieren'}
+                ${job.enabled === false ? jobsT('jobs.enable') : jobsT('jobs.disable')}
               </button>
               <button class="job-menu-item danger" data-jobs-action="delete-job" data-job-key="${escHtml(job.key)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -352,14 +363,14 @@ function renderJobCard(job) {
                   <path d="M10 11v6"/><path d="M14 11v6"/>
                   <path d="M9 6V4h6v2"/>
                 </svg>
-                Job löschen
+                ${jobsT('jobs.deleteJob')}
               </button>
             </div>
           </div>
         </div>
       </div>
       <div class="job-meta">${features.join('')}</div>
-      ${job.enabled === false ? `<div class="status-message warning-state job-disabled-note">Job ist deaktiviert.</div>` : ''}
+      ${job.enabled === false ? `<div class="status-message warning-state job-disabled-note">${jobsT('jobs.disabled')}</div>` : ''}
       ${job.description ? `<div class="job-description">${renderDescriptionMarkdown(job.description)}</div>` : ''}
       <div class="job-last-run-wrap">${policyHtml}${lastRunHtml}${verificationHtml}${schedHtml}</div>
       <div class="job-actions">${actionHtml}</div>
@@ -370,17 +381,17 @@ function renderJobRestoreVerification(job) {
   const status = String(job.restore_verification_status || '').toLowerCase();
   if (!status) return '';
   const map = {
-    verified: { cls: 'success', text: 'Restore: verifiziert' },
-    stale: { cls: 'warning', text: 'Restore: überfällig' },
-    failed: { cls: 'error', text: 'Restore: fehlgeschlagen' },
-    never: { cls: 'unknown', text: 'Restore: offen' },
-    not_required: { cls: 'neutral', text: 'Restore: nicht geplant' },
+    verified: { cls: 'success', text: jobsT('jobs.restoreVerified') },
+    stale: { cls: 'warning', text: jobsT('jobs.restoreStale') },
+    failed: { cls: 'error', text: jobsT('jobs.restoreFailed') },
+    never: { cls: 'unknown', text: jobsT('jobs.restoreOpen') },
+    not_required: { cls: 'neutral', text: jobsT('jobs.restoreNotRequired') },
   };
   const item = map[status];
   if (!item) return '';
   const detail = [
-    job.restore_verification_last_test_date ? `Letzter Test: ${job.restore_verification_last_test_date}` : '',
-    job.restore_verification_valid_until ? `Gültig bis: ${job.restore_verification_valid_until}` : '',
+    job.restore_verification_last_test_date ? jobsT('jobs.lastTest', { date: job.restore_verification_last_test_date }) : '',
+    job.restore_verification_valid_until ? jobsT('jobs.validUntil', { date: job.restore_verification_valid_until }) : '',
   ].filter(Boolean).join(' · ');
   return `<div class="job-restore-proof"><span class="restore-v-badge ${item.cls}" title="${escHtml(detail || item.text)}">${item.text}</span></div>`;
 }
@@ -410,7 +421,12 @@ function resolveJobIconColor(job) {
 }
 
 function statusLabel(s) {
-  return { success: 'OK', skipped: 'Übersprungen', warning: 'Warnung', error: 'Fehler' }[s] || s;
+  return {
+    success: 'OK',
+    skipped: jobsT('jobs.statusSkipped'),
+    warning: jobsT('jobs.statusWarning'),
+    error: jobsT('jobs.statusError'),
+  }[s] || s;
 }
 
 function toggleJobMenu(e, key) {
@@ -477,22 +493,25 @@ async function setJobEnabled(jobKey, enabled) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     await refreshJobs();
-    showMsg('jobs-message', 'success', `Job ${enabled ? 'aktiviert' : 'deaktiviert'}: ${jobKey}`);
+    showMsg('jobs-message', 'success', jobsT('jobs.toggleSuccess', {
+      state: jobsT(enabled ? 'jobs.enabledState' : 'jobs.disabledState'),
+      key: jobKey,
+    }));
   } catch (err) {
-    showJobsError(`Umschalten fehlgeschlagen: ${err.message}`);
+    showJobsError(jobsT('jobs.toggleFailed', { message: err.message }));
   }
 }
 
 function showStartModal(jobKey) {
   const canStart = _isDataDirReady();
   if (!canStart) {
-    showMsg('jobs-message', 'error', 'Bitte zuerst GLOBAL_DATA_DIR in Einstellungen setzen.');
+    showMsg('jobs-message', 'error', jobsT('jobs.dataDirRequired'));
     return;
   }
   const job = jobsState.jobs.find(j => j.key === jobKey);
   if (!job) return;
   if (job.enabled === false) {
-    showMsg('jobs-message', 'warning', `Job ist deaktiviert: ${jobKey}`);
+    showMsg('jobs-message', 'warning', jobsT('jobs.disabledWithKey', { key: jobKey }));
     return;
   }
 
@@ -500,9 +519,9 @@ function showStartModal(jobKey) {
   jobsState.confirmAction = 'start';
 
   const titleName = job.name || job.display_name || capitalize(job.backup_type);
-  document.getElementById('modal-title').textContent = `Job starten: ${titleName}`;
+  document.getElementById('modal-title').textContent = jobsT('jobs.startTitle', { name: titleName });
   document.getElementById('modal-description').textContent =
-    `Das Backup "${job.display_name || job.key}" wird jetzt gestartet.`;
+    jobsT('jobs.startDescription', { name: job.display_name || job.key });
 
   const infoEl = document.getElementById('modal-info');
   const items = [];
@@ -513,7 +532,7 @@ function showStartModal(jobKey) {
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
         <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <span class="modal-info-text">Alle Docker-Container werden <strong>gestoppt</strong> und nach dem Backup wieder gestartet.</span>
+      <span class="modal-info-text">${jobsT('jobs.dockerWarning')}</span>
     </div>`);
   }
 
@@ -523,7 +542,7 @@ function showStartModal(jobKey) {
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
         <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <span class="modal-info-text">Laufende <strong>VMs werden heruntergefahren</strong> und nach dem Backup neu gestartet.</span>
+      <span class="modal-info-text">${jobsT('jobs.vmWarning')}</span>
     </div>`);
   }
 
@@ -533,7 +552,7 @@ function showStartModal(jobKey) {
       <line x1="12" y1="8" x2="12" y2="12"/>
       <line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    <span class="modal-info-text">Die Log-Ausgabe wird live im Browser angezeigt.</span>
+    <span class="modal-info-text">${jobsT('jobs.liveLogInfo')}</span>
   </div>`);
 
   infoEl.innerHTML = items.join('');
@@ -543,7 +562,7 @@ function showStartModal(jobKey) {
   const confirmBtn = document.getElementById('modal-confirm-btn');
   if (confirmBtn) {
     confirmBtn.className = 'btn btn-primary';
-    confirmBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"/></svg> Jetzt starten`;
+    confirmBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"/></svg> ${jobsT('jobs.startNow')}`;
     confirmBtn.disabled = false;
   }
   if (pwWrap) pwWrap.classList.add('hidden');
@@ -560,7 +579,7 @@ function closeModal() {
   const confirmBtn = document.getElementById('modal-confirm-btn');
   if (confirmBtn) {
     confirmBtn.className = 'btn btn-primary';
-    confirmBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"/></svg> Jetzt starten`;
+    confirmBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"/></svg> ${jobsT('jobs.startNow')}`;
     confirmBtn.disabled = false;
   }
   const wrap = document.getElementById('modal-confirm-input-wrap');
@@ -578,21 +597,21 @@ function closeModal() {
 async function showDeleteJobModal(jobKey, displayName, typeId, location) {
   jobsState.pendingDeleteJobKey = jobKey;
   jobsState.confirmAction = 'delete';
-  document.getElementById('modal-title').textContent = 'Job-Skript löschen';
+  document.getElementById('modal-title').textContent = jobsT('jobs.deleteTitle');
   document.getElementById('modal-description').textContent =
-    `Soll der Job „${displayName}" wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`;
+    jobsT('jobs.deleteDescription', { name: displayName });
   document.getElementById('modal-info').innerHTML = `
     <div class="modal-info-item warning">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" color="var(--warning)">
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
         <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <span class="modal-info-text">Der Job wird aus der UI entfernt. Repository-Daten bleiben erhalten.</span>
+      <span class="modal-info-text">${jobsT('jobs.deleteKeepsRepository')}</span>
     </div>`;
   document.getElementById('modal-info').innerHTML += `
     <label class="form-checkbox-row" style="margin-top:10px">
       <input type="checkbox" id="modal-delete-artifacts">
-      Zusatzdateien ebenfalls löschen (Status, Logs, Restore-Test)
+      ${jobsT('jobs.deleteArtifacts')}
     </label>`;
 
   const pwWrap = document.getElementById('modal-passphrase-delete-wrap');
@@ -614,7 +633,7 @@ async function showDeleteJobModal(jobKey, displayName, typeId, location) {
   const wrap = document.getElementById('modal-confirm-input-wrap');
   const label = document.getElementById('modal-confirm-input-label');
   const inp   = document.getElementById('modal-confirm-input');
-  label.textContent = `Zur Bestätigung „${jobKey}" eingeben:`;
+  label.textContent = jobsT('jobs.confirmDelete', { key: jobKey });
   inp.value = '';
   inp.dataset.expected = jobKey;
   wrap.classList.remove('hidden');
@@ -624,7 +643,7 @@ async function showDeleteJobModal(jobKey, displayName, typeId, location) {
   confirmBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
     <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
     <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-  </svg> Löschen`;
+  </svg> ${jobsT('jobs.delete')}`;
   confirmBtn.className = 'btn btn-danger';
   confirmBtn.disabled = true;
   document.getElementById('confirm-modal').classList.remove('hidden');
@@ -660,14 +679,14 @@ async function confirmJobDelete() {
     jobsState.loaded = false;
     await refreshJobs();
     const extra = [
-      data.deleted_status_files ? `${data.deleted_status_files} Status-Datei(en)` : '',
-      data.deleted_log_files    ? `${data.deleted_log_files} Log-Datei(en)` : '',
-      data.deleted_passphrase   ? 'Passphrase-Datei' : '',
+      data.deleted_status_files ? jobsT('jobs.statusFiles', { count: data.deleted_status_files }) : '',
+      data.deleted_log_files    ? jobsT('jobs.logFiles', { count: data.deleted_log_files }) : '',
+      data.deleted_passphrase   ? jobsT('jobs.passphraseFile') : '',
     ].filter(Boolean).join(', ');
     showMsg('jobs-message', 'success',
-      `Gelöscht: ${data.filename}${extra ? ' · ' + extra : ''}`);
+      jobsT('jobs.deleted', { filename: data.filename, extra: extra ? ` · ${extra}` : '' }));
   } catch (err) {
-    showJobsError(`Löschen fehlgeschlagen: ${err.message}`);
+    showJobsError(jobsT('jobs.deleteFailed', { message: err.message }));
   }
 }
 
@@ -692,7 +711,7 @@ async function confirmJobStart() {
     await refreshJobs();
     openLogPanel(jobKey);
   } catch (err) {
-    showJobsError(`Start fehlgeschlagen: ${err.message}`);
+    showJobsError(jobsT('jobs.startFailed', { message: err.message }));
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -702,7 +721,7 @@ async function confirmJobStart() {
 
 function openLogPanel(jobKey) {
   const job = jobsState.jobs.find(j => j.key === jobKey);
-  const title = job ? `Log: ${job.display_name || job.key}` : `Log: ${jobKey}`;
+  const title = jobsT('jobs.logTitle', { name: job ? (job.display_name || job.key) : jobKey });
 
   document.getElementById('log-panel-title-text').textContent = title;
   document.getElementById('log-output').textContent = '';
@@ -737,7 +756,7 @@ function openLogPanel(jobKey) {
   });
 
   es.addEventListener('error', (e) => {
-    if (e.data) appendLogLine(`[Fehler] ${e.data}`);
+    if (e.data) appendLogLine(jobsT('jobs.logError', { message: e.data }));
     setLogStatus('error', '?');
     es.close();
     jobsState.activeEventSource = null;
@@ -789,19 +808,19 @@ function setLogStatus(state, exitCode) {
     const dot = document.createElement('span');
     dot.className = 'running-dot';
     dot.style.marginRight = '4px';
-    badge.append(dot, document.createTextNode('Läuft...'));
+    badge.append(dot, document.createTextNode(jobsT('jobs.running')));
   } else if (state === 'success') {
     badge.className = 'badge success';
     badge.textContent = '';
     const dot = document.createElement('span');
     dot.className = 'badge-dot';
-    badge.append(dot, document.createTextNode(`Fertig (Exit ${exit})`));
+    badge.append(dot, document.createTextNode(jobsT('jobs.logDone', { code: exit })));
   } else {
     badge.className = 'badge error';
     badge.textContent = '';
     const dot = document.createElement('span');
     dot.className = 'badge-dot';
-    badge.append(dot, document.createTextNode(`Fehler (Exit ${exit})`));
+    badge.append(dot, document.createTextNode(jobsT('jobs.logFailed', { code: exit })));
   }
 }
 
@@ -820,20 +839,26 @@ function closeLogPanel() {
 
 // ── Schedule Modal ────────────────────────────────────────────────────────────
 
-function showScheduleModal(jobKey, displayName) {
-  scheduleModalState.jobKey = jobKey;
-
+function _updateScheduleModalTitle(jobKey, displayName) {
+  const titleEl = document.getElementById('schedule-modal-title');
+  if (!titleEl) return;
   if (displayName) {
-    document.getElementById('schedule-modal-title').textContent = `Zeitplan: ${displayName}`;
+    titleEl.textContent = jobsT('schedule.titleFor', { name: displayName });
   } else {
     const job = jobsState.jobs.find(j => j.key === jobKey);
     if (job) {
-      document.getElementById('schedule-modal-title').textContent =
-        `Zeitplan: ${capitalize(job.backup_type)} (${job.location})`;
+      titleEl.textContent = jobsT('schedule.titleFor', {
+        name: `${capitalize(job.backup_type)} (${jobsLocationLabel(job.location)})`,
+      });
     } else {
-      document.getElementById('schedule-modal-title').textContent = `Zeitplan: ${jobKey}`;
+      titleEl.textContent = jobsT('schedule.titleFor', { name: jobKey });
     }
   }
+}
+
+function showScheduleModal(jobKey, displayName) {
+  scheduleModalState.jobKey = jobKey;
+  _updateScheduleModalTitle(jobKey, displayName);
 
   const schedules = _coreSchedules();
   const existing = schedules[jobKey];
@@ -915,9 +940,9 @@ function updateSchedulePreview() {
   const el   = document.getElementById('schedule-next-run-text');
   if (!el) return;
   if (next) {
-    el.textContent = `Nächster Lauf: ${fmtDateShort(next)}`;
+    el.textContent = jobsT('schedule.nextRun', { date: fmtDateShort(next) });
   } else {
-    el.textContent = cron ? 'Ungültiger Ausdruck' : '—';
+    el.textContent = cron ? jobsT('schedule.invalid') : '—';
   }
 }
 
@@ -943,9 +968,9 @@ async function saveScheduleAction() {
     _onScheduleChanged(jobKey);
   } catch (err) {
     if (window.BBUI?.components?.toast?.error) {
-      window.BBUI.components.toast.error('jobs-message', `Fehler beim Speichern: ${err.message}`);
+      window.BBUI.components.toast.error('jobs-message', jobsT('schedule.saveError', { message: err.message }));
     } else {
-      alert(`Fehler beim Speichern: ${err.message}`);
+      alert(jobsT('schedule.saveError', { message: err.message }));
     }
   }
 }
@@ -969,9 +994,9 @@ async function deleteScheduleAction() {
     _onScheduleChanged(jobKey);
   } catch (err) {
     if (window.BBUI?.components?.toast?.error) {
-      window.BBUI.components.toast.error('jobs-message', `Fehler beim Löschen: ${err.message}`);
+      window.BBUI.components.toast.error('jobs-message', jobsT('schedule.deleteError', { message: err.message }));
     } else {
-      alert(`Fehler beim Löschen: ${err.message}`);
+      alert(jobsT('schedule.deleteError', { message: err.message }));
     }
   }
 }
@@ -1065,10 +1090,25 @@ function calcNextRun(cron) {
 
 function fmtDateShort(d) {
   if (!d) return '—';
-  const pad = n => String(n).padStart(2, '0');
-  const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-  return `${days[d.getDay()]}, ${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() || 'de';
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'de-DE', {
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
 }
+
+window.addEventListener?.('bbui:language-changed', () => {
+  if (jobsState.loaded) renderJobsGrid(jobsState.jobs);
+  if (scheduleModalState.jobKey) {
+    _updateScheduleModalTitle(scheduleModalState.jobKey);
+    updateSchedulePreview();
+  }
+});
 
 // ── Jobs-Meldungen ────────────────────────────────────────────────────────────
 

@@ -172,8 +172,8 @@
     <div id="page-jobs" class="page">
       <div class="page-header">
         <div>
-          <h1>Jobs</h1>
-          <p class="page-subtitle">Backup-Jobs starten und überwachen</p>
+          <h1 data-i18n="jobs.title">Jobs</h1>
+          <p class="page-subtitle" data-i18n="jobs.subtitle">Backup-Jobs starten und überwachen</p>
         </div>
         <div class="header-actions">
           <button class="btn btn-secondary" id="jobs-refresh-btn">
@@ -181,14 +181,14 @@
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
-            Aktualisieren
+            <span data-i18n="jobs.refresh">Aktualisieren</span>
           </button>
           <button class="btn btn-primary" id="jobs-new-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Neuer Job
+            <span data-i18n="jobs.new">Neuer Job</span>
           </button>
         </div>
       </div>
@@ -198,7 +198,7 @@
       <div id="jobs-grid" class="backup-grid">
         <div class="loading-spinner">
           <div class="spinner"></div>
-          <span>Lade Jobs...</span>
+          <span data-i18n="jobs.loading">Lade Jobs...</span>
         </div>
       </div>
 
@@ -210,12 +210,12 @@
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span id="log-panel-title-text">Log-Ausgabe</span>
+            <span id="log-panel-title-text" data-i18n="jobs.logOutput">Log-Ausgabe</span>
           </div>
           <div class="log-panel-actions">
             <span id="log-status-badge" class="badge"></span>
-            <button class="btn btn-secondary btn-sm" id="jobs-log-clear-btn">Leeren</button>
-            <button class="btn btn-secondary btn-sm" id="jobs-log-close-btn">
+            <button class="btn btn-secondary btn-sm" id="jobs-log-clear-btn" data-i18n="jobs.clear">Leeren</button>
+            <button class="btn btn-secondary btn-sm" id="jobs-log-close-btn" data-i18n-aria-label="jobs.close" aria-label="Schließen">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
@@ -225,7 +225,7 @@
         </div>
         <pre id="log-output" class="log-output"></pre>
         <div id="log-scroll-hint" class="log-scroll-hint">
-          <button id="jobs-log-scroll-end-btn">&#8595; Zum Ende springen</button>
+          <button id="jobs-log-scroll-end-btn">&#8595; <span data-i18n="jobs.jumpToEnd">Zum Ende springen</span></button>
         </div>
       </div>
     </div>
@@ -846,8 +846,8 @@
 <div id="confirm-modal" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3 id="modal-title">Job starten</h3>
-      <button class="modal-close" id="confirm-modal-close-btn">
+      <h3 id="modal-title" data-i18n="jobs.start">Job starten</h3>
+      <button class="modal-close" id="confirm-modal-close-btn" data-i18n-aria-label="jobs.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
@@ -860,7 +860,7 @@
       <div id="modal-passphrase-delete-wrap" class="hidden" style="margin-top:12px">
         <label class="form-checkbox-row">
           <input type="checkbox" id="modal-delete-passphrase">
-          Passphrase-Datei ebenfalls löschen
+          <span data-i18n="jobs.deletePassphrase">Passphrase-Datei ebenfalls löschen</span>
           <span id="modal-delete-passphrase-path" style="font-size:11px;color:var(--text-muted);display:block;margin-left:22px"></span>
         </label>
       </div>
@@ -870,12 +870,12 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" id="confirm-modal-cancel-btn">Abbrechen</button>
+      <button class="btn btn-secondary" id="confirm-modal-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
       <button class="btn btn-primary" id="modal-confirm-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
-        Jetzt starten
+        <span data-i18n="jobs.startNow">Jetzt starten</span>
       </button>
     </div>
   </div>
@@ -960,8 +960,8 @@
 <div id="wizard-modal" class="modal-backdrop hidden">
   <div class="modal modal-wizard">
     <div class="modal-header">
-      <h3 id="wizard-modal-title">Neuer Backup-Job</h3>
-      <button class="modal-close" id="wizard-close-btn">
+      <h3 id="wizard-modal-title" data-i18n="wizard.newTitle">Neuer Backup-Job</h3>
+      <button class="modal-close" id="wizard-close-btn" data-i18n-aria-label="jobs.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
@@ -972,37 +972,37 @@
     <div class="wizard-stepper">
       <div class="wizard-step active" id="wstep-dot-1">
         <div class="wizard-step-dot">1</div>
-        <div class="wizard-step-label">Grunddaten</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepBasics">Grunddaten</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-2">
         <div class="wizard-step-dot">2</div>
-        <div class="wizard-step-label">Quellen &amp; Ziel</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepSourcesTarget">Quellen &amp; Ziel</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-3">
         <div class="wizard-step-dot">3</div>
-        <div class="wizard-step-label">Retention</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepRetention">Retention</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-4">
         <div class="wizard-step-dot">4</div>
-        <div class="wizard-step-label">Passphrase</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepPassphrase">Passphrase</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-5">
         <div class="wizard-step-dot">5</div>
-        <div class="wizard-step-label">Beschreibung</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepDescription">Beschreibung</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-6">
         <div class="wizard-step-dot">6</div>
-        <div class="wizard-step-label">Zeitplan</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepSchedule">Zeitplan</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-7">
         <div class="wizard-step-dot">7</div>
-        <div class="wizard-step-label">Flow-Vorschau</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepPreview">Flow-Vorschau</div>
       </div>
     </div>
 
@@ -1013,89 +1013,89 @@
         <div id="wizard-error-1" class="status-message error hidden"></div>
         <div class="settings-body two-col wizard-step1-layout">
           <div class="form-group" style="grid-column:1/-1">
-            <label class="form-label">Job-Name <span class="form-hint">(Anzeigename)</span></label>
+            <label class="form-label"><span data-i18n="wizard.jobName">Job-Name</span> <span class="form-hint" data-i18n="wizard.displayNameHint">(Anzeigename)</span></label>
             <input class="form-input" type="text" id="wiz-job-name"
-              placeholder="z.B. Borg Backup (Meine Daten)">
+              placeholder="z.B. Borg Backup (Meine Daten)" data-i18n-placeholder="wizard.jobNamePlaceholder">
           </div>
           <div class="form-group">
-            <label class="form-label">Typ-ID <span class="form-hint">(nur a–z, 0–9, _)</span></label>
+            <label class="form-label"><span data-i18n="wizard.typeId">Typ-ID</span> <span class="form-hint" data-i18n="wizard.typeIdHint">(nur a–z, 0–9, _)</span></label>
             <input class="form-input mono" type="text" id="wiz-type-id"
-              placeholder="z.B. meinedaten">
+              placeholder="z.B. meinedaten" data-i18n-placeholder="wizard.typeIdPlaceholder">
           </div>
           <div class="form-group">
-            <label class="form-label">Icon</label>
+            <label class="form-label" data-i18n="wizard.icon">Icon</label>
             <select class="form-select" id="wiz-icon">
-              <option value="">Automatisch (Typ)</option>
+              <option value="" data-i18n="wizard.automaticType">Automatisch (Typ)</option>
               <option value="flash">Flash</option>
               <option value="appdata">Appdata</option>
-              <option value="photos">Fotos</option>
+              <option value="photos" data-i18n="wizard.photos">Fotos</option>
               <option value="vms">VMs</option>
-              <option value="sonstiges">Sonstiges</option>
+              <option value="sonstiges" data-i18n="wizard.other">Sonstiges</option>
               <option value="docker">Docker</option>
-              <option value="folder">Ordner</option>
+              <option value="folder" data-i18n="wizard.folder">Ordner</option>
               <option value="cloud">Cloud</option>
-              <option value="archive">Archiv</option>
-              <option value="database">Datenbank</option>
+              <option value="archive" data-i18n="wizard.archive">Archiv</option>
+              <option value="database" data-i18n="wizard.database">Datenbank</option>
               <option value="server">Server</option>
               <option value="home">Home</option>
-              <option value="music">Musik</option>
+              <option value="music" data-i18n="wizard.music">Musik</option>
               <option value="video">Video</option>
-              <option value="documents">Dokumente</option>
+              <option value="documents" data-i18n="wizard.documents">Dokumente</option>
               <option value="code">Code</option>
-              <option value="camera">Kamera</option>
+              <option value="camera" data-i18n="wizard.camera">Kamera</option>
               <option value="usb">USB</option>
-              <option value="shield">Sicherheit</option>
+              <option value="shield" data-i18n="wizard.security">Sicherheit</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Icon-Farbe</label>
+            <label class="form-label" data-i18n="wizard.iconColor">Icon-Farbe</label>
             <select class="form-select" id="wiz-icon-color">
-              <option value="">Automatisch (Typ)</option>
-              <option value="blue">Blau</option>
+              <option value="" data-i18n="wizard.automaticType">Automatisch (Typ)</option>
+              <option value="blue" data-i18n="wizard.blue">Blau</option>
               <option value="indigo">Indigo</option>
-              <option value="purple">Lila</option>
+              <option value="purple" data-i18n="wizard.purple">Lila</option>
               <option value="pink">Pink</option>
-              <option value="green">Grün</option>
+              <option value="green" data-i18n="wizard.green">Grün</option>
               <option value="lime">Lime</option>
-              <option value="violet">Violett</option>
+              <option value="violet" data-i18n="wizard.violet">Violett</option>
               <option value="amber">Amber</option>
               <option value="orange">Orange</option>
-              <option value="red">Rot</option>
+              <option value="red" data-i18n="wizard.red">Rot</option>
               <option value="rose">Rose</option>
-              <option value="teal">Türkis</option>
+              <option value="teal" data-i18n="wizard.teal">Türkis</option>
               <option value="cyan">Cyan</option>
-              <option value="gray">Grau</option>
+              <option value="gray" data-i18n="wizard.gray">Grau</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Vorschau</label>
-            <div class="wizard-icon-preview" id="wiz-icon-preview" title="Icon-Vorschau">
+            <label class="form-label" data-i18n="wizard.preview">Vorschau</label>
+            <div class="wizard-icon-preview" id="wiz-icon-preview" title="Icon-Vorschau" data-i18n-title="wizard.iconPreview">
               <div class="type-icon type-icon-sonstiges" id="wiz-icon-preview-box"></div>
-              <span id="wiz-icon-preview-label">Automatisch</span>
+              <span id="wiz-icon-preview-label" data-i18n="wizard.automatic">Automatisch</span>
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Location <span class="form-hint">(Alias/Profil)</span></label>
+            <label class="form-label"><span data-i18n="wizard.location">Location</span> <span class="form-hint" data-i18n="wizard.aliasProfileHint">(Alias/Profil)</span></label>
             <select class="form-select" id="wiz-location">
-              <option value="local">Lokal</option>
+              <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
               <option value="usb">USB</option>
               <option value="smb">SMB</option>
-              <option value="storagebox">Storagebox</option>
+              <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox</option>
             </select>
           </div>
           <div class="wizard-feature-grid" style="grid-column:1/-1">
             <div class="form-group wizard-feature-box">
-              <label class="form-label">Docker-Container stoppen <span class="form-hint">(für Appdata-Backups)</span></label>
+            <label class="form-label"><span data-i18n="wizard.stopDocker">Docker-Container stoppen</span> <span class="form-hint" data-i18n="wizard.appdataHint">(für Appdata-Backups)</span></label>
               <label class="form-checkbox-row">
                 <input type="checkbox" id="wiz-use-docker">
-                Docker vor dem Backup stoppen und danach starten
+                <span data-i18n="wizard.stopDockerDescription">Docker vor dem Backup stoppen und danach starten</span>
               </label>
             </div>
             <div class="form-group wizard-feature-box">
-              <label class="form-label">VMs herunterfahren <span class="form-hint">(für VM-Backups)</span></label>
+              <label class="form-label"><span data-i18n="wizard.shutdownVms">VMs herunterfahren</span> <span class="form-hint" data-i18n="wizard.vmHint">(für VM-Backups)</span></label>
               <label class="form-checkbox-row">
                 <input type="checkbox" id="wiz-use-vm">
-                Laufende VMs vor dem Backup herunterfahren und danach starten
+                <span data-i18n="wizard.shutdownVmsDescription">Laufende VMs vor dem Backup herunterfahren und danach starten</span>
               </label>
             </div>
           </div>
@@ -1107,7 +1107,7 @@
         <div id="wizard-error-2" class="status-message error hidden"></div>
         <div class="settings-body">
           <div class="form-group">
-            <label class="form-label">Quellpfade <span class="form-hint">(Autocomplete ab /mnt, Enter zum Übernehmen)</span></label>
+            <label class="form-label"><span data-i18n="wizard.sourcePaths">Quellpfade</span> <span class="form-hint" data-i18n="wizard.sourcePathsHint">(Autocomplete ab /mnt, Enter zum Übernehmen)</span></label>
             <input class="form-input mono" type="text" id="wiz-source-path-input" placeholder="/mnt/user/...">
             <div id="wiz-source-path-suggest" class="wizard-path-suggest hidden"></div>
             <div id="wiz-source-path-list" class="wizard-path-list"></div>
@@ -1115,56 +1115,56 @@
               placeholder="/mnt/user/data/&#10;/mnt/user/documents/"></textarea>
           </div>
           <div class="form-group">
-            <label class="form-label">Repository-Pfad</label>
+            <label class="form-label" data-i18n="wizard.repositoryPath">Repository-Pfad</label>
             <input class="form-input mono" type="text" id="wiz-repo-path"
-              placeholder="/mnt/backup/borg-backup-meinedaten">
+              placeholder="/mnt/backup/borg-backup-meinedaten" data-i18n-placeholder="wizard.repositoryPlaceholder">
             <div id="wiz-storagebox-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
           </div>
           <div class="form-group hidden" id="wiz-usb-profile-group">
-            <label class="form-label">USB-Profil</label>
+            <label class="form-label" data-i18n="wizard.usbProfile">USB-Profil</label>
             <select class="form-select" id="wiz-usb-profile"></select>
             <div id="wiz-usb-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
           </div>
           <div class="form-group hidden" id="wiz-smb-profile-group">
-            <label class="form-label">SMB-Profil</label>
+            <label class="form-label" data-i18n="wizard.smbProfile">SMB-Profil</label>
             <select class="form-select" id="wiz-smb-profile"></select>
             <div id="wiz-smb-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
           </div>
           <div class="form-group hidden" id="wiz-storage-profile-group">
-            <label class="form-label">Storage-Profil</label>
+            <label class="form-label" data-i18n="wizard.storageProfile">Storage-Profil</label>
             <select class="form-select" id="wiz-storage-profile"></select>
             <div id="wiz-storage-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
           </div>
           <div class="form-group hidden" id="wiz-smb-mount-options-group">
-            <label class="form-label">SMB-Mount-Optionen</label>
+            <label class="form-label" data-i18n="wizard.smbMountOptions">SMB-Mount-Optionen</label>
             <label class="form-checkbox-row">
               <input type="checkbox" id="wiz-smb-mount-before-run" checked>
-              SMB vor dem Backup mounten
+              <span data-i18n="wizard.mountBefore">SMB vor dem Backup mounten</span>
             </label>
             <label class="form-checkbox-row" style="margin-top:6px">
               <input type="checkbox" id="wiz-smb-unmount-after-run" checked>
-              SMB nach dem Backup unmounten
+              <span data-i18n="wizard.unmountAfter">SMB nach dem Backup unmounten</span>
             </label>
           </div>
           <div class="form-group">
-            <label class="form-label">Kompression</label>
+            <label class="form-label" data-i18n="wizard.compression">Kompression</label>
             <select class="form-select" id="wiz-compression">
-              <option value="lz4">lz4 (schnell, Standard)</option>
+              <option value="lz4" data-i18n="wizard.compressionLz4">lz4 (schnell, Standard)</option>
               <option value="zstd,1">zstd,1</option>
               <option value="zstd,3">zstd,3</option>
               <option value="zstd,6">zstd,6</option>
               <option value="zstd,9">zstd,9</option>
-              <option value="none">none (keine Kompression)</option>
+              <option value="none" data-i18n="wizard.compressionNone">none (keine Kompression)</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Verschlüsselung <span class="form-hint">(für borg init)</span></label>
+            <label class="form-label"><span data-i18n="wizard.encryption">Verschlüsselung</span> <span class="form-hint" data-i18n="wizard.borgInitHint">(für borg init)</span></label>
             <select class="form-select" id="wiz-encryption">
-              <option value="repokey-blake2">repokey-blake2 (empfohlen)</option>
+              <option value="repokey-blake2" data-i18n="wizard.encryptionRecommended">repokey-blake2 (empfohlen)</option>
               <option value="repokey">repokey</option>
               <option value="keyfile-blake2">keyfile-blake2</option>
               <option value="keyfile">keyfile</option>
-              <option value="none">none (keine Verschlüsselung)</option>
+              <option value="none" data-i18n="wizard.encryptionNone">none (keine Verschlüsselung)</option>
             </select>
           </div>
         </div>
@@ -1172,7 +1172,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="7 10 12 15 17 10"></polyline>
           </svg>
-          Weitere Einstellungen unten
+          <span data-i18n="wizard.moreSettingsBelow">Weitere Einstellungen unten</span>
         </div>
       </div>
 
@@ -1181,19 +1181,19 @@
         <div id="wizard-error-3" class="status-message error hidden"></div>
         <div class="settings-body two-col">
           <div class="form-group">
-            <label class="form-label">Täglich behalten</label>
+            <label class="form-label" data-i18n="wizard.keepDaily">Täglich behalten</label>
             <input class="form-input" type="number" min="0" id="wiz-keep-daily" value="7">
           </div>
           <div class="form-group">
-            <label class="form-label">Wöchentlich behalten</label>
+            <label class="form-label" data-i18n="wizard.keepWeekly">Wöchentlich behalten</label>
             <input class="form-input" type="number" min="0" id="wiz-keep-weekly" value="4">
           </div>
           <div class="form-group">
-            <label class="form-label">Monatlich behalten</label>
+            <label class="form-label" data-i18n="wizard.keepMonthly">Monatlich behalten</label>
             <input class="form-input" type="number" min="0" id="wiz-keep-monthly" value="6">
           </div>
           <div class="form-group">
-            <label class="form-label">Jährlich behalten</label>
+            <label class="form-label" data-i18n="wizard.keepYearly">Jährlich behalten</label>
             <input class="form-input" type="number" min="0" id="wiz-keep-yearly" value="3">
           </div>
         </div>
@@ -1206,46 +1206,46 @@
         <!-- shown when passphrase file already exists -->
         <div id="wizard-passphrase-conflict" class="hidden">
           <div class="status-message warning passphrase-conflict-box">
-            <strong>Passphrase-Datei existiert bereits</strong>
+            <strong data-i18n="wizard.passphraseExists">Passphrase-Datei existiert bereits</strong>
             <span id="wizard-passphrase-conflict-path" style="font-size:12px;display:block;margin-top:2px;opacity:.8"></span>
             <div class="passphrase-conflict-btns">
-              <button class="btn btn-secondary btn-sm" id="wiz-keep-btn">Vorhandene behalten</button>
-              <button class="btn btn-sm btn-danger-sm" id="wiz-replace-btn">Neue Passphrase setzen</button>
+              <button class="btn btn-secondary btn-sm" id="wiz-keep-btn" data-i18n="wizard.keepExisting">Vorhandene behalten</button>
+              <button class="btn btn-sm btn-danger-sm" id="wiz-replace-btn" data-i18n="wizard.setNewPassphrase">Neue Passphrase setzen</button>
             </div>
             <div id="wizard-passphrase-keep-confirm" class="passphrase-keep-confirm hidden">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>
-              Vorhandene Passphrase wird beibehalten
+              <span data-i18n="wizard.keepingExisting">Vorhandene Passphrase wird beibehalten</span>
             </div>
           </div>
           <div id="wizard-passphrase-replace-warning" class="status-message error hidden passphrase-warning">
-            <strong>Achtung:</strong> Eine neue Passphrase macht das vorhandene Repository dauerhaft unlesbar!
+            <strong data-i18n="wizard.warningLabel">Achtung:</strong> <span data-i18n="wizard.replaceWarningText">Eine neue Passphrase macht das vorhandene Repository dauerhaft unlesbar!</span>
           </div>
         </div>
 
         <div id="wizard-passphrase-form" class="settings-body">
           <div class="form-group">
-            <label class="form-label">Passphrase <span class="form-hint">(wird in <code>/boot/config/borg-backup/secrets/.borg-passphrase-&lt;typ&gt;_&lt;location&gt;</code> gespeichert)</span></label>
+            <label class="form-label">Passphrase <span class="form-hint"><span data-i18n="wizard.storedPrefix">(wird in</span> <code>/boot/config/borg-backup/secrets/.borg-passphrase-&lt;typ&gt;_&lt;location&gt;</code> <span data-i18n="wizard.storedSuffix">gespeichert)</span></span></label>
             <div class="passphrase-input-wrap">
               <input class="form-input mono" type="password" id="wiz-passphrase"
-                placeholder="Passphrase eingeben oder generieren"
+                placeholder="Passphrase eingeben oder generieren" data-i18n-placeholder="wizard.passphrasePlaceholder"
                 autocomplete="new-password">
               <button class="btn btn-secondary btn-sm" type="button"
-                id="wiz-passphrase-toggle">Anzeigen</button>
+                id="wiz-passphrase-toggle" data-i18n="wizard.show">Anzeigen</button>
             </div>
           </div>
           <div class="form-group">
             <div class="passphrase-actions">
               <button class="btn btn-secondary btn-sm" type="button" id="wiz-generate-btn">
-                Zufällig generieren
+                <span data-i18n="wizard.generateRandom">Zufällig generieren</span>
               </button>
               <button class="btn btn-secondary btn-sm" type="button"
                 id="wiz-copy-btn" disabled>
-                Kopieren
+                <span data-i18n="wizard.copy">Kopieren</span>
               </button>
             </div>
           </div>
           <div class="status-message warning passphrase-warning">
-            <strong>Wichtig:</strong> Speichere die Passphrase sicher. Ohne sie sind verschlüsselte Backups nicht wiederherstellbar.
+            <strong data-i18n="wizard.importantLabel">Wichtig:</strong> <span data-i18n="wizard.passphraseImportantText">Speichere die Passphrase sicher. Ohne sie sind verschlüsselte Backups nicht wiederherstellbar.</span>
           </div>
         </div><!-- /#wizard-passphrase-form -->
       </div>
@@ -1256,8 +1256,8 @@
         <div class="settings-body">
           <div class="form-group">
             <label class="form-label wizard-label-inline">
-              <span>Beschreibung <span class="form-hint">(optional)</span></span>
-              <button type="button" class="wizard-help-btn" id="wiz-description-help-btn" title="Markdown-Hilfe" aria-label="Markdown-Hilfe">
+              <span><span data-i18n="wizard.description">Beschreibung</span> <span class="form-hint" data-i18n="wizard.optionalHint">(optional)</span></span>
+              <button type="button" class="wizard-help-btn" id="wiz-description-help-btn" title="Markdown-Hilfe" aria-label="Markdown-Hilfe" data-i18n-title="wizard.markdownHelp" data-i18n-aria-label="wizard.markdownHelp">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -1265,9 +1265,9 @@
                 </svg>
               </button>
             </label>
-            <div class="form-hint" style="margin:0 0 6px 0">Das Feld Beschreibung erlaubt Markdown.</div>
+            <div class="form-hint" style="margin:0 0 6px 0" data-i18n="wizard.descriptionMarkdown">Das Feld Beschreibung erlaubt Markdown.</div>
             <textarea class="form-input path-list-input" id="wiz-description" rows="6"
-              placeholder="z.B. **Paperless**&#10;- Appdata sichern&#10;- Ziel: /mnt/backup/borg-backup-meinedaten"></textarea>
+              placeholder="z.B. **Paperless**&#10;- Appdata sichern&#10;- Ziel: /mnt/backup/borg-backup-meinedaten" data-i18n-placeholder="wizard.descriptionPlaceholder"></textarea>
           </div>
         </div>
       </div>
@@ -1277,23 +1277,23 @@
         <div id="wizard-error-6" class="status-message error hidden"></div>
         <div class="settings-body">
           <div class="schedule-toggle-row">
-            <span class="schedule-field-label">Zeitplan aktivieren</span>
+            <span class="schedule-field-label" data-i18n="schedule.enable">Zeitplan aktivieren</span>
             <label class="toggle-switch">
               <input type="checkbox" id="wiz-sched-enabled">
               <span class="toggle-slider"></span>
             </label>
           </div>
           <div class="schedule-field-row">
-            <span class="schedule-field-label">Häufigkeit</span>
+            <span class="schedule-field-label" data-i18n="schedule.frequency">Häufigkeit</span>
             <div class="freq-btn-group">
-              <button class="freq-btn" data-wiz-freq="daily">Täglich</button>
-              <button class="freq-btn" data-wiz-freq="weekly">Wöchentlich</button>
-              <button class="freq-btn" data-wiz-freq="monthly">Monatlich</button>
-              <button class="freq-btn" data-wiz-freq="custom">Benutzerdefiniert</button>
+              <button class="freq-btn" data-wiz-freq="daily" data-i18n="schedule.daily">Täglich</button>
+              <button class="freq-btn" data-wiz-freq="weekly" data-i18n="schedule.weekly">Wöchentlich</button>
+              <button class="freq-btn" data-wiz-freq="monthly" data-i18n="schedule.monthly">Monatlich</button>
+              <button class="freq-btn" data-wiz-freq="custom" data-i18n="schedule.custom">Benutzerdefiniert</button>
             </div>
           </div>
           <div class="schedule-field-row" id="wiz-sched-time-row">
-            <span class="schedule-field-label">Uhrzeit</span>
+            <span class="schedule-field-label" data-i18n="schedule.time">Uhrzeit</span>
             <div class="time-picker">
               <input type="number" id="wiz-sched-hour"   class="time-input" min="0" max="23" value="3">
               <span class="time-sep">:</span>
@@ -1301,31 +1301,31 @@
             </div>
           </div>
           <div class="schedule-field-row hidden" id="wiz-sched-dow-row">
-            <span class="schedule-field-label">Wochentag</span>
+            <span class="schedule-field-label" data-i18n="schedule.weekday">Wochentag</span>
             <div class="dow-btn-group">
-              <button class="dow-btn" data-wiz-dow="1">Mo</button>
-              <button class="dow-btn" data-wiz-dow="2">Di</button>
-              <button class="dow-btn" data-wiz-dow="3">Mi</button>
-              <button class="dow-btn" data-wiz-dow="4">Do</button>
-              <button class="dow-btn" data-wiz-dow="5">Fr</button>
-              <button class="dow-btn" data-wiz-dow="6">Sa</button>
-              <button class="dow-btn" data-wiz-dow="0">So</button>
+              <button class="dow-btn" data-wiz-dow="1" data-i18n="schedule.dayMon">Mo</button>
+              <button class="dow-btn" data-wiz-dow="2" data-i18n="schedule.dayTue">Di</button>
+              <button class="dow-btn" data-wiz-dow="3" data-i18n="schedule.dayWed">Mi</button>
+              <button class="dow-btn" data-wiz-dow="4" data-i18n="schedule.dayThu">Do</button>
+              <button class="dow-btn" data-wiz-dow="5" data-i18n="schedule.dayFri">Fr</button>
+              <button class="dow-btn" data-wiz-dow="6" data-i18n="schedule.daySat">Sa</button>
+              <button class="dow-btn" data-wiz-dow="0" data-i18n="schedule.daySun">So</button>
             </div>
           </div>
           <div class="schedule-field-row hidden" id="wiz-sched-dom-row">
-            <span class="schedule-field-label">Tag des Monats</span>
+            <span class="schedule-field-label" data-i18n="schedule.dayOfMonth">Tag des Monats</span>
             <div class="dom-picker">
               <input type="number" id="wiz-sched-dom" class="time-input dom-input"
                      min="1" max="28" value="1">
-              <span class="schedule-field-hint">Hinweis: Max. 28 um Monatsfehler zu vermeiden</span>
+              <span class="schedule-field-hint" data-i18n="schedule.dayOfMonthHint">Hinweis: Max. 28 um Monatsfehler zu vermeiden</span>
             </div>
           </div>
           <div class="schedule-field-row hidden" id="wiz-sched-custom-row">
-            <span class="schedule-field-label">Cron-Ausdruck</span>
+            <span class="schedule-field-label" data-i18n="schedule.cronExpression">Cron-Ausdruck</span>
             <div class="custom-cron-wrap">
               <input type="text" id="wiz-sched-cron-custom" class="cron-input"
                      placeholder="0 3 * * *">
-              <span class="schedule-field-hint">Format: Minute Stunde Tag Monat Wochentag</span>
+              <span class="schedule-field-hint" data-i18n="schedule.cronFormat">Format: Minute Stunde Tag Monat Wochentag</span>
             </div>
           </div>
           <div class="schedule-next-run" id="wiz-sched-next-run">
@@ -1341,11 +1341,11 @@
       <div id="wizard-step-7" class="wizard-step-body hidden">
         <div id="wizard-error-7" class="status-message error hidden"></div>
         <div id="wizard-preview-loading" class="loading-spinner hidden">
-          <div class="spinner"></div><span>Lade Flow-Vorschau...</span>
+          <div class="spinner"></div><span data-i18n="wizard.loadingPreview">Lade Flow-Vorschau...</span>
         </div>
         <div id="wizard-preview-wrap" class="hidden">
           <div class="wizard-preview-info">
-            Runner: <code id="wizard-preview-filename"></code>
+            <span data-i18n="wizard.runner">Runner:</span> <code id="wizard-preview-filename"></code>
           </div>
           <div id="wizard-preview-mode-info" class="wizard-preview-mode-info"></div>
           <div id="wizard-remote-repo-status" class="status-message hidden"></div>
@@ -1353,7 +1353,7 @@
           <div id="wizard-remote-init-confirm-wrap" class="hidden" style="margin-top:10px">
             <label class="form-checkbox-row">
               <input type="checkbox" id="wiz-remote-init-confirm">
-              Remote-Repository bei Bedarf anlegen bestätigen
+              <span data-i18n="wizard.confirmRemoteInit">Remote-Repository bei Bedarf anlegen bestätigen</span>
             </label>
           </div>
         </div>
@@ -1362,15 +1362,15 @@
     </div><!-- /.wizard-body -->
 
     <div class="modal-footer">
-      <button class="btn btn-secondary" id="wizard-back-btn" style="display:none">Zurück</button>
+      <button class="btn btn-secondary" id="wizard-back-btn" style="display:none" data-i18n="wizard.back">Zurück</button>
       <div style="flex:1"></div>
-      <button class="btn btn-secondary" id="wizard-cancel-btn">Abbrechen</button>
-      <button class="btn btn-primary" id="wizard-next-btn">Weiter</button>
+      <button class="btn btn-secondary" id="wizard-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
+      <button class="btn btn-primary" id="wizard-next-btn" data-i18n="wizard.next">Weiter</button>
       <button class="btn btn-primary hidden" id="wizard-save-btn" data-step="7">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
-        Speichern
+        <span data-i18n="jobs.save">Speichern</span>
       </button>
     </div>
   </div>
@@ -1379,23 +1379,23 @@
 <div id="wizard-help-modal" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3>Beschreibung: Markdown-Hilfe</h3>
-      <button class="modal-close" id="wizard-help-close-btn">
+      <h3 data-i18n="wizard.helpTitle">Beschreibung: Markdown-Hilfe</h3>
+      <button class="modal-close" id="wizard-help-close-btn" data-i18n-aria-label="jobs.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
     </div>
     <div class="modal-body">
-      <p class="text-muted" style="margin-top:0">Unterstützt werden normale Markdown-Basics:</p>
+      <p class="text-muted" style="margin-top:0" data-i18n="wizard.markdownBasics">Unterstützt werden normale Markdown-Basics:</p>
       <ul style="margin-left:18px;color:var(--text-secondary);font-size:13px;line-height:1.5">
-        <li><code>**fett**</code> für Fettdruck</li>
-        <li><code>*kursiv*</code> für Kursiv</li>
-        <li><code>- Punkt 1</code> für Listen</li>
-        <li>Absätze durch Leerzeilen trennen</li>
+        <li><code>**fett**</code> <span data-i18n="wizard.boldHelp">für Fettdruck</span></li>
+        <li><code>*kursiv*</code> <span data-i18n="wizard.italicHelp">für Kursiv</span></li>
+        <li><code>- Punkt 1</code> <span data-i18n="wizard.listHelp">für Listen</span></li>
+        <li data-i18n="wizard.paragraphHelp">Absätze durch Leerzeilen trennen</li>
       </ul>
-      <p class="text-muted" style="margin-top:10px">Beispiel:</p>
-      <pre class="log-output" style="max-height:180px;min-height:120px">**Borg Backup - Fotos**
+      <p class="text-muted" style="margin-top:10px" data-i18n="wizard.example">Beispiel:</p>
+      <pre class="log-output" style="max-height:180px;min-height:120px" data-i18n="wizard.helpExample">**Borg Backup - Fotos**
 
 Backup der wichtigsten Fotoverzeichnisse.
 
@@ -1403,7 +1403,7 @@ Backup der wichtigsten Fotoverzeichnisse.
 - Ziel: storagebox</pre>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" id="wizard-help-ok-btn">Schließen</button>
+      <button class="btn btn-secondary" id="wizard-help-ok-btn" data-i18n="jobs.close">Schließen</button>
     </div>
   </div>
 </div>
@@ -1412,8 +1412,8 @@ Backup der wichtigsten Fotoverzeichnisse.
 <div id="schedule-modal" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3 id="schedule-modal-title">Zeitplan</h3>
-      <button class="modal-close" id="schedule-close-btn">
+      <h3 id="schedule-modal-title" data-i18n="schedule.title">Zeitplan</h3>
+      <button class="modal-close" id="schedule-close-btn" data-i18n-aria-label="jobs.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
@@ -1422,7 +1422,7 @@ Backup der wichtigsten Fotoverzeichnisse.
     <div class="modal-body">
       <!-- Enable toggle -->
       <div class="schedule-toggle-row">
-        <span class="schedule-field-label">Zeitplan aktivieren</span>
+        <span class="schedule-field-label" data-i18n="schedule.enable">Zeitplan aktivieren</span>
         <label class="toggle-switch">
           <input type="checkbox" id="schedule-enabled">
           <span class="toggle-slider"></span>
@@ -1431,18 +1431,18 @@ Backup der wichtigsten Fotoverzeichnisse.
 
       <!-- Frequency presets -->
       <div class="schedule-field-row">
-        <span class="schedule-field-label">Häufigkeit</span>
+        <span class="schedule-field-label" data-i18n="schedule.frequency">Häufigkeit</span>
         <div class="freq-btn-group">
-          <button class="freq-btn" data-freq="daily">Täglich</button>
-          <button class="freq-btn" data-freq="weekly">Wöchentlich</button>
-          <button class="freq-btn" data-freq="monthly">Monatlich</button>
-          <button class="freq-btn" data-freq="custom">Benutzerdefiniert</button>
+          <button class="freq-btn" data-freq="daily" data-i18n="schedule.daily">Täglich</button>
+          <button class="freq-btn" data-freq="weekly" data-i18n="schedule.weekly">Wöchentlich</button>
+          <button class="freq-btn" data-freq="monthly" data-i18n="schedule.monthly">Monatlich</button>
+          <button class="freq-btn" data-freq="custom" data-i18n="schedule.custom">Benutzerdefiniert</button>
         </div>
       </div>
 
       <!-- Time picker (daily / weekly / monthly) -->
       <div class="schedule-field-row" id="schedule-time-row">
-        <span class="schedule-field-label">Uhrzeit</span>
+        <span class="schedule-field-label" data-i18n="schedule.time">Uhrzeit</span>
         <div class="time-picker">
           <input type="number" id="schedule-hour"   class="time-input" min="0" max="23" value="3">
           <span class="time-sep">:</span>
@@ -1452,35 +1452,35 @@ Backup der wichtigsten Fotoverzeichnisse.
 
       <!-- Weekday picker (weekly) -->
       <div class="schedule-field-row hidden" id="schedule-dow-row">
-        <span class="schedule-field-label">Wochentag</span>
+        <span class="schedule-field-label" data-i18n="schedule.weekday">Wochentag</span>
         <div class="dow-btn-group">
-          <button class="dow-btn" data-dow="1">Mo</button>
-          <button class="dow-btn" data-dow="2">Di</button>
-          <button class="dow-btn" data-dow="3">Mi</button>
-          <button class="dow-btn" data-dow="4">Do</button>
-          <button class="dow-btn" data-dow="5">Fr</button>
-          <button class="dow-btn" data-dow="6">Sa</button>
-          <button class="dow-btn" data-dow="0">So</button>
+          <button class="dow-btn" data-dow="1" data-i18n="schedule.dayMon">Mo</button>
+          <button class="dow-btn" data-dow="2" data-i18n="schedule.dayTue">Di</button>
+          <button class="dow-btn" data-dow="3" data-i18n="schedule.dayWed">Mi</button>
+          <button class="dow-btn" data-dow="4" data-i18n="schedule.dayThu">Do</button>
+          <button class="dow-btn" data-dow="5" data-i18n="schedule.dayFri">Fr</button>
+          <button class="dow-btn" data-dow="6" data-i18n="schedule.daySat">Sa</button>
+          <button class="dow-btn" data-dow="0" data-i18n="schedule.daySun">So</button>
         </div>
       </div>
 
       <!-- Day of month picker (monthly) -->
       <div class="schedule-field-row hidden" id="schedule-dom-row">
-        <span class="schedule-field-label">Tag des Monats</span>
+        <span class="schedule-field-label" data-i18n="schedule.dayOfMonth">Tag des Monats</span>
         <div class="dom-picker">
           <input type="number" id="schedule-dom" class="time-input dom-input"
                  min="1" max="28" value="1">
-          <span class="schedule-field-hint">Hinweis: Max. 28 um Monatsfehler zu vermeiden</span>
+          <span class="schedule-field-hint" data-i18n="schedule.dayOfMonthHint">Hinweis: Max. 28 um Monatsfehler zu vermeiden</span>
         </div>
       </div>
 
       <!-- Custom cron expression -->
       <div class="schedule-field-row hidden" id="schedule-custom-row">
-        <span class="schedule-field-label">Cron-Ausdruck</span>
+        <span class="schedule-field-label" data-i18n="schedule.cronExpression">Cron-Ausdruck</span>
         <div class="custom-cron-wrap">
           <input type="text" id="schedule-cron-custom" class="cron-input"
                  placeholder="0 3 * * *">
-          <span class="schedule-field-hint">Format: Minute Stunde Tag Monat Wochentag</span>
+          <span class="schedule-field-hint" data-i18n="schedule.cronFormat">Format: Minute Stunde Tag Monat Wochentag</span>
         </div>
       </div>
 
@@ -1493,9 +1493,9 @@ Backup der wichtigsten Fotoverzeichnisse.
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-danger-sm" id="schedule-delete-btn" style="margin-right:auto">Löschen</button>
-      <button class="btn btn-secondary" id="schedule-cancel-btn">Abbrechen</button>
-      <button class="btn btn-primary" id="schedule-save-btn">Speichern</button>
+      <button class="btn btn-danger-sm" id="schedule-delete-btn" style="margin-right:auto" data-i18n="jobs.delete">Löschen</button>
+      <button class="btn btn-secondary" id="schedule-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
+      <button class="btn btn-primary" id="schedule-save-btn" data-i18n="jobs.save">Speichern</button>
     </div>
   </div>
 </div>

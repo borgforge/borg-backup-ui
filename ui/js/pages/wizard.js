@@ -23,6 +23,10 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
 };
 const wizardState = window.BBUI.wizardState;
 
+function wizardT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(key, params) || key;
+}
+
 function wizardUpdateStep2ScrollHint() {
   const modal = document.getElementById('wizard-modal');
   const body = modal?.querySelector('.wizard-body');
@@ -90,7 +94,7 @@ function wizardSetUsbProfileOptions() {
   const rows = Array.isArray(wizardState.usbProfiles) ? wizardState.usbProfiles : [];
   sel.innerHTML = rows.length
     ? rows.map((p) => `<option value="${escHtml(p.key || '')}">${escHtml(p.name || p.mount_path || '')} — ${escHtml(p.mount_path || '')}</option>`).join('')
-    : '<option value="">Kein USB-Profil vorhanden</option>';
+    : `<option value="">${wizardT('wizard.noUsbProfile')}</option>`;
   if (rows.length) {
     const wanted = wizardState.selectedUsbProfileKey || rows[0].key;
     const found = rows.find((p) => String(p.key) === String(wanted));
@@ -108,7 +112,7 @@ function wizardSetSmbProfileOptions() {
   const rows = Array.isArray(wizardState.smbProfiles) ? wizardState.smbProfiles : [];
   sel.innerHTML = rows.length
     ? rows.map((p) => `<option value="${escHtml(p.key || '')}">${escHtml(p.name || p.mount_path || '')} — ${escHtml(p.server || '')}/${escHtml(p.share || '')}</option>`).join('')
-    : '<option value="">Kein SMB-Profil vorhanden</option>';
+    : `<option value="">${wizardT('wizard.noSmbProfile')}</option>`;
   if (rows.length) {
     const wanted = wizardState.selectedSmbProfileKey || rows[0].key;
     const found = rows.find((p) => String(p.key) === String(wanted));
@@ -126,7 +130,7 @@ function wizardSetStorageProfileOptions() {
   const rows = Array.isArray(wizardState.storageProfiles) ? wizardState.storageProfiles : [];
   sel.innerHTML = rows.length
     ? rows.map((p) => `<option value="${escHtml(p.key || '')}">${escHtml(p.name || p.host || '')} — ${escHtml(p.user || '')}@${escHtml(p.host || '')}:${escHtml(p.port || '23')}</option>`).join('')
-    : '<option value="">Kein Storage-Profil vorhanden</option>';
+    : `<option value="">${wizardT('wizard.noStorageProfile')}</option>`;
   if (rows.length) {
     const wanted = wizardState.selectedStorageProfileKey || rows[0].key;
     const found = rows.find((p) => String(p.key) === String(wanted));
@@ -196,7 +200,7 @@ function openWizard() {
   wizardState.original = null;
   wizardState.step = 1;
   const title = document.getElementById('wizard-modal-title');
-  if (title) title.textContent = 'Neuer Backup-Job';
+  if (title) title.textContent = wizardT('wizard.newTitle');
   document.getElementById('wiz-job-name').value = '';
   document.getElementById('wiz-type-id').value = '';
   document.getElementById('wiz-icon').value = '';
@@ -230,7 +234,7 @@ function openWizard() {
   wizardState.passphraseExists = false;
   wizardState.keepPassphrase = false;
   document.getElementById('wiz-passphrase').value = '';
-  document.getElementById('wiz-passphrase-toggle').textContent = 'Anzeigen';
+  document.getElementById('wiz-passphrase-toggle').textContent = wizardT('wizard.show');
   document.getElementById('wiz-passphrase').type = 'password';
   document.getElementById('wiz-copy-btn').disabled = true;
   document.getElementById('wizard-passphrase-conflict').classList.add('hidden');
@@ -337,7 +341,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
   wizardState.mode = mode;
   wizardState.existingJobKey = jobKey;
   const title = document.getElementById('wizard-modal-title');
-  if (title) title.textContent = mode === 'adopt' ? 'Legacy-Job übernehmen' : 'Backup-Job bearbeiten';
+  if (title) title.textContent = wizardT(mode === 'adopt' ? 'wizard.adoptTitle' : 'wizard.editTitle');
   _setWizardFormDisabled(true);
   try {
     const res = await fetch(`/api/wizard/job?job_key=${encodeURIComponent(jobKey)}`);
@@ -359,7 +363,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
     document.getElementById('wizard-passphrase-form').classList.add('hidden');
   } catch (err) {
     closeWizard();
-    showMsg('jobs-message', 'error', `Wizard laden fehlgeschlagen: ${err.message}`);
+    showMsg('jobs-message', 'error', wizardT('wizard.loadFailed', { message: err.message }));
   } finally {
     _setWizardFormDisabled(false);
   }
@@ -441,14 +445,18 @@ function wizardAutoFill() {
     if (hintEl) {
       hintEl.classList.remove('hidden');
       hintEl.textContent = complete
-        ? `Storage-Profil aktiv: ${(profile.name || profile.key || 'Storagebox')} · ${user}@${host}:${port}${basePath}${profile.auth_ok ? ' (SSH ok)' : (profile.setup_message ? ` — ${profile.setup_message}` : '')}`
-        : 'Storage-Profil unvollständig. Bitte unter Einstellungen ein vollständiges Storage-Profil hinterlegen.';
+        ? wizardT('wizard.activeStorageProfile', {
+          name: profile.name || profile.key || 'Storagebox',
+          target: `${user}@${host}:${port}${basePath}`,
+          status: profile.auth_ok ? ' (SSH ok)' : (profile.setup_message ? ` — ${profile.setup_message}` : ''),
+        })
+        : wizardT('wizard.storageProfileIncomplete');
     }
     if (storageHintEl) {
       storageHintEl.classList.remove('hidden');
       storageHintEl.textContent = complete
         ? `${profile.name || profile.key || 'Storagebox'} (${user}@${host}:${port})`
-        : 'Ausgewähltes Profil ist unvollständig.';
+        : wizardT('wizard.selectedProfileIncomplete');
     }
 
     // Storagebox repo path is managed centrally by profile settings.
@@ -472,7 +480,10 @@ function wizardAutoFill() {
           usbHintEl.classList.remove('status-message', 'warning-state');
           usbHintEl.classList.add('form-hint');
           usbHintEl.classList.remove('hidden');
-          usbHintEl.textContent = `USB-Profil aktiv: ${active.name || active.key} (${active.mount_path})`;
+          usbHintEl.textContent = wizardT('wizard.activeUsbProfile', {
+            name: active.name || active.key,
+            path: active.mount_path,
+          });
         }
         repoEl.value = `${active.mount_path.replace(/\/+$/, '')}/borg-backup-${typeId}`;
         repoEl.dataset.autofilled = 'true';
@@ -481,7 +492,7 @@ function wizardAutoFill() {
           usbHintEl.classList.remove('form-hint');
           usbHintEl.classList.add('status-message', 'warning-state');
           usbHintEl.classList.remove('hidden');
-          usbHintEl.textContent = 'Kein USB-Profil vorhanden. Bitte unter Einstellungen > USB-Profile mindestens ein Profil anlegen.';
+          usbHintEl.textContent = wizardT('wizard.usbProfileRequired');
         }
         repoEl.value = '';
         repoEl.dataset.autofilled = 'true';
@@ -498,7 +509,10 @@ function wizardAutoFill() {
           smbHintEl.classList.remove('status-message', 'warning-state');
           smbHintEl.classList.add('form-hint');
           smbHintEl.classList.remove('hidden');
-          smbHintEl.textContent = `SMB-Profil aktiv: ${active.name || active.key} (${active.server}/${active.share})`;
+          smbHintEl.textContent = wizardT('wizard.activeSmbProfile', {
+            name: active.name || active.key,
+            target: `${active.server}/${active.share}`,
+          });
         }
         repoEl.value = `${active.mount_path.replace(/\/+$/, '')}/borg-backup-${typeId}`;
         repoEl.dataset.autofilled = 'true';
@@ -507,7 +521,7 @@ function wizardAutoFill() {
           smbHintEl.classList.remove('form-hint');
           smbHintEl.classList.add('status-message', 'warning-state');
           smbHintEl.classList.remove('hidden');
-          smbHintEl.textContent = 'Kein SMB-Profil vorhanden. Bitte in Einstellungen > SMB-Profile ein Profil anlegen.';
+          smbHintEl.textContent = wizardT('wizard.smbProfileRequired');
         }
         repoEl.value = '';
         repoEl.dataset.autofilled = 'true';
@@ -563,7 +577,7 @@ function wizardUpdateIconPreview() {
     'teal', 'cyan', 'gray',
   ]);
   box.className = `type-icon type-icon-${iconKey || 'sonstiges'}${knownColor.has(colorKey) ? ` type-icon-color-${colorKey}` : ''}`;
-  label.textContent = iconKey || 'Automatisch';
+  label.textContent = iconKey || wizardT('wizard.automatic');
 }
 
 function wizardClearError(step) {
@@ -623,13 +637,13 @@ function wizardRenderSourcePaths() {
   if (!list) return;
   const items = wizardState.sourcePaths || [];
   if (!items.length) {
-    list.innerHTML = '<div class="form-hint">Noch keine Quellpfade hinzugefügt.</div>';
+    list.innerHTML = `<div class="form-hint">${wizardT('wizard.noSourcePaths')}</div>`;
     return;
   }
   list.innerHTML = items.map((p, idx) => `
     <div class="wizard-path-chip">
       <span class="wizard-path-chip-text">${escHtml(p)}</span>
-      <button type="button" class="wizard-path-chip-del" data-wiz-src-del="${idx}" title="Entfernen">×</button>
+      <button type="button" class="wizard-path-chip-del" data-wiz-src-del="${idx}" title="${wizardT('wizard.removeSource')}" aria-label="${wizardT('wizard.removeSource')}">×</button>
     </div>
   `).join('');
 }
@@ -748,49 +762,49 @@ function wizardSourcePathsClick(event) {
 function _wizardValidate(step) {
   const p = _wizardCollectParams();
   if (step === 1) {
-    if (!p.job_name) { _wizardShowError(1, 'Job-Name darf nicht leer sein.'); return false; }
-    if (!p.type_id)  { _wizardShowError(1, 'Typ-ID darf nicht leer sein.'); return false; }
+    if (!p.job_name) { _wizardShowError(1, wizardT('wizard.validationJobName')); return false; }
+    if (!p.type_id)  { _wizardShowError(1, wizardT('wizard.validationTypeId')); return false; }
     if (!/^[a-z0-9_]+$/.test(p.type_id)) {
-      _wizardShowError(1, 'Typ-ID darf nur Kleinbuchstaben, Ziffern und _ enthalten.');
+      _wizardShowError(1, wizardT('wizard.validationTypeFormat'));
       return false;
     }
   }
   if (step === 2) {
-    if (!p.source_paths) { _wizardShowError(2, 'Mindestens ein Quellpfad ist erforderlich.'); return false; }
-    if (!p.repo_path)    { _wizardShowError(2, 'Repository-Pfad darf nicht leer sein.'); return false; }
+    if (!p.source_paths) { _wizardShowError(2, wizardT('wizard.validationSource')); return false; }
+    if (!p.repo_path)    { _wizardShowError(2, wizardT('wizard.validationRepository')); return false; }
     if (p.location === 'usb') {
       const rows = Array.isArray(wizardState.usbProfiles) ? wizardState.usbProfiles : [];
       if (!rows.length) {
-        _wizardShowError(2, 'Kein USB-Profil vorhanden. Bitte in Einstellungen > USB-Profile ein Profil anlegen.');
+        _wizardShowError(2, wizardT('wizard.usbProfileRequired'));
         return false;
       }
     }
     if (p.location === 'smb') {
       const rows = Array.isArray(wizardState.smbProfiles) ? wizardState.smbProfiles : [];
       if (!rows.length) {
-        _wizardShowError(2, 'Kein SMB-Profil vorhanden. Bitte in Einstellungen > SMB-Profile ein Profil anlegen.');
+        _wizardShowError(2, wizardT('wizard.smbProfileRequired'));
         return false;
       }
       if (!p.smb_profile_key) {
-        _wizardShowError(2, 'Bitte ein SMB-Profil auswählen.');
+        _wizardShowError(2, wizardT('wizard.validationSelectSmb'));
         return false;
       }
     }
     if (p.location === 'storagebox') {
       const rows = Array.isArray(wizardState.storageProfiles) ? wizardState.storageProfiles : [];
       if (!rows.length) {
-        _wizardShowError(2, 'Kein Storage-Profil vorhanden. Bitte in Einstellungen ein Storage-Profil anlegen.');
+        _wizardShowError(2, wizardT('wizard.validationStorageRequired'));
         return false;
       }
       if (!p.storage_profile_key) {
-        _wizardShowError(2, 'Bitte ein Storage-Profil auswählen.');
+        _wizardShowError(2, wizardT('wizard.validationSelectStorage'));
         return false;
       }
     }
   }
   if (step === 4) {
     if (p.encryption !== 'none' && !wizardState.keepPassphrase && !p.passphrase) {
-      _wizardShowError(4, 'Bitte eine Passphrase eingeben oder generieren.');
+      _wizardShowError(4, wizardT('wizard.validationPassphrase'));
       return false;
     }
   }
@@ -882,7 +896,7 @@ async function _wizardPreview() {
   const params = _wizardCollectParams();
   const modeInfoEl = document.getElementById('wizard-preview-mode-info');
   if (modeInfoEl) {
-    modeInfoEl.textContent = 'Ausfuehrung erfolgt scriptless ueber Job-Metadaten (Phase 4 Runner).';
+    modeInfoEl.textContent = wizardT('wizard.scriptlessInfo');
   }
 
   try {
@@ -900,28 +914,33 @@ async function _wizardPreview() {
     const remoteRepo = flow.remote_repo && typeof flow.remote_repo === 'object' ? flow.remote_repo : null;
     wizardState.remoteRepoStatus = remoteRepo;
     const lines = [];
-    lines.push(`Job: ${flow.job_key || '-'}`);
-    lines.push(`Location: ${summary.location || '-'}`);
-    lines.push(`Repository: ${summary.repo || '-'}`);
+    lines.push(wizardT('wizard.previewJob', { value: flow.job_key || '-' }));
+    lines.push(wizardT('wizard.previewLocation', { value: summary.location || '-' }));
+    lines.push(wizardT('wizard.previewRepository', { value: summary.repo || '-' }));
     if (summary.location === 'storagebox' && remoteRepo) {
       const repoState = remoteRepo.exists
-        ? 'vorhanden'
-        : (remoteRepo.checked ? 'nicht vorhanden oder nicht prüfbar' : 'nicht geprüft');
-      lines.push(`Repository-Status: ${repoState}${remoteRepo.message ? ` (${remoteRepo.message})` : ''}`);
+        ? wizardT('wizard.repoExists')
+        : (remoteRepo.checked ? wizardT('wizard.repoUnavailable') : wizardT('wizard.repoUnchecked'));
+      lines.push(wizardT('wizard.previewRepositoryStatus', {
+        value: `${repoState}${remoteRepo.message ? ` (${remoteRepo.message})` : ''}`,
+      }));
     }
-    lines.push(`Verschluesselung: ${summary.encryption || '-'}`);
-    lines.push(`Quellen: ${summary.sources_count ?? '-'}`);
-    lines.push(`Docker: ${summary.docker ? 'ja' : 'nein'} | VM: ${summary.vm ? 'ja' : 'nein'}`);
+    lines.push(wizardT('wizard.previewEncryption', { value: summary.encryption || '-' }));
+    lines.push(wizardT('wizard.previewSources', { value: summary.sources_count ?? '-' }));
+    lines.push(wizardT('wizard.previewFeatures', {
+      docker: wizardT(summary.docker ? 'wizard.yes' : 'wizard.no'),
+      vm: wizardT(summary.vm ? 'wizard.yes' : 'wizard.no'),
+    }));
     lines.push('');
-    lines.push('Ablauf:');
+    lines.push(wizardT('wizard.previewFlow'));
     steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
 
     document.getElementById('wizard-preview-filename').textContent = flow.runner || 'scriptless-wizard-runner';
     document.getElementById('wizard-preview-code').textContent = lines.join('\n');
     if (repoStatusEl && summary.location === 'storagebox' && remoteRepo) {
       const repoState = remoteRepo.exists
-        ? 'Remote-Repository vorhanden.'
-        : (remoteRepo.checked ? 'Remote-Repository nicht vorhanden oder nicht prüfbar.' : 'Remote-Repository nicht geprüft.');
+        ? wizardT('wizard.remoteRepoExists')
+        : (remoteRepo.checked ? wizardT('wizard.remoteRepoUnavailable') : wizardT('wizard.remoteRepoUnchecked'));
       repoStatusEl.className = `status-message ${remoteRepo.exists ? 'success-state' : 'warning-state'}`;
       repoStatusEl.textContent = `${repoState}${remoteRepo.message ? ` ${remoteRepo.message}` : ''}`;
     } else if (repoStatusEl) {
@@ -934,7 +953,7 @@ async function _wizardPreview() {
     wrap.classList.remove('hidden');
   } catch (err) {
     wizardState.remoteRepoStatus = null;
-    errEl.textContent = `Vorschau-Fehler: ${err.message}`;
+    errEl.textContent = wizardT('wizard.previewError', { message: err.message });
     errEl.classList.remove('hidden');
   } finally {
     loading.classList.add('hidden');
@@ -952,7 +971,7 @@ async function saveWizardJob() {
     const remoteRepo = wizardState.remoteRepoStatus;
     const needsRemoteConfirm = params.location === 'storagebox' && (!remoteRepo || remoteRepo.needs_init_confirm !== false);
     if (needsRemoteConfirm && !params.remote_init_confirmed) {
-      throw new Error('Bitte Remote-Repository-Anlage bestätigen.');
+      throw new Error(wizardT('wizard.confirmRemoteRequired'));
     }
     const res  = await fetch('/api/wizard/save', {
       method: 'POST',
@@ -984,9 +1003,9 @@ async function saveWizardJob() {
     closeWizard();
     jobsState.loaded = false;
     await refreshJobs();
-    showMsg('jobs-message', 'success', `Job gespeichert: ${params.type_id}_${params.location}`);
+    showMsg('jobs-message', 'success', wizardT('wizard.saved', { key: `${params.type_id}_${params.location}` }));
   } catch (err) {
-    errEl.textContent = `Fehler: ${err.message}`;
+    errEl.textContent = wizardT('wizard.saveError', { message: err.message });
     errEl.classList.remove('hidden');
   } finally {
     btn.classList.remove('loading');
@@ -1001,7 +1020,7 @@ function wizardGeneratePassphrase() {
   const el = document.getElementById('wiz-passphrase');
   el.value = pw;
   el.type = 'text';
-  document.getElementById('wiz-passphrase-toggle').textContent = 'Verbergen';
+  document.getElementById('wiz-passphrase-toggle').textContent = wizardT('wizard.hide');
   document.getElementById('wiz-copy-btn').disabled = false;
   wizardClearError(4);
 }
@@ -1012,8 +1031,8 @@ function wizardCopyPassphrase() {
   const btn = document.getElementById('wiz-copy-btn');
   const markCopied = () => {
     if (!btn) return;
-    btn.textContent = 'Kopiert!';
-    setTimeout(() => { btn.textContent = 'Kopieren'; }, 2000);
+    btn.textContent = wizardT('wizard.copied');
+    setTimeout(() => { btn.textContent = wizardT('wizard.copy'); }, 2000);
   };
 
   const fallbackCopy = () => {
@@ -1042,10 +1061,10 @@ function wizardTogglePassphrase() {
   const btn = document.getElementById('wiz-passphrase-toggle');
   if (el.type === 'password') {
     el.type = 'text';
-    btn.textContent = 'Verbergen';
+    btn.textContent = wizardT('wizard.hide');
   } else {
     el.type = 'password';
-    btn.textContent = 'Anzeigen';
+    btn.textContent = wizardT('wizard.show');
   }
 }
 
@@ -1117,8 +1136,32 @@ function wizardSchedulePreview() {
   const next = calcNextRun(cron);
   const el   = document.getElementById('wiz-sched-next-run-text');
   if (!el) return;
-  el.textContent = next ? `Nächster Lauf: ${fmtDateShort(next)}` : (cron ? 'Ungültiger Ausdruck' : '—');
+  el.textContent = next
+    ? wizardT('schedule.nextRun', { date: fmtDateShort(next) })
+    : (cron ? wizardT('schedule.invalid') : '—');
 }
+
+window.addEventListener?.('bbui:language-changed', () => {
+  const title = document.getElementById('wizard-modal-title');
+  if (title) {
+    const titleKey = wizardState.mode === 'adopt'
+      ? 'wizard.adoptTitle'
+      : (wizardState.mode === 'edit' ? 'wizard.editTitle' : 'wizard.newTitle');
+    title.textContent = wizardT(titleKey);
+  }
+  const passphrase = document.getElementById('wiz-passphrase');
+  const passphraseToggle = document.getElementById('wiz-passphrase-toggle');
+  if (passphrase && passphraseToggle) {
+    passphraseToggle.textContent = wizardT(passphrase.type === 'password' ? 'wizard.show' : 'wizard.hide');
+  }
+  wizardSetUsbProfileOptions();
+  wizardSetSmbProfileOptions();
+  wizardSetStorageProfileOptions();
+  wizardRenderSourcePaths();
+  wizardUpdateIconPreview();
+  wizardAutoFill();
+  wizardSchedulePreview();
+});
 
 function openWizardDescriptionHelp() {
   document.getElementById('wizard-help-modal')?.classList.remove('hidden');
