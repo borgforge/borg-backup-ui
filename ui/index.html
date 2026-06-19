@@ -293,8 +293,8 @@
     <div id="page-history" class="page">
       <div class="page-header">
         <div>
-          <h1>History</h1>
-          <p class="page-subtitle">Alle Backup-Läufe</p>
+          <h1 data-i18n="history.title">History</h1>
+          <p class="page-subtitle" data-i18n="history.subtitle">Alle Backup-Läufe</p>
         </div>
         <div class="header-actions">
           <button class="btn btn-secondary" id="history-refresh-btn">
@@ -302,7 +302,7 @@
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
-            Aktualisieren
+            <span data-i18n="history.refresh">Aktualisieren</span>
           </button>
         </div>
       </div>
@@ -310,35 +310,35 @@
       <!-- Filter Bar -->
       <div class="history-filters">
         <select class="history-filter-select" id="history-filter-type">
-          <option value="">Alle Typen</option>
+          <option value="" data-i18n="history.allTypes">Alle Typen</option>
           <option value="flash">Flash</option>
           <option value="appdata">Appdata</option>
           <option value="photos">Photos</option>
           <option value="vms">VMs</option>
-          <option value="sonstiges">Sonstiges</option>
+          <option value="sonstiges" data-i18n="history.other">Sonstiges</option>
           <option value="custom">Custom</option>
         </select>
         <select class="history-filter-select" id="history-filter-location">
-          <option value="">Alle Locations</option>
-          <option value="local">Lokal</option>
+          <option value="" data-i18n="history.allLocations">Alle Locations</option>
+          <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
           <option value="usb">USB</option>
           <option value="smb">SMB</option>
-          <option value="storagebox">Storagebox</option>
+          <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox</option>
           <option value="custom">Custom</option>
         </select>
         <select class="history-filter-select" id="history-filter-status">
-          <option value="">Alle Status</option>
-          <option value="success">Erfolg</option>
-          <option value="skipped">Übersprungen</option>
-          <option value="warning">Warnung</option>
-          <option value="error">Fehler</option>
+          <option value="" data-i18n="history.allStatuses">Alle Status</option>
+          <option value="success" data-i18n="history.statusSuccess">Erfolg</option>
+          <option value="skipped" data-i18n="history.statusSkipped">Übersprungen</option>
+          <option value="warning" data-i18n="history.statusWarning">Warnung</option>
+          <option value="error" data-i18n="history.statusError">Fehler</option>
         </select>
         <span id="history-count" class="history-count-label"></span>
       </div>
 
       <div id="history-message" class="status-message hidden"></div>
       <div id="history-content">
-        <div class="loading-spinner"><div class="spinner"></div><span>Lade History...</span></div>
+        <div class="loading-spinner"><div class="spinner"></div><span data-i18n="history.loading">Lade History...</span></div>
       </div>
     </div>
 
@@ -346,12 +346,12 @@
     <div id="page-berichte" class="page">
       <div class="page-header">
         <div>
-          <h1>Berichte</h1>
-          <p class="page-subtitle">Historische Auswertung der Backup-Jobs</p>
+          <h1 data-i18n="reports.title">Berichte</h1>
+          <p class="page-subtitle" data-i18n="reports.subtitle">Historische Auswertung der Backup-Jobs</p>
         </div>
         <div class="header-actions">
           <select id="bericht-job-sel" class="restore-select" style="min-width:240px">
-            <option value="">— Job wählen —</option>
+            <option value="" data-i18n="reports.selectJob">— Job wählen —</option>
           </select>
         </div>
       </div>
@@ -365,20 +365,20 @@
           <line x1="12" y1="20" x2="12" y2="7"/>
           <line x1="17" y1="20" x2="17" y2="10"/>
         </svg>
-        <div class="page-empty-state-title">Kein Job ausgewählt</div>
-        <div class="page-empty-state-desc">Wähle oben einen Backup-Job aus, um historische Statistiken, Laufzeiten und Diagramme anzuzeigen.</div>
+        <div class="page-empty-state-title" data-i18n="reports.noJobSelected">Kein Job ausgewählt</div>
+        <div class="page-empty-state-desc" data-i18n="reports.emptyDescription">Wähle oben einen Backup-Job aus, um historische Statistiken, Laufzeiten und Diagramme anzuzeigen.</div>
         <div class="page-empty-state-steps">
           <div class="page-empty-state-step">
             <div class="page-empty-state-step-num">1</div>
-            <div class="page-empty-state-step-text">Job aus der Liste auswählen</div>
+            <div class="page-empty-state-step-text" data-i18n="reports.emptyStepSelect">Job aus der Liste auswählen</div>
           </div>
           <div class="page-empty-state-step">
             <div class="page-empty-state-step-num">2</div>
-            <div class="page-empty-state-step-text">Statistiken &amp; Charts werden geladen</div>
+            <div class="page-empty-state-step-text" data-i18n="reports.emptyStepStats">Statistiken &amp; Charts werden geladen</div>
           </div>
           <div class="page-empty-state-step">
             <div class="page-empty-state-step-num">3</div>
-            <div class="page-empty-state-step-text">Optional: Borg Repository Info laden</div>
+            <div class="page-empty-state-step-text" data-i18n="reports.emptyStepBorgInfo">Optional: Borg Repository Info laden</div>
           </div>
         </div>
       </div>
@@ -387,27 +387,27 @@
         <!-- Summary Cards -->
         <div class="repo-stats-cards" style="margin-bottom:24px">
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Läufe gesamt</div>
+            <div class="repo-stat-label" data-i18n="reports.totalRuns">Läufe gesamt</div>
             <div class="repo-stat-value" id="br-runs">—</div>
           </div>
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Erfolgreich</div>
+            <div class="repo-stat-label" data-i18n="reports.successful">Erfolgreich</div>
             <div class="repo-stat-value" id="br-success">—</div>
           </div>
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Ø Dauer</div>
+            <div class="repo-stat-label" data-i18n="reports.averageDuration">Ø Dauer</div>
             <div class="repo-stat-value" id="br-avg-dur">—</div>
           </div>
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Repo-Größe (aktuell)</div>
+            <div class="repo-stat-label" data-i18n="reports.currentRepoSize">Repo-Größe (aktuell)</div>
             <div class="repo-stat-value" id="br-repo-size">—</div>
           </div>
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Datenmenge (original)</div>
+            <div class="repo-stat-label" data-i18n="reports.originalData">Datenmenge (original)</div>
             <div class="repo-stat-value" id="br-orig-size">—</div>
           </div>
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Neue Daten (letzter Lauf)</div>
+            <div class="repo-stat-label" data-i18n="reports.latestNewData">Neue Daten (letzter Lauf)</div>
             <div class="repo-stat-value" id="br-dedup">—</div>
           </div>
         </div>
@@ -415,19 +415,19 @@
 
         <div class="repo-stats-cards" style="margin-bottom:24px">
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Zuwachs 7 Tage</div>
+            <div class="repo-stat-label" data-i18n="reports.growth7Days">Zuwachs 7 Tage</div>
             <div class="repo-stat-value" id="br-growth-7d">—</div>
           </div>
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Zuwachs 30 Tage</div>
+            <div class="repo-stat-label" data-i18n="reports.growth30Days">Zuwachs 30 Tage</div>
             <div class="repo-stat-value" id="br-growth-30d">—</div>
           </div>
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Ø Zuwachs/Tag</div>
+            <div class="repo-stat-label" data-i18n="reports.averageGrowthDay">Ø Zuwachs/Tag</div>
             <div class="repo-stat-value" id="br-growth-avg-day">—</div>
           </div>
           <div class="repo-stat-card">
-            <div class="repo-stat-label">Letzter Zuwachs</div>
+            <div class="repo-stat-label" data-i18n="reports.latestGrowth">Letzter Zuwachs</div>
             <div class="repo-stat-value" id="br-growth-last">—</div>
           </div>
         </div>
@@ -436,37 +436,37 @@
         <div class="bericht-borginfo-section">
           <div class="bericht-borginfo-header">
             <div>
-              <div class="bericht-borginfo-title">Borg Repository Info</div>
-              <div class="bericht-borginfo-hint">Präzise Deduplizierungsstatistiken direkt aus dem Repository (borg info)</div>
+              <div class="bericht-borginfo-title" data-i18n="reports.borgInfoTitle">Borg Repository Info</div>
+              <div class="bericht-borginfo-hint" data-i18n="reports.borgInfoHint">Präzise Deduplizierungsstatistiken direkt aus dem Repository (borg info)</div>
             </div>
             <button class="btn btn-secondary" id="bericht-borginfo-btn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
                 <line x1="6" y1="20" x2="6" y2="14"/>
               </svg>
-              Laden
+              <span data-i18n="reports.load">Laden</span>
             </button>
           </div>
           <div id="bericht-borginfo-msg" class="status-message hidden"></div>
           <div id="bericht-borginfo-cards" style="display:none" class="repo-stats-cards">
             <div class="repo-stat-card">
-              <div class="repo-stat-label">Alle Archive (unkomprimiert)</div>
+              <div class="repo-stat-label" data-i18n="reports.allArchivesUncompressed">Alle Archive (unkomprimiert)</div>
               <div class="repo-stat-value" id="bi-total-size">—</div>
             </div>
             <div class="repo-stat-card">
-              <div class="repo-stat-label">Komprimiert</div>
+              <div class="repo-stat-label" data-i18n="reports.compressed">Komprimiert</div>
               <div class="repo-stat-value" id="bi-csize">—</div>
             </div>
             <div class="repo-stat-card">
-              <div class="repo-stat-label">Auf Disk (dedupliziert)</div>
+              <div class="repo-stat-label" data-i18n="reports.onDiskDeduplicated">Auf Disk (dedupliziert)</div>
               <div class="repo-stat-value" id="bi-unique">—</div>
             </div>
             <div class="repo-stat-card">
-              <div class="repo-stat-label">Echte Einsparung</div>
+              <div class="repo-stat-label" data-i18n="reports.actualSavings">Echte Einsparung</div>
               <div class="repo-stat-value" id="bi-savings">—</div>
             </div>
             <div class="repo-stat-card">
-              <div class="repo-stat-label">Archive</div>
+              <div class="repo-stat-label" data-i18n="reports.archives">Archive</div>
               <div class="repo-stat-value" id="bi-count">—</div>
             </div>
           </div>
@@ -474,25 +474,25 @@
 
         <!-- Repo-Größe über Zeit -->
         <div class="card bericht-chart-card">
-          <div class="repo-stats-chart-title">Repository-Größe über Zeit</div>
+          <div class="repo-stats-chart-title" data-i18n="reports.repoSizeOverTime">Repository-Größe über Zeit</div>
           <div id="bericht-size-chart" class="rs-chart-scroll"></div>
         </div>
 
         <!-- Neue Daten pro Lauf -->
         <div class="card bericht-chart-card">
-          <div class="repo-stats-chart-title">Neue unique Daten pro Lauf (Dedupliziert)</div>
+          <div class="repo-stats-chart-title" data-i18n="reports.uniqueDataPerRun">Neue unique Daten pro Lauf (Dedupliziert)</div>
           <div id="bericht-dedup-chart" class="rs-chart-scroll"></div>
         </div>
 
         <!-- Dauer pro Lauf -->
         <div class="card bericht-chart-card">
-          <div class="repo-stats-chart-title">Dauer pro Lauf</div>
+          <div class="repo-stats-chart-title" data-i18n="reports.durationPerRun">Dauer pro Lauf</div>
           <div id="bericht-dur-chart" class="rs-chart-scroll"></div>
         </div>
 
         <!-- Status-Verlauf -->
         <div class="card bericht-chart-card">
-          <div class="repo-stats-chart-title">Status-Verlauf (pro Monat)</div>
+          <div class="repo-stats-chart-title" data-i18n="reports.statusByMonth">Status-Verlauf (pro Monat)</div>
           <div id="bericht-status-chart" class="rs-chart-scroll"></div>
         </div>
 
