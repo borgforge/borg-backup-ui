@@ -394,16 +394,19 @@ function checkUpdateModeHint() {
   if (sel.value === 'verify_data') {
     sel.classList.add('warn');
     if (badge) badge.classList.remove('hidden');
-    hint.textContent = storageT('storage.check.verifyDataHint');
+    hint.dataset.i18n = 'storage.check.verifyDataHint';
+    hint.textContent = storageT(hint.dataset.i18n);
     return;
   }
   sel.classList.remove('warn');
   if (badge) badge.classList.add('hidden');
   if (sel.value === 'verbose') {
-    hint.textContent = storageT('storage.check.verboseHint');
+    hint.dataset.i18n = 'storage.check.verboseHint';
+    hint.textContent = storageT(hint.dataset.i18n);
     return;
   }
-  hint.textContent = storageT('storage.check.quickHint');
+  hint.dataset.i18n = 'storage.check.quickHint';
+  hint.textContent = storageT(hint.dataset.i18n);
 }
 
 function _appendCheckLog(rawLine) {
