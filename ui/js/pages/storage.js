@@ -6,6 +6,14 @@ window.BBUI = window.BBUI || {};
 window.BBUI.storageState = window.BBUI.storageState || { loaded: false, data: null, smbActionResults: {} };
 const storageState = window.BBUI.storageState;
 
+function storageT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(key, params) || key;
+}
+
+function storageCount(count, singularKey, pluralKey) {
+  return storageT(count === 1 ? singularKey : pluralKey, { count });
+}
+
 async function refreshStorage() {
   hideEl('storage-message');
   try {
@@ -15,7 +23,7 @@ async function refreshStorage() {
     storageState.loaded = true;
     renderStorage(storageState.data);
   } catch (err) {
-    showMsg('storage-message', 'error', `Fehler: ${err.message}`);
+    showMsg('storage-message', 'error', storageT('storage.errorPrefix', { message: err.message }));
   }
   checkLoadJobs();
 }
@@ -30,7 +38,7 @@ function renderStorage(data) {
     {
       key: 'local',
       cssClass: 'local',
-      title: 'Lokal',
+      title: storageT('storage.local'),
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="2" y="2" width="20" height="8" rx="2"/>
         <rect x="2" y="14" width="20" height="8" rx="2"/>
@@ -42,7 +50,7 @@ function renderStorage(data) {
     {
       key: 'usb',
       cssClass: 'usb',
-      title: 'USB-Laufwerk',
+      title: storageT('storage.usbDrive'),
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M17 8h1a4 4 0 0 1 0 8h-1"/>
         <path d="M3 8h11v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z"/>
@@ -54,22 +62,26 @@ function renderStorage(data) {
     {
       key: 'smb',
       cssClass: 'smb',
-      title: 'SMB',
+      title: storageT('storage.smb'),
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 7h18"/><path d="M3 12h18"/><path d="M3 17h18"/>
       </svg>`,
-      meta: `${(data.smb_profiles || []).length} Profile`,
+      meta: storageCount(
+        (data.smb_profiles || []).length,
+        'storage.profileCountOne',
+        'storage.profileCountMany',
+      ),
     },
     {
       key: 'storagebox',
       cssClass: 'storagebox',
-      title: 'Storagebox',
+      title: storageT('storage.storagebox'),
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
       </svg>`,
       meta: data.storagebox_host
         ? `ssh ${data.storagebox_host}:${data.storagebox_port}`
-        : 'nicht konfiguriert',
+        : storageT('storage.notConfigured'),
     },
   ];
 
@@ -84,7 +96,7 @@ function renderRepoListItem(repo) {
 
   const typeLabel = {
     flash: 'FLASH', appdata: 'APPDATA', photos: 'PHOTOS',
-    VMs: 'VMs', sonstiges: 'SONST.',
+    VMs: 'VMs', sonstiges: storageT('storage.typeOther'),
   }[repo.backup_type] || repo.backup_type.toUpperCase();
 
   const displayPath = repo.path_display.length > 55
@@ -105,11 +117,11 @@ function renderRepoListItem(repo) {
           data-storage-action="test-repo"
           data-repo-path="${escHtml(repo.path_display)}"
           data-repo-conf-key="${escHtml(repo.conf_key || '')}"
-          data-result-id="${resultId}">Test</button>
+          data-result-id="${resultId}">${storageT('storage.test')}</button>
         <button class="btn btn-secondary btn-sm hidden"
           id="${detailsBtnId}"
           data-storage-action="show-test-details"
-          data-result-id="${resultId}">Details</button>
+          data-result-id="${resultId}">${storageT('storage.details')}</button>
         <span class="test-result" id="${resultId}"></span>
       </div>
     </li>`;
@@ -128,7 +140,7 @@ function onStorageContentClick(event) {
   if (action === 'show-test-details') {
     const resultEl = document.getElementById(el.dataset.resultId || '');
     if (!resultEl) return;
-    return openStorageTestDetails(resultEl.dataset.fullOutput || 'Keine Details verfügbar.');
+    return openStorageTestDetails(resultEl.dataset.fullOutput || storageT('storage.noDetails'));
   }
 }
 
@@ -137,11 +149,11 @@ function renderStorageCard(section, repos) {
     return renderSmbCard(section, repos);
   }
   const repoCountBadge = repos.length > 0
-    ? `<span class="storage-count-badge">${repos.length} Repos</span>`
+    ? `<span class="storage-count-badge">${storageCount(repos.length, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</span>`
     : `<span class="storage-count-badge">–</span>`;
 
   const body = repos.length === 0
-    ? `<div class="storage-empty">Keine Repositories konfiguriert</div>`
+    ? `<div class="storage-empty">${storageT('storage.noRepositories')}</div>`
     : `<ul class="repo-list">${repos.map(r => renderRepoListItem(r)).join('')}</ul>`;
 
   return `
@@ -194,22 +206,24 @@ function renderSmbCard(section, smbRepos) {
   });
 
   const body = !profiles.length
-    ? `<div class="storage-empty">Keine SMB-Profile konfiguriert</div>`
+    ? `<div class="storage-empty">${storageT('storage.noSmbProfiles')}</div>`
     : `<div class="smb-profile-list">${profiles.map((p, idx) => {
       const rid = `smb-profile-result-${idx}`;
       const entry = grouped.get(String(p.key || '')) || { profile: p, repos: [] };
       const repos = entry.repos || [];
-      const mountState = p.is_mounted ? 'Gemountet' : 'Nicht gemountet';
+      const mountState = p.is_mounted ? storageT('storage.mounted') : storageT('storage.notMounted');
       const cached = storageState.smbActionResults[String(p.key || '')] || null;
       const actionClass = cached ? (cached.ok ? 'ok' : 'fail') : '';
-      const actionText = cached ? (cached.text || '') : '';
+      const actionText = cached
+        ? (cached.ok ? '✓ OK' : `✗ ${cached.message || storageT('storage.error')}`)
+        : '';
       const reposHtml = repos.length
         ? `<ul class="repo-list smb-repo-sublist">${repos.map((repo) => {
             const resultId = `repo-test-${repo.conf_key}`;
             const detailsBtnId = `repo-test-details-${repo.conf_key}`;
             const typeLabel = {
               flash: 'FLASH', appdata: 'APPDATA', photos: 'PHOTOS',
-              VMs: 'VMs', sonstiges: 'SONST.',
+              VMs: 'VMs', sonstiges: storageT('storage.typeOther'),
             }[repo.backup_type] || String(repo.backup_type || '').toUpperCase();
             const displayPath = String(repo.path_display || '').length > 55
               ? '…' + String(repo.path_display || '').slice(-52)
@@ -225,16 +239,16 @@ function renderSmbCard(section, smbRepos) {
                   data-repo-path="${escHtml(repo.path_display)}"
                   data-repo-conf-key="${escHtml(repo.conf_key || '')}"
                   data-result-id="${resultId}"
-                  ${p.is_mounted ? '' : 'disabled title="Erst SMB mounten"'}>Test</button>
+                  ${p.is_mounted ? '' : `disabled title="${storageT('storage.mountFirst')}"`}>${storageT('storage.test')}</button>
                 <button class="btn btn-secondary btn-sm hidden"
                   id="${detailsBtnId}"
                   data-storage-action="show-test-details"
-                  data-result-id="${resultId}">Details</button>
+                  data-result-id="${resultId}">${storageT('storage.details')}</button>
                 <span class="test-result" id="${resultId}"></span>
               </div>
             </li>`;
           }).join('')}</ul>`
-        : `<div class="storage-empty smb-empty-sublist">Keine Repositories für dieses SMB-Profil</div>`;
+        : `<div class="storage-empty smb-empty-sublist">${storageT('storage.noRepositoriesForProfile')}</div>`;
 
       return `<section class="smb-profile-item">
         <div class="smb-profile-head">
@@ -244,15 +258,15 @@ function renderSmbCard(section, smbRepos) {
             <span class="smb-mount-badge ${p.is_mounted ? 'ok' : 'off'}">${mountState}</span>
           </div>
           <div class="repo-item-actions">
-            <button class="btn btn-secondary btn-sm" data-storage-action="smb-action" data-smb-action="mount" data-profile-key="${escHtml(p.key || '')}" data-result-id="${rid}">Mount</button>
-            <button class="btn btn-secondary btn-sm" data-storage-action="smb-action" data-smb-action="unmount" data-profile-key="${escHtml(p.key || '')}" data-result-id="${rid}">Unmount</button>
+            <button class="btn btn-secondary btn-sm" data-storage-action="smb-action" data-smb-action="mount" data-profile-key="${escHtml(p.key || '')}" data-result-id="${rid}">${storageT('storage.mount')}</button>
+            <button class="btn btn-secondary btn-sm" data-storage-action="smb-action" data-smb-action="unmount" data-profile-key="${escHtml(p.key || '')}" data-result-id="${rid}">${storageT('storage.unmount')}</button>
             <span class="test-result ${actionClass}" id="${rid}">${escHtml(actionText)}</span>
           </div>
         </div>
         ${reposHtml}
       </section>`;
     }).join('')}
-    ${unassigned.length ? `<div class="repo-list-item"><span class="type-mini-badge">Ohne Profil</span><div class="repo-path-display"><span class="repo-path-text">Einige SMB-Repositories konnten keinem Profil zugeordnet werden.</span></div></div>` : ''}
+    ${unassigned.length ? `<div class="repo-list-item"><span class="type-mini-badge">${storageT('storage.withoutProfile')}</span><div class="repo-path-display"><span class="repo-path-text">${storageT('storage.unassignedRepositories')}</span></div></div>` : ''}
     </div>`;
 
   const repoCount = repoRows.length;
@@ -266,7 +280,7 @@ function renderSmbCard(section, smbRepos) {
             ${section.meta ? `<div class="storage-card-meta">${escHtml(section.meta)}</div>` : ''}
           </div>
         </div>
-        <span class="storage-count-badge">${repoCount} Repos</span>
+        <span class="storage-count-badge">${storageCount(repoCount, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</span>
       </div>
       ${body}
     </div>`;
@@ -285,12 +299,12 @@ async function runSmbAction(profileKey, action, resultId) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     if (el) {
       el.className = `test-result ${data.ok ? 'ok' : 'fail'}`;
-      el.textContent = data.ok ? '✓ OK' : `✗ ${data.message || 'Fehler'}`;
+      el.textContent = data.ok ? '✓ OK' : `✗ ${data.message || storageT('storage.error')}`;
       el.title = String((data && (data.message || data.output || '')) || '');
     }
     storageState.smbActionResults[String(profileKey || '')] = {
       ok: !!data.ok,
-      text: data.ok ? '✓ OK' : `✗ ${data.message || 'Fehler'}`,
+      message: data.message || '',
       ts: Date.now(),
     };
     await refreshStorage();
@@ -298,7 +312,7 @@ async function runSmbAction(profileKey, action, resultId) {
     if (el) { el.className = 'test-result fail'; el.textContent = `✗ ${err.message}`; el.title = String(err.message || ''); }
     storageState.smbActionResults[String(profileKey || '')] = {
       ok: false,
-      text: `✗ ${err.message}`,
+      message: err.message,
       ts: Date.now(),
     };
   }
@@ -307,7 +321,7 @@ async function runSmbAction(profileKey, action, resultId) {
 async function testRepo(repoPath, resultId, repoConfKey = '') {
   const el = document.getElementById(resultId);
   const detailsBtn = document.getElementById(`repo-test-details-${repoConfKey}`);
-  if (el) { el.className = 'test-result testing'; el.textContent = 'Prüfe...'; el.title = ''; }
+  if (el) { el.className = 'test-result testing'; el.textContent = storageT('storage.checking'); el.title = ''; }
   if (detailsBtn) detailsBtn.classList.add('hidden');
   try {
     const res = await fetch('/api/storage/test', {
@@ -332,8 +346,8 @@ async function testRepo(repoPath, resultId, repoConfKey = '') {
       }
     }
   } catch (err) {
-    if (el) { el.className = 'test-result fail'; el.textContent = '✗ Fehler'; el.title = String(err?.message || 'Unbekannter Fehler'); }
-    if (el) el.dataset.fullOutput = String(err?.message || 'Unbekannter Fehler');
+    if (el) { el.className = 'test-result fail'; el.textContent = `✗ ${storageT('storage.error')}`; el.title = String(err?.message || storageT('storage.unknownError')); }
+    if (el) el.dataset.fullOutput = String(err?.message || storageT('storage.unknownError'));
     if (detailsBtn) detailsBtn.classList.remove('hidden');
   }
 }
@@ -342,7 +356,7 @@ function openStorageTestDetails(text) {
   const modal = document.getElementById('storage-test-modal');
   const output = document.getElementById('storage-test-modal-output');
   if (!modal || !output) return;
-  output.textContent = String(text || '').trim() || 'Keine Details verfügbar.';
+  output.textContent = String(text || '').trim() || storageT('storage.noDetails');
   modal.classList.remove('hidden');
 }
 
@@ -367,9 +381,9 @@ window.BBUI.storageCheckState = window.BBUI.storageCheckState || { es: null };
 const checkState = window.BBUI.storageCheckState;
 
 function _checkModeLabel(mode) {
-  if (mode === 'verbose') return 'Verbose';
-  if (mode === 'verify_data') return 'Verify Data';
-  return 'Schnell';
+  if (mode === 'verbose') return storageT('storage.check.modeVerbose');
+  if (mode === 'verify_data') return storageT('storage.check.modeVerifyData');
+  return storageT('storage.check.modeQuick');
 }
 
 function checkUpdateModeHint() {
@@ -380,16 +394,19 @@ function checkUpdateModeHint() {
   if (sel.value === 'verify_data') {
     sel.classList.add('warn');
     if (badge) badge.classList.remove('hidden');
-    hint.textContent = 'Vollprüfung der Datenblöcke. Höchste Sicherheit, deutlich längere Laufzeit und höhere I/O-Last.';
+    hint.dataset.i18n = 'storage.check.verifyDataHint';
+    hint.textContent = storageT(hint.dataset.i18n);
     return;
   }
   sel.classList.remove('warn');
   if (badge) badge.classList.add('hidden');
   if (sel.value === 'verbose') {
-    hint.textContent = 'Zeigt zusätzliche Prüfschritte und Details im Log. Laufzeit ähnlich zu Schnell.';
+    hint.dataset.i18n = 'storage.check.verboseHint';
+    hint.textContent = storageT(hint.dataset.i18n);
     return;
   }
-  hint.textContent = 'Standardprüfung mit Fortschrittsanzeige. Schnellster Modus für Routinechecks.';
+  hint.dataset.i18n = 'storage.check.quickHint';
+  hint.textContent = storageT(hint.dataset.i18n);
 }
 
 function _appendCheckLog(rawLine) {
@@ -407,8 +424,10 @@ async function checkLoadJobs() {
     const data = await res.json();
     const sel = document.getElementById('check-job-select');
     if (!sel) return;
-    sel.innerHTML = '<option value="">— Job wählen —</option>' +
+    const selected = sel.value;
+    sel.innerHTML = `<option value="">${storageT('storage.check.selectJob')}</option>` +
       (data.jobs || []).map(j => `<option value="${escHtml(j.key)}">${escHtml(j.name)}</option>`).join('');
+    sel.value = selected;
   } catch (_) {}
   checkUpdateModeHint();
 }
@@ -416,7 +435,7 @@ async function checkLoadJobs() {
 async function checkRun() {
   const sel = document.getElementById('check-job-select');
   const jobKey = sel ? sel.value : '';
-  if (!jobKey) { showMsg('check-message', 'error', 'Bitte einen Job wählen.'); return; }
+  if (!jobKey) { showMsg('check-message', 'error', storageT('storage.check.chooseJob')); return; }
   const modeSel = document.getElementById('check-level-select');
   const mode = modeSel ? modeSel.value : 'quick';
 
@@ -429,7 +448,7 @@ async function checkRun() {
   const statusEl = document.getElementById('check-log-status');
   if (logEl) logEl.textContent = '';
   if (statusEl) {
-    statusEl.textContent = `Läuft… (${_checkModeLabel(mode)})`;
+    statusEl.textContent = storageT('storage.check.running', { mode: _checkModeLabel(mode) });
     statusEl.className = 'check-log-status running';
   }
 
@@ -448,7 +467,7 @@ async function checkRun() {
       return;
     }
   } catch (err) {
-    showMsg('check-message', 'error', `Fehler: ${err.message}`);
+    showMsg('check-message', 'error', storageT('storage.errorPrefix', { message: err.message }));
     if (btn) btn.disabled = false;
     return;
   }
@@ -463,7 +482,9 @@ async function checkRun() {
   es.addEventListener('done', (e) => {
     const code = parseInt(e.data, 10);
     if (statusEl) {
-      statusEl.textContent = code === 0 ? 'Erfolgreich' : `Fehler (Exit ${e.data})`;
+      statusEl.textContent = code === 0
+        ? storageT('storage.check.successful')
+        : storageT('storage.check.failedExit', { code: e.data });
       statusEl.className = `check-log-status ${code === 0 ? 'success' : 'error'}`;
     }
     es.close(); checkState.es = null;
@@ -471,8 +492,8 @@ async function checkRun() {
   });
 
   es.addEventListener('error', (e) => {
-    if (e.data) _appendCheckLog(`[Fehler] ${e.data}`);
-    if (statusEl) { statusEl.textContent = 'Fehler'; statusEl.className = 'check-log-status error'; }
+    if (e.data) _appendCheckLog(storageT('storage.check.logError', { message: e.data }));
+    if (statusEl) { statusEl.textContent = storageT('storage.error'); statusEl.className = 'check-log-status error'; }
     es.close(); checkState.es = null;
     if (btn) btn.disabled = false;
   });
@@ -493,3 +514,9 @@ function checkCloseLog() {
   const btn = document.getElementById('check-run-btn');
   if (btn) btn.disabled = false;
 }
+
+window.addEventListener('bbui:language-changed', () => {
+  if (storageState.loaded && storageState.data) renderStorage(storageState.data);
+  checkUpdateModeHint();
+  checkLoadJobs();
+});
