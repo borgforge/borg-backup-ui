@@ -44,6 +44,7 @@
     });
   });
   const sources = [
+    '/ui/js/components/i18n.js',
     '/ui/js/api/client.js',
     '/ui/js/utils/dom.js',
     '/ui/js/utils/format.js',
@@ -72,7 +73,16 @@
     const script = document.createElement('script');
     script.src = sources[idx];
     script.defer = false;
-    script.onload = function () { loadNext(idx + 1); };
+    script.onload = function () {
+      if (sources[idx] === '/ui/js/components/i18n.js') {
+        const initI18n = window.BBUI?.components?.i18n?.init;
+        if (typeof initI18n === 'function') {
+          Promise.resolve(initI18n()).catch(() => {}).finally(() => loadNext(idx + 1));
+          return;
+        }
+      }
+      loadNext(idx + 1);
+    };
     document.head.appendChild(script);
   }
   loadNext(0);

@@ -235,6 +235,24 @@ body {
   color: var(--text-muted);
   font-size: 12px;
 }
+.sidebar-language {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+.sidebar-language select {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 24px 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+}
 .sidebar-health-indicator {
   width: 100%;
   display: flex;
