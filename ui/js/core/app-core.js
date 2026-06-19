@@ -198,10 +198,14 @@ async function updateDataDirWarning() {
     const html = !ready
       ? `${missing ? 'Hauptverzeichnis für Betriebsdaten fehlt.' : 'Konfiguration unvollständig oder ungültig.'} Bitte in <a href="#" data-core-action="goto-settings">Einstellungen</a> prüfen.${firstErrSafe ? ` Hinweis: ${firstErrSafe}` : ''}`
       : '';
+    const i18n = window.BBUI?.components?.i18n;
+    const dashboardHtml = !ready && i18n
+      ? `${i18n.t(missing ? 'dashboard.dataDirMissing' : 'dashboard.configIncomplete')} ${i18n.t('dashboard.checkSettingsPrefix')} <a href="#" data-core-action="goto-settings">${i18n.t('nav.settings')}</a> ${i18n.t('dashboard.checkSettingsSuffix')}${firstErrSafe ? ` ${i18n.t('dashboard.detailHint', { message: firstErrSafe })}` : ''}`
+      : html;
     for (const el of [dashEl, jobsEl]) {
       if (!el) continue;
       if (!ready) {
-        el.innerHTML = html;
+        el.innerHTML = el === dashEl ? dashboardHtml : html;
         el.className = 'status-message warning-state';
       } else {
         el.className = 'status-message hidden';
@@ -211,9 +215,15 @@ async function updateDataDirWarning() {
     if (dashSetupEl) {
       if (!ready) {
         dashSetupEl.className = 'status-message warning-state';
-        dashSetupEl.textContent = missing
-          ? 'Erstkonfiguration erforderlich. Weitere Bereiche sind bis zum Speichern von GLOBAL_DATA_DIR gesperrt.'
-          : `Konfigurationsprüfung fehlgeschlagen: ${firstErr || 'Bitte Einstellungen prüfen.'}`;
+        dashSetupEl.textContent = i18n
+          ? (missing
+            ? i18n.t('dashboard.firstConfigRequired')
+            : i18n.t('dashboard.configCheckFailed', {
+              message: firstErr || i18n.t('dashboard.checkSettingsFallback'),
+            }))
+          : (missing
+            ? 'Erstkonfiguration erforderlich. Weitere Bereiche sind bis zum Speichern von GLOBAL_DATA_DIR gesperrt.'
+            : `Konfigurationsprüfung fehlgeschlagen: ${firstErr || 'Bitte Einstellungen prüfen.'}`);
       } else {
         dashSetupEl.className = 'status-message hidden';
       }

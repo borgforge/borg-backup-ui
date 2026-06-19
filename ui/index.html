@@ -135,8 +135,8 @@
     <div id="page-dashboard" class="page active">
       <div class="page-header">
         <div>
-          <h1>Dashboard</h1>
-          <p class="page-subtitle">Backup-Übersicht</p>
+          <h1 data-i18n="dashboard.title">Dashboard</h1>
+          <p class="page-subtitle" data-i18n="dashboard.subtitle">Backup-Übersicht</p>
         </div>
         <div class="header-actions">
           <span id="last-refresh" class="refresh-label"></span>
@@ -145,16 +145,16 @@
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
-            Aktualisieren
+            <span data-i18n="dashboard.refresh">Aktualisieren</span>
           </button>
         </div>
       </div>
       <div class="dashboard-summary-section">
-        <div class="dashboard-summary-title">Backup-Läufe</div>
+        <div class="dashboard-summary-title" data-i18n="dashboard.backupRuns">Backup-Läufe</div>
         <div id="summary-bar" class="summary-bar"></div>
       </div>
       <div class="dashboard-summary-section">
-        <div class="dashboard-summary-title">Restore-Nachweis</div>
+        <div class="dashboard-summary-title" data-i18n="dashboard.restoreProof">Restore-Nachweis</div>
         <div id="restore-summary-bar" class="summary-bar"></div>
       </div>
       <div id="dashboard-data-dir-warning" class="status-message hidden"></div>
@@ -163,7 +163,7 @@
       <div id="backup-grid" class="backup-grid">
         <div class="loading-spinner">
           <div class="spinner"></div>
-          <span>Lade Backup-Status...</span>
+          <span data-i18n="dashboard.loading">Lade Backup-Status...</span>
         </div>
       </div>
     </div>

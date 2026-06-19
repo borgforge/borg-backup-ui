@@ -4,6 +4,21 @@
 // DASHBOARD PAGE
 // ══════════════════════════════════════════════════════════════════════════════
 
+function dashboardT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(key, params) || key;
+}
+
+function dashboardLocationLabel(location) {
+  return {
+    local: dashboardT('jobs.locationLocal'),
+    usb: dashboardT('jobs.locationUsb'),
+    smb: dashboardT('jobs.locationSmb'),
+    storagebox: dashboardT('jobs.locationStoragebox'),
+  }[location] || location || '—';
+}
+
+let dashboardSystemHealth = null;
+
 async function fetchStatus() {
   const res = await fetch('/api/status');
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -66,10 +81,11 @@ async function refreshStatus() {
     const coreState = window.BBUI.core.state;
     coreState.data = statusData;
     coreState.lastRefresh = new Date();
-    renderDashboard(coreState.data, systemHealth);
+    dashboardSystemHealth = systemHealth;
+    renderDashboard(coreState.data, dashboardSystemHealth);
     updateRefreshLabel();
   } catch (err) {
-    showError(`Fehler beim Laden: ${err.message}`);
+    showError(dashboardT('dashboard.loadError', { message: err.message }));
   } finally {
     if (btn) btn.classList.remove('loading');
   }
@@ -86,7 +102,12 @@ function updateRefreshLabel() {
   const el = document.getElementById('last-refresh');
   if (!el || !coreState.lastRefresh) return;
   const t = coreState.lastRefresh;
-  el.textContent = `Aktualisiert: ${t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() || 'de';
+  const time = t.toLocaleTimeString(language === 'en' ? 'en-GB' : 'de-DE', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  el.textContent = dashboardT('dashboard.updated', { time });
 }
 
 function renderDashboard(data, systemHealth) {
@@ -114,7 +135,7 @@ function renderDashboardSystemWarning(data) {
     return;
   }
   el.className = 'status-message warning';
-  el.textContent = 'Systemzustand nicht vollständig OK. Details unter Einstellungen prüfen.';
+  el.textContent = dashboardT('dashboard.systemWarning');
 }
 
 function renderSummaryBar(summary) {
@@ -122,11 +143,11 @@ function renderSummaryBar(summary) {
   if (!el) return;
 
   el.innerHTML = [
-    statTile('total',   summary.total,   'Gesamt', iconGrid()),
-    statTile('success', summary.success, 'Erfolgreich', iconCheck()),
-    statTile('skipped', summary.skipped || 0, 'Übersprungen', iconSkip()),
-    statTile('warning', summary.warning, 'Warnungen',   iconWarn()),
-    statTile('error',   summary.error,   'Fehler',      iconX()),
+    statTile('total',   summary.total,   dashboardT('dashboard.total'), iconGrid()),
+    statTile('success', summary.success, dashboardT('dashboard.successful'), iconCheck()),
+    statTile('skipped', summary.skipped || 0, dashboardT('dashboard.skipped'), iconSkip()),
+    statTile('warning', summary.warning, dashboardT('dashboard.warnings'), iconWarn()),
+    statTile('error',   summary.error,   dashboardT('dashboard.errors'), iconX()),
   ].join('');
 }
 
@@ -146,11 +167,11 @@ function renderRestoreVerificationSummary(backups) {
   const never = scoped.filter((b) => b.restore_verification_status === 'never').length;
 
   el.innerHTML = [
-    statTile('success', `${verified}/${scoped.length}`, 'Restore verifiziert', iconCheck()),
-    statTile('warning', stale, 'Restore überfällig', iconWarn()),
-    statTile('error', failed, 'Restore fehlgeschlagen', iconX()),
-    statTile('unknown', never, 'Restore offen', iconGrid()),
-    statTile('total', notRequired, 'Restore nicht geplant', iconSkip()),
+    statTile('success', `${verified}/${scoped.length}`, dashboardT('dashboard.restoreVerified'), iconCheck()),
+    statTile('warning', stale, dashboardT('dashboard.restoreOverdue'), iconWarn()),
+    statTile('error', failed, dashboardT('dashboard.restoreFailed'), iconX()),
+    statTile('unknown', never, dashboardT('dashboard.restoreOpen'), iconGrid()),
+    statTile('total', notRequired, dashboardT('dashboard.restoreNotScheduled'), iconSkip()),
   ].join('');
 }
 
@@ -171,7 +192,7 @@ function renderBackupGrid(backups) {
 
   if (!backups || backups.length === 0) {
     el.innerHTML = '';
-    showEmpty('Keine Backup-Status-Dateien gefunden.<br>Wurde bereits ein Backup-Job ausgeführt?');
+    showEmpty(`${dashboardT('dashboard.emptyStatus')}<br>${dashboardT('dashboard.emptyQuestion')}`);
     return;
   }
 
@@ -192,7 +213,7 @@ function renderBackupGrid(backups) {
     .filter(loc => groups[loc].length > 0)
     .map(loc => `
       <div class="jobs-location-group">
-        <div class="jobs-location-header">${locLabel(loc)}</div>
+        <div class="jobs-location-header">${dashboardLocationLabel(loc)}</div>
         <div class="jobs-group-grid">${groups[loc].map(renderCard).join('')}</div>
       </div>`)
     .join('');
@@ -206,18 +227,13 @@ function renderCard(b) {
   const locClass    = (b.location || '').toLowerCase();
 
   const statusLabel = {
-    success: 'Erfolgreich',
-    skipped: 'Übersprungen',
-    warning: 'Warnung',
-    error:   'Fehler',
-  }[b.status] || b.status || 'Unbekannt';
+    success: dashboardT('dashboard.successful'),
+    skipped: dashboardT('dashboard.skipped'),
+    warning: dashboardT('jobs.statusWarning'),
+    error: dashboardT('jobs.statusError'),
+  }[b.status] || b.status || dashboardT('dashboard.unknown');
 
-  const locLabel = {
-    local:      'Local',
-    usb:        'USB',
-    smb:        'SMB',
-    storagebox: 'Storagebox',
-  }[b.location] || b.location || '—';
+  const locationLabel = dashboardLocationLabel(b.location);
 
   const typeLabel = capitalize(b.backup_type || '—');
   const restoreVerification = renderRestoreVerificationBadge(b);
@@ -226,7 +242,7 @@ function renderCard(b) {
     ? `<div class="error-msg">${escHtml(b.error_message)}</div>`
     : '';
   const skipSection = b.status === 'skipped'
-    ? `<div class="error-msg" style="color:var(--warning)">${escHtml(b.skip_reason_text || 'Lauf wurde übersprungen')}</div>`
+    ? `<div class="error-msg" style="color:var(--warning)">${escHtml(b.skip_reason_text || dashboardT('dashboard.skipDefault'))}</div>`
     : '';
 
   const growthClass = b.growth_bytes == null ? 'neutral'
@@ -246,30 +262,30 @@ function renderCard(b) {
   const sizeSection = b.original_size > 0 ? `
     <div class="size-grid">
       <div class="size-row">
-        <span class="size-label">Quelle</span>
+        <span class="size-label">${dashboardT('dashboard.source')}</span>
         <span class="size-value">${b.original_size_formatted}</span>
       </div>
       <div class="size-row">
-        <span class="size-label">Komprimiert</span>
+        <span class="size-label">${dashboardT('dashboard.compressed')}</span>
         <span class="size-value">${b.compressed_size_formatted}
           ${b.compression_pct ? `<span class="size-pct">-${b.compression_pct}</span>` : ''}
         </span>
       </div>
       <div class="size-row">
-        <span class="size-label">Dedupliziert</span>
+        <span class="size-label">${dashboardT('dashboard.deduplicated')}</span>
         <span class="size-value">${b.deduplicated_size_formatted}
           ${b.dedup_pct ? `<span class="size-pct">-${b.dedup_pct}</span>` : ''}
         </span>
       </div>
       <div class="size-row">
-        <span class="size-label">Repository</span>
+        <span class="size-label">${dashboardT('dashboard.repository')}</span>
         <span class="size-value">${b.repository_size_formatted}</span>
       </div>
     </div>
     <div class="growth-row">
-      <span>Wachstum seit Vorwoche</span>
+      <span>${dashboardT('dashboard.weeklyGrowth')}</span>
       <span class="growth-value ${growthClass}">${b.growth_formatted}</span>
-    </div>` : `<div class="size-label" style="color:var(--text-muted);margin-top:8px">Keine Größen-Daten</div>`;
+    </div>` : `<div class="size-label" style="color:var(--text-muted);margin-top:8px">${dashboardT('dashboard.noSizeData')}</div>`;
 
   return `
     <div class="backup-card ${statusClass}">
@@ -282,12 +298,12 @@ function renderCard(b) {
           </div>
         </div>
         <div class="card-badges">
-          ${b.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>Deaktiviert</span>` : ''}
+          ${b.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
           <span class="badge ${statusClass}">
             <span class="badge-dot"></span>
             ${statusLabel}
           </span>
-          <span class="loc-badge ${locClass}">${locLabel}</span>
+          <span class="loc-badge ${locClass}">${locationLabel}</span>
           ${restoreVerification}
         </div>
       </div>
@@ -310,24 +326,24 @@ function renderRestoreVerificationBadge(b) {
   const status = String(b.restore_verification_status || '').toLowerCase();
   if (!status) return '';
   const map = {
-    verified: { cls: 'success', text: 'Restore: verifiziert' },
-    stale: { cls: 'warning', text: 'Restore: überfällig' },
-    failed: { cls: 'error', text: 'Restore: fehlgeschlagen' },
-    never: { cls: 'unknown', text: 'Restore: offen' },
-    not_required: { cls: 'neutral', text: 'Restore: nicht geplant' },
+    verified: { cls: 'success', text: dashboardT('jobs.restoreVerified') },
+    stale: { cls: 'warning', text: dashboardT('jobs.restoreStale') },
+    failed: { cls: 'error', text: dashboardT('jobs.restoreFailed') },
+    never: { cls: 'unknown', text: dashboardT('jobs.restoreOpen') },
+    not_required: { cls: 'neutral', text: dashboardT('jobs.restoreNotRequired') },
   };
   const m = map[status];
   if (!m) return '';
   const details = [
-    b.restore_verification_last_test_date ? `Letzter Test: ${b.restore_verification_last_test_date}` : '',
-    b.restore_verification_valid_until ? `Gültig bis: ${b.restore_verification_valid_until}` : '',
+    b.restore_verification_last_test_date ? dashboardT('jobs.lastTest', { date: b.restore_verification_last_test_date }) : '',
+    b.restore_verification_valid_until ? dashboardT('jobs.validUntil', { date: b.restore_verification_valid_until }) : '',
   ].filter(Boolean).join(' · ');
   return `<span class="restore-v-badge ${m.cls}" title="${escHtml(details || m.text)}">${m.text}</span>`;
 }
 
 function renderNeverRunCard(b) {
   const locClass  = (b.location || '').toLowerCase();
-  const locLbl    = { local: 'Local', usb: 'USB', smb: 'SMB', storagebox: 'Storagebox' }[b.location] || b.location || '—';
+  const locLbl = dashboardLocationLabel(b.location);
   const typeLabel = capitalize(b.backup_type || '—');
 
   return `
@@ -340,13 +356,13 @@ function renderNeverRunCard(b) {
           </div>
         </div>
         <div class="card-badges">
-          ${b.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>Deaktiviert</span>` : ''}
-          <span class="badge unknown"><span class="badge-dot"></span>Nie ausgeführt</span>
+          ${b.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
+          <span class="badge unknown"><span class="badge-dot"></span>${dashboardT('dashboard.neverExecuted')}</span>
           <span class="loc-badge ${locClass}">${locLbl}</span>
         </div>
       </div>
       <div class="card-divider"></div>
-      <div class="never-run-hint">Dieser Job wurde noch nie ausgeführt.</div>
+      <div class="never-run-hint">${dashboardT('dashboard.neverExecutedHint')}</div>
     </div>`;
 }
 
@@ -427,10 +443,12 @@ function repoCheckIcon(status) {
 
 function repoCheckLabel(b) {
   if (b.repository_check_status === 'ok')
-    return `Check OK${b.repository_check_date ? ` (${b.repository_check_date.slice(0, 10)})` : ''}`;
+    return dashboardT('dashboard.checkOk', {
+      date: b.repository_check_date ? ` (${b.repository_check_date.slice(0, 10)})` : '',
+    });
   if (b.repository_check_status === 'overdue')
-    return `Check überfällig – nächster: ${b.repository_next_check || '—'}`;
-  return 'Check-Status unbekannt';
+    return dashboardT('dashboard.checkOverdue', { date: b.repository_next_check || '—' });
+  return dashboardT('dashboard.checkUnknown');
 }
 
 function showError(msg) {
@@ -451,3 +469,10 @@ function hideMessage() {
   const el = document.getElementById('status-message');
   if (el) el.className = 'status-message hidden';
 }
+
+window.addEventListener?.('bbui:language-changed', () => {
+  const coreState = window.BBUI?.core?.state;
+  if (coreState?.data) renderDashboard(coreState.data, dashboardSystemHealth);
+  updateRefreshLabel();
+  window.BBUI?.core?.updateDataDirWarning?.();
+});
