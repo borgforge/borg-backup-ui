@@ -39,7 +39,10 @@ def test_javascript_translation_keys_exist_in_both_resources():
     referenced = set()
     for path in (ROOT / "ui" / "js").rglob("*.js"):
         source = path.read_text(encoding="utf-8")
-        referenced.update(re.findall(r"(?:\.t|_sidebarTranslation)\('([^']+)'", source))
+        referenced.update(re.findall(
+            r"['\"]((?:app|language|nav|sidebar|storage)\.[a-zA-Z0-9.]+)['\"]",
+            source,
+        ))
 
     assert referenced
     assert referenced <= _flatten_keys(_load("de"))
