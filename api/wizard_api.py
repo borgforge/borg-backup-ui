@@ -163,10 +163,13 @@ def _storagebox_repo_status(params: dict, ui_config: Optional[dict], scripts_dir
             "checked": False,
             "exists": False,
             "needs_init_confirm": True,
-            "message": "Storagebox-Repository ist keine ssh:// URI.",
+            "message": "Storage Box repository is not an ssh:// URI.",
+            "message_code": "wizard_repo_not_ssh",
         }
 
     env = dict(os.environ)
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
     encryption = str(params.get("encryption", "repokey-blake2") or "repokey-blake2").strip()
     passphrase = str(params.get("passphrase", "") or "").strip()
     if encryption != "none":
@@ -199,21 +202,24 @@ def _storagebox_repo_status(params: dict, ui_config: Optional[dict], scripts_dir
             "checked": False,
             "exists": False,
             "needs_init_confirm": True,
-            "message": "borg binary nicht gefunden; Repository-Existenz konnte nicht geprüft werden.",
+            "message": "borg binary not found; repository existence could not be checked.",
+            "message_code": "wizard_borg_missing",
         }
     except subprocess.TimeoutExpired:
         return {
             "checked": True,
             "exists": False,
             "needs_init_confirm": True,
-            "message": "Timeout bei Repository-Prüfung.",
+            "message": "Repository check timed out.",
+            "message_code": "wizard_repo_timeout",
         }
     except Exception as exc:
         return {
             "checked": False,
             "exists": False,
             "needs_init_confirm": True,
-            "message": f"Repository-Prüfung fehlgeschlagen: {exc}",
+            "message": f"Repository check failed: {exc}",
+            "message_code": "wizard_repo_check_failed",
         }
 
     if result.returncode == 0:
@@ -221,16 +227,18 @@ def _storagebox_repo_status(params: dict, ui_config: Optional[dict], scripts_dir
             "checked": True,
             "exists": True,
             "needs_init_confirm": False,
-            "message": "Remote-Repository ist vorhanden.",
+            "message": "Remote repository exists.",
+            "message_code": "wizard_repo_exists",
         }
 
     output = ((result.stderr or "") + "\n" + (result.stdout or "")).strip()
-    first_line = output.splitlines()[0].strip() if output.splitlines() else "borg info konnte das Repository nicht öffnen."
+    first_line = output.splitlines()[0].strip() if output.splitlines() else "borg info could not open the repository."
     return {
         "checked": True,
         "exists": False,
         "needs_init_confirm": True,
         "message": first_line[:240],
+        "message_code": "wizard_repo_unavailable",
         "exit_code": result.returncode,
     }
 
@@ -465,7 +473,7 @@ def generate_script(params: dict) -> str:
         init_passphrase = f'''
     passphrase_key  = "{passphrase_key}"
     passphrase_file = env.get(passphrase_key, "{passphrase_def}")
-    logging.info("Passphrase-Datei (%s): %s", passphrase_key, passphrase_file)'''
+    logging.info("Passphrase file (%s): %s", passphrase_key, passphrase_file)'''
     else:
         passphrase_setup  = ""
         init_passphrase   = ""
@@ -483,7 +491,7 @@ def _init_repo_if_needed(env: dict) -> int:
     )
     if check.returncode == 0:
         return 0
-    logging.info("Repository nicht gefunden – initialisiere: %s", repo){init_passphrase}
+    logging.info("Repository not found; initializing: %s", repo){init_passphrase}
     result = _sp.run(
         ["borg", "init", "--encryption={encryption}", repo],
         capture_output=True, text=True,
@@ -492,9 +500,9 @@ def _init_repo_if_needed(env: dict) -> int:
         for line in (result.stdout + result.stderr).splitlines():
             if line.strip():
                 logging.error("[borg init] %s", line)
-        logging.error("borg init fehlgeschlagen (Exit %d)", result.returncode)
+        logging.error("borg init failed (exit %d)", result.returncode)
     else:
-        logging.info("Repository erfolgreich initialisiert: %s", repo)
+        logging.info("Repository initialized successfully: %s", repo)
     return result.returncode
 
 '''
@@ -508,6 +516,9 @@ import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
+
+os.environ["LC_ALL"] = "C"
+os.environ["LANG"] = "C"
 
 VERSION = "1.0.0"
 SCRIPT_DIR = Path(__file__).parent

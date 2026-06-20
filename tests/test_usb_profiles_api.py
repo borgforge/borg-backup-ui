@@ -31,7 +31,7 @@ def test_usb_profile_status_reports_missing_path():
 
     assert result["results"][0]["ok"] is False
     assert result["results"][0]["exists"] is False
-    assert result["results"][0]["message"] == "Pfad nicht gefunden"
+    assert result["results"][0]["message"] == "Path not found"
 
 
 def test_usb_profile_status_reports_directory_state(tmp_path: Path):

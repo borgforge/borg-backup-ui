@@ -99,7 +99,7 @@ class BorgConfig:
             try:
                 return int(raw)
             except ValueError:
-                logger.warning("Ungültiger Wert für %s ('%s'), verwende %d", key, raw, default)
+                logger.warning("Invalid value for %s ('%s'); using %d", key, raw, default)
                 return default
 
         def _non_negative_int(key: str, default: int) -> int:
@@ -177,7 +177,7 @@ class BorgRunner:
             Borg Exit-Code (0, 1 oder 2)
         """
         logger.info(
-            "Borg prune: Lösche alte Backups "
+            "Borg prune: deleting old backups "
             "(keep: %dd/%dw/%dm/%dy)",
             self.config.keep_daily,
             self.config.keep_weekly,
@@ -201,11 +201,11 @@ class BorgRunner:
         exit_code = _run_borg(cmd)
 
         if exit_code == BORG_EXIT_OK:
-            logger.info("Borg prune erfolgreich")
+            logger.info("Borg prune succeeded")
         elif exit_code == BORG_EXIT_WARNING:
-            logger.info("Borg prune mit Warnungen (Exit 1)")
+            logger.info("Borg prune completed with warnings (exit 1)")
         else:
-            logger.warning("WARNUNG: Borg prune fehlgeschlagen (Exit %d)", exit_code)
+            logger.warning("WARNING: Borg prune failed (exit %d)", exit_code)
 
         return exit_code
 
@@ -218,7 +218,7 @@ class BorgRunner:
         Returns:
             Borg Exit-Code (0 = OK, >0 = Fehler)
         """
-        logger.info("Borg compact: Gebe ungenutzten Speicherplatz frei...")
+        logger.info("Borg compact: reclaiming unused space...")
 
         cmd = ["borg", "compact", "--verbose", "--show-rc"]
         if self.config.repo:
@@ -227,9 +227,9 @@ class BorgRunner:
         exit_code = _run_borg(cmd)
 
         if exit_code == BORG_EXIT_OK:
-            logger.info("Borg compact erfolgreich")
+            logger.info("Borg compact succeeded")
         else:
-            logger.warning("WARNUNG: Borg compact fehlgeschlagen (Exit %d)", exit_code)
+            logger.warning("WARNING: Borg compact failed (exit %d)", exit_code)
 
         return exit_code
 
@@ -248,16 +248,16 @@ class BorgRunner:
 
         if days_since < self.config.check_interval_days:
             logger.info(
-                "Borg check übersprungen (letzter Check vor %d Tagen, "
-                "Intervall: %d Tage)",
+                "Borg check skipped (last check %d days ago, "
+                "interval: %d days)",
                 days_since,
                 self.config.check_interval_days,
             )
             return BORG_EXIT_OK
 
         logger.info(
-            "Borg check: Prüfe Repository-Integrität "
-            "(letzter Check vor %d Tagen)...",
+            "Borg check: checking repository integrity "
+            "(last check %d days ago)...",
             days_since,
         )
 
@@ -268,10 +268,10 @@ class BorgRunner:
         exit_code = _run_borg(cmd)
 
         if exit_code == BORG_EXIT_OK:
-            logger.info("Borg check erfolgreich - Repository OK")
+            logger.info("Borg check succeeded - repository OK")
             _touch_flag(self.config.check_flag_file)
         else:
-            logger.error("FEHLER: Borg check fehlgeschlagen (Exit %d)", exit_code)
+            logger.error("ERROR: Borg check failed (exit %d)", exit_code)
 
         return exit_code
 
@@ -297,7 +297,7 @@ class BorgRunner:
         """
         repo = self.config.repo or os.environ.get("BORG_REPO", "")
         if not repo:
-            logger.error("borg create: BORG_REPO nicht gesetzt")
+            logger.error("borg create: BORG_REPO is not set")
             return BORG_EXIT_ERROR
 
         archive = f"{repo}::{archive_prefix}-{{now:%Y-%m-%d_%H-%M-%S}}"
@@ -314,17 +314,19 @@ class BorgRunner:
 
         _log_section("PHASE 3: BORG BACKUP (CREATE)")
         logger.info("Repository: %s", repo)
-        logger.info("Backup-Pfade: %s", " ".join(str(p) for p in paths))
+        logger.info("Backup paths: %s", " ".join(str(p) for p in paths))
         logger.info("Performance: Compression=%s", self.config.compression)
         logger.info("Cache: %s", os.environ.get("BORG_CACHE_DIR", ""))
         logger.info("")
         logger.info(
-            "Borg create startet... (%d Pfade, compression=%s)",
+            "Borg create starting... (%d paths, compression=%s)",
             len(paths),
             self.config.compression,
         )
 
         env = os.environ.copy()
+        env["LC_ALL"] = "C"
+        env["LANG"] = "C"
         if extra_env:
             env.update(extra_env)
 
@@ -337,10 +339,10 @@ class BorgRunner:
                 env=env,
             )
         except FileNotFoundError:
-            logger.error("borg nicht gefunden – ist Borg Backup installiert?")
+            logger.error("borg was not found; is Borg Backup installed?")
             return BORG_EXIT_ERROR
         except OSError as exc:
-            logger.error("Borg-Prozess konnte nicht gestartet werden: %s", exc)
+            logger.error("Borg process could not be started: %s", exc)
             return BORG_EXIT_ERROR
 
         wd_stop = threading.Event()
@@ -364,11 +366,11 @@ class BorgRunner:
         exit_code = process.returncode
 
         if exit_code == BORG_EXIT_OK:
-            logger.info("Borg create erfolgreich")
+            logger.info("Borg create succeeded")
         elif exit_code == BORG_EXIT_WARNING:
-            logger.info("Borg create mit Warnungen (Exit 1) – Backup nutzbar")
+            logger.info("Borg create completed with warnings (exit 1); backup is usable")
         else:
-            logger.error("FEHLER: Borg create fehlgeschlagen (Exit %d)", exit_code)
+            logger.error("ERROR: Borg create failed (exit %d)", exit_code)
 
         return exit_code
 
@@ -382,7 +384,7 @@ class BorgRunner:
         Returns:
             Schlechtester Exit-Code der drei Operationen (0, 1 oder ≥2)
         """
-        _log_section("PHASE 4: BORG WARTUNG (Prune, Compact, Check)")
+        _log_section("PHASE 4: BORG MAINTENANCE (Prune, Compact, Check)")
         worst = BORG_EXIT_OK
 
         steps = [
@@ -392,11 +394,11 @@ class BorgRunner:
         ]
 
         for step_name, step_fn in steps:
-            logger.info("Wartung Schritt: %s", step_name)
+            logger.info("Maintenance step: %s", step_name)
             exit_code = step_fn()
             if exit_code >= BORG_EXIT_ERROR:
                 logger.error(
-                    "Borg %s fehlgeschlagen (Exit %d) – Wartung abgebrochen",
+                    "Borg %s failed (exit %d); maintenance aborted",
                     step_name, exit_code,
                 )
                 return exit_code
@@ -424,13 +426,13 @@ def parse_borg_stats(log_file: Path) -> Optional[BorgStats]:
         BorgStats-Instanz, oder None wenn Log nicht lesbar
     """
     if not log_file or not Path(log_file).exists():
-        logger.warning("parse_borg_stats: Log-Datei nicht gefunden: %s", log_file)
+        logger.warning("parse_borg_stats: log file not found: %s", log_file)
         return None
 
     try:
         lines = Path(log_file).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError as exc:
-        logger.warning("parse_borg_stats: Log-Datei nicht lesbar: %s", exc)
+        logger.warning("parse_borg_stats: log file is not readable: %s", exc)
         return None
 
     full_text = "\n".join(lines)
@@ -529,6 +531,8 @@ def _run_borg(cmd: List[str]) -> int:
         Exit-Code des Borg-Prozesses
     """
     env = os.environ.copy()
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
 
     try:
         process = subprocess.Popen(
@@ -539,10 +543,10 @@ def _run_borg(cmd: List[str]) -> int:
             env=env,
         )
     except FileNotFoundError:
-        logger.error("borg nicht gefunden – ist Borg Backup installiert?")
+        logger.error("borg was not found; is Borg Backup installed?")
         return BORG_EXIT_ERROR
     except OSError as exc:
-        logger.error("Borg-Prozess konnte nicht gestartet werden: %s", exc)
+        logger.error("Borg process could not be started: %s", exc)
         return BORG_EXIT_ERROR
 
     max_runtime_hours = _max_runtime_hours_from_env(os.environ)
@@ -575,7 +579,7 @@ def _max_runtime_hours_from_env(env: Dict[str, str]) -> int:
         return max(0, int(raw))
     except ValueError:
         logger.warning(
-            "Ungültiger Wert für BORG_MAX_RUNTIME_HOURS ('%s'), verwende 0 (unbegrenzt).",
+            "Invalid value for BORG_MAX_RUNTIME_HOURS ('%s'); using 0 (unlimited).",
             raw,
         )
         return 0
@@ -619,14 +623,14 @@ def _start_process_watchdog(
             if elapsed_hours >= next_warn_hours:
                 if max_hours > 0:
                     logger.warning(
-                        "%s läuft seit %.1fh (Hard-Limit=%dh).",
+                        "%s has been running for %.1fh (hard limit=%dh).",
                         operation,
                         elapsed_hours,
                         max_hours,
                     )
                 else:
                     logger.warning(
-                        "%s läuft seit %.1fh (kein Hard-Limit: BORG_MAX_RUNTIME_HOURS=0).",
+                        "%s has been running for %.1fh (no hard limit: BORG_MAX_RUNTIME_HOURS=0).",
                         operation,
                         elapsed_hours,
                     )
@@ -634,7 +638,7 @@ def _start_process_watchdog(
 
             if hard_deadline is not None and not terminate_sent and now >= hard_deadline:
                 logger.error(
-                    "%s überschreitet Hard-Limit (%dh) – sende SIGTERM.",
+                    "%s exceeded the hard limit (%dh); sending SIGTERM.",
                     operation,
                     max_hours,
                 )
@@ -648,7 +652,7 @@ def _start_process_watchdog(
 
             if terminate_sent and process.poll() is None and now >= terminate_deadline:
                 logger.error(
-                    "%s reagiert nicht auf SIGTERM – sende SIGKILL nach %ds Grace-Phase.",
+                    "%s did not respond to SIGTERM; sending SIGKILL after %ds grace period.",
                     operation,
                     kill_grace_s,
                 )
@@ -680,7 +684,7 @@ def _touch_flag(flag_file: Path) -> None:
         flag_file.parent.mkdir(parents=True, exist_ok=True)
         flag_file.touch()
     except OSError as exc:
-        logger.warning("Flag-Datei konnte nicht geschrieben werden (%s): %s", flag_file, exc)
+        logger.warning("Flag file could not be written (%s): %s", flag_file, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -702,7 +706,7 @@ def _cli_info(repo: str) -> int:
 def _cli_prune_dry(config: BorgConfig) -> int:
     """Simuliert prune mit --dry-run (löscht nichts)."""
     logger.info(
-        "DRY-RUN prune (keep: %dd/%dw/%dm/%dy) – nichts wird gelöscht",
+        "DRY-RUN prune (keep: %dd/%dw/%dm/%dy); nothing will be deleted",
         config.keep_daily, config.keep_weekly,
         config.keep_monthly, config.keep_yearly,
     )
@@ -726,7 +730,7 @@ def _cli_parse_stats(log_path: Path) -> int:
     """Parst Borg-Statistiken aus einer Log-Datei und gibt sie aus."""
     stats = parse_borg_stats(log_path)
     if stats is None:
-        print(f"Keine Statistiken gefunden in: {log_path}")
+        print(f"No statistics found in: {log_path}")
         return 1
 
     def _fmt(b: int) -> str:
@@ -735,11 +739,11 @@ def _cli_parse_stats(log_path: Path) -> int:
                 return f"{b / div:.2f} {unit}"
         return f"{b} B"
 
-    print(f"Archiv:            {stats.archive_name}")
-    print(f"Originalgröße:     {_fmt(stats.original_size)}")
-    print(f"Komprimiert:       {_fmt(stats.compressed_size)}")
-    print(f"Dedupliziert:      {_fmt(stats.deduplicated_size)}")
-    print(f"Anzahl Dateien:    {stats.files:,}")
+    print(f"Archive:           {stats.archive_name}")
+    print(f"Original size:     {_fmt(stats.original_size)}")
+    print(f"Compressed:        {_fmt(stats.compressed_size)}")
+    print(f"Deduplicated:      {_fmt(stats.deduplicated_size)}")
+    print(f"File count:        {stats.files:,}")
     return 0
 
 
@@ -796,8 +800,8 @@ if __name__ == "__main__":
 
     elif _cmd == "parse-stats":
         if len(sys.argv) < 3:
-            print("Fehler: Pfad zur Log-Datei fehlt.")
-            print("Beispiel: python3 lib/borg_runner.py parse-stats /mnt/user/logs/backup.log")
+            print("Error: log file path is missing.")
+            print("Example: python3 lib/borg_runner.py parse-stats /mnt/user/logs/backup.log")
             sys.exit(1)
         sys.exit(_cli_parse_stats(Path(sys.argv[2])))
 

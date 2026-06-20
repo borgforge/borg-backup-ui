@@ -237,12 +237,17 @@ function renderCard(b) {
 
   const typeLabel = capitalize(b.backup_type || '—');
   const restoreVerification = renderRestoreVerificationBadge(b);
+  const skipReasonKey = `dashboard.skipReasons.${b.skip_reason_code || 'skipped'}`;
+  const translatedSkipReason = dashboardT(skipReasonKey);
+  const skipReason = translatedSkipReason === skipReasonKey
+    ? dashboardT('dashboard.skipDefault')
+    : translatedSkipReason;
 
-  const errorSection = b.status === 'error' && b.error_message
-    ? `<div class="error-msg">${escHtml(b.error_message)}</div>`
+  const errorSection = b.status === 'error'
+    ? `<div class="error-msg">${escHtml(dashboardT('dashboard.backupFailedDetails'))}</div>`
     : '';
   const skipSection = b.status === 'skipped'
-    ? `<div class="error-msg" style="color:var(--warning)">${escHtml(b.skip_reason_text || dashboardT('dashboard.skipDefault'))}</div>`
+    ? `<div class="error-msg" style="color:var(--warning)">${escHtml(skipReason)}</div>`
     : '';
 
   const growthClass = b.growth_bytes == null ? 'neutral'

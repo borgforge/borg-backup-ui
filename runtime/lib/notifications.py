@@ -97,7 +97,7 @@ class MailConfig:
         try:
             port = int(port_raw)
         except ValueError:
-            logger.warning("GLOBAL_SMTP_PORT ungültig ('%s'), verwende 25", port_raw)
+            logger.warning("Invalid GLOBAL_SMTP_PORT ('%s'); using 25", port_raw)
             port = 25
 
         return cls(
@@ -142,7 +142,7 @@ def notify(
     effective_icon = icon if icon else normalised
 
     if not Path(_NOTIFY_BIN).exists():
-        logger.warning("Unraid notify binary nicht gefunden: %s", _NOTIFY_BIN)
+        logger.warning("Unraid notify binary not found: %s", _NOTIFY_BIN)
         return False
 
     cmd = [
@@ -162,7 +162,7 @@ def notify(
             return False
         return True
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
-        logger.warning("notify fehlgeschlagen: %s", exc)
+        logger.warning("notify failed: %s", exc)
         return False
 
 
@@ -187,16 +187,16 @@ def send_mail(
         True wenn Versand erfolgreich, False bei Fehler
     """
     if not config.recipient:
-        logger.warning("Kein Mail-Empfänger konfiguriert – überspringe Mailversand")
+        logger.warning("No mail recipient configured; skipping mail delivery")
         return False
 
     try:
         msg = _build_message(config, subject, body_text, body_html)
         _send_smtp(config, msg)
-        logger.info("Mailversand OK → %s", config.recipient)
+        logger.info("Mail delivery succeeded -> %s", config.recipient)
         return True
     except Exception as exc:  # noqa: BLE001  # best-effort: alle Fehler abfangen
-        logger.warning("Mailversand fehlgeschlagen: %s", exc)
+        logger.warning("Mail delivery failed: %s", exc)
         return False
 
 
@@ -237,7 +237,7 @@ def send_backup_log_mail(
         try:
             log_content = Path(log_file).read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
-            logger.warning("Log-Datei nicht lesbar (%s): %s", log_file, exc)
+            logger.warning("Log file is not readable (%s): %s", log_file, exc)
 
     body_text = "\n".join(header_lines) + log_content
 

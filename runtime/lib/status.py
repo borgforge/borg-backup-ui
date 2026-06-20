@@ -63,7 +63,7 @@ class BackupStatus:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
-            logger.warning("Fehler beim Lesen von %s: %s", path, exc)
+            logger.warning("Could not read %s: %s", path, exc)
             return cls(source_path=path)
 
         obj = cls(source_path=path)
@@ -133,7 +133,7 @@ class BackupStatus:
         path = status_dir / f"{timestamp}_{self.backup_type}_{self.location}.status"
         data = {k: v for k, v in asdict(self).items() if k != "source_path"}
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        logger.info("Backup-Status gespeichert: %s", path)
+        logger.info("Saved backup status: %s", path)
         return path
 
 
@@ -192,7 +192,7 @@ class RestoreTest:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
-            logger.warning("Fehler beim Lesen von %s: %s", path, exc)
+            logger.warning("Could not read %s: %s", path, exc)
             return cls(source_path=path)
 
         # Backup-Typ und Location aus Dateiname: flash_local.test
@@ -312,7 +312,7 @@ class StatusStore:
                              Archiv-Verzeichnis verschoben (für Summary-Mail).
         """
         if not self.status_dir.exists():
-            logger.warning("Status-Verzeichnis nicht gefunden: %s", self.status_dir)
+            logger.warning("Status directory not found: %s", self.status_dir)
             return []
 
         statuses: List[BackupStatus] = []
@@ -327,9 +327,9 @@ class StatusStore:
                 try:
                     dest = self.archive_dir / f.name
                     f.rename(dest)
-                    logger.debug("Archiviert: %s -> %s", f.name, dest)
+                    logger.debug("Archived: %s -> %s", f.name, dest)
                 except OSError as exc:
-                    logger.warning("Fehler beim Archivieren von %s: %s", f, exc)
+                    logger.warning("Could not archive %s: %s", f, exc)
 
         self._statuses = statuses
         self._loaded = True
@@ -450,7 +450,7 @@ class SnapshotManager:
                     self.snapshot_file.read_text(encoding="utf-8")
                 )
             except (json.JSONDecodeError, OSError) as exc:
-                logger.warning("Fehler beim Lesen von %s: %s", self.snapshot_file, exc)
+                logger.warning("Could not read %s: %s", self.snapshot_file, exc)
                 self._data = {}
         else:
             self._data = {}
@@ -508,7 +508,7 @@ class SnapshotManager:
         if changed:
             self._save()
             logger.info(
-                "Snapshot-Trim: Max. %d Einträge pro Backup-Typ", self.max_entries
+                "Snapshot trim: maximum %d entries per backup type", self.max_entries
             )
 
     def _save(self) -> None:
@@ -543,7 +543,7 @@ def cleanup_status_archive(archive_dir: Path, retention_days: int = 90) -> int:
                 f.unlink()
                 deleted += 1
         except OSError as exc:
-            logger.warning("Fehler beim Löschen von %s: %s", f, exc)
+            logger.warning("Could not delete %s: %s", f, exc)
 
     return deleted
 

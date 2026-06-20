@@ -225,7 +225,7 @@ def storagebox_key_generate(ui_config: dict, profile_key: str = "") -> dict:
         raise ValueError("BORG_SSH_KEY ist nicht gesetzt")
     key_path.parent.mkdir(parents=True, exist_ok=True)
     if key_path.exists():
-        return {"generated": False, "message": f"SSH-Key existiert bereits: {key_path}"}
+        return {"generated": False, "message": f"SSH key already exists: {key_path}", "message_code": "storagebox_key_exists", "message_params": {"path": str(key_path)}}
     res = subprocess.run(
         ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key_path)],
         capture_output=True,
@@ -234,7 +234,7 @@ def storagebox_key_generate(ui_config: dict, profile_key: str = "") -> dict:
     )
     if res.returncode != 0:
         raise RuntimeError((res.stderr or res.stdout or "ssh-keygen fehlgeschlagen").strip())
-    return {"generated": True, "message": f"SSH-Key erstellt: {key_path}"}
+    return {"generated": True, "message": f"SSH key created: {key_path}", "message_code": "storagebox_key_created", "message_params": {"path": str(key_path)}}
 
 
 def storagebox_key_public(ui_config: dict, profile_key: str = "") -> dict:
@@ -260,7 +260,7 @@ def storagebox_key_deploy(ui_config: dict, password: str, profile_key: str = "")
     if res.returncode != 0:
         msg = (res.stderr or res.stdout or "Key-Deploy fehlgeschlagen").strip()
         raise RuntimeError(msg[:320])
-    return {"deployed": True, "message": "Public Key erfolgreich auf Storagebox installiert"}
+    return {"deployed": True, "message": "Public key installed on Storage Box", "message_code": "storagebox_key_deployed"}
 
 
 def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
@@ -272,7 +272,8 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
     if not auth_ok:
         return {
             "success": False,
-            "message": "SSH fehlgeschlagen: User konnte sich nicht per SSH-Key anmelden.",
+            "message": "SSH authentication with the configured key failed.",
+            "message_code": "storagebox_ssh_failed",
             "details": auth_msg[:500],
             "target_type": target.get("target_type", "generic"),
             "target_detection_method": target.get("method", "none"),
@@ -284,7 +285,8 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
     if not borg_ok:
         return {
             "success": False,
-            "message": "Remote-Borg fehlt: auf dem Zielsystem muss borg installiert sein.",
+            "message": "Borg is not available on the target system.",
+            "message_code": "storagebox_borg_missing",
             "details": borg_msg[:500],
             "target_type": target.get("target_type", "generic"),
             "target_detection_method": target.get("method", "none"),
@@ -310,7 +312,9 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         detail = _sanitize_ssh_noise(exists_cmd.stderr or exists_cmd.stdout or "Pfadprüfung fehlgeschlagen")
         return {
             "success": False,
-            "message": f"Pfad nicht gefunden oder nicht lesbar: {base}",
+            "message": f"Path not found or not readable: {base}",
+            "message_code": "storagebox_path_missing",
+            "message_params": {"path": base},
             "details": detail[:500],
             "target_type": target.get("target_type", "generic"),
             "target_detection_method": target.get("method", "none"),
@@ -332,7 +336,9 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         msg = _sanitize_ssh_noise(mk.stderr or mk.stdout or "Schreibtest (mkdir) fehlgeschlagen")
         return {
             "success": False,
-            "message": f"Pfad nicht beschreibbar: {base}",
+            "message": f"Path is not writable: {base}",
+            "message_code": "storagebox_path_not_writable",
+            "message_params": {"path": base},
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
             "target_detection_method": target.get("method", "none"),
@@ -345,7 +351,9 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rmdir {shlex.quote(probe_dir)}"], capture_output=True, text=True, timeout=8)
         return {
             "success": False,
-            "message": f"Pfad nicht beschreibbar: {base}",
+            "message": f"Path is not writable: {base}",
+            "message_code": "storagebox_path_not_writable",
+            "message_params": {"path": base},
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
             "target_detection_method": target.get("method", "none"),
@@ -359,7 +367,8 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rmdir {shlex.quote(probe_dir)}"], capture_output=True, text=True, timeout=8)
         return {
             "success": False,
-            "message": "Schreibtest fehlgeschlagen (Datei konnte nicht verifiziert werden).",
+            "message": "Write test failed because the probe file could not be verified.",
+            "message_code": "storagebox_write_verify_failed",
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
             "target_detection_method": target.get("method", "none"),
@@ -372,7 +381,8 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rmdir {shlex.quote(probe_dir)}"], capture_output=True, text=True, timeout=8)
         return {
             "success": False,
-            "message": "Schreibtest fehlgeschlagen (Probe-Datei konnte nicht gelöscht werden).",
+            "message": "Write test failed because the probe file could not be removed.",
+            "message_code": "storagebox_write_cleanup_failed",
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
             "target_detection_method": target.get("method", "none"),
@@ -384,7 +394,8 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         msg = _sanitize_ssh_noise(rmdir.stderr or rmdir.stdout or "Schreibtest (rmdir) fehlgeschlagen")
         return {
             "success": False,
-            "message": "Schreibtest teilweise erfolgreich (Cleanup fehlgeschlagen).",
+            "message": "Write test succeeded, but cleanup failed.",
+            "message_code": "storagebox_write_cleanup_failed",
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
             "target_detection_method": target.get("method", "none"),
@@ -393,8 +404,9 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         }
     return {
         "success": True,
-        "message": "Erfolgreich: SSH ok, Borg ok, Pfad gefunden, Pfad beschreibbar.",
-        "details": "SSH-Key-Anmeldung, Remote-Borg-Pruefung und Schreibtest (mkdir/touch/stat/rm/rmdir) erfolgreich.",
+        "message": "SSH, Borg, and write access checks succeeded.",
+        "message_code": "storagebox_connection_success",
+        "details": "SSH key authentication, remote Borg check, and write test (mkdir/touch/stat/rm/rmdir) succeeded.",
         "target_type": target.get("target_type", "generic"),
         "target_detection_method": target.get("method", "none"),
         "target_detection_hint": target.get("hint", ""),
@@ -438,6 +450,8 @@ class _StorageKeyDeployManager:
         pid, master_fd = pty.fork()
         if pid == 0:
             try:
+                os.environ["LC_ALL"] = "C"
+                os.environ["LANG"] = "C"
                 os.execvp(cmd[0], cmd)
             except Exception:
                 os._exit(127)
@@ -457,7 +471,7 @@ class _StorageKeyDeployManager:
         }
         with self._lock:
             self._sessions[sid] = sess
-        self._append(sess, f"[info] Starte Deploy auf Zieltyp: {target}\n")
+        self._append(sess, f"[info] Starting deployment to target type: {target}\n")
 
         threading.Thread(target=self._reader_loop, args=(sid,), daemon=True).start()
         threading.Thread(target=self._timeout_watch, args=(sid, 180), daemon=True).start()
@@ -548,7 +562,7 @@ class _StorageKeyDeployManager:
                     except Exception:
                         pass
             sess["status"] = "canceled"
-            self._append(sess, "\n[info] Deploy abgebrochen.\n")
+            self._append(sess, "\n[info] Deployment cancelled.\n")
         return {"canceled": True}
 
     def state(self, session_id: str) -> Dict[str, Any]:

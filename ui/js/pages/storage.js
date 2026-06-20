@@ -214,8 +214,11 @@ function renderSmbCard(section, smbRepos) {
       const mountState = p.is_mounted ? storageT('storage.mounted') : storageT('storage.notMounted');
       const cached = storageState.smbActionResults[String(p.key || '')] || null;
       const actionClass = cached ? (cached.ok ? 'ok' : 'fail') : '';
+      const cachedMessage = cached?.payload
+        ? apiMessage(cached.payload, cached.ok ? 'OK' : storageT('storage.error'))
+        : (cached?.message || storageT('storage.error'));
       const actionText = cached
-        ? (cached.ok ? '✓ OK' : `✗ ${cached.message || storageT('storage.error')}`)
+        ? (cached.ok ? '✓ OK' : `✗ ${cachedMessage}`)
         : '';
       const reposHtml = repos.length
         ? `<ul class="repo-list smb-repo-sublist">${repos.map((repo) => {
@@ -296,15 +299,20 @@ async function runSmbAction(profileKey, action, resultId) {
       body: JSON.stringify({ profile_key: profileKey, action }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     if (el) {
       el.className = `test-result ${data.ok ? 'ok' : 'fail'}`;
-      el.textContent = data.ok ? '✓ OK' : `✗ ${data.message || storageT('storage.error')}`;
-      el.title = String((data && (data.message || data.output || '')) || '');
+      const message = apiMessage(data, data.ok ? 'OK' : storageT('storage.error'));
+      el.textContent = data.ok ? '✓ OK' : `✗ ${message}`;
+      el.title = message;
     }
     storageState.smbActionResults[String(profileKey || '')] = {
       ok: !!data.ok,
-      message: data.message || '',
+      message: apiMessage(data, data.ok ? 'OK' : storageT('storage.error')),
+      payload: {
+        message_code: data.message_code || '',
+        message_params: data.message_params || {},
+      },
       ts: Date.now(),
     };
     await refreshStorage();

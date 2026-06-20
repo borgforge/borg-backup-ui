@@ -55,7 +55,7 @@ def test_notify_send_failure_is_info_hint(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger="lib.vm_manager"):
         manager._send_notify_send("LinuxMint", "tsteinbe", "1000", "Backup startet")
 
-    assert "Hinweis: Desktop-Benachrichtigung konnte nicht bestätigt werden" in caplog.text
+    assert "Note: desktop notification could not be confirmed" in caplog.text
     assert "exit=1 dbus denied" in caplog.text
 
 

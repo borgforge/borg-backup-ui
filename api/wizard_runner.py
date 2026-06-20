@@ -310,9 +310,9 @@ class SmbMountSession:
             return
         try:
             subprocess.run(["umount", self.mount_path], capture_output=True, text=True, timeout=15, check=False)
-            logging.info("SMB-Unmount abgeschlossen: %s", self.mount_path)
+            logging.info("SMB unmount completed: %s", self.mount_path)
         except Exception as exc:
-            logging.warning("SMB-Unmount fehlgeschlagen (%s): %s", self.mount_path, exc)
+            logging.warning("SMB unmount failed (%s): %s", self.mount_path, exc)
 
 
 def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir: Path) -> tuple[dict, dict]:
@@ -420,7 +420,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
         netloc = parts.netloc or ""
         if "@" not in netloc and netloc:
             env["BORG_REPO"] = urlunsplit((parts.scheme, f"{storagebox_user}@{netloc}", parts.path, parts.query, parts.fragment))
-            logging.info("Storagebox-Repo-URI ohne User erkannt; verwende STORAGEBOX_USER=%s", storagebox_user)
+            logging.info("Storage Box repository URI has no user; using STORAGEBOX_USER=%s", storagebox_user)
     env.setdefault("BORG_COMPRESSION", meta_compression or env.get(f"COMPRESSION_{tu}", "lz4"))
     env.setdefault("BORG_CHECKPOINT_INTERVAL", env.get("GLOBAL_BORG_CHECKPOINT_INTERVAL", "1800"))
     env.setdefault("BORG_CACHE_DIR", cache_dir)
@@ -499,7 +499,7 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
     if location != "smb":
         return sess
     if not bool(meta.get("mount_before_run", True)):
-        logging.info("SMB-Mount vor Lauf deaktiviert (mount_before_run=false)")
+        logging.info("SMB mount before run is disabled (mount_before_run=false)")
         return sess
 
     profile_key = str(meta.get("smb_profile_key") or "").strip()
@@ -527,7 +527,7 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
     sess.unmount_after_run = bool(meta.get("unmount_after_run", True))
 
     if _is_smb_mounted(mount_path):
-        logging.info("SMB bereits gemountet: %s", mount_path)
+        logging.info("SMB is already mounted: %s", mount_path)
         return sess
 
     src = f"//{server}/{share}"
@@ -556,7 +556,7 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
         msg = (res.stderr or res.stdout or "SMB-Mount fehlgeschlagen").strip()
         raise RuntimeError(f"SMB-Mount fehlgeschlagen ({src} -> {mount_path}): {msg}")
     sess.mounted_by_runner = True
-    logging.info("SMB-Mount erfolgreich: %s -> %s", src, mount_path)
+    logging.info("SMB mount succeeded: %s -> %s", src, mount_path)
     return sess
 
 
@@ -571,7 +571,7 @@ def _init_repo_if_needed(env: dict, encryption: str) -> int:
     if "://" not in repo and not repo.startswith("ssh:"):
         repo_path = Path(repo)
         if repo_path.exists() and (repo_path / "config").exists():
-            logging.info("Repository existiert bereits (lokaler Check): %s", repo)
+            logging.info("Repository already exists (local check): %s", repo)
             return 0
 
     check = subprocess.run(
@@ -583,7 +583,7 @@ def _init_repo_if_needed(env: dict, encryption: str) -> int:
     if check.returncode == 0:
         return 0
 
-    logging.info("Repository nicht gefunden - initialisiere: %s", repo)
+    logging.info("Repository not found; initializing: %s", repo)
     result = subprocess.run(
         ["borg", "init", f"--encryption={encryption}", repo],
         capture_output=True,
@@ -592,15 +592,15 @@ def _init_repo_if_needed(env: dict, encryption: str) -> int:
     )
     combined = f"{result.stdout}\n{result.stderr}".lower()
     if "already exists at" in combined or "repository already exists" in combined:
-        logging.info("Repository existiert bereits (borg init Meldung): %s", repo)
+        logging.info("Repository already exists (borg init output): %s", repo)
         return 0
     if result.returncode != 0:
         for line in (result.stdout + result.stderr).splitlines():
             if line.strip():
                 logging.error("[borg init] %s", line)
-        logging.error("borg init fehlgeschlagen (Exit %d)", result.returncode)
+        logging.error("borg init failed (exit %d)", result.returncode)
     else:
-        logging.info("Repository erfolgreich initialisiert: %s", repo)
+        logging.info("Repository initialized successfully: %s", repo)
     return result.returncode
 
 
@@ -684,20 +684,20 @@ def main() -> int:
     borg_scripts_dir_raw = os.environ.get("BORG_UI_BORG_SCRIPTS_DIR", "").strip()
     backup_scripts_dir_raw = os.environ.get("BORG_SCRIPT_DIR", "").strip()
     if not job_key:
-        logging.error("BORG_UI_JOB_KEY fehlt")
+        logging.error("BORG_UI_JOB_KEY is missing")
         return 2
     if not borg_scripts_dir_raw or not backup_scripts_dir_raw:
-        logging.error("Runner-Kontext fehlt (BORG_UI_BORG_SCRIPTS_DIR / BORG_SCRIPT_DIR)")
+        logging.error("Runner context is missing (BORG_UI_BORG_SCRIPTS_DIR / BORG_SCRIPT_DIR)")
         return 2
 
     borg_scripts_dir = Path(borg_scripts_dir_raw)
     backup_scripts_dir = Path(backup_scripts_dir_raw)
     try:
         borg_bin = _ensure_borg_available()
-        logging.info("Borg Binary aktiv: %s", borg_bin)
+        logging.info("Active Borg binary: %s", borg_bin)
         env, meta = _load_env_from_job(job_key, borg_scripts_dir, backup_scripts_dir)
     except Exception as exc:
-        logging.error("Job-Laden fehlgeschlagen: %s", exc)
+        logging.error("Loading job failed: %s", exc)
         return 2
 
     sys.path.insert(0, str(backup_scripts_dir))
@@ -727,7 +727,7 @@ def main() -> int:
     resources = _build_resources(env, meta)
     ok, reason = lock_set.acquire(resources)
     if not ok:
-        logging.warning("Job wird uebersprungen: %s", reason)
+        logging.warning("Job is being skipped: %s", reason)
         return 2
 
     smb_session = SmbMountSession()
@@ -737,7 +737,7 @@ def main() -> int:
         if bool(meta.get("create_repo_if_missing", True)):
             ok_guard, guard_msg = _guard_remote_repo_init(env, meta)
             if not ok_guard:
-                logging.error("Remote-Init Guard blockiert: %s", guard_msg)
+                logging.error("Remote initialization guard blocked the run: %s", guard_msg)
                 return 2
             init_exit = _init_repo_if_needed(env, encryption)
             if init_exit != 0:
@@ -755,13 +755,13 @@ def main() -> int:
         abort_on_parity = _env_flag(env.get("ABORT_ON_PARITY_CHECK"), default=True)
         with BackupJob(job_config, docker_manager=docker_mgr, vm_manager=vm_mgr, mail_config=mail_config) as job:
             if abort_on_parity:
-                logging.info("Parity-Check aktiv (ABORT_ON_PARITY_CHECK=true)")
+                logging.info("Parity check enabled (ABORT_ON_PARITY_CHECK=true)")
                 job.check_parity()
             else:
-                logging.info("Parity-Check deaktiviert (ABORT_ON_PARITY_CHECK=false)")
+                logging.info("Parity check disabled (ABORT_ON_PARITY_CHECK=false)")
             usb_mount_path = _resolve_usb_mount_path(meta, backup_scripts_dir)
             if usb_mount_path:
-                logging.info("USB-Mount-Check aktiv: %s", usb_mount_path)
+                logging.info("USB mount check enabled: %s", usb_mount_path)
                 job.check_usb_mount(Path(usb_mount_path))
             job.check_prerequisites()
             job.cleanup_old_logs()

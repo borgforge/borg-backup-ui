@@ -308,7 +308,7 @@ def run_smb_profile_action(ui_config: dict, profile_key: str, action: str) -> Di
 
     if act == "mount":
         if _mounted():
-            return {"ok": True, "action": "mount", "message": "Bereits gemountet"}
+            return {"ok": True, "action": "mount", "message": "Already mounted", "message_code": "smb_already_mounted"}
         opts = [f"credentials={cred}", "iocharset=utf8", f"vers={profile['vers']}"]
         if profile.get("sec"):
             opts.append(f"sec={profile['sec']}")
@@ -317,15 +317,15 @@ def run_smb_profile_action(ui_config: dict, profile_key: str, action: str) -> Di
             capture_output=True, text=True, timeout=30, check=False,
         )
         ok = res.returncode == 0
-        msg = "Mount OK" if ok else (res.stderr or res.stdout or "Mount fehlgeschlagen").strip()
-        return {"ok": ok, "action": "mount", "message": msg}
+        msg = "Mount OK" if ok else (res.stderr or res.stdout or "Mount failed").strip()
+        return {"ok": ok, "action": "mount", "message": msg, "message_code": "smb_mount_success" if ok else "smb_mount_failed"}
 
     if not _mounted():
-        return {"ok": True, "action": "unmount", "message": "Bereits unmountet"}
+        return {"ok": True, "action": "unmount", "message": "Already unmounted", "message_code": "smb_already_unmounted"}
     res = subprocess.run(["umount", mount_path], capture_output=True, text=True, timeout=20, check=False)
     ok = res.returncode == 0
-    msg = "Unmount OK" if ok else (res.stderr or res.stdout or "Unmount fehlgeschlagen").strip()
-    return {"ok": ok, "action": "unmount", "message": msg}
+    msg = "Unmount OK" if ok else (res.stderr or res.stdout or "Unmount failed").strip()
+    return {"ok": ok, "action": "unmount", "message": msg, "message_code": "smb_unmount_success" if ok else "smb_unmount_failed"}
 
 
 def validate_smb_profile_usage_before_save(ui_config: dict, new_rows: List[Dict[str, str]]) -> None:
@@ -475,41 +475,41 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         if smb_password:
             item["credentials_ok"] = True
             item["checks"]["auth_ok"] = True
-            item["checks"]["auth_msg"] = "Passwort über UI übergeben"
+            item["checks"]["auth_msg"] = "Password supplied through UI"
         else:
             pf = Path(password_file)
             if not pf.exists() or not pf.is_file():
-                item["message"] = "Passwort-Datei nicht gefunden"
-                item["checks"]["auth_msg"] = "Passwort-Datei nicht gefunden"
+                item["message"] = "Password file not found"
+                item["checks"]["auth_msg"] = "Password file not found"
                 results.append(item)
                 continue
             try:
                 content = pf.read_text(encoding="utf-8", errors="replace")
             except Exception:
-                item["message"] = "Passwort-Datei nicht lesbar"
-                item["checks"]["auth_msg"] = "Passwort-Datei nicht lesbar"
+                item["message"] = "Password file is not readable"
+                item["checks"]["auth_msg"] = "Password file is not readable"
                 results.append(item)
                 continue
             low = content.lower()
             has_user = f"username={username}".lower() in low
             has_pass = "password=" in low
             if not (has_user and has_pass):
-                item["message"] = "Passwort-Datei unvollständig (username/password)"
-                item["checks"]["auth_msg"] = "Cred-Datei unvollständig"
+                item["message"] = "Password file is incomplete (username/password)"
+                item["checks"]["auth_msg"] = "Credentials file is incomplete"
                 results.append(item)
                 continue
             item["credentials_ok"] = True
             item["checks"]["auth_ok"] = True
-            item["checks"]["auth_msg"] = "Cred-Datei vollständig"
+            item["checks"]["auth_msg"] = "Credentials file is complete"
 
         try:
             import socket
             with socket.create_connection((server, 445), timeout=3):
                 pass
             item["checks"]["port_ok"] = True
-            item["checks"]["port_msg"] = "TCP 445 erreichbar"
+            item["checks"]["port_msg"] = "TCP 445 reachable"
         except Exception as exc:
-            item["checks"]["port_msg"] = f"TCP 445 nicht erreichbar: {exc}"
+            item["checks"]["port_msg"] = f"TCP 445 unreachable: {exc}"
 
         p = Path(mount_path)
         if not p.exists():
@@ -520,13 +520,13 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         item["exists"] = p.exists()
         item["is_dir"] = p.is_dir()
         if not item["exists"]:
-            item["message"] = "Mount-Pfad nicht gefunden"
-            item["checks"]["share_msg"] = "nicht prüfbar"
+            item["message"] = "Mount path not found"
+            item["checks"]["share_msg"] = "cannot be checked"
             results.append(item)
             continue
         if not item["is_dir"]:
-            item["message"] = "Mount-Pfad ist kein Verzeichnis"
-            item["checks"]["share_msg"] = "nicht prüfbar"
+            item["message"] = "Mount path is not a directory"
+            item["checks"]["share_msg"] = "cannot be checked"
             results.append(item)
             continue
         mounted = False
@@ -572,7 +572,7 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
                     break
                 errors.append(f"vers={v}: {(mnt.stderr or mnt.stdout or 'mount fehlgeschlagen').strip()}")
             if not mnt or mnt.returncode != 0:
-                item["message"] = "SMB-Test-Mount fehlgeschlagen: " + " | ".join(errors[:3])
+                item["message"] = "SMB test mount failed: " + " | ".join(errors[:3])
                 item["checks"]["mount_msg"] = item["message"]
                 if temp_cred_file and temp_cred_file.exists():
                     temp_cred_file.unlink(missing_ok=True)
@@ -582,10 +582,10 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
             test_mounted = True
             item["is_mounted"] = True
             item["checks"]["mount_ok"] = True
-            item["checks"]["mount_msg"] = "Test-Mount erfolgreich"
+            item["checks"]["mount_msg"] = "Test mount succeeded"
         else:
             item["checks"]["mount_ok"] = True
-            item["checks"]["mount_msg"] = "Bereits gemountet"
+            item["checks"]["mount_msg"] = "Already mounted"
         try:
             mount_lines = Path("/proc/mounts").read_text(encoding="utf-8", errors="ignore").splitlines()
             src_expected = f"//{server}/{share}".lower()
@@ -600,12 +600,12 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
                     hit = True
                     break
             if not hit:
-                item["message"] = "Gemountet, aber Quelle passt nicht zum Profil"
-                item["checks"]["share_msg"] = "Quelle passt nicht zum Profil"
+                item["message"] = "Mounted, but source does not match profile"
+                item["checks"]["share_msg"] = "Source does not match profile"
                 results.append(item)
                 continue
             item["checks"]["share_ok"] = True
-            item["checks"]["share_msg"] = "Share-Quelle passt"
+            item["checks"]["share_msg"] = "Share source matches"
         except Exception:
             pass
         probe = Path(mount_path) / ".bbui-smb-write-test"
@@ -613,29 +613,29 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
             probe.write_text("ok\n", encoding="utf-8")
             probe.unlink(missing_ok=True)
         except Exception as exc:
-            item["message"] = f"SMB gemountet, aber Schreibtest fehlgeschlagen: {exc}"
+            item["message"] = f"SMB mounted, but write test failed: {exc}"
             item["checks"]["write_msg"] = str(exc)
             if test_mounted:
                 um = subprocess.run(["umount", mount_path], capture_output=True, text=True, timeout=12, check=False)
                 item["checks"]["unmount_ok"] = um.returncode == 0
-                item["checks"]["unmount_msg"] = "Unmount OK" if um.returncode == 0 else (um.stderr or um.stdout or "Unmount fehlgeschlagen").strip()
+                item["checks"]["unmount_msg"] = "Unmount OK" if um.returncode == 0 else (um.stderr or um.stdout or "Unmount failed").strip()
             if temp_cred_file and temp_cred_file.exists():
                 temp_cred_file.unlink(missing_ok=True)
             results.append(item)
             continue
         item["checks"]["write_ok"] = True
-        item["checks"]["write_msg"] = "Schreibtest erfolgreich"
+        item["checks"]["write_msg"] = "Write test succeeded"
 
         if test_mounted:
             um = subprocess.run(["umount", mount_path], capture_output=True, text=True, timeout=12, check=False)
             item["checks"]["unmount_ok"] = um.returncode == 0
-            item["checks"]["unmount_msg"] = "Unmount OK" if um.returncode == 0 else (um.stderr or um.stdout or "Unmount fehlgeschlagen").strip()
+            item["checks"]["unmount_msg"] = "Unmount OK" if um.returncode == 0 else (um.stderr or um.stdout or "Unmount failed").strip()
             item["is_mounted"] = False
-            item["message"] = "OK (Test-Mount erfolgreich, danach unmountet)"
+            item["message"] = "OK (test mount succeeded and was unmounted)"
         else:
             item["checks"]["unmount_ok"] = True
-            item["checks"]["unmount_msg"] = "Nicht erforderlich (bereits gemountet)"
-            item["message"] = "OK (bereits gemountet)"
+            item["checks"]["unmount_msg"] = "Not required (already mounted)"
+            item["message"] = "OK (already mounted)"
 
         if temp_cred_file and temp_cred_file.exists():
             temp_cred_file.unlink(missing_ok=True)

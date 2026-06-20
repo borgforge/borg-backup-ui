@@ -346,7 +346,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
   try {
     const res = await fetch(`/api/wizard/job?job_key=${encodeURIComponent(jobKey)}`);
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const job = data.job || {};
     _wizardFillFromJob(job);
     wizardState.original = {
@@ -696,7 +696,7 @@ async function wizardSourcePathInputChanged() {
   try {
     const res = await fetch(`/api/wizard/source-dirs?prefix=${encodeURIComponent(prefix)}&limit=100`);
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     wizardState.sourceSuggest = Array.isArray(data?.dirs) ? data.dirs : [];
     wizardState.sourceSuggestIndex = wizardState.sourceSuggest.length ? 0 : -1;
     wizardRenderSourceSuggest();
@@ -906,7 +906,7 @@ async function _wizardPreview() {
       body: JSON.stringify(params),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
 
     const flow = data.flow || {};
     const steps = Array.isArray(flow.steps) ? flow.steps : [];
@@ -922,7 +922,7 @@ async function _wizardPreview() {
         ? wizardT('wizard.repoExists')
         : (remoteRepo.checked ? wizardT('wizard.repoUnavailable') : wizardT('wizard.repoUnchecked'));
       lines.push(wizardT('wizard.previewRepositoryStatus', {
-        value: `${repoState}${remoteRepo.message ? ` (${remoteRepo.message})` : ''}`,
+        value: `${repoState} (${apiMessage(remoteRepo, repoState)})`,
       }));
     }
     lines.push(wizardT('wizard.previewEncryption', { value: summary.encryption || '-' }));
@@ -942,7 +942,7 @@ async function _wizardPreview() {
         ? wizardT('wizard.remoteRepoExists')
         : (remoteRepo.checked ? wizardT('wizard.remoteRepoUnavailable') : wizardT('wizard.remoteRepoUnchecked'));
       repoStatusEl.className = `status-message ${remoteRepo.exists ? 'success-state' : 'warning-state'}`;
-      repoStatusEl.textContent = `${repoState}${remoteRepo.message ? ` ${remoteRepo.message}` : ''}`;
+      repoStatusEl.textContent = `${repoState} ${apiMessage(remoteRepo, repoState)}`;
     } else if (repoStatusEl) {
       repoStatusEl.className = 'status-message hidden';
       repoStatusEl.textContent = '';
@@ -979,7 +979,7 @@ async function saveWizardJob() {
       body: JSON.stringify(params),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
 
     // Save schedule if enabled
     const schedEnabled = document.getElementById('wiz-sched-enabled').checked;

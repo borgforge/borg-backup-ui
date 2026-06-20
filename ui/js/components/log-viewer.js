@@ -3,6 +3,7 @@
 (function initLogViewerComponent() {
   window.BBUI = window.BBUI || {};
   window.BBUI.components = window.BBUI.components || {};
+  const t = (key, params = {}) => window.BBUI?.components?.i18n?.t?.(`api.messages.${key}`, params) || key;
 
   async function open(filePath) {
     const modal = document.getElementById('log-viewer-modal');
@@ -11,15 +12,15 @@
     if (!modal) return;
 
     title.textContent = String(filePath || '').split('/').pop();
-    body.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><span>Lade Log...</span></div>';
+    body.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>${escHtml(t('logLoading'))}</span></div>`;
     modal.classList.remove('hidden');
 
     try {
       const res  = await fetch('/api/history/log?file=' + encodeURIComponent(filePath));
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status));
       if (!data.exists) {
-        body.innerHTML = '<div class="log-viewer-missing">Datei nicht gefunden:<br><code id="log-viewer-missing-path"></code></div>';
+        body.innerHTML = `<div class="log-viewer-missing">${escHtml(t('logMissing'))}:<br><code id="log-viewer-missing-path"></code></div>`;
         const pathEl = document.getElementById('log-viewer-missing-path');
         if (pathEl) pathEl.textContent = String(filePath || '');
       } else {
@@ -27,7 +28,7 @@
         body.scrollTop = 0;
       }
     } catch (e) {
-      body.innerHTML = `<div class="log-viewer-missing">Fehler: ${escHtml(e.message)}</div>`;
+      body.innerHTML = `<div class="log-viewer-missing">${escHtml(t('errorValue', { message: e.message }))}</div>`;
     }
   }
 

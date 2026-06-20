@@ -1479,17 +1479,20 @@ def validate_runtime_config(ui_config: dict) -> dict:
         errors.append({
             "key": "GLOBAL_DATA_DIR",
             "message": "GLOBAL_DATA_DIR ist nicht gesetzt.",
+            "message_code": "config_data_dir_missing",
         })
     else:
         if not data_dir.startswith("/"):
             errors.append({
                 "key": "GLOBAL_DATA_DIR",
                 "message": "GLOBAL_DATA_DIR muss ein absoluter Pfad sein (z. B. /mnt/user/borg-backup-ui).",
+                "message_code": "config_data_dir_absolute",
             })
         elif data_dir == "/":
             errors.append({
                 "key": "GLOBAL_DATA_DIR",
                 "message": "GLOBAL_DATA_DIR darf nicht '/'.",
+                "message_code": "config_data_dir_root",
             })
         else:
             try:
@@ -1498,6 +1501,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
                 errors.append({
                     "key": "GLOBAL_DATA_DIR",
                     "message": f"GLOBAL_DATA_DIR ist nicht nutzbar: {exc}",
+                    "message_code": "config_data_dir_unusable",
                 })
 
     smtp_port = _as_int(conf.get("GLOBAL_SMTP_PORT", "587"), -1)
@@ -1505,6 +1509,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
         warnings.append({
             "key": "GLOBAL_SMTP_PORT",
             "message": "GLOBAL_SMTP_PORT liegt außerhalb 1..65535.",
+            "message_code": "config_smtp_port",
         })
 
     storagebox_port = _as_int(conf.get("STORAGEBOX_PORT", "23"), -1)
@@ -1512,6 +1517,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
         warnings.append({
             "key": "STORAGEBOX_PORT",
             "message": "STORAGEBOX_PORT liegt außerhalb 1..65535.",
+            "message_code": "config_storagebox_port",
         })
 
     try:
@@ -1520,6 +1526,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
         warnings.append({
             "key": "SMB_PROFILES_JSON",
             "message": str(exc),
+            "message_code": "config_smb_profiles",
         })
 
     rt_level = str(conf.get("RESTORE_TEST_LEVEL", "2")).strip()
@@ -1527,6 +1534,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
         warnings.append({
             "key": "RESTORE_TEST_LEVEL",
             "message": "RESTORE_TEST_LEVEL sollte 1, 2 oder 3 sein.",
+            "message_code": "config_restore_test_level",
         })
 
     for key in (
@@ -1552,6 +1560,8 @@ def validate_runtime_config(ui_config: dict) -> dict:
             warnings.append({
                 "key": key,
                 "message": f"{key} sollte eine nicht-negative Ganzzahl sein.",
+                "message_code": "config_non_negative_integer",
+                "message_params": {"key": key},
             })
 
     return {

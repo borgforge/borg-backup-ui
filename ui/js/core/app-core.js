@@ -191,7 +191,8 @@ async function updateDataDirWarning() {
     }
     const missing = !Boolean(data?.global_data_dir_set);
     const ready = Boolean(data?.ready);
-    const firstErr = String(data?.validation?.errors?.[0]?.message || '');
+    const firstError = data?.validation?.errors?.[0] || null;
+    const firstErr = firstError ? apiMessage(firstError, '') : '';
     const firstErrSafe = escHtml(firstErr);
     setupRequired = !ready;
     globalDataDirReady = ready;

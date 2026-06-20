@@ -152,7 +152,7 @@ async function _pollRestoreState(restoreId) {
   try {
     const res = await fetch(`/api/restore/state?restore_id=${encodeURIComponent(restoreId)}`, { credentials: 'include' });
     const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status));
     if (restoreState.activeRestoreId !== restoreId) return;
 
     const lines = Array.isArray(data.lines) ? data.lines : [];
@@ -175,7 +175,12 @@ async function _pollRestoreState(restoreId) {
       restoreUpdateConfirmState();
       restoreSetStep(5);
       if (data.skipped) {
-        showMsg('restore-assist-msg', 'warning', restoreT('skipped', { reason: data.reason || restoreT('targetExists') }));
+        const reasonKey = {
+          target_exists: 'targetExists',
+          target_not_empty: 'targetNotEmpty',
+          target_unreadable: 'targetUnreadable',
+        }[data.skip_reason_code] || 'targetExists';
+        showMsg('restore-assist-msg', 'warning', restoreT('skipped', { reason: restoreT(reasonKey) }));
       } else {
         showMsg('restore-assist-msg', 'success', restoreT('success', { path: data.destination_path || '' }));
       }
@@ -185,7 +190,7 @@ async function _pollRestoreState(restoreId) {
       _stopRestorePolling();
       _setRestoreAssistBusy(false);
       restoreUpdateConfirmState();
-      showMsg('restore-assist-msg', 'error', restoreT('failed', { message: data.error || restoreT('unknownError') }));
+      showMsg('restore-assist-msg', 'error', restoreT('failed', { message: restoreT('unknownError') }));
       return;
     }
 
@@ -320,8 +325,9 @@ async function restoreLoadArchives() {
   _restoreMsg(restoreT('loadingArchives'));
 
   try {
-    const data = await (await fetch(`/api/restore/archives?job=${encodeURIComponent(jobKey)}`, { credentials: 'include' })).json();
-    if (data.error) { _restoreMsg(restoreT('error', { message: data.error }), true); return; }
+    const res = await fetch(`/api/restore/archives?job=${encodeURIComponent(jobKey)}`, { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || data.error) { _restoreMsg(restoreT('error', { message: apiErrorMessage(data, res.status) }), true); return; }
 
     const sel = document.getElementById('restore-archive-sel');
     sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
@@ -361,8 +367,9 @@ async function restoreBrowse(path) {
 
   try {
     const url = `/api/restore/files?job=${encodeURIComponent(jobKey)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
-    const data = await (await fetch(url, { credentials: 'include' })).json();
-    if (data.error) { _restoreMsg(restoreT('error', { message: data.error }), true); return; }
+    const res = await fetch(url, { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || data.error) { _restoreMsg(restoreT('error', { message: apiErrorMessage(data, res.status) }), true); return; }
 
     _restoreMsg('');
     _restoreRenderBreadcrumb(path);
@@ -458,13 +465,14 @@ async function restoreDownload(path) {
     const checkRes = await fetch(`/api/restore/download-check?${baseParams}`, { credentials: 'include' });
     const checkData = await checkRes.json();
     if (!checkRes.ok || checkData?.error) {
-      throw new Error(checkData?.error || `HTTP ${checkRes.status}`);
+      throw new Error(apiErrorMessage(checkData, checkRes.status));
     }
 
     if (checkData.action === 'block') {
       if (fileList) fileList.innerHTML = originalHtml;
-      _restoreMsg(checkData.message || restoreT('downloadBlocked'), 'warn');
-      showMsg('restore-assist-msg', 'error', checkData.message || restoreT('downloadBlocked'));
+      const message = apiMessage(checkData, restoreT('downloadBlocked'));
+      _restoreMsg(message, 'warn');
+      showMsg('restore-assist-msg', 'error', message);
       return;
     }
 
@@ -472,7 +480,7 @@ async function restoreDownload(path) {
     if (checkData.action === 'confirm') {
       if (fileList) fileList.innerHTML = originalHtml;
       _restoreMsg('');
-      const ok = await openRestoreDownloadConfirmModal(checkData.message || restoreT('largeDownload'));
+      const ok = await openRestoreDownloadConfirmModal(apiMessage(checkData, restoreT('largeDownload')));
       if (!ok) return;
       url += '&confirm_large=1';
     }
@@ -612,7 +620,7 @@ async function restoreRunPrecheck() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     restoreState.precheck = data;
     const combinedDryRun = [data.dry_run_stdout || '', data.dry_run_stderr || '']
       .filter(Boolean)
@@ -723,7 +731,7 @@ async function restoreStart() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const restoreId = String(data.restore_id || '').trim();
     if (!restoreId) {
       throw new Error(restoreT('missingRestoreId'));

@@ -33,18 +33,18 @@ _ARCHIVE_RX = re.compile(r"^[a-zA-Z0-9_.:-]+$")
 def _validate_job_key(job_key: str) -> str:
     key = str(job_key or "").strip()
     if not _JOB_KEY_RX.fullmatch(key):
-        raise ValueError("Ungültiger Job-Key")
+        raise ValueError("Invalid job key")
     return key
 
 
 def _validate_archive_name(archive: str) -> str:
     name = str(archive or "").strip()
     if not name:
-        raise ValueError("archive fehlt")
+        raise ValueError("archive is missing")
     if "::" in name:
-        raise ValueError("Ungültiger Archivname")
+        raise ValueError("Invalid archive name")
     if not _ARCHIVE_RX.fullmatch(name):
-        raise ValueError("Ungültiger Archivname")
+        raise ValueError("Invalid archive name")
     return name
 
 
@@ -135,7 +135,7 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
             if str(run.get("state", "")).strip().lower() == "running":
                 run["state"] = "aborted"
                 run["phase"] = "aborted"
-                run["error"] = str(run.get("error") or "Server-Neustart während Restore-Lauf")
+                run["error"] = str(run.get("error") or "Server restarted during restore run")
                 run["finished_at"] = str(run.get("finished_at") or now_iso)
                 lines = run.get("lines")
                 if not isinstance(lines, list):
@@ -197,14 +197,14 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
                 meta_path = p
                 break
         if meta_path is None:
-            raise ValueError(f"Wizard-Metadaten fehlen: {job_key}")
+            raise ValueError(f"Wizard metadata is missing: {job_key}")
         raw = json.loads(meta_path.read_text(encoding="utf-8"))
 
         repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
         repo_key = str(repo_cfg.get("conf_key") or "")
         repo_default = str(repo_cfg.get("default") or "").strip()
         if not repo_default:
-            raise ValueError(f"Repo-Default fehlt in {meta_path.name}")
+            raise ValueError(f"Repository default is missing in {meta_path.name}")
 
         pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
         pass_key = str(pass_cfg.get("conf_key") or "")
@@ -225,7 +225,7 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
 
     script_path = job.script_path
     if script_path is None:
-        raise ValueError(f"Script-Pfad fehlt für Job: {job_key}")
+        raise ValueError(f"Script path is missing for job: {job_key}")
     content = script_path.read_text(encoding="utf-8")
 
     # Repo path — try multiple patterns to handle wizard and hand-written scripts
@@ -281,7 +281,7 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
             repo_default = _resolve_var(m.group(1))
 
     if not repo_default:
-        raise ValueError(f"BORG_REPO nicht in {script_path.name} gefunden — bitte Script prüfen")
+        raise ValueError(f"BORG_REPO was not found in {script_path.name}; check the script")
 
     # Load backup.conf (try both possible locations)
     conf: dict = {}
@@ -365,7 +365,7 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
             capture_output=True, text=True, env=env, timeout=30,
         )
         if r.returncode != 0:
-            raise RuntimeError(f"borg list fehlgeschlagen: {r.stderr.strip()}")
+            raise RuntimeError(f"borg list failed: {r.stderr.strip()}")
 
         data = json.loads(r.stdout)
         return list(reversed([
@@ -392,7 +392,7 @@ def _build_index(repo: str, archive: str, env: dict) -> dict:
         capture_output=True, text=True, env=env, timeout=300,
     )
     if r.returncode != 0:
-        raise RuntimeError(f"borg list fehlgeschlagen: {r.stderr.strip()}")
+        raise RuntimeError(f"borg list failed: {r.stderr.strip()}")
 
     # index: parent_path (str) → {child_name: entry_dict}
     index: dict = {}
@@ -488,14 +488,14 @@ def get_repo_stats(config: dict, job_key: str) -> dict:
         capture_output=True, text=True, env=env, timeout=60,
     )
     if r_info.returncode != 0:
-        raise RuntimeError(f"borg info fehlgeschlagen: {r_info.stderr.strip()}")
+        raise RuntimeError(f"borg info failed: {r_info.stderr.strip()}")
 
     r_list = subprocess.run(
         ["borg", "list", "--json", info["repo"]],
         capture_output=True, text=True, env=env, timeout=30,
     )
     if r_list.returncode != 0:
-        raise RuntimeError(f"borg list fehlgeschlagen: {r_list.stderr.strip()}")
+        raise RuntimeError(f"borg list failed: {r_list.stderr.strip()}")
 
     info_data = json.loads(r_info.stdout)
     list_data = json.loads(r_list.stdout)
@@ -629,27 +629,27 @@ def list_target_dirs_with_config(config: dict, prefix: str = "", limit: int = 40
 def _validate_target_dir(target_dir: str, config: dict | None = None) -> Path:
     p = Path(str(target_dir or "").strip())
     if not p:
-        raise ValueError("target_dir fehlt")
+        raise ValueError("target_dir is missing")
     try:
         rp = p.resolve()
     except OSError:
-        raise ValueError("Zielpfad ist ungültig")
+        raise ValueError("Target path is invalid")
     roots = _get_restore_allowed_roots(config or {}) if config is not None else [Path("/mnt/user").resolve()]
     if not _is_under_allowed_roots(rp, roots):
-        raise ValueError("Zielpfad liegt außerhalb der erlaubten Restore-Roots")
+        raise ValueError("Target path is outside the allowed restore roots")
     if not p.exists():
-        raise ValueError("Zielpfad existiert nicht")
+        raise ValueError("Target path does not exist")
     if not p.is_dir():
-        raise ValueError("Zielpfad ist kein Verzeichnis")
+        raise ValueError("Target path is not a directory")
     if not os.access(p, os.W_OK | os.X_OK):
-        raise ValueError("Zielpfad ist nicht beschreibbar")
+        raise ValueError("Target path is not writable")
     return p
 
 
 def _precheck_metadata(repo: str, archive: str, source_path: str, env: dict) -> dict:
     source_clean = str(source_path or "").strip().strip("/")
     if not source_clean:
-        raise ValueError("source_path fehlt")
+        raise ValueError("source_path is missing")
     parts = [x for x in source_clean.split("/") if x]
     repo_archive = f"{repo}::{archive}"
 
@@ -720,7 +720,7 @@ def restore_precheck(
     env = _borg_env(info["passphrase_file"])
     target = _validate_target_dir(target_dir, config)
     if conflict_mode not in {"skip", "overwrite", "rename"}:
-        raise ValueError("Ungültiger Konfliktmodus")
+        raise ValueError("Invalid conflict mode")
 
     mountpoint = str(target.anchor or "/")
     free = shutil.disk_usage(target).free
@@ -772,12 +772,12 @@ def start_restore(
     env = _borg_env(info["passphrase_file"])
     target = _validate_target_dir(target_dir, config)
     if conflict_mode not in {"skip", "overwrite", "rename"}:
-        raise ValueError("Ungültiger Konfliktmodus")
+        raise ValueError("Invalid conflict mode")
 
     source_clean = str(source_path or "").strip().strip("/")
     parts = [x for x in source_clean.split("/") if x]
     if not parts:
-        raise ValueError("source_path fehlt")
+        raise ValueError("source_path is missing")
     basename = parts[-1]
     source_meta = _precheck_metadata(info["repo"], archive, source_clean, env)
     source_type = str(source_meta.get("source_type", "")).strip()
@@ -846,7 +846,7 @@ def start_restore(
     cleanup_extract_dir = None
     if dest.exists() and not (restore_dir_contents_directly and conflict_mode != "rename"):
         if conflict_mode == "skip":
-            return {"started": False, "skipped": True, "reason": "Zieldatei existiert", "destination_path": str(dest)}
+            return {"started": False, "skipped": True, "reason": "Target file exists", "skip_reason_code": "target_exists", "destination_path": str(dest)}
         if conflict_mode == "overwrite":
             extract_cwd = target / f".bbui-restore-stage-{timestamp}"
             extract_cwd.mkdir(parents=True, exist_ok=True)
@@ -867,9 +867,9 @@ def start_restore(
         if conflict_mode == "skip":
             try:
                 if any(target.iterdir()):
-                    return {"started": False, "skipped": True, "reason": "Zielordner enthält bereits Daten", "destination_path": str(target)}
+                    return {"started": False, "skipped": True, "reason": "Target directory already contains data", "skip_reason_code": "target_not_empty", "destination_path": str(target)}
             except OSError:
-                return {"started": False, "skipped": True, "reason": "Zielordner nicht lesbar", "destination_path": str(target)}
+                return {"started": False, "skipped": True, "reason": "Target directory is not readable", "skip_reason_code": "target_unreadable", "destination_path": str(target)}
         if conflict_mode == "overwrite":
             extract_cwd = target / f".bbui-restore-stage-{timestamp}"
             extract_cwd.mkdir(parents=True, exist_ok=True)
@@ -929,13 +929,13 @@ def start_restore(
         tail = "\n".join(out_lines[-20:]).strip()
         if cleanup_extract_dir and cleanup_extract_dir.exists():
             shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
-        raise RuntimeError(tail or f"borg extract fehlgeschlagen (Exit {ret})")
+        raise RuntimeError(tail or f"borg extract failed (exit {ret})")
 
     src_temp = extract_cwd if restore_dir_contents_directly else (extract_cwd / basename)
     if not src_temp.exists():
         if cleanup_extract_dir and cleanup_extract_dir.exists():
             shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
-        raise RuntimeError("Extract erfolgreich, aber Quelldatei im Ziel nicht gefunden")
+        raise RuntimeError("Extract succeeded, but the source file was not found in the target")
 
     if restore_dir_contents_directly and conflict_mode == "overwrite":
         for child in src_temp.iterdir():
@@ -997,6 +997,7 @@ def start_restore_async(
         "destination_path": "",
         "error": "",
         "skipped": False,
+        "skip_reason_code": "",
         "lines": [],
     }
     with _RESTORE_LOCK:
@@ -1041,6 +1042,7 @@ def start_restore_async(
             s["finished_at"] = datetime.now().isoformat(timespec="seconds")
             s["destination_path"] = str(result.get("destination_path", "") or "")
             s["skipped"] = bool(result.get("skipped", False))
+            s["skip_reason_code"] = str(result.get("skip_reason_code", "") or "")
             try:
                 _persist_restore_runs(config)
             except Exception:
@@ -1063,7 +1065,7 @@ def start_restore_async(
     def _worker() -> None:
         try:
             _set_phase("extract")
-            _append("Starte Restore-Extract ...")
+            _append("Starting restore extract ...")
             result = start_restore(
                 config,
                 job_key,
@@ -1075,12 +1077,12 @@ def start_restore_async(
                 progress_cb=_append,
             )
             if result.get("skipped"):
-                _append(f"Übersprungen: {result.get('reason', 'unknown')}")
+                _append(f"Skipped: {result.get('reason', 'unknown')}")
             else:
-                _append(f"Restore erfolgreich: {result.get('destination_path', '')}")
+                _append(f"Restore completed successfully: {result.get('destination_path', '')}")
             _finish_done(result)
         except Exception as exc:
-            _append(f"FEHLER: {exc}")
+            _append(f"ERROR: {exc}")
             _append(traceback.format_exc(limit=2).strip())
             _finish_error(str(exc))
 
@@ -1108,5 +1110,6 @@ def get_restore_state(config: dict, restore_id: str) -> dict:
             "destination_path": s.get("destination_path"),
             "error": s.get("error"),
             "skipped": bool(s.get("skipped", False)),
+            "skip_reason_code": s.get("skip_reason_code", ""),
             "lines": list(s.get("lines", []))[-80:],
         }

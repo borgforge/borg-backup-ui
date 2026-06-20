@@ -47,18 +47,18 @@ def test_usb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
             "message": "",
         }
         if not mount_path:
-            item["message"] = "Pfad fehlt"
+            item["message"] = "Path is missing"
             results.append(item)
             continue
         p = Path(mount_path)
         item["exists"] = p.exists()
         item["is_dir"] = p.is_dir()
         if not item["exists"]:
-            item["message"] = "Pfad nicht gefunden"
+            item["message"] = "Path not found"
             results.append(item)
             continue
         if not item["is_dir"]:
-            item["message"] = "Pfad ist kein Verzeichnis"
+            item["message"] = "Path is not a directory"
             results.append(item)
             continue
         mounted = False
@@ -89,7 +89,7 @@ def test_usb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
                 mounted = False
         item["is_mounted"] = mounted
         if not mounted:
-            item["message"] = "Pfad ist nicht gemountet"
+            item["message"] = "Path is not mounted"
             results.append(item)
             continue
         item["ok"] = True
