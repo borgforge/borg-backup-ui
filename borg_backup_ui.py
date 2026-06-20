@@ -397,7 +397,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         data_dir = str(conf.get("GLOBAL_DATA_DIR", "")).strip()
         if not data_dir:
             raise RuntimeError(
-                "GLOBAL_DATA_DIR ist nicht gesetzt. Bitte zuerst in Einstellungen ein Hauptverzeichnis konfigurieren."
+                "GLOBAL_DATA_DIR is not set. Configure a primary data directory in Settings first."
             )
         ensure_data_dirs(data_dir)
 
@@ -515,7 +515,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache")
             self.end_headers()
             return False
-        self._send_api_error(401, "auth_required", "Login erforderlich oder Session abgelaufen", request_id=uuid.uuid4().hex[:12])
+        self._send_api_error(401, "auth_required", "Sign-in is required or the session has expired", request_id=uuid.uuid4().hex[:12])
         return False
 
     def _verify_user_credentials(self, username: str, password: str) -> dict | None:
@@ -915,7 +915,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_auth_login(self) -> dict:
         body = self._read_json_body()
         if self._bootstrap_required():
-            raise PermissionError("Bitte zuerst Admin-Benutzer einrichten")
+            raise PermissionError("Create the administrator account first")
         username = str(body.get("username", ""))
         password = str(body.get("password", ""))
         ip = self._client_ip()
@@ -929,7 +929,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             attempts = [t for t in cls._LOGIN_FAILURES.get(ip, []) if (now - t) < 300.0]
             cls._LOGIN_FAILURES[ip] = attempts
             if len(attempts) >= 5:
-                raise RateLimitExceeded("Zu viele Login-Fehlversuche. Bitte später erneut versuchen.")
+                raise RateLimitExceeded("Too many failed sign-in attempts. Try again later.")
         user = self._verify_user_credentials(username, password)
         if not user:
             with cls._LOGIN_FAILURES_LOCK:
@@ -937,7 +937,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 attempts.append(now)
                 cls._LOGIN_FAILURES[ip] = attempts
             self._security_audit("auth_login", "failed", target=_normalize_username(username), detail="invalid_credentials")
-            raise PermissionError("Login fehlgeschlagen")
+            raise PermissionError("Sign-in failed")
         with cls._LOGIN_FAILURES_LOCK:
             cls._LOGIN_FAILURES.pop(ip, None)
         session_user = _normalize_username(user.get("username", ""))
@@ -999,19 +999,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         new_password = str(body.get("new_password", ""))
         new_password_confirm = str(body.get("new_password_confirm", ""))
         if len(new_password) < 12:
-            raise ValueError("Neues Passwort muss mindestens 12 Zeichen haben")
+            raise ValueError("The new password must contain at least 12 characters")
         if new_password != new_password_confirm:
-            raise ValueError("Passwort-Bestätigung stimmt nicht überein")
+            raise ValueError("The password confirmation does not match")
 
         session = self._get_current_session_meta() or {}
         username = _normalize_username(session.get("username", ""))
         if not username:
-            raise PermissionError("Keine aktive Benutzer-Session")
+            raise PermissionError("No active user session")
 
         user = self._verify_user_credentials(username, current_password)
         if not user:
             self._security_audit("auth_change_password", "failed", target=username, detail="invalid_current_password")
-            raise PermissionError("Aktuelles Passwort ist ungültig")
+            raise PermissionError("The current password is invalid")
 
         cls = type(self)
         with cls._USERS_LOCK:
@@ -1023,7 +1023,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     idx = i
                     break
             if idx < 0:
-                raise ValueError("Benutzer nicht gefunden")
+                raise ValueError("User not found")
             now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             users[idx]["password_hash"] = _hash_password(new_password)
             users[idx]["updated_at"] = now
@@ -1043,7 +1043,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         current_role = str(session.get("role", "")).strip().lower()
         if not current_username:
             self._security_audit("auth_logout_all_sessions", "failed", detail="no_active_session")
-            raise PermissionError("Keine aktive Benutzer-Session")
+            raise PermissionError("No active user session")
 
         self._load_sessions()
         cookies = _parse_cookie_header(self.headers.get("Cookie") or "")
@@ -1055,7 +1055,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             if scope == "all":
                 if current_role != "admin":
                     self._security_audit("auth_logout_all_sessions", "failed", target=current_username, detail="admin_required_for_scope_all")
-                    raise PermissionError("Nur Admin darf alle Sessions abmelden")
+                    raise PermissionError("Only an administrator may terminate all sessions")
                 removed = len(cls._UI_SESSIONS)
                 cls._UI_SESSIONS = {}
             else:
@@ -1074,24 +1074,24 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _post_auth_setup_admin(self) -> dict:
         if not self._bootstrap_required():
-            raise ValueError("Admin-Setup ist nicht erforderlich")
+            raise ValueError("Administrator setup is not required")
         body = self._read_json_body()
         username = _normalize_username(body.get("username", ""))
         password = str(body.get("password", ""))
         password_confirm = str(body.get("password_confirm", ""))
         if not username:
-            raise ValueError("Benutzername fehlt")
+            raise ValueError("Username is required")
         if not re.fullmatch(r"[a-z0-9._-]{3,64}", username):
-            raise ValueError("Benutzername ungültig (3-64, a-z 0-9 . _ -)")
+            raise ValueError("Username is invalid (3-64 characters: a-z, 0-9, ., _, -)")
         if len(password) < 12:
-            raise ValueError("Passwort muss mindestens 12 Zeichen haben")
+            raise ValueError("Password must contain at least 12 characters")
         if password != password_confirm:
-            raise ValueError("Passwort-Bestätigung stimmt nicht überein")
+            raise ValueError("The password confirmation does not match")
 
         cls = type(self)
         with cls._USERS_LOCK:
             if _has_any_users(self.config):
-                raise ValueError("Admin-Setup ist nicht erforderlich")
+                raise ValueError("Administrator setup is not required")
             now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             store = _default_users_store()
             store["users"] = [{
@@ -1114,19 +1114,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         password = str(body.get("password", ""))
         role = str(body.get("role", "viewer")).strip().lower()
         if role not in {"viewer", "operator", "admin"}:
-            raise ValueError("Ungültige Rolle")
+            raise ValueError("Invalid role")
         if not username:
-            raise ValueError("Benutzername fehlt")
+            raise ValueError("Username is required")
         if not re.fullmatch(r"[a-z0-9._-]{3,64}", username):
-            raise ValueError("Benutzername ungültig (3-64, a-z 0-9 . _ -)")
+            raise ValueError("Username is invalid (3-64 characters: a-z, 0-9, ., _, -)")
         if len(password) < 12:
-            raise ValueError("Passwort muss mindestens 12 Zeichen haben")
+            raise ValueError("Password must contain at least 12 characters")
         cls = type(self)
         with cls._USERS_LOCK:
             store = _read_users_store(self.config)
             users = [u for u in store.get("users", []) if isinstance(u, dict)]
             if any(_normalize_username(u.get("username", "")) == username for u in users):
-                raise ValueError("Benutzername existiert bereits")
+                raise ValueError("Username already exists")
             now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             users.append({
                 "id": f"u_{secrets.token_hex(8)}",
@@ -1147,13 +1147,13 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         username = _normalize_username(body.get("username", ""))
         if not username:
-            raise ValueError("Benutzername fehlt")
+            raise ValueError("Username is required")
         role = body.get("role")
         enabled = body.get("enabled")
         if role is not None:
             role = str(role).strip().lower()
             if role not in {"viewer", "operator", "admin"}:
-                raise ValueError("Ungültige Rolle")
+                raise ValueError("Invalid role")
         if enabled is not None:
             enabled = bool(enabled)
 
@@ -1167,7 +1167,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     idx = i
                     break
             if idx < 0:
-                raise ValueError("Benutzer nicht gefunden")
+                raise ValueError("User not found")
 
             current = users[idx]
             new_role = role if role is not None else str(current.get("role", "viewer")).strip().lower()
@@ -1183,7 +1183,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     and _normalize_username(u.get("username", "")) != username
                 ]
                 if not active_admins:
-                    raise ValueError("Letzter aktiver Admin darf nicht deaktiviert oder degradiert werden")
+                    raise ValueError("The last active administrator cannot be disabled or demoted")
 
             now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             current["role"] = new_role
@@ -1200,9 +1200,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         username = _normalize_username(body.get("username", ""))
         password = str(body.get("password", ""))
         if not username:
-            raise ValueError("Benutzername fehlt")
+            raise ValueError("Username is required")
         if len(password) < 12:
-            raise ValueError("Passwort muss mindestens 12 Zeichen haben")
+            raise ValueError("Password must contain at least 12 characters")
         cls = type(self)
         with cls._USERS_LOCK:
             store = _read_users_store(self.config)
@@ -1213,7 +1213,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     idx = i
                     break
             if idx < 0:
-                raise ValueError("Benutzer nicht gefunden")
+                raise ValueError("User not found")
             now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             users[idx]["password_hash"] = _hash_password(password)
             users[idx]["updated_at"] = now
@@ -1226,12 +1226,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         username = _normalize_username(body.get("username", ""))
         if not username:
-            raise ValueError("Benutzername fehlt")
+            raise ValueError("Username is required")
 
         current = self._get_current_session_meta() or {}
         current_username = _normalize_username(current.get("username", ""))
         if current_username and current_username == username:
-            raise ValueError("Aktuell angemeldeter Benutzer kann nicht gelöscht werden")
+            raise ValueError("The currently signed-in user cannot be deleted")
 
         cls = type(self)
         with cls._USERS_LOCK:
@@ -1243,7 +1243,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     idx = i
                     break
             if idx < 0:
-                raise ValueError("Benutzer nicht gefunden")
+                raise ValueError("User not found")
 
             victim = users[idx]
             is_admin_enabled = (
@@ -1258,7 +1258,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     and _normalize_username(u.get("username", "")) != username
                 ]
                 if not active_admins:
-                    raise ValueError("Letzter aktiver Admin darf nicht gelöscht werden")
+                    raise ValueError("The last active administrator cannot be deleted")
 
             del users[idx]
             store["users"] = users
@@ -1314,7 +1314,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         cron    = body.get("cron", "")
         enabled = bool(body.get("enabled", True))
         if not job_key or not cron:
-            raise ValueError("job_key und cron sind erforderlich")
+            raise ValueError("job_key and cron are required")
         save_schedule(self.config, job_key, cron, enabled)
         return {"saved": True}
 
@@ -1324,12 +1324,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         job_key = str(body.get("job_key", "")).strip()
         enabled = bool(body.get("enabled", True))
         if not job_key:
-            raise ValueError("job_key fehlt")
+            raise ValueError("job_key is required")
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         meta_file = get_jobs_meta_dir(scripts_dir, data_root) / f"{job_key}.json"
         if not meta_file.exists():
-            raise FileNotFoundError(f"Job-Metadatei nicht gefunden: {job_key}")
+            raise FileNotFoundError(f"Job metadata file not found: {job_key}")
         raw = json.loads(meta_file.read_text(encoding="utf-8"))
         raw["enabled"] = enabled
         meta_file.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1343,16 +1343,16 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         job_key = body.get("job_key", "")
         if not job_key:
-            raise ValueError("job_key fehlt")
+            raise ValueError("job_key is required")
 
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         jobs = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
         if job_key not in jobs:
-            raise ValueError(f"Unbekannter Job: {job_key}")
+            raise ValueError(f"Unknown job: {job_key}")
 
         if JobManager.get().is_running(job_key):
-            raise RuntimeError("Job läuft gerade – bitte erst warten")
+            raise RuntimeError("The job is currently running; wait for it to finish")
 
         info = jobs[job_key]
         conf = read_expanded_conf(self.config)
@@ -1468,7 +1468,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         job_key = body.get("job_key", "")
         if not job_key:
-            raise ValueError("job_key ist erforderlich")
+            raise ValueError("job_key is required")
         delete_schedule(self.config, job_key)
         return {"deleted": True}
 
@@ -1505,10 +1505,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(query_string)
         file_path = unquote((qs.get("file") or [""])[0])
         if not file_path:
-            raise ValueError("file fehlt")
+            raise ValueError("file is required")
         requested = Path(file_path)
         if requested.suffix.lower() not in (".log", ".txt"):
-            raise ValueError("Ungültiger Dateityp")
+            raise ValueError("Invalid file type")
 
         # Preferred: exact path from status entry.
         candidates = [requested]
@@ -1530,7 +1530,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             content = resolved.read_text(encoding="utf-8", errors="replace")
             return {"exists": True, "content": content, "path": str(resolved)}
         except OSError as e:
-            raise RuntimeError(f"Lesefehler: {e}") from e
+            raise RuntimeError(f"Read error: {e}") from e
 
     def _get_history(self, query_string: str) -> dict:
         from history_api import get_history_data
@@ -1565,9 +1565,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         type_id = (params.get("type_id") or [""])[0].strip()
         location = (params.get("location") or [""])[0].strip().lower()
         if not _re.fullmatch(r"[a-z0-9_]+", type_id):
-            raise ValueError("Ungültige type_id")
+            raise ValueError("Invalid type_id")
         if location and location not in {"local", "usb", "smb", "storagebox", "custom"}:
-            raise ValueError("Ungültige location")
+            raise ValueError("Invalid location")
         return check_passphrase_exists(type_id, location or None)
 
     def _get_wizard_job(self, qs: str) -> dict:
@@ -1577,7 +1577,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         params = _pqs(qs)
         job_key = (params.get("job_key") or [""])[0].strip()
         if not job_key:
-            raise ValueError("job_key fehlt")
+            raise ValueError("job_key is required")
         scripts_dir = resolve_scripts_dir(self.config)
         return {"job": load_job_for_wizard(job_key, scripts_dir, self.config)}
 
@@ -1599,7 +1599,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(qs_str)
         job_key = (qs.get("job") or [""])[0]
         if not job_key:
-            raise ValueError("job Parameter fehlt")
+            raise ValueError("job parameter is required")
         return {"archives": list_archives(self.config, job_key)}
 
     def _get_restore_files(self, qs_str: str) -> dict:
@@ -1611,7 +1611,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         archive = (qs.get("archive") or [""])[0]
         path = unquote((qs.get("path") or [""])[0])
         if not job_key or not archive:
-            raise ValueError("job und archive Parameter fehlen")
+            raise ValueError("job and archive parameters are required")
         return {"files": list_files(self.config, job_key, archive, path)}
 
     def _get_report_jobs(self) -> dict:
@@ -1624,7 +1624,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(qs_str)
         job_key = (qs.get("job") or [""])[0]
         if not job_key:
-            raise ValueError("job Parameter fehlt")
+            raise ValueError("job parameter is required")
         return get_report_data(self.config, job_key)
 
     def _get_repo_stats(self, qs_str: str) -> dict:
@@ -1634,7 +1634,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(qs_str)
         job_key = (qs.get("job") or [""])[0]
         if not job_key:
-            raise ValueError("job Parameter fehlt")
+            raise ValueError("job parameter is required")
         return get_repo_stats(self.config, job_key)
 
     def _get_restore_target_dirs(self, qs_str: str) -> dict:
@@ -1657,7 +1657,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(qs_str)
         restore_id = str((qs.get("restore_id") or [""])[0]).strip()
         if not restore_id:
-            raise ValueError("restore_id fehlt")
+            raise ValueError("restore_id is required")
         return get_restore_state(self.config, restore_id)
 
     def _get_check_jobs(self) -> dict:
@@ -1673,10 +1673,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         job_key = body.get("job", "")
         if not job_key:
-            raise ValueError("job Parameter fehlt")
+            raise ValueError("job parameter is required")
         mode = str(body.get("mode", "quick")).strip().lower()
         if mode not in {"quick", "verbose", "verify_data"}:
-            raise ValueError("Ungültiger mode Parameter")
+            raise ValueError("Invalid mode parameter")
         from check_api import CheckManager
         ok, err = CheckManager.get().start(self.config, job_key, mode)
         if not ok:
@@ -1713,7 +1713,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         confirm_large = str((qs.get("confirm_large") or ["0"])[0]).strip().lower() in {"1", "true", "yes"}
 
         if not all([job_key, archive, path]):
-            self.send_error(400, "job, archive, path erforderlich")
+            self.send_error(400, "job, archive, and path are required")
             return
 
         try:
@@ -1781,19 +1781,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         probe_cmd = ["borg", "list", "--format", "{type}\n", repo_archive, source_path]
         probe = subprocess.run(probe_cmd, capture_output=True, text=True, env=env)
         if probe.returncode != 0:
-            err = (probe.stderr or "Pfad konnte nicht geprüft werden").strip()
+            err = (probe.stderr or "The path could not be inspected").strip()
             raise RuntimeError(err)
         raw_type = (probe.stdout or "").strip().splitlines()[0:1]
         raw_type = raw_type[0].strip() if raw_type else ""
         type_map = {"file": "file", "dir": "dir", "-": "file", "d": "dir"}
         entry_type = type_map.get(raw_type, "")
         if entry_type not in {"file", "dir"}:
-            raise RuntimeError(f"Nicht unterstützter Pfadtyp: {raw_type or 'unbekannt'}")
+            raise RuntimeError(f"Unsupported path type: {raw_type or 'unknown'}")
 
         size_cmd = ["borg", "list", "--format", "{type}|{size}\n", repo_archive, source_path]
         size_run = subprocess.run(size_cmd, capture_output=True, text=True, env=env)
         if size_run.returncode != 0:
-            err = (size_run.stderr or "Größe konnte nicht ermittelt werden").strip()
+            err = (size_run.stderr or "The size could not be determined").strip()
             raise RuntimeError(err)
         total_bytes = 0
         for line in (size_run.stdout or "").splitlines():
@@ -1812,14 +1812,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if total_bytes > hard_bytes:
             action = "block"
             message = (
-                f"Direkt-Download zu groß ({self._fmt_bytes(total_bytes)}). "
-                f"Limit: {self._fmt_bytes(hard_bytes)}. Bitte Restore in Zielordner verwenden."
+                f"Direct download is too large ({self._fmt_bytes(total_bytes)}). "
+                f"Limit: {self._fmt_bytes(hard_bytes)}. Restore to a target directory instead."
             )
         elif total_bytes > warn_bytes:
             action = "confirm"
             message = (
-                f"Großer Download ({self._fmt_bytes(total_bytes)}). "
-                f"Bitte bestätigen, um fortzufahren."
+                f"Large download ({self._fmt_bytes(total_bytes)}). "
+                f"Confirm to continue."
             )
         return {
             "entry_type": entry_type,
@@ -1848,7 +1848,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         archive = (qs.get("archive") or [""])[0]
         path = unquote((qs.get("path") or [""])[0])
         if not all([job_key, archive, path]):
-            raise ValueError("job, archive, path erforderlich")
+            raise ValueError("job, archive, and path are required")
         info = get_repo_info(self.config, job_key)
         env = _borg_env(info["passphrase_file"])
         repo_archive = f"{info['repo']}::{archive}"
@@ -1891,11 +1891,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         job_keys = body.get("job_keys", [])
 
         if level not in {"1", "2", "3"}:
-            raise ValueError("Ungültiges Level (erlaubt: 1, 2, 3)")
+            raise ValueError("Invalid level (allowed: 1, 2, 3)")
         if location not in {"local", "usb", "smb", "storagebox", "all"}:
-            raise ValueError("Ungültige Location")
+            raise ValueError("Invalid location")
         if not isinstance(job_keys, list):
-            raise ValueError("job_keys muss eine Liste sein")
+            raise ValueError("job_keys must be a list")
         clean_job_keys = [str(k).strip() for k in job_keys if str(k).strip()]
         auto_selected = False
         skipped = []
@@ -1905,9 +1905,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             for k in clean_job_keys:
                 row = known.get(k)
                 if not row:
-                    raise ValueError(f"Unbekannter Job: {k}")
+                    raise ValueError(f"Unknown job: {k}")
                 if row.get("enabled") is False:
-                    raise ValueError(f"Job ist deaktiviert: {k}")
+                    raise ValueError(f"Job is disabled: {k}")
         scheduled = bool(body.get("scheduled", False))
         if scheduled and not clean_job_keys:
             plan = list_restore_test_plan(self.config)
@@ -1942,7 +1942,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         scripts_dir = resolve_scripts_dir(self.config)
         script_path = scripts_dir / "borg_restore_test.py"
         if not script_path.exists():
-            raise FileNotFoundError(f"borg_restore_test.py nicht gefunden in {scripts_dir}")
+            raise FileNotFoundError(f"borg_restore_test.py not found in {scripts_dir}")
 
         backup_scripts_dir = Path(self.config["BACKUP_SCRIPTS_DIR"])
         cmd = ["python3", str(script_path), "--level", level, "--location", location]
@@ -1976,7 +1976,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         job_key = str(body.get("job_key", "")).strip()
         if not job_key:
-            raise ValueError("job_key fehlt")
+            raise ValueError("job_key is required")
         requested_level = str(body.get("level", "")).strip()
         effective_level = requested_level
         if not effective_level:
@@ -2007,7 +2007,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         repo_path = body.get("repo_path", "")
         repo_conf_key = str(body.get("repo_conf_key", "")).strip()
         if not repo_path:
-            raise ValueError("repo_path fehlt")
+            raise ValueError("repo_path is required")
         return test_repository(repo_path, self.config, repo_conf_key=repo_conf_key)
 
     def _post_storage_smb_action(self) -> dict:
@@ -2037,7 +2037,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         confirm = bool(body.get("confirm", False))
         if not confirm:
-            raise ValueError("Bestätigung fehlt")
+            raise ValueError("Confirmation is required")
         return start_restore_async(
             self.config,
             str(body.get("job_key", "")).strip(),
@@ -2103,8 +2103,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         updates = body.get("updates", {})
         if not updates:
-            raise ValueError("updates fehlt")
-        write_conf(self.config, updates, snapshot_reason="Manuelle Änderung")
+            raise ValueError("updates is required")
+        write_conf(self.config, updates, snapshot_reason="Manual change")
         return {"saved": True}
 
     def _put_settings(self) -> dict:
@@ -2130,15 +2130,15 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         smb_cleanup_keys = body.get("smb_cleanup_keys", [])
         smb_secret_cleanup_keys = body.get("smb_secret_cleanup_keys", [])
         if not updates:
-            raise ValueError("updates fehlt")
+            raise ValueError("updates is required")
         if smb_cleanup_keys is None:
             smb_cleanup_keys = []
         if smb_secret_cleanup_keys is None:
             smb_secret_cleanup_keys = []
         if not isinstance(smb_cleanup_keys, list):
-            raise ValueError("smb_cleanup_keys muss eine Liste sein")
+            raise ValueError("smb_cleanup_keys must be a list")
         if not isinstance(smb_secret_cleanup_keys, list):
-            raise ValueError("smb_secret_cleanup_keys muss eine Liste sein")
+            raise ValueError("smb_secret_cleanup_keys must be a list")
         prev_conf = read_expanded_conf(self.config)
         prev_data_dir = str(prev_conf.get("GLOBAL_DATA_DIR", "")).strip()
         prev_smb_rows = []
@@ -2162,7 +2162,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if data_dir is not None:
             data_dir = str(data_dir).strip()
             if not data_dir:
-                raise ValueError("GLOBAL_DATA_DIR darf nicht leer sein")
+                raise ValueError("GLOBAL_DATA_DIR must not be empty")
             dirs = derive_data_dirs(data_dir)
             updates["GLOBAL_DATA_DIR"] = data_dir
             updates["GLOBAL_LOG_DIR"] = dirs["logs"]
@@ -2184,9 +2184,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             try:
                 parsed_usb = json.loads(raw_usb)
             except (json.JSONDecodeError, TypeError, ValueError):
-                raise ValueError("USB_PROFILES_JSON ist kein gültiges JSON.")
+                raise ValueError("USB_PROFILES_JSON is not valid JSON.")
             if not isinstance(parsed_usb, list):
-                raise ValueError("USB_PROFILES_JSON muss eine Liste sein.")
+                raise ValueError("USB_PROFILES_JSON must be a list.")
             settings_payload["usb_profiles"] = _normalize_usb_profile_rows(parsed_usb)
             updates.pop("USB_PROFILES_JSON", None)
             settings_changed = True
@@ -2195,9 +2195,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             try:
                 parsed_storage = json.loads(raw_storage)
             except (json.JSONDecodeError, TypeError, ValueError):
-                raise ValueError("STORAGE_PROFILES_JSON ist kein gültiges JSON.")
+                raise ValueError("STORAGE_PROFILES_JSON is not valid JSON.")
             if not isinstance(parsed_storage, list):
-                raise ValueError("STORAGE_PROFILES_JSON muss eine Liste sein.")
+                raise ValueError("STORAGE_PROFILES_JSON must be a list.")
             normalized_storage = _normalize_storage_profile_rows(parsed_storage)
             validate_storage_profiles_complete_before_save(normalized_storage)
             validate_storage_profile_usage_before_save(self.config, normalized_storage)
@@ -2232,7 +2232,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             settings_changed = True
         if settings_changed:
             write_settings_payload(self.config, settings_payload)
-        write_conf(self.config, updates, snapshot_reason="Manuelle Änderung")
+        write_conf(self.config, updates, snapshot_reason="Manual change")
         created_paths = None
         if data_dir is not None:
             created = ensure_data_dirs(str(data_dir))
@@ -2281,7 +2281,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         profiles = body.get("profiles", [])
         if not isinstance(profiles, list):
-            raise ValueError("profiles muss eine Liste sein")
+            raise ValueError("profiles must be a list")
         return test_usb_profiles_status(profiles)
 
     def _post_settings_smb_profiles_status(self) -> dict:
@@ -2289,7 +2289,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         profiles = body.get("profiles", [])
         if not isinstance(profiles, list):
-            raise ValueError("profiles muss eine Liste sein")
+            raise ValueError("profiles must be a list")
         return test_smb_profiles_status(profiles)
 
     def _post_send_weekly_report(self) -> dict:
@@ -2309,7 +2309,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         name = str((body or {}).get("name", "")).strip()
         if not name:
-            raise ValueError("name fehlt")
+            raise ValueError("name is required")
         restored = restore_conf_backup(self.config, name)
         _apply_runtime_dirs_from_conf(self.config)
         return restored
@@ -2319,7 +2319,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         name = str((body or {}).get("name", "")).strip()
         if not name:
-            raise ValueError("name fehlt")
+            raise ValueError("name is required")
         return delete_conf_backup(self.config, name)
 
     def _post_settings_backup_delete_keep_latest(self) -> dict:
@@ -2331,7 +2331,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         name = str((body or {}).get("name", "")).strip()
         if not name:
-            raise ValueError("name fehlt")
+            raise ValueError("name is required")
         context_lines = int((body or {}).get("context_lines", 3) or 3)
         return diff_conf_backup(self.config, name, context_lines=context_lines)
 
@@ -2352,7 +2352,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if bundle is None and bundle_text:
             bundle = json.loads(bundle_text)
         if bundle is None:
-            raise ValueError("bundle oder bundle_text fehlt")
+            raise ValueError("bundle or bundle_text is required")
         mode = str(body.get("mode", "skip")).strip().lower()
         dry_run = bool(body.get("dry_run", True))
         selected_jobs = body.get("selected_jobs") if isinstance(body.get("selected_jobs"), list) else None
@@ -2378,7 +2378,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if bundle is None and bundle_text:
             bundle = json.loads(bundle_text)
         if bundle is None:
-            raise ValueError("bundle oder bundle_text fehlt")
+            raise ValueError("bundle or bundle_text is required")
         return preview_jobs_bundle(self.config, bundle)
 
     def _post_settings_jobs_export_secure(self) -> dict:
@@ -2393,7 +2393,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         password = str(body.get("password") or "")
         payload_b64 = str(body.get("payload_b64") or "")
         if not payload_b64:
-            raise ValueError("payload_b64 fehlt")
+            raise ValueError("payload_b64 is required")
         return preview_jobs_bundle_encrypted(self.config, password, payload_b64)
 
     def _post_settings_jobs_import_secure(self) -> dict:
@@ -2402,7 +2402,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         password = str(body.get("password") or "")
         payload_b64 = str(body.get("payload_b64") or "")
         if not payload_b64:
-            raise ValueError("payload_b64 fehlt")
+            raise ValueError("payload_b64 is required")
         mode = str(body.get("mode", "skip")).strip().lower()
         dry_run = bool(body.get("dry_run", True))
         selected_jobs = body.get("selected_jobs") if isinstance(body.get("selected_jobs"), list) else None
@@ -2439,7 +2439,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         mode = str(body.get("mode", "skip")).strip().lower()
         selected_names = body.get("selected_names") if isinstance(body.get("selected_names"), list) else None
         if not payload_b64:
-            raise ValueError("payload_b64 fehlt")
+            raise ValueError("payload_b64 is required")
         return import_secrets_backup(password, payload_b64, mode=mode, selected_names=selected_names)
 
     def _post_settings_secrets_backup_preview(self) -> dict:
@@ -2448,7 +2448,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         password = str(body.get("password") or "")
         payload_b64 = str(body.get("payload_b64") or "")
         if not payload_b64:
-            raise ValueError("payload_b64 fehlt")
+            raise ValueError("payload_b64 is required")
         return preview_secrets_backup(password, payload_b64)
 
     def _post_settings_profile_secrets_export(self) -> dict:
@@ -2463,7 +2463,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         password = str(body.get("password") or "")
         payload_b64 = str(body.get("payload_b64") or "")
         if not payload_b64:
-            raise ValueError("payload_b64 fehlt")
+            raise ValueError("payload_b64 is required")
         return preview_profile_secrets_backup(self.config, password, payload_b64)
 
     def _post_settings_profile_secrets_import(self) -> dict:
@@ -2477,7 +2477,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         profile_map = body.get("profile_map") if isinstance(body.get("profile_map"), dict) else None
         per_profile_mode = body.get("per_profile_mode") if isinstance(body.get("per_profile_mode"), dict) else None
         if not payload_b64:
-            raise ValueError("payload_b64 fehlt")
+            raise ValueError("payload_b64 is required")
         return import_profile_secrets_backup(
             self.config,
             password,
@@ -2513,7 +2513,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         password = str(body.get("password") or "")
         profile_key = str(body.get("profile_key") or "").strip().lower()
         if not password:
-            raise ValueError("password fehlt")
+            raise ValueError("password is required")
         return storagebox_key_deploy(self.config, password, profile_key=profile_key)
 
     def _post_storagebox_test(self) -> dict:
@@ -2528,7 +2528,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         params = _pqs(qs)
         sid = str((params.get("session_id") or [""])[0]).strip()
         if not sid:
-            raise ValueError("session_id fehlt")
+            raise ValueError("session_id is required")
         return storagebox_deploy_state(sid)
 
     def _post_storagebox_deploy_start(self) -> dict:
@@ -2544,7 +2544,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         sid = str(body.get("session_id", "")).strip()
         text = str(body.get("text", ""))
         if not sid:
-            raise ValueError("session_id fehlt")
+            raise ValueError("session_id is required")
         return storagebox_deploy_input(sid, text)
 
     def _post_storagebox_deploy_cancel(self) -> dict:
@@ -2552,7 +2552,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         sid = str(body.get("session_id", "")).strip()
         if not sid:
-            raise ValueError("session_id fehlt")
+            raise ValueError("session_id is required")
         return storagebox_deploy_cancel(sid)
 
     def _post_run_job(self) -> dict:
@@ -2561,16 +2561,16 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         job_key = body.get("job_key", "")
         if not job_key:
-            raise ValueError("job_key fehlt")
+            raise ValueError("job_key is required")
 
         borg_scripts_dir = resolve_scripts_dir(self.config)
         backup_scripts_dir = Path(self.config["BACKUP_SCRIPTS_DIR"])
         data_root = resolve_data_root(self.config)
         jobs = {j.key: j for j in discover_jobs(borg_scripts_dir, data_root)}
         if job_key not in jobs:
-            raise ValueError(f"Unbekannter Job: {job_key}")
+            raise ValueError(f"Unknown job: {job_key}")
         if not jobs[job_key].enabled:
-            raise RuntimeError(f"Job ist deaktiviert: {job_key}")
+            raise RuntimeError(f"Job is disabled: {job_key}")
 
         info = jobs[job_key]
         plugin_runtime = Path(__file__).resolve().parent / "runtime"
@@ -2592,7 +2592,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             )
         else:
             if info.script_path is None:
-                raise RuntimeError("Legacy-Job ohne Skriptpfad ist nicht ausführbar")
+                raise RuntimeError("A legacy job without a script path cannot be executed")
             extra_env = {"PYTHONPATH": merged_pp}
             ok, err = JobManager.get().start(
                 job_key,
@@ -2669,7 +2669,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         username_field = """<div class="form-group">
-        <label class="form-label">Benutzername</label>
+        <label class="form-label" data-i18n="auth.username"></label>
         <input id="login-username" class="form-input" type="text" autocomplete="username" autofocus>
       </div>"""
         login_payload = "const un=(document.getElementById('login-username')?.value||'').trim();const payload={username:un,password:pw};"
@@ -2688,6 +2688,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 })();
 </script>
 <link rel="stylesheet" href="/ui/style.css">
+<script src="/ui/js/components/i18n.js"></script>
 <style>
   .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
   .login-card{width:min(440px,100%);background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-soft)}
@@ -2713,27 +2714,30 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         <img class="login-logo" src="/ui/assets/app-icon.png" alt="" aria-hidden="true">
         <div class="login-title">Borg Backup</div>
       </div>
-      <div class="login-meta">Anmeldung</div>
+      <div class="login-meta" data-i18n="auth.loginTitle"></div>
     </div>
     <div class="login-body">
-      <p class="login-sub">Mit Benutzerkonto anmelden, um die Weboberfläche zu öffnen.</p>
+      <p class="login-sub" data-i18n="auth.loginSubtitle"></p>
       __USERNAME_FIELD__
       <div class="form-group">
-        <label class="form-label">Passwort</label>
-        <input id="login-password" class="form-input" type="password">
+        <label class="form-label" data-i18n="auth.password"></label>
+        <input id="login-password" class="form-input" type="password" autocomplete="current-password">
       </div>
       <div id="login-msg" class="status-message hidden login-msg"></div>
-      <button id="login-btn" class="btn btn-primary login-btn">Anmelden</button>
+      <button id="login-btn" class="btn btn-primary login-btn" data-i18n="auth.loginAction"></button>
     </div>
   </section>
 </main>
 <script>
 const btn=document.getElementById('login-btn');const msg=document.getElementById('login-msg');
+const i18nReady=window.BBUI.components.i18n.init().then(()=>{document.title=window.BBUI.components.i18n.t('auth.loginTitle');});
+function authT(key){return window.BBUI.components.i18n.t(key);}
+function authApiError(data,fallback){const code=String(data?.code||'').trim();if(code==='forbidden')return authT(fallback);const key=code?`api.errors.${code}`:'';const translated=key?authT(key):'';return translated&&translated!==key?translated:authT(fallback);}
 function showErr(t){msg.textContent=t;msg.className='status-message error login-msg';}
 async function doLogin(){btn.classList.add('loading');msg.className='status-message hidden login-msg';
-try{const pw=document.getElementById('login-password').value||'';__LOGIN_PAYLOAD__const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Login fehlgeschlagen');window.location.href='/';}
-catch(e){showErr('Login fehlgeschlagen');}
+try{await i18nReady;const pw=document.getElementById('login-password').value||'';__LOGIN_PAYLOAD__const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const d=await r.json();if(!r.ok||!d.ok)throw new Error(authApiError(d,'auth.loginFailed'));window.location.href='/';}
+catch(e){showErr(e.message||authT('auth.loginFailed'));}
 finally{btn.classList.remove('loading');}}
 btn.addEventListener('click',doLogin);
 document.getElementById('login-password').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
@@ -2771,6 +2775,7 @@ if(document.getElementById('login-username')){document.getElementById('login-use
 })();
 </script>
 <link rel="stylesheet" href="/ui/style.css">
+<script src="/ui/js/components/i18n.js"></script>
 <style>
   .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
   .login-card{width:min(560px,100%);background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-soft)}
@@ -2783,29 +2788,33 @@ if(document.getElementById('login-username')){document.getElementById('login-use
 </style>
 </head><body>
 <main class="login-wrap"><section class="login-card">
-<div class="login-head"><img class="login-logo" src="/ui/assets/app-icon.png" alt="" aria-hidden="true"><div class="login-title">Erstkonfiguration</div></div>
-<div class="login-sub">Bitte den ersten Admin-Benutzer anlegen.</div>
+<div class="login-head"><img class="login-logo" src="/ui/assets/app-icon.png" alt="" aria-hidden="true"><div class="login-title" data-i18n="auth.setupTitle"></div></div>
+<div class="login-sub" data-i18n="auth.setupSubtitle"></div>
 <div class="login-body">
-<div class="form-group"><label class="form-label">Benutzername</label><input id="setup-username" class="form-input" type="text" autocomplete="username" autofocus></div>
-<div class="form-group"><label class="form-label">Passwort</label><input id="setup-password" class="form-input" type="password" autocomplete="new-password"></div>
-<div class="form-group"><label class="form-label">Passwort bestätigen</label><input id="setup-password-confirm" class="form-input" type="password" autocomplete="new-password"></div>
+<div class="form-group"><label class="form-label" data-i18n="auth.username"></label><input id="setup-username" class="form-input" type="text" autocomplete="username" autofocus></div>
+<div class="form-group"><label class="form-label" data-i18n="auth.password"></label><input id="setup-password" class="form-input" type="password" autocomplete="new-password"></div>
+<div class="form-group"><label class="form-label" data-i18n="auth.passwordConfirm"></label><input id="setup-password-confirm" class="form-input" type="password" autocomplete="new-password"></div>
 <div id="setup-msg" class="status-message hidden login-msg"></div>
-<button id="setup-btn" class="btn btn-primary" style="width:100%">Admin anlegen</button>
+<button id="setup-btn" class="btn btn-primary" style="width:100%" data-i18n="auth.setupAction"></button>
 </div></section></main>
 <script>
 const btn=document.getElementById('setup-btn');const msg=document.getElementById('setup-msg');
+const i18nReady=window.BBUI.components.i18n.init().then(()=>{document.title=window.BBUI.components.i18n.t('auth.setupTitle');});
+function authT(key){return window.BBUI.components.i18n.t(key);}
+function authApiError(data,fallback){const code=String(data?.code||'').trim();if(code==='bad_request'||code==='forbidden')return authT(fallback);const key=code?`api.errors.${code}`:'';const translated=key?authT(key):'';return translated&&translated!==key?translated:authT(fallback);}
 function showErr(t){msg.textContent=t;msg.className='status-message error login-msg';}
 async function doSetup(){btn.classList.add('loading');msg.className='status-message hidden login-msg';
 try{
+ await i18nReady;
  const username=(document.getElementById('setup-username').value||'').trim();
  const password=document.getElementById('setup-password').value||'';
  const password_confirm=document.getElementById('setup-password-confirm').value||'';
  const r=await fetch('/api/auth/setup-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,password_confirm})});
- const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Setup fehlgeschlagen');
+ const d=await r.json();if(!r.ok||!d.ok)throw new Error(authApiError(d,'auth.setupFailed'));
  const lr=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
- const ld=await lr.json();if(!lr.ok||!ld.ok)throw new Error('Auto-Login fehlgeschlagen');
+ const ld=await lr.json();if(!lr.ok||!ld.ok)throw new Error(authApiError(ld,'auth.autoLoginFailed'));
  window.location.href='/';
-}catch(e){showErr(e.message||'Setup fehlgeschlagen');}
+}catch(e){showErr(e.message||authT('auth.setupFailed'));}
 finally{btn.classList.remove('loading');}}
 btn.addEventListener('click',doSetup);
 ['setup-username','setup-password','setup-password-confirm'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')doSetup();}));
@@ -2828,16 +2837,16 @@ btn.addEventListener('click',doSetup);
             if self.command in {"POST", "PUT", "DELETE"}:
                 if not self._has_valid_api_token_header():
                     if not self._is_same_origin_request():
-                        self._send_api_error(403, "csrf_origin_mismatch", "Ungültiger Origin-Header", request_id=request_id)
+                        self._send_api_error(403, "csrf_origin_mismatch", "Invalid Origin header", request_id=request_id)
                         return
             if path not in auth_free_paths and not self._is_api_authorized():
-                self._send_api_error(401, "unauthorized", "API-Token fehlt oder ist ungültig", request_id=request_id)
+                self._send_api_error(401, "unauthorized", "The API token is missing or invalid", request_id=request_id)
                 return
             required_role = self._required_role_for_request(path, self.command)
             if required_role:
                 role = self._get_current_role()
                 if not self._role_at_least(role, required_role):
-                    self._send_api_error(403, "forbidden", f"Rolle '{required_role}' erforderlich", request_id=request_id)
+                    self._send_api_error(403, "forbidden", f"Role '{required_role}' is required", request_id=request_id)
                     return
             self._extra_response_headers = []
             data = fn()
@@ -3055,11 +3064,11 @@ def main():
         migration_details["storage_paths"] = {"status": "error", "error": str(exc)}
         _log(f"WARNING: Storage path migration skipped: {exc}")
     reason_code = "no_changes"
-    reason_text = "Keine Änderungen nötig"
+    reason_text = "No changes required"
     storage_info = migration_details.get("storage_paths", {})
     if not migration_ok:
         reason_code = "error"
-        reason_text = "Migration mit Fehlern"
+        reason_text = "Migration completed with errors"
     elif bool(storage_info.get("changed")):
         reason_code = "storage_paths_changed"
         reason_text = "Cache/Remotes/backup.conf an GLOBAL_DATA_DIR angepasst"
@@ -3067,7 +3076,7 @@ def main():
     _write_migration_state(
         config,
         migration_ok,
-        "; ".join(migration_messages) or "Migration ausgeführt",
+        "; ".join(migration_messages) or "Migration completed",
         reason_code=reason_code,
         reason_text=reason_text,
         details=migration_details,

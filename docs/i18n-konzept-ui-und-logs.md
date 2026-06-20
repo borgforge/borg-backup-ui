@@ -111,8 +111,9 @@ Konvention:
 - Der Audit prueft `ui/index.html` auf sichtbare Textknoten ohne
   `data-i18n*`-Markierung und `ui/js/**/*.js` auf deutsche String-Literale.
 - `python3 plugin/i18n_audit.py --backend` erweitert den Check um deutsche
-  String-Literale in `api/**/*.py` und `runtime/**/*.py`. Seit Issue `#47` ist
-  auch dieser Modus Teil des automatisierten Merge-Gates.
+  String-Literale in `borg_backup_ui.py`, `api/**/*.py` und `runtime/**/*.py`.
+  Seit Issue `#47` ist dieser Modus Teil des automatisierten Merge-Gates; Issue
+  `#49` hat den Hauptserver in denselben Check aufgenommen.
 - `tests/test_i18n_resources.py` fuehrt denselben Audit bei jedem Testlauf aus.
 - Technische Produktnamen, Pfade, Konfigurationswerte, Formatnamen und reine
   interne Routen-IDs sind keine zu uebersetzenden UI-Texte.
@@ -136,9 +137,10 @@ Konvention:
 - Backend-Fallbacks, Diagnosetexte und generierte Runner-Texte wurden in Issue
   `#47` auf Englisch vereinheitlicht. Historische deutsche Migrationswerte und
   Logmarker werden weiterhin gelesen, aber nicht neu erzeugt.
-- Die in `borg_backup_ui.py` eingebetteten Login- und Erstsetup-Seiten sowie
-  verbleibende Hauptserver-Fallbacks werden als eigene UI-/Servergrenze in
-  Issue `#49` lokalisiert und in den Audit aufgenommen.
+- Die in `borg_backup_ui.py` eingebetteten Login- und Erstsetup-Seiten verwenden
+  seit Issue `#49` dieselbe browserlokale Sprachwahl und dieselben Ressourcen
+  wie die Hauptoberflaeche. Sie zeigen lokalisierte Fehlercodes statt roher
+  Servermeldungen; verbleibende Hauptserver-Fallbacks sind Englisch.
 
 ## Risiken & Gegenmaßnahmen
 - Risiko: Inkonsistente Texte bei gemischter Hardcode/i18n-Nutzung.

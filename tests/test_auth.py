@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 import sys
 import time
@@ -31,6 +32,19 @@ def _make_handler() -> BackupUIHandler:
     return h
 
 
+def _render_auth_page(method_name: str) -> str:
+    handler = _make_handler()
+    handler.wfile = BytesIO()
+    handler._bootstrap_required = lambda: method_name == "_serve_setup_admin_page"
+    handler._ui_auth_enabled = lambda: True
+    handler.send_response = lambda _status: None
+    handler.send_header = lambda _name, _value: None
+    handler.end_headers = lambda: None
+
+    getattr(handler, method_name)()
+    return handler.wfile.getvalue().decode("utf-8")
+
+
 def test_verify_password_hash_accepts_valid_password():
     encoded = hash_password("secret-123")
     assert verify_password_hash("secret-123", encoded) is True
@@ -46,6 +60,28 @@ def test_parse_cookie_header_ignores_invalid_parts():
         "bbui_session": "sid-1",
         "theme": "dark",
     }
+
+
+def test_login_page_uses_shared_language_preference_and_localized_error_codes():
+    html = _render_auth_page("_serve_login_page")
+
+    assert '/ui/js/components/i18n.js' in html
+    assert 'data-i18n="auth.loginTitle"' in html
+    assert 'data-i18n="auth.username"' in html
+    assert "api.errors.${code}" in html
+    assert "d.message" not in html
+    assert "Login fehlgeschlagen" not in html
+
+
+def test_setup_page_uses_shared_language_preference_and_localized_error_codes():
+    html = _render_auth_page("_serve_setup_admin_page")
+
+    assert '/ui/js/components/i18n.js' in html
+    assert 'data-i18n="auth.setupTitle"' in html
+    assert 'data-i18n="auth.passwordConfirm"' in html
+    assert "api.errors.${code}" in html
+    assert "d.message" not in html
+    assert "Setup fehlgeschlagen" not in html
 
 
 def test_auth_store_writes_users_and_sessions_atomically(tmp_path: Path):

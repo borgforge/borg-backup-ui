@@ -178,6 +178,16 @@ def test_backend_message_codes_have_translations():
     assert {f"api.messages.{code}" for code in codes} <= keys
 
 
+def test_authentication_pages_reference_existing_translation_keys():
+    source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
+    referenced = set(re.findall(r'data-i18n="([a-zA-Z0-9.]+)"', source))
+    referenced.update(re.findall(r"authT\(['\"]([a-zA-Z0-9.]+)['\"]", source))
+
+    assert referenced
+    assert referenced <= _flatten_keys(_load("de"))
+    assert referenced <= _flatten_keys(_load("en"))
+
+
 def test_api_client_resolves_codes_without_displaying_raw_messages():
     source = (ROOT / "ui" / "js" / "api" / "client.js").read_text(encoding="utf-8")
 
