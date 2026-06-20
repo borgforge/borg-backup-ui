@@ -115,6 +115,7 @@ python3 -m py_compile borg_backup_ui.py api/*.py runtime/scripts/*.py
 
 - [Manual maintenance tests on Unraid](./manual-maintenance-tests.md)
 - [Release workflow](./release-workflow.md)
+- [Bilingual documentation plan](./bilingual-documentation-plan.md)
 
 ## License
 
