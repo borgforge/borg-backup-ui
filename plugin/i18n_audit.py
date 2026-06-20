@@ -212,6 +212,7 @@ def audit(root: Path = ROOT, *, include_backend: bool = False) -> list[Finding]:
     for path in sorted((root / "ui" / "js").rglob("*.js")):
         findings.extend(audit_javascript(path))
     if include_backend:
+        findings.extend(audit_backend_python(root / "borg_backup_ui.py"))
         for path in sorted((root / "api").rglob("*.py")):
             findings.extend(audit_backend_python(path))
         for path in sorted((root / "runtime").rglob("*.py")):

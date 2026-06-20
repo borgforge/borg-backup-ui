@@ -7,6 +7,20 @@
     "german": "German",
     "english": "English"
   },
+  "auth": {
+    "loginTitle": "Sign in",
+    "loginSubtitle": "Sign in with a user account to open the web interface.",
+    "setupTitle": "Initial setup",
+    "setupSubtitle": "Create the first administrator account.",
+    "username": "Username",
+    "password": "Password",
+    "passwordConfirm": "Confirm password",
+    "loginAction": "Sign in",
+    "setupAction": "Create administrator",
+    "loginFailed": "Sign-in failed.",
+    "setupFailed": "Initial setup failed.",
+    "autoLoginFailed": "Automatic sign-in failed."
+  },
   "nav": {
     "dashboard": "Dashboard",
     "jobs": "Jobs",
