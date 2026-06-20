@@ -81,5 +81,5 @@ def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: P
         "GLOBAL_DATA_DIR": str(data_root),
     })
 
-    with pytest.raises(ValueError, match="SMB-Profil kann nicht gelöscht werden"):
+    with pytest.raises(ValueError, match="SMB profile cannot be deleted"):
         validate_smb_profile_usage_before_save({"BACKUP_SCRIPTS_DIR": str(scripts_dir)}, [])

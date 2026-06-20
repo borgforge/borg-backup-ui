@@ -89,38 +89,38 @@ def validate_params(
     """Wirft ValueError bei ungültigen Parametern."""
     type_id = params.get("type_id", "").strip()
     if not type_id:
-        raise ValueError("Typ-ID darf nicht leer sein")
+        raise ValueError("Type ID must not be empty")
     if not re.fullmatch(r"[a-z0-9_]+", type_id):
-        raise ValueError("Typ-ID darf nur Kleinbuchstaben, Ziffern und _ enthalten")
+        raise ValueError("Type ID may contain only lowercase letters, digits, and underscores")
     if not params.get("job_name", "").strip():
-        raise ValueError("Job-Name darf nicht leer sein")
+        raise ValueError("Job name must not be empty")
     if not params.get("source_paths", "").strip():
-        raise ValueError("Mindestens ein Quellpfad ist erforderlich")
+        raise ValueError("At least one source path is required")
     if not params.get("repo_path", "").strip():
-        raise ValueError("Repository-Pfad darf nicht leer sein")
+        raise ValueError("Repository path must not be empty")
 
     location = params.get("location", "local")
     if location not in ("local", "usb", "smb", "storagebox"):
-        raise ValueError(f"Ungültige Location: {location!r}")
+        raise ValueError(f"Invalid location: {location!r}")
     if location == "smb" and not str(params.get("smb_profile_key", "")).strip():
-        raise ValueError("SMB-Profil fehlt")
+        raise ValueError("SMB profile is missing")
     if location == "storagebox" and not str(params.get("storage_profile_key", "")).strip():
-        raise ValueError("Storage-Profil fehlt")
+        raise ValueError("Storage profile is missing")
 
     raw_sources = [p.strip() for p in str(params.get("source_paths", "")).split() if p.strip()]
     for src in raw_sources:
         p = Path(src)
         if not p.exists():
-            raise ValueError(f"Quellpfad existiert nicht: {src}")
+            raise ValueError(f"Source path does not exist: {src}")
         if not p.is_dir():
-            raise ValueError(f"Quellpfad ist kein Verzeichnis: {src}")
+            raise ValueError(f"Source path is not a directory: {src}")
 
     filename = _script_filename(type_id, location)
     target = scripts_dir / filename
     from jobs_api import get_jobs_meta_dir
     meta_target = get_jobs_meta_dir(scripts_dir, data_root) / f"{type_id}_{location}.json"
     if (target.exists() or meta_target.exists()) and not allow_existing:
-        raise FileExistsError(f"Job existiert bereits: {type_id}_{location}")
+        raise FileExistsError(f"Job already exists: {type_id}_{location}")
 
 
 def _repo_conf_key(type_id: str, location: str) -> str:
@@ -299,7 +299,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     data_root = resolve_data_root(ui_config)
     jobs = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
     if job_key not in jobs:
-        raise ValueError(f"Unbekannter Job: {job_key}")
+        raise ValueError(f"Unknown job: {job_key}")
 
     info = jobs[job_key]
     conf = read_expanded_conf(ui_config)
@@ -480,7 +480,7 @@ def generate_script(params: dict) -> str:
 
     init_block = f'''
 def _init_repo_if_needed(env: dict) -> int:
-    """Initialisiert das Borg-Repository falls es noch nicht existiert."""
+    """Initialize the Borg repository if it does not exist yet."""
     import subprocess as _sp
     repo = env.get("BORG_REPO", "")
     if not repo:
@@ -605,7 +605,7 @@ def main() -> int:
 {docker_stop}        runner = BorgRunner(borg_config)
         exit_code = runner.create(job_config.backup_paths, "{archive_prefix}")
         if exit_code >= 2:
-            job.set_result(exit_code, final_msg=f"borg create fehlgeschlagen (Exit {{exit_code}})")
+            job.set_result(exit_code, final_msg=f"borg create failed (exit {{exit_code}})")
             return exit_code
 {docker_start}        maint_exit = runner.maintenance()
         exit_code = max(exit_code, maint_exit)
@@ -734,8 +734,8 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         if bool(repo_status.get("exists", False)):
             create_repo_if_missing = False
         elif create_repo_if_missing and not remote_init_confirmed:
-            msg = str(repo_status.get("message") or "Remote-Repository ist nicht als vorhanden bestätigt.")
-            raise ValueError(f"Remote-Repository-Anlage nicht bestätigt: {msg}")
+            msg = str(repo_status.get("message") or "Remote repository existence is not confirmed.")
+            raise ValueError(f"Remote repository creation is not confirmed: {msg}")
 
     metadata = {
         "job_key": job_key,

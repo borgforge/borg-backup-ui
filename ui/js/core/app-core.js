@@ -112,7 +112,9 @@ function _systemHealthAttentionCount(data) {
     checks.cifs_supported,
     checks.secrets_permissions_ok,
   ].filter((ok) => !ok).length;
-  const migrationFailed = String(data?.migration_summary?.state || '').trim() === 'Fehlgeschlagen' ? 1 : 0;
+  const migrationStatus = String(data?.migration_summary?.status || '').trim();
+  const migrationState = String(data?.migration_summary?.state || '').trim();
+  const migrationFailed = (migrationStatus === 'failed' || ['Fehlgeschlagen', 'Failed'].includes(migrationState)) ? 1 : 0;
   const registrySummary = data?.migration_registry?.summary && typeof data.migration_registry.summary === 'object'
     ? data.migration_registry.summary
     : {};

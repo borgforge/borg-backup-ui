@@ -952,15 +952,19 @@ function _renderMigrationRegistryGroups(items) {
 
 function _localizeMigrationAction(value) {
   const raw = String(value || '').trim();
-  const moved = raw.match(/^(\d+) Elemente verschoben$/);
-  const moveErrors = raw.match(/^(\d+) Verschiebe-Fehler$/);
+  const moved = raw.match(/^(\d+) (?:Elemente verschoben|items moved)$/);
+  const moveErrors = raw.match(/^(\d+) (?:Verschiebe-Fehler|move errors)$/);
   if (moved) return settingsT('health.itemsMoved', { count: moved[1] });
   if (moveErrors) return settingsT('health.moveErrors', { count: moveErrors[1] });
   const known = {
     'Storage-Pfade aktualisiert': 'storagePathsUpdated',
+    'Storage paths updated': 'storagePathsUpdated',
     'Profileinstellungen angepasst': 'profileSettingsUpdated',
+    'Profile settings updated': 'profileSettingsUpdated',
     'backup.conf korrigiert': 'configCorrected',
+    'backup.conf corrected': 'configCorrected',
     'Job-Layout geprüft': 'jobLayoutChecked',
+    'Job layout checked': 'jobLayoutChecked',
   };
   return known[raw] ? settingsT(`health.${known[raw]}`) : raw;
 }
@@ -979,7 +983,8 @@ function _localizeMigrationReason(code, fallback, status) {
 function _buildMigrationSummary(data) {
   const summary = data?.migration_summary && typeof data.migration_summary === 'object' ? data.migration_summary : null;
   if (summary) {
-    const status = String(summary.status || '').trim() || (summary.state === 'Fehlgeschlagen' ? 'failed' : 'success');
+    const legacyState = String(summary.state || '').trim();
+    const status = String(summary.status || '').trim() || (['Fehlgeschlagen', 'Failed'].includes(legacyState) ? 'failed' : 'success');
     const reasonCode = String(summary.reason_code || '').trim();
     const errors = Array.isArray(summary.errors)
       ? summary.errors.map((v) => _localizeMigrationAction(v)).filter(Boolean).join(' · ')

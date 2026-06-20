@@ -243,25 +243,25 @@ def list_conf_backups(ui_config: dict) -> dict:
 
 def restore_conf_backup(ui_config: dict, name: str) -> dict:
     if not name or "/" in name or ".." in name:
-        raise ValueError("Ungültiger Backup-Name")
+        raise ValueError("Invalid backup name")
     backup_dir = _conf_backup_dir(ui_config)
     src = backup_dir / name
     if not src.exists() or not src.is_file():
-        raise FileNotFoundError("Backup-Datei nicht gefunden")
+        raise FileNotFoundError("Backup file not found")
     conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
     conf_file.parent.mkdir(parents=True, exist_ok=True)
-    backup_conf_snapshot(ui_config, keep=10, reason="Restore vor Wiederherstellung")
+    backup_conf_snapshot(ui_config, keep=10, reason="Restore before recovery")
     shutil.copy2(src, conf_file)
     return {"restored": True, "name": name}
 
 
 def delete_conf_backup(ui_config: dict, name: str) -> dict:
     if not name or "/" in name or ".." in name:
-        raise ValueError("Ungültiger Backup-Name")
+        raise ValueError("Invalid backup name")
     backup_dir = _conf_backup_dir(ui_config)
     target = backup_dir / name
     if not target.exists() or not target.is_file():
-        raise FileNotFoundError("Backup-Datei nicht gefunden")
+        raise FileNotFoundError("Backup file not found")
     target.unlink()
     meta_file = backup_dir / f"{name}.meta.json"
     try:
@@ -299,15 +299,15 @@ def diff_conf_backup(ui_config: dict, name: str, context_lines: int = 3) -> dict
     Zeigt Unified-Diff zwischen aktivem backup.conf und gewähltem Backup.
     """
     if not name or "/" in name or ".." in name:
-        raise ValueError("Ungültiger Backup-Name")
+        raise ValueError("Invalid backup name")
     backup_dir = _conf_backup_dir(ui_config)
     backup_file = backup_dir / name
     if not backup_file.exists() or not backup_file.is_file():
-        raise FileNotFoundError("Backup-Datei nicht gefunden")
+        raise FileNotFoundError("Backup file not found")
 
     conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
     if not conf_file.exists() or not conf_file.is_file():
-        raise FileNotFoundError("Aktive backup.conf nicht gefunden")
+        raise FileNotFoundError("Active backup.conf not found")
 
     ctx = int(context_lines) if str(context_lines).strip().isdigit() else 3
     ctx = max(0, min(20, ctx))
@@ -667,7 +667,7 @@ def sync_backup_conf_schema(ui_config: dict) -> dict:
     example_file = config_dir / "backup.conf.example"
 
     if not example_file.exists():
-        return {"changed": False, "error": "backup.conf.example fehlt"}
+        return {"changed": False, "error": "backup.conf.example is missing"}
 
     if not conf_file.exists():
         shutil.copy2(example_file, conf_file)
@@ -1059,9 +1059,9 @@ def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "") ->
             "exit_code": result.returncode,
         }
     except FileNotFoundError:
-        return {"success": False, "output": "borg binary nicht gefunden.", "exit_code": -1}
+        return {"success": False, "output": "borg binary not found.", "exit_code": -1}
     except subprocess.TimeoutExpired:
-        return {"success": False, "output": "Timeout (20s) – Repository nicht erreichbar.", "exit_code": -1}
+        return {"success": False, "output": "Timeout (20s) - repository unreachable.", "exit_code": -1}
     except Exception as exc:
         return {"success": False, "output": str(exc), "exit_code": -1}
 
@@ -1305,12 +1305,12 @@ def derive_data_dirs(global_data_dir: str) -> dict:
 def ensure_data_dirs(global_data_dir: str) -> dict:
     root = (global_data_dir or "").strip()
     if not root:
-        raise ValueError("GLOBAL_DATA_DIR ist nicht gesetzt")
+        raise ValueError("GLOBAL_DATA_DIR is not set")
     # Unraid-spezifischer Guard:
     # /mnt/user darf erst beschrieben werden, wenn das Array gestartet ist.
     if root == "/mnt/user" or root.startswith("/mnt/user/"):
         if not _is_unraid_array_started():
-            raise RuntimeError("Unraid-Array ist noch nicht gestartet (/mnt/user nicht verfügbar)")
+            raise RuntimeError("The Unraid array has not started yet (/mnt/user is unavailable)")
     paths = derive_data_dirs(root)
     created = []
     for key in ("base", "logs", "status", "restore_status", "cache", "remotes"):
@@ -1333,13 +1333,13 @@ def migrate_storage_paths_from_global_data_dir(ui_config: dict) -> dict:
     conf = read_expanded_conf(ui_config)
     data_dir = str(conf_raw.get("GLOBAL_DATA_DIR", "")).strip() or str(conf.get("GLOBAL_DATA_DIR", "")).strip()
     if not data_dir:
-        return {"changed": False, "reason": "GLOBAL_DATA_DIR nicht gesetzt", "migrated_files": []}
+        return {"changed": False, "reason": "GLOBAL_DATA_DIR is not set", "migrated_files": []}
     if data_dir == "/mnt/user" or data_dir.startswith("/mnt/user/"):
         if not _is_unraid_array_started():
             return {
                 "changed": False,
                 "reason": "array_not_started",
-                "details": "Storage-Pfadmigration übersprungen: Unraid-Array ist noch nicht gestartet",
+                "details": "Storage path migration skipped: the Unraid array has not started yet",
                 "migrated_files": [],
             }
 
@@ -1478,20 +1478,20 @@ def validate_runtime_config(ui_config: dict) -> dict:
     if not data_dir:
         errors.append({
             "key": "GLOBAL_DATA_DIR",
-            "message": "GLOBAL_DATA_DIR ist nicht gesetzt.",
+            "message": "GLOBAL_DATA_DIR is not set.",
             "message_code": "config_data_dir_missing",
         })
     else:
         if not data_dir.startswith("/"):
             errors.append({
                 "key": "GLOBAL_DATA_DIR",
-                "message": "GLOBAL_DATA_DIR muss ein absoluter Pfad sein (z. B. /mnt/user/borg-backup-ui).",
+                "message": "GLOBAL_DATA_DIR must be an absolute path (for example /mnt/user/borg-backup-ui).",
                 "message_code": "config_data_dir_absolute",
             })
         elif data_dir == "/":
             errors.append({
                 "key": "GLOBAL_DATA_DIR",
-                "message": "GLOBAL_DATA_DIR darf nicht '/'.",
+                "message": "GLOBAL_DATA_DIR must not be '/'.",
                 "message_code": "config_data_dir_root",
             })
         else:
@@ -1500,7 +1500,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
             except Exception as exc:
                 errors.append({
                     "key": "GLOBAL_DATA_DIR",
-                    "message": f"GLOBAL_DATA_DIR ist nicht nutzbar: {exc}",
+                    "message": f"GLOBAL_DATA_DIR is not usable: {exc}",
                     "message_code": "config_data_dir_unusable",
                 })
 
@@ -1508,7 +1508,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
     if smtp_port < 1 or smtp_port > 65535:
         warnings.append({
             "key": "GLOBAL_SMTP_PORT",
-            "message": "GLOBAL_SMTP_PORT liegt außerhalb 1..65535.",
+            "message": "GLOBAL_SMTP_PORT is outside 1..65535.",
             "message_code": "config_smtp_port",
         })
 
@@ -1516,7 +1516,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
     if storagebox_port < 1 or storagebox_port > 65535:
         warnings.append({
             "key": "STORAGEBOX_PORT",
-            "message": "STORAGEBOX_PORT liegt außerhalb 1..65535.",
+            "message": "STORAGEBOX_PORT is outside 1..65535.",
             "message_code": "config_storagebox_port",
         })
 
@@ -1533,7 +1533,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
     if rt_level not in {"1", "2", "3"}:
         warnings.append({
             "key": "RESTORE_TEST_LEVEL",
-            "message": "RESTORE_TEST_LEVEL sollte 1, 2 oder 3 sein.",
+            "message": "RESTORE_TEST_LEVEL should be 1, 2, or 3.",
             "message_code": "config_restore_test_level",
         })
 
@@ -1559,7 +1559,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
         if val < 0:
             warnings.append({
                 "key": key,
-                "message": f"{key} sollte eine nicht-negative Ganzzahl sein.",
+                "message": f"{key} should be a non-negative integer.",
                 "message_code": "config_non_negative_integer",
                 "message_params": {"key": key},
             })

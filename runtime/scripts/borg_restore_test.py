@@ -253,7 +253,7 @@ class RestoreTest:
 
         key = str(repo.get("smb_profile_key") or "").strip().lower()
         if not key:
-            return False, "SMB-Profil fehlt im Job"
+            return False, "SMB profile is missing from the job"
         profiles = self._parse_smb_profiles()
         profile = profiles.get(key)
         if not isinstance(profile, dict):
@@ -346,7 +346,7 @@ class RestoreTest:
             raw = json.loads(tf.read_text(encoding="utf-8"))
             last_result = str(raw.get("test_result", "")).strip().lower()
             if last_result != "success":
-                self.log(f"  Letzter Teststatus: {last_result or 'unknown'} → erneuter Test erforderlich")
+                self.log(f"  Latest test status: {last_result or 'unknown'} - a new test is required")
                 return True
         except Exception:
             # Bei beschädigter/inkompatibler Testdatei lieber erneut testen.
@@ -881,11 +881,11 @@ def main() -> None:
                         help="Test level: 1=integrity, 2=dry run (default), 3=sample restore")
     parser.add_argument("--location", default="local",
                         choices=["local", "usb", "smb", "storagebox", "all"],
-                        help="Welche Locations testen (Standard: local)")
+                        help="Locations to test (default: local)")
     parser.add_argument("--smb-auto-mount", action="store_true",
-                        help="SMB-Repositories vor Test mounten und danach unmounten")
+                        help="Mount SMB repositories before testing and unmount them afterward")
     parser.add_argument("--job-key",  dest="job_keys", action="append", default=[],
-                        help="Optional: nur bestimmte Jobs testen (z. B. flash_local). Kann mehrfach angegeben werden.")
+                        help="Optionally test only selected jobs (for example flash_local); may be repeated")
     args = parser.parse_args()
 
     conf  = load_conf()

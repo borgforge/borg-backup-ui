@@ -62,11 +62,11 @@ class CheckManager:
         """
         with self._lock:
             if self._state is not None and not self._state.finished:
-                return False, "Ein Check läuft bereits"
+                return False, "A check is already running"
 
         mode = (mode or "quick").strip().lower()
         if mode not in self._MODE_ARGS:
-            return False, f"Ungültiger Check-Modus: {mode}"
+            return False, f"Invalid check mode: {mode}"
 
         try:
             from restore_api import _get_job_repo_info, _borg_env
@@ -75,7 +75,7 @@ class CheckManager:
             info = _get_job_repo_info(config, job_key)
             env = _borg_env(info["passphrase_file"])
         except Exception as exc:
-            return False, f"Repository-Info nicht lesbar: {exc}"
+            return False, f"Repository information is not readable: {exc}"
 
         cmd = ["borg", "check"] + self._MODE_ARGS[mode] + [info["repo"]]
 
@@ -89,7 +89,7 @@ class CheckManager:
                 bufsize=1,
             )
         except OSError as exc:
-            return False, f"Start fehlgeschlagen: {exc}"
+            return False, f"Start failed: {exc}"
 
         state = _CheckState(proc, job_key, mode, datetime.now())
         state.append_line(f"[Info] Starte: {' '.join(cmd[:-1])} {info['repo']}")
@@ -162,7 +162,7 @@ class CheckManager:
         with self._lock:
             state = self._state
         if state is None:
-            yield "event: error\ndata: Kein Check gestartet\n\n"
+            yield "event: error\ndata: No check was started\n\n"
             return
 
         yield ": heartbeat\n\n"

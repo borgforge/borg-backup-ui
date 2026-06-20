@@ -182,9 +182,9 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
 
 def preview_jobs_bundle(config: dict, bundle: dict) -> dict:
     if not isinstance(bundle, dict):
-        raise ValueError("Ungültiges Bundle")
+        raise ValueError("Invalid bundle")
     if bundle.get("format") != "bbui-job-bundle-v1":
-        raise ValueError("Unbekanntes Bundle-Format")
+        raise ValueError("Unknown bundle format")
     rows = _job_preview_rows(config, bundle)
     settings_preview = _preview_settings_payload(config, bundle.get("settings_payload"))
     return {
@@ -365,18 +365,18 @@ def import_jobs_bundle(
     per_profile_mode: dict | None = None,
 ) -> dict:
     if mode not in {"skip", "overwrite", "rename"}:
-        raise ValueError("Ungültiger Import-Modus")
+        raise ValueError("Invalid import mode")
     if not isinstance(bundle, dict):
-        raise ValueError("Ungültiges Bundle")
+        raise ValueError("Invalid bundle")
     if bundle.get("format") != "bbui-job-bundle-v1":
-        raise ValueError("Unbekanntes Bundle-Format")
+        raise ValueError("Unknown bundle format")
     if settings_mode not in {"ignore", "merge", "replace"}:
-        raise ValueError("Ungültiger Settings-Import-Modus")
+        raise ValueError("Invalid settings import mode")
 
     jobs = bundle.get("jobs")
     schedules = bundle.get("schedules") if isinstance(bundle.get("schedules"), dict) else {}
     if not isinstance(jobs, list):
-        raise ValueError("Bundle enthält keine Job-Liste")
+        raise ValueError("Bundle does not contain a job list")
 
     jobs_dir = _jobs_dir(config)
     existing_files = {p.stem for p in jobs_dir.glob("*.json")}
@@ -587,7 +587,7 @@ def _openssl_encrypt(plaintext: bytes, password: str) -> bytes:
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError((proc.stderr or b"").decode("utf-8", "ignore").strip() or "OpenSSL-Verschlüsselung fehlgeschlagen")
+        raise RuntimeError((proc.stderr or b"").decode("utf-8", "ignore").strip() or "OpenSSL encryption failed")
     return proc.stdout
 
 
@@ -612,14 +612,14 @@ def _openssl_decrypt(ciphertext: bytes, password: str) -> bytes:
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError("Entschlüsselung fehlgeschlagen (Passwort oder Datei ungültig)")
+        raise RuntimeError("Decryption failed (invalid password or file)")
     return proc.stdout
 
 
 def export_secrets_backup(password: str) -> dict:
     pw = str(password or "")
     if len(pw) < 8:
-        raise ValueError("Passwort muss mindestens 8 Zeichen haben")
+        raise ValueError("Password must contain at least 8 characters")
     files = []
     for p in sorted(_secrets_dir().glob(".*")):
         if not p.is_file():
@@ -655,10 +655,10 @@ def preview_secrets_backup(password: str, payload_b64: str) -> dict:
     plaintext = _openssl_decrypt(enc, str(password or ""))
     payload = json.loads(plaintext.decode("utf-8"))
     if payload.get("format") != "bbui-secrets-backup-v1":
-        raise ValueError("Ungültiges Secrets-Backup-Format")
+        raise ValueError("Invalid secrets backup format")
     files = payload.get("files") or []
     if not isinstance(files, list):
-        raise ValueError("Ungültige Secrets-Dateiliste")
+        raise ValueError("Invalid secrets file list")
     rows = []
     td = _secrets_dir()
     for item in files:
@@ -689,15 +689,15 @@ def import_secrets_backup(
     selected_names: list[str] | None = None,
 ) -> dict:
     if mode not in {"skip", "overwrite", "rename"}:
-        raise ValueError("Ungültiger Import-Modus")
+        raise ValueError("Invalid import mode")
     enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
     plaintext = _openssl_decrypt(enc, str(password or ""))
     payload = json.loads(plaintext.decode("utf-8"))
     if payload.get("format") != "bbui-secrets-backup-v1":
-        raise ValueError("Ungültiges Secrets-Backup-Format")
+        raise ValueError("Invalid secrets backup format")
     files = payload.get("files") or []
     if not isinstance(files, list):
-        raise ValueError("Ungültige Secrets-Dateiliste")
+        raise ValueError("Invalid secrets file list")
 
     target_dir = _secrets_dir()
     written = 0
@@ -735,7 +735,7 @@ def import_secrets_backup(
 def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: list[str] | None = None) -> dict:
     pw = str(password or "")
     if len(pw) < 8:
-        raise ValueError("Passwort muss mindestens 8 Zeichen haben")
+        raise ValueError("Password must contain at least 8 characters")
     plain = export_jobs_bundle(config, selected_keys=selected_keys)
     bundle = plain.get("bundle") if isinstance(plain.get("bundle"), dict) else {}
     # Secure jobs bundle intentionally excludes settings payload:
@@ -763,7 +763,7 @@ def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str)
     plaintext = _openssl_decrypt(enc, str(password or ""))
     payload = json.loads(plaintext.decode("utf-8"))
     if payload.get("format") != "bbui-job-bundle-secure-v1":
-        raise ValueError("Unbekanntes verschlüsseltes Jobs-Format")
+        raise ValueError("Unknown encrypted jobs format")
     bundle = payload.get("bundle")
     bundle = dict(bundle) if isinstance(bundle, dict) else {}
     bundle.pop("settings_payload", None)
@@ -790,10 +790,10 @@ def import_jobs_bundle_encrypted(
     plaintext = _openssl_decrypt(enc, str(password or ""))
     payload = json.loads(plaintext.decode("utf-8"))
     if payload.get("format") != "bbui-job-bundle-secure-v1":
-        raise ValueError("Unbekanntes verschlüsseltes Jobs-Format")
+        raise ValueError("Unknown encrypted jobs format")
     bundle = payload.get("bundle")
     if not isinstance(bundle, dict):
-        raise ValueError("Ungültiges Bundle")
+        raise ValueError("Invalid bundle")
     passphrase_files = payload.get("passphrase_files") if isinstance(payload.get("passphrase_files"), dict) else {}
 
     # Secure jobs import intentionally ignores settings payload.
@@ -871,7 +871,7 @@ def import_jobs_bundle_encrypted(
 def export_profile_secrets_backup(config: dict, password: str) -> dict:
     pw = str(password or "")
     if len(pw) < 8:
-        raise ValueError("Passwort muss mindestens 8 Zeichen haben")
+        raise ValueError("Password must contain at least 8 characters")
     settings_payload = read_settings_payload(config)
     entries = _collect_profile_secrets(settings_payload)
     payload = {
@@ -917,7 +917,7 @@ def preview_profile_secrets_backup(config: dict, password: str, payload_b64: str
     plaintext = _openssl_decrypt(enc, str(password or ""))
     payload = json.loads(plaintext.decode("utf-8"))
     if payload.get("format") != "bbui-profile-secrets-v1":
-        raise ValueError("Ungültiges Profile-Secrets-Format")
+        raise ValueError("Invalid profile secrets format")
     manifest = payload.get("manifest") if isinstance(payload.get("manifest"), list) else []
     incoming_settings_payload = payload.get("settings_payload") if isinstance(payload.get("settings_payload"), dict) else None
     settings_payload = read_settings_payload(config)
@@ -976,15 +976,15 @@ def import_profile_secrets_backup(
     per_profile_mode: dict | None = None,
 ) -> dict:
     if mode not in {"skip", "overwrite"}:
-        raise ValueError("Ungültiger Import-Modus (erlaubt: skip, overwrite)")
+        raise ValueError("Invalid import mode (allowed: skip, overwrite)")
     if settings_mode not in {"ignore", "merge", "replace"}:
-        raise ValueError("Ungültiger Settings-Import-Modus")
+        raise ValueError("Invalid settings import mode")
 
     enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
     plaintext = _openssl_decrypt(enc, str(password or ""))
     payload = json.loads(plaintext.decode("utf-8"))
     if payload.get("format") != "bbui-profile-secrets-v1":
-        raise ValueError("Ungültiges Profile-Secrets-Format")
+        raise ValueError("Invalid profile secrets format")
 
     manifest = payload.get("manifest") if isinstance(payload.get("manifest"), list) else []
     files = payload.get("files") if isinstance(payload.get("files"), list) else []

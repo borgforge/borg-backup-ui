@@ -773,18 +773,18 @@ if __name__ == "__main__":
     )
 
     parser = argparse.ArgumentParser(
-        description="backup_job.py – Diagnose und Smoke-Test"
+        description="backup_job.py - diagnostics and smoke test"
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("info", help="Zeigt aktuelle Konfiguration aus Env-Vars")
+    subparsers.add_parser("info", help="Show current configuration from environment variables")
     subparsers.add_parser(
-        "check-parity", help="Prüft Parity-Status (exit 0 wenn aktiv)"
+        "check-parity", help="Check parity status (exit 0 when active)"
     )
     check_usb = subparsers.add_parser(
-        "check-usb", help="Prüft USB-Mount (exit 0 wenn nicht verfügbar)"
+        "check-usb", help="Check USB mount (exit 0 when unavailable)"
     )
-    check_usb.add_argument("mount_path", help="Pfad zum USB-Mount")
+    check_usb.add_argument("mount_path", help="Path to the USB mount")
 
     args = parser.parse_args()
 

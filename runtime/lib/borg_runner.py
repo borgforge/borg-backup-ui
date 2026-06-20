@@ -761,19 +761,19 @@ if __name__ == "__main__":
     _repo = _config.repo
 
     _USAGE = (
-        "Verwendung: python3 lib/borg_runner.py <befehl> [args]\n"
+        "Usage: python3 lib/borg_runner.py <command> [args]\n"
         "\n"
-        "Befehle:\n"
-        "  info          Repository-Informationen anzeigen (sicher, read-only)\n"
-        "  prune-dry     Prune simulieren ohne zu löschen (--dry-run)\n"
-        "  compact       Ungenutzten Speicher freigeben\n"
-        "  check         Repository-Integrität prüfen (respektiert Intervall)\n"
-        "  check-force   Repository-Integrität prüfen (Intervall ignorieren)\n"
+        "Commands:\n"
+        "  info          Show repository information (safe, read-only)\n"
+        "  prune-dry     Simulate prune without deleting data (--dry-run)\n"
+        "  compact       Release unused storage\n"
+        "  check         Check repository integrity (honor interval)\n"
+        "  check-force   Check repository integrity (ignore interval)\n"
         "  parse-stats <logdatei>\n"
-        "                Borg-Statistiken aus Log-Datei parsen und anzeigen\n"
+        "                Parse and show Borg statistics from a log file\n"
         "\n"
-        "Voraussetzung: BORG_REPO (und BORG_PASSPHRASE / BORG_PASSCOMMAND)\n"
-        "               müssen als Umgebungsvariablen gesetzt sein.\n"
+        "Required: BORG_REPO (and BORG_PASSPHRASE / BORG_PASSCOMMAND)\n"
+        "          must be set as environment variables.\n"
     )
 
     _cmd = sys.argv[1] if len(sys.argv) > 1 else ""

@@ -125,38 +125,38 @@ def validate_storage_profile_usage_before_save(ui_config: dict, next_rows: List[
         row = next_by_key.get(key)
         if row is None:
             raise ValueError(
-                f"Storage-Profil '{key}' kann nicht entfernt werden, es wird noch von {len(jobs)} Job(s) genutzt."
+                f"Storage profile '{key}' cannot be removed because it is still used by {len(jobs)} job(s)."
             )
         missing = [
             label for field, label in (
                 ("host", "Host"),
-                ("user", "Benutzer"),
-                ("base_path", "Basispfad"),
+                ("user", "user"),
+                ("base_path", "base path"),
             )
             if not str(row.get(field) or "").strip()
         ]
         if missing:
             raise ValueError(
-                f"Storage-Profil '{key}' wird noch von {len(jobs)} Job(s) genutzt und darf nicht unvollständig gespeichert werden. "
-                f"Fehlt: {', '.join(missing)}."
+                f"Storage profile '{key}' is still used by {len(jobs)} job(s) and cannot be saved incomplete. "
+                f"Missing: {', '.join(missing)}."
             )
 
 
 def validate_storage_profiles_complete_before_save(next_rows: List[Dict[str, str]]) -> None:
     for row in next_rows or []:
-        key = str(row.get("key") or "").strip() or str(row.get("name") or "").strip() or "unbekannt"
+        key = str(row.get("key") or "").strip() or str(row.get("name") or "").strip() or "unknown"
         missing = [
             label for field, label in (
                 ("name", "Name"),
                 ("host", "Host"),
-                ("user", "Benutzer"),
-                ("base_path", "Basispfad"),
+                ("user", "user"),
+                ("base_path", "base path"),
             )
             if not str(row.get(field) or "").strip()
         ]
         if missing:
             raise ValueError(
-                f"Storage-Profil '{key}' ist unvollständig. Fehlt: {', '.join(missing)}."
+                f"Storage profile '{key}' is incomplete. Missing: {', '.join(missing)}."
             )
 
 

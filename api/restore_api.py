@@ -140,7 +140,7 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
                 lines = run.get("lines")
                 if not isinstance(lines, list):
                     lines = []
-                lines.append("Restore wurde nach Server-Neustart als abgebrochen markiert.")
+                lines.append("Restore was marked as aborted after the server restarted.")
                 run["lines"] = lines[-200:]
                 changed = True
 
@@ -184,7 +184,7 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
     data_root = resolve_data_root(config)
     jobs = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
     if job_key not in jobs:
-        raise ValueError(f"Unbekannter Job: {job_key}")
+        raise ValueError(f"Unknown job: {job_key}")
 
     job = jobs[job_key]
 
@@ -742,7 +742,7 @@ def restore_precheck(
         "dry_run": False,
         "dry_run_exit_code": meta["exit_code"],
         "dry_run_stdout": (
-            "Precheck ist metadata-only (kein Extract).\n"
+            "Precheck is metadata-only (no extraction).\n"
             + (meta["stdout"] or "")
         )[-8000:],
         "dry_run_stderr": (meta["stderr"] or "")[-8000:],
@@ -1096,7 +1096,7 @@ def get_restore_state(config: dict, restore_id: str) -> dict:
     with _RESTORE_LOCK:
         s = _RESTORE_RUNS.get(str(restore_id).strip())
         if not s:
-            raise ValueError("Unbekannte restore_id")
+            raise ValueError("Unknown restore_id")
         return {
             "restore_id": s.get("restore_id"),
             "state": s.get("state"),

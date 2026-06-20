@@ -50,8 +50,8 @@ def test_registry_reports_deprecated_cleanup_candidates(tmp_path: Path):
     registry = get_migration_registry_status(cfg)
     cleanup = _items_by_id(registry)["legacy_deprecated_keys_cleanup_v1"]
 
-    assert cleanup["title"] == "Deprecated backup.conf Cleanup-Kandidaten"
-    assert "können bereinigt werden" in cleanup["reason"]
+    assert cleanup["title"] == "Deprecated backup.conf cleanup candidates"
+    assert "can be cleaned up" in cleanup["reason"]
     assert cleanup["category"] == "planned_migration"
     assert cleanup["stage"] == "planned"
     assert cleanup["auto_apply"] is False
@@ -117,12 +117,12 @@ def test_registry_reports_schema_missing_and_storage_marker(tmp_path: Path):
     registry = get_migration_registry_status(cfg)
     items = _items_by_id(registry)
 
-    assert items["setup_runtime_paths"]["title"] == "Runtime-Pfade aus GLOBAL_DATA_DIR"
+    assert items["setup_runtime_paths"]["title"] == "Runtime paths from GLOBAL_DATA_DIR"
     assert items["setup_runtime_paths"]["category"] == "setup"
-    assert "unvollstaendigen Lauf" in items["setup_runtime_paths"]["reason"]
-    assert items["config_backup_conf_schema"]["title"] == "backup.conf-Schema aus backup.conf.example"
+    assert "failed or incomplete run" in items["setup_runtime_paths"]["reason"]
+    assert items["config_backup_conf_schema"]["title"] == "backup.conf schema from backup.conf.example"
     assert items["config_backup_conf_schema"]["category"] == "config"
-    assert "fehlen Schema-Keys" in items["config_backup_conf_schema"]["reason"]
+    assert "missing schema keys" in items["config_backup_conf_schema"]["reason"]
     assert items["setup_runtime_paths"]["status"] == "failed"
     assert items["config_backup_conf_schema"]["status"] == "pending"
     assert items["config_backup_conf_schema"]["details"]["missing_keys"] == ["BORG_MAX_RUNTIME_HOURS"]
@@ -162,7 +162,7 @@ def test_registry_prefers_migration_state_v2_over_legacy_marker(tmp_path: Path):
 
     assert item["status"] == "applied"
     assert item["details"]["state"] == "baseline_detected"
-    assert "Migrationsstatus erledigt" in item["reason"]
+    assert "complete in migration state" in item["reason"]
 
 
 def test_registry_does_not_count_not_needed_cleanup_as_planned(tmp_path: Path):
@@ -209,9 +209,9 @@ def test_legacy_cleanup_plan_is_dry_run(tmp_path: Path):
     assert plan["candidate_count"] == 1
     assert plan["planned_actions"] == [{
         "key": "REPO_FLASH_LOCAL",
-        "action": "auskommentieren",
+        "action": "comment out",
         "mode": "comment_out",
-        "reason": "nicht mehr im aktuellen backup.conf.example enthalten",
+        "reason": "no longer present in the current backup.conf.example",
         "known": False,
     }]
     conf_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
