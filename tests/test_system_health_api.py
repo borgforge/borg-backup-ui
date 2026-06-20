@@ -156,3 +156,6 @@ def test_collect_job_health_flags_broken_storagebox_repo_uri(tmp_path, monkeypat
 
     assert health["summary"]["failed"] == 1
     assert "fehlenden Slash" in " ".join(health["items"][0]["errors"])
+    assert [row["code"] for row in health["items"][0]["error_details"]] == [
+        "storagebox_repo_port_slash",
+    ]

@@ -32,20 +32,30 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   smbSecretCleanupKeys: [],
   authStatus: null,
   authUsers: [],
+  data: null,
+  systemHealth: null,
 };
 const settingsState = window.BBUI.settingsState;
 
+function settingsT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(`settings.${key}`, params) || `settings.${key}`;
+}
+
+function settingsLocale() {
+  return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
+}
+
 function getSettingsTabs() {
   const tabs = [
-  { key: 'general', label: 'Allgemein' },
-  { key: 'users', label: 'Benutzer' },
-  { key: 'backup', label: 'Backup' },
-  { key: 'restore', label: 'Restore' },
-  { key: 'usb', label: 'USB-Profile' },
-  { key: 'smb', label: 'SMB-Profile' },
-  { key: 'storagebox', label: 'SSH-Profile' },
-  { key: 'transfer', label: 'Import / Export' },
-  { key: 'advanced', label: 'Erweitert' },
+  { key: 'general', label: settingsT('tabs.general') },
+  { key: 'users', label: settingsT('tabs.users') },
+  { key: 'backup', label: settingsT('tabs.backup') },
+  { key: 'restore', label: settingsT('tabs.restore') },
+  { key: 'usb', label: settingsT('tabs.usbProfiles') },
+  { key: 'smb', label: settingsT('tabs.smbProfiles') },
+  { key: 'storagebox', label: settingsT('tabs.sshProfiles') },
+  { key: 'transfer', label: settingsT('tabs.transfer') },
+  { key: 'advanced', label: settingsT('tabs.advanced') },
   ];
   const auth = settingsState.authStatus || {};
   const isAdmin = String(auth.current_role || '').toLowerCase() === 'admin';
@@ -86,6 +96,8 @@ async function refreshSettings() {
       settingsState.storageboxConnMsg = String(data.storagebox_setup.message || '');
     }
     const health = healthRes.ok ? await healthRes.json() : null;
+    settingsState.data = data;
+    settingsState.systemHealth = health;
     renderSettings(data, health);
     settingsState.smbCleanupKeys = [];
     settingsState.smbSecretCleanupKeys = [];
@@ -98,7 +110,7 @@ async function refreshSettings() {
       _applyVersionInfo(ver.version, ver.author, ver.borg_version);
     }
   } catch (err) {
-    showMsg('settings-message', 'error', `Fehler: ${err.message}`);
+    showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
   }
 }
 
@@ -109,14 +121,20 @@ function _renderSettingsLoading() {
     <div class="settings-section">
       <div class="settings-section-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-        Einstellungen werden aktualisiert
+        ${escHtml(settingsT('updating'))}
       </div>
       <div class="settings-body">
-        <div class="status-message empty-state">Systemzustand und Einstellungen werden neu geladen...</div>
+        <div class="status-message empty-state">${escHtml(settingsT('reloading'))}</div>
       </div>
     </div>
   `;
 }
+
+window.addEventListener?.('bbui:language-changed', () => {
+  if (settingsState.loaded && settingsState.data) {
+    renderSettings(settingsState.data, settingsState.systemHealth);
+  }
+});
 
 function _applyVersionInfo(version, author, borgVersion) {
   const el = document.getElementById('app-version-info');
@@ -233,8 +251,8 @@ function addUsbProfileRow(row = {}) {
   wrap.innerHTML = `
     <input class="form-input" type="text" data-usb-profile-name placeholder="USB-Drive-A" value="${escHtml(name)}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
     <input class="form-input mono" type="text" data-usb-profile-path placeholder="/mnt/disks/DEIN_DRIVE" value="${escHtml(path)}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
-    <span class="usb-profile-state text-muted" data-usb-profile-state>Ungeprüft</span>
-    <button type="button" class="btn btn-danger btn-sm" data-settings-action="usb-profile-remove">Entfernen</button>
+    <span class="usb-profile-state text-muted" data-usb-profile-state>${settingsT('profiles.unchecked')}</span>
+    <button type="button" class="btn btn-danger btn-sm" data-settings-action="usb-profile-remove">${settingsT('common.remove')}</button>
   `;
   box.appendChild(wrap);
 }
@@ -245,26 +263,26 @@ function renderSettingsUsbProfiles(rows) {
     <div class="usb-profile-row" data-profile-key="${escHtml(r.key || '')}">
       <input class="form-input" type="text" data-usb-profile-name placeholder="USB-Drive-A" value="${escHtml(r.name || '')}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
       <input class="form-input mono" type="text" data-usb-profile-path placeholder="/mnt/disks/DEIN_DRIVE" value="${escHtml(r.mount_path || '')}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
-      <span class="usb-profile-state text-muted" data-usb-profile-state>Ungeprüft</span>
-      <button type="button" class="btn btn-danger btn-sm" data-settings-action="usb-profile-remove">Entfernen</button>
+      <span class="usb-profile-state text-muted" data-usb-profile-state>${settingsT('profiles.unchecked')}</span>
+      <button type="button" class="btn btn-danger btn-sm" data-settings-action="usb-profile-remove">${settingsT('common.remove')}</button>
     </div>
   `).join('');
-  return settingsCard('USB-Profile',
+  return settingsCard(settingsT('profiles.usbTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><path d="M12 3v4"/><path d="M10 3h4"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/></svg>`,
     `<div class="settings-body">
       <div class="text-muted" style="font-size:12px;margin-bottom:10px">
-        Definiert auswählbare USB-Ziele für den Wizard. Der Repository-Pfad wird aus Profil + Job-Typ zusammengesetzt.
+        ${settingsT('profiles.usbDescription')}
       </div>
       <div id="usb-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
       <input type="hidden" id="usb-profiles-json" data-key="USB_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-check">Status prüfen</button>
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-add">USB-Profil hinzufügen</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-check">${settingsT('common.checkStatus')}</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-add">${settingsT('profiles.addUsb')}</button>
       </div>
       <div id="usb-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
-      ${normalized.length === 0 ? '<div class="status-message warning" style="margin-top:10px">Noch kein USB-Profil vorhanden. USB-Location im Wizard bleibt gesperrt, bis mindestens ein Profil angelegt ist.</div>' : ''}
+      ${normalized.length === 0 ? `<div class="status-message warning" style="margin-top:10px">${settingsT('profiles.noUsb')}</div>` : ''}
     </div>`);
 }
 
@@ -349,8 +367,8 @@ function addStorageProfileRow(row = {}) {
       <option value="synology" ${targetType === 'synology' ? 'selected' : ''}>Synology</option>
       <option value="generic" ${targetType === 'generic' ? 'selected' : ''}>Generic SSH</option>
     </select>
-    <span class="text-muted" style="font-size:12px">Jobs: ${Number(row.jobs_count || 0)}</span>
-    <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">Entfernen</button>
+    <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(row.jobs_count || 0) })}</span>
+    <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">${settingsT('common.remove')}</button>
   `;
   box.appendChild(wrap);
 }
@@ -370,22 +388,22 @@ function renderSettingsStorageProfiles(rows) {
         <option value="synology" ${String(r.target_type || '') === 'synology' ? 'selected' : ''}>Synology</option>
         <option value="generic" ${String(r.target_type || '') === 'generic' ? 'selected' : ''}>Generic SSH</option>
       </select>
-      <span class="text-muted" style="font-size:12px">Jobs: ${Number(r.jobs_count || 0)}</span>
-      <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">Entfernen</button>
+      <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(r.jobs_count || 0) })}</span>
+      <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">${settingsT('common.remove')}</button>
     </div>
   `).join('');
-  return settingsCard('Storage-Profile',
+  return settingsCard(settingsT('profiles.storageTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M3 12h18M3 19h18"/></svg>`,
     `<div class="settings-body">
       <div class="text-muted" style="font-size:12px;margin-bottom:10px">
-        Mehrere SSH-Storage-Ziele für Location=Storagebox. Jobs referenzieren ein Profil per Schlüssel.
+        ${settingsT('profiles.storageDescription')}
       </div>
       <div id="storage-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
       <input type="hidden" id="storage-profiles-json" data-key="STORAGE_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="storage-profile-add">Storage-Profil hinzufügen</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="storage-profile-add">${settingsT('profiles.addStorage')}</button>
       </div>
       <div id="storage-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
     </div>`);
@@ -464,19 +482,19 @@ function addSmbProfileRow(row = {}) {
   if (key) wrap.dataset.profileKey = key;
   wrap.innerHTML = `
     <div class="smb-profile-main">
-      <input class="form-input" type="text" data-smb-profile-name placeholder="Profilname (z. B. NAS-A)" value="${escHtml(name)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="text" data-smb-profile-server placeholder="Host/IP (z. B. 192.168.178.50)" value="${escHtml(server)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="text" data-smb-profile-share placeholder="Share (z. B. backup)" value="${escHtml(share)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input" type="text" data-smb-profile-name placeholder="${settingsT('profiles.profileNamePlaceholder')}" value="${escHtml(name)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-server placeholder="${settingsT('profiles.hostPlaceholder')}" value="${escHtml(server)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-share placeholder="${settingsT('profiles.sharePlaceholder')}" value="${escHtml(share)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
       <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(path)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="text" data-smb-profile-username placeholder="Benutzer" value="${escHtml(username)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="password" data-smb-profile-password placeholder="${passwordSet ? 'Passwort gesetzt (nur bei Änderung neu eingeben)' : 'Passwort eingeben'}" value="" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">Optionen</button>
-      <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">Entfernen</button>
-      <span class="text-muted" style="font-size:12px">Jobs: ${jobsCount}</span>
+      <input class="form-input mono" type="text" data-smb-profile-username placeholder="${settingsT('profiles.usernamePlaceholder')}" value="${escHtml(username)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="password" data-smb-profile-password placeholder="${passwordSet ? settingsT('profiles.passwordSetPlaceholder') : settingsT('profiles.passwordPlaceholder')}" value="" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">${settingsT('profiles.options')}</button>
+      <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">${settingsT('common.remove')}</button>
+      <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: jobsCount })}</span>
     </div>
     <div class="smb-profile-optional hidden" data-smb-profile-optional>
-      <input class="form-input mono" type="text" data-smb-profile-vers placeholder="SMB-Version (z. B. 3.0)" value="${escHtml(vers)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="text" data-smb-profile-sec placeholder="Security (optional, z. B. ntlmssp)" value="${escHtml(sec)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-vers placeholder="${settingsT('profiles.smbVersionPlaceholder')}" value="${escHtml(vers)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-sec placeholder="${settingsT('profiles.securityPlaceholder')}" value="${escHtml(sec)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
     </div>
     <div class="smb-profile-checks hidden" data-smb-profile-checks></div>
     <input type="hidden" data-smb-profile-password-set value="${passwordSet ? 'true' : 'false'}">
@@ -489,57 +507,57 @@ function renderSettingsSmbProfiles(rows) {
   const content = normalized.map((r) => `
     <div class="smb-profile-row" data-profile-key="${escHtml(r.key || '')}" data-smb-jobs-count="${Number(r.jobs_count || 0)}" data-smb-job-refs="${escHtml((r.job_refs || []).join(', '))}">
       <div class="smb-profile-main">
-        <input class="form-input" type="text" data-smb-profile-name placeholder="Profilname (z. B. NAS-A)" value="${escHtml(r.name || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="text" data-smb-profile-server placeholder="Host/IP (z. B. 192.168.178.50)" value="${escHtml(r.server || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="text" data-smb-profile-share placeholder="Share (z. B. backup)" value="${escHtml(r.share || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input" type="text" data-smb-profile-name placeholder="${settingsT('profiles.profileNamePlaceholder')}" value="${escHtml(r.name || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-server placeholder="${settingsT('profiles.hostPlaceholder')}" value="${escHtml(r.server || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-share placeholder="${settingsT('profiles.sharePlaceholder')}" value="${escHtml(r.share || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
         <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(r.mount_path || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="text" data-smb-profile-username placeholder="Benutzer" value="${escHtml(r.username || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="password" data-smb-profile-password placeholder="${r.password_set ? 'Passwort gesetzt (nur bei Änderung neu eingeben)' : 'Passwort eingeben'}" value="" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">Optionen</button>
-        <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">Entfernen</button>
-        <span class="text-muted" style="font-size:12px">Jobs: ${Number(r.jobs_count || 0)}</span>
+        <input class="form-input mono" type="text" data-smb-profile-username placeholder="${settingsT('profiles.usernamePlaceholder')}" value="${escHtml(r.username || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="password" data-smb-profile-password placeholder="${r.password_set ? settingsT('profiles.passwordSetPlaceholder') : settingsT('profiles.passwordPlaceholder')}" value="" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">${settingsT('profiles.options')}</button>
+        <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">${settingsT('common.remove')}</button>
+        <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(r.jobs_count || 0) })}</span>
       </div>
       <div class="smb-profile-optional hidden" data-smb-profile-optional>
-        <input class="form-input mono" type="text" data-smb-profile-vers placeholder="SMB-Version (z. B. 3.0)" value="${escHtml(r.vers || '3.0')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="text" data-smb-profile-sec placeholder="Security (optional, z. B. ntlmssp)" value="${escHtml(r.sec || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-vers placeholder="${settingsT('profiles.smbVersionPlaceholder')}" value="${escHtml(r.vers || '3.0')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-sec placeholder="${settingsT('profiles.securityPlaceholder')}" value="${escHtml(r.sec || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
       </div>
       <div class="smb-profile-checks hidden" data-smb-profile-checks></div>
       <input type="hidden" data-smb-profile-password-set value="${r.password_set ? 'true' : 'false'}">
     </div>
   `).join('');
-  return settingsCard('SMB-Profile',
+  return settingsCard(settingsT('profiles.smbTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v10H3z"/><path d="M7 7V5h10v2"/><path d="M7 12h.01"/><path d="M11 12h.01"/><path d="M15 12h.01"/></svg>`,
     `<div class="settings-body">
       <div class="text-muted" style="font-size:12px;margin-bottom:10px">
-        Definiert SMB-Mount-Profile mit Benutzer + Passwort. Passwort wird als Secret-Datei gespeichert.
+        ${settingsT('profiles.smbDescription')}
       </div>
       <div id="smb-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
       <input type="hidden" id="smb-profiles-json" data-key="SMB_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-check">Status prüfen</button>
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-add">SMB-Profil hinzufügen</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-check">${settingsT('common.checkStatus')}</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-add">${settingsT('profiles.addSmb')}</button>
       </div>
       <div id="smb-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
-      ${normalized.length === 0 ? '<div class="status-message warning" style="margin-top:10px">Noch kein SMB-Profil vorhanden.</div>' : ''}
+      ${normalized.length === 0 ? `<div class="status-message warning" style="margin-top:10px">${settingsT('profiles.noSmb')}</div>` : ''}
     </div>`);
 }
 
 function _renderSmbChecksHtml(r) {
   const c = r?.checks || {};
   const steps = [
-    { label: 'SMB-Port erreichbar (445)', ok: !!c.port_ok, msg: String(c.port_msg || '') },
-    { label: 'Authentifizierung OK', ok: !!c.auth_ok, msg: String(c.auth_msg || '') },
-    { label: 'Temporärer Mount möglich', ok: !!c.mount_ok, msg: !!c.mount_ok ? String(c.mount_msg || '') : 'SMB Test-Mount fehlgeschlagen' },
-    { label: 'Share gefunden', ok: !!c.share_ok, msg: String(c.share_msg || '') },
-    { label: 'Schreibtest OK', ok: !!c.write_ok, msg: String(c.write_msg || '') },
-    { label: 'Unmount OK', ok: !!c.unmount_ok, msg: String(c.unmount_msg || '') },
+    { label: settingsT('profiles.smbPort'), ok: !!c.port_ok, msg: String(c.port_msg || '') },
+    { label: settingsT('profiles.authentication'), ok: !!c.auth_ok, msg: String(c.auth_msg || '') },
+    { label: settingsT('profiles.temporaryMount'), ok: !!c.mount_ok, msg: !!c.mount_ok ? String(c.mount_msg || '') : settingsT('profiles.mountFailed') },
+    { label: settingsT('profiles.shareFound'), ok: !!c.share_ok, msg: String(c.share_msg || '') },
+    { label: settingsT('profiles.writeTest'), ok: !!c.write_ok, msg: String(c.write_msg || '') },
+    { label: settingsT('profiles.unmount'), ok: !!c.unmount_ok, msg: String(c.unmount_msg || '') },
   ];
   let blocked = false;
   const line = (label, ok, msg) => {
     if (blocked) {
-      return `<div class="smb-check-row skip"><span>${escHtml(label)}</span><span>Nicht getestet</span></div>`;
+      return `<div class="smb-check-row skip"><span>${escHtml(label)}</span><span>${settingsT('profiles.notTested')}</span></div>`;
     }
     const message = String(msg || '').trim();
     if (ok) {
@@ -547,16 +565,16 @@ function _renderSmbChecksHtml(r) {
     }
     if (message) {
       blocked = true;
-      return `<div class="smb-check-row bad"><span>${escHtml(label)}</span><span>Fehler - ${escHtml(message)}</span></div>`;
+      return `<div class="smb-check-row bad"><span>${escHtml(label)}</span><span>${settingsT('profiles.checkError', { message: escHtml(message) })}</span></div>`;
     }
-    return `<div class="smb-check-row skip"><span>${escHtml(label)}</span><span>Nicht getestet</span></div>`;
+    return `<div class="smb-check-row skip"><span>${escHtml(label)}</span><span>${settingsT('profiles.notTested')}</span></div>`;
   };
   const rows = steps.map((s) => line(s.label, s.ok, s.msg)).join('');
   return `
     <div class="smb-check-grid">
       ${rows}
     </div>
-    ${r?.message ? `<details class="smb-check-details"><summary>Details anzeigen</summary><pre>${escHtml(String(r.message || ''))}</pre></details>` : ''}
+    ${r?.message ? `<details class="smb-check-details"><summary>${settingsT('common.details')}</summary><pre>${escHtml(String(r.message || ''))}</pre></details>` : ''}
   `;
 }
 
@@ -566,38 +584,38 @@ function _renderStorageboxChecksHtml(payload) {
     const ok = !!row?.ok;
     const label = String(row?.label || '');
     const msg = String(row?.message || '');
-    return `<div class="smb-check-row ${ok ? 'ok' : 'fail'}"><span>${escHtml(label)}</span><span>${ok ? 'OK' : 'Fehler'}${msg ? ` - ${escHtml(msg)}` : ''}</span></div>`;
+    return `<div class="smb-check-row ${ok ? 'ok' : 'fail'}"><span>${escHtml(label)}</span><span>${ok ? settingsT('common.ok') : settingsT('common.error')}${msg ? ` - ${escHtml(msg)}` : ''}</span></div>`;
   }).join('');
   const details = String(payload.details || '').trim();
   return `
     <div class="smb-check-grid">
       ${rows}
     </div>
-    ${details ? `<details class="smb-check-details"><summary>Details anzeigen</summary><pre>${escHtml(details)}</pre></details>` : ''}
+    ${details ? `<details class="smb-check-details"><summary>${settingsT('common.details')}</summary><pre>${escHtml(details)}</pre></details>` : ''}
   `;
 }
 
 function renderSettingsSystemHealth(data) {
   const cifsState = String(data?.checks?.cifs_state || '').toLowerCase();
   const cifsDetail = cifsState === 'loaded'
-    ? 'Kernel-Modul geladen'
-    : (cifsState === 'available' ? 'Kernel-Modul verfügbar (lädt beim ersten Mount)' : 'cifs fehlt');
+    ? settingsT('health.cifsLoaded')
+    : (cifsState === 'available' ? settingsT('health.cifsAvailable') : settingsT('health.cifsMissing'));
   const perms = data?.secrets_permissions || {};
   const permDetail = perms.ok
-    ? (perms.message || 'Alle geprüften Dateien auf 600')
+    ? settingsT('health.permissionsOk')
     : ((Array.isArray(perms.bad_files) && perms.bad_files.length)
       ? perms.bad_files.map((f) => `${f.path} (${f.mode})`).join(' | ')
-      : (perms.message || 'Dateirechte prüfen'));
+      : settingsT('health.checkPermissions'));
   const checks = [
-    ['Data-Root', data?.checks?.data_root_ok, data?.paths?.data_root || '—'],
-    ['Jobs-Pfad', data?.checks?.jobs_path_ok, data?.paths?.jobs || '—'],
-    ['Secrets-Pfad', data?.checks?.secrets_path_ok, data?.paths?.secrets || '—'],
-    ['mount/umount verfügbar', data?.checks?.mount_bin_ok, `${data?.paths?.mount_bin || '—'} | ${data?.paths?.umount_bin || '—'}`],
-    ['CIFS-Unterstützung', data?.checks?.cifs_supported, cifsDetail],
-    ['Secret-Dateirechte', data?.checks?.secrets_permissions_ok, permDetail],
+    [settingsT('health.dataRoot'), data?.checks?.data_root_ok, data?.paths?.data_root || '—'],
+    [settingsT('health.jobsPath'), data?.checks?.jobs_path_ok, data?.paths?.jobs || '—'],
+    [settingsT('health.secretsPath'), data?.checks?.secrets_path_ok, data?.paths?.secrets || '—'],
+    [settingsT('health.mountAvailable'), data?.checks?.mount_bin_ok, `${data?.paths?.mount_bin || '—'} | ${data?.paths?.umount_bin || '—'}`],
+    [settingsT('health.cifsSupport'), data?.checks?.cifs_supported, cifsDetail],
+    [settingsT('health.secretPermissions'), data?.checks?.secrets_permissions_ok, permDetail],
   ];
   const migrationSummary = _buildMigrationSummary(data || {});
-  const lastEffectiveTs = _formatHealthTimestamp(migrationSummary.lastEffectiveRun) || 'keine Änderungen protokolliert';
+  const lastEffectiveTs = _formatHealthTimestamp(migrationSummary.lastEffectiveRun) || settingsT('health.noEffectiveChanges');
   const registrySummary = data?.migration_registry?.summary && typeof data.migration_registry.summary === 'object'
     ? data.migration_registry.summary
     : {};
@@ -609,64 +627,64 @@ function renderSettingsSystemHealth(data) {
   const jobFailed = Number(jobSummary.failed || 0);
   const failedChecks = checks.filter(([, ok]) => !ok).length;
   const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.deprecated_key_candidates || 0);
-  const overallOk = failedChecks === 0 && migrationSummary.state !== 'Fehlgeschlagen' && registryAttention === 0 && jobFailed === 0;
+  const overallOk = failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0;
   const technicalRows = [
-    ['Migration-State', data?.paths?.migration_state_file || '—'],
-    ['Migration-Log', data?.paths?.migration_log_file || '—'],
-    ['Geprüfte Secret-Dateien', String(perms.checked_files_count ?? 0)],
+    [settingsT('health.migrationState'), data?.paths?.migration_state_file || '—'],
+    [settingsT('health.migrationLog'), data?.paths?.migration_log_file || '—'],
+    [settingsT('health.checkedSecretFiles'), String(perms.checked_files_count ?? 0)],
   ];
 
-  return settingsCard('Systemzustand & Migration',
+  return settingsCard(settingsT('health.title'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
     `<div class="settings-body">
       <div class="system-health-overview ${overallOk ? 'ok' : 'bad'}">
         <div>
-          <div class="system-health-overview-title">${overallOk ? 'Systemzustand OK' : 'Prüfung benötigt Aufmerksamkeit'}</div>
-          <div class="system-health-overview-subtitle">${overallOk ? 'Alle Systemprüfungen sind erfolgreich.' : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed)}</div>
+          <div class="system-health-overview-title">${overallOk ? settingsT('health.okTitle') : settingsT('health.attentionTitle')}</div>
+          <div class="system-health-overview-subtitle">${overallOk ? settingsT('health.okSubtitle') : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed)}</div>
         </div>
-        <span class="system-health-badge ${overallOk ? 'ok' : 'bad'}">${overallOk ? 'OK' : 'Prüfen'}</span>
+        <span class="system-health-badge ${overallOk ? 'ok' : 'bad'}">${overallOk ? settingsT('common.ok') : settingsT('health.check')}</span>
       </div>
 
       <div class="system-health-block">
-        <div class="system-health-block-title">System</div>
+        <div class="system-health-block-title">${settingsT('health.system')}</div>
         <div class="system-health-grid">${_renderSystemHealthRows(checks)}</div>
       </div>
 
       <div class="system-health-block">
-        <div class="system-health-block-title">Jobs</div>
+        <div class="system-health-block-title">${settingsT('health.jobs')}</div>
         ${_renderJobHealthOverview(jobSummary, jobItems)}
       </div>
 
       <div class="system-health-block">
-        <div class="system-health-block-title">Letzter Migrationslauf</div>
+        <div class="system-health-block-title">${settingsT('health.lastMigration')}</div>
         <div class="migration-status-grid">
           <div>
-            <span class="system-health-name">Letzter Lauf</span>
+            <span class="system-health-name">${settingsT('health.lastRun')}</span>
             <strong>${escHtml(migrationSummary.lastRun)}</strong>
           </div>
           <div>
-            <span class="system-health-name">Letzte echte Migration</span>
+            <span class="system-health-name">${settingsT('health.lastEffectiveRun')}</span>
             <strong>${escHtml(lastEffectiveTs)}</strong>
           </div>
           <div>
-            <span class="system-health-name">Status</span>
-            <span class="system-health-badge ${migrationSummary.state === 'Fehlgeschlagen' ? 'bad' : 'ok'}">${escHtml(migrationSummary.state)}</span>
+            <span class="system-health-name">${settingsT('health.status')}</span>
+            <span class="system-health-badge ${migrationSummary.status === 'failed' ? 'bad' : 'ok'}">${escHtml(migrationSummary.state)}</span>
           </div>
         </div>
         <div class="migration-summary">
-          <div><strong>Grund:</strong> ${escHtml(migrationSummary.reason)}</div>
-          <div><strong>Aktionen:</strong> ${migrationSummary.actions.length ? migrationSummary.actions.map((a) => escHtml(a)).join(' · ') : 'keine'}</div>
-          ${migrationSummary.errors ? `<div class="system-health-error"><strong>Fehler:</strong> ${escHtml(migrationSummary.errors)}</div>` : ''}
+          <div><strong>${settingsT('health.reason')}</strong> ${escHtml(migrationSummary.reason)}</div>
+          <div><strong>${settingsT('health.actions')}</strong> ${migrationSummary.actions.length ? migrationSummary.actions.map((a) => escHtml(a)).join(' · ') : settingsT('common.none')}</div>
+          ${migrationSummary.errors ? `<div class="system-health-error"><strong>${settingsT('health.errors')}</strong> ${escHtml(migrationSummary.errors)}</div>` : ''}
         </div>
       </div>
 
       <div class="system-health-block">
-        <div class="system-health-block-title">Initiales Setup, Konfiguration & Wartung</div>
+        <div class="system-health-block-title">${settingsT('health.setupConfigMaintenance')}</div>
         ${_renderMigrationRegistryOverview(registrySummary, registryActionItems)}
       </div>
 
       <details class="system-health-technical">
-        <summary>Technische Details</summary>
+        <summary>${settingsT('health.technicalDetails')}</summary>
         <div class="system-health-grid">
           ${technicalRows.map(([name, detail]) => `
             <div class="system-health-row neutral">
@@ -691,7 +709,7 @@ function _formatHealthTimestamp(value) {
   if (!raw) return '';
   try {
     const d = new Date(raw);
-    if (!Number.isNaN(d.getTime())) return d.toLocaleString('de-DE');
+    if (!Number.isNaN(d.getTime())) return d.toLocaleString(settingsLocale());
   } catch (_) {}
   return raw;
 }
@@ -710,23 +728,23 @@ function _renderSystemHealthRows(rows) {
 
 function _formatMigrationRegistrySummary(summary) {
   const total = Number(summary?.total || 0);
-  if (!total) return 'keine Registry-Daten';
+  if (!total) return settingsT('health.noRegistryData');
   const parts = [
-    `${total} Einträge`,
-    `${Number(summary?.pending || 0)} offen`,
-    `${Number(summary?.failed || 0)} fehlerhaft`,
+    `${total} ${settingsT('common.entries')}`,
+    `${Number(summary?.pending || 0)} ${settingsT('health.statusPending')}`,
+    `${Number(summary?.failed || 0)} ${settingsT('health.statusFailed')}`,
   ];
   const deprecated = Number(summary?.deprecated_key_candidates || 0);
-  if (deprecated > 0) parts.push(`${deprecated} Cleanup-Kandidaten`);
+  if (deprecated > 0) parts.push(`${deprecated} ${settingsT('health.cleanupCandidates')}`);
   return parts.join(', ');
 }
 
 function _systemHealthAttentionText(failedChecks, registryAttention, jobFailed = 0) {
   const parts = [];
-  if (failedChecks > 0) parts.push(`${failedChecks} Systemprüfung(en) mit Fehlerstatus`);
-  if (jobFailed > 0) parts.push(`${jobFailed} Job-Prüfung(en) mit Fehlerstatus`);
-  if (registryAttention > 0) parts.push(`${registryAttention} Konfigurations-/Wartungspunkt(e) offen`);
-  return parts.join(' · ') || 'Prüfung benötigt Aufmerksamkeit.';
+  if (failedChecks > 0) parts.push(settingsT('health.systemChecksFailed', { count: failedChecks }));
+  if (jobFailed > 0) parts.push(settingsT('health.jobChecksFailed', { count: jobFailed }));
+  if (registryAttention > 0) parts.push(settingsT('health.maintenanceOpen', { count: registryAttention }));
+  return parts.join(' · ') || settingsT('health.attentionTitle');
 }
 
 function _renderJobHealthOverview(summary, items) {
@@ -738,29 +756,36 @@ function _renderJobHealthOverview(summary, items) {
   const hasProblems = failed > 0 || warnings > 0;
   return `
     <div class="migration-overview-grid">
-      ${_renderMigrationMetric('Jobs', total, 'neutral')}
-      ${_renderMigrationMetric('OK', ok, 'ok')}
-      ${_renderMigrationMetric('Warnungen', warnings, warnings > 0 ? 'warn' : 'ok')}
-      ${_renderMigrationMetric('Fehlerhaft', failed, failed > 0 ? 'bad' : 'ok')}
+      ${_renderMigrationMetric(settingsT('health.jobs'), total, 'neutral')}
+      ${_renderMigrationMetric(settingsT('common.ok'), ok, 'ok')}
+      ${_renderMigrationMetric(settingsT('common.warnings'), warnings, warnings > 0 ? 'warn' : 'ok')}
+      ${_renderMigrationMetric(settingsT('common.failed'), failed, failed > 0 ? 'bad' : 'ok')}
     </div>
     <div class="migration-action-panel ${hasProblems ? 'attention' : 'ok'}">
-      <div class="migration-action-title">${hasProblems ? 'Job-Prüfungen mit Handlungsbedarf' : 'Job-Prüfungen OK'}</div>
-      ${hasProblems ? _renderJobHealthProblems(problemItems) : '<div class="migration-action-empty">Repo-URI, Quellpfade, Passphrase- und Profilreferenzen sind lokal plausibel.</div>'}
+      <div class="migration-action-title">${hasProblems ? settingsT('health.jobChecksAttention') : settingsT('health.jobChecksOk')}</div>
+      ${hasProblems ? _renderJobHealthProblems(problemItems) : `<div class="migration-action-empty">${settingsT('health.jobChecksPlausible')}</div>`}
     </div>
   `;
 }
 
 function _renderJobHealthProblems(items) {
-  if (!items.length) return '<div class="migration-action-empty">Keine Details vorhanden.</div>';
+  if (!items.length) return `<div class="migration-action-empty">${settingsT('health.noDetails')}</div>`;
   return `<div class="migration-action-list">${items.map((item) => {
     const errors = Array.isArray(item?.errors) ? item.errors : [];
+    const errorDetails = Array.isArray(item?.error_details) ? item.error_details : [];
     const warnings = Array.isArray(item?.warnings) ? item.warnings : [];
-    const details = errors.concat(warnings).map((v) => String(v || '').trim()).filter(Boolean).join(' · ');
+    const localizedErrors = errorDetails.length
+      ? errorDetails.map((row) => {
+        const code = String(row?.code || '').trim();
+        return code ? settingsT(`health.jobErrors.${code}`, row?.params || {}) : '';
+      }).filter(Boolean)
+      : errors;
+    const details = localizedErrors.concat(warnings).map((v) => String(v || '').trim()).filter(Boolean).join(' · ');
     return `
       <div class="migration-action-row ${escHtml(String(item?.state || 'bad'))}">
         <div>
           <strong>${escHtml(String(item?.name || item?.job_key || 'Job'))}</strong>
-          <span>${escHtml(details || 'Prüfung fehlgeschlagen')}</span>
+          <span>${escHtml(details || settingsT('health.checkFailed'))}</span>
         </div>
       </div>
     `;
@@ -776,21 +801,21 @@ function _migrationRegistryActionItems(items) {
 
 function _renderMigrationRegistryOverview(summary, actionItems) {
   const total = Number(summary?.total || 0);
-  if (!total) return '<div class="migration-action-empty">Keine Registry-Daten vorhanden.</div>';
+  if (!total) return `<div class="migration-action-empty">${settingsT('health.noRegistryData')}</div>`;
   const pending = Number(summary?.pending || 0);
   const failed = Number(summary?.failed || 0);
   const cleanup = Number(summary?.deprecated_key_candidates || 0);
   const hasAction = actionItems.length > 0 || cleanup > 0;
   return `
     <div class="migration-overview-grid">
-      ${_renderMigrationMetric('Einträge', total, 'neutral')}
-      ${_renderMigrationMetric('Offen', pending, pending > 0 ? 'warn' : 'ok')}
-      ${_renderMigrationMetric('Fehlerhaft', failed, failed > 0 ? 'bad' : 'ok')}
-      ${_renderMigrationMetric('Cleanup-Kandidaten', cleanup, cleanup > 0 ? 'warn' : 'ok')}
+      ${_renderMigrationMetric(settingsT('common.entries'), total, 'neutral')}
+      ${_renderMigrationMetric(settingsT('common.pending'), pending, pending > 0 ? 'warn' : 'ok')}
+      ${_renderMigrationMetric(settingsT('common.failed'), failed, failed > 0 ? 'bad' : 'ok')}
+      ${_renderMigrationMetric(settingsT('health.cleanupCandidates'), cleanup, cleanup > 0 ? 'warn' : 'ok')}
     </div>
     <div class="migration-action-panel ${hasAction ? 'attention' : 'ok'}">
-      <div class="migration-action-title">${hasAction ? 'Offene Punkte' : 'Keine Aktion erforderlich'}</div>
-      ${hasAction ? _renderMigrationActionList(actionItems, cleanup) : '<div class="migration-action-empty">Setup, Schema-Abgleich und Cleanup sind aktuell ohne Handlungsbedarf.</div>'}
+      <div class="migration-action-title">${hasAction ? settingsT('health.openItems') : settingsT('health.noActionRequired')}</div>
+      ${hasAction ? _renderMigrationActionList(actionItems, cleanup) : `<div class="migration-action-empty">${settingsT('health.registryOk')}</div>`}
     </div>
   `;
 }
@@ -807,18 +832,18 @@ function _renderMigrationMetric(label, value, tone) {
 function _renderMigrationActionList(actionItems, cleanupCount) {
   const rows = actionItems.map((item) => _renderMigrationActionItem(item)).join('');
   const cleanupHint = cleanupCount > 0 && !actionItems.some((item) => String(item?.id || '') === 'legacy_deprecated_keys_cleanup_v1')
-    ? `<div class="migration-action-row pending"><div><strong>Deprecated backup.conf Cleanup</strong><span>${cleanupCount} Kandidat(en) vorhanden</span></div></div>`
+    ? `<div class="migration-action-row pending"><div><strong>${settingsT('health.cleanupTitle')}</strong><span>${settingsT('health.candidatesAvailable', { count: cleanupCount })}</span></div></div>`
     : '';
   return `<div class="migration-action-list">${rows}${cleanupHint}</div>`;
 }
 
 function _renderMigrationActionItem(item) {
   const status = String(item?.status || 'unknown').trim();
-  const title = String(item?.title || item?.id || 'Eintrag').trim();
-  const reason = String(item?.reason || '').trim();
+  const title = _migrationRegistryText(item, 'title');
+  const reason = _migrationRegistryText(item, 'reason');
   const details = item?.details && typeof item.details === 'object' ? item.details : {};
   const count = Number(details.candidate_count || details.missing_count || 0);
-  const suffix = count > 0 ? ` · ${count} betroffen` : '';
+  const suffix = count > 0 ? ` · ${settingsT('health.affected', { count })}` : '';
   const canApplyPlan = String(item?.id || '') === 'legacy_deprecated_keys_cleanup_v1' && count > 0;
   return `
     <div class="migration-action-row ${escHtml(status)}">
@@ -826,7 +851,7 @@ function _renderMigrationActionItem(item) {
         <strong>${escHtml(title)}</strong>
         <span>${escHtml(_migrationRegistryStatusLabel(status))}${escHtml(suffix)}${reason ? `: ${escHtml(reason)}` : ''}</span>
       </div>
-      ${canApplyPlan ? `<button class="btn btn-secondary btn-sm migration-action-button" data-settings-action="legacy-cleanup-apply" data-candidate-count="${Number(count || 0)}">Cleanup auskommentieren</button>` : ''}
+      ${canApplyPlan ? `<button class="btn btn-secondary btn-sm migration-action-button" data-settings-action="legacy-cleanup-apply" data-candidate-count="${Number(count || 0)}">${settingsT('health.commentCleanup')}</button>` : ''}
     </div>
   `;
 }
@@ -834,29 +859,62 @@ function _renderMigrationActionItem(item) {
 function _migrationRegistryStatusLabel(status) {
   const raw = String(status || 'unknown').trim();
   const labels = {
-    applied: 'angewendet',
-    pending: 'offen',
-    failed: 'fehlerhaft',
-    not_needed: 'nicht nötig',
-    unknown: 'unbekannt',
+    applied: settingsT('health.statusApplied'),
+    pending: settingsT('health.statusPending'),
+    failed: settingsT('health.statusFailed'),
+    not_needed: settingsT('health.statusNotNeeded'),
+    unknown: settingsT('health.statusUnknown'),
   };
   return labels[raw] || raw;
+}
+
+function _migrationRegistryText(item, field) {
+  const id = String(item?.id || '').trim();
+  const status = String(item?.status || '').trim();
+  const keys = {
+    setup_jobs_dir: {
+      title: 'registryJobsDirTitle',
+      reason: status === 'applied' ? 'registryJobsDirPresent' : 'registryJobsDirMissing',
+    },
+    setup_settings_json: {
+      title: 'registrySettingsTitle',
+      reason: status === 'applied' ? 'registrySettingsPresent' : 'registrySettingsMissing',
+    },
+    setup_runtime_paths: {
+      title: 'registryRuntimeTitle',
+      reason: status === 'applied' ? 'registryRuntimeApplied' : (status === 'failed' ? 'registryRuntimeFailed' : 'registryRuntimePending'),
+    },
+    config_backup_conf_schema: {
+      title: 'registrySchemaTitle',
+      reason: status === 'applied' ? 'registrySchemaComplete' : 'registrySchemaMissing',
+    },
+    legacy_deprecated_keys_cleanup_v1: {
+      title: 'registryCleanupTitle',
+      reason: status === 'pending' ? 'registryCleanupPresent' : 'registryCleanupEmpty',
+    },
+  };
+  const key = keys[id]?.[field];
+  if (key) return settingsT(`health.${key}`);
+  return String(item?.[field] || (field === 'title' ? id || settingsT('health.entry') : '')).trim();
 }
 
 function _renderMigrationRegistryItem(item) {
   const status = String(item?.status || 'unknown').trim();
   const stage = String(item?.stage || 'active').trim();
   const statusLabel = _migrationRegistryStatusLabel(status);
-  const plannedSuffix = stage === 'planned' && status !== 'not_needed' ? ' · geplant' : '';
-  const title = String(item?.title || item?.id || 'Migration').trim();
+  const plannedSuffix = stage === 'planned' && status !== 'not_needed' ? ` · ${settingsT('health.planned')}` : '';
+  const title = _migrationRegistryText(item, 'title') || settingsT('health.migration');
   const id = String(item?.id || '').trim();
-  const reason = String(item?.reason || '').trim();
+  const reason = _migrationRegistryText(item, 'reason');
   const details = item?.details && typeof item.details === 'object' ? item.details : {};
   const candidates = Array.isArray(details.candidate_keys) ? details.candidate_keys : [];
   const plan = details?.dry_run_plan && typeof details.dry_run_plan === 'object' ? details.dry_run_plan : null;
   const planCandidateCount = Number(plan?.candidate_count || 0);
   const planText = plan && planCandidateCount > 0
-    ? `Dry-Run: ${Number(plan.candidate_count || 0)} Keys ${plan.mode === 'remove' ? 'entfernen' : 'auskommentieren'}; Backup/Rollback vorgesehen.`
+    ? settingsT('health.dryRunPlan', {
+      count: Number(plan.candidate_count || 0),
+      mode: plan.mode === 'remove' ? settingsT('health.removeKeys') : settingsT('health.commentKeys'),
+    })
     : '';
   return `
     <div class="migration-registry-item ${escHtml(status)}">
@@ -874,9 +932,9 @@ function _renderMigrationRegistryItem(item) {
 
 function _renderMigrationRegistryGroups(items) {
   const groups = [
-    ['setup', 'Initiales Setup'],
-    ['config', 'Konfiguration'],
-    ['planned_migration', 'Geplante Migrationen'],
+    ['setup', settingsT('health.initialSetup')],
+    ['config', settingsT('health.configuration')],
+    ['planned_migration', settingsT('health.plannedMigrations')],
   ];
   return groups.map(([category, title]) => {
     const rows = items.filter((item) => String(item?.category || 'setup') === category);
@@ -890,20 +948,49 @@ function _renderMigrationRegistryGroups(items) {
   }).join('');
 }
 
+function _localizeMigrationAction(value) {
+  const raw = String(value || '').trim();
+  const moved = raw.match(/^(\d+) Elemente verschoben$/);
+  const moveErrors = raw.match(/^(\d+) Verschiebe-Fehler$/);
+  if (moved) return settingsT('health.itemsMoved', { count: moved[1] });
+  if (moveErrors) return settingsT('health.moveErrors', { count: moveErrors[1] });
+  const known = {
+    'Storage-Pfade aktualisiert': 'storagePathsUpdated',
+    'Profileinstellungen angepasst': 'profileSettingsUpdated',
+    'backup.conf korrigiert': 'configCorrected',
+    'Job-Layout geprüft': 'jobLayoutChecked',
+  };
+  return known[raw] ? settingsT(`health.${known[raw]}`) : raw;
+}
+
+function _localizeMigrationReason(code, fallback, status) {
+  const keys = {
+    none: 'reasonNone',
+    storage_paths_changed: 'reasonStorageChanged',
+    no_changes: 'reasonNoChanges',
+    error: 'reasonFailed',
+  };
+  if (keys[code]) return settingsT(`health.${keys[code]}`);
+  return fallback || settingsT(status === 'success' ? 'health.reasonSuccess' : 'health.reasonFailed');
+}
+
 function _buildMigrationSummary(data) {
   const summary = data?.migration_summary && typeof data.migration_summary === 'object' ? data.migration_summary : null;
   if (summary) {
+    const status = String(summary.status || '').trim() || (summary.state === 'Fehlgeschlagen' ? 'failed' : 'success');
+    const reasonCode = String(summary.reason_code || '').trim();
     const errors = Array.isArray(summary.errors)
-      ? summary.errors.map((v) => String(v || '').trim()).filter(Boolean).join(' · ')
+      ? summary.errors.map((v) => _localizeMigrationAction(v)).filter(Boolean).join(' · ')
       : String(summary.errors || '').trim();
     const actions = Array.isArray(summary.actions)
-      ? summary.actions.map((v) => String(v || '').trim()).filter(Boolean)
+      ? summary.actions.map((v) => _localizeMigrationAction(v)).filter(Boolean)
       : [];
     return {
-      state: String(summary.state || summary.status || '—').trim() || '—',
+      status,
+      state: status === 'failed' ? settingsT('health.stateFailed') : (status === 'none' ? settingsT('health.stateNone') : settingsT('health.stateSuccess')),
       lastRun: _formatHealthTimestamp(summary.last_run) || '—',
       lastEffectiveRun: String(summary.last_effective_run || '').trim(),
-      reason: String(summary.reason || '—').trim() || '—',
+      reason: _localizeMigrationReason(reasonCode, String(summary.reason || '').trim(), status),
       errors,
       actions,
       techMsg: String(summary.technical_message || '').trim(),
@@ -915,10 +1002,11 @@ function _buildMigrationSummary(data) {
   const tsRaw = String(lastEvent?.timestamp || '').trim();
   if (!tsRaw) {
     return {
-      state: 'Noch kein Lauf',
+      status: 'none',
+      state: settingsT('health.stateNone'),
       lastRun: '—',
       lastEffectiveRun: '',
-      reason: 'Noch kein Migrationslauf protokolliert',
+      reason: settingsT('health.reasonNone'),
       errors: '',
       actions: [],
       techMsg: '',
@@ -935,20 +1023,18 @@ function _buildMigrationSummary(data) {
   const actions = [];
   const moved = Number(storage?.moved || 0);
   const moveErrors = Number(storage?.move_errors || 0);
-  if (moved > 0) actions.push(`${moved} Elemente verschoben`);
-  if (storage?.changed === true) actions.push('Storage-Pfade aktualisiert');
-  if (storage?.settings_changed === true) actions.push('Profileinstellungen angepasst');
-  if (storage?.forced_conf_write === true) actions.push('backup.conf korrigiert');
+  if (moved > 0) actions.push(settingsT('health.itemsMoved', { count: moved }));
+  if (storage?.changed === true) actions.push(settingsT('health.storagePathsUpdated'));
+  if (storage?.settings_changed === true) actions.push(settingsT('health.profileSettingsUpdated'));
+  if (storage?.forced_conf_write === true) actions.push(settingsT('health.configCorrected'));
   const jobs = (details?.jobs_layout && typeof details.jobs_layout === 'object') ? details.jobs_layout : {};
-  if (String(jobs?.status || '').toLowerCase() === 'ok') actions.push('Job-Layout geprüft');
-  const errors = moveErrors > 0 ? `${moveErrors} Verschiebe-Fehler` : (!ok ? 'Migration fehlgeschlagen' : '');
-  const reason = reasonText || (
-    reasonCode === 'storage_paths_changed'
-      ? 'Änderung des Cache/Remotes inkl. backup.conf-Anpassung'
-      : (reasonCode === 'no_changes' ? 'Keine Änderungen nötig' : (ok ? 'Migration ausgeführt' : 'Migration mit Fehlern'))
-  );
+  if (String(jobs?.status || '').toLowerCase() === 'ok') actions.push(settingsT('health.jobLayoutChecked'));
+  const errors = moveErrors > 0 ? settingsT('health.moveErrors', { count: moveErrors }) : (!ok ? settingsT('health.migrationFailed') : '');
+  const status = ok ? 'success' : 'failed';
+  const reason = _localizeMigrationReason(reasonCode, reasonText, status);
   return {
-    state: ok ? 'Erfolgreich' : 'Fehlgeschlagen',
+    status,
+    state: ok ? settingsT('health.stateSuccess') : settingsT('health.stateFailed'),
     lastRun,
     lastEffectiveRun: String(data?.migration_log?.last_effective_event?.timestamp || '').trim(),
     reason,
@@ -961,33 +1047,33 @@ function _buildMigrationSummary(data) {
 function renderSettingsGeneral(g) {
   const hint = !((g.GLOBAL_DATA_DIR || '').trim())
     ? `<div class="status-message warning" style="grid-column:1/-1">
-         Bitte Hauptverzeichnis für Betriebsdaten setzen. Ohne GLOBAL_DATA_DIR sind Start-Aktionen gesperrt.
+         ${settingsT('general.dataDirWarning')}
        </div>`
     : '';
-  return settingsCard('Allgemein',
+  return settingsCard(settingsT('general.title'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
     `<div class="settings-body two-col">
       ${hint}
-      ${fmono('GLOBAL_DATA_DIR', 'Hauptverzeichnis (Pflicht)', g.GLOBAL_DATA_DIR, g.GLOBAL_DATA_DIR_SUGGESTION || '/mnt/user/borg-backup-ui')}
-      ${fmonoRO('GLOBAL_LOG_DIR (abgeleitet)', g.GLOBAL_LOG_DIR || '')}
-      ${fmonoRO('STATUS_DIR (abgeleitet)', g.STATUS_DIR || '')}
-      ${fmonoRO('RESTORE_TEST_STATUS_DIR (abgeleitet)', g.RESTORE_TEST_STATUS_DIR || '')}
+      ${fmono('GLOBAL_DATA_DIR', settingsT('general.dataDir'), g.GLOBAL_DATA_DIR, g.GLOBAL_DATA_DIR_SUGGESTION || '/mnt/user/borg-backup-ui')}
+      ${fmonoRO(settingsT('general.derived', { name: 'GLOBAL_LOG_DIR' }), g.GLOBAL_LOG_DIR || '')}
+      ${fmonoRO(settingsT('general.derived', { name: 'STATUS_DIR' }), g.STATUS_DIR || '')}
+      ${fmonoRO(settingsT('general.derived', { name: 'RESTORE_TEST_STATUS_DIR' }), g.RESTORE_TEST_STATUS_DIR || '')}
       <div class="form-group">
-        <label class="form-label">UI-Theme</label>
+        <label class="form-label">${settingsT('general.theme')}</label>
         <select class="form-select" id="ui-theme-select">
-          <option value="dark">Dunkel</option>
-          <option value="light">Hell</option>
-          <option value="system">System</option>
+          <option value="dark">${settingsT('general.themeDark')}</option>
+          <option value="light">${settingsT('general.themeLight')}</option>
+          <option value="system">${settingsT('general.themeSystem')}</option>
         </select>
       </div>
-      ${fnum('GLOBAL_LOG_RETENTION_DAYS', 'Log-Aufbewahrung (Tage)', g.GLOBAL_LOG_RETENTION_DAYS)}
-      ${fmono('GLOBAL_BORG_CACHE_BASE', 'Borg Cache-Verzeichnis', g.GLOBAL_BORG_CACHE_BASE)}
-      ${fnum('GLOBAL_BORG_CHECK_INTERVAL_DAYS', 'Check-Intervall (Tage)', g.GLOBAL_BORG_CHECK_INTERVAL_DAYS)}
+      ${fnum('GLOBAL_LOG_RETENTION_DAYS', settingsT('general.logRetention'), g.GLOBAL_LOG_RETENTION_DAYS)}
+      ${fmono('GLOBAL_BORG_CACHE_BASE', settingsT('general.borgCache'), g.GLOBAL_BORG_CACHE_BASE)}
+      ${fnum('GLOBAL_BORG_CHECK_INTERVAL_DAYS', settingsT('general.checkInterval'), g.GLOBAL_BORG_CHECK_INTERVAL_DAYS)}
       <label class="form-checkbox-row" style="grid-column:1/-1">
         <input type="checkbox" data-key="ABORT_ON_PARITY_CHECK"
           ${g.ABORT_ON_PARITY_CHECK === 'true' ? 'checked' : ''}
           onchange="markSettingsDirty()">
-        Backup abbrechen wenn Parity-Check läuft
+        ${settingsT('general.abortParity')}
       </label>
     </div>`);
 }
@@ -1000,33 +1086,33 @@ function renderSettingsUsers() {
   const ownSessions = Number(settingsState.authStatus?.active_sessions_own || 0);
   const totalSessionsRaw = settingsState.authStatus?.active_sessions_total;
   const totalSessions = totalSessionsRaw === null || totalSessionsRaw === undefined ? null : Number(totalSessionsRaw || 0);
-  return settingsCard('Benutzerverwaltung',
+  return settingsCard(settingsT('users.title'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>`,
     `<div class="settings-body">
       <div style="display:grid;grid-template-columns:1fr;gap:8px;align-items:end;margin-bottom:10px">
         <div class="form-group">
-          <label class="form-label">Session-Timeout (Minuten)</label>
+          <label class="form-label">${settingsT('users.sessionTimeout')}</label>
           <input class="form-input" type="number" min="5" data-key="UI_SESSION_TIMEOUT_MINUTES" value="${escHtml(timeout)}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <span class="text-muted" style="font-size:12px">
-            Angemeldet: <strong>${escHtml(currentUser || '—')}</strong>${currentRole ? ` (${escHtml(currentRole)})` : ''}
-            · Aktive Sessions: <strong>${ownSessions}</strong>${totalSessions !== null ? ` · Gesamt: <strong>${totalSessions}</strong>` : ''}
+            ${settingsT('users.signedIn')} <strong>${escHtml(currentUser || '—')}</strong>${currentRole ? ` (${escHtml(currentRole)})` : ''}
+            · ${settingsT('users.activeSessions')} <strong>${ownSessions}</strong>${totalSessions !== null ? ` · ${settingsT('users.total')} <strong>${totalSessions}</strong>` : ''}
           </span>
-          <button class="btn btn-secondary btn-sm" data-settings-action="user-change-own-password">Eigenes Passwort ändern</button>
-          <button class="btn btn-secondary btn-sm" data-settings-action="user-logout-own-sessions">Meine Sessions abmelden</button>
-          ${currentRole === 'admin' ? '<button class="btn btn-secondary btn-sm" data-settings-action="user-logout-all-sessions">Alle Sessions abmelden</button>' : ''}
+          <button class="btn btn-secondary btn-sm" data-settings-action="user-change-own-password">${settingsT('users.changeOwnPassword')}</button>
+          <button class="btn btn-secondary btn-sm" data-settings-action="user-logout-own-sessions">${settingsT('users.logoutOwn')}</button>
+          ${currentRole === 'admin' ? `<button class="btn btn-secondary btn-sm" data-settings-action="user-logout-all-sessions">${settingsT('users.logoutAll')}</button>` : ''}
         </div>
       </div>
       <div style="display:grid;grid-template-columns:2fr 1.2fr 1fr auto;gap:8px;align-items:end">
-        <div class="form-group"><label class="form-label">Benutzername</label><input id="user-new-name" class="form-input" type="text" placeholder="newuser"></div>
-        <div class="form-group"><label class="form-label">Rolle</label><select id="user-new-role" class="form-select"><option value="viewer">viewer</option><option value="operator">operator</option><option value="admin">admin</option></select></div>
-        <div class="form-group"><label class="form-label">Passwort</label><input id="user-new-password" class="form-input" type="password" placeholder="mind. 12 Zeichen"></div>
-        <button class="btn btn-secondary btn-sm" data-settings-action="user-create">Anlegen</button>
+        <div class="form-group"><label class="form-label">${settingsT('users.username')}</label><input id="user-new-name" class="form-input" type="text" placeholder="newuser"></div>
+        <div class="form-group"><label class="form-label">${settingsT('users.role')}</label><select id="user-new-role" class="form-select"><option value="viewer">viewer</option><option value="operator">operator</option><option value="admin">admin</option></select></div>
+        <div class="form-group"><label class="form-label">${settingsT('users.password')}</label><input id="user-new-password" class="form-input" type="password" placeholder="${settingsT('users.passwordMin')}"></div>
+        <button class="btn btn-secondary btn-sm" data-settings-action="user-create">${settingsT('users.create')}</button>
       </div>
       <div id="users-msg" class="status-message hidden" style="margin-top:8px"></div>
       <table class="settings-table" style="margin-top:10px">
-        <thead><tr><th>Benutzer</th><th>Rolle</th><th>Aktiv</th><th>Letzter Login</th><th>Aktionen</th></tr></thead>
+        <thead><tr><th>${settingsT('users.user')}</th><th>${settingsT('users.role')}</th><th>${settingsT('users.active')}</th><th>${settingsT('users.lastLogin')}</th><th>${settingsT('users.actions')}</th></tr></thead>
         <tbody>
           ${rows.map((u) => `<tr data-user-name="${escHtml(u.username)}">
             <td>${escHtml(u.username)}</td>
@@ -1036,10 +1122,10 @@ function renderSettingsUsers() {
             <td><input type="checkbox" data-user-enabled ${u.enabled ? 'checked' : ''}></td>
             <td>${escHtml(u.last_login_at || '—')}</td>
             <td style="display:flex;gap:6px">
-              <button class="btn btn-secondary btn-sm" data-settings-action="user-save">Speichern</button>
-              <button class="btn btn-secondary btn-sm" data-settings-action="user-reset-password">Passwort</button>
-              <button class="btn btn-secondary btn-sm" data-settings-action="user-deactivate">Deaktivieren</button>
-              <button class="btn btn-danger btn-sm" data-settings-action="user-delete">Löschen</button>
+              <button class="btn btn-secondary btn-sm" data-settings-action="user-save">${settingsT('users.save')}</button>
+              <button class="btn btn-secondary btn-sm" data-settings-action="user-reset-password">${settingsT('users.password')}</button>
+              <button class="btn btn-secondary btn-sm" data-settings-action="user-deactivate">${settingsT('users.deactivate')}</button>
+              <button class="btn btn-danger btn-sm" data-settings-action="user-delete">${settingsT('users.delete')}</button>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -1048,18 +1134,18 @@ function renderSettingsUsers() {
 }
 
 function renderSettingsConfigBackups() {
-  return settingsCard('Config-Backups & Rollback',
+  return settingsCard(settingsT('backups.title'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 3"/></svg>`,
     `<div class="settings-body">
       <div class="text-muted" style="font-size:12px;margin-bottom:10px">
-        Beim Speichern der Einstellungen wird automatisch ein Backup von <code>backup.conf</code> erstellt.
+        ${settingsT('backups.description')}
       </div>
       <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <button class="btn btn-secondary btn-sm" data-settings-action="delete-backups-keep-latest">Alle außer neuestes löschen</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="delete-backups-keep-latest">${settingsT('backups.deleteExceptLatest')}</button>
       </div>
       <div id="settings-config-backups-msg" class="status-message hidden"></div>
       <div id="settings-config-backups-list">
-        <div class="loading-spinner"><div class="spinner"></div><span>Lade Config-Backups...</span></div>
+        <div class="loading-spinner"><div class="spinner"></div><span>${settingsT('backups.loading')}</span></div>
       </div>
       <div id="settings-config-backups-diff" class="hidden" style="margin-top:10px"></div>
     </div>`);
@@ -1068,24 +1154,24 @@ function renderSettingsConfigBackups() {
 function renderSettingsTransferTools() {
   const jobsPreview = settingsState.transferJobsPreview;
   const profileSecretsPreview = settingsState.transferProfileSecretsPreview;
-  return settingsCard('Import / Export',
+  return settingsCard(settingsT('transfer.title'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
     `<div class="settings-body">
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
-        Verschlüsselter Transfer: Jobs + Passphrases sowie SMB/SSH-Profile + Credentials/Keys.
+        ${settingsT('transfer.description')}
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-support-bundle">Supportpaket erstellen</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-support-bundle">${settingsT('transfer.supportBundle')}</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-jobs-secure">Jobs+Passphrases Export</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-secure-select-file">Jobs+Passphrases Vorschau</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-apply" ${jobsPreview ? '' : 'disabled'}>Jobs+Passphrases Importieren</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-jobs-secure">${settingsT('transfer.jobsExport')}</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-secure-select-file">${settingsT('transfer.jobsPreview')}</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-apply" ${jobsPreview ? '' : 'disabled'}>${settingsT('transfer.jobsImport')}</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-profile-secrets">Profile+Secrets Export</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-select-file">Profile+Secrets Vorschau</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-apply" ${profileSecretsPreview ? '' : 'disabled'}>Profile+Secrets Importieren</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-profile-secrets">${settingsT('transfer.profilesExport')}</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-select-file">${settingsT('transfer.profilesPreview')}</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-apply" ${profileSecretsPreview ? '' : 'disabled'}>${settingsT('transfer.profilesImport')}</button>
       </div>
       <div id="settings-transfer-msg" class="status-message hidden"></div>
       <div id="settings-transfer-preview-jobs" style="margin-top:10px">
@@ -1111,17 +1197,17 @@ function renderJobsImportPreview(d) {
     return acc;
   }, { total: 0, new: 0, exists: 0, invalid: 0, other: 0 });
   const settingsBlock = sp && sp.present ? `
-    <div class="text-muted" style="font-size:12px;margin:10px 0 6px 0">Settings-Import (SMB/USB-Profile)</div>
+    <div class="text-muted" style="font-size:12px;margin:10px 0 6px 0">${settingsT('transfer.settingsImport')}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
-      Profile im Bundle: ${Number(sp.profiles_total || 0)} · Modus:
+      ${settingsT('transfer.profilesInBundle', { count: Number(sp.profiles_total || 0) })}
       <select class="form-select" id="settings-import-mode" style="width:220px;display:inline-block;margin-left:6px">
-        <option value="merge" ${settingsState.transferSettingsMode === 'merge' ? 'selected' : ''}>merge (neu + Konflikte skip)</option>
-        <option value="replace" ${settingsState.transferSettingsMode === 'replace' ? 'selected' : ''}>replace (komplett ersetzen)</option>
-        <option value="ignore" ${settingsState.transferSettingsMode === 'ignore' ? 'selected' : ''}>ignore (nicht übernehmen)</option>
+        <option value="merge" ${settingsState.transferSettingsMode === 'merge' ? 'selected' : ''}>${settingsT('transfer.mergeMode')}</option>
+        <option value="replace" ${settingsState.transferSettingsMode === 'replace' ? 'selected' : ''}>${settingsT('transfer.replaceMode')}</option>
+        <option value="ignore" ${settingsState.transferSettingsMode === 'ignore' ? 'selected' : ''}>${settingsT('transfer.ignoreMode')}</option>
       </select>
     </div>
     <table class="settings-table" style="margin-bottom:8px">
-      <thead><tr><th>Scope</th><th>Profil</th><th>Status</th><th>Jobs</th><th>Konfliktmodus</th></tr></thead>
+      <thead><tr><th>${settingsT('transfer.scope')}</th><th>${settingsT('transfer.profile')}</th><th>${settingsT('transfer.status')}</th><th>${settingsT('transfer.jobs')}</th><th>${settingsT('transfer.conflictMode')}</th></tr></thead>
       <tbody>
         ${[...(sp.usb || []).map(r => ({...r, scope:'usb'})), ...(sp.smb || []).map(r => ({...r, scope:'smb'}))].map((r) => {
           const modeKey = `${r.scope}:${r.key}`;
@@ -1140,23 +1226,23 @@ function renderJobsImportPreview(d) {
   ` : '';
   return `
     ${settingsBlock}
-    <div class="text-muted" style="font-size:12px;margin-bottom:8px">Jobs-Import Vorschau (${rows.length})${Number(d?.passphrase_count || 0) ? ` · Passphrases im Paket: ${Number(d.passphrase_count)}` : ''}</div>
+    <div class="text-muted" style="font-size:12px;margin-bottom:8px">${settingsT('transfer.jobsPreviewTitle', { count: rows.length })}${Number(d?.passphrase_count || 0) ? ` · ${settingsT('transfer.passphrasesInPackage', { count: Number(d.passphrase_count) })}` : ''}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
-      Gesamt: ${stats.total} · Neu: ${stats.new} · Bereits vorhanden: ${stats.exists} · Ungültig: ${stats.invalid}${stats.other ? ` · Sonstige: ${stats.other}` : ''}
+      ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.new', { count: stats.new })} · ${settingsT('transfer.existing', { count: stats.exists })} · ${settingsT('transfer.invalid', { count: stats.invalid })}${stats.other ? ` · ${settingsT('transfer.other', { count: stats.other })}` : ''}
     </div>
     <table class="settings-table">
-      <thead><tr><th>Import</th><th>Name</th><th>Typ</th><th>Location</th><th>Schedule</th><th>Features</th><th>Job</th><th>Passphrase</th><th>Modus</th></tr></thead>
+      <thead><tr><th>${settingsT('transfer.import')}</th><th>${settingsT('transfer.name')}</th><th>${settingsT('transfer.type')}</th><th>${settingsT('transfer.location')}</th><th>${settingsT('transfer.schedule')}</th><th>${settingsT('transfer.features')}</th><th>${settingsT('transfer.job')}</th><th>${settingsT('transfer.passphrase')}</th><th>${settingsT('transfer.mode')}</th></tr></thead>
       <tbody>
       ${rows.map((r, idx) => {
         const feats = `${r?.features?.docker ? 'docker ' : ''}${r?.features?.vm ? 'vm' : ''}`.trim() || '—';
         const sch = r?.schedule?.cron ? `${r.schedule.cron}${r?.schedule?.enabled ? '' : ' (off)'}` : '—';
         const pp = ({
-          present_match: 'vorhanden',
-          present_mismatch: 'abweichend',
-          present: 'vorhanden',
-          missing: 'fehlt',
-          unknown: 'unbekannt',
-        })[r?.passphrase?.status || 'unknown'] || 'unbekannt';
+          present_match: settingsT('transfer.present'),
+          present_mismatch: settingsT('transfer.different'),
+          present: settingsT('transfer.present'),
+          missing: settingsT('transfer.missing'),
+          unknown: settingsT('transfer.unknown'),
+        })[r?.passphrase?.status || 'unknown'] || settingsT('transfer.unknown');
         return `<tr>
           <td><input type="checkbox" data-job-preview-select="${idx}" ${r.conflict === 'invalid' ? 'disabled' : 'checked'}></td>
           <td>${escHtml(r.name || r.job_key || '')}</td>
@@ -1190,23 +1276,23 @@ function renderSecretsImportPreview(d) {
     return acc;
   }, { total: 0, present: 0, mismatch: 0, missing: 0, unknown: 0 });
   return `
-    <div class="text-muted" style="font-size:12px;margin:12px 0 8px 0">Passphrase-Import Vorschau (${rows.length})</div>
+    <div class="text-muted" style="font-size:12px;margin:12px 0 8px 0">${settingsT('transfer.passphrasePreview', { count: rows.length })}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
-      Gesamt: ${stats.total} · Vorhanden: ${stats.present} · Abweichend: ${stats.mismatch} · Fehlend: ${stats.missing}${stats.unknown ? ` · Unbekannt: ${stats.unknown}` : ''}
+      ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.presentCount', { count: stats.present })} · ${settingsT('transfer.differentCount', { count: stats.mismatch })} · ${settingsT('transfer.missingCount', { count: stats.missing })}${stats.unknown ? ` · ${settingsT('transfer.unknownCount', { count: stats.unknown })}` : ''}
     </div>
     <table class="settings-table">
-      <thead><tr><th>Import</th><th>Datei</th><th>Status</th></tr></thead>
+      <thead><tr><th>${settingsT('transfer.import')}</th><th>${settingsT('transfer.file')}</th><th>${settingsT('transfer.status')}</th></tr></thead>
       <tbody>
       ${rows.map((r, idx) => `<tr>
         <td><input type="checkbox" data-secret-preview-select="${idx}" checked></td>
         <td><code style="font-size:12px">${escHtml(r.name || '')}</code></td>
         <td>${escHtml(({
-          present_match: 'vorhanden',
-          present_mismatch: 'abweichend',
-          present: 'vorhanden',
-          missing: 'fehlt',
-          unknown: 'unbekannt',
-        })[r.status || 'unknown'] || 'unbekannt')}</td>
+          present_match: settingsT('transfer.present'),
+          present_mismatch: settingsT('transfer.different'),
+          present: settingsT('transfer.present'),
+          missing: settingsT('transfer.missing'),
+          unknown: settingsT('transfer.unknown'),
+        })[r.status || 'unknown'] || settingsT('transfer.unknown'))}</td>
       </tr>`).join('')}
       </tbody>
     </table>`;
@@ -1228,28 +1314,28 @@ function renderProfileSecretsImportPreview(d) {
     return acc;
   }, { total: 0, match: 0, mismatch: 0, profile_missing: 0, missing: 0, other: 0 });
   const label = (s) => ({
-    present_match: 'vorhanden',
-    present_mismatch: 'abweichend',
-    profile_missing: 'Profil fehlt',
-    missing: 'fehlt',
-    unknown: 'unbekannt',
-  }[s] || 'unbekannt');
+    present_match: settingsT('transfer.present'),
+    present_mismatch: settingsT('transfer.different'),
+    profile_missing: settingsT('transfer.profileMissing'),
+    missing: settingsT('transfer.missing'),
+    unknown: settingsT('transfer.unknown'),
+  }[s] || settingsT('transfer.unknown'));
   const settingsRows = sp ? [
     ...((sp.smb || []).map((r) => ({ scope: 'smb', ...r }))),
     ...((sp.storage || []).map((r) => ({ scope: 'storage', ...r }))),
   ] : [];
   const settingsBlock = sp && sp.present ? `
-    <div class="text-muted" style="font-size:12px;margin:10px 0 6px 0">Profile im Paket (${Number(sp.profiles_total || 0)})</div>
+    <div class="text-muted" style="font-size:12px;margin:10px 0 6px 0">${settingsT('transfer.profilesInPackage', { count: Number(sp.profiles_total || 0) })}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
-      Profilmodus:
+      ${settingsT('transfer.profileMode')}
       <select class="form-select" id="profile-secrets-settings-mode" style="width:220px;display:inline-block;margin-left:6px">
-        <option value="merge" selected>merge (neu + Konflikte skip)</option>
-        <option value="replace">replace (komplett ersetzen)</option>
-        <option value="ignore">ignore (nicht übernehmen)</option>
+        <option value="merge" selected>${settingsT('transfer.mergeMode')}</option>
+        <option value="replace">${settingsT('transfer.replaceMode')}</option>
+        <option value="ignore">${settingsT('transfer.ignoreMode')}</option>
       </select>
     </div>
     <table class="settings-table" style="margin-bottom:8px">
-      <thead><tr><th>Scope</th><th>Profil</th><th>Status</th></tr></thead>
+      <thead><tr><th>${settingsT('transfer.scope')}</th><th>${settingsT('transfer.profile')}</th><th>${settingsT('transfer.status')}</th></tr></thead>
       <tbody>
         ${settingsRows.map((r) => `<tr>
           <td>${escHtml(String(r.scope || '').toUpperCase())}</td>
@@ -1261,12 +1347,12 @@ function renderProfileSecretsImportPreview(d) {
   ` : '';
   return `
     ${settingsBlock}
-    <div class="text-muted" style="font-size:12px;margin:12px 0 8px 0">Profile+Secrets Vorschau (${rows.length})</div>
+    <div class="text-muted" style="font-size:12px;margin:12px 0 8px 0">${settingsT('transfer.profilesSecretsPreview', { count: rows.length })}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
-      Gesamt: ${stats.total} · Vorhanden: ${stats.match} · Abweichend: ${stats.mismatch} · Fehlend: ${stats.missing} · Profil fehlt: ${stats.profile_missing}${stats.other ? ` · Sonstige: ${stats.other}` : ''}
+      ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.presentCount', { count: stats.match })} · ${settingsT('transfer.differentCount', { count: stats.mismatch })} · ${settingsT('transfer.missingCount', { count: stats.missing })} · ${settingsT('transfer.profileMissingCount', { count: stats.profile_missing })}${stats.other ? ` · ${settingsT('transfer.other', { count: stats.other })}` : ''}
     </div>
     <table class="settings-table">
-      <thead><tr><th>Import</th><th>Typ</th><th>Profil</th><th>Ziel-Profil</th><th>Secret</th><th>Status</th><th>Zielpfad</th></tr></thead>
+      <thead><tr><th>${settingsT('transfer.import')}</th><th>${settingsT('transfer.type')}</th><th>${settingsT('transfer.profile')}</th><th>${settingsT('transfer.targetProfile')}</th><th>${settingsT('transfer.secret')}</th><th>${settingsT('transfer.status')}</th><th>${settingsT('transfer.targetPath')}</th></tr></thead>
       <tbody>
       ${rows.map((r, idx) => {
         const pType = String(r.profile_type || '').toLowerCase();
@@ -1306,9 +1392,9 @@ function _pickFileText(accept = '') {
     if (accept) inp.accept = accept;
     inp.onchange = () => {
       const f = inp.files && inp.files[0];
-      if (!f) return reject(new Error('Keine Datei ausgewählt'));
+      if (!f) return reject(new Error(settingsT('transfer.noFileSelected')));
       const r = new FileReader();
-      r.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+      r.onerror = () => reject(new Error(settingsT('transfer.fileReadError')));
       r.onload = () => resolve({ name: f.name || '', content: String(r.result || '') });
       r.readAsText(f);
     };
@@ -1323,9 +1409,9 @@ function _pickFileBufferAsBase64(accept = '') {
     if (accept) inp.accept = accept;
     inp.onchange = () => {
       const f = inp.files && inp.files[0];
-      if (!f) return reject(new Error('Keine Datei ausgewählt'));
+      if (!f) return reject(new Error(settingsT('transfer.noFileSelected')));
       const r = new FileReader();
-      r.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+      r.onerror = () => reject(new Error(settingsT('transfer.fileReadError')));
       r.onload = () => {
         const buf = new Uint8Array(r.result);
         let s = '';
@@ -1340,16 +1426,16 @@ function _pickFileBufferAsBase64(accept = '') {
 
 async function _pickFileViaUiDialog(cfg) {
   const ok = await _openSettingsDialog({
-    title: cfg?.title || 'Datei auswählen',
-    message: cfg?.message || 'Bitte eine Datei auswählen.',
-    confirmText: cfg?.confirmText || 'Datei wählen',
+    title: cfg?.title || settingsT('transfer.selectFile'),
+    message: cfg?.message || settingsT('transfer.selectFileMessage'),
+    confirmText: cfg?.confirmText || settingsT('transfer.chooseFile'),
   });
   if (!ok) return null;
   const picked = cfg?.binary ? await _pickFileBufferAsBase64(cfg?.accept || '') : await _pickFileText(cfg?.accept || '');
   const name = String(picked?.name || '');
   const prefix = String(cfg?.namePrefix || '').trim();
   if (prefix && !name.startsWith(prefix)) {
-    throw new Error(`Falscher Dateityp: erwartet ${prefix}*`);
+    throw new Error(settingsT('transfer.wrongFileType', { prefix }));
   }
   return picked;
 }
@@ -1367,7 +1453,7 @@ function _openSettingsDialog(cfg) {
     const closeBtn = document.getElementById('settings-dialog-close-btn');
     if (!modal || !title || !desc || !inputWrap || !inputLabel || !input || !okBtn || !cancelBtn || !closeBtn) return resolve(null);
 
-    title.textContent = cfg?.title || 'Bestätigung';
+    title.textContent = cfg?.title || settingsT('transfer.confirmation');
     if (cfg?.html) {
       desc.innerHTML = String(cfg.html);
     } else {
@@ -1379,7 +1465,7 @@ function _openSettingsDialog(cfg) {
     input.type = cfg?.input?.type || 'text';
     input.value = cfg?.input?.value || '';
     input.placeholder = cfg?.input?.placeholder || '';
-    okBtn.textContent = cfg?.confirmText || 'Bestätigen';
+    okBtn.textContent = cfg?.confirmText || settingsT('transfer.confirm');
     okBtn.className = `btn ${cfg?.confirmClass || 'btn-primary'}`;
     const validate = cfg?.input?.validate || (() => true);
     const update = () => { okBtn.disabled = needInput ? !validate(input.value) : false; };
@@ -1429,9 +1515,9 @@ async function exportJobsBundle() {
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     _downloadTextFile(data.filename || 'bbui-jobs-export.json', data.bundle_text || JSON.stringify(data.bundle || {}, null, 2));
-    showMsg('settings-transfer-msg', 'success', `Export erstellt (${data.job_count || 0} Jobs).`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.exportCreated', { jobs: data.job_count || 0 }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Export fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.exportFailed', { message: err.message }));
   }
 }
 
@@ -1439,10 +1525,10 @@ async function exportJobsBundleSecure() {
   hideEl('settings-transfer-msg');
   try {
     const password = await _openSettingsDialog({
-      title: 'Jobs+Passphrases exportieren',
-      message: 'Passwort für verschlüsseltes Jobs-Paket eingeben.',
-      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
-      confirmText: 'Export starten',
+      title: settingsT('transfer.exportJobsTitle'),
+      message: settingsT('transfer.jobsPasswordPrompt'),
+      input: { label: settingsT('transfer.password'), type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
+      confirmText: settingsT('transfer.startExport'),
     });
     if (!password) return;
     const res = await fetch('/api/settings/jobs-export-secure', {
@@ -1464,9 +1550,9 @@ async function exportJobsBundleSecure() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showMsg('settings-transfer-msg', 'success', `Verschlüsselter Jobs-Export erstellt (${data.job_count || 0} Jobs, ${data.passphrase_count || 0} Passphrases).`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.secureJobsCreated', { jobs: data.job_count || 0, passphrases: data.passphrase_count || 0 }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Verschlüsselter Jobs-Export fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.secureJobsFailed', { message: err.message }));
   }
 }
 
@@ -1492,21 +1578,21 @@ async function exportSupportBundle() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showMsg('settings-transfer-msg', 'success', `Supportpaket erstellt (${data.file_count || 0} Dateien).`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.supportCreated', { count: data.file_count || 0 }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Supportpaket fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.supportFailed', { message: err.message }));
   }
 }
 
 async function applyLegacyCleanupFromSettings(el) {
   const count = Number(el?.dataset?.candidateCount || 0);
   const confirm = await _openSettingsDialog({
-    title: 'Legacy-Cleanup anwenden',
-    html: `<p>Es werden ${escHtml(String(count))} aktive Legacy-/Deprecated-Zeilen in <code>backup.conf</code> auskommentiert. Vorher wird automatisch ein Config-Backup erstellt.</p><p>Zum Fortfahren bitte <strong>AUSKOMMENTIEREN</strong> eingeben.</p>`,
-    confirmText: 'Auskommentieren',
+    title: settingsT('transfer.cleanupApplyTitle'),
+    html: settingsT('transfer.cleanupApplyHtml', { count: escHtml(String(count)) }),
+    confirmText: settingsT('transfer.commentOut'),
     confirmClass: 'btn-danger',
     input: {
-      label: 'Bestätigung',
+      label: settingsT('transfer.confirmation'),
       placeholder: 'AUSKOMMENTIEREN',
       validate: (value) => String(value || '').trim() === 'AUSKOMMENTIEREN',
     },
@@ -1521,11 +1607,11 @@ async function applyLegacyCleanupFromSettings(el) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-    showMsg('settings-message', 'success', `${data.message || 'Legacy-Cleanup angewendet.'}${data.backup ? ` Backup: ${data.backup}` : ''}`);
+    showMsg('settings-message', 'success', `${data.message || settingsT('transfer.cleanupApplied')}${data.backup ? ` Backup: ${data.backup}` : ''}`);
     await refreshSettings();
     await refreshSettingsConfigBackups();
   } catch (err) {
-    showMsg('settings-message', 'error', `Legacy-Cleanup fehlgeschlagen: ${err.message}`);
+    showMsg('settings-message', 'error', settingsT('transfer.cleanupFailed', { message: err.message }));
   }
 }
 
@@ -1535,10 +1621,10 @@ async function importJobsBundle(dryRun) {
     const picked = await _pickFileText();
     const text = picked.content;
     const modeRaw = await _openSettingsDialog({
-      title: 'Jobs importieren',
-      message: 'Import-Modus eingeben: skip, overwrite oder rename',
-      input: { label: 'Import-Modus', value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
-      confirmText: dryRun ? 'Prüfen' : 'Importieren',
+      title: settingsT('transfer.importJobsTitle'),
+      message: settingsT('transfer.importModePrompt'),
+      input: { label: settingsT('transfer.importMode'), value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
+      confirmText: dryRun ? settingsT('transfer.checkAction') : settingsT('transfer.importAction'),
     });
     if (!modeRaw) return;
     const mode = modeRaw.trim();
@@ -1552,10 +1638,10 @@ async function importJobsBundle(dryRun) {
     const lines = (data.report || []).slice(0, 10).map(r => `${r.job_key || '-'} -> ${r.new_job_key || r.job_key || '-'} [${r.status}]`);
     const summary = `Jobs: ${data.imported_count || 0}, Schedules: ${data.scheduled_count || 0}`;
     const suffix = lines.length ? `\n${lines.join('\n')}` : '';
-    showMsg('settings-transfer-msg', dryRun ? 'warning' : 'success', `${dryRun ? 'Prüfung OK' : 'Import OK'}: ${summary}${suffix}`);
+    showMsg('settings-transfer-msg', dryRun ? 'warning' : 'success', `${dryRun ? settingsT('transfer.checkOk') : settingsT('transfer.importOk')}: ${summary}${suffix}`);
     if (!dryRun) await refreshSettings();
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Import fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.importFailed', { message: err.message }));
   }
 }
 
@@ -1563,9 +1649,9 @@ async function importJobsPreviewSelectFile() {
   hideEl('settings-transfer-msg');
   try {
     const picked = await _pickFileViaUiDialog({
-      title: 'Jobs-Datei wählen',
-      message: 'Bitte die exportierte Jobs-Bundle-Datei auswählen.',
-      confirmText: 'Datei öffnen',
+      title: settingsT('transfer.selectJobsFile'),
+      message: settingsT('transfer.selectJobsFileMessage'),
+      confirmText: settingsT('transfer.openFile'),
       binary: false,
     });
     if (!picked) return;
@@ -1584,9 +1670,9 @@ async function importJobsPreviewSelectFile() {
     settingsState.transferJobsPreview = data;
     settingsState.transferSettingsMode = 'merge';
     await refreshSettings();
-    showMsg('settings-transfer-msg', 'success', `Vorschau geladen: ${data.job_count || 0} Jobs (${picked.name || 'Datei'})`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.previewLoadedJobs', { count: data.job_count || 0, file: picked.name || settingsT('transfer.file') }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Vorschau fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.previewFailed', { message: err.message }));
   }
 }
 
@@ -1594,19 +1680,19 @@ async function importJobsSecurePreviewSelectFile() {
   hideEl('settings-transfer-msg');
   try {
     const picked = await _pickFileViaUiDialog({
-      title: 'Verschlüsselte Jobs-Datei wählen',
-      message: 'Bitte die verschlüsselte Jobs-Datei auswählen.',
-      confirmText: 'Datei öffnen',
+      title: settingsT('transfer.selectSecureJobsFile'),
+      message: settingsT('transfer.selectSecureJobsFileMessage'),
+      confirmText: settingsT('transfer.openFile'),
       binary: true,
       accept: '.jobs.enc,application/octet-stream',
       namePrefix: 'bbui-jobs-secure-',
     });
     if (!picked) return;
     const password = await _openSettingsDialog({
-      title: 'Verschlüsselte Jobs Vorschau',
-      message: 'Passwort für Jobs-Datei eingeben.',
-      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
-      confirmText: 'Vorschau laden',
+      title: settingsT('transfer.secureJobsPreviewTitle'),
+      message: settingsT('transfer.jobsFilePassword'),
+      input: { label: settingsT('transfer.password'), type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: settingsT('transfer.loadPreview'),
     });
     if (!password) return;
     const payload_b64 = picked.payload_b64;
@@ -1627,9 +1713,9 @@ async function importJobsSecurePreviewSelectFile() {
     settingsState.transferProfileSecretsPassword = '';
     settingsState.transferSettingsMode = 'merge';
     await refreshSettings();
-    showMsg('settings-transfer-msg', 'success', `Vorschau geladen: ${data.job_count || 0} Jobs (${picked.name || 'Datei'})`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.previewLoadedJobs', { count: data.job_count || 0, file: picked.name || settingsT('transfer.file') }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Vorschau fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.previewFailed', { message: err.message }));
   }
 }
 
@@ -1640,7 +1726,7 @@ async function importJobsApplySelected() {
     const hasPayload = settingsState.transferJobsSecureMode
       ? !!settingsState.transferJobsSecurePayloadB64
       : !!settingsState.transferJobsBundleText;
-    if (!preview || !hasPayload) throw new Error('Keine Job-Vorschau vorhanden');
+    if (!preview || !hasPayload) throw new Error(settingsT('transfer.noJobsPreview'));
     const selected = [];
     const perMode = {};
     const perProfileMode = {};
@@ -1652,7 +1738,7 @@ async function importJobsApplySelected() {
         if (modeSel?.value) perMode[r.job_key] = modeSel.value;
       }
     });
-    if (!selected.length) throw new Error('Keine Jobs ausgewählt');
+    if (!selected.length) throw new Error(settingsT('transfer.noJobsSelected'));
     const settingsModeEl = document.getElementById('settings-import-mode');
     const settingsMode = String(settingsModeEl?.value || settingsState.transferSettingsMode || 'merge').trim().toLowerCase();
     document.querySelectorAll('[data-settings-profile-mode]').forEach((el) => {
@@ -1665,24 +1751,24 @@ async function importJobsApplySelected() {
       return String(row?.conflict || '') === 'exists';
     }).length;
     const ok = await _openSettingsDialog({
-      title: 'Jobs importieren',
-      message: `Auswahl: ${selected.length} Job(s)${existsCnt ? `, davon ${existsCnt} bereits vorhanden` : ''}. Import jetzt starten?`,
-      confirmText: 'Import starten',
+      title: settingsT('transfer.importJobsTitle'),
+      message: settingsT('transfer.confirmJobsImport', { count: selected.length, existing: existsCnt ? settingsT('transfer.existingSelection', { count: existsCnt }) : '' }),
+      confirmText: settingsT('transfer.startImport'),
     });
     if (!ok) return;
     let importJobs = true;
     let importPassphrases = true;
     if (settingsState.transferJobsSecureMode) {
       const scope = await _openSettingsDialog({
-        title: 'Import-Inhalt',
+        title: settingsT('transfer.importContent'),
         html: `
           <div style="display:flex;flex-direction:column;gap:8px">
-            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="both" checked> Jobs und Passphrases</label>
-            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="jobs_only"> Nur Jobs</label>
-            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="passphrases_only"> Nur Passphrases</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="both" checked> ${settingsT('transfer.jobsAndPassphrases')}</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="jobs_only"> ${settingsT('transfer.jobsOnly')}</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="passphrases_only"> ${settingsT('transfer.passphrasesOnly')}</label>
           </div>
         `,
-        confirmText: 'Weiter',
+        confirmText: settingsT('transfer.continue'),
         resolveValue: ({ modal }) => {
           const checked = modal?.querySelector('input[name="jobs-secure-scope"]:checked');
           return String(checked?.value || 'both');
@@ -1730,9 +1816,9 @@ async function importJobsApplySelected() {
       ? ` · ${Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(', ')}`
       : '';
     const srep = data?.settings_report || null;
-    const stext = srep ? ` · Settings(${srep.mode}): ${srep.applied || 0} angewendet, Konflikte ${srep.conflicts || 0}${data?.settings_backup ? `, Backup: ${data.settings_backup}` : ''}` : '';
-    const ppText = Number(data?.restored_passphrases || 0) ? ` · Passphrases: ${Number(data.restored_passphrases)} wiederhergestellt` : '';
-    showMsg('settings-transfer-msg', 'success', `Import OK: ${data.imported_count || 0} Jobs, ${data.scheduled_count || 0} Schedules${detail}${stext}${ppText}`);
+    const stext = srep ? ` · Settings(${srep.mode}): ${srep.applied || 0} ${settingsT('transfer.settingsApplied')}, ${settingsT('transfer.conflicts')} ${srep.conflicts || 0}${data?.settings_backup ? `, Backup: ${data.settings_backup}` : ''}` : '';
+    const ppText = Number(data?.restored_passphrases || 0) ? ` · ${settingsT('transfer.passphrasesRestored', { count: Number(data.restored_passphrases) })}` : '';
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.importSummary', { jobs: data.imported_count || 0, schedules: data.scheduled_count || 0, details: `${detail}${stext}${ppText}` }));
     settingsState.transferJobsPreview = null;
     settingsState.transferJobsBundleText = '';
     settingsState.transferJobsSecurePayloadB64 = '';
@@ -1740,7 +1826,7 @@ async function importJobsApplySelected() {
     settingsState.transferJobsSecureMode = false;
     await refreshSettings();
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Import fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.importFailed', { message: err.message }));
   }
 }
 
@@ -1748,10 +1834,10 @@ async function exportSecretsBackup() {
   hideEl('settings-transfer-msg');
   try {
     const password = await _openSettingsDialog({
-      title: 'Passphrase-Backup exportieren',
-      message: 'Passwort für verschlüsseltes Backup eingeben.',
-      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
-      confirmText: 'Export starten',
+      title: settingsT('transfer.passphraseExportTitle'),
+      message: settingsT('transfer.encryptedBackupPassword'),
+      input: { label: settingsT('transfer.password'), type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
+      confirmText: settingsT('transfer.startExport'),
     });
     if (!password) return;
     const res = await fetch('/api/settings/secrets-backup-export', {
@@ -1773,9 +1859,9 @@ async function exportSecretsBackup() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showMsg('settings-transfer-msg', 'success', `Passphrase-Backup erstellt (${data.count || 0} Dateien).`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.passphraseBackupCreated', { count: data.count || 0 }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Passphrase-Backup fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.passphraseBackupFailed', { message: err.message }));
   }
 }
 
@@ -1783,25 +1869,25 @@ async function importSecretsBackup() {
   hideEl('settings-transfer-msg');
   try {
     const password = await _openSettingsDialog({
-      title: 'Passphrase-Backup importieren',
-      message: 'Passwort für Backup-Datei eingeben.',
-      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
-      confirmText: 'Weiter',
+      title: settingsT('transfer.passphraseImportTitle'),
+      message: settingsT('transfer.backupFilePassword'),
+      input: { label: settingsT('transfer.password'), type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: settingsT('transfer.continue'),
     });
     if (!password) return;
     const picked = await _pickFileViaUiDialog({
-      title: 'Passphrase-Backup wählen',
-      message: 'Bitte die verschlüsselte Passphrase-Backup-Datei auswählen.',
-      confirmText: 'Datei öffnen',
+      title: settingsT('transfer.selectPassphraseBackup'),
+      message: settingsT('transfer.selectPassphraseBackupMessage'),
+      confirmText: settingsT('transfer.openFile'),
       binary: true,
     });
     if (!picked) return;
     const fileText = picked.payload_b64;
     const modeRaw = await _openSettingsDialog({
-      title: 'Import-Modus',
-      message: 'Umgang mit bestehenden Dateien: skip, overwrite oder rename',
-      input: { label: 'Import-Modus', value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
-      confirmText: 'Import starten',
+      title: settingsT('transfer.importMode'),
+      message: settingsT('transfer.existingFilesPrompt'),
+      input: { label: settingsT('transfer.importMode'), value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
+      confirmText: settingsT('transfer.startImport'),
     });
     if (!modeRaw) return;
     const mode = modeRaw.trim();
@@ -1812,10 +1898,10 @@ async function importSecretsBackup() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-    showMsg('settings-transfer-msg', 'success', `Passphrase-Import OK: ${data.restored_count || 0} Dateien wiederhergestellt.`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.passphraseImportOk', { count: data.restored_count || 0, suffix: settingsT('transfer.restoredSuffix') }));
     await refreshSettings();
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Passphrase-Import fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.passphraseImportFailed', { message: err.message }));
   }
 }
 
@@ -1823,16 +1909,16 @@ async function importSecretsPreviewSelectFile() {
   hideEl('settings-transfer-msg');
   try {
     const password = await _openSettingsDialog({
-      title: 'Passphrase-Backup Vorschau',
-      message: 'Passwort für Backup-Datei eingeben.',
-      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
-      confirmText: 'Weiter',
+      title: settingsT('transfer.passphrasePreviewTitle'),
+      message: settingsT('transfer.backupFilePassword'),
+      input: { label: settingsT('transfer.password'), type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: settingsT('transfer.continue'),
     });
     if (!password) return;
     const picked = await _pickFileViaUiDialog({
-      title: 'Passphrase-Backup wählen',
-      message: 'Bitte die verschlüsselte Backup-Datei für die Vorschau auswählen.',
-      confirmText: 'Datei öffnen',
+      title: settingsT('transfer.selectPassphraseBackup'),
+      message: settingsT('transfer.selectPreviewBackupMessage'),
+      confirmText: settingsT('transfer.openFile'),
       binary: true,
     });
     if (!picked) return;
@@ -1848,9 +1934,9 @@ async function importSecretsPreviewSelectFile() {
     settingsState.transferSecretsPayloadB64 = payload_b64;
     settingsState.transferSecretsPassword = password;
     await refreshSettings();
-    showMsg('settings-transfer-msg', 'success', `Vorschau geladen: ${data.count || 0} Passphrase-Dateien (${picked.name || 'Datei'})`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.previewLoadedPassphrases', { count: data.count || 0, file: picked.name || settingsT('transfer.file') }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Secrets-Vorschau fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.secretsPreviewFailed', { message: err.message }));
   }
 }
 
@@ -1859,26 +1945,26 @@ async function importSecretsApplySelected() {
   try {
     const preview = settingsState.transferSecretsPreview;
     if (!preview || !settingsState.transferSecretsPayloadB64 || !settingsState.transferSecretsPassword) {
-      throw new Error('Keine Secrets-Vorschau vorhanden');
+      throw new Error(settingsT('transfer.noSecretsPreview'));
     }
     const selected = [];
     (preview.files || []).forEach((r, idx) => {
       const cb = document.querySelector(`[data-secret-preview-select="${idx}"]`);
       if (cb?.checked) selected.push(r.name);
     });
-    if (!selected.length) throw new Error('Keine Passphrase-Dateien ausgewählt');
+    if (!selected.length) throw new Error(settingsT('transfer.noPassphraseFilesSelected'));
     const modeRaw = await _openSettingsDialog({
-      title: 'Import-Modus',
-      message: 'Umgang mit bestehenden Dateien: skip, overwrite oder rename',
-      input: { label: 'Import-Modus', value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
-      confirmText: 'Import starten',
+      title: settingsT('transfer.importMode'),
+      message: settingsT('transfer.existingFilesPrompt'),
+      input: { label: settingsT('transfer.importMode'), value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
+      confirmText: settingsT('transfer.startImport'),
     });
     if (!modeRaw) return;
     const mismatchCnt = (preview.files || []).filter((r) => selected.includes(r.name) && String(r.status || '') === 'present_mismatch').length;
     const ok = await _openSettingsDialog({
-      title: 'Passphrases importieren',
-      message: `Auswahl: ${selected.length} Datei(en), Modus: ${modeRaw.trim()}${mismatchCnt ? `, abweichend: ${mismatchCnt}` : ''}. Import jetzt starten?`,
-      confirmText: 'Import starten',
+      title: settingsT('transfer.passphraseImportTitle'),
+      message: settingsT('transfer.confirmPassphraseImport', { count: selected.length, mode: modeRaw.trim(), different: mismatchCnt ? settingsT('transfer.differentSelection', { count: mismatchCnt }) : '' }),
+      confirmText: settingsT('transfer.startImport'),
     });
     if (!ok) return;
     const res = await fetch('/api/settings/secrets-backup-import', {
@@ -1893,13 +1979,13 @@ async function importSecretsApplySelected() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-    showMsg('settings-transfer-msg', 'success', `Passphrase-Import OK: ${data.restored_count || 0} Dateien`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.passphraseImportOk', { count: data.restored_count || 0, suffix: '' }));
     settingsState.transferSecretsPreview = null;
     settingsState.transferSecretsPayloadB64 = '';
     settingsState.transferSecretsPassword = '';
     await refreshSettings();
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Passphrase-Import fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.passphraseImportFailed', { message: err.message }));
   }
 }
 
@@ -1907,10 +1993,10 @@ async function exportProfileSecretsBackup() {
   hideEl('settings-transfer-msg');
   try {
     const password = await _openSettingsDialog({
-      title: 'Profile+Secrets exportieren',
-      message: 'Passwort für verschlüsseltes Secrets-Paket eingeben.',
-      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
-      confirmText: 'Export starten',
+      title: settingsT('transfer.exportProfilesTitle'),
+      message: settingsT('transfer.secretsPackagePassword'),
+      input: { label: settingsT('transfer.password'), type: 'password', value: '', validate: (v) => String(v || '').length >= 8 },
+      confirmText: settingsT('transfer.startExport'),
     });
     if (!password) return;
     const res = await fetch('/api/settings/profile-secrets-export', {
@@ -1932,9 +2018,9 @@ async function exportProfileSecretsBackup() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showMsg('settings-transfer-msg', 'success', `Profile+Secrets exportiert (${data.count || 0} Einträge).`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.profilesExported', { count: data.count || 0 }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Profile+Secrets Export fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.profilesExportFailed', { message: err.message }));
   }
 }
 
@@ -1942,19 +2028,19 @@ async function importProfileSecretsPreviewSelectFile() {
   hideEl('settings-transfer-msg');
   try {
     const picked = await _pickFileViaUiDialog({
-      title: 'Profile+Secrets wählen',
-      message: 'Bitte die verschlüsselte Profile+Secrets-Datei auswählen.',
-      confirmText: 'Datei öffnen',
+      title: settingsT('transfer.selectProfilesFile'),
+      message: settingsT('transfer.selectProfilesFileMessage'),
+      confirmText: settingsT('transfer.openFile'),
       binary: true,
       accept: '.profiles.enc,application/octet-stream',
       namePrefix: 'bbui-profile-secrets-',
     });
     if (!picked) return;
     const password = await _openSettingsDialog({
-      title: 'Profile+Secrets Vorschau',
-      message: 'Passwort für Secrets-Datei eingeben.',
-      input: { label: 'Passwort', type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
-      confirmText: 'Vorschau laden',
+      title: settingsT('transfer.profilesPreviewTitle'),
+      message: settingsT('transfer.secretsFilePassword'),
+      input: { label: settingsT('transfer.password'), type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: settingsT('transfer.loadPreview'),
     });
     if (!password) return;
     const payload_b64 = picked.payload_b64;
@@ -1974,9 +2060,9 @@ async function importProfileSecretsPreviewSelectFile() {
     settingsState.transferJobsSecurePassword = '';
     settingsState.transferJobsSecureMode = false;
     await refreshSettings();
-    showMsg('settings-transfer-msg', 'success', `Vorschau geladen: ${data.count || 0} Profile+Secrets (${picked.name || 'Datei'})`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.previewLoadedProfiles', { count: data.count || 0, file: picked.name || settingsT('transfer.file') }));
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Profile+Secrets Vorschau fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.profilesPreviewFailed', { message: err.message }));
   }
 }
 
@@ -1985,7 +2071,7 @@ async function importProfileSecretsApplySelected() {
   try {
     const preview = settingsState.transferProfileSecretsPreview;
     if (!preview || !settingsState.transferProfileSecretsPayloadB64 || !settingsState.transferProfileSecretsPassword) {
-      throw new Error('Keine Profile+Secrets Vorschau vorhanden');
+      throw new Error(settingsT('transfer.noProfilesPreview'));
     }
     const selected = [];
     const profileMap = {};
@@ -1999,12 +2085,12 @@ async function importProfileSecretsApplySelected() {
         if (mapped) profileMap[entryId] = mapped;
       }
     });
-    if (!selected.length) throw new Error('Keine Profile+Secrets ausgewählt');
+    if (!selected.length) throw new Error(settingsT('transfer.noProfilesSelected'));
     const modeRaw = await _openSettingsDialog({
-      title: 'Import-Modus',
-      message: 'Umgang mit bestehenden Dateien: skip oder overwrite',
-      input: { label: 'Import-Modus', value: 'skip', placeholder: 'skip | overwrite', validate: (v) => ['skip', 'overwrite'].includes((v || '').trim()) },
-      confirmText: 'Import starten',
+      title: settingsT('transfer.importMode'),
+      message: settingsT('transfer.existingFilesShortPrompt'),
+      input: { label: settingsT('transfer.importMode'), value: 'skip', placeholder: 'skip | overwrite', validate: (v) => ['skip', 'overwrite'].includes((v || '').trim()) },
+      confirmText: settingsT('transfer.startImport'),
     });
     if (!modeRaw) return;
     const settingsModeEl = document.getElementById('profile-secrets-settings-mode');
@@ -2023,13 +2109,13 @@ async function importProfileSecretsApplySelected() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-    showMsg('settings-transfer-msg', 'success', `Profile+Secrets Import OK: ${data.restored_count || 0} Dateien`);
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.profilesImportOk', { count: data.restored_count || 0 }));
     settingsState.transferProfileSecretsPreview = null;
     settingsState.transferProfileSecretsPayloadB64 = '';
     settingsState.transferProfileSecretsPassword = '';
     await refreshSettings();
   } catch (err) {
-    showMsg('settings-transfer-msg', 'error', `Profile+Secrets Import fehlgeschlagen: ${err.message}`);
+    showMsg('settings-transfer-msg', 'error', settingsT('transfer.profilesImportFailed', { message: err.message }));
   }
 }
 
@@ -2042,12 +2128,12 @@ async function refreshSettingsConfigBackups() {
     const data = await res.json();
     const rows = data.backups || [];
     if (!rows.length) {
-      el.innerHTML = `<div class="text-muted" style="font-size:13px">Noch keine Config-Backups vorhanden.</div>`;
+      el.innerHTML = `<div class="text-muted" style="font-size:13px">${settingsT('backups.none')}</div>`;
       return;
     }
     el.innerHTML = `
       <table class="settings-table">
-        <thead><tr><th>Datei</th><th>Grund</th><th>Geändert</th><th>Größe</th><th></th></tr></thead>
+        <thead><tr><th>${settingsT('backups.file')}</th><th>${settingsT('backups.reason')}</th><th>${settingsT('backups.changed')}</th><th>${settingsT('backups.size')}</th><th></th></tr></thead>
         <tbody>
           ${rows.map(r => `
             <tr>
@@ -2057,24 +2143,24 @@ async function refreshSettingsConfigBackups() {
               <td>${_fmtBytes(Number(r.size || 0))}</td>
               <td style="text-align:right">
                 <button class="btn btn-secondary btn-sm" data-settings-action="diff-config-backup" data-backup-name="${escHtml(r.name)}">Diff</button>
-                <button class="btn btn-secondary btn-sm" data-settings-action="restore-config-backup" data-backup-name="${escHtml(r.name)}">Wiederherstellen</button>
-                <button class="btn btn-secondary btn-sm" data-settings-action="delete-config-backup" data-backup-name="${escHtml(r.name)}">Löschen</button>
+                <button class="btn btn-secondary btn-sm" data-settings-action="restore-config-backup" data-backup-name="${escHtml(r.name)}">${settingsT('backups.restore')}</button>
+                <button class="btn btn-secondary btn-sm" data-settings-action="delete-config-backup" data-backup-name="${escHtml(r.name)}">${settingsT('backups.delete')}</button>
               </td>
             </tr>
           `).join('')}
         </tbody>
       </table>`;
   } catch (err) {
-    el.innerHTML = `<div class="status-message error-state">Fehler beim Laden: ${escHtml(err.message || String(err))}</div>`;
+    el.innerHTML = `<div class="status-message error-state">${settingsT('backups.loadError', { message: escHtml(err.message || String(err)) })}</div>`;
   }
 }
 
 async function restoreSettingsConfigBackup(name) {
   if (!name) return;
   const ok = await _openSettingsDialog({
-    title: 'Backup wiederherstellen',
-    message: `${name}\n\nDie aktuelle backup.conf wird vorher zusätzlich gesichert.`,
-    confirmText: 'Wiederherstellen',
+    title: settingsT('backups.restoreTitle'),
+    message: settingsT('backups.restoreMessage', { name }),
+    confirmText: settingsT('backups.restore'),
   });
   if (!ok) return;
   hideEl('settings-config-backups-msg');
@@ -2086,10 +2172,10 @@ async function restoreSettingsConfigBackup(name) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-    showMsg('settings-config-backups-msg', 'success', `Wiederhergestellt: ${name}`);
+    showMsg('settings-config-backups-msg', 'success', settingsT('backups.restored', { name }));
     await refreshSettings();
   } catch (err) {
-    showMsg('settings-config-backups-msg', 'error', `Restore fehlgeschlagen: ${err.message}`);
+    showMsg('settings-config-backups-msg', 'error', settingsT('backups.restoreError', { message: err.message }));
   }
 }
 
@@ -2099,7 +2185,7 @@ async function diffSettingsConfigBackup(name) {
   const box = document.getElementById('settings-config-backups-diff');
   if (box) {
     box.className = '';
-    box.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>Lade Diff...</span></div>`;
+    box.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>${settingsT('backups.loadingDiff')}</span></div>`;
   }
   try {
     const res = await fetch('/api/settings/backup-diff', {
@@ -2111,11 +2197,11 @@ async function diffSettingsConfigBackup(name) {
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     if (!box) return;
     if (!data.changed) {
-      box.innerHTML = `<div class="status-message success">Keine Unterschiede zwischen aktiver backup.conf und ${escHtml(name)}.</div>`;
+      box.innerHTML = `<div class="status-message success">${settingsT('backups.noDifferences', { name: escHtml(name) })}</div>`;
       return;
     }
     const rows = Array.isArray(data.side_by_side) ? data.side_by_side : [];
-    const leftTitle = 'Aktive backup.conf';
+    const leftTitle = settingsT('backups.activeConfig');
     const rightTitle = `Backup: ${name}`;
     const lineNo = (n) => (Number.isInteger(n) ? String(n) : '');
     const sideRows = rows.map((r) => `
@@ -2141,13 +2227,13 @@ async function diffSettingsConfigBackup(name) {
         </table>
       </div>
       <details style="margin-top:8px">
-        <summary style="cursor:pointer;color:var(--text-muted)">Unified Diff anzeigen</summary>
+        <summary style="cursor:pointer;color:var(--text-muted)">${settingsT('backups.showDiff')}</summary>
         <pre class="log-output" style="max-height:240px;overflow:auto">${escHtml(unifiedFallback)}</pre>
       </details>
     `;
   } catch (err) {
     if (box) {
-      box.innerHTML = `<div class="status-message error-state">Diff fehlgeschlagen: ${escHtml(err.message || String(err))}</div>`;
+      box.innerHTML = `<div class="status-message error-state">${settingsT('backups.diffError', { message: escHtml(err.message || String(err)) })}</div>`;
     }
   }
 }
@@ -2155,9 +2241,9 @@ async function diffSettingsConfigBackup(name) {
 async function deleteSettingsConfigBackup(name) {
   if (!name) return;
   const ok = await _openSettingsDialog({
-    title: 'Backup löschen',
+    title: settingsT('backups.deleteTitle'),
     message: name,
-    confirmText: 'Löschen',
+    confirmText: settingsT('backups.delete'),
   });
   if (!ok) return;
   hideEl('settings-config-backups-msg');
@@ -2169,18 +2255,18 @@ async function deleteSettingsConfigBackup(name) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-    showMsg('settings-config-backups-msg', 'success', `Gelöscht: ${name}`);
+    showMsg('settings-config-backups-msg', 'success', settingsT('backups.deleted', { value: name }));
     await refreshSettingsConfigBackups();
   } catch (err) {
-    showMsg('settings-config-backups-msg', 'error', `Löschen fehlgeschlagen: ${err.message}`);
+    showMsg('settings-config-backups-msg', 'error', settingsT('backups.deleteError', { message: err.message }));
   }
 }
 
 async function deleteConfigBackupsKeepLatest() {
   const ok = await _openSettingsDialog({
-    title: 'Backups aufräumen',
-    message: 'Alle Config-Backups außer dem neuesten löschen?',
-    confirmText: 'Aufräumen',
+    title: settingsT('backups.cleanupTitle'),
+    message: settingsT('backups.cleanupMessage'),
+    confirmText: settingsT('backups.cleanup'),
   });
   if (!ok) return;
   hideEl('settings-config-backups-msg');
@@ -2194,36 +2280,36 @@ async function deleteConfigBackupsKeepLatest() {
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     const count = Number(data.deleted_count || 0);
     const kept = data.kept ? `, behalten: ${data.kept}` : '';
-    showMsg('settings-config-backups-msg', 'success', `Gelöscht: ${count}${kept}`);
+    showMsg('settings-config-backups-msg', 'success', settingsT('backups.deleted', { value: `${count}${kept}` }));
     await refreshSettingsConfigBackups();
   } catch (err) {
-    showMsg('settings-config-backups-msg', 'error', `Aufräumen fehlgeschlagen: ${err.message}`);
+    showMsg('settings-config-backups-msg', 'error', settingsT('backups.cleanupError', { message: err.message }));
   }
 }
 
 function renderSettingsSMTP(s) {
   const passwordSet = String(s.GLOBAL_SMTP_PASSWORD_SET || 'false') === 'true';
-  return settingsCard('E-Mail (SMTP)',
+  return settingsCard(settingsT('forms.smtpTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
     `<div class="settings-body two-col">
-      ${ftext('GLOBAL_MAIL_RECIPIENT', 'Empfänger', s.GLOBAL_MAIL_RECIPIENT)}
-      ${ftext('GLOBAL_MAIL_SENDER', 'Absender', s.GLOBAL_MAIL_SENDER)}
+      ${ftext('GLOBAL_MAIL_RECIPIENT', settingsT('forms.recipient'), s.GLOBAL_MAIL_RECIPIENT)}
+      ${ftext('GLOBAL_MAIL_SENDER', settingsT('forms.sender'), s.GLOBAL_MAIL_SENDER)}
       ${ftext('GLOBAL_SMTP_HOST', 'SMTP-Host', s.GLOBAL_SMTP_HOST)}
       ${fnum('GLOBAL_SMTP_PORT', 'SMTP-Port', s.GLOBAL_SMTP_PORT)}
-      ${ftext('GLOBAL_SMTP_USER', 'SMTP-Benutzer', s.GLOBAL_SMTP_USER)}
-      ${fpwd('GLOBAL_SMTP_PASSWORD', passwordSet ? 'SMTP-Passwort (gesetzt)' : 'SMTP-Passwort', '')}
+      ${ftext('GLOBAL_SMTP_USER', settingsT('forms.smtpUser'), s.GLOBAL_SMTP_USER)}
+      ${fpwd('GLOBAL_SMTP_PASSWORD', passwordSet ? settingsT('forms.smtpPasswordSet') : settingsT('forms.smtpPassword'), '')}
       <label class="form-checkbox-row" style="grid-column:1/-1">
         <input type="checkbox" data-key="GLOBAL_SMTP_USE_TLS"
           ${s.GLOBAL_SMTP_USE_TLS === 'true' ? 'checked' : ''}
           onchange="markSettingsDirty()">
-        TLS/STARTTLS verwenden
+        ${settingsT('forms.useTls')}
       </label>
       <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;margin-top:4px">
         <button class="btn btn-secondary btn-sm" id="smtp-test-btn" data-settings-action="send-test-email">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
-          Test-E-Mail senden
+          ${settingsT('forms.sendTestEmail')}
         </button>
         <span id="smtp-test-result" style="font-size:13px"></span>
       </div>
@@ -2247,10 +2333,10 @@ async function sendTestEmail() {
       body: JSON.stringify({ recipient }),
     });
     const data = await res.json();
-    result.textContent = data.message || (data.success ? 'Gesendet.' : 'Fehler.');
+    result.textContent = data.message || (data.success ? settingsT('forms.sent') : settingsT('forms.error'));
     result.style.color = data.success ? 'var(--success)' : 'var(--error)';
   } catch (err) {
-    result.textContent = `Fehler: ${err.message}`;
+    result.textContent = settingsT('error', { message: err.message });
     result.style.color = 'var(--error)';
   } finally {
     btn.classList.remove('loading');
@@ -2260,22 +2346,22 @@ async function sendTestEmail() {
 function renderSettingsPerRepoPassphrases(list) {
   const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M12 15h8M16 12v6"/></svg>`;
   if (!list.length) {
-    return settingsCard('Per-Repo Passphrasen', icon,
-      `<div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">Noch keine per-Repo Passphrasen vorhanden. Werden beim Anlegen eines neuen Jobs mit Verschlüsselung automatisch erstellt.</p></div>`);
+    return settingsCard(settingsT('forms.perRepoTitle'), icon,
+      `<div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${settingsT('forms.noPassphrases')}</p></div>`);
   }
   const rows = list.map(p => {
     const d = new Date(p.mtime * 1000);
-    const ts = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+    const ts = d.toLocaleDateString(settingsLocale()) + ' ' + d.toLocaleTimeString(settingsLocale(), {hour:'2-digit', minute:'2-digit'});
     return `<tr>
       <td><code style="font-size:12px">${p.type_id}</code></td>
       <td style="font-size:12px;color:var(--text-secondary)">${p.path}</td>
       <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${ts}</td>
     </tr>`;
   }).join('');
-  return settingsCard('Per-Repo Passphrasen', icon,
+  return settingsCard(settingsT('forms.perRepoTitle'), icon,
     `<div class="settings-body">
       <table class="settings-table">
-        <thead><tr><th>Typ</th><th>Pfad (Flash)</th><th>Geändert</th></tr></thead>
+        <thead><tr><th>${settingsT('forms.type')}</th><th>${settingsT('forms.flashPath')}</th><th>${settingsT('forms.changed')}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`);
@@ -2291,12 +2377,12 @@ function renderSettingsStorageboxSetup(s, storageProfiles = []) {
     const label = `${p.name} (${p.host})`;
     return `<option value="${escHtml(p.key)}" ${selectedKey === p.key ? 'selected' : ''}>${escHtml(label)}</option>`;
   }).join('');
-  const pubBtnLabel = settingsState.storageboxPubVisible ? 'Public Key ausblenden' : 'Public Key anzeigen';
-  return settingsCard('SSH Setup & Check',
+  const pubBtnLabel = settingsState.storageboxPubVisible ? settingsT('forms.hidePublicKey') : settingsT('forms.showPublicKey');
+  return settingsCard(settingsT('forms.sshSetup'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
     `<div class="settings-body">
       <div class="form-group" style="margin-top:-2px;margin-bottom:8px">
-        <label class="form-label">Profil</label>
+        <label class="form-label">${settingsT('forms.profile')}</label>
         <select class="form-select" id="storagebox-profile-select" onchange="onStorageboxProfileSelectChanged()">
           ${profileOptions}
         </select>
@@ -2305,11 +2391,11 @@ function renderSettingsStorageboxSetup(s, storageProfiles = []) {
         ${settingsState.storageboxChecks ? _renderStorageboxChecksHtml(settingsState.storageboxChecks) : ''}
       </div>
       <div class="storagebox-actions">
-        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-status">Status prüfen</button>
-        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-generate">Key erzeugen</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-status">${settingsT('common.checkStatus')}</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-generate">${settingsT('forms.generateKey')}</button>
         <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-public">${pubBtnLabel}</button>
-        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-deploy">Key deployen</button>
-        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-test">Verbindung testen</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-key-deploy">${settingsT('forms.deployKey')}</button>
+        <button class="btn btn-secondary btn-sm" data-settings-action="storagebox-test">${settingsT('forms.testConnection')}</button>
       </div>
       <div id="storagebox-setup-msg" class="status-message hidden" style="margin-top:10px"></div>
       <textarea id="storagebox-public-key" class="form-input mono ${settingsState.storageboxPubVisible ? '' : 'hidden'}" style="margin-top:8px;min-height:84px" readonly></textarea>
@@ -2317,7 +2403,7 @@ function renderSettingsStorageboxSetup(s, storageProfiles = []) {
 }
 
 function renderSettingsRetention(rows) {
-  const header = ['Typ', 'Täglich', 'Wöchentl.', 'Monatl.', 'Jährl.'];
+  const header = [settingsT('forms.type'), settingsT('forms.daily'), settingsT('forms.weekly'), settingsT('forms.monthly'), settingsT('forms.yearly')];
   const thead = `<tr>${header.map(h => `<th>${h}</th>`).join('')}</tr>`;
   const tbody = rows.map(r => `
     <tr>
@@ -2331,7 +2417,7 @@ function renderSettingsRetention(rows) {
         </td>`).join('')}
     </tr>`).join('');
 
-  return settingsCard('Retention (Aufbewahrung)',
+  return settingsCard(settingsT('forms.retention'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
     `<div class="settings-body" style="padding:0">
       <table class="retention-table" style="margin:0">
@@ -2352,7 +2438,7 @@ function renderSettingsCompression(rows) {
       </select>
     </div>`).join('');
 
-  return settingsCard('Kompression',
+  return settingsCard(settingsT('forms.compression'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`,
     `<div class="settings-body">${content}</div>`);
 }
@@ -2364,97 +2450,97 @@ function renderSettingsRestoreTests(rt) {
   const locOpts = ['local','usb','smb','storagebox','all'].map(v =>
     `<option value="${v}" ${(rt.RESTORE_TEST_LOCATION||'local')===v?'selected':''}>${locLabel(v)}</option>`
   ).join('');
-  return settingsCard('Restore Tests',
+  return settingsCard(settingsT('forms.restoreTests'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>`,
     `<div class="settings-body">
-      <h4 class="settings-subtitle">Basis</h4>
+      <h4 class="settings-subtitle">${settingsT('forms.basic')}</h4>
       <div class="two-col">
         <div class="form-group">
-          <label class="form-label">Standard Test-Level</label>
+          <label class="form-label">${settingsT('forms.defaultTestLevel')}</label>
           <select class="form-select" data-key="RESTORE_TEST_LEVEL" onchange="markSettingsDirty()">${levelOpts}</select>
         </div>
-        ${fnum('RESTORE_TEST_INTERVAL_DAYS', 'Intervall (Tage)', rt.RESTORE_TEST_INTERVAL_DAYS || '30')}
+        ${fnum('RESTORE_TEST_INTERVAL_DAYS', settingsT('forms.intervalDays'), rt.RESTORE_TEST_INTERVAL_DAYS || '30')}
         <div class="form-group">
-          <label class="form-label">Standard Location</label>
+          <label class="form-label">${settingsT('forms.defaultLocation')}</label>
           <select class="form-select" data-key="RESTORE_TEST_LOCATION" onchange="markSettingsDirty()">${locOpts}</select>
         </div>
       </div>
 
-      <h4 class="settings-subtitle">Strategie Dry-Run</h4>
+      <h4 class="settings-subtitle">${settingsT('forms.dryRunStrategy')}</h4>
       <div class="two-col">
-        ${ftext('RESTORE_TEST_FORCE_CHUNK_TYPES', 'Chunk-Modus erzwingen für Typen (CSV)', rt.RESTORE_TEST_FORCE_CHUNK_TYPES || 'vms,photos')}
-        ${fnum('RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB', 'Ab Größe (GB) direkt Chunk-Modus', rt.RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB || '500')}
+        ${ftext('RESTORE_TEST_FORCE_CHUNK_TYPES', settingsT('forms.forceChunkTypes'), rt.RESTORE_TEST_FORCE_CHUNK_TYPES || 'vms,photos')}
+        ${fnum('RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB', settingsT('forms.chunkFromSize'), rt.RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB || '500')}
       </div>
       <div class="muted" style="font-size:12px;margin-top:-6px">
-        Beispiel Typen: <code>vms,photos</code>. Wert <code>0</code> bei Größe deaktiviert die automatische Umschaltung.
+        ${settingsT('forms.chunkHint')}
       </div>
 
-      <h4 class="settings-subtitle">Limits &amp; Performance</h4>
+      <h4 class="settings-subtitle">${settingsT('forms.limitsPerformance')}</h4>
       <div class="two-col">
-        ${fnum('RESTORE_TEST_MIN_COVERAGE', 'Mindest-Coverage (%)', rt.RESTORE_TEST_MIN_COVERAGE || '5')}
-        ${fnum('RESTORE_TEST_MAX_ENTRIES', 'Max. Einträge je Test', rt.RESTORE_TEST_MAX_ENTRIES || '1000')}
-        ${fnum('RESTORE_TEST_SAMPLE_SIZE', 'Level-3 Sample-Dateien', rt.RESTORE_TEST_SAMPLE_SIZE || '5')}
-        ${fnum('RESTORE_TEST_BORG_TIMEOUT', 'Borg Standard Timeout (s)', rt.RESTORE_TEST_BORG_TIMEOUT || '240')}
-        ${fnum('RESTORE_TEST_DRY_RUN_TIMEOUT', 'Dry-Run Timeout (s, 0 = aus)', rt.RESTORE_TEST_DRY_RUN_TIMEOUT || '0')}
-        ${fnum('RESTORE_TEST_DRY_RUN_CHUNK_SIZE', 'Chunk-Größe (Dateien)', rt.RESTORE_TEST_DRY_RUN_CHUNK_SIZE || '100')}
-        ${fnum('RESTORE_TEST_DRY_RUN_MAX_FILES', 'Max. Dry-Run Dateien (Fallback/Chunk)', rt.RESTORE_TEST_DRY_RUN_MAX_FILES || '1000')}
+        ${fnum('RESTORE_TEST_MIN_COVERAGE', settingsT('forms.minimumCoverage'), rt.RESTORE_TEST_MIN_COVERAGE || '5')}
+        ${fnum('RESTORE_TEST_MAX_ENTRIES', settingsT('forms.maxEntries'), rt.RESTORE_TEST_MAX_ENTRIES || '1000')}
+        ${fnum('RESTORE_TEST_SAMPLE_SIZE', settingsT('forms.sampleFiles'), rt.RESTORE_TEST_SAMPLE_SIZE || '5')}
+        ${fnum('RESTORE_TEST_BORG_TIMEOUT', settingsT('forms.borgTimeout'), rt.RESTORE_TEST_BORG_TIMEOUT || '240')}
+        ${fnum('RESTORE_TEST_DRY_RUN_TIMEOUT', settingsT('forms.dryRunTimeout'), rt.RESTORE_TEST_DRY_RUN_TIMEOUT || '0')}
+        ${fnum('RESTORE_TEST_DRY_RUN_CHUNK_SIZE', settingsT('forms.chunkSize'), rt.RESTORE_TEST_DRY_RUN_CHUNK_SIZE || '100')}
+        ${fnum('RESTORE_TEST_DRY_RUN_MAX_FILES', settingsT('forms.maxDryRunFiles'), rt.RESTORE_TEST_DRY_RUN_MAX_FILES || '1000')}
       </div>
       <label class="form-checkbox-row" style="margin-top:10px">
         <input type="checkbox" data-key="RESTORE_TEST_LEVEL3_LEGACY_SAMPLING"
           ${(rt.RESTORE_TEST_LEVEL3_LEGACY_SAMPLING || 'false') === 'true' ? 'checked' : ''}
           onchange="markSettingsDirty()">
-        Level-3 Legacy-Sampling verwenden (Stichprobe aus bis zu 1000 Archiv-Dateien)
+        ${settingsT('forms.legacySampling')}
       </label>
     </div>`);
 }
 
 function renderSettingsDockerVMs(docker, vms) {
-  return settingsCard('Docker &amp; VMs',
+  return settingsCard(settingsT('forms.dockerVms'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>`,
     `<div class="settings-body two-col">
       ${fnum('DOCKER_STOP_TIMEOUT', 'Docker Stop Timeout (s)', docker.DOCKER_STOP_TIMEOUT)}
-      ${fnum('DOCKER_STOP_WAIT', 'Docker Stop Wartezeit (s)', docker.DOCKER_STOP_WAIT)}
-      ${fnum('DOCKER_START_WAIT', 'Docker Start Wartezeit (s)', docker.DOCKER_START_WAIT)}
+      ${fnum('DOCKER_STOP_WAIT', settingsT('forms.dockerStopWait'), docker.DOCKER_STOP_WAIT)}
+      ${fnum('DOCKER_START_WAIT', settingsT('forms.dockerStartWait'), docker.DOCKER_START_WAIT)}
       <div></div>
       ${fnum('VM_SHUTDOWN_TIMEOUT', 'VM Shutdown Timeout (s)', vms.VM_SHUTDOWN_TIMEOUT)}
-      ${fnum('VM_SHUTDOWN_WARNING_MINUTES', 'VM Warnung (Minuten)', vms.VM_SHUTDOWN_WARNING_MINUTES)}
-      ${fnum('VM_STARTUP_WAIT', 'VM Start Wartezeit (s)', vms.VM_STARTUP_WAIT)}
+      ${fnum('VM_SHUTDOWN_WARNING_MINUTES', settingsT('forms.vmWarning'), vms.VM_SHUTDOWN_WARNING_MINUTES)}
+      ${fnum('VM_STARTUP_WAIT', settingsT('forms.vmStartWait'), vms.VM_STARTUP_WAIT)}
     </div>`);
 }
 
 function renderSettingsWeeklyReport(wr) {
   const enabled = (wr.WEEKLY_REPORT_ENABLED || 'false') === 'true';
   const dayOpts = [
-    ['0','Montag'], ['1','Dienstag'], ['2','Mittwoch'], ['3','Donnerstag'],
-    ['4','Freitag'], ['5','Samstag'], ['6','Sonntag'],
+    ['0',settingsT('forms.monday')], ['1',settingsT('forms.tuesday')], ['2',settingsT('forms.wednesday')], ['3',settingsT('forms.thursday')],
+    ['4',settingsT('forms.friday')], ['5',settingsT('forms.saturday')], ['6',settingsT('forms.sunday')],
   ].map(([v, l]) => `<option value="${v}" ${(wr.WEEKLY_REPORT_DAY||'1')===v?'selected':''}>${l}</option>`).join('');
 
-  return settingsCard('Wöchentlicher Status-Report',
+  return settingsCard(settingsT('forms.weeklyReport'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
     `<div class="settings-body">
       <div class="form-group" style="margin-bottom:16px">
         <label class="form-checkbox-row">
           <input type="checkbox" data-key="WEEKLY_REPORT_ENABLED" onchange="markSettingsDirty()" ${enabled?'checked':''}>
-          Report aktivieren
+          ${settingsT('forms.enableReport')}
         </label>
       </div>
       <div class="two-col">
         <div class="form-group">
-          <label class="form-label">Wochentag</label>
+          <label class="form-label">${settingsT('forms.weekday')}</label>
           <select class="form-select" data-key="WEEKLY_REPORT_DAY" onchange="markSettingsDirty()">${dayOpts}</select>
         </div>
         <div class="form-group">
-          <label class="form-label">Uhrzeit</label>
+          <label class="form-label">${settingsT('forms.time')}</label>
           <input type="time" class="form-input" data-key="WEEKLY_REPORT_TIME" value="${escHtml(wr.WEEKLY_REPORT_TIME||'09:00')}" oninput="markSettingsDirty()">
         </div>
         <div class="form-group">
-          <label class="form-label">Empfänger</label>
-          <input type="email" class="form-input" data-key="WEEKLY_REPORT_RECIPIENT" value="${escHtml(wr.WEEKLY_REPORT_RECIPIENT||'')}" placeholder="Standard: GLOBAL_MAIL_RECIPIENT" oninput="markSettingsDirty()">
+          <label class="form-label">${settingsT('forms.recipient')}</label>
+          <input type="email" class="form-input" data-key="WEEKLY_REPORT_RECIPIENT" value="${escHtml(wr.WEEKLY_REPORT_RECIPIENT||'')}" placeholder="${settingsT('forms.defaultRecipient')}" oninput="markSettingsDirty()">
         </div>
       </div>
       <div id="weekly-report-message" class="status-message hidden" style="margin-top:12px"></div>
       <div style="margin-top:12px">
-        <button class="btn btn-secondary" id="weekly-report-send-btn" data-settings-action="send-weekly-report">Jetzt senden</button>
+        <button class="btn btn-secondary" id="weekly-report-send-btn" data-settings-action="send-weekly-report">${settingsT('forms.sendNow')}</button>
       </div>
     </div>`);
 }
@@ -2464,9 +2550,9 @@ async function onSettingsContentClick(event) {
   if (tabBtn) {
     if (settingsState.dirty) {
       const discard = await _openSettingsDialog({
-        title: 'Ungespeicherte Änderungen',
-        message: 'Du hast ungespeicherte Änderungen. Beim Tab-Wechsel gehen sie verloren.',
-        confirmText: 'Verwerfen & wechseln',
+        title: settingsT('forms.unsavedTitle'),
+        message: settingsT('forms.tabUnsavedMessage'),
+        confirmText: settingsT('forms.discardSwitch'),
         confirmClass: 'btn-danger',
       });
       if (!discard) return;
@@ -2538,41 +2624,25 @@ async function onSettingsContentClick(event) {
     if (jobsCount > 0) {
       const refs = String(row?.dataset?.smbJobRefs || '').trim();
       await _openSettingsDialog({
-        title: 'SMB-Profil kann nicht entfernt werden',
-        message: `Es wird noch von ${jobsCount} Job(s) genutzt.${refs ? `\n\nJobs:\n${refs}` : ''}`,
+        title: settingsT('profiles.cannotRemoveSmb'),
+        message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
         confirmText: 'OK',
       });
-      showMsg('smb-profiles-msg', 'warning', `Profil wird noch von ${jobsCount} Job(s) genutzt.${refs ? ` (${refs})` : ''}`);
+      showMsg('smb-profiles-msg', 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
       return;
     }
     const profileKey = String(row?.dataset?.profileKey || '').trim().toLowerCase();
     if (!profileKey) return;
     const confirmedRemove = await _openSettingsDialog({
-      title: 'SMB-Profil entfernen',
-      html: `
-        <div class="modal-info-item warning" style="margin-top:8px">
-          SMB-Profil wird aus der UI entfernt. Repository-Daten bleiben erhalten.
-        </div>
-        <label class="form-checkbox-row" style="margin-top:10px">
-          <input type="checkbox" id="smb-remove-unmount-first" checked>
-          Wenn gemountet zuerst unmounten
-        </label>
-        <label class="form-checkbox-row" style="margin-top:8px">
-          <input type="checkbox" id="smb-remove-mountpoint-cleanup">
-          Mountpunkt löschen (nur wenn leer und nicht gemountet)
-        </label>
-        <label class="form-checkbox-row" style="margin-top:8px">
-          <input type="checkbox" id="smb-remove-secret-cleanup">
-          Credentials-Datei löschen (.smb-&lt;key&gt;.cred)
-        </label>
-      `,
+      title: settingsT('profiles.removeSmbTitle'),
+      html: settingsT('profiles.removeSmbHtml'),
       input: {
-        label: `Zur Bestätigung "${profileKey}" eingeben:`,
+        label: settingsT('profiles.confirmProfile', { name: profileKey }),
         value: '',
         placeholder: profileKey,
         validate: (v) => String(v || '').trim() === profileKey,
       },
-      confirmText: 'Entfernen',
+      confirmText: settingsT('common.remove'),
       confirmClass: 'btn-danger',
       resolveValue: ({ modal }) => ({
         confirmed: true,
@@ -2599,7 +2669,7 @@ async function onSettingsContentClick(event) {
           throw new Error(data.error || data.message || `HTTP ${res.status}`);
         }
       } catch (err) {
-        showMsg('smb-profiles-msg', 'error', `Unmount vor Entfernen fehlgeschlagen: ${err.message}`);
+        showMsg('smb-profiles-msg', 'error', settingsT('profiles.unmountRemoveFailed', { message: err.message }));
         return;
       }
     }
@@ -2620,11 +2690,11 @@ async function onSettingsContentClick(event) {
     if (jobsCount > 0) {
       const refs = String(row?.dataset?.storageJobRefs || '').trim();
       await _openSettingsDialog({
-        title: 'Storage-Profil kann nicht entfernt werden',
-        message: `Es wird noch von ${jobsCount} Job(s) genutzt.${refs ? `\n\nJobs:\n${refs}` : ''}`,
+        title: settingsT('profiles.cannotRemoveStorage'),
+        message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
         confirmText: 'OK',
       });
-      showMsg('storage-profiles-msg', 'warning', `Profil wird noch von ${jobsCount} Job(s) genutzt.${refs ? ` (${refs})` : ''}`);
+      showMsg('storage-profiles-msg', 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
       return;
     }
     if (row) row.remove();
@@ -2669,10 +2739,10 @@ async function createUserFromSettings() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
-    showMsg('users-msg', 'success', `Benutzer ${name} angelegt.`);
+    showMsg('users-msg', 'success', settingsT('users.createSuccess', { name }));
     await refreshSettings();
   } catch (err) {
-    showMsg('users-msg', 'error', `Anlegen fehlgeschlagen: ${err.message}`);
+    showMsg('users-msg', 'error', settingsT('users.createError', { message: err.message }));
   }
 }
 
@@ -2688,24 +2758,24 @@ async function updateUserFromRow(row) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
-    showMsg('users-msg', 'success', `Benutzer ${username} aktualisiert.`);
+    showMsg('users-msg', 'success', settingsT('users.updateSuccess', { name: username }));
     await refreshSettings();
   } catch (err) {
-    showMsg('users-msg', 'error', `Update fehlgeschlagen: ${err.message}`);
+    showMsg('users-msg', 'error', settingsT('users.updateError', { message: err.message }));
   }
 }
 
 async function resetUserPasswordFromRow(row) {
   const username = String(row.dataset.userName || '').trim();
   const value = await _openSettingsDialog({
-    title: 'Passwort zurücksetzen',
+    title: settingsT('users.resetPasswordTitle'),
     input: {
-      label: `Neues Passwort für ${username}:`,
+      label: settingsT('users.newPasswordFor', { name: username }),
       value: '',
       type: 'password',
       validate: (v) => String(v || '').length >= 12,
     },
-    confirmText: 'Setzen',
+    confirmText: settingsT('users.set'),
   });
   if (!value) return;
   try {
@@ -2716,9 +2786,9 @@ async function resetUserPasswordFromRow(row) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
-    showMsg('users-msg', 'success', `Passwort für ${username} aktualisiert.`);
+    showMsg('users-msg', 'success', settingsT('users.passwordUpdated', { name: username }));
   } catch (err) {
-    showMsg('users-msg', 'error', `Passwort-Reset fehlgeschlagen: ${err.message}`);
+    showMsg('users-msg', 'error', settingsT('users.passwordResetError', { message: err.message }));
   }
 }
 
@@ -2727,23 +2797,17 @@ async function deleteUserFromRow(row) {
   if (!username) return;
   const isEnabled = !!row.querySelector('[data-user-enabled]')?.checked;
   const ok = await _openSettingsDialog({
-    title: 'Benutzer hart löschen',
-    html: `
-      <div class="modal-info-item warning" style="margin-top:8px">
-        Der Benutzer wird dauerhaft entfernt (inkl. Zuordnung in der Benutzerliste).
-      </div>
-      <div class="modal-info-item info" style="margin-top:8px">
-        Empfehlung: Für regulären Offboarding-Fall zuerst <strong>Deaktivieren</strong> verwenden.
-      </div>
-      ${isEnabled ? '<div class="modal-info-item warning" style="margin-top:8px">Benutzer ist aktuell aktiv.</div>' : ''}
-    `,
+    title: settingsT('users.hardDeleteTitle'),
+    html: settingsT('users.hardDeleteHtml', {
+      active: isEnabled ? `<div class="modal-info-item warning" style="margin-top:8px">${settingsT('users.currentlyActive')}</div>` : '',
+    }),
     input: {
-      label: `Zur Bestätigung "${username}" eingeben:`,
+      label: settingsT('users.confirmName', { name: username }),
       value: '',
       placeholder: username,
       validate: (v) => String(v || '').trim() === username,
     },
-    confirmText: 'Löschen',
+    confirmText: settingsT('users.delete'),
     confirmClass: 'btn-danger',
   });
   if (!ok) return;
@@ -2755,10 +2819,10 @@ async function deleteUserFromRow(row) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
-    showMsg('users-msg', 'success', `Benutzer ${username} gelöscht.`);
+    showMsg('users-msg', 'success', settingsT('users.deleted', { name: username }));
     await refreshSettings();
   } catch (err) {
-    showMsg('users-msg', 'error', `Löschen fehlgeschlagen: ${err.message}`);
+    showMsg('users-msg', 'error', settingsT('users.deleteError', { message: err.message }));
   }
 }
 
@@ -2774,23 +2838,23 @@ async function deactivateUserFromRow(row) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
-    showMsg('users-msg', 'success', `Benutzer ${username} deaktiviert.`);
+    showMsg('users-msg', 'success', settingsT('users.deactivated', { name: username }));
     await refreshSettings();
   } catch (err) {
-    showMsg('users-msg', 'error', `Deaktivieren fehlgeschlagen: ${err.message}`);
+    showMsg('users-msg', 'error', settingsT('users.deactivateError', { message: err.message }));
   }
 }
 
 async function changeOwnPasswordFromSettings() {
   const currentUser = String(settingsState.authStatus?.current_user || '').trim();
   const values = await _openSettingsDialog({
-    title: 'Eigenes Passwort ändern',
+    title: settingsT('users.changePasswordTitle'),
     html: `
-      <div class="form-group"><label class="form-label">Aktuelles Passwort</label><input id="pwd-current" class="form-input" type="password"></div>
-      <div class="form-group"><label class="form-label">Neues Passwort (mind. 12 Zeichen)</label><input id="pwd-new" class="form-input" type="password"></div>
-      <div class="form-group"><label class="form-label">Neues Passwort bestätigen</label><input id="pwd-new-confirm" class="form-input" type="password"></div>
+      <div class="form-group"><label class="form-label">${settingsT('users.currentPassword')}</label><input id="pwd-current" class="form-input" type="password"></div>
+      <div class="form-group"><label class="form-label">${settingsT('users.newPassword')}</label><input id="pwd-new" class="form-input" type="password"></div>
+      <div class="form-group"><label class="form-label">${settingsT('users.confirmNewPassword')}</label><input id="pwd-new-confirm" class="form-input" type="password"></div>
     `,
-    confirmText: 'Passwort ändern',
+    confirmText: settingsT('users.changePassword'),
     resolveValue: ({ modal }) => ({
       current_password: String(modal.querySelector('#pwd-current')?.value || ''),
       new_password: String(modal.querySelector('#pwd-new')?.value || ''),
@@ -2806,17 +2870,17 @@ async function changeOwnPasswordFromSettings() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
-    showMsg('users-msg', 'success', `Passwort für ${currentUser || 'aktuellen Benutzer'} geändert.`);
+    showMsg('users-msg', 'success', settingsT('users.passwordChanged', { name: currentUser || settingsT('users.currentUser') }));
   } catch (err) {
-    showMsg('users-msg', 'error', `Passwort ändern fehlgeschlagen: ${err.message}`);
+    showMsg('users-msg', 'error', settingsT('users.changePasswordError', { message: err.message }));
   }
 }
 
 async function logoutOwnSessionsFromSettings() {
   const ok = await _openSettingsDialog({
-    title: 'Eigene Sessions abmelden',
-    message: 'Alle Sessions des aktuellen Benutzers beenden?',
-    confirmText: 'Abmelden',
+    title: settingsT('users.logoutOwnTitle'),
+    message: settingsT('users.logoutOwnMessage'),
+    confirmText: settingsT('users.logout'),
   });
   if (!ok) return;
   try {
@@ -2829,15 +2893,15 @@ async function logoutOwnSessionsFromSettings() {
     if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
     window.location.href = '/login';
   } catch (err) {
-    showMsg('users-msg', 'error', `Sessions abmelden fehlgeschlagen: ${err.message}`);
+    showMsg('users-msg', 'error', settingsT('users.logoutError', { message: err.message }));
   }
 }
 
 async function logoutAllSessionsFromSettings() {
   const ok = await _openSettingsDialog({
-    title: 'Alle Sessions abmelden',
-    message: 'Wirklich alle aktiven Sessions aller Benutzer beenden?',
-    confirmText: 'Alle abmelden',
+    title: settingsT('users.logoutAllTitle'),
+    message: settingsT('users.logoutAllMessage'),
+    confirmText: settingsT('users.logoutAllConfirm'),
     confirmClass: 'btn-danger',
   });
   if (!ok) return;
@@ -2851,7 +2915,7 @@ async function logoutAllSessionsFromSettings() {
     if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
     window.location.href = '/login';
   } catch (err) {
-    showMsg('users-msg', 'error', `Alle Sessions abmelden fehlgeschlagen: ${err.message}`);
+    showMsg('users-msg', 'error', settingsT('users.logoutAllError', { message: err.message }));
   }
 }
 
@@ -2859,7 +2923,7 @@ async function checkUsbProfilesStatus() {
   const profiles = getUsbProfilesFromDom();
   const msgEl = document.getElementById('usb-profiles-msg');
   if (!profiles.length) {
-    showMsg('usb-profiles-msg', 'warning', 'Keine USB-Profile zum Prüfen vorhanden.');
+    showMsg('usb-profiles-msg', 'warning', settingsT('profiles.noneToCheckUsb'));
     return;
   }
   try {
@@ -2877,7 +2941,7 @@ async function checkUsbProfilesStatus() {
       if (!stateEl) return;
       const r = rows[idx];
       if (!r) {
-        stateEl.textContent = 'Ungeprüft';
+        stateEl.textContent = settingsT('profiles.unchecked');
         stateEl.className = 'usb-profile-state text-muted';
         return;
       }
@@ -2885,15 +2949,15 @@ async function checkUsbProfilesStatus() {
         stateEl.textContent = 'OK';
         stateEl.className = 'usb-profile-state text-success';
       } else {
-        stateEl.textContent = `Fehler: ${r.message || 'unbekannt'}`;
+        stateEl.textContent = settingsT('profiles.checkErrorMessage', { message: r.message || settingsT('common.unknown') });
         stateEl.className = 'usb-profile-state text-danger';
       }
     });
     const okCount = rows.filter((r) => r.ok).length;
     const failCount = rows.length - okCount;
-    showMsg('usb-profiles-msg', failCount ? 'warning' : 'success', `Prüfung abgeschlossen: ${okCount} OK, ${failCount} Fehler.`);
+    showMsg('usb-profiles-msg', failCount ? 'warning' : 'success', settingsT('profiles.checkComplete', { ok: okCount, failed: failCount }));
   } catch (err) {
-    if (msgEl) showMsg('usb-profiles-msg', 'error', `Fehler: ${err.message}`);
+    if (msgEl) showMsg('usb-profiles-msg', 'error', settingsT('profiles.checkErrorMessage', { message: err.message }));
   }
 }
 
@@ -2901,7 +2965,7 @@ async function checkSmbProfilesStatus() {
   const profiles = getSmbProfilesFromDom();
   const msgEl = document.getElementById('smb-profiles-msg');
   if (!profiles.length) {
-    showMsg('smb-profiles-msg', 'warning', 'Keine SMB-Profile zum Prüfen vorhanden.');
+    showMsg('smb-profiles-msg', 'warning', settingsT('profiles.noneToCheckSmb'));
     return;
   }
   try {
@@ -2932,9 +2996,9 @@ async function checkSmbProfilesStatus() {
     });
     const okCount = rows.filter((r) => r.ok).length;
     const failCount = rows.length - okCount;
-    showMsg('smb-profiles-msg', failCount ? 'warning' : 'success', `Prüfung abgeschlossen: ${okCount} OK, ${failCount} Fehler.`);
+    showMsg('smb-profiles-msg', failCount ? 'warning' : 'success', settingsT('profiles.checkComplete', { ok: okCount, failed: failCount }));
   } catch (err) {
-    if (msgEl) showMsg('smb-profiles-msg', 'error', `Fehler: ${err.message}`);
+    if (msgEl) showMsg('smb-profiles-msg', 'error', settingsT('profiles.checkErrorMessage', { message: err.message }));
   }
 }
 
@@ -2991,15 +3055,15 @@ async function storageboxKeyStatus() {
     const key = await _storageboxCall('key-status');
     settingsState.storageboxChecks = {
       rows: [
-        { label: 'SSH-Key vorhanden', ok: !!key.key_exists, message: key.key_exists ? 'Key-Datei gefunden' : 'Key-Datei fehlt' },
-        { label: 'Public Key vorhanden', ok: !!key.pub_exists, message: key.pub_exists ? 'Public-Key-Datei gefunden' : 'Public-Key-Datei fehlt' },
+        { label: settingsT('storagebox.sshKeyPresent'), ok: !!key.key_exists, message: key.key_exists ? settingsT('storagebox.keyFileFound') : settingsT('storagebox.keyFileMissing') },
+        { label: settingsT('storagebox.publicKeyPresent'), ok: !!key.pub_exists, message: key.pub_exists ? settingsT('storagebox.publicKeyFileFound') : settingsT('storagebox.publicKeyFileMissing') },
       ],
-      details: key.key_path ? `Key-Pfad: ${key.key_path}` : '',
+      details: key.key_path ? settingsT('storagebox.keyPath', { path: key.key_path }) : '',
     };
     settingsState.storageboxLastCheckAt = new Date().toISOString();
     await refreshSettings();
   } catch (e) {
-    _storageboxShow(`Fehler: ${e.message}`, false);
+    _storageboxShow(settingsT('error', { message: e.message }), false);
   }
 }
 
@@ -3007,8 +3071,8 @@ async function storageboxKeyGenerate() {
   hideEl('storagebox-setup-msg');
   try {
     const d = await _storageboxCall('key-generate');
-    await _storageboxRefreshWithFlash(d.message || 'Key erzeugt', true);
-  } catch (e) { _storageboxShow(`Fehler: ${e.message}`, false); }
+    await _storageboxRefreshWithFlash(d.message || settingsT('storagebox.keyGenerated'), true);
+  } catch (e) { _storageboxShow(settingsT('error', { message: e.message }), false); }
 }
 
 async function storageboxKeyPublic() {
@@ -3019,8 +3083,8 @@ async function storageboxKeyPublic() {
       const taHide = document.getElementById('storagebox-public-key');
       if (taHide) taHide.classList.add('hidden');
       const btnHide = document.querySelector('[data-settings-action="storagebox-key-public"]');
-      if (btnHide) btnHide.textContent = 'Public Key anzeigen';
-      _storageboxShow('Public Key ausgeblendet');
+      if (btnHide) btnHide.textContent = settingsT('forms.showPublicKey');
+      _storageboxShow(settingsT('storagebox.publicKeyHidden'));
       return;
     }
     const d = await _storageboxCall('key-public');
@@ -3031,9 +3095,9 @@ async function storageboxKeyPublic() {
     }
     settingsState.storageboxPubVisible = true;
     const btn = document.querySelector('[data-settings-action="storagebox-key-public"]');
-    if (btn) btn.textContent = 'Public Key ausblenden';
-    _storageboxShow(`Public Key geladen (${d.pub_path || ''})`);
-  } catch (e) { _storageboxShow(`Fehler: ${e.message}`, false); }
+    if (btn) btn.textContent = settingsT('forms.hidePublicKey');
+    _storageboxShow(settingsT('storagebox.publicKeyLoaded', { path: d.pub_path || '' }));
+  } catch (e) { _storageboxShow(settingsT('error', { message: e.message }), false); }
 }
 
 async function storageboxKeyDeploy() {
@@ -3042,7 +3106,7 @@ async function storageboxKeyDeploy() {
     const d = await _storageboxCall('deploy/start', {});
     openStorageDeployModal(d.session_id, d.target_type || 'generic');
   } catch (e) {
-    _storageboxShow(`Fehler: ${e.message}`, false);
+    _storageboxShow(settingsT('error', { message: e.message }), false);
   }
 }
 
@@ -3067,7 +3131,7 @@ async function openStorageDeployModal(sessionId, targetType) {
   if (!modal || !out || !hint || !input || !sendBtn || !cancelBtn || !okBtn) return;
 
   out.textContent = '';
-  hint.textContent = 'SSH-Key Deploy Session';
+  hint.textContent = settingsT('deploy.session');
   input.value = '';
   sendBtn.disabled = false;
   cancelBtn.disabled = false;
@@ -3087,7 +3151,7 @@ async function openStorageDeployModal(sessionId, targetType) {
         sendBtn.disabled = true;
         cancelBtn.disabled = true;
         const ok = st.status === 'success';
-        _storageboxShow(ok ? 'Key-Deploy erfolgreich abgeschlossen.' : `Key-Deploy beendet: ${st.status}`, ok);
+        _storageboxShow(ok ? settingsT('storagebox.deploySuccess') : settingsT('storagebox.deployEnded', { status: st.status }), ok);
       }
     } catch (_) {}
   };
@@ -3106,12 +3170,12 @@ async function storageDeploySendInput() {
   try {
     const res = await _storageboxCall('deploy/input', { session_id: sid, text });
     if (res && res.sent === false) {
-      _storageboxShow(`Eingabe nicht gesendet (Session-Status: ${res.status || 'unbekannt'})`, false);
+      _storageboxShow(settingsT('storagebox.inputNotSent', { status: res.status || settingsT('common.unknown') }), false);
       return;
     }
     input.value = '';
   } catch (e) {
-    _storageboxShow(`Fehler: ${e.message}`, false);
+    _storageboxShow(settingsT('error', { message: e.message }), false);
   }
 }
 
@@ -3135,16 +3199,16 @@ async function storageboxTest() {
     const details = String(d.details || '').trim();
     settingsState.storageboxChecks = {
       rows: [
-        { label: 'SSH-Verbindung', ok: d?.steps?.ssh_ok === true, message: d?.steps?.ssh_ok === true ? 'SSH erreichbar' : (d?.steps?.ssh_ok === false ? 'SSH fehlgeschlagen' : 'Nicht geprüft') },
-        { label: 'Borg verfügbar', ok: d?.steps?.borg_ok === true, message: d?.steps?.borg_ok === true ? 'Borg vorhanden' : (d?.steps?.borg_ok === false ? 'Borg fehlt/Fehler' : 'Nicht geprüft') },
-        { label: 'Repository-Pfad gefunden', ok: d?.steps?.path_exists === true, message: d?.steps?.path_exists === true ? 'Pfad vorhanden' : (d?.steps?.path_exists === false ? 'Pfad fehlt' : 'Nicht geprüft') },
-        { label: 'Schreibtest', ok: d?.steps?.path_writable === true, message: d?.steps?.path_writable === true ? 'Schreibzugriff erfolgreich' : (d?.steps?.path_writable === false ? 'Schreibzugriff fehlgeschlagen' : 'Nicht geprüft') },
+        { label: settingsT('storagebox.sshConnection'), ok: d?.steps?.ssh_ok === true, message: d?.steps?.ssh_ok === true ? settingsT('storagebox.sshReachable') : (d?.steps?.ssh_ok === false ? settingsT('storagebox.sshFailed') : settingsT('common.notChecked')) },
+        { label: settingsT('storagebox.borgAvailable'), ok: d?.steps?.borg_ok === true, message: d?.steps?.borg_ok === true ? settingsT('storagebox.borgPresent') : (d?.steps?.borg_ok === false ? settingsT('storagebox.borgMissing') : settingsT('common.notChecked')) },
+        { label: settingsT('storagebox.repoPathFound'), ok: d?.steps?.path_exists === true, message: d?.steps?.path_exists === true ? settingsT('storagebox.pathPresent') : (d?.steps?.path_exists === false ? settingsT('storagebox.pathMissing') : settingsT('common.notChecked')) },
+        { label: settingsT('storagebox.writeTest'), ok: d?.steps?.path_writable === true, message: d?.steps?.path_writable === true ? settingsT('storagebox.writeSuccess') : (d?.steps?.path_writable === false ? settingsT('storagebox.writeFailed') : settingsT('common.notChecked')) },
       ],
       details: details || String(d.message || ''),
     };
     settingsState.storageboxLastCheckAt = new Date().toISOString();
     await refreshSettings();
-  } catch (e) { _storageboxShow(`Fehler: ${e.message}`, false); }
+  } catch (e) { _storageboxShow(settingsT('error', { message: e.message }), false); }
 }
 
 async function sendWeeklyReport() {
@@ -3162,7 +3226,7 @@ async function sendWeeklyReport() {
     const data = await res.json();
     showMsg('weekly-report-message', data.success ? 'success' : 'error', data.message);
   } catch (err) {
-    showMsg('weekly-report-message', 'error', `Fehler: ${err.message}`);
+    showMsg('weekly-report-message', 'error', settingsT('error', { message: err.message }));
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -3171,19 +3235,19 @@ async function sendWeeklyReport() {
 // ── Settings-Formular-Hilfsfunktionen ─────────────────────────────────────────
 
 function renderSettingsAbout() {
-  return settingsCard('Über Borg Backup UI',
+  return settingsCard(settingsT('forms.about'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
     `<div class="settings-body">
       <div class="about-grid">
         <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">—</span></div>
         <div class="about-row"><span class="about-label">Borg Version</span><span class="about-value" id="settings-about-borg-version">—</span></div>
-        <div class="about-row"><span class="about-label">Autor</span><span class="about-value">Thorsten Steinberg</span></div>
-        <div class="about-row"><span class="about-label">Lizenz</span><span class="about-value">MIT</span></div>
+        <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">Thorsten Steinberg</span></div>
+        <div class="about-row"><span class="about-label">${settingsT('forms.license')}</span><span class="about-value">MIT</span></div>
         <div class="about-row">
-          <span class="about-label">Drittanbieter-Lizenzen</span>
+          <span class="about-label">${settingsT('forms.thirdPartyLicenses')}</span>
           <span class="about-value">
             BorgBackup (BSD-3-Clause),
-            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">Original-Lizenz</a>
+            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a>
           </span>
         </div>
         <div class="about-row"><span class="about-label">Repository</span><span class="about-value"><a href="https://gitlab.thetwist.de/tsteinbe/borg-backup-ui" target="_blank" class="about-link">gitlab.thetwist.de/tsteinbe/borg-backup-ui</a></span></div>
@@ -3251,9 +3315,9 @@ function _updateUnsavedChangesUi() {
 async function canLeaveSettingsPage() {
   if (!settingsState.dirty) return true;
   const discard = await _openSettingsDialog({
-    title: 'Ungespeicherte Änderungen',
-    message: 'Es gibt ungespeicherte Änderungen. Seite wirklich verlassen?',
-    confirmText: 'Verlassen',
+    title: settingsT('forms.unsavedTitle'),
+    message: settingsT('forms.leaveUnsavedMessage'),
+    confirmText: settingsT('forms.leave'),
     confirmClass: 'btn-danger',
   });
   if (!discard) return false;
@@ -3286,7 +3350,7 @@ async function saveSettings() {
     }
   });
   if (!String(updates.GLOBAL_DATA_DIR || '').trim()) {
-    showMsg('settings-message', 'error', 'GLOBAL_DATA_DIR ist Pflicht. Bitte Hauptverzeichnis eintragen.');
+    showMsg('settings-message', 'error', settingsT('forms.dataDirRequired'));
     return;
   }
   updates.GLOBAL_DATA_DIR = String(updates.GLOBAL_DATA_DIR).trim();
@@ -3318,18 +3382,18 @@ async function saveSettings() {
       showMsg(
         'settings-message',
         'success',
-        `Einstellungen gespeichert. Verzeichnisse aktiv: ${dd.logs}, ${dd.status}, ${dd.restore_status}`
+        settingsT('forms.savedDirectories', { directories: `${dd.logs}, ${dd.status}, ${dd.restore_status}` })
       );
     } else {
-      showMsg('settings-message', 'success', 'Einstellungen gespeichert.');
+      showMsg('settings-message', 'success', settingsT('forms.saved'));
     }
     if (data?.smb_cleanup && Array.isArray(data.smb_cleanup.removed) && data.smb_cleanup.removed.length) {
       const removed = data.smb_cleanup.removed.map((r) => r.path).filter(Boolean).join(', ');
-      showMsg('settings-message', 'success', `Einstellungen gespeichert. SMB-Mountpunkte entfernt: ${removed}`);
+      showMsg('settings-message', 'success', settingsT('forms.savedMountsRemoved', { paths: removed }));
     }
     if (data?.smb_secret_cleanup && Array.isArray(data.smb_secret_cleanup.removed) && data.smb_secret_cleanup.removed.length) {
       const removedSecrets = data.smb_secret_cleanup.removed.map((r) => r.path).filter(Boolean).join(', ');
-      showMsg('settings-message', 'success', `SMB-Credentials entfernt: ${removedSecrets}`);
+      showMsg('settings-message', 'success', settingsT('forms.credentialsRemoved', { paths: removedSecrets }));
     }
     settingsState.smbCleanupKeys = [];
     settingsState.smbSecretCleanupKeys = [];
@@ -3339,7 +3403,7 @@ async function saveSettings() {
     await refreshSettingsConfigBackups();
     await window.BBUI.core.updateDataDirWarning();
   } catch (err) {
-    showMsg('settings-message', 'error', `Fehler: ${err.message}`);
+    showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
   } finally {
     if (btn) btn.classList.remove('loading');
   }

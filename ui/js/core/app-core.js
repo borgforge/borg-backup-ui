@@ -195,10 +195,12 @@ async function updateDataDirWarning() {
     const firstErrSafe = escHtml(firstErr);
     setupRequired = !ready;
     globalDataDirReady = ready;
-    const html = !ready
-      ? `${missing ? 'Hauptverzeichnis für Betriebsdaten fehlt.' : 'Konfiguration unvollständig oder ungültig.'} Bitte in <a href="#" data-core-action="goto-settings">Einstellungen</a> prüfen.${firstErrSafe ? ` Hinweis: ${firstErrSafe}` : ''}`
-      : '';
     const i18n = window.BBUI?.components?.i18n;
+    const html = !ready
+      ? (i18n
+        ? `${i18n.t(missing ? 'settings.setup.dataDirMissing' : 'settings.setup.configIncomplete')} ${i18n.t('settings.setup.checkPrefix')} <a href="#" data-core-action="goto-settings">${i18n.t('nav.settings')}</a> ${i18n.t('settings.setup.checkSuffix')}${firstErrSafe ? ` ${i18n.t('settings.setup.detail', { message: firstErrSafe })}` : ''}`
+        : '')
+      : '';
     const dashboardHtml = !ready && i18n
       ? `${i18n.t(missing ? 'dashboard.dataDirMissing' : 'dashboard.configIncomplete')} ${i18n.t('dashboard.checkSettingsPrefix')} <a href="#" data-core-action="goto-settings">${i18n.t('nav.settings')}</a> ${i18n.t('dashboard.checkSettingsSuffix')}${firstErrSafe ? ` ${i18n.t('dashboard.detailHint', { message: firstErrSafe })}` : ''}`
       : html;
@@ -221,9 +223,7 @@ async function updateDataDirWarning() {
             : i18n.t('dashboard.configCheckFailed', {
               message: firstErr || i18n.t('dashboard.checkSettingsFallback'),
             }))
-          : (missing
-            ? 'Erstkonfiguration erforderlich. Weitere Bereiche sind bis zum Speichern von GLOBAL_DATA_DIR gesperrt.'
-            : `Konfigurationsprüfung fehlgeschlagen: ${firstErr || 'Bitte Einstellungen prüfen.'}`);
+          : '';
       } else {
         dashSetupEl.className = 'status-message hidden';
       }
@@ -231,9 +231,13 @@ async function updateDataDirWarning() {
     if (settingsEl) {
       if (!ready) {
         settingsEl.className = 'status-message warning-state';
-        settingsEl.textContent = missing
-          ? 'GLOBAL_DATA_DIR fehlt. Bitte zuerst ein Hauptverzeichnis setzen.'
-          : `Konfigurationsfehler: ${firstErr || 'Bitte Einstellungen prüfen.'}`;
+        settingsEl.textContent = i18n
+          ? (missing
+            ? i18n.t('settings.setup.dataDirSetFirst')
+            : i18n.t('settings.setup.configError', {
+              message: firstErr || i18n.t('settings.setup.checkFallback'),
+            }))
+          : '';
       } else {
         settingsEl.className = 'status-message hidden';
       }
@@ -254,7 +258,9 @@ function applySetupNavLock() {
 
 function applyDataDirActionGates() {
   const disabled = !globalDataDirReady;
-  const hint = disabled ? 'Bitte zuerst GLOBAL_DATA_DIR in Einstellungen setzen.' : '';
+  const hint = disabled
+    ? (window.BBUI?.components?.i18n?.t?.('settings.setup.actionHint') || '')
+    : '';
   for (const id of ['check-run-btn', 'rt-run-btn']) {
     const el = document.getElementById(id);
     if (!el) continue;
@@ -295,4 +301,7 @@ window.BBUI.core.applyDataDirActionGates = applyDataDirActionGates;
 window.BBUI.core.invalidateSetupStatusCache = invalidateSetupStatusCache;
 window.BBUI.core.updateSidebarSystemHealth = updateSidebarSystemHealth;
 
-window.addEventListener('bbui:language-changed', () => updateSidebarSystemHealth(true));
+window.addEventListener('bbui:language-changed', () => {
+  updateSidebarSystemHealth(true);
+  updateDataDirWarning();
+});

@@ -747,8 +747,8 @@
     <div id="page-settings" class="page">
       <div class="page-header">
         <div>
-          <h1>Einstellungen</h1>
-          <p class="page-subtitle">backup.conf bearbeiten</p>
+          <h1 data-i18n="settings.title">Einstellungen</h1>
+          <p class="page-subtitle" data-i18n="settings.subtitle">backup.conf bearbeiten</p>
         </div>
         <div class="header-actions">
           <span id="settings-conf-path" class="refresh-label"></span>
@@ -756,14 +756,14 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            Speichern
+            <span data-i18n="settings.save">Speichern</span>
           </button>
         </div>
       </div>
       <div id="settings-message" class="status-message hidden"></div>
       <div id="settings-setup-warning" class="status-message hidden"></div>
       <div id="settings-content">
-        <div class="loading-spinner"><div class="spinner"></div><span>Lade Einstellungen...</span></div>
+        <div class="loading-spinner"><div class="spinner"></div><span data-i18n="settings.loading">Lade Einstellungen...</span></div>
       </div>
     </div>
 
@@ -885,7 +885,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3 id="settings-dialog-title">Eingabe</h3>
-      <button class="modal-close" id="settings-dialog-close-btn">
+      <button class="modal-close" id="settings-dialog-close-btn" data-i18n-aria-label="settings.dialog.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
@@ -900,7 +900,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" id="settings-dialog-cancel-btn">Abbrechen</button>
+      <button class="btn btn-secondary" id="settings-dialog-cancel-btn" data-i18n="settings.dialog.cancel">Abbrechen</button>
       <button class="btn btn-primary" id="settings-dialog-confirm-btn">Bestätigen</button>
     </div>
   </div>
@@ -910,8 +910,8 @@
 <div id="storage-deploy-modal" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3>SSH Key Deploy</h3>
-      <button class="modal-close" id="storage-deploy-close-btn" onclick="closeStorageDeployModal()">
+      <h3 data-i18n="settings.deploy.title">SSH Key Deploy</h3>
+      <button class="modal-close" id="storage-deploy-close-btn" onclick="closeStorageDeployModal()" data-i18n-aria-label="settings.dialog.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
@@ -922,14 +922,14 @@
       <div class="form-hint" id="storage-deploy-target-hint" style="margin-bottom:8px"></div>
       <pre id="storage-deploy-output" class="log-output" style="max-height:260px;min-height:120px"></pre>
       <div class="form-group" style="margin-top:10px">
-        <label class="form-label">Eingabe (z. B. Passwort)</label>
-        <input class="form-input" type="password" id="storage-deploy-input" autocomplete="off" placeholder="Passwort eingeben und senden">
+        <label class="form-label" data-i18n="settings.deploy.input">Eingabe (z. B. Passwort)</label>
+        <input class="form-input" type="password" id="storage-deploy-input" autocomplete="off" placeholder="Passwort eingeben und senden" data-i18n-placeholder="settings.deploy.passwordPlaceholder">
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" id="storage-deploy-send-btn">Senden</button>
-      <button class="btn btn-secondary" id="storage-deploy-cancel-btn" onclick="storageDeployCancel()">Abbrechen</button>
-      <button class="btn btn-primary" id="storage-deploy-ok-btn" onclick="closeStorageDeployModal()">Schließen</button>
+      <button class="btn btn-secondary" id="storage-deploy-send-btn" data-i18n="settings.deploy.send">Senden</button>
+      <button class="btn btn-secondary" id="storage-deploy-cancel-btn" onclick="storageDeployCancel()" data-i18n="settings.dialog.cancel">Abbrechen</button>
+      <button class="btn btn-primary" id="storage-deploy-ok-btn" onclick="closeStorageDeployModal()" data-i18n="settings.dialog.close">Schließen</button>
     </div>
   </div>
 </div>

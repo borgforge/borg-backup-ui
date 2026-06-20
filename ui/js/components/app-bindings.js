@@ -284,7 +284,7 @@
         showMsg(
           'settings-message',
           'warning',
-          'Erstkonfiguration erforderlich: Bitte Hauptverzeichnis (GLOBAL_DATA_DIR) setzen und speichern.'
+          window.BBUI?.components?.i18n?.t?.('settings.setup.startupRequired') || ''
         );
         return;
       }
