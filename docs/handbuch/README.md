@@ -9,6 +9,10 @@ Dieses Verzeichnis beschreibt die Struktur für ein ausführliches Anwenderhandb
 - Support und Entwicklung haben eine gemeinsame Referenz für Begriffe, Bedienwege und erwartetes Verhalten.
 - Sichtbare UI-Änderungen werden nachvollziehbar dokumentiert.
 
+Der verbindliche Umfang fuer die englische Spiegelstruktur und die Regeln fuer
+oeffentliche Installationsinformationen stehen im
+[Plan fuer zweisprachige Dokumentation](../bilingual-documentation-plan.md).
+
 ## Abgrenzung zur In-App-Hilfe
 
 - **In-App-Hilfe**: kurze Zusammenfassung, schnelle Orientierung, typische Fehlerbilder.
