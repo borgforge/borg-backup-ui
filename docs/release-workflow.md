@@ -69,9 +69,14 @@ Format `YYYY.MM.DD.HHMM` verwendet.
 
 Nach erfolgreichem Test auf Unraid:
 
-1. Arbeitsbranch pruefen und die durch den Test-Build entstandenen Dateien committen.
-2. Keine neue Version bauen, damit exakt das getestete Paket freigegeben wird.
-3. Go-Live-PR erstellen:
+1. Den fuer den Release erforderlichen Umfang aus
+   [`docs/manual-maintenance-tests.md`](./manual-maintenance-tests.md)
+   vollstaendig mit `PASS` abschliessen und das Ergebnis dokumentieren.
+2. Bei der ersten Community-Apps-Veroeffentlichung sowohl den Fresh-Install-
+   als auch den Update-Durchlauf ausfuehren.
+3. Arbeitsbranch pruefen und die durch den Test-Build entstandenen Dateien committen.
+4. Keine neue Version bauen, damit exakt das getestete Paket freigegeben wird.
+5. Go-Live-PR erstellen:
 
 ```bash
 ./plugin/promote-release.sh <version>

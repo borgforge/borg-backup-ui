@@ -111,6 +111,11 @@ Syntax check example:
 python3 -m py_compile borg_backup_ui.py api/*.py runtime/scripts/*.py
 ```
 
+## Manual Release Validation
+
+- [Manual maintenance tests on Unraid](./manual-maintenance-tests.md)
+- [Release workflow](./release-workflow.md)
+
 ## License
 
 - Project: MIT
