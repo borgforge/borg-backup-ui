@@ -24,7 +24,7 @@ def test_notify_send_runs_as_guest_user(monkeypatch):
 
     monkeypatch.setattr(manager, "_guest_exec_and_wait", fake_guest_exec)
 
-    manager._send_notify_send("LinuxMint", "tsteinbe", "1000", "Backup startet")
+    manager._send_notify_send("LinuxMint", "tsteinbe", "1000", "Backup is starting")
 
     args = captured["payload"]["arguments"]
     assert captured["vm_name"] == "LinuxMint"
@@ -38,8 +38,8 @@ def test_notify_send_runs_as_guest_user(monkeypatch):
         "/usr/bin/notify-send",
         "--urgency=critical",
         "-t", "120000",
-        "Backup-Wartung",
-        "Backup startet",
+        "Backup maintenance",
+        "Backup is starting",
     ]
     assert args["capture-output"] is True
 
@@ -53,7 +53,7 @@ def test_notify_send_failure_is_info_hint(monkeypatch, caplog):
     monkeypatch.setattr(manager, "_guest_exec_and_wait", fake_guest_exec)
 
     with caplog.at_level(logging.INFO, logger="lib.vm_manager"):
-        manager._send_notify_send("LinuxMint", "tsteinbe", "1000", "Backup startet")
+        manager._send_notify_send("LinuxMint", "tsteinbe", "1000", "Backup is starting")
 
     assert "Note: desktop notification could not be confirmed" in caplog.text
     assert "exit=1 dbus denied" in caplog.text
@@ -70,4 +70,4 @@ def test_guest_exec_and_wait_returns_failure_instead_of_raising(monkeypatch):
     result = manager._guest_exec_and_wait("LinuxMint", "{}")
 
     assert result["ok"] is False
-    assert result["detail"] == "guest-exec konnte nicht geprüft werden"
+    assert result["detail"] == "guest-exec could not be checked"

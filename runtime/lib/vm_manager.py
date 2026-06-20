@@ -168,8 +168,8 @@ class VmManager:
 
         # Phase 1: Alle VMs parallel warnen
         warning_msg = (
-            f"WARNUNG: Backup der VM wird durchgefuehrt "
-            f"VM wird in {self.config.warning_minutes} Minuten heruntergefahren!"
+            "WARNING: The VM is about to be backed up. "
+            f"It will shut down in {self.config.warning_minutes} minutes."
         )
         logger.info(
             "Sending warning to all %d VM(s) (wait time: %d minutes)",
@@ -181,7 +181,7 @@ class VmManager:
         for remaining in range(self.config.warning_minutes, 0, -1):
             if remaining == 1:
                 logger.info("Final minute before shutdown; sending final warning to all VMs...")
-                self._warn_vms_parallel(running, "ACHTUNG: System faehrt JETZT herunter!")
+                self._warn_vms_parallel(running, "WARNING: The system is shutting down NOW!")
             else:
                 logger.info("Waiting %d more minute(s) before VM shutdown...", remaining)
             time.sleep(60)
@@ -208,8 +208,8 @@ class VmManager:
             from lib.notifications import notify
             notify(
                 level="alert",
-                subject="VM Backup abgebrochen",
-                description=f"{len(still_running)} VM(s) konnten nicht heruntergefahren werden.",
+                subject="VM backup aborted",
+                description=f"{len(still_running)} VM(s) could not be shut down.",
                 job_name="Borg Backup (VMs)",
             )
             raise SystemExit(1)
@@ -402,7 +402,7 @@ class VmManager:
             elapsed += check_interval
             if elapsed % 30 == 0:
                 logger.info(
-                    "  Noch %d VM(s) laufen (%ds vergangen)...",
+                    "  %d VM(s) still running (%ds elapsed)...",
                     still_running, elapsed,
                 )
         return len(self._get_running_vms()) == 0
@@ -426,8 +426,8 @@ class VmManager:
         from lib.notifications import notify
         notify(
             level="warning",
-            subject="VM Backup Warnung",
-            description=f"VM '{vm_name}' wird in {self.config.warning_minutes} Min für Backup heruntergefahren",
+            subject="VM backup warning",
+            description=f"VM '{vm_name}' will shut down for backup in {self.config.warning_minutes} minutes",
             job_name="Borg Backup (VMs)",
         )
         if qemu_agent_available(vm_name):
@@ -480,7 +480,7 @@ class VmManager:
                     "/usr/bin/notify-send",
                     "--urgency=critical",
                     "-t", "120000",
-                    "Backup-Wartung",
+                    "Backup maintenance",
                     safe_msg,
                 ],
                 "capture-output": True,
@@ -490,7 +490,7 @@ class VmManager:
         if status.get("ok"):
             logger.info("  |    Notification sent")
             return
-        detail = str(status.get("detail") or "unbekannte Ursache").strip()
+        detail = str(status.get("detail") or "unknown cause").strip()
         logger.info("  |    Note: desktop notification could not be confirmed (%s)", detail)
 
     def _send_wall_message(self, vm_name: str, message: str) -> None:
@@ -506,7 +506,7 @@ class VmManager:
         })
         status = self._guest_exec_and_wait(vm_name, payload)
         if not status.get("ok"):
-            detail = str(status.get("detail") or "unbekannte Ursache").strip()
+            detail = str(status.get("detail") or "unknown cause").strip()
             logger.info("  |    Note: wall message could not be confirmed (%s)", detail)
 
     def _guest_exec_and_wait(self, vm_name: str, payload: str, *, timeout: int = 15) -> Dict[str, Any]:
@@ -528,7 +528,7 @@ class VmManager:
                 }
             pid = self._extract_pid(exec_result.stdout)
             if pid is None:
-                return {"ok": False, "detail": "keine guest-exec PID erhalten"}
+                return {"ok": False, "detail": "no guest-exec PID received"}
 
             deadline = time.time() + max(1, timeout)
             last_status: Dict[str, Any] = {}
@@ -553,10 +553,10 @@ class VmManager:
                 time.sleep(0.2)
 
             if last_status:
-                return {"ok": False, "detail": "guest-exec-status Timeout ohne Prozessende"}
-            return {"ok": False, "detail": "guest-exec-status Timeout"}
+                return {"ok": False, "detail": "guest-exec-status timed out before the process exited"}
+            return {"ok": False, "detail": "guest-exec-status timed out"}
         except (subprocess.TimeoutExpired, OSError):
-            return {"ok": False, "detail": "guest-exec konnte nicht geprüft werden"}
+            return {"ok": False, "detail": "guest-exec could not be checked"}
 
     def _send_windows_message(self, vm_name: str, message: str) -> None:
         """Sendet msg.exe-Nachricht in Windows-VM."""

@@ -16,7 +16,7 @@ from typing import List, Optional
 _REPORT_CRON_BEGIN = "# --- BORG-BACKUP-UI WEEKLY-REPORT BEGIN ---"
 _REPORT_CRON_END   = "# --- BORG-BACKUP-UI WEEKLY-REPORT END ---"
 
-_DAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
 def get_weekly_report_settings(config: dict) -> dict:
@@ -76,7 +76,7 @@ def apply_weekly_report_cron(config: dict) -> None:
         capture_output=True,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"crontab konnte nicht gesetzt werden: {proc.stderr}")
+        raise RuntimeError(f"Could not update crontab: {proc.stderr}")
 
 
 def send_weekly_report(config: dict, recipient: str = "") -> dict:
@@ -101,23 +101,23 @@ def send_weekly_report(config: dict, recipient: str = "") -> dict:
     sender   = (conf.get("GLOBAL_MAIL_SENDER", "")).strip() or user
 
     if not host:
-        return {"success": False, "message": "GLOBAL_SMTP_HOST ist nicht konfiguriert."}
+        return {"success": False, "message": "GLOBAL_SMTP_HOST is not configured.", "message_code": "smtp_host_missing"}
     if not to_addr:
-        return {"success": False, "message": "Kein Empfänger konfiguriert."}
+        return {"success": False, "message": "No recipient is configured.", "message_code": "smtp_recipient_missing"}
     if not sender:
-        return {"success": False, "message": "Kein Absender konfiguriert."}
+        return {"success": False, "message": "No sender is configured.", "message_code": "smtp_sender_missing"}
 
     try:
         html = _build_html_report(config)
     except Exception as exc:
-        return {"success": False, "message": f"Report-Generierung fehlgeschlagen: {exc}"}
+        return {"success": False, "message": f"Report generation failed: {exc}", "message_code": "weekly_report_generation_failed"}
 
-    now = datetime.now().strftime("%d.%m.%Y")
+    now = datetime.now().strftime("%Y-%m-%d")
     msg = EmailMessage()
-    msg["Subject"] = f"Borg Backup – Wochenbericht {now}"
+    msg["Subject"] = f"Borg Backup - Weekly Report {now}"
     msg["From"]    = sender
     msg["To"]      = to_addr
-    msg.set_content(f"Borg Backup Wochenbericht {now}\n\nBitte im HTML-fähigen E-Mail-Programm anzeigen.")
+    msg.set_content(f"Borg Backup Weekly Report {now}\n\nPlease view this message in an HTML-capable email client.")
     msg.add_alternative(html, subtype="html")
 
     _diag = f"[Host={host}:{port}, TLS={use_tls}]"
@@ -145,16 +145,16 @@ def send_weekly_report(config: dict, recipient: str = "") -> dict:
                     smtp.ehlo()
                 _login_if_needed(smtp)
                 smtp.send_message(msg)
-        return {"success": True, "message": f"Wochenbericht gesendet an {to_addr}."}
+        return {"success": True, "message": f"Weekly report sent to {to_addr}.", "message_code": "weekly_report_sent", "message_params": {"recipient": to_addr}}
     except smtplib.SMTPAuthenticationError as e:
         err = e.smtp_error.decode(errors='replace') if isinstance(e.smtp_error, bytes) else str(e)
-        return {"success": False, "message": f"Authentifizierungsfehler: {err} {_diag}"}
+        return {"success": False, "message": f"Authentication failed: {err} {_diag}", "message_code": "smtp_auth_failed"}
     except smtplib.SMTPException as e:
-        return {"success": False, "message": f"SMTP-Fehler: {e} {_diag}"}
+        return {"success": False, "message": f"SMTP error: {e} {_diag}", "message_code": "smtp_failed"}
     except OSError as e:
-        return {"success": False, "message": f"Verbindungsfehler: {e} {_diag}"}
+        return {"success": False, "message": f"Connection failed: {e} {_diag}", "message_code": "smtp_connection_failed"}
     except Exception as e:
-        return {"success": False, "message": f"Fehler: {e} {_diag}"}
+        return {"success": False, "message": f"Unexpected error: {e} {_diag}", "message_code": "smtp_failed"}
 
 
 # ── HTML-Report-Generator ──────────────────────────────────────────────────────
@@ -169,8 +169,8 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     generated_at = now or datetime.now()
 
     run_dates = [st.timestamp_dt for st in all_statuses if st.timestamp_dt is not None]
-    period_start = min(run_dates).strftime("%d.%m.%Y %H:%M") if run_dates else "keine Daten"
-    period_end = max(run_dates).strftime("%d.%m.%Y %H:%M") if run_dates else "keine Daten"
+    period_start = min(run_dates).strftime("%Y-%m-%d %H:%M") if run_dates else "no data"
+    period_end = max(run_dates).strftime("%Y-%m-%d %H:%M") if run_dates else "no data"
     hostname = str(config.get("HOSTNAME") or config.get("SERVER_NAME") or "").strip() or "Unraid"
 
     rows = []
@@ -191,9 +191,9 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
         }.get(st.status, "#6b7280")
         status_label = {
             "success": "OK",
-            "skipped": "Übersprungen",
-            "warning": "Warnung",
-            "error":   "Fehler",
+            "skipped": "Skipped",
+            "warning": "Warning",
+            "error":   "Error",
         }.get(st.status, st.status)
 
         if st.status == "success":
@@ -205,10 +205,10 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
         if st.timestamp_dt is not None and (oldest_latest is None or st.timestamp_dt < oldest_latest):
             oldest_latest = st.timestamp_dt
 
-        ta = _time_ago_de(st.timestamp, generated_at) if st.timestamp else "—"
+        ta = _time_ago(st.timestamp, generated_at) if st.timestamp else "—"
         repo_fmt = format_bytes(st.repository_size) if st.repository_size else "—"
         dur_fmt  = format_duration(st.duration_seconds) if st.duration_seconds else "—"
-        files_fmt = f"{st.files_count:,}".replace(",", ".") if st.files_count else "—"
+        files_fmt = f"{st.files_count:,}" if st.files_count else "—"
         archive_fmt = st.archive_name or "—"
         check_label = _repo_check_label(st.repository_check_status)
         check_color = "#16a34a" if st.repository_check_status == "ok" else ("#d97706" if st.repository_check_status == "overdue" else "#64748b")
@@ -221,9 +221,9 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
         if note:
             issues.append((key, note, status_color))
         if st.timestamp_dt and (generated_at - st.timestamp_dt) > timedelta(days=7):
-            issues.append((key, f"Letzter Lauf ist {_time_ago_de(st.timestamp, generated_at)}.", "#d97706"))
+            issues.append((key, f"Last run was {_time_ago(st.timestamp, generated_at)}.", "#d97706"))
         if st.repository_check_status == "overdue":
-            issues.append((key, "Repository-Prüfung ist überfällig.", "#d97706"))
+            issues.append((key, "Repository check is overdue.", "#d97706"))
 
         if st.status == "error":
             log_summary = _summarize_log(st.log_file)
@@ -253,20 +253,20 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     error_total = sum(1 for st in latest.values() if st.status == "error")
     warn_total  = sum(1 for st in latest.values() if st.status in {"warning", "skipped"})
     summary_color = "#22c55e" if error_total == 0 and warn_total == 0 else ("#f59e0b" if error_total == 0 else "#ef4444")
-    summary_text  = "Alle Backups OK" if error_total == 0 and warn_total == 0 else (
-        f"{error_total} Fehler, {warn_total} Warnungen"
+    summary_text  = "All backups OK" if error_total == 0 and warn_total == 0 else (
+        f"{error_total} errors, {warn_total} warnings"
     )
 
-    now = generated_at.strftime("%d.%m.%Y %H:%M")
-    rows_html = "".join(rows) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>Keine Backup-Daten vorhanden.</td></tr>"
-    oldest_latest_fmt = oldest_latest.strftime("%d.%m.%Y %H:%M") if oldest_latest else "—"
+    now = generated_at.strftime("%Y-%m-%d %H:%M")
+    rows_html = "".join(rows) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
+    oldest_latest_fmt = oldest_latest.strftime("%Y-%m-%d %H:%M") if oldest_latest else "—"
     issue_html = _render_issue_list(issues)
     log_html = _render_log_notes(log_notes)
     logo_html = _app_icon_img_html()
 
     return f"""<!DOCTYPE html>
-<html lang="de">
-<head><meta charset="UTF-8"><title>Borg Backup Wochenbericht</title></head>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Borg Backup Weekly Report</title></head>
 <body style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#eef2f7;margin:0;padding:24px;color:#0f172a">
   <div style="max-width:1120px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 10px 28px rgba(15,23,42,.10);border:1px solid #dbe3ee">
     <div style="background:#172033;padding:24px 28px">
@@ -275,8 +275,8 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
           <td style="width:58px;vertical-align:top;padding:0 14px 0 0">{logo_html}</td>
           <td style="vertical-align:middle;padding:0">
             <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#93c5fd;font-weight:700;margin-bottom:6px">Borg Backup UI</div>
-            <h1 style="color:#fff;margin:0;font-size:22px;line-height:1.25">Wochenbericht</h1>
-            <p style="color:#cbd5e1;margin:8px 0 0;font-size:13px;white-space:nowrap">Server: {_he(hostname)} · Zeitraum: {_he(period_start)} bis {_he(period_end)} · Erzeugt: {now}</p>
+            <h1 style="color:#fff;margin:0;font-size:22px;line-height:1.25">Weekly Report</h1>
+            <p style="color:#cbd5e1;margin:8px 0 0;font-size:13px;white-space:nowrap">Server: {_he(hostname)} · Period: {_he(period_start)} to {_he(period_end)} · Generated: {now}</p>
           </td>
         </tr>
       </table>
@@ -284,35 +284,35 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     <div style="padding:24px 28px">
       <div style="background:{summary_color}14;border:1px solid {summary_color}55;border-radius:8px;padding:14px 16px;margin-bottom:18px">
         <span style="color:{summary_color};font-weight:800;font-size:16px">{summary_text}</span>
-        <span style="color:#475569;font-size:13px;margin-left:12px">{success_total}/{total} erfolgreich</span>
+        <span style="color:#475569;font-size:13px;margin-left:12px">{success_total}/{total} successful</span>
       </div>
 
       <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px;margin:0 -10px 18px">
         <tr>
-          {_metric_card("Jobs", str(total), "letzter bekannter Status")}
-          {_metric_card("Repo gesamt", format_bytes(total_repo_size) if total_repo_size else "—", "Summe der letzten Läufe")}
-          {_metric_card("Dauer gesamt", format_duration(total_duration) if total_duration else "—", "Summe der letzten Läufe")}
-          {_metric_card("Dateien", f"{total_files:,}".replace(",", ".") if total_files else "—", "letzte Läufe")}
-          {_metric_card("Ältester Lauf", oldest_latest_fmt, "unter den letzten Jobständen")}
+          {_metric_card("Jobs", str(total), "latest known status")}
+          {_metric_card("Total repository size", format_bytes(total_repo_size) if total_repo_size else "—", "sum of latest runs")}
+          {_metric_card("Total duration", format_duration(total_duration) if total_duration else "—", "sum of latest runs")}
+          {_metric_card("Files", f"{total_files:,}" if total_files else "—", "latest runs")}
+          {_metric_card("Oldest run", oldest_latest_fmt, "among latest job statuses")}
         </tr>
       </table>
 
       {issue_html}
 
-      <h2 style="margin:22px 0 10px;font-size:15px;color:#0f172a">Job-Übersicht</h2>
+      <h2 style="margin:22px 0 10px;font-size:15px;color:#0f172a">Job Overview</h2>
       <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:980px">
         <thead>
           <tr style="background:#f1f5f9">
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Job / Archiv</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Job / Archive</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Status</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Letzter Lauf</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Dauer</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Last Run</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Duration</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Repo</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Dateien</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Läufe 7T</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Erfolg 7T</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Repo-Check</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Files</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Runs 7d</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Success 7d</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Repo Check</th>
           </tr>
         </thead>
         <tbody>{rows_html}</tbody>
@@ -322,7 +322,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
       {log_html}
     </div>
     <div style="background:#f8fafc;padding:14px 28px;font-size:11px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0">
-      Borg Backup UI – automatisch generierter Bericht · Statusdaten aus {_he(str(status_dir))}
+      Borg Backup UI · Automatically generated report · Status data from {_he(str(status_dir))}
     </div>
   </div>
 </body>
@@ -374,7 +374,7 @@ def _status_sort_key(st, fallback_key: str) -> tuple:
     )
 
 
-def _time_ago_de(timestamp_str: str, reference: datetime) -> str:
+def _time_ago(timestamp_str: str, reference: datetime) -> str:
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
         try:
             ts = datetime.strptime(timestamp_str, fmt)
@@ -382,19 +382,19 @@ def _time_ago_de(timestamp_str: str, reference: datetime) -> str:
         except (ValueError, TypeError):
             pass
     else:
-        return "unbekannt"
+        return "unknown"
 
     diff = max(0, int((reference - ts).total_seconds()))
     if diff < 60:
-        return "gerade eben"
+        return "just now"
     if diff < 3600:
         minutes = diff // 60
-        return f"vor {minutes} Minute" if minutes == 1 else f"vor {minutes} Minuten"
+        return f"{minutes} minute ago" if minutes == 1 else f"{minutes} minutes ago"
     if diff < 86400:
         hours = diff // 3600
-        return f"vor {hours} Stunde" if hours == 1 else f"vor {hours} Stunden"
+        return f"{hours} hour ago" if hours == 1 else f"{hours} hours ago"
     days = diff // 86400
-    return f"vor {days} Tag" if days == 1 else f"vor {days} Tagen"
+    return f"{days} day ago" if days == 1 else f"{days} days ago"
 
 
 def _metric_card(label: str, value: str, hint: str) -> str:
@@ -409,18 +409,18 @@ def _metric_card(label: str, value: str, hint: str) -> str:
 def _repo_check_label(status: str) -> str:
     return {
         "ok": "OK",
-        "overdue": "überfällig",
-        "unknown": "unbekannt",
-    }.get(status or "unknown", status or "unbekannt")
+        "overdue": "overdue",
+        "unknown": "unknown",
+    }.get(status or "unknown", status or "unknown")
 
 
 def _status_note(st) -> str:
     if st.status == "error":
-        return st.error_message or f"Backup fehlgeschlagen (Exit {st.exit_code})."
+        return st.error_message or f"Backup failed (exit {st.exit_code})."
     if st.status == "warning":
-        return st.error_message or "Backup mit Warnungen abgeschlossen."
+        return st.error_message or "Backup completed with warnings."
     if st.status == "skipped":
-        return st.skip_reason_text or st.skip_reason_code or "Backup wurde übersprungen."
+        return st.skip_reason_text or st.skip_reason_code or "Backup was skipped."
     return ""
 
 
@@ -454,8 +454,8 @@ def _render_issue_list(issues: list) -> str:
     if not issues:
         return """
         <div style="border:1px solid #bbf7d0;background:#f0fdf4;border-radius:8px;padding:12px 14px;margin:18px 0">
-          <div style="font-weight:800;color:#15803d">Keine Auffälligkeiten erkannt</div>
-          <div style="font-size:12px;color:#64748b;margin-top:2px">Alle letzten Jobstände sind ohne Fehler oder Warnung.</div>
+          <div style="font-weight:800;color:#15803d">No issues detected</div>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">All latest job statuses are free of errors and warnings.</div>
         </div>"""
 
     items = []
@@ -464,12 +464,12 @@ def _render_issue_list(issues: list) -> str:
         <tr>
           <td style="padding:7px 10px;border-bottom:1px solid #fde68a;font-weight:700;color:#92400e">{_he(key)}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #fde68a;color:#475569">{_he(text)}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #fde68a;color:{color};font-weight:700">prüfen</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #fde68a;color:{color};font-weight:700">check</td>
         </tr>""")
-    more = "" if len(issues) <= 12 else f"<div style='font-size:12px;color:#92400e;margin-top:8px'>Weitere Auffälligkeiten: {len(issues) - 12}</div>"
+    more = "" if len(issues) <= 12 else f"<div style='font-size:12px;color:#92400e;margin-top:8px'>Additional issues: {len(issues) - 12}</div>"
     return f"""
     <div style="border:1px solid #facc15;background:#fffbeb;border-radius:8px;padding:12px 14px;margin:18px 0">
-      <div style="font-weight:800;color:#92400e;margin-bottom:8px">Auffälligkeiten</div>
+      <div style="font-weight:800;color:#92400e;margin-bottom:8px">Issues</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px">{''.join(items)}</table>
       {more}
     </div>"""
@@ -523,5 +523,5 @@ def _render_log_notes(log_notes: list) -> str:
           {line_html}
         </div>""")
     return f"""
-    <h2 style="margin:24px 0 8px;font-size:15px;color:#0f172a">Log-Hinweise</h2>
+    <h2 style="margin:24px 0 8px;font-size:15px;color:#0f172a">Log Details</h2>
     <div style="border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;padding:4px 14px">{''.join(blocks)}</div>"""

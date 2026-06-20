@@ -298,8 +298,8 @@ class BackupJob:
             )
             notify(
                 level="warning",
-                subject="Backup übersprungen",
-                description=f"USB-Laufwerk nicht gemountet ({mount_path}). Bitte anschließen.",
+                subject="Backup skipped",
+                description=f"USB drive is not mounted ({mount_path}). Please connect it.",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
             self._skip_reason = f"USB is not mounted: {mount_path}"
@@ -318,8 +318,8 @@ class BackupJob:
             )
             notify(
                 level="warning",
-                subject="Backup übersprungen",
-                description=f"USB-Laufwerk nicht beschreibbar ({mount_path}).",
+                subject="Backup skipped",
+                description=f"USB drive is not writable ({mount_path}).",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
             self._skip_reason = f"USB is not writable: {mount_path}"
@@ -380,8 +380,8 @@ class BackupJob:
             )
             notify(
                 level="info",
-                subject="Backup übersprungen",
-                description=f"Parity-{resync_action} läuft ({progress}%). Backup wird später ausgeführt.",
+                subject="Backup skipped",
+                description=f"Parity operation '{resync_action}' is running ({progress}%). The backup will run later.",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
             self._skip_reason = f"Parity operation active: {resync_action} ({progress}%)"
@@ -531,30 +531,30 @@ class BackupJob:
         duration = max(0, int(time.time() - self._start_time))
 
         if not self._final_msg:
-            self._final_msg = f"Backup beendet (borg exit {exit_code})."
+            self._final_msg = f"Backup finished (borg exit {exit_code})."
 
         if exit_code == 0:
             logger.info("Borg backup completed successfully (exit 0)")
             notify(
                 "info",
-                "Backup erfolgreich",
-                f"Backup abgeschlossen. Log: {self.config.log_file}",
+                "Backup successful",
+                f"Backup completed. Log: {self.config.log_file}",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
         elif exit_code == 1:
             logger.info("Borg backup completed with warnings (exit 1)")
             notify(
                 "warning",
-                "Backup mit Warnungen",
-                f"Exit 1. Prüfe Log: {self.config.log_file}",
+                "Backup completed with warnings",
+                f"Exit 1. Check log: {self.config.log_file}",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
         else:
             logger.info("Borg backup failed (exit %d)", exit_code)
             notify(
                 "alert",
-                "BACKUP FEHLGESCHLAGEN",
-                f"Borg Exit {exit_code}. Siehe Log: {self.config.log_file}",
+                "BACKUP FAILED",
+                f"Borg exit {exit_code}. See log: {self.config.log_file}",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
 

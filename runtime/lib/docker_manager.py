@@ -207,8 +207,8 @@ class DockerManager:
         still_running = len(_get_running_ids())
         if still_running != 0:
             msg = (
-                f"Nicht alle Container konnten gestoppt werden "
-                f"({still_running} laufen noch). Siehe Log: {log_file}"
+                "Not all containers could be stopped "
+                f"({still_running} still running). See log: {log_file}"
             )
             logger.error("ERROR: %s", msg)
             raise RuntimeError(msg)

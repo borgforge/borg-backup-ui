@@ -67,6 +67,8 @@
       "smtp_recipient_missing": "Es ist kein E-Mail-Empfänger konfiguriert.",
       "smtp_sender_missing": "Es ist kein E-Mail-Absender konfiguriert.",
       "smtp_test_sent": "Test-E-Mail wurde an {recipient} gesendet.",
+      "weekly_report_sent": "Der Wochenbericht wurde an {recipient} gesendet.",
+      "weekly_report_generation_failed": "Der Wochenbericht konnte nicht erstellt werden.",
       "smtp_auth_failed": "Die SMTP-Authentifizierung ist fehlgeschlagen.",
       "smtp_failed": "Die SMTP-Anfrage ist fehlgeschlagen.",
       "smtp_connection_failed": "Die Verbindung zum SMTP-Server ist fehlgeschlagen.",

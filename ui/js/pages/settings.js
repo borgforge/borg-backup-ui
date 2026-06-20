@@ -3226,7 +3226,11 @@ async function sendWeeklyReport() {
       body: JSON.stringify({ recipient }),
     });
     const data = await res.json();
-    showMsg('weekly-report-message', data.success ? 'success' : 'error', data.message);
+    showMsg(
+      'weekly-report-message',
+      data.success ? 'success' : 'error',
+      apiMessage(data, data.success ? settingsT('forms.sent') : settingsT('forms.error')),
+    );
   } catch (err) {
     showMsg('weekly-report-message', 'error', settingsT('error', { message: err.message }));
   } finally {

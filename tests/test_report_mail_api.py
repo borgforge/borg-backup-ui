@@ -43,18 +43,18 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
 
     html = _build_html_report({"STATUS_DIR": str(status_dir), "HOSTNAME": "Tower"}, now=REPORT_NOW)
 
-    assert "Wochenbericht" in html
+    assert "Weekly Report" in html
     assert "data:image/png;base64" in html
     assert "Server: Tower" in html
-    assert "Repo gesamt" in html
-    assert "Dauer gesamt" in html
-    assert "Job-Übersicht" in html
+    assert "Total repository size" in html
+    assert "Total duration" in html
+    assert "Job Overview" in html
     assert "appdata_local" in html
     assert "appdata-backup-2026-06-11_23-00-00" in html
-    assert "Läufe 7T" in html
-    assert "Erfolg 7T" in html
+    assert "Runs 7d" in html
+    assert "Success 7d" in html
     assert "Exit</th>" not in html
-    assert "Keine Auffälligkeiten erkannt" in html
+    assert "No issues detected" in html
 
 
 def test_weekly_report_success_rate_uses_recent_runs(tmp_path: Path):
@@ -76,7 +76,7 @@ def test_weekly_report_success_rate_uses_recent_runs(tmp_path: Path):
 
     html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
-    assert "Erfolg 7T" in html
+    assert "Success 7d" in html
     assert "100%" in html
     assert "50%" not in html
 
@@ -108,10 +108,10 @@ def test_weekly_report_surfaces_issues_and_log_hints(tmp_path: Path):
 
     html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
-    assert "Auffälligkeiten" in html
+    assert "Issues" in html
     assert "Repository nicht erreichbar" in html
-    assert "Repository-Prüfung ist überfällig" in html
-    assert "Log-Hinweise" in html
+    assert "Repository check is overdue" in html
+    assert "Log Details" in html
     assert "Borg compact fehlgeschlagen" in html
 
 
@@ -164,5 +164,5 @@ def test_weekly_report_ignores_non_error_log_hints(tmp_path: Path):
 
     html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
-    assert "Log-Hinweise" not in html
+    assert "Log Details" not in html
     assert "Kein Mail-Versand" not in html
