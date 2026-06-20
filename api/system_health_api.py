@@ -211,6 +211,7 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
                 "name": meta_file.stem,
                 "state": "bad",
                 "errors": [f"Job-Metadaten nicht lesbar: {exc}"],
+                "error_details": [{"code": "metadata_unreadable", "params": {"message": str(exc)}}],
                 "warnings": [],
             })
             continue
@@ -220,30 +221,35 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
         name = str(raw.get("name") or job_key).strip()
         location = str(raw.get("location") or "").strip().lower()
         errors: list[str] = []
+        error_details: list[dict] = []
         warnings: list[str] = []
+
+        def add_error(code: str, message: str, **params: Any) -> None:
+            errors.append(message)
+            error_details.append({"code": code, "params": params})
 
         repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
         repo = str(repo_cfg.get("default") or "").strip()
         if not repo:
-            errors.append("Repository fehlt")
+            add_error("repository_missing", "Repository fehlt")
         elif location == "storagebox":
             if not repo.startswith("ssh://"):
-                errors.append("Storagebox-Repository ist keine ssh:// URI")
+                add_error("storagebox_repo_not_ssh", "Storagebox-Repository ist keine ssh:// URI")
             else:
                 parts = urlsplit(repo)
                 if not parts.netloc or not parts.path.startswith("/"):
-                    errors.append("Storagebox-Repository-URI ist unvollständig")
+                    add_error("storagebox_repo_incomplete", "Storagebox-Repository-URI ist unvollständig")
                 if ":23." in repo:
-                    errors.append("Storagebox-Repository-URI enthält fehlenden Slash nach Port")
+                    add_error("storagebox_repo_port_slash", "Storagebox-Repository-URI enthält fehlenden Slash nach Port")
 
         paths_cfg = raw.get("paths") if isinstance(raw.get("paths"), dict) else {}
         source_paths = _split_job_paths(paths_cfg.get("default"))
         if not source_paths:
-            errors.append("Quellpfade fehlen")
+            add_error("source_paths_missing", "Quellpfade fehlen")
         else:
             missing = [p for p in source_paths if not Path(p).exists()]
             if missing:
-                errors.append(f"{len(missing)} Quellpfad(e) nicht vorhanden")
+                add_error("source_paths_not_found", f"{len(missing)} Quellpfad(e) nicht vorhanden", count=len(missing))
 
         encryption = str(raw.get("encryption") or "").strip().lower()
         pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
@@ -251,23 +257,23 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
         pass_path = str(pass_cfg.get("default") or "").strip()
         if encryption != "none" and pass_mode != "none":
             if not pass_path:
-                errors.append("Passphrase-Datei fehlt in Metadaten")
+                add_error("passphrase_metadata_missing", "Passphrase-Datei fehlt in Metadaten")
             elif not Path(pass_path).is_file():
-                errors.append("Passphrase-Datei nicht vorhanden")
+                add_error("passphrase_file_missing", "Passphrase-Datei nicht vorhanden")
 
         if location == "storagebox":
             profile_key = str(raw.get("storage_profile_key") or "").strip().lower()
             profile = storage_by_key.get(profile_key)
             if not profile_key:
-                errors.append("Storage-Profil fehlt")
+                add_error("storage_profile_missing", "Storage-Profil fehlt")
             elif profile is None:
-                errors.append(f"Storage-Profil '{profile_key}' nicht gefunden")
+                add_error("storage_profile_not_found", f"Storage-Profil '{profile_key}' nicht gefunden", profile=profile_key)
             else:
                 ssh_key = str(profile.get("ssh_key_path") or "").strip()
                 if ssh_key and not Path(ssh_key).is_file():
-                    errors.append("SSH-Key-Datei nicht vorhanden")
+                    add_error("ssh_key_file_missing", "SSH-Key-Datei nicht vorhanden")
                 if not str(profile.get("host") or "").strip() or not str(profile.get("user") or "").strip():
-                    errors.append("Storage-Profil ist unvollständig")
+                    add_error("storage_profile_incomplete", "Storage-Profil ist unvollständig")
 
         state = "bad" if errors else ("warn" if warnings else "ok")
         items.append({
@@ -276,6 +282,7 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             "location": location,
             "state": state,
             "errors": errors,
+            "error_details": error_details,
             "warnings": warnings,
         })
 
