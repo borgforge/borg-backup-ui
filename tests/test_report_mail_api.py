@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 import sys
 
@@ -13,6 +14,9 @@ if str(RUNTIME_LIB) not in sys.path:
     sys.path.insert(0, str(RUNTIME_LIB))
 
 from report_mail_api import _build_html_report
+
+
+REPORT_NOW = datetime(2026, 6, 12, 12, 0, 0)
 
 
 def _write_status(status_dir: Path, name: str, data: dict) -> None:
@@ -37,7 +41,7 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
         "repository_check_status": "ok",
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir), "HOSTNAME": "Tower"})
+    html = _build_html_report({"STATUS_DIR": str(status_dir), "HOSTNAME": "Tower"}, now=REPORT_NOW)
 
     assert "Wochenbericht" in html
     assert "data:image/png;base64" in html
@@ -70,7 +74,7 @@ def test_weekly_report_success_rate_uses_recent_runs(tmp_path: Path):
         "status": "success",
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)})
+    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
     assert "Erfolg 7T" in html
     assert "100%" in html
@@ -102,7 +106,7 @@ def test_weekly_report_surfaces_issues_and_log_hints(tmp_path: Path):
         "repository_check_status": "overdue",
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)})
+    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
     assert "Auffälligkeiten" in html
     assert "Repository nicht erreichbar" in html
@@ -134,7 +138,7 @@ def test_weekly_report_sorts_jobs_by_location(tmp_path: Path):
         "status": "success",
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)})
+    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
     assert html.index("photos_local") < html.index("appdata_storagebox")
     assert html.index("appdata_storagebox") < html.index("flash_usb")
@@ -158,7 +162,7 @@ def test_weekly_report_ignores_non_error_log_hints(tmp_path: Path):
         "log_file": str(log_file),
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)})
+    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
     assert "Log-Hinweise" not in html
     assert "Kein Mail-Versand" not in html

@@ -159,14 +159,14 @@ def send_weekly_report(config: dict, recipient: str = "") -> dict:
 
 # ── HTML-Report-Generator ──────────────────────────────────────────────────────
 
-def _build_html_report(config: dict) -> str:
+def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     from status import StatusStore, format_bytes, format_duration
 
     status_dir = Path(config["STATUS_DIR"])
     store = StatusStore(status_dir)
     all_statuses = store.load()
     latest = store.get_latest_per_key(all_statuses)
-    generated_at = datetime.now()
+    generated_at = now or datetime.now()
 
     run_dates = [st.timestamp_dt for st in all_statuses if st.timestamp_dt is not None]
     period_start = min(run_dates).strftime("%d.%m.%Y %H:%M") if run_dates else "keine Daten"
