@@ -37,6 +37,21 @@ function restoreTestsLocationLabel(location) {
     : (location || '—');
 }
 
+function restoreTestFailureMessage(test) {
+  const code = String(test?.failure_code || 'RT_UNKNOWN');
+  const key = `restoreTests.failures.${code}`;
+  const translated = window.BBUI?.components?.i18n?.t?.(key);
+  return translated && translated !== key ? translated : restoreTestsT('failures.RT_UNKNOWN');
+}
+
+function restoreTestStepMessage(step) {
+  const label = rtStepLabel(String(step?.step_id || ''));
+  if (step?.status === 'passed') return restoreTestsT('stepPassed', { step: label });
+  if (step?.status === 'failed') return restoreTestsT('stepFailed', { step: label });
+  if (step?.status === 'not_tested') return restoreTestsT('notTested');
+  return restoreTestsT('noStepMessage');
+}
+
 function _updateRTScheduleBtn() {
   // Schedule icon removed in consolidated UI.
 }
@@ -118,7 +133,7 @@ async function runRestoreTestNow() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     if (data.started === false && data.reason === 'no_due_jobs') {
       showMsg(
         'restore-tests-message',
@@ -398,7 +413,7 @@ async function saveRestorePlanPolicy(jobKey) {
       }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const stamp = new Date().toLocaleTimeString(restoreTestsLocale());
     restoreTestsState.rowNote[jobKey] = restoreTestsT('savedAt', { time: stamp });
     showMsg('restore-tests-message', 'success', restoreTestsT('policySaved', { job: jobKey }));
@@ -424,7 +439,7 @@ async function runRestorePlanJob(jobKey) {
       body: JSON.stringify({ job_key: jobKey }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const stamp = new Date().toLocaleTimeString(restoreTestsLocale());
     restoreTestsState.rowNote[jobKey] = restoreTestsT('startedAt', { time: stamp });
     showMsg('restore-tests-message', 'success', restoreTestsT('testStarted', { job: jobKey }));
@@ -672,7 +687,9 @@ function renderRTReportRow(t, idx) {
   const cov = Number(t.test_coverage_percentage || 0);
   const covTxt = formatCoveragePercent(cov);
   const stats = t.archive_stats_formatted || {};
-  const detailError = t.failure_hint || t.error_message || t.error || '';
+  const detailError = t.test_result === 'failed' || t.test_result === 'unavailable'
+    ? restoreTestFailureMessage(t)
+    : '';
   const dt = String(t.test_date || '—');
   const reportId = t.report_id || t.test_id;
   const archive = t.tested_archive || t.archive_name;
@@ -712,7 +729,7 @@ function renderRTReportRow(t, idx) {
             ${rtReportMetaItem(restoreTestsT('duration'), t.duration_formatted || '—')}
             ${rtReportMetaItem(restoreTestsT('originalSize'), stats.original || '—')}
             ${rtReportMetaItem(restoreTestsT('coverage'), `${covTxt}${t.coverage_basis ? ` (${t.coverage_basis})` : ''}`)}
-            ${rtReportMetaItem(restoreTestsT('overallStatus'), t.overall_status || status.label)}
+            ${rtReportMetaItem(restoreTestsT('overallStatus'), status.label)}
             ${rtReportMetaItem(restoreTestsT('validUntil'), t.valid_until || t.valid_until_date)}
             ${rtReportMetaItem(restoreTestsT('errorCode'), t.failure_code)}
           </div>
@@ -746,7 +763,7 @@ function renderRTStepsTable(steps, report = {}) {
           <div class="rt-step-title">${escHtml(rtStepLabel(String(s.step_id || '')))}</div>
           <span class="rt-step-status ${statusClass}">${escHtml(statusText || '—')}</span>
         </div>
-        <div class="rt-step-message">${escHtml(s.message || restoreTestsT('noStepMessage'))}</div>
+        <div class="rt-step-message">${escHtml(restoreTestStepMessage(s))}</div>
         <div class="rt-step-facts">
           ${s.timestamp ? `<span>${escHtml(restoreTestsT('timestampValue', { value: s.timestamp }))}</span>` : ''}
           ${s.error_code ? `<span>${escHtml(restoreTestsT('errorCodeValue', { value: s.error_code }))}</span>` : ''}

@@ -491,7 +491,7 @@ async function setJobEnabled(jobKey, enabled) {
       body: JSON.stringify({ job_key: jobKey, enabled: !!enabled }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     await refreshJobs();
     showMsg('jobs-message', 'success', jobsT('jobs.toggleSuccess', {
       state: jobsT(enabled ? 'jobs.enabledState' : 'jobs.disabledState'),
@@ -675,7 +675,7 @@ async function confirmJobDelete() {
       body: JSON.stringify({ job_key: jobKey, delete_passphrase: deletePassphrase, delete_artifacts: deleteArtifacts }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     jobsState.loaded = false;
     await refreshJobs();
     const extra = [
@@ -706,7 +706,7 @@ async function confirmJobStart() {
       body: JSON.stringify({ job_key: jobKey }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
 
     await refreshJobs();
     openLogPanel(jobKey);
@@ -960,7 +960,7 @@ async function saveScheduleAction() {
       body: JSON.stringify({ job_key: jobKey, cron, enabled }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const schedules = _coreSchedules();
     schedules[jobKey] = { cron, enabled };
     _coreSetSchedules(schedules);
@@ -986,7 +986,7 @@ async function deleteScheduleAction() {
       body: JSON.stringify({ job_key: jobKey }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const schedules = _coreSchedules();
     delete schedules[jobKey];
     _coreSetSchedules(schedules);

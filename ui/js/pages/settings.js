@@ -93,7 +93,9 @@ async function refreshSettings() {
     }
     if (settingsState.storageboxConnOk === null && data?.storagebox_setup) {
       settingsState.storageboxConnOk = !!data.storagebox_setup.auth_ok;
-      settingsState.storageboxConnMsg = String(data.storagebox_setup.message || '');
+      settingsState.storageboxConnMsg = data.storagebox_setup.auth_ok
+        ? settingsT('storagebox.sshReachable')
+        : settingsT('storagebox.sshFailed');
     }
     const health = healthRes.ok ? await healthRes.json() : null;
     settingsState.data = data;
@@ -561,11 +563,11 @@ function _renderSmbChecksHtml(r) {
     }
     const message = String(msg || '').trim();
     if (ok) {
-      return `<div class="smb-check-row ok"><span>${escHtml(label)}</span><span>OK${message ? ` - ${escHtml(message)}` : ''}</span></div>`;
+      return `<div class="smb-check-row ok"><span>${escHtml(label)}</span><span>OK</span></div>`;
     }
     if (message) {
       blocked = true;
-      return `<div class="smb-check-row bad"><span>${escHtml(label)}</span><span>${settingsT('profiles.checkError', { message: escHtml(message) })}</span></div>`;
+      return `<div class="smb-check-row bad"><span>${escHtml(label)}</span><span>${settingsT('common.error')}</span></div>`;
     }
     return `<div class="smb-check-row skip"><span>${escHtml(label)}</span><span>${settingsT('profiles.notTested')}</span></div>`;
   };
@@ -1513,7 +1515,7 @@ async function exportJobsBundle() {
   try {
     const res = await fetch('/api/settings/jobs-export');
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     _downloadTextFile(data.filename || 'bbui-jobs-export.json', data.bundle_text || JSON.stringify(data.bundle || {}, null, 2));
     showMsg('settings-transfer-msg', 'success', settingsT('transfer.exportCreated', { jobs: data.job_count || 0 }));
   } catch (err) {
@@ -1537,7 +1539,7 @@ async function exportJobsBundleSecure() {
       body: JSON.stringify({ password }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const bytes = atob(data.payload_b64 || '');
     const arr = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
@@ -1565,7 +1567,7 @@ async function exportSupportBundle() {
       body: JSON.stringify({}),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const bytes = atob(data.payload_b64 || '');
     const arr = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
@@ -1606,8 +1608,8 @@ async function applyLegacyCleanupFromSettings(el) {
       body: JSON.stringify({ mode: 'comment_out', confirm }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-    showMsg('settings-message', 'success', `${data.message || settingsT('transfer.cleanupApplied')}${data.backup ? ` Backup: ${data.backup}` : ''}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    showMsg('settings-message', 'success', `${apiMessage(data, settingsT('transfer.cleanupApplied'))}${data.backup ? ` Backup: ${data.backup}` : ''}`);
     await refreshSettings();
     await refreshSettingsConfigBackups();
   } catch (err) {
@@ -1634,7 +1636,7 @@ async function importJobsBundle(dryRun) {
       body: JSON.stringify({ bundle_text: text, mode, dry_run: !!dryRun }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const lines = (data.report || []).slice(0, 10).map(r => `${r.job_key || '-'} -> ${r.new_job_key || r.job_key || '-'} [${r.status}]`);
     const summary = `Jobs: ${data.imported_count || 0}, Schedules: ${data.scheduled_count || 0}`;
     const suffix = lines.length ? `\n${lines.join('\n')}` : '';
@@ -1662,7 +1664,7 @@ async function importJobsPreviewSelectFile() {
       body: JSON.stringify({ bundle_text: text }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     settingsState.transferJobsBundleText = text;
     settingsState.transferJobsSecureMode = false;
     settingsState.transferJobsSecurePayloadB64 = '';
@@ -1702,7 +1704,7 @@ async function importJobsSecurePreviewSelectFile() {
       body: JSON.stringify({ password, payload_b64 }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     settingsState.transferJobsBundleText = '';
     settingsState.transferJobsSecureMode = true;
     settingsState.transferJobsSecurePayloadB64 = payload_b64;
@@ -1805,7 +1807,7 @@ async function importJobsApplySelected() {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const report = Array.isArray(data?.report) ? data.report : [];
     const byStatus = report.reduce((acc, r) => {
       const s = String(r?.status || 'unknown');
@@ -1846,7 +1848,7 @@ async function exportSecretsBackup() {
       body: JSON.stringify({ password }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const bytes = atob(data.payload_b64 || '');
     const arr = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
@@ -1897,7 +1899,7 @@ async function importSecretsBackup() {
       body: JSON.stringify({ password, payload_b64: fileText, mode }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('settings-transfer-msg', 'success', settingsT('transfer.passphraseImportOk', { count: data.restored_count || 0, suffix: settingsT('transfer.restoredSuffix') }));
     await refreshSettings();
   } catch (err) {
@@ -1929,7 +1931,7 @@ async function importSecretsPreviewSelectFile() {
       body: JSON.stringify({ password, payload_b64 }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     settingsState.transferSecretsPreview = data;
     settingsState.transferSecretsPayloadB64 = payload_b64;
     settingsState.transferSecretsPassword = password;
@@ -1978,7 +1980,7 @@ async function importSecretsApplySelected() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('settings-transfer-msg', 'success', settingsT('transfer.passphraseImportOk', { count: data.restored_count || 0, suffix: '' }));
     settingsState.transferSecretsPreview = null;
     settingsState.transferSecretsPayloadB64 = '';
@@ -2005,7 +2007,7 @@ async function exportProfileSecretsBackup() {
       body: JSON.stringify({ password }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const bytes = atob(data.payload_b64 || '');
     const arr = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
@@ -2050,7 +2052,7 @@ async function importProfileSecretsPreviewSelectFile() {
       body: JSON.stringify({ password, payload_b64 }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     settingsState.transferProfileSecretsPreview = data;
     settingsState.transferProfileSecretsPayloadB64 = payload_b64;
     settingsState.transferProfileSecretsPassword = password;
@@ -2108,7 +2110,7 @@ async function importProfileSecretsApplySelected() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('settings-transfer-msg', 'success', settingsT('transfer.profilesImportOk', { count: data.restored_count || 0 }));
     settingsState.transferProfileSecretsPreview = null;
     settingsState.transferProfileSecretsPayloadB64 = '';
@@ -2171,7 +2173,7 @@ async function restoreSettingsConfigBackup(name) {
       body: JSON.stringify({ name }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('settings-config-backups-msg', 'success', settingsT('backups.restored', { name }));
     await refreshSettings();
   } catch (err) {
@@ -2194,7 +2196,7 @@ async function diffSettingsConfigBackup(name) {
       body: JSON.stringify({ name, context_lines: 3 }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     if (!box) return;
     if (!data.changed) {
       box.innerHTML = `<div class="status-message success">${settingsT('backups.noDifferences', { name: escHtml(name) })}</div>`;
@@ -2254,7 +2256,7 @@ async function deleteSettingsConfigBackup(name) {
       body: JSON.stringify({ name }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('settings-config-backups-msg', 'success', settingsT('backups.deleted', { value: name }));
     await refreshSettingsConfigBackups();
   } catch (err) {
@@ -2277,7 +2279,7 @@ async function deleteConfigBackupsKeepLatest() {
       body: JSON.stringify({}),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const count = Number(data.deleted_count || 0);
     const kept = data.kept ? `, behalten: ${data.kept}` : '';
     showMsg('settings-config-backups-msg', 'success', settingsT('backups.deleted', { value: `${count}${kept}` }));
@@ -2333,7 +2335,7 @@ async function sendTestEmail() {
       body: JSON.stringify({ recipient }),
     });
     const data = await res.json();
-    result.textContent = data.message || (data.success ? settingsT('forms.sent') : settingsT('forms.error'));
+    result.textContent = apiMessage(data, data.success ? settingsT('forms.sent') : settingsT('forms.error'));
     result.style.color = data.success ? 'var(--success)' : 'var(--error)';
   } catch (err) {
     result.textContent = settingsT('error', { message: err.message });
@@ -2666,7 +2668,7 @@ async function onSettingsContentClick(event) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok === false) {
-          throw new Error(data.error || data.message || `HTTP ${res.status}`);
+          throw new Error(apiErrorMessage(data, res.status));
         }
       } catch (err) {
         showMsg('smb-profiles-msg', 'error', settingsT('profiles.unmountRemoveFailed', { message: err.message }));
@@ -2738,7 +2740,7 @@ async function createUserFromSettings() {
       body: JSON.stringify({ username: name, role, password }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('users-msg', 'success', settingsT('users.createSuccess', { name }));
     await refreshSettings();
   } catch (err) {
@@ -2757,7 +2759,7 @@ async function updateUserFromRow(row) {
       body: JSON.stringify({ username, role, enabled }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('users-msg', 'success', settingsT('users.updateSuccess', { name: username }));
     await refreshSettings();
   } catch (err) {
@@ -2785,7 +2787,7 @@ async function resetUserPasswordFromRow(row) {
       body: JSON.stringify({ username, password: String(value) }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('users-msg', 'success', settingsT('users.passwordUpdated', { name: username }));
   } catch (err) {
     showMsg('users-msg', 'error', settingsT('users.passwordResetError', { message: err.message }));
@@ -2818,7 +2820,7 @@ async function deleteUserFromRow(row) {
       body: JSON.stringify({ username }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('users-msg', 'success', settingsT('users.deleted', { name: username }));
     await refreshSettings();
   } catch (err) {
@@ -2837,7 +2839,7 @@ async function deactivateUserFromRow(row) {
       body: JSON.stringify({ username, role, enabled: false }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('users-msg', 'success', settingsT('users.deactivated', { name: username }));
     await refreshSettings();
   } catch (err) {
@@ -2869,7 +2871,7 @@ async function changeOwnPasswordFromSettings() {
       body: JSON.stringify(values),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, res.status));
     showMsg('users-msg', 'success', settingsT('users.passwordChanged', { name: currentUser || settingsT('users.currentUser') }));
   } catch (err) {
     showMsg('users-msg', 'error', settingsT('users.changePasswordError', { message: err.message }));
@@ -2890,7 +2892,7 @@ async function logoutOwnSessionsFromSettings() {
       body: JSON.stringify({ scope: 'current' }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, res.status));
     window.location.href = '/login';
   } catch (err) {
     showMsg('users-msg', 'error', settingsT('users.logoutError', { message: err.message }));
@@ -2912,7 +2914,7 @@ async function logoutAllSessionsFromSettings() {
       body: JSON.stringify({ scope: 'all' }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, res.status));
     window.location.href = '/login';
   } catch (err) {
     showMsg('users-msg', 'error', settingsT('users.logoutAllError', { message: err.message }));
@@ -2933,7 +2935,7 @@ async function checkUsbProfilesStatus() {
       body: JSON.stringify({ profiles }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const rows = Array.isArray(data?.results) ? data.results : [];
     const rowEls = document.querySelectorAll('#usb-profiles-rows .usb-profile-row');
     rowEls.forEach((rowEl, idx) => {
@@ -2949,7 +2951,7 @@ async function checkUsbProfilesStatus() {
         stateEl.textContent = 'OK';
         stateEl.className = 'usb-profile-state text-success';
       } else {
-        stateEl.textContent = settingsT('profiles.checkErrorMessage', { message: r.message || settingsT('common.unknown') });
+        stateEl.textContent = settingsT('profiles.checkErrorMessage', { message: settingsT('common.error') });
         stateEl.className = 'usb-profile-state text-danger';
       }
     });
@@ -2975,7 +2977,7 @@ async function checkSmbProfilesStatus() {
       body: JSON.stringify({ profiles }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const rows = Array.isArray(data?.results) ? data.results : [];
     const rowEls = document.querySelectorAll('#smb-profiles-rows .smb-profile-row');
     rowEls.forEach((rowEl, idx) => {
@@ -3012,7 +3014,7 @@ async function _storageboxCall(action, body = {}) {
     body: JSON.stringify(payload),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
   return data;
 }
 
@@ -3071,7 +3073,7 @@ async function storageboxKeyGenerate() {
   hideEl('storagebox-setup-msg');
   try {
     const d = await _storageboxCall('key-generate');
-    await _storageboxRefreshWithFlash(d.message || settingsT('storagebox.keyGenerated'), true);
+    await _storageboxRefreshWithFlash(apiMessage(d, settingsT('storagebox.keyGenerated')), true);
   } catch (e) { _storageboxShow(settingsT('error', { message: e.message }), false); }
 }
 
@@ -3195,7 +3197,7 @@ async function storageboxTest() {
   try {
     const d = await _storageboxCall('test');
     settingsState.storageboxConnOk = !!d.success;
-    settingsState.storageboxConnMsg = d.message || '';
+    settingsState.storageboxConnMsg = apiMessage(d, d.success ? settingsT('storagebox.sshReachable') : settingsT('storagebox.sshFailed'));
     const details = String(d.details || '').trim();
     settingsState.storageboxChecks = {
       rows: [
@@ -3204,7 +3206,7 @@ async function storageboxTest() {
         { label: settingsT('storagebox.repoPathFound'), ok: d?.steps?.path_exists === true, message: d?.steps?.path_exists === true ? settingsT('storagebox.pathPresent') : (d?.steps?.path_exists === false ? settingsT('storagebox.pathMissing') : settingsT('common.notChecked')) },
         { label: settingsT('storagebox.writeTest'), ok: d?.steps?.path_writable === true, message: d?.steps?.path_writable === true ? settingsT('storagebox.writeSuccess') : (d?.steps?.path_writable === false ? settingsT('storagebox.writeFailed') : settingsT('common.notChecked')) },
       ],
-      details: details || String(d.message || ''),
+      details: details || apiMessage(d, ''),
     };
     settingsState.storageboxLastCheckAt = new Date().toISOString();
     await refreshSettings();
@@ -3374,7 +3376,7 @@ async function saveSettings() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     settingsState.dirty = false;
     _updateUnsavedChangesUi();
     const dd = data?.data_dirs;

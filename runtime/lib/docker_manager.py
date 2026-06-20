@@ -69,7 +69,7 @@ class DockerConfig:
             try:
                 return int(raw)
             except ValueError:
-                logger.warning("Ungültiger Wert für %s ('%s'), verwende %d", key, raw, default)
+                logger.warning("Invalid value for %s ('%s'); using %d", key, raw, default)
                 return default
 
         return cls(
@@ -168,20 +168,20 @@ class DockerManager:
         result = DockerStopResult()
 
         if not docker_available():
-            logger.info("Docker ist deaktiviert/nicht verfügbar – überspringe Container-Stop")
+            logger.info("Docker is disabled or unavailable; skipping container stop")
             return result
 
         result.available = True
         container_ids = _get_running_ids()
         if not container_ids:
-            logger.info("Keine laufenden Docker Container")
+            logger.info("No running Docker containers")
             result.success = True
             return result
 
         result.container_ids = container_ids
         result.count_before = len(container_ids)
         logger.info(
-            "Stoppe %d Docker Container (Timeout: %ds)",
+            "Stopping %d Docker containers (timeout: %ds)",
             result.count_before,
             self.config.stop_timeout,
         )
@@ -197,9 +197,9 @@ class DockerManager:
                 timeout=self.config.stop_timeout * len(container_ids) + 30,
             )
         except subprocess.TimeoutExpired:
-            logger.warning("docker stop Timeout überschritten")
+            logger.warning("docker stop timed out")
         except OSError as exc:
-            logger.warning("docker stop fehlgeschlagen: %s", exc)
+            logger.warning("docker stop failed: %s", exc)
 
         time.sleep(self.config.stop_wait)
 
@@ -210,10 +210,10 @@ class DockerManager:
                 f"Nicht alle Container konnten gestoppt werden "
                 f"({still_running} laufen noch). Siehe Log: {log_file}"
             )
-            logger.error("FEHLER: %s", msg)
+            logger.error("ERROR: %s", msg)
             raise RuntimeError(msg)
 
-        logger.info("Alle Docker Container erfolgreich gestoppt")
+        logger.info("All Docker containers stopped successfully")
         result.success = True
         return result
 
@@ -241,7 +241,7 @@ class DockerManager:
             return result
 
         logger.info(
-            "Starte %d Docker Container nach Priorität...",
+            "Starting %d Docker containers by priority...",
             stop_result.count_before,
         )
 
@@ -255,35 +255,35 @@ class DockerManager:
         all_failed: List[str] = []
 
         if groups[1]:
-            logger.info("=== Phase 1: Kritische Infrastruktur (Datenbanken, Cache) ===")
-            failed = self._start_group(groups[1], "Priorität 1 - Infrastruktur")
+            logger.info("=== Phase 1: Critical infrastructure (databases, cache) ===")
+            failed = self._start_group(groups[1], "Priority 1 - infrastructure")
             all_failed.extend(failed)
             if groups[2] or groups[3]:
                 time.sleep(self.config.priority_wait)
 
         if groups[2]:
-            logger.info("=== Phase 2: Standard-Anwendungen ===")
-            failed = self._start_group(groups[2], "Priorität 2 - Standard")
+            logger.info("=== Phase 2: Standard applications ===")
+            failed = self._start_group(groups[2], "Priority 2 - standard")
             all_failed.extend(failed)
             if groups[3]:
                 time.sleep(self.config.priority_wait)
 
         if groups[3]:
-            logger.info("=== Phase 3: Sonstige Container ===")
-            failed = self._start_group(groups[3], "Priorität 3 - Sonstige")
+            logger.info("=== Phase 3: Other containers ===")
+            failed = self._start_group(groups[3], "Priority 3 - other")
             all_failed.extend(failed)
 
         # Retry-Loop für fehlgeschlagene Container
         retry_count = 1
         while all_failed and retry_count <= self.config.max_retries:
             logger.info(
-                "RETRY %d/%d: Versuche %d Container neu zu starten...",
+                "RETRY %d/%d: attempting to restart %d containers...",
                 retry_count, self.config.max_retries, len(all_failed),
             )
             new_failed = []
             for cid in all_failed:
                 name = _get_container_name(cid)
-                logger.info("  - Starte %s (%s)", name, cid)
+                logger.info("  - Starting %s (%s)", name, cid)
                 _docker_start(cid)
 
             time.sleep(self.config.retry_wait)
@@ -293,7 +293,7 @@ class DockerManager:
                     new_failed.append(cid)
                 else:
                     name = _get_container_name(cid)
-                    logger.info("  ✓ %s erfolgreich gestartet", name)
+                    logger.info("  OK %s started successfully", name)
 
             all_failed = new_failed
             retry_count += 1
@@ -304,12 +304,12 @@ class DockerManager:
 
         if result.all_started:
             logger.info(
-                "✓ Alle Docker Container erfolgreich gestartet (%d/%d)",
+                "OK All Docker containers started successfully (%d/%d)",
                 result.count_after, result.count_before,
             )
         else:
             logger.warning(
-                "⚠ WARNUNG: %d Container konnten nach %d Retries nicht gestartet werden:",
+                "WARNING: %d containers could not be started after %d retries:",
                 len(all_failed), self.config.max_retries,
             )
             for cid in all_failed:
@@ -324,11 +324,11 @@ class DockerManager:
 
     def _start_group(self, container_ids: List[str], group_name: str) -> List[str]:
         """Startet eine Prioritätsgruppe und gibt fehlgeschlagene IDs zurück."""
-        logger.info("Starte %d Container (%s)...", len(container_ids), group_name)
+        logger.info("Starting %d containers (%s)...", len(container_ids), group_name)
 
         for cid in container_ids:
             name = _get_container_name(cid)
-            logger.info("  - Starte %s (%s)", name, cid)
+            logger.info("  - Starting %s (%s)", name, cid)
             _docker_start(cid)
 
         time.sleep(self.config.start_wait)
@@ -339,7 +339,7 @@ class DockerManager:
     @staticmethod
     def _log_running_containers(container_ids: List[str]) -> None:
         """Gibt formatierte Container-Liste aus (Name + ID)."""
-        logger.info("Container-Liste:")
+        logger.info("Container list:")
         try:
             result = subprocess.run(
                 ["docker", "ps", "--format", "{{.Names}}|{{.ID}}"],
@@ -354,7 +354,7 @@ class DockerManager:
                 cid = parts[1] if len(parts) > 1 else ""
                 logger.info("  - %-30s (%s)", name, cid)
         except (subprocess.TimeoutExpired, OSError) as exc:
-            logger.warning("Container-Liste nicht abrufbar: %s", exc)
+            logger.warning("Container list could not be retrieved: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +427,7 @@ def _docker_start(container_id: str) -> None:
             timeout=60,
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
-        logger.warning("docker start %s fehlgeschlagen: %s", container_id, exc)
+        logger.warning("docker start %s failed: %s", container_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -437,11 +437,11 @@ def _docker_start(container_id: str) -> None:
 def _cli_status() -> None:
     """Zeigt alle laufenden Container mit Priorität an."""
     if not docker_available():
-        print("Docker ist nicht verfügbar.")
+        print("Docker is unavailable.")
         return
     ids = _get_running_ids()
     if not ids:
-        print("Keine laufenden Container.")
+        print("No running containers.")
         return
     print(f"{len(ids)} laufende Container:")
     for cid in ids:
@@ -456,31 +456,31 @@ def _cli_stop(state_file: Path) -> int:
     try:
         result = manager.stop_all()
     except RuntimeError as exc:
-        print(f"FEHLER: {exc}")
+        print(f"ERROR: {exc}")
         return 1
 
     if not result.available:
-        print("Docker nicht verfügbar – nichts gestoppt.")
+        print("Docker unavailable; nothing was stopped.")
         return 0
     if not result.container_ids:
-        print("Keine laufenden Container – nichts zu tun.")
+        print("No running containers; nothing to do.")
         return 0
 
     state_file.write_text("\n".join(result.container_ids), encoding="utf-8")
-    print(f"{result.count_before} Container gestoppt. Zustand gespeichert: {state_file}")
+    print(f"{result.count_before} containers stopped. State saved: {state_file}")
     return 0
 
 
 def _cli_start(state_file: Path) -> int:
     """Startet Container aus state_file wieder."""
     if not state_file.exists():
-        print(f"Keine gespeicherten Container gefunden ({state_file}).")
-        print("Tipp: Zuerst 'stop' ausführen.")
+        print(f"No saved containers found ({state_file}).")
+        print("Hint: run 'stop' first.")
         return 1
 
     ids = [line for line in state_file.read_text(encoding="utf-8").splitlines() if line]
     if not ids:
-        print("Keine Container-IDs in der State-Datei.")
+        print("No container IDs in the state file.")
         return 1
 
     stop_result = DockerStopResult(
@@ -493,12 +493,12 @@ def _cli_start(state_file: Path) -> int:
     start_result = manager.start_all(stop_result)
 
     if start_result.all_started:
-        print(f"Alle {start_result.count_after} Container gestartet.")
+        print(f"All {start_result.count_after} containers started.")
         state_file.unlink(missing_ok=True)
         return 0
     else:
         print(
-            f"Warnung: {len(start_result.failed_ids)} Container konnten nicht gestartet werden: "
+            f"Warning: {len(start_result.failed_ids)} containers could not be started: "
             + ", ".join(start_result.failed_ids)
         )
         return 1
@@ -526,5 +526,5 @@ if __name__ == "__main__":
         sys.exit(_cli_start(_STATE_FILE))
     else:
         print(f"Unbekannter Befehl: {cmd!r}")
-        print("Verwendung: python3 lib/docker_manager.py status|stop|start")
+        print("Usage: python3 lib/docker_manager.py status|stop|start")
         sys.exit(1)

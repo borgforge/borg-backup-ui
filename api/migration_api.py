@@ -235,7 +235,8 @@ def apply_legacy_cleanup(ui_config: dict, *, mode: str = "comment_out", confirm:
             "candidate_count": 0,
             "commented_count": 0,
             "backup": None,
-            "message": "Keine Cleanup-Kandidaten vorhanden.",
+            "message": "No cleanup candidates are available.",
+            "message_code": "cleanup_no_candidates",
         }
 
     config_dir = _config_dir(ui_config)
@@ -267,7 +268,8 @@ def apply_legacy_cleanup(ui_config: dict, *, mode: str = "comment_out", confirm:
             "commented_count": 0,
             "commented_keys": [],
             "backup": None,
-            "message": "Keine aktiven Legacy-Zeilen gefunden.",
+            "message": "No active legacy lines were found.",
+            "message_code": "cleanup_no_active_lines",
         }
 
     snapshot = backup_conf_snapshot(ui_config, keep=10, reason="Legacy cleanup migration")
@@ -280,7 +282,9 @@ def apply_legacy_cleanup(ui_config: dict, *, mode: str = "comment_out", confirm:
         "commented_count": len(commented),
         "commented_keys": commented,
         "backup": snapshot.name if snapshot else None,
-        "message": f"{len(commented)} Legacy-/Deprecated-Key(s) auskommentiert.",
+        "message": f"Commented out {len(commented)} legacy/deprecated key(s).",
+        "message_code": "cleanup_commented",
+        "message_params": {"count": len(commented)},
     }
 
 

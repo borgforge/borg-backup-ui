@@ -24,11 +24,11 @@ def send_test_email(ui_config: dict, recipient: str = "") -> dict:
     to_addr = recipient.strip() or (conf.get("GLOBAL_MAIL_RECIPIENT") or defaults.get("GLOBAL_MAIL_RECIPIENT", "")).strip()
 
     if not host:
-        return {"success": False, "message": "GLOBAL_SMTP_HOST ist nicht konfiguriert."}
+        return {"success": False, "message": "GLOBAL_SMTP_HOST is not configured.", "message_code": "smtp_host_missing"}
     if not to_addr:
-        return {"success": False, "message": "Kein Empfänger angegeben (GLOBAL_MAIL_RECIPIENT)."}
+        return {"success": False, "message": "No recipient configured (GLOBAL_MAIL_RECIPIENT).", "message_code": "smtp_recipient_missing"}
     if not sender:
-        return {"success": False, "message": "Kein Absender konfiguriert (GLOBAL_MAIL_SENDER oder GLOBAL_SMTP_USER)."}
+        return {"success": False, "message": "No sender configured (GLOBAL_MAIL_SENDER or GLOBAL_SMTP_USER).", "message_code": "smtp_sender_missing"}
 
     diag = f"[Host={host}:{port}, TLS={use_tls}, User={'✓' if user else '✗ (leer)'}, Pass={'✓' if password else '✗ (leer)'}]"
 
@@ -65,13 +65,13 @@ def send_test_email(ui_config: dict, recipient: str = "") -> dict:
                     smtp.ehlo()
                 _login_if_needed(smtp)
                 smtp.send_message(msg)
-        return {"success": True, "message": f"Test-E-Mail erfolgreich gesendet an {to_addr}."}
+        return {"success": True, "message": f"Test email sent to {to_addr}.", "message_code": "smtp_test_sent", "message_params": {"recipient": to_addr}}
     except smtplib.SMTPAuthenticationError as e:
         err = e.smtp_error.decode(errors="replace") if isinstance(e.smtp_error, bytes) else str(e)
-        return {"success": False, "message": f"Authentifizierungsfehler: {err} {diag}"}
+        return {"success": False, "message": f"Authentication failed: {err} {diag}", "message_code": "smtp_auth_failed"}
     except smtplib.SMTPException as e:
-        return {"success": False, "message": f"SMTP-Fehler: {e} {diag}"}
+        return {"success": False, "message": f"SMTP error: {e} {diag}", "message_code": "smtp_failed"}
     except OSError as e:
-        return {"success": False, "message": f"Verbindungsfehler: {e} {diag}"}
+        return {"success": False, "message": f"Connection failed: {e} {diag}", "message_code": "smtp_connection_failed"}
     except Exception as e:
-        return {"success": False, "message": f"Fehler: {e} {diag}"}
+        return {"success": False, "message": f"Unexpected error: {e} {diag}", "message_code": "smtp_failed"}

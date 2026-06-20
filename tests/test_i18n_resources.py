@@ -74,7 +74,7 @@ def test_javascript_translation_keys_exist_in_both_resources():
     for path in (ROOT / "ui" / "js").rglob("*.js"):
         source = path.read_text(encoding="utf-8")
         referenced.update(re.findall(
-            r"['\"]((?:app|dashboard|history|jobs|language|nav|reports|restore|restoreTests|schedule|settings|sidebar|storage|wizard)\.[a-zA-Z0-9.]+)['\"]",
+            r"['\"]((?:api|app|dashboard|history|jobs|language|nav|reports|restore|restoreTests|schedule|settings|sidebar|storage|wizard)\.[a-zA-Z0-9.]+)['\"]",
             source,
         ))
         referenced.update(
@@ -134,6 +134,25 @@ def test_job_health_error_codes_have_translations():
     assert {f"settings.health.jobErrors.{code}" for code in codes} <= keys
 
 
+def test_backend_message_codes_have_translations():
+    codes = set()
+    for path in (ROOT / "api").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        codes.update(re.findall(r'["\']message_code["\']\s*:\s*["\']([a-z0-9_]+)["\']', source))
+
+    keys = _flatten_keys(_load("de"))
+    assert codes
+    assert {f"api.messages.{code}" for code in codes} <= keys
+
+
+def test_api_client_resolves_codes_without_displaying_raw_messages():
+    source = (ROOT / "ui" / "js" / "api" / "client.js").read_text(encoding="utf-8")
+
+    assert "api.messages.${messageCode}" in source
+    assert "api.errors.${errorCode}" in source
+    assert "data.message || data.error" not in source
+
+
 def test_restore_pages_use_localization_helpers_for_dynamic_content():
     restore = (ROOT / "ui" / "js" / "pages" / "restore.js").read_text(encoding="utf-8")
     restore_tests = (ROOT / "ui" / "js" / "pages" / "restore-tests.js").read_text(encoding="utf-8")
@@ -151,3 +170,23 @@ def test_restore_pages_use_localization_helpers_for_dynamic_content():
         "Geprüfte Stichproben-Dateien",
     ):
         assert text not in restore_tests
+
+
+def test_migrated_pages_do_not_display_raw_backend_errors():
+    pages = (
+        "history.js",
+        "jobs.js",
+        "reports.js",
+        "restore.js",
+        "restore-tests.js",
+        "storage.js",
+        "wizard.js",
+    )
+    for name in pages:
+        source = (ROOT / "ui" / "js" / "pages" / name).read_text(encoding="utf-8")
+        assert "throw new Error(data.error" not in source, name
+        assert "message: data.message" not in source, name
+
+    settings = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
+    assert "throw new Error(data.error" not in settings
+    assert "storageboxConnMsg = d.message" not in settings

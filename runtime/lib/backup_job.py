@@ -187,10 +187,10 @@ class BackupJob:
         cfg = self.config
         _log_section("BACKUP START")
         logger.info("Job:   %s", cfg.job_name)
-        logger.info("Datum: %s", cfg.date_tag)
+        logger.info("Date: %s", cfg.date_tag)
         logger.info("Log:   %s", cfg.log_file)
         logger.info("")
-        logger.info("Effektive Konfiguration:")
+        logger.info("Effective configuration:")
         logger.info("  Repository:  %s", cfg.borg_repo or os.environ.get("BORG_REPO", ""))
         logger.info("  Compression: %s", cfg.borg_compression)
         logger.info(
@@ -198,10 +198,10 @@ class BackupJob:
             cfg.borg_keep_daily, cfg.borg_keep_weekly,
             cfg.borg_keep_monthly, cfg.borg_keep_yearly,
         )
-        logger.info("  Log-Dir:     %s (%d Tage)", cfg.log_dir, cfg.log_retention_days)
+        logger.info("  Log-Dir:     %s (%d days)", cfg.log_dir, cfg.log_retention_days)
         logger.info("  Cache:       %s", cfg.borg_cache_dir)
         if self.mail_config and self.mail_config.recipient:
-            logger.info("  Mail:        %s (bei Fehler)", self.mail_config.recipient)
+            logger.info("  Mail:        %s (on error)", self.mail_config.recipient)
         if self.vm_manager is not None:
             logger.info("  VM Timeout:  %ds", self.vm_manager.config.shutdown_timeout)
         logger.info("")
@@ -215,10 +215,10 @@ class BackupJob:
         if exc_type is not None and not self._skip_finish:
             if self._borg_exit == 99:
                 self._borg_exit = 2
-            logger.error("Job durch Exception abgebrochen: %s", exc_val)
+            logger.error("Job aborted by exception: %s", exc_val)
 
         if not self._skip_finish:
-            _log_section("PHASE 5: CLEANUP & ABSCHLUSS")
+            _log_section("PHASE 5: CLEANUP & COMPLETION")
 
         self._restart_docker()
 
@@ -290,10 +290,10 @@ class BackupJob:
             self._write_mini_log(
                 "USB_NOT_MOUNTED",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Übersprungen wegen fehlendem USB-Laufwerk",
-                    f"Mount-Pfad: {mount_path}",
-                    "Status: Verzeichnis existiert nicht",
-                    "Grund: USB-Laufwerk nicht angeschlossen oder nicht gemountet",
+                    f"Borg Backup ({self.config.backup_type}) - Skipped because the USB drive is missing",
+                    f"Mount path: {mount_path}",
+                    "Status: directory does not exist",
+                    "Reason: USB drive is not connected or mounted",
                 ],
             )
             notify(
@@ -302,7 +302,7 @@ class BackupJob:
                 description=f"USB-Laufwerk nicht gemountet ({mount_path}). Bitte anschließen.",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
-            self._skip_reason = f"USB nicht gemountet: {mount_path}"
+            self._skip_reason = f"USB is not mounted: {mount_path}"
             self._persist_skip_status_once()
             raise SystemExit(0)
 
@@ -310,10 +310,10 @@ class BackupJob:
             self._write_mini_log(
                 "USB_NOT_WRITABLE",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Übersprungen wegen schreibgeschütztem USB-Laufwerk",
-                    f"Mount-Pfad: {mount_path}",
-                    "Status: Nicht beschreibbar",
-                    "Grund: USB-Laufwerk ist read-only oder keine Schreibrechte",
+                    f"Borg Backup ({self.config.backup_type}) - Skipped because the USB drive is read-only",
+                    f"Mount path: {mount_path}",
+                    "Status: not writable",
+                    "Reason: USB drive is read-only or lacks write permissions",
                 ],
             )
             notify(
@@ -322,7 +322,7 @@ class BackupJob:
                 description=f"USB-Laufwerk nicht beschreibbar ({mount_path}).",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
-            self._skip_reason = f"USB nicht beschreibbar: {mount_path}"
+            self._skip_reason = f"USB is not writable: {mount_path}"
             self._persist_skip_status_once()
             raise SystemExit(0)
 
@@ -365,17 +365,17 @@ class BackupJob:
 
             progress = (resync_pos * 100 // resync_size) if resync_size > 0 else 0
             logger.info(
-                "Parity aktiv (%s %d%%) - Backup wird übersprungen.",
+                "Parity operation active (%s %d%%); backup will be skipped.",
                 resync_action,
                 progress,
             )
             self._write_mini_log(
                 "SKIPPED_PARITY",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Übersprungen wegen laufender Parity-Operation",
+                    f"Borg Backup ({self.config.backup_type}) - Skipped because a parity operation is running",
                     f"Operation: {resync_action}",
-                    f"Fortschritt: {progress}% ({resync_pos}/{resync_size})",
-                    "Grund: System-Performance schonen während Parity-Operation",
+                    f"Progress: {progress}% ({resync_pos}/{resync_size})",
+                    "Reason: Preserve system performance during the parity operation",
                 ],
             )
             notify(
@@ -384,7 +384,7 @@ class BackupJob:
                 description=f"Parity-{resync_action} läuft ({progress}%). Backup wird später ausgeführt.",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
-            self._skip_reason = f"Parity aktiv: {resync_action} ({progress}%)"
+            self._skip_reason = f"Parity operation active: {resync_action} ({progress}%)"
             self._persist_skip_status_once()
             raise SystemExit(0)
 
@@ -395,23 +395,23 @@ class BackupJob:
         Lock-File wird NICHT hier erstellt – das übernimmt __enter__.
         Fehlende Backup-Pfade sind Warnungen (kein Abbruch).
         """
-        _log_section("PHASE 1: VALIDIERUNG")
-        logger.info("Validiere Voraussetzungen...")
+        _log_section("PHASE 1: VALIDATION")
+        logger.info("Validating prerequisites...")
 
-        logger.info("  [1/3] Prüfe Backup-Pfade...")
+        logger.info("  [1/3] Checking backup paths...")
         missing = [p for p in self.config.backup_paths if not p.is_dir()]
         existing_count = len(self.config.backup_paths) - len(missing)
         if missing:
-            logger.warning("  WARNUNG: %d Pfad(e) existieren nicht:", len(missing))
+            logger.warning("  WARNING: %d path(s) do not exist:", len(missing))
             for p in missing:
                 logger.warning("    - %s", p)
         logger.info(
-            "  OK - %d/%d Pfade gefunden", existing_count, len(self.config.backup_paths)
+            "  OK - %d/%d paths found", existing_count, len(self.config.backup_paths)
         )
 
-        logger.info("  [2/3] Prüfe Borg Backup Installation...")
+        logger.info("  [2/3] Checking Borg Backup installation...")
         if not shutil.which("borg"):
-            logger.error("  FEHLER: borg command nicht gefunden")
+            logger.error("  ERROR: borg command not found")
             raise SystemExit(1)
         try:
             proc = subprocess.run(
@@ -422,19 +422,19 @@ class BackupJob:
             borg_version = "unknown"
         logger.info("  OK - %s", borg_version)
 
-        logger.info("  [3/3] Prüfe Cache-Verzeichnis...")
+        logger.info("  [3/3] Checking cache directory...")
         self.config.borg_cache_dir.mkdir(parents=True, exist_ok=True)
         logger.info("  OK - %s", self.config.borg_cache_dir)
 
-        logger.info("Validierung erfolgreich abgeschlossen")
+        logger.info("Validation completed successfully")
 
     def cleanup_old_logs(self) -> None:
         """Löscht Backup-Logs älter als log_retention_days."""
-        _log_section("PHASE 2: VORBEREITUNG")
+        _log_section("PHASE 2: PREPARATION")
         if not self.config.log_dir.is_dir() or self.config.log_retention_days <= 0:
             return
         logger.info(
-            "Bereinige Logs älter als %d Tage...", self.config.log_retention_days
+            "Removing logs older than %d days...", self.config.log_retention_days
         )
         cutoff = time.time() - (self.config.log_retention_days * 86400)
         pattern = f"Borg-Backup_{self.config.backup_type}--*.log"
@@ -442,9 +442,9 @@ class BackupJob:
             try:
                 if log_path.stat().st_mtime < cutoff:
                     log_path.unlink()
-                    logger.debug("Log gelöscht: %s", log_path)
+                    logger.debug("Deleted log: %s", log_path)
             except OSError as exc:
-                logger.warning("Konnte Log nicht löschen %s: %s", log_path, exc)
+                logger.warning("Could not delete log %s: %s", log_path, exc)
 
     # ------------------------------------------------------------------
     # Interne Methoden
@@ -464,7 +464,7 @@ class BackupJob:
                         os.kill(int(stale_pid), 0)
                     except (ValueError, ProcessLookupError):
                         logger.warning(
-                            "Verwaiste Lock-Datei gefunden (PID: %s), überschreibe Lock.",
+                            "Found stale lock file (PID: %s); replacing lock.",
                             stale_pid,
                         )
                     except PermissionError:
@@ -485,7 +485,7 @@ class BackupJob:
                 holder_pid = stale_pid
             fd.close()
             logger.error(
-                "FEHLER: Backup läuft bereits (PID: %s, Lock: %s)",
+                "ERROR: Backup is already running (PID: %s, lock: %s)",
                 holder_pid or "?",
                 self.config.lock_file,
             )
@@ -496,7 +496,7 @@ class BackupJob:
         fd.write(f"{os.getpid()}\n")
         fd.flush()
         self._lock_fd = fd
-        logger.info("Lock-File erstellt (PID: %d)", os.getpid())
+        logger.info("Created lock file (PID: %d)", os.getpid())
 
     def _remove_lock(self) -> None:
         """Entfernt Lock-File."""
@@ -510,7 +510,7 @@ class BackupJob:
                     fd.close()
             self.config.lock_file.unlink(missing_ok=True)
         except OSError as exc:
-            logger.warning("Konnte Lock-File nicht entfernen: %s", exc)
+            logger.warning("Could not remove lock file: %s", exc)
 
     def _restart_docker(self) -> None:
         """Startet Docker-Container und VMs neu, falls sie gestoppt wurden."""
@@ -534,7 +534,7 @@ class BackupJob:
             self._final_msg = f"Backup beendet (borg exit {exit_code})."
 
         if exit_code == 0:
-            logger.info("Borg Backup erfolgreich abgeschlossen (Exit 0)")
+            logger.info("Borg backup completed successfully (exit 0)")
             notify(
                 "info",
                 "Backup erfolgreich",
@@ -542,7 +542,7 @@ class BackupJob:
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
         elif exit_code == 1:
-            logger.info("Borg Backup mit Warnungen (Exit 1)")
+            logger.info("Borg backup completed with warnings (exit 1)")
             notify(
                 "warning",
                 "Backup mit Warnungen",
@@ -550,7 +550,7 @@ class BackupJob:
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
         else:
-            logger.info("Borg Backup fehlgeschlagen (Exit %d)", exit_code)
+            logger.info("Borg backup failed (exit %d)", exit_code)
             notify(
                 "alert",
                 "BACKUP FEHLGESCHLAGEN",
@@ -561,7 +561,7 @@ class BackupJob:
         self._save_status(duration)
 
         if exit_code >= 2 and self.mail_config is not None:
-            logger.info("Versende Fehler-Mail...")
+            logger.info("Sending failure email...")
             send_backup_log_mail(
                 config=self.mail_config,
                 backup_type=self.config.backup_type,
@@ -572,28 +572,28 @@ class BackupJob:
             )
         else:
             logger.info(
-                "Kein Mail-Versand (Erfolg/Warnung wird in Weekly Summary berichtet)"
+                "No email sent (success/warning is included in the weekly summary)"
             )
 
-        logger.info("Ende: %s", self.config.job_name)
-        _log_section("BACKUP ABGESCHLOSSEN")
+        logger.info("End: %s", self.config.job_name)
+        _log_section("BACKUP COMPLETED")
 
     def _save_skip_status(self) -> None:
         """Speichert Skip-Läufe als Warning in den normalen Status-Dateien (History sichtbar)."""
         from lib.status import BackupStatus
 
         duration = max(0, int(time.time() - self._start_time))
-        reason = self._skip_reason or "Backup wurde übersprungen"
+        reason = self._skip_reason or "Backup was skipped"
         reason_low = reason.lower()
-        if reason_low.startswith("parity aktiv"):
+        if reason_low.startswith("parity operation active"):
             reason_code = "parity_active"
-        elif reason_low.startswith("usb nicht gemountet"):
+        elif reason_low.startswith("usb is not mounted"):
             reason_code = "usb_not_mounted"
-        elif reason_low.startswith("usb nicht beschreibbar"):
+        elif reason_low.startswith("usb is not writable"):
             reason_code = "usb_not_writable"
         else:
             reason_code = "skipped"
-        logger.info("Skip-Status wird gespeichert: %s", reason)
+        logger.info("Saving skipped status: %s", reason)
         bs = BackupStatus(
             backup_type=self.config.backup_type,
             location=self.config.backup_location,
@@ -601,7 +601,7 @@ class BackupJob:
             duration_seconds=duration,
             exit_code=0,
             status="skipped",
-            error_message=f"Übersprungen: {reason}",
+            error_message=f"Skipped: {reason}",
             skip_reason_code=reason_code,
             skip_reason_text=reason,
             log_file=str(self.config.log_file),
@@ -620,7 +620,7 @@ class BackupJob:
             bs.save(self.config.status_dir)
             self._skip_status_written = True
         except OSError as exc:
-            logger.warning("Konnte Skip-Status nicht speichern: %s", exc)
+            logger.warning("Could not save skipped status: %s", exc)
 
     def _persist_skip_status_once(self) -> None:
         if self._skip_status_written:
@@ -672,7 +672,7 @@ class BackupJob:
         try:
             bs.save(self.config.status_dir)
         except OSError as exc:
-            logger.warning("Konnte Status nicht speichern: %s", exc)
+            logger.warning("Could not save status: %s", exc)
 
     def _get_repository_size(self) -> int:
         """
@@ -756,7 +756,7 @@ class BackupJob:
             content = "\n".join(f"[{ts}] {line}" for line in lines) + "\n"
             mini_log.write_text(content, encoding="utf-8")
         except OSError as exc:
-            logger.warning("Konnte Mini-Log nicht schreiben: %s", exc)
+            logger.warning("Could not write mini log: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -801,13 +801,13 @@ if __name__ == "__main__":
         print(f"borg_cache_dir:      {cfg.borg_cache_dir}")
         print(f"log_retention_days:  {cfg.log_retention_days}")
         print(f"status_dir:          {cfg.status_dir}")
-        print(f"borg_repo:           {cfg.borg_repo or '(aus BORG_REPO Env-Var)'}")
+        print(f"borg_repo:           {cfg.borg_repo or '(from BORG_REPO environment variable)'}")
         print(f"check_flag_file:     {cfg.borg_check_flag_file}")
         print(f"check_interval_days: {cfg.borg_check_interval_days}")
     elif args.command == "check-parity":
         job = BackupJob(cfg)
         job.check_parity()
-        print("Keine aktive Parity-Operation gefunden.")
+        print("No active parity operation found.")
     elif args.command == "check-usb":
         job = BackupJob(cfg)
         job.check_usb_mount(Path(args.mount_path))

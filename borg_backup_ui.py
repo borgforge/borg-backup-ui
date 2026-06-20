@@ -281,10 +281,10 @@ def bootstrap_data_layout(config: dict) -> None:
         src = SCRIPT_DIR / "runtime" / "config" / "backup.conf.example"
         if src.exists():
             shutil.copy2(src, conf_file)
-            _log(f"Initial backup.conf erstellt: {conf_file}")
+            _log(f"Created initial backup.conf: {conf_file}")
         else:
             conf_file.write_text("", encoding="utf-8")
-            _log(f"WARNUNG: backup.conf.example fehlt, leere backup.conf erstellt: {conf_file}")
+            _log(f"WARNING: backup.conf.example is missing; created empty backup.conf: {conf_file}")
 
     # Schema sync: add missing keys, keep legacy keys in explicit block.
     try:
@@ -292,11 +292,11 @@ def bootstrap_data_layout(config: dict) -> None:
         sync_result = sync_backup_conf_schema(config)
         if sync_result.get("changed"):
             _log(
-                "backup.conf Schema-Sync angewendet "
+                "Applied backup.conf schema sync "
                 f"(missing={sync_result.get('missing_added', 0)}, legacy={sync_result.get('legacy_keys', 0)})"
             )
     except Exception as exc:
-        _log(f"WARNUNG: backup.conf Schema-Sync fehlgeschlagen: {exc}")
+        _log(f"WARNING: backup.conf schema sync failed: {exc}")
 
 
 def setup_borg_path() -> None:
@@ -346,7 +346,7 @@ def setup_borg_path() -> None:
         os.environ["PATH"] = f"{prefix}:{current_path}" if current_path else prefix
         _log(f"Borg Binary aktiv: {active}")
     else:
-        _log("WARNUNG: Gebuendelte Borg-Binary nicht aktiv, nutze System-PATH.")
+        _log("WARNING: Bundled Borg binary is not active; using system PATH.")
 def setup_lib_path(config: dict) -> bool:
     """Fügt ausschließlich plugin-runtime lib/ hinzu (kein Fallback)."""
     plugin_lib_dir = SCRIPT_DIR / "runtime" / "lib"
@@ -1768,7 +1768,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             rc = proc.wait()
             if rc != 0:
                 stderr_out = (proc.stderr.read() or b"").decode("utf-8", errors="replace").strip()
-                log_line(f"Restore-Download Fehler (rc={rc}): {stderr_out[:500] or 'ohne stderr'}")
+                log_line(f"Restore download error (rc={rc}): {stderr_out[:500] or 'no stderr'}")
         except (BrokenPipeError, ConnectionResetError):
             proc.kill()
 
@@ -2887,7 +2887,7 @@ btn.addEventListener('click',doSetup);
         ctx = self._extract_request_context()
         _log(
             f'API error request_id={request_id} status={status} method={self.command} path={self.path} code={code} '
-            f'context={json.dumps(ctx, ensure_ascii=False)} message="{safe_message}"'
+            f'context={json.dumps(ctx, ensure_ascii=False)}'
         )
         try:
             p = urlparse(self.path).path
@@ -2997,7 +2997,7 @@ def main():
     try:
         bootstrap_data_layout(config)
     except Exception as exc:
-        _log(f"WARNUNG: Bootstrap übersprungen: {exc}")
+        _log(f"WARNING: Bootstrap skipped: {exc}")
 
     migration_ok = True
     migration_messages: list[str] = []
@@ -3020,7 +3020,7 @@ def main():
         migration_ok = False
         migration_messages.append(f"jobs_layout=error:{exc}")
         migration_details["jobs_layout"] = {"status": "error", "error": str(exc)}
-        _log(f"WARNUNG: Job-Datenmigration übersprungen: {exc}")
+        _log(f"WARNING: Job data migration skipped: {exc}")
 
     try:
         from config_api import migrate_storage_paths_from_global_data_dir
@@ -3053,7 +3053,7 @@ def main():
         migration_ok = False
         migration_messages.append(f"storage_paths=error:{exc}")
         migration_details["storage_paths"] = {"status": "error", "error": str(exc)}
-        _log(f"WARNUNG: Storage-Pfadmigration übersprungen: {exc}")
+        _log(f"WARNING: Storage path migration skipped: {exc}")
     reason_code = "no_changes"
     reason_text = "Keine Änderungen nötig"
     storage_info = migration_details.get("storage_paths", {})
@@ -3075,7 +3075,7 @@ def main():
 
     lib_found = setup_lib_path(config)
     if not lib_found:
-        _log("WARNUNG: plugin runtime/lib nicht gefunden.")
+        _log("WARNING: plugin runtime/lib was not found.")
 
     _apply_runtime_dirs_from_conf(config)
 
@@ -3093,18 +3093,18 @@ def main():
         from schedule_api import apply_all_schedules, prune_orphaned_schedules
         pruned = prune_orphaned_schedules(config, log_fn=_log)
         if pruned.get("changed"):
-            _log(f"AUTO-PRUNE schedules.json abgeschlossen: removed={len(pruned.get('removed_keys', []))}")
+            _log(f"AUTO-PRUNE schedules.json completed: removed={len(pruned.get('removed_keys', []))}")
         apply_all_schedules(config)
         _log("Cron-Schedules angewendet.")
     except Exception as exc:
-        _log(f"WARNUNG: Cron-Schedules konnten nicht angewendet werden: {exc}")
+        _log(f"WARNING: Cron schedules could not be applied: {exc}")
 
     port = int(config["PORT"])
     bind = config["BIND"]
     server = ThreadedHTTPServer((bind, port), BackupUIHandler)
-    _log(f"Borg Backup UI gestartet: http://{bind}:{port}")
+    _log(f"Borg Backup UI started: http://{bind}:{port}")
     _log(f"BACKUP_SCRIPTS_DIR = {config['BACKUP_SCRIPTS_DIR']}")
-    _log(f"BORG_SCRIPTS_DIR   = {config.get('BORG_SCRIPTS_DIR', '(nicht gesetzt)')}")
+    _log(f"BORG_SCRIPTS_DIR   = {config.get('BORG_SCRIPTS_DIR', '(not set)')}")
     _log(f"STATUS_DIR         = {config['STATUS_DIR']}")
 
     try:

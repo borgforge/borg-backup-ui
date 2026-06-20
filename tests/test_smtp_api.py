@@ -30,7 +30,8 @@ def test_send_test_email_requires_recipient(monkeypatch):
     result = send_test_email({})
 
     assert result["success"] is False
-    assert "Empfänger" in result["message"]
+    assert result["message_code"] == "smtp_recipient_missing"
+    assert "recipient" in result["message"]
 
 
 def test_send_test_email_requires_sender(monkeypatch):
@@ -42,4 +43,5 @@ def test_send_test_email_requires_sender(monkeypatch):
     result = send_test_email({})
 
     assert result["success"] is False
-    assert "Absender" in result["message"]
+    assert result["message_code"] == "smtp_sender_missing"
+    assert "sender" in result["message"]

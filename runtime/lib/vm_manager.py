@@ -63,7 +63,7 @@ class VmConfig:
             try:
                 return int(raw) if raw else default
             except ValueError:
-                logger.warning("Ungültiger Wert für %s ('%s'), verwende %d", key, raw, default)
+                logger.warning("Invalid value for %s ('%s'); using %d", key, raw, default)
                 return default
 
         return cls(
@@ -153,15 +153,15 @@ class VmManager:
             SystemExit(1): Wenn VMs nach Timeout noch laufen.
         """
         if not virsh_available():
-            logger.info("virsh ist nicht verfügbar – überspringe VM-Shutdown")
+            logger.info("virsh is unavailable; skipping VM shutdown")
             return VmShutdownResult()
 
         running = self._get_running_vms()
         if not running:
-            logger.info("Keine laufenden VMs")
+            logger.info("No running VMs")
             return VmShutdownResult()
 
-        logger.info("Gefunden: %d laufende VM(s)", len(running))
+        logger.info("Found %d running VM(s)", len(running))
         for vm in running:
             vm_id = self._get_vm_id(vm)
             logger.info("  - %-30s (ID: %s)", vm, vm_id)
@@ -172,7 +172,7 @@ class VmManager:
             f"VM wird in {self.config.warning_minutes} Minuten heruntergefahren!"
         )
         logger.info(
-            "Sende Warnung an alle %d VM(s) (Wartezeit: %d Minuten)",
+            "Sending warning to all %d VM(s) (wait time: %d minutes)",
             len(running), self.config.warning_minutes,
         )
         self._warn_vms_parallel(running, warning_msg)
@@ -180,14 +180,14 @@ class VmManager:
         # Phase 2: Zentraler Countdown
         for remaining in range(self.config.warning_minutes, 0, -1):
             if remaining == 1:
-                logger.info("Letzte Minute vor Shutdown – sende finale Warnung an alle VMs...")
+                logger.info("Final minute before shutdown; sending final warning to all VMs...")
                 self._warn_vms_parallel(running, "ACHTUNG: System faehrt JETZT herunter!")
             else:
-                logger.info("Warte noch %d Minute(n) bis zum VM-Shutdown...", remaining)
+                logger.info("Waiting %d more minute(s) before VM shutdown...", remaining)
             time.sleep(60)
 
         # Phase 3: Graceful Shutdown
-        logger.info("Fahre %d VM(s) herunter (graceful shutdown)...", len(running))
+        logger.info("Shutting down %d VM(s) gracefully...", len(running))
         for vm in running:
             logger.info("  Shutdown: %s", vm)
             try:
@@ -196,13 +196,13 @@ class VmManager:
                     capture_output=True, timeout=30,
                 )
             except (subprocess.TimeoutExpired, OSError) as exc:
-                logger.warning("virsh shutdown %s fehlgeschlagen: %s", vm, exc)
+                logger.warning("virsh shutdown %s failed: %s", vm, exc)
 
         # Warten bis alle gestoppt
         if not self._wait_for_shutdown(timeout=self.config.shutdown_timeout):
             still_running = self._get_running_vms()
             logger.error(
-                "FEHLER: %d VM(s) konnten nicht heruntergefahren werden: %s",
+                "ERROR: %d VM(s) could not be shut down: %s",
                 len(still_running), still_running,
             )
             from lib.notifications import notify
@@ -214,7 +214,7 @@ class VmManager:
             )
             raise SystemExit(1)
 
-        logger.info("Alle VMs erfolgreich heruntergefahren")
+        logger.info("All VMs shut down successfully")
         return VmShutdownResult(stopped_vms=list(running))
 
     def start_all(self, result: VmShutdownResult) -> None:
@@ -227,16 +227,16 @@ class VmManager:
         if not virsh_available() or not result.stopped_vms:
             return
 
-        logger.info("Starte %d VM(s) wieder...", result.count)
+        logger.info("Restarting %d VM(s)...", result.count)
         for vm in result.stopped_vms:
-            logger.info("  Starte: %s", vm)
+            logger.info("  Starting: %s", vm)
             try:
                 subprocess.run(
                     ["virsh", "start", vm],
                     capture_output=True, timeout=30,
                 )
             except (subprocess.TimeoutExpired, OSError) as exc:
-                logger.warning("  WARNUNG: Konnte %s nicht starten: %s", vm, exc)
+                logger.warning("  WARNING: Could not start %s: %s", vm, exc)
 
         time.sleep(self.config.startup_wait)
 
@@ -244,13 +244,13 @@ class VmManager:
         running_count = len(running_after)
         if running_count == result.count:
             logger.info(
-                "Alle VMs erfolgreich neu gestartet (%d/%d)",
+                "All VMs restarted successfully (%d/%d)",
                 running_count, result.count,
             )
         else:
             failed = result.count - running_count
             logger.warning(
-                "WARNUNG: %d VM(s) konnten nicht gestartet werden (%d/%d laufen)",
+                "WARNING: %d VM(s) could not be started (%d/%d running)",
                 failed, running_count, result.count,
             )
             not_started = [
@@ -349,13 +349,13 @@ class VmManager:
                 self._send_windows_message(vm_name, message)
             else:
                 # Best-effort: beide Methoden versuchen
-                logger.info("  │  Unbekanntes Betriebssystem, versuche alle Methoden")
+                logger.info("  |  Unknown operating system; trying all methods")
                 self._send_wall_message(vm_name, message)
                 self._send_windows_message(vm_name, message)
         except (subprocess.TimeoutExpired, OSError, ValueError, RuntimeError) as exc:
-            logger.debug("send_message %s fehlgeschlagen: %s", vm_name, exc)
+            logger.debug("send_message %s failed: %s", vm_name, exc)
         finally:
-            logger.info("  └─ Nachricht gesendet")
+            logger.info("  +- Message sent")
 
     # ------------------------------------------------------------------
     # Interne Methoden
@@ -419,7 +419,7 @@ class VmManager:
                 try:
                     future.result()
                 except (subprocess.TimeoutExpired, OSError, ValueError, RuntimeError) as exc:
-                    logger.debug("Warnung an VM %s fehlgeschlagen: %s", vm, exc)
+                    logger.debug("Warning to VM %s failed: %s", vm, exc)
 
     def _warn_single_vm(self, vm_name: str, message: str) -> None:
         """Sendet Warnung an eine einzelne VM."""
@@ -431,29 +431,29 @@ class VmManager:
             job_name="Borg Backup (VMs)",
         )
         if qemu_agent_available(vm_name):
-            logger.info("  - VM: %s – QEMU Guest Agent verfügbar, sende Nachricht...", vm_name)
+            logger.info("  - VM: %s - QEMU Guest Agent available; sending message...", vm_name)
             self.send_message(vm_name, message)
         else:
-            logger.info("  - VM: %s – QEMU Guest Agent nicht verfügbar", vm_name)
+            logger.info("  - VM: %s - QEMU Guest Agent unavailable", vm_name)
 
     def _send_linux_message(self, vm_name: str, message: str) -> None:
         """Sendet Desktop-Notification + wall an alle Linux-Benutzer."""
         users = self.get_logged_in_users(vm_name)
         if users:
-            logger.info("  │  Gefundene Benutzer: %s", ", ".join(users))
+            logger.info("  |  Found users: %s", ", ".join(users))
             for user in users:
-                logger.info("  │  Verarbeite Benutzer: %s", user)
+                logger.info("  |  Processing user: %s", user)
                 uid = self._get_user_uid(vm_name, user)
                 if uid:
-                    logger.info("  │    UID ermittelt: %s", uid)
+                    logger.info("  |    Resolved UID: %s", uid)
                     self._send_notify_send(vm_name, user, uid, message)
                 else:
-                    logger.info("  │    Konnte UID nicht ermitteln")
+                    logger.info("  |    Could not resolve UID")
         else:
-            logger.info("  │  Keine angemeldeten Benutzer gefunden")
+            logger.info("  |  No signed-in users found")
 
         # wall als Fallback (an alle Terminals)
-        logger.info("  │  Sende zusätzlich 'wall' Nachricht...")
+        logger.info("  |  Also sending a wall message...")
         self._send_wall_message(vm_name, message)
 
     def _send_notify_send(self, vm_name: str, user: str, uid: str, message: str) -> None:
@@ -461,10 +461,10 @@ class VmManager:
         user_s = str(user or "").strip()
         uid_s = str(uid or "").strip()
         if not re.fullmatch(r"^[a-zA-Z0-9_.-]+$", user_s):
-            logger.warning("  │    Überspringe notify-send: ungültiger Benutzername '%s'", user_s)
+            logger.warning("  |    Skipping notify-send: invalid username '%s'", user_s)
             return
         if not re.fullmatch(r"^\d+$", uid_s):
-            logger.warning("  │    Überspringe notify-send: ungültige UID '%s'", uid_s)
+            logger.warning("  |    Skipping notify-send: invalid UID '%s'", uid_s)
             return
         safe_msg = str(message or "").strip()[:512]
         payload = json.dumps({
@@ -488,10 +488,10 @@ class VmManager:
         })
         status = self._guest_exec_and_wait(vm_name, payload)
         if status.get("ok"):
-            logger.info("  │    Benachrichtigung gesendet")
+            logger.info("  |    Notification sent")
             return
         detail = str(status.get("detail") or "unbekannte Ursache").strip()
-        logger.info("  │    Hinweis: Desktop-Benachrichtigung konnte nicht bestätigt werden (%s)", detail)
+        logger.info("  |    Note: desktop notification could not be confirmed (%s)", detail)
 
     def _send_wall_message(self, vm_name: str, message: str) -> None:
         """Sendet wall-Nachricht in Linux-VM."""
@@ -507,7 +507,7 @@ class VmManager:
         status = self._guest_exec_and_wait(vm_name, payload)
         if not status.get("ok"):
             detail = str(status.get("detail") or "unbekannte Ursache").strip()
-            logger.info("  │    Hinweis: wall-Nachricht konnte nicht bestätigt werden (%s)", detail)
+            logger.info("  |    Note: wall message could not be confirmed (%s)", detail)
 
     def _guest_exec_and_wait(self, vm_name: str, payload: str, *, timeout: int = 15) -> Dict[str, Any]:
         """
@@ -560,7 +560,7 @@ class VmManager:
 
     def _send_windows_message(self, vm_name: str, message: str) -> None:
         """Sendet msg.exe-Nachricht in Windows-VM."""
-        logger.info("  │  Sende Windows-Nachricht...")
+        logger.info("  |  Sending Windows message...")
         payload = json.dumps({
             "execute": "guest-exec",
             "arguments": {
@@ -702,11 +702,11 @@ if __name__ == "__main__":
             for vm in running:
                 print(f"  - {vm}")
         else:
-            print("Keine laufenden VMs")
+            print("No running VMs")
     elif args.command == "shutdown":
         result = manager.shutdown_all()
         print(f"Gestoppt: {result.stopped_vms}")
     elif args.command == "start":
-        print("start benötigt ein VmShutdownResult – nur im Backup-Kontext nutzbar")
+        print("start requires a VmShutdownResult and is only available in backup context")
     else:
         parser.print_help()

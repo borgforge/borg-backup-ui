@@ -104,7 +104,7 @@ def test_validate_target_dir_rejects_path_outside_allowed_roots(tmp_path: Path, 
     other.mkdir()
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {"RESTORE_ALLOWED_ROOTS": str(allowed)})
     cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    with pytest.raises(ValueError, match="außerhalb"):
+    with pytest.raises(ValueError, match="outside"):
         _validate_target_dir(str(other), cfg)
 
 
@@ -116,5 +116,5 @@ def test_validate_target_dir_rejects_nonexistent_directory(tmp_path: Path, monke
     missing = allowed / "missing-dir"
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {"RESTORE_ALLOWED_ROOTS": str(allowed)})
     cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    with pytest.raises(ValueError, match="existiert nicht"):
+    with pytest.raises(ValueError, match="does not exist"):
         _validate_target_dir(str(missing), cfg)

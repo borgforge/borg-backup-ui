@@ -51,7 +51,7 @@ async function berichtLoad() {
       fetch('/api/jobs'),
     ]);
     const data = await reportRes.json();
-    if (data.error) { _berichtMsg(reportsT('error', { message: data.error }), true); return; }
+    if (!reportRes.ok || data.error) { _berichtMsg(reportsT('error', { message: apiErrorMessage(data, reportRes.status) }), true); return; }
     const jobsData = jobsRes.ok ? await jobsRes.json() : { jobs: [] };
     const selected = (jobsData.jobs || []).find((j) => String(j.key) === String(jobKey));
     reportState.data = data;
@@ -421,8 +421,9 @@ async function berichtLoadBorgInfo() {
   _berichtBorgInfoMsg(reportsT('queryingBorgInfo'));
   document.getElementById('bericht-borginfo-cards').style.display = 'none';
   try {
-    const data = await (await fetch(`/api/restore/repo-stats?job=${encodeURIComponent(jobKey)}`)).json();
-    if (data.error) { _berichtBorgInfoMsg(reportsT('error', { message: data.error }), true); btn.disabled = false; btn.textContent = reportsT('load'); return; }
+    const res = await fetch(`/api/restore/repo-stats?job=${encodeURIComponent(jobKey)}`);
+    const data = await res.json();
+    if (!res.ok || data.error) { _berichtBorgInfoMsg(reportsT('error', { message: apiErrorMessage(data, res.status) }), true); btn.disabled = false; btn.textContent = reportsT('load'); return; }
     reportState.borgInfo = data;
     reportState.borgInfoLoaded = true;
     _berichtBorgInfoMsg('');

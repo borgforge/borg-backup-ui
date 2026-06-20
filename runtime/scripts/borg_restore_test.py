@@ -211,7 +211,7 @@ class RestoreTest:
         p = Path(pp_file)
         if p.is_file():
             return p.read_text(encoding="utf-8").strip()
-        raise FileNotFoundError(f"Passphrase-Datei nicht gefunden: {pp_file}")
+        raise FileNotFoundError(f"Passphrase file not found: {pp_file}")
 
     def _parse_smb_profiles(self) -> dict:
         raw = str(self.conf.get("SMB_PROFILES_JSON", "[]") or "[]")
@@ -257,7 +257,7 @@ class RestoreTest:
         profiles = self._parse_smb_profiles()
         profile = profiles.get(key)
         if not isinstance(profile, dict):
-            return False, f"SMB-Profil nicht gefunden: {key}"
+            return False, f"SMB profile not found: {key}"
 
         server = str(profile.get("server", "")).strip()
         share = str(profile.get("share", "")).strip().lstrip("/")
@@ -265,12 +265,12 @@ class RestoreTest:
         vers = str(profile.get("vers", "")).strip() or "3.0"
         sec = str(profile.get("sec", "")).strip()
         if not server or not share or not mount_path:
-            return False, f"SMB-Profil unvollständig: {key}"
+            return False, f"SMB profile is incomplete: {key}"
         pf = str(profile.get("password_file", "")).strip()
         if not pf:
             pf = f"/boot/config/borg-backup/secrets/.smb-{key}.cred"
         if not Path(pf).is_file():
-            return False, f"SMB-Credential-Datei fehlt: {pf}"
+            return False, f"SMB credentials file is missing: {pf}"
 
         Path(mount_path).mkdir(parents=True, exist_ok=True)
         if self._is_smb_mounted(mount_path):
@@ -284,7 +284,7 @@ class RestoreTest:
             capture_output=True, text=True, timeout=30, check=False
         )
         if res.returncode != 0:
-            return False, (res.stderr or res.stdout or "SMB-Mount fehlgeschlagen").strip()
+            return False, (res.stderr or res.stdout or "SMB mount failed").strip()
         return True, ""
 
     def _cleanup_smb_mount(self, repo: dict, mounted_by_me: bool) -> None:
@@ -350,13 +350,13 @@ class RestoreTest:
                 return True
         except Exception:
             # Bei beschädigter/inkompatibler Testdatei lieber erneut testen.
-            self.log("  Letzte Testdatei nicht lesbar → erneuter Test erforderlich")
+            self.log("  Latest test file is not readable; a new test is required")
             return True
         age_days = (time.time() - tf.stat().st_mtime) / 86400
         if age_days >= self.test_interval:
-            self.log(f"  Letzter Test vor {age_days:.0f} Tagen → fällig")
+            self.log(f"  Last test was {age_days:.0f} days ago; test is due")
             return True
-        self.log(f"  Letzter Test vor {age_days:.0f} Tagen → noch nicht fällig (Intervall: {self.test_interval}d)")
+        self.log(f"  Last test was {age_days:.0f} days ago; not due yet (interval: {self.test_interval}d)")
         return False
 
     # ── Fehleranalyse ──────────────────────────────────────────────────────────
@@ -365,24 +365,24 @@ class RestoreTest:
     def _analyze_error(output: str) -> dict:
         lo = output.lower()
         if "timed out" in lo or "timeout" in lo:
-            return {"category": "timeout",              "details": "Borg-Befehl hat das konfigurierte Timeout überschritten"}
+            return {"category": "timeout",              "details": "Borg command exceeded the configured timeout"}
         if "passphrase" in lo and ("wrong" in lo or "incorrect" in lo):
-            return {"category": "authentication",       "details": "Falsches Passwort oder Passphrase-Datei"}
+            return {"category": "authentication",       "details": "Incorrect password or passphrase file"}
         if "not found" in lo or ("does not exist" in lo and "repository" in lo):
-            return {"category": "repository_missing",   "details": "Repository nicht gefunden oder nicht erreichbar"}
+            return {"category": "repository_missing",   "details": "Repository not found or unreachable"}
         if "locked" in lo:
-            return {"category": "repository_locked",    "details": "Repository gesperrt (anderer Borg-Prozess läuft?)"}
+            return {"category": "repository_locked",    "details": "Repository is locked (another Borg process may be running)"}
         if "corrupt" in lo or "integrity" in lo or "checksum" in lo:
-            return {"category": "data_corruption",      "details": "Daten-Korruption erkannt – Archive oder Chunks beschädigt"}
+            return {"category": "data_corruption",      "details": "Data corruption detected; archives or chunks are damaged"}
         if "permission denied" in lo or "access denied" in lo:
-            return {"category": "permission",           "details": "Fehlende Berechtigungen für Repository oder Dateien"}
+            return {"category": "permission",           "details": "Missing permissions for repository or files"}
         if "no space left" in lo or "disk full" in lo:
-            return {"category": "disk_full",            "details": "Kein Speicherplatz verfügbar"}
+            return {"category": "disk_full",            "details": "No disk space available"}
         if "network" in lo or "connection" in lo or "ssh" in lo or "timeout" in lo:
-            return {"category": "network",              "details": "Netzwerk-Fehler oder SSH-Verbindung fehlgeschlagen"}
+            return {"category": "network",              "details": "Network error or SSH connection failed"}
         if "archive" in lo and ("not found" in lo or "does not exist" in lo):
-            return {"category": "archive_missing",      "details": "Archive nicht gefunden im Repository"}
-        return {"category": "unknown",                  "details": "Unbekannter Fehler – siehe Log für Details"}
+            return {"category": "archive_missing",      "details": "Archive not found in repository"}
+        return {"category": "unknown",                  "details": "Unknown error; see the log for details"}
 
     @staticmethod
     def _failure_code_from_category(category: str) -> str:
@@ -417,7 +417,7 @@ class RestoreTest:
                 "step_id": sid,
                 "status": "not_tested",
                 "duration_ms": 0,
-                "message": "Nicht geprüft",
+                "message": "Not tested",
                 "command": "",
                 "error_code": "",
                 "timestamp": now,
@@ -438,7 +438,7 @@ class RestoreTest:
         self.log(f"  Repository: {path}")
 
         if self.args.dry_run:
-            self.log("  [dry-run] Übersprungen")
+            self.log("  [dry-run] Skipped")
             return 2
 
         if not self._should_test(key):
@@ -454,15 +454,15 @@ class RestoreTest:
                         "step_id": "repo_reachable",
                         "status": "failed",
                         "duration_ms": 0,
-                        "message": "SMB-Mount fehlgeschlagen",
+                        "message": "SMB mount failed",
                         "command": "",
                         "error_code": "RT_SMB_MOUNT_FAILED",
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     })
                     self._mark_not_tested(steps, "repo_reachable")
-                    self.log(f"  ⊘ SMB-Mount fehlgeschlagen: {smb_err}")
+                    self.log(f"  SKIP SMB mount failed: {smb_err}")
                     self._write(key, repo, "unavailable", 0, 0, 0, 0, "unknown", "", {}, [],
-                                exit_code=3, reason=f"SMB-Mount fehlgeschlagen: {smb_err}",
+                                exit_code=3, reason=f"SMB mount failed: {smb_err}",
                                 steps=steps, failure_code="RT_SMB_MOUNT_FAILED", failure_hint=smb_err)
                     return 3
             if not path.startswith("ssh://") and not Path(path).is_dir():
@@ -470,17 +470,17 @@ class RestoreTest:
                     "step_id": "repo_reachable",
                     "status": "failed",
                     "duration_ms": 0,
-                    "message": "Repository nicht erreichbar",
+                    "message": "Repository unreachable",
                     "command": "",
                     "error_code": "RT_REPO_UNAVAILABLE",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
                 self._mark_not_tested(steps, "repo_reachable")
-                self.log(f"  ⊘ Repository nicht verfügbar: {path}")
+                self.log(f"  SKIP Repository unavailable: {path}")
                 self._write(key, repo, "unavailable", 0, 0, 0, 0, "unknown", "", {}, [],
-                            exit_code=3, reason="Repository nicht gemountet oder nicht erreichbar",
+                            exit_code=3, reason="Repository is not mounted or reachable",
                             steps=steps, failure_code="RT_REPO_UNAVAILABLE",
-                            failure_hint="Repository nicht gemountet oder nicht erreichbar")
+                            failure_hint="Repository is not mounted or reachable")
                 return 3
 
             try:
@@ -492,11 +492,11 @@ class RestoreTest:
             env = self._env(passphrase)
             t0 = time.time()
 
-            self.log("Level 1: Repository-Integrität")
+            self.log("Level 1: Repository integrity")
             s0 = time.time()
             r = self._borg(["list", "--short", "--last", "1", path], env)
             if r.returncode != 0:
-                self.log(f"  ERROR: borg list fehlgeschlagen (Exit {r.returncode})")
+                self.log(f"  ERROR: borg list failed (exit {r.returncode})")
                 self.log(f"  {r.stderr[:300]}")
                 err = self._analyze_error(r.stderr)
                 code = self._failure_code_from_category(err["category"])
@@ -504,7 +504,7 @@ class RestoreTest:
                     "step_id": "repo_reachable",
                     "status": "failed",
                     "duration_ms": int((time.time() - s0) * 1000),
-                    "message": "Repository-Check fehlgeschlagen",
+                    "message": "Repository check failed",
                     "command": f"borg list --short --last 1 {path}",
                     "error_code": code,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -519,7 +519,7 @@ class RestoreTest:
                 "step_id": "repo_reachable",
                 "status": "passed",
                 "duration_ms": int((time.time() - s0) * 1000),
-                "message": "Repository erreichbar",
+                "message": "Repository reachable",
                 "command": f"borg list --short --last 1 {path}",
                 "error_code": "",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -527,12 +527,12 @@ class RestoreTest:
 
             last_archive = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
             if not last_archive:
-                self.log("  ERROR: Kein Archive gefunden")
+                self.log("  ERROR: No archive found")
                 steps.append({
                     "step_id": "archive_readable",
                     "status": "failed",
                     "duration_ms": 0,
-                    "message": "Kein Archiv gefunden",
+                    "message": "No archive found",
                     "command": f"borg list --short --last 1 {path}",
                     "error_code": "RT_ARCHIVE_MISSING",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -540,20 +540,20 @@ class RestoreTest:
                 self._mark_not_tested(steps, "archive_readable")
                 self._write(key, repo, "failed", int(time.time()-t0), 0, 0, 0, "unknown", "", {}, [],
                             exit_code=1, error_category="archive_missing",
-                            error_details="Kein Archive im Repository gefunden",
+                            error_details="No archive found in repository",
                             steps=steps, failure_code="RT_ARCHIVE_MISSING",
-                            failure_hint="Kein Archive im Repository gefunden")
+                            failure_hint="No archive found in repository")
                 return 1
             steps.append({
                 "step_id": "archive_readable",
                 "status": "passed",
                 "duration_ms": 0,
-                "message": f"Archiv gefunden: {last_archive}",
+                "message": f"Archive found: {last_archive}",
                 "command": f"borg list --short --last 1 {path}",
                 "error_code": "",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
-            self.log(f"  ✓ Level 1 OK – letztes Archive: {last_archive}")
+            self.log(f"  OK Level 1 - latest archive: {last_archive}")
 
             archive_stats: dict = {"original_size": 0, "compressed_size": 0, "deduplicated_size": 0, "files_count": 0}
             s_meta = time.time()
@@ -570,14 +570,14 @@ class RestoreTest:
                             "deduplicated_size": s.get("deduplicated_size", 0),
                             "files_count": s.get("nfiles", 0),
                         }
-                        self.log(f"  → Größe: {self._fmt_bytes(archive_stats['original_size'])}, Dateien: {archive_stats['files_count']}")
+                        self.log(f"  Size: {self._fmt_bytes(archive_stats['original_size'])}, files: {archive_stats['files_count']}")
                 except (json.JSONDecodeError, KeyError):
                     pass
             steps.append({
                 "step_id": "metadata_check",
                 "status": "passed" if r_info.returncode == 0 else "failed",
                 "duration_ms": int((time.time() - s_meta) * 1000),
-                "message": "Metadaten gelesen" if r_info.returncode == 0 else "Metadaten konnten nicht gelesen werden",
+                "message": "Metadata read" if r_info.returncode == 0 else "Metadata could not be read",
                 "command": f"borg info --json {path}::{last_archive}",
                 "error_code": "" if r_info.returncode == 0 else "RT_METADATA_CHECK_FAILED",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -589,7 +589,7 @@ class RestoreTest:
                     "step_id": "restore_probe",
                     "status": "not_tested",
                     "duration_ms": 0,
-                    "message": "Nicht geprüft (Level 1)",
+                    "message": "Not tested (Level 1)",
                     "command": "",
                     "error_code": "",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -598,7 +598,7 @@ class RestoreTest:
                     "step_id": "integrity_check",
                     "status": "not_tested",
                     "duration_ms": 0,
-                    "message": "Nicht geprüft (Level 1)",
+                    "message": "Not tested (Level 1)",
                     "command": "",
                     "error_code": "",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -607,15 +607,15 @@ class RestoreTest:
                     "step_id": "cleanup",
                     "status": "passed",
                     "duration_ms": 0,
-                    "message": "Cleanup abgeschlossen",
+                    "message": "Cleanup completed",
                     "command": "",
                     "error_code": "",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
                 self._write(key, repo, "success", duration, 0, 0, 0, "not_applicable", last_archive, archive_stats, [],
-                            exit_code=0, test_coverage_pct=0.0, reason="Nur Level 1 konfiguriert",
+                            exit_code=0, test_coverage_pct=0.0, reason="Only Level 1 is configured",
                             steps=steps)
-                self.log(f"✅ Restore-Test erfolgreich ({duration}s)")
+                self.log(f"OK Restore test succeeded ({duration}s)")
                 return 0
 
             self.log("Level 2: Extract Dry-Run")
@@ -624,7 +624,7 @@ class RestoreTest:
             full_count = len(r_count.stdout.splitlines()) if r_count.returncode == 0 else 0
             test_count = max(100, full_count * self.min_coverage // 100) if full_count else 100
             test_count = min(test_count, self.max_entries)
-            self.log(f"  → Prüfe {test_count} von {full_count} Einträgen")
+            self.log(f"  Testing {test_count} of {full_count} entries")
 
             r_list = self._borg(["list", "--json-lines", f"{path}::{last_archive}"], env, timeout=300)
             tested_entries: list = []
@@ -653,8 +653,8 @@ class RestoreTest:
                 force_chunk = True
 
             if force_chunk and tested_entries:
-                reason = f"Typ-Regel ({btype})" if btype.strip().lower() in self.force_chunk_types else f"Archivgröße {archive_size_gb:.1f} GB"
-                self.log(f"  → Chunk-Modus aktiv ({reason})")
+                reason = f"type rule ({btype})" if btype.strip().lower() in self.force_chunk_types else f"archive size {archive_size_gb:.1f} GB"
+                self.log(f"  Chunk mode enabled ({reason})")
                 failed_chunk = None
                 tested_files_only = [e[2:] for e in tested_entries if e.startswith("- ")]
                 random.shuffle(tested_files_only)
@@ -672,7 +672,7 @@ class RestoreTest:
                         "step_id": "restore_probe",
                         "status": "failed",
                         "duration_ms": int((time.time() - s_probe) * 1000),
-                        "message": "Restore-Probe fehlgeschlagen",
+                        "message": "Restore probe failed",
                         "command": "borg extract --dry-run <chunked>",
                         "error_code": code,
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -693,7 +693,7 @@ class RestoreTest:
                         "step_id": "restore_probe",
                         "status": "failed",
                         "duration_ms": int((time.time() - s_probe) * 1000),
-                        "message": "Restore-Probe fehlgeschlagen",
+                        "message": "Restore probe failed",
                         "command": f"borg extract --dry-run {path}::{last_archive}",
                         "error_code": code,
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -709,7 +709,7 @@ class RestoreTest:
                 "step_id": "restore_probe",
                 "status": "passed",
                 "duration_ms": int((time.time() - s_probe) * 1000),
-                "message": "Restore-Probe erfolgreich",
+                "message": "Restore probe succeeded",
                 "command": "borg extract --dry-run",
                 "error_code": "",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -723,14 +723,14 @@ class RestoreTest:
             error_details = ""
 
             if self.test_level == 3:
-                self.log("Level 3: Sample Restore (SHA256-Validierung)")
+                self.log("Level 3: Sample restore (SHA256 validation)")
                 l3["enabled"] = True
                 regular = self._collect_level3_legacy_pool(path, last_archive, env, limit=1000) if self.level3_legacy_sampling else [e[2:] for e in tested_entries if e.startswith("- ")]
                 sample = random.sample(regular, min(self.sample_size, len(regular))) if regular else []
                 if not sample:
                     exit_code = 1
                     error_category = "archive_missing"
-                    error_details = "Keine regulären Dateien für Level-3-Stichprobe gefunden"
+                    error_details = "No regular files found for the Level 3 sample"
                 checksums: list = []
                 failed_files: list = []
                 for fpath in sample:
@@ -753,14 +753,14 @@ class RestoreTest:
                 if failed_files:
                     exit_code = 1
                     error_category = "sample_restore_failed"
-                    error_details = f"Sample Restore: {len(failed_files)}/{len(sample)} Dateien fehlgeschlagen"
+                    error_details = f"Sample restore: {len(failed_files)}/{len(sample)} files failed"
 
             if exit_code == 0:
                 steps.append({
                     "step_id": "integrity_check",
                     "status": "passed",
                     "duration_ms": 0,
-                    "message": "Integritäts-/Stichprobenprüfung erfolgreich",
+                    "message": "Integrity/sample check succeeded",
                     "command": "sha256 sample compare",
                     "error_code": "",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -769,7 +769,7 @@ class RestoreTest:
                     "step_id": "cleanup",
                     "status": "passed",
                     "duration_ms": 0,
-                    "message": "Cleanup abgeschlossen",
+                    "message": "Cleanup completed",
                     "command": "remove temp test data",
                     "error_code": "",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -780,7 +780,7 @@ class RestoreTest:
                     "step_id": "integrity_check",
                     "status": "failed",
                     "duration_ms": 0,
-                    "message": "Integritäts-/Stichprobenprüfung fehlgeschlagen",
+                    "message": "Integrity/sample check failed",
                     "command": "sha256 sample compare",
                     "error_code": code,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -793,9 +793,9 @@ class RestoreTest:
                         exit_code=exit_code, test_coverage_pct=cov_pct, l3_details=l3, error_category=error_category, error_details=error_details,
                         steps=steps, failure_code=self._failure_code_from_category(error_category), failure_hint=error_details)
             if exit_code == 0:
-                self.log(f"✅ Restore-Test erfolgreich ({duration}s)")
+                self.log(f"OK Restore test succeeded ({duration}s)")
             else:
-                self.log(f"❌ Restore-Test fehlgeschlagen ({duration}s)")
+                self.log(f"ERROR Restore test failed ({duration}s)")
             return exit_code
         finally:
             self._cleanup_smb_mount(repo, smb_mounted_by_me)
@@ -874,11 +874,11 @@ class RestoreTest:
 def main() -> None:
     parser = argparse.ArgumentParser(description=f"Borg Restore Test v{VERSION}")
     parser.add_argument("--force",    action="store_true",
-                        help="Tests erzwingen, auch wenn noch nicht fällig")
+                        help="Force tests even when they are not due")
     parser.add_argument("--dry-run",  action="store_true",
-                        help="Zeigt was getestet würde, ohne Änderungen")
+                        help="Show what would be tested without making changes")
     parser.add_argument("--level",    type=int, default=2, choices=[1, 2, 3],
-                        help="Test-Level: 1=Integrität, 2=Dry-Run (Standard), 3=Sample Restore")
+                        help="Test level: 1=integrity, 2=dry run (default), 3=sample restore")
     parser.add_argument("--location", default="local",
                         choices=["local", "usb", "smb", "storagebox", "all"],
                         help="Welche Locations testen (Standard: local)")
@@ -905,7 +905,7 @@ def main() -> None:
         repos = [r for r in repos if str(r.get("job_key", "")).strip() in wanted]
 
     if not repos:
-        tester.log("Keine Repositories konfiguriert – prüfe backup.conf")
+        tester.log("No repositories configured; check backup.conf")
         tester.close()
         sys.exit(0)
 
@@ -922,7 +922,7 @@ def main() -> None:
         elif rc == 3: unavail += 1
 
     tester.log(f"{'='*60}")
-    tester.log(f"Zusammenfassung: {ok} OK | {fail} Fehler | {unavail} nicht verfügbar | {skipped} übersprungen")
+    tester.log(f"Summary: {ok} OK | {fail} failed | {unavail} unavailable | {skipped} skipped")
     tester.close()
     sys.exit(0 if fail == 0 else 1)
 

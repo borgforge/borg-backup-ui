@@ -30,7 +30,7 @@ async function refreshHistory() {
   try {
     const res  = await fetch('/api/history?' + params.toString(), { credentials: 'include' });
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status));
     historyState.data   = data;
     historyState.loaded = true;
     renderHistory(data);
@@ -93,10 +93,10 @@ function renderHistory(data) {
 
 function renderHistoryRow(e, idx) {
   if (e.entry_kind === 'restore_test_report') return renderRestoreReportRow(e, idx);
-  const detailReason = e.skip_reason_text
-    ? historyT('skippedReason', { reason: e.skip_reason_text })
-    : '';
-  const detailError = e.error_message || detailReason;
+  const skipKey = `dashboard.skipReasons.${e.skip_reason_code || 'skipped'}`;
+  const skipTranslation = window.BBUI?.components?.i18n?.t?.(skipKey) || skipKey;
+  const detailReason = skipTranslation === skipKey ? historyT('skippedReason', { reason: '' }) : skipTranslation;
+  const detailError = e.status === 'error' ? historyT('backupFailedDetails') : detailReason;
   const statusBadge = `<span class="history-status-badge ${e.status}">${historyStatusLabel(e.status)}</span>`;
   const locClass = e.location || '';
   const typeLabel = historyTypeLabel(e.backup_type);
@@ -146,7 +146,13 @@ function renderRestoreReportRow(e, idx) {
   const locClass = e.location || '';
   const cov = Number(e.coverage_percent || 0);
   const covTxt = Number.isFinite(cov) ? `${cov.toLocaleString(historyLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : `0${historyLocale() === 'de-DE' ? ',' : '.'}0%`;
-  const detailError = e.failure_hint || e.error_message || '';
+  const failureKey = `restoreTests.failures.${e.failure_code || 'RT_UNKNOWN'}`;
+  const failureTranslation = window.BBUI?.components?.i18n?.t?.(failureKey) || failureKey;
+  const detailError = (e.status === 'failed' || e.status === 'unavailable' || e.status === 'error')
+    ? (failureTranslation === failureKey
+      ? window.BBUI?.components?.i18n?.t?.('restoreTests.failures.RT_UNKNOWN') || ''
+      : failureTranslation)
+    : '';
 
   return `
     <tr id="${rowId}" class="history-row history-restore-row" data-history-action="toggle-detail" data-row-id="${rowId}" data-detail-id="${detailId}">
@@ -194,7 +200,7 @@ function renderRestoreReportSteps(steps) {
       <td>${escHtml(label)}</td>
       <td>${escHtml(statusText)}</td>
       <td>${escHtml(dur)}</td>
-      <td>${escHtml(s.message || '')}</td>
+      <td>${escHtml(`${label}: ${statusText}`)}</td>
       <td style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;word-break:break-all">${escHtml(s.command || '—')}</td>
     </tr>`;
   }).join('');
