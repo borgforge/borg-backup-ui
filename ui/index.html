@@ -503,17 +503,17 @@
     <div id="page-restore" class="page">
       <div class="page-header">
         <div>
-          <h1>Browse &amp; Restore</h1>
-          <p class="page-subtitle">Geführter Assistent in festen Schritten</p>
+          <h1 data-i18n="restore.title">Browse &amp; Restore</h1>
+          <p class="page-subtitle" data-i18n="restore.subtitle">Geführter Assistent in festen Schritten</p>
         </div>
       </div>
 
       <div id="restore-stepper" class="history-filters" style="margin-bottom:10px">
-        <span class="history-type-badge" id="restore-step-badge-1">1 Job</span>
-        <span class="history-type-badge" id="restore-step-badge-2">2 Archiv</span>
-        <span class="history-type-badge" id="restore-step-badge-3">3 Auswahl</span>
-        <span class="history-type-badge" id="restore-step-badge-4">4 Ziel &amp; Modus</span>
-        <span class="history-type-badge" id="restore-step-badge-5">5 Prüfen &amp; Start</span>
+        <span class="history-type-badge" id="restore-step-badge-1" data-i18n="restore.stepJob">1 Job</span>
+        <span class="history-type-badge" id="restore-step-badge-2" data-i18n="restore.stepArchive">2 Archiv</span>
+        <span class="history-type-badge" id="restore-step-badge-3" data-i18n="restore.stepSelection">3 Auswahl</span>
+        <span class="history-type-badge" id="restore-step-badge-4" data-i18n="restore.stepTargetMode">4 Ziel &amp; Modus</span>
+        <span class="history-type-badge" id="restore-step-badge-5" data-i18n="restore.stepCheckStart">5 Prüfen &amp; Start</span>
       </div>
 
       <div id="restore-msg" class="restore-msg hidden"></div>
@@ -524,98 +524,98 @@
           <circle cx="11" cy="14" r="3"/>
           <line x1="16" y1="19" x2="13.5" y2="16.5"/>
         </svg>
-        <div class="page-empty-state-title">Start über Schritt 1</div>
-        <div class="page-empty-state-desc">Wähle zuerst einen Job. Danach führt dich der Assistent durch alle Schritte.</div>
+        <div class="page-empty-state-title" data-i18n="restore.emptyTitle">Start über Schritt 1</div>
+        <div class="page-empty-state-desc" data-i18n="restore.emptyDescription">Wähle zuerst einen Job. Danach führt dich der Assistent durch alle Schritte.</div>
       </div>
 
       <div id="restore-wizard" class="card" style="display:none">
         <div class="settings-body two-col" style="padding-top:10px">
           <div class="form-group" style="grid-column:1/-1" id="restore-step-panel-1">
-            <label class="form-label">1. Job auswählen</label>
+            <label class="form-label" data-i18n="restore.selectJob">1. Job auswählen</label>
             <select id="restore-job-sel" class="restore-select">
-              <option value="">— Job wählen —</option>
+              <option value="" data-i18n="restore.chooseJob">— Job wählen —</option>
             </select>
-            <div class="text-muted" style="font-size:12px;margin-top:8px">Nur Backup-Jobs werden angezeigt.</div>
+            <div class="text-muted" style="font-size:12px;margin-top:8px" data-i18n="restore.backupJobsOnly">Nur Backup-Jobs werden angezeigt.</div>
           </div>
 
           <div class="form-group" style="grid-column:1/-1; display:none" id="restore-step-panel-2">
-            <label class="form-label">2. Archiv auswählen</label>
+            <label class="form-label" data-i18n="restore.selectArchive">2. Archiv auswählen</label>
             <select id="restore-archive-sel" class="restore-select">
-              <option value="">— Archiv wählen —</option>
+              <option value="" data-i18n="restore.chooseArchive">— Archiv wählen —</option>
             </select>
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-3">
-            <div class="repo-stats-chart-title">3. Auswahl</div>
+            <div class="repo-stats-chart-title"><span data-i18n="restore.stepSelection">3 Auswahl</span></div>
             <div id="restore-browser">
               <div class="restore-breadcrumb" id="restore-breadcrumb"></div>
               <div id="restore-filelist"></div>
             </div>
-            <div class="text-muted" style="font-size:12px;margin-top:8px">
+            <div class="text-muted" style="font-size:12px;margin-top:8px" data-i18n="restore.selectionHelp">
               Hinweis: Symbol <strong>⬇</strong> lädt eine Datei sofort herunter. Symbol <strong>✓</strong> wählt Datei oder Verzeichnis für die Wiederherstellung aus. Es ist immer nur <strong>eine</strong> Auswahl gleichzeitig möglich.
             </div>
             <div class="status-message" style="margin-top:10px">
-              <strong>Auswahl</strong><br>
-              Typ: <span id="restore-selected-type">—</span><br>
-              Pfad: <span id="restore-selected-path">—</span><br>
-              Hinweis: <span id="restore-selected-hint">—</span><br>
-              <button class="btn btn-secondary btn-sm" id="restore-clear-selection-btn" style="margin-top:8px">Auswahl entfernen</button>
+              <strong data-i18n="restore.selection">Auswahl</strong><br>
+              <span data-i18n="restore.type">Typ:</span> <span id="restore-selected-type">—</span><br>
+              <span data-i18n="restore.path">Pfad:</span> <span id="restore-selected-path">—</span><br>
+              <span data-i18n="restore.hint">Hinweis:</span> <span id="restore-selected-hint">—</span><br>
+              <button class="btn btn-secondary btn-sm" id="restore-clear-selection-btn" style="margin-top:8px" data-i18n="restore.removeSelection">Auswahl entfernen</button>
             </div>
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-4">
-            <div class="repo-stats-chart-title">4. Ziel &amp; Modus</div>
+            <div class="repo-stats-chart-title"><span data-i18n="restore.stepTargetMode">4 Ziel &amp; Modus</span></div>
             <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label">Quellpfad (Archiv)</label>
+              <label class="form-label" data-i18n="restore.sourcePath">Quellpfad (Archiv)</label>
               <input id="restore-source-path" class="form-input mono" type="text" readonly value="">
             </div>
             <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label">Zielordner</label>
+              <label class="form-label" data-i18n="restore.targetDirectory">Zielordner</label>
               <input id="restore-target-path" class="form-input mono" type="text" placeholder="/mnt/user/" list="restore-target-suggestions" autocomplete="off">
               <datalist id="restore-target-suggestions"></datalist>
-              <div class="text-muted" style="font-size:12px;margin-top:6px">Vorschlag: <code>/mnt/user/restore</code></div>
+              <div class="text-muted" style="font-size:12px;margin-top:6px" data-i18n="restore.targetSuggestion">Vorschlag: /mnt/user/restore</div>
             </div>
             <div class="form-group">
-              <label class="form-label">Konfliktstrategie</label>
+              <label class="form-label" data-i18n="restore.conflictStrategy">Konfliktstrategie</label>
               <select id="restore-conflict-mode" class="form-input">
-                <option value="skip">Nicht überschreiben</option>
-                <option value="overwrite">Ersetzen</option>
-                <option value="rename">Umbenennen (Zeitstempel)</option>
+                <option value="skip" data-i18n="restore.skip">Nicht überschreiben</option>
+                <option value="overwrite" data-i18n="restore.overwrite">Ersetzen</option>
+                <option value="rename" data-i18n="restore.rename">Umbenennen (Zeitstempel)</option>
               </select>
             </div>
             <label class="form-checkbox-row" style="align-self:end; margin-bottom:8px">
               <input id="restore-dry-run" type="checkbox" checked>
-              Testlauf (keine Änderungen)
+              <span data-i18n="restore.dryRun">Testlauf (keine Änderungen)</span>
             </label>
             <label class="form-checkbox-row" style="grid-column:1/-1">
               <input id="restore-preserve-owner" type="checkbox">
-              Original Owner/Group beibehalten
+              <span data-i18n="restore.preserveOwner">Original Owner/Group beibehalten</span>
             </label>
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-5">
-            <div class="repo-stats-chart-title">5. Prüfen &amp; Start</div>
+            <div class="repo-stats-chart-title"><span data-i18n="restore.stepCheckStart">5 Prüfen &amp; Start</span></div>
             <div class="status-message">
-              <strong>Aktuelle Auswahl</strong><br>
-              Job: <span id="restore-summary-job">—</span> ·
-              Archiv: <span id="restore-summary-archive">—</span> ·
-              Element: <span id="restore-summary-count">0</span> ·
-              Zielordner: <span id="restore-summary-target">—</span>
+              <strong data-i18n="restore.currentSelection">Aktuelle Auswahl</strong><br>
+              <span data-i18n="restore.job">Job:</span> <span id="restore-summary-job">—</span> ·
+              <span data-i18n="restore.archive">Archiv:</span> <span id="restore-summary-archive">—</span> ·
+              <span data-i18n="restore.element">Element:</span> <span id="restore-summary-count">0</span> ·
+              <span data-i18n="restore.target">Zielordner:</span> <span id="restore-summary-target">—</span>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
-              <button class="btn btn-secondary btn-sm" id="restore-start-btn" disabled>Wiederherstellen starten</button>
+              <button class="btn btn-secondary btn-sm" id="restore-start-btn" disabled data-i18n="restore.start">Wiederherstellen starten</button>
             </div>
             <label class="form-checkbox-row" style="margin-top:10px">
               <input id="restore-confirm-check" type="checkbox">
-              Zusammenfassung geprüft – Wiederherstellung ausführen
+              <span data-i18n="restore.confirmSummary">Zusammenfassung geprüft – Wiederherstellung ausführen</span>
             </label>
             <div id="restore-assist-msg" class="status-message hidden"></div>
             <pre id="restore-precheck-output" class="log-output" style="max-height:260px; min-height:100px"></pre>
           </div>
         </div>
         <div class="modal-footer" style="border-top:none; padding-top:0">
-          <button class="btn btn-secondary btn-sm" id="restore-step-back-btn" disabled>Zurück</button>
-          <button class="btn btn-primary btn-sm" id="restore-step-next-btn">Weiter</button>
+          <button class="btn btn-secondary btn-sm" id="restore-step-back-btn" disabled data-i18n="restore.back">Zurück</button>
+          <button class="btn btn-primary btn-sm" id="restore-step-next-btn" data-i18n="restore.next">Weiter</button>
         </div>
       </div>
     </div>
@@ -624,8 +624,8 @@
     <div id="page-restore-tests" class="page">
       <div class="page-header">
         <div>
-          <h1>Restore Tests</h1>
-          <p class="page-subtitle">Verifizierung der Wiederherstellbarkeit</p>
+          <h1 data-i18n="restoreTests.title">Restore Tests</h1>
+          <p class="page-subtitle" data-i18n="restoreTests.subtitle">Verifizierung der Wiederherstellbarkeit</p>
         </div>
         <div class="header-actions">
           <button class="btn btn-secondary" id="restore-tests-refresh-btn">
@@ -633,20 +633,20 @@
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
-            Aktualisieren
+            <span data-i18n="restoreTests.refresh">Aktualisieren</span>
           </button>
-          <button class="btn btn-primary" id="rt-run-btn" title="Startet nur fällige geplante Tests (nicht alle Jobs).">
+          <button class="btn btn-primary" id="rt-run-btn" title="Startet nur fällige geplante Tests (nicht alle Jobs)." data-i18n-title="restoreTests.runDueTitle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
-            Fällige Tests jetzt ausführen
+            <span data-i18n="restoreTests.runDue">Fällige Tests jetzt ausführen</span>
           </button>
         </div>
       </div>
       <div id="restore-tests-message" class="status-message hidden"></div>
       <div class="segmented-control" style="margin-bottom:12px">
-        <button type="button" class="segmented-btn active" id="rt-subtab-plan-btn">Planung &amp; Policy</button>
-        <button type="button" class="segmented-btn" id="rt-subtab-reports-btn">Prüfberichte</button>
+        <button type="button" class="segmented-btn active" id="rt-subtab-plan-btn" data-i18n="restoreTests.planTab">Planung &amp; Policy</button>
+        <button type="button" class="segmented-btn" id="rt-subtab-reports-btn" data-i18n="restoreTests.reportsTab">Prüfberichte</button>
       </div>
       <div class="restore-tests-hint" style="margin-bottom:12px">
         <div class="restore-tests-hint-title">
@@ -655,18 +655,18 @@
             <path d="M12 16v-4"/>
             <path d="M12 8h.01"/>
           </svg>
-          Hinweise zu Restore-Tests
+          <span data-i18n="restoreTests.hintsTitle">Hinweise zu Restore-Tests</span>
         </div>
-        <p class="restore-tests-hint-text">
+        <p class="restore-tests-hint-text" data-i18n="restoreTests.hintsIntro">
           Restore-Tests können je nach Archivgröße und Dateityp lange dauern.
         </p>
         <ul class="restore-tests-hint-list">
-          <li>bis 100 GB: ca. 5–20 min</li>
-          <li>100–500 GB: ca. 20–60 min</li>
-          <li>500 GB–1 TB: ca. 45–150 min</li>
-          <li>&gt; 1 TB: ca. 1.5–4+ h</li>
+          <li data-i18n="restoreTests.estimateSmall">bis 100 GB: ca. 5-20 min</li>
+          <li data-i18n="restoreTests.estimateMedium">100-500 GB: ca. 20-60 min</li>
+          <li data-i18n="restoreTests.estimateLarge">500 GB-1 TB: ca. 45-150 min</li>
+          <li data-i18n="restoreTests.estimateHuge">&gt; 1 TB: ca. 1.5-4+ h</li>
         </ul>
-        <p class="restore-tests-hint-text" style="margin:0">
+        <p class="restore-tests-hint-text" style="margin:0" data-i18n="restoreTests.hintsPolicy">
           Hinweis: Die zentrale Steuerung erfolgt in „Planung &amp; Policy pro Job“. Diese Seite führt
           den fälligen Plan aus und zeigt die Ergebnisse.
         </p>
@@ -674,47 +674,47 @@
 
       <div class="card" id="restore-tests-plan" style="margin-bottom:12px">
         <div class="card-header">
-          <h3>Planung &amp; Policy pro Job</h3>
+          <h3 data-i18n="restoreTests.planTitle">Planung &amp; Policy pro Job</h3>
         </div>
         <div class="card-body">
           <div id="restore-tests-plan-summary" class="muted" style="font-size:12px;margin-bottom:8px"></div>
           <div id="restore-tests-plan-content">
-            <div class="loading-spinner"><div class="spinner"></div><span>Lade Plan...</span></div>
+            <div class="loading-spinner"><div class="spinner"></div><span data-i18n="restoreTests.loadingPlan">Lade Plan...</span></div>
           </div>
         </div>
       </div>
 
       <div class="card hidden" id="restore-tests-reports" style="margin-bottom:12px">
         <div class="card-header">
-          <h3>Prüfberichte</h3>
+          <h3 data-i18n="restoreTests.reportsTitle">Prüfberichte</h3>
         </div>
         <div class="card-body">
           <div id="restore-tests-reports-filters" class="restore-reports-filters">
-            <input type="text" id="rt-report-filter-job" class="form-input" placeholder="Job filtern (Name/Key)">
+            <input type="text" id="rt-report-filter-job" class="form-input" placeholder="Job filtern (Name/Key)" data-i18n-placeholder="restoreTests.filterJob">
             <select id="rt-report-filter-location" class="form-select">
-              <option value="all">Alle Standorte</option>
+              <option value="all" data-i18n="restoreTests.allLocations">Alle Standorte</option>
             </select>
             <select id="rt-report-filter-status" class="form-select">
-              <option value="all">Alle Status</option>
-              <option value="success">Verifiziert</option>
-              <option value="failed">Fehlgeschlagen</option>
-              <option value="unavailable">Nicht verfügbar</option>
-              <option value="stale">Überfällig</option>
+              <option value="all" data-i18n="restoreTests.allStatuses">Alle Status</option>
+              <option value="success" data-i18n="restoreTests.verified">Verifiziert</option>
+              <option value="failed" data-i18n="restoreTests.failed">Fehlgeschlagen</option>
+              <option value="unavailable" data-i18n="restoreTests.unavailable">Nicht verfügbar</option>
+              <option value="stale" data-i18n="restoreTests.overdue">Überfällig</option>
             </select>
             <select id="rt-report-filter-range" class="form-select">
-              <option value="all">Gesamter Zeitraum</option>
-              <option value="7">Letzte 7 Tage</option>
-              <option value="30">Letzte 30 Tage</option>
-              <option value="90">Letzte 90 Tage</option>
+              <option value="all" data-i18n="restoreTests.allTime">Gesamter Zeitraum</option>
+              <option value="7" data-i18n="restoreTests.last7Days">Letzte 7 Tage</option>
+              <option value="30" data-i18n="restoreTests.last30Days">Letzte 30 Tage</option>
+              <option value="90" data-i18n="restoreTests.last90Days">Letzte 90 Tage</option>
             </select>
             <label class="form-checkbox-row" style="margin:0">
               <input type="checkbox" id="rt-report-filter-problem">
-              Nur fehlgeschlagen/überfällig
+              <span data-i18n="restoreTests.problemsOnly">Nur fehlgeschlagen/überfällig</span>
             </label>
           </div>
           <div id="restore-tests-summary" class="summary-bar hidden"></div>
           <div id="restore-tests-content">
-            <div class="loading-spinner"><div class="spinner"></div><span>Lade Prüfberichte...</span></div>
+            <div class="loading-spinner"><div class="spinner"></div><span data-i18n="restoreTests.loadingReports">Lade Prüfberichte...</span></div>
           </div>
         </div>
       </div>
@@ -727,11 +727,11 @@
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span>Restore Test Log</span>
+            <span data-i18n="restoreTests.logTitle">Restore Test Log</span>
           </div>
           <div class="log-panel-actions">
             <span id="rt-log-status-badge" class="badge"></span>
-            <button class="btn btn-secondary btn-sm" id="rt-log-close-btn">
+            <button class="btn btn-secondary btn-sm" id="rt-log-close-btn" aria-label="Schließen" data-i18n-aria-label="restoreTests.close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
@@ -800,8 +800,8 @@
 <div id="restore-confirm-modal" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3>Restore bestätigen</h3>
-      <button class="modal-close" id="restore-confirm-close-btn">
+      <h3 data-i18n="restore.confirmModalTitle">Restore bestätigen</h3>
+      <button class="modal-close" id="restore-confirm-close-btn" data-i18n-aria-label="restore.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
@@ -809,12 +809,12 @@
       </button>
     </div>
     <div class="modal-body">
-      <p class="text-muted" style="margin-top:0">Bitte Angaben prüfen und Restore bestätigen.</p>
+      <p class="text-muted" style="margin-top:0" data-i18n="restore.confirmModalDescription">Bitte Angaben prüfen und Restore bestätigen.</p>
       <pre id="restore-confirm-summary" class="log-output" style="max-height:220px;min-height:120px"></pre>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" id="restore-confirm-cancel-btn">Abbrechen</button>
-      <button class="btn btn-primary" id="restore-confirm-start-btn">Restore starten</button>
+      <button class="btn btn-secondary" id="restore-confirm-cancel-btn" data-i18n="restore.cancel">Abbrechen</button>
+      <button class="btn btn-primary" id="restore-confirm-start-btn" data-i18n="restore.confirmAction">Restore starten</button>
     </div>
   </div>
 </div>
@@ -823,8 +823,8 @@
 <div id="restore-download-confirm-modal" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3>Großen Download bestätigen</h3>
-      <button class="modal-close" id="restore-download-confirm-close-btn">
+      <h3 data-i18n="restore.downloadModalTitle">Großen Download bestätigen</h3>
+      <button class="modal-close" id="restore-download-confirm-close-btn" data-i18n-aria-label="restore.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
@@ -833,11 +833,11 @@
     </div>
     <div class="modal-body">
       <p id="restore-download-confirm-message" style="margin-top:0"></p>
-      <div class="status-message warning">Hinweis: Bei großen Downloads kann der Browser länger blockieren.</div>
+      <div class="status-message warning" data-i18n="restore.downloadWarning">Hinweis: Bei großen Downloads kann der Browser länger blockieren.</div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" id="restore-download-confirm-cancel-btn">Abbrechen</button>
-      <button class="btn btn-primary" id="restore-download-confirm-start-btn">Download starten</button>
+      <button class="btn btn-secondary" id="restore-download-confirm-cancel-btn" data-i18n="restore.cancel">Abbrechen</button>
+      <button class="btn btn-primary" id="restore-download-confirm-start-btn" data-i18n="restore.downloadStart">Download starten</button>
     </div>
   </div>
 </div>

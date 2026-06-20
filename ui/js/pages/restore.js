@@ -23,8 +23,13 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   restorePollTimer: null,
   autoPrecheckKey: '',
   completed: false,
+  files: [],
 };
 const restoreState = window.BBUI.restoreState;
+
+function restoreT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(`restore.${key}`, params) || `restore.${key}`;
+}
 
 function restoreSetStep(step) {
   const next = Math.max(1, Math.min(5, Number(step) || 1));
@@ -45,11 +50,11 @@ function restoreSetStep(step) {
   const nextBtn = document.getElementById('restore-step-next-btn');
   if (backBtn) {
     backBtn.disabled = next <= 1 && !restoreState.completed;
-    backBtn.textContent = (next === 5 && restoreState.completed) ? 'Schließen' : 'Zurück';
+    backBtn.textContent = (next === 5 && restoreState.completed) ? restoreT('close') : restoreT('back');
   }
   if (nextBtn) {
     nextBtn.style.display = next >= 5 ? 'none' : '';
-    nextBtn.textContent = next === 4 ? 'Zur Prüfung' : 'Weiter';
+    nextBtn.textContent = next === 4 ? restoreT('toCheck') : restoreT('next');
   }
   if (next === 5) {
     restoreEnsureAutoPrecheck();
@@ -66,10 +71,10 @@ function restoreCanAdvance(step) {
 
 function restoreStepNext() {
   if (!restoreCanAdvance(restoreState.step)) {
-    if (restoreState.step === 1) return _restoreMsg('Bitte zuerst einen Job auswählen.', true);
-    if (restoreState.step === 2) return _restoreMsg('Bitte zuerst ein Archiv auswählen.', true);
-    if (restoreState.step === 3) return _restoreMsg('Bitte zuerst ein Element auswählen.', true);
-    if (restoreState.step === 4) return _restoreMsg('Bitte zuerst einen Zielordner angeben.', true);
+    if (restoreState.step === 1) return _restoreMsg(restoreT('selectJobFirst'), true);
+    if (restoreState.step === 2) return _restoreMsg(restoreT('selectArchiveFirst'), true);
+    if (restoreState.step === 3) return _restoreMsg(restoreT('selectElementFirst'), true);
+    if (restoreState.step === 4) return _restoreMsg(restoreT('enterTargetFirst'), true);
   }
   restoreSetStep(restoreState.step + 1);
 }
@@ -92,6 +97,7 @@ function restoreReloadWizard() {
   restoreState.archive = '';
   restoreState.job = '';
   restoreState.path = '';
+  restoreState.files = [];
   _stopRestorePolling();
   const out = document.getElementById('restore-precheck-output');
   if (out) out.textContent = '';
@@ -124,10 +130,10 @@ function _restoreRenderSelectedBox() {
   const typeEl = document.getElementById('restore-selected-type');
   const pathEl = document.getElementById('restore-selected-path');
   const hintEl = document.getElementById('restore-selected-hint');
-  const type = restoreState.selectedType === 'd' ? 'Verzeichnis' : (restoreState.selectedType === 'f' ? 'Datei' : '—');
+  const type = restoreState.selectedType === 'd' ? restoreT('directory') : (restoreState.selectedType === 'f' ? restoreT('file') : '—');
   const hint = restoreState.selectedType === 'd'
-    ? 'Verzeichnis inkl. Inhalt wird wiederhergestellt.'
-    : (restoreState.selectedType === 'f' ? 'Eine einzelne Datei wird wiederhergestellt.' : 'Noch kein Element ausgewählt.');
+    ? restoreT('directoryHint')
+    : (restoreState.selectedType === 'f' ? restoreT('fileHint') : restoreT('nothingSelected'));
   if (typeEl) typeEl.textContent = type;
   if (pathEl) pathEl.textContent = restoreState.selectedPath || '—';
   if (hintEl) hintEl.textContent = hint;
@@ -153,9 +159,9 @@ async function _pollRestoreState(restoreId) {
     const phase = data.phase || 'running';
     if (out) {
       out.textContent = [
-        `Restore-ID: ${restoreId}`,
-        `Status: ${data.state || 'running'}`,
-        `Phase: ${phase}`,
+        restoreT('restoreId', { value: restoreId }),
+        restoreT('status', { value: data.state || restoreT('running') }),
+        restoreT('phase', { value: phase }),
         '',
         ...lines,
       ].join('\n');
@@ -169,9 +175,9 @@ async function _pollRestoreState(restoreId) {
       restoreUpdateConfirmState();
       restoreSetStep(5);
       if (data.skipped) {
-        showMsg('restore-assist-msg', 'warning', `Übersprungen: ${data.reason || 'Zieldatei existiert'}`);
+        showMsg('restore-assist-msg', 'warning', restoreT('skipped', { reason: data.reason || restoreT('targetExists') }));
       } else {
-        showMsg('restore-assist-msg', 'success', `Restore erfolgreich: ${data.destination_path || ''}`);
+        showMsg('restore-assist-msg', 'success', restoreT('success', { path: data.destination_path || '' }));
       }
       return;
     }
@@ -179,7 +185,7 @@ async function _pollRestoreState(restoreId) {
       _stopRestorePolling();
       _setRestoreAssistBusy(false);
       restoreUpdateConfirmState();
-      showMsg('restore-assist-msg', 'error', `Restore fehlgeschlagen: ${data.error || 'Unbekannter Fehler'}`);
+      showMsg('restore-assist-msg', 'error', restoreT('failed', { message: data.error || restoreT('unknownError') }));
       return;
     }
 
@@ -250,7 +256,7 @@ function _restoreBindTargetAutocomplete() {
 async function restoreInit() {
   restoreState.completed = false;
   const sel = document.getElementById('restore-job-sel');
-  sel.innerHTML = '<option value="">— Job wählen —</option>';
+  sel.innerHTML = `<option value="">${restoreT('chooseJob')}</option>`;
   const wizard = document.getElementById('restore-wizard');
   if (wizard) wizard.style.display = '';
   const empty = document.getElementById('restore-empty');
@@ -289,7 +295,7 @@ async function restoreInit() {
       }
     }
   } catch (e) {
-    _restoreMsg('Fehler beim Laden der Jobs: ' + e.message, true);
+    _restoreMsg(restoreT('loadJobsError', { message: e.message }), true);
   }
 }
 
@@ -303,7 +309,7 @@ async function restoreLoadArchives() {
   restoreState.selectedType = '';
   restoreState.autoPrecheckKey = '';
   const sel = document.getElementById('restore-archive-sel');
-  if (sel) sel.innerHTML = '<option value="">— Archiv wählen —</option>';
+  if (sel) sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
   _restoreMsg('');
 
   if (!jobKey) {
@@ -311,14 +317,14 @@ async function restoreLoadArchives() {
     _restoreRenderSelectedBox();
     return;
   }
-  _restoreMsg('Lade Archive...');
+  _restoreMsg(restoreT('loadingArchives'));
 
   try {
     const data = await (await fetch(`/api/restore/archives?job=${encodeURIComponent(jobKey)}`, { credentials: 'include' })).json();
-    if (data.error) { _restoreMsg('Fehler: ' + data.error, true); return; }
+    if (data.error) { _restoreMsg(restoreT('error', { message: data.error }), true); return; }
 
     const sel = document.getElementById('restore-archive-sel');
-    sel.innerHTML = '<option value="">— Archiv wählen —</option>';
+    sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
     for (const a of (data.archives || [])) {
       const opt = document.createElement('option');
       opt.value = a.name;
@@ -329,7 +335,7 @@ async function restoreLoadArchives() {
     _restoreRenderSelectionSummary();
     _restoreMsg('');
   } catch (e) {
-    _restoreMsg('Fehler: ' + e.message, true);
+    _restoreMsg(restoreT('error', { message: e.message }), true);
   }
 }
 
@@ -349,20 +355,21 @@ async function restoreBrowse(path) {
     filelist.innerHTML = `
       <div class="loading-spinner" style="padding:22px 16px">
         <div class="spinner"></div>
-        <span>Lade Dateien...</span>
+        <span>${restoreT('loadingFiles')}</span>
       </div>`;
   }
 
   try {
     const url = `/api/restore/files?job=${encodeURIComponent(jobKey)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
     const data = await (await fetch(url, { credentials: 'include' })).json();
-    if (data.error) { _restoreMsg('Fehler: ' + data.error, true); return; }
+    if (data.error) { _restoreMsg(restoreT('error', { message: data.error }), true); return; }
 
     _restoreMsg('');
     _restoreRenderBreadcrumb(path);
-    _restoreRenderFiles(data.files || []);
+    restoreState.files = data.files || [];
+    _restoreRenderFiles(restoreState.files);
   } catch (e) {
-    _restoreMsg('Fehler: ' + e.message, true);
+    _restoreMsg(restoreT('error', { message: e.message }), true);
   }
 }
 
@@ -381,7 +388,7 @@ function _restoreRenderBreadcrumb(path) {
 function _restoreRenderFiles(files) {
   const el = document.getElementById('restore-filelist');
   if (!files.length) {
-    el.innerHTML = '<div class="restore-empty">Keine Dateien</div>';
+    el.innerHTML = `<div class="restore-empty">${restoreT('noFiles')}</div>`;
     return;
   }
 
@@ -400,12 +407,12 @@ function _restoreRenderFiles(files) {
       <td class="restore-col-size">${size}</td>
       <td class="restore-col-date">${mtime}</td>
       <td class="restore-col-action">
-        <button class="restore-icon-btn" data-restore-action="download" data-path="${escHtml(f.path)}" title="Herunterladen" aria-label="Herunterladen">
+        <button class="restore-icon-btn" data-restore-action="download" data-path="${escHtml(f.path)}" title="${restoreT('download')}" aria-label="${restoreT('download')}">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 4v10m0 0l-4-4m4 4l4-4M5 20h14"/>
           </svg>
         </button>
-        <button class="restore-icon-btn ${isSelected ? 'restore-icon-btn-selected' : ''}" data-restore-action="select" data-path="${escHtml(f.path)}" data-name="${escHtml(f.name)}" data-type="${escHtml(f.type || '')}" title="${isSelected ? 'Ausgewählt' : 'Auswählen'}" aria-label="${isSelected ? 'Ausgewählt' : 'Auswählen'}">
+        <button class="restore-icon-btn ${isSelected ? 'restore-icon-btn-selected' : ''}" data-restore-action="select" data-path="${escHtml(f.path)}" data-name="${escHtml(f.name)}" data-type="${escHtml(f.type || '')}" title="${isSelected ? restoreT('selected') : restoreT('select')}" aria-label="${isSelected ? restoreT('selected') : restoreT('select')}">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M20 6 9 17l-5-5"/>
           </svg>
@@ -416,7 +423,7 @@ function _restoreRenderFiles(files) {
 
   el.innerHTML = `<table class="restore-table">
     <thead><tr>
-      <th>Name</th><th>Größe</th><th>Datum</th><th></th>
+      <th>${restoreT('name')}</th><th>${restoreT('size')}</th><th>${restoreT('date')}</th><th></th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
@@ -438,12 +445,12 @@ function onRestoreBrowserClick(event) {
 async function restoreDownload(path) {
   const fileList = document.getElementById('restore-filelist');
   const originalHtml = fileList ? fileList.innerHTML : '';
-  _restoreMsg('Prüfe Downloadgröße...');
+  _restoreMsg(restoreT('checkingDownloadSize'));
   if (fileList) {
     fileList.innerHTML = `
       <div class="loading-spinner" style="padding:22px 16px">
         <div class="spinner"></div>
-        <span>Prüfe Downloadgröße...</span>
+        <span>${restoreT('checkingDownloadSize')}</span>
       </div>`;
   }
   try {
@@ -456,8 +463,8 @@ async function restoreDownload(path) {
 
     if (checkData.action === 'block') {
       if (fileList) fileList.innerHTML = originalHtml;
-      _restoreMsg(checkData.message || 'Download blockiert.', 'warn');
-      showMsg('restore-assist-msg', 'error', checkData.message || 'Download blockiert.');
+      _restoreMsg(checkData.message || restoreT('downloadBlocked'), 'warn');
+      showMsg('restore-assist-msg', 'error', checkData.message || restoreT('downloadBlocked'));
       return;
     }
 
@@ -465,17 +472,17 @@ async function restoreDownload(path) {
     if (checkData.action === 'confirm') {
       if (fileList) fileList.innerHTML = originalHtml;
       _restoreMsg('');
-      const ok = await openRestoreDownloadConfirmModal(checkData.message || 'Großer Download.');
+      const ok = await openRestoreDownloadConfirmModal(checkData.message || restoreT('largeDownload'));
       if (!ok) return;
       url += '&confirm_large=1';
     }
     if (fileList) fileList.innerHTML = originalHtml;
-    _restoreMsg('Download startet...');
+    _restoreMsg(restoreT('downloadStarting'));
     window.location.href = url;
   } catch (e) {
     if (fileList) fileList.innerHTML = originalHtml;
-    _restoreMsg(`Download fehlgeschlagen: ${e.message}`, true);
-    showMsg('restore-assist-msg', 'error', `Download fehlgeschlagen: ${e.message}`);
+    _restoreMsg(restoreT('downloadFailed', { message: e.message }), true);
+    showMsg('restore-assist-msg', 'error', restoreT('downloadFailed', { message: e.message }));
   }
 }
 
@@ -501,7 +508,7 @@ function restorePrepare(path, name, type) {
   restoreSetStep(Math.max(3, restoreState.step));
   _restoreRenderSelectionSummary();
   restoreUpdateConfirmState();
-  _restoreMsg('Element ausgewählt. Mit "Weiter" zu Ziel & Modus.', false);
+  _restoreMsg(restoreT('elementSelected'), false);
 }
 
 function restoreClearSelection() {
@@ -576,16 +583,16 @@ async function restoreRunPrecheck() {
   const out = document.getElementById('restore-precheck-output');
   const confirmCheck = document.getElementById('restore-confirm-check');
   if (confirmCheck) confirmCheck.checked = false;
-  if (out) out.textContent = 'Precheck läuft...';
+  if (out) out.textContent = restoreT('precheckRunning');
   _setRestoreAssistBusy(true);
   if (!restoreState.job || !restoreState.archive || !source || !target) {
-    showMsg('restore-assist-msg', 'error', 'Bitte zuerst ein Archiv auswählen, ein Element markieren und einen Zielordner angeben.');
+    showMsg('restore-assist-msg', 'error', restoreT('precheckInputsMissing'));
     if (out) out.textContent = '';
     _setRestoreAssistBusy(false);
     return;
   }
   if (!_isAllowedRestoreTarget(target)) {
-    showMsg('restore-assist-msg', 'error', 'Zielpfad muss unter /mnt/user liegen.');
+    showMsg('restore-assist-msg', 'error', restoreT('targetRestriction'));
     if (out) out.textContent = '';
     _setRestoreAssistBusy(false);
     return;
@@ -612,25 +619,25 @@ async function restoreRunPrecheck() {
       .join('\n')
       .trim();
     const lines = [
-      `Archiv: ${data.archive}`,
-      `Quellpfad: ${data.source_path}`,
-      `Zielpfad: ${data.target_dir}`,
-      `Konfliktmodus: ${data.conflict_mode}`,
-      `Dry-Run: ${data.dry_run ? 'ja' : 'nein'} (Exit ${data.dry_run_exit_code})`,
-      `Zieldatei: ${data.destination_path}`,
-      `Existiert bereits: ${data.destination_exists ? 'ja' : 'nein'}`,
-      `Mountpoint: ${data.target_mountpoint}`,
-      `Freier Platz: ${_restoreFmtSize(data.target_free_bytes || 0)}`,
+      restoreT('archiveValue', { value: data.archive }),
+      restoreT('source', { value: data.source_path }),
+      restoreT('targetPath', { value: data.target_dir }),
+      restoreT('conflictMode', { value: data.conflict_mode }),
+      restoreT('dryRunResult', { value: data.dry_run ? restoreT('yes') : restoreT('no'), exit: data.dry_run_exit_code }),
+      restoreT('destination', { value: data.destination_path }),
+      restoreT('alreadyExists', { value: data.destination_exists ? restoreT('yes') : restoreT('no') }),
+      restoreT('mountpoint', { value: data.target_mountpoint }),
+      restoreT('freeSpace', { value: _restoreFmtSize(data.target_free_bytes || 0) }),
       '',
-      '[Dry-Run Ausgabe]',
-      combinedDryRun || '(leer)',
+      restoreT('dryRunOutput'),
+      combinedDryRun || restoreT('empty'),
     ];
     if (out) out.textContent = lines.join('\n');
-    showMsg('restore-assist-msg', data.ok ? 'success' : 'error', data.ok ? 'Precheck erfolgreich. Bitte Zusammenfassung prüfen und bestätigen.' : 'Precheck fehlgeschlagen.');
+    showMsg('restore-assist-msg', data.ok ? 'success' : 'error', data.ok ? restoreT('precheckSuccess') : restoreT('precheckFailed'));
   } catch (err) {
     restoreState.precheck = null;
     if (out) out.textContent = '';
-    showMsg('restore-assist-msg', 'error', `Precheck fehlgeschlagen: ${err.message}`);
+    showMsg('restore-assist-msg', 'error', restoreT('precheckError', { message: err.message }));
   } finally {
     _setRestoreAssistBusy(false);
     restoreUpdateConfirmState();
@@ -667,36 +674,36 @@ async function restoreStart() {
   const preserveOwner = !!document.getElementById('restore-preserve-owner')?.checked;
   const confirmCheck = !!document.getElementById('restore-confirm-check')?.checked;
   if (!confirmCheck || !restoreState.precheck?.ok) {
-    showMsg('restore-assist-msg', 'error', 'Bitte zuerst erfolgreichen Precheck ausführen und bestätigen.');
+    showMsg('restore-assist-msg', 'error', restoreT('confirmPrecheckFirst'));
     return;
   }
   if (!_isAllowedRestoreTarget(target)) {
-    showMsg('restore-assist-msg', 'error', 'Zielpfad muss unter /mnt/user liegen.');
+    showMsg('restore-assist-msg', 'error', restoreT('targetRestriction'));
     return;
   }
   const summary = [
-    `Archiv: ${restoreState.archive}`,
-    `Quellpfad: ${source}`,
-    `Zielpfad: ${target}`,
-    `Konfliktmodus: ${mode}`,
-    `Owner/Group: ${preserveOwner ? 'aus Backup beibehalten' : 'an Zielverzeichnis anpassen'}`,
+    restoreT('archiveValue', { value: restoreState.archive }),
+    restoreT('source', { value: source }),
+    restoreT('targetPath', { value: target }),
+    restoreT('conflictMode', { value: mode }),
+    restoreT('ownerGroup', { value: preserveOwner ? restoreT('ownerFromBackup') : restoreT('ownerFromTarget') }),
   ].join('\n');
   const confirmed = await openRestoreConfirmModal(summary);
   if (!confirmed) return;
   const out = document.getElementById('restore-precheck-output');
   if (out) {
     out.textContent = [
-      'Restore läuft...',
-      `Archiv: ${restoreState.archive}`,
-      `Quelle: ${source}`,
-      `Ziel: ${target}`,
-      `Modus: ${mode}`,
-      `Owner/Group: ${preserveOwner ? 'aus Backup beibehalten' : 'an Zielverzeichnis anpassen'}`,
+      restoreT('restoreRunning'),
+      restoreT('archiveValue', { value: restoreState.archive }),
+      restoreT('sourceShort', { value: source }),
+      restoreT('targetShort', { value: target }),
+      restoreT('mode', { value: mode }),
+      restoreT('ownerGroup', { value: preserveOwner ? restoreT('ownerFromBackup') : restoreT('ownerFromTarget') }),
       '',
-      'Bitte warten, bis der Restore abgeschlossen ist.'
+      restoreT('wait')
     ].join('\n');
   }
-  showMsg('restore-assist-msg', 'warning', 'Restore läuft…');
+  showMsg('restore-assist-msg', 'warning', restoreT('restoreRunningShort'));
   _setRestoreAssistBusy(true);
   _stopRestorePolling();
   restoreState.activeRestoreId = '';
@@ -719,12 +726,12 @@ async function restoreStart() {
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     const restoreId = String(data.restore_id || '').trim();
     if (!restoreId) {
-      throw new Error('Keine restore_id erhalten');
+      throw new Error(restoreT('missingRestoreId'));
     }
     restoreState.activeRestoreId = restoreId;
     restoreState.completed = false;
     if (out) {
-      out.textContent += `\n\nRestore-ID: ${restoreId}\nStatus: gestartet`;
+      out.textContent += `\n\n${restoreT('restoreId', { value: restoreId })}\n${restoreT('status', { value: restoreT('started') })}`;
     }
     _pollRestoreState(restoreId);
   } catch (err) {
@@ -732,8 +739,8 @@ async function restoreStart() {
     restoreState.activeRestoreId = '';
     _setRestoreAssistBusy(false);
     restoreUpdateConfirmState();
-    showMsg('restore-assist-msg', 'error', `Restore fehlgeschlagen: ${err.message}`);
-    if (out) out.textContent += `\n\nErgebnis: Fehler\n${err.message}`;
+    showMsg('restore-assist-msg', 'error', restoreT('failed', { message: err.message }));
+    if (out) out.textContent += `\n\n${restoreT('resultError')}\n${err.message}`;
   }
 }
 
@@ -742,7 +749,7 @@ function openRestoreConfirmModal(summaryText) {
     const modal = document.getElementById('restore-confirm-modal');
     const summary = document.getElementById('restore-confirm-summary');
     if (!modal || !summary) {
-      resolve(window.confirm(`Restore wirklich starten?\n\n${summaryText}`));
+      resolve(window.confirm(`${restoreT('confirmStart')}\n\n${summaryText}`));
       return;
     }
     restoreState.confirmResolver = resolve;
@@ -766,11 +773,11 @@ function openRestoreDownloadConfirmModal(messageText) {
     const modal = document.getElementById('restore-download-confirm-modal');
     const msg = document.getElementById('restore-download-confirm-message');
     if (!modal || !msg) {
-      resolve(window.confirm(messageText || 'Großer Download. Fortfahren?'));
+      resolve(window.confirm(messageText || restoreT('continueLargeDownload')));
       return;
     }
     restoreState.downloadConfirmResolver = resolve;
-    msg.textContent = messageText || 'Großer Download. Fortfahren?';
+    msg.textContent = messageText || restoreT('continueLargeDownload');
     modal.classList.remove('hidden');
   });
 }
@@ -827,3 +834,21 @@ function restorePrecheckInputsChanged() {
     restoreEnsureAutoPrecheck();
   }
 }
+
+window.addEventListener?.('bbui:language-changed', () => {
+  _restoreRenderSelectionSummary();
+  _restoreRenderSelectedBox();
+  if (Array.isArray(restoreState.files) && restoreState.files.length) {
+    _restoreRenderFiles(restoreState.files);
+  }
+  const backBtn = document.getElementById('restore-step-back-btn');
+  const nextBtn = document.getElementById('restore-step-next-btn');
+  if (backBtn) {
+    backBtn.textContent = restoreState.step === 5 && restoreState.completed
+      ? restoreT('close')
+      : restoreT('back');
+  }
+  if (nextBtn) {
+    nextBtn.textContent = restoreState.step === 4 ? restoreT('toCheck') : restoreT('next');
+  }
+});
