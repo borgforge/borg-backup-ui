@@ -63,6 +63,29 @@ def test_wizard_preview_rebuilds_storagebox_repo_from_profile(monkeypatch):
     assert flow["summary"]["repo"] == "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash"
 
 
+def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
+    params = _storagebox_params()
+    params["source_paths"] = "/boot /mnt/user/appdata"
+
+    flow = generate_flow_preview(params, {}, Path("/tmp/scripts"))
+
+    assert [step["code"] for step in flow["step_codes"]] == [
+        "prechecks",
+        "resourceLocksAcquire",
+        "borgCreate",
+        "borgMaintenance",
+        "statusNotification",
+        "resourceLocksRelease",
+    ]
+    assert flow["step_codes"][2]["params"] == {"count": 2}
+    fallback = "\n".join(flow["steps"])
+    assert "Pfade" not in fallback
+    assert "Quelle(n)" not in fallback
+    assert "Wartung" not in fallback
+    assert "Benachrichtigung" not in fallback
+
+
 def test_save_storagebox_job_existing_repo_disables_create_if_missing(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
 

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.15.1213">
+<!ENTITY version   "2026.06.20.2204">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "&gitlab;/-/raw/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,12 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.20.2204###
+- Fixed remaining localization and history status issues (#59):
+  - Wizard flow preview steps now follow the selected German or English UI language.
+  - Successful backup runs no longer display a skipped-run error in History.
+  - Restore-test cleanup status is localized without changing stored English reports.
+
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
   - Wochenbericht zeigt die Erfolgsquote der letzten 7 Tage statt der historischen Gesamtquote.
@@ -38,7 +44,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>9cfb56b151253a24c9578f427b7dfedb</MD5>
+<MD5>06a46a441e72647d2d1d2e388603e5d1</MD5>
 </FILE>
 
 <!--

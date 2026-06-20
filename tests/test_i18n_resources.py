@@ -188,6 +188,27 @@ def test_authentication_pages_reference_existing_translation_keys():
     assert referenced <= _flatten_keys(_load("en"))
 
 
+def test_issue_59_dynamic_status_text_uses_localization_contracts():
+    wizard = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
+    history = (ROOT / "ui" / "js" / "pages" / "history.js").read_text(encoding="utf-8")
+    restore_tests = (ROOT / "ui" / "js" / "pages" / "restore-tests.js").read_text(encoding="utf-8")
+
+    step_codes = {
+        "prechecks", "resourceLocksAcquire", "dockerStop", "vmStop", "borgCreate",
+        "borgMaintenance", "statusNotification", "vmStart", "dockerStart", "resourceLocksRelease",
+    }
+    for language in ("de", "en"):
+        keys = _flatten_keys(_load(language))
+        assert {f"wizard.flowSteps.{code}" for code in step_codes} <= keys
+        assert "restoreTests.cleanupCompleted" in keys
+
+    assert "wizard.flowSteps.${code}" in wizard
+    assert "if (status !== 'skipped') return '';" in history
+    assert "const detailError = historyRunDetailMessage(e);" in history
+    assert "[restoreTestsT('cleanupStatus'), step.message]" not in restore_tests
+    assert "[restoreTestsT('cleanupStatus'), restoreTestStepMessage(step)]" in restore_tests
+
+
 def test_api_client_resolves_codes_without_displaying_raw_messages():
     source = (ROOT / "ui" / "js" / "api" / "client.js").read_text(encoding="utf-8")
 
