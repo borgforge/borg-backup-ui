@@ -2,7 +2,7 @@ Menu="Utilities:8"
 Type="xmenu"
 Title="Borg Backup UI"
 Icon="plugin-icon.png"
-Description="Web-Oberfläche für Borg Backup – Dashboard, Jobs, Storage, History, Restore-Tests und Einstellungen. Benötigt Python 3 for Unraid."
+Description="Borg Backup web interface for dashboard, jobs, storage, history, restore tests, and settings. Requires Python 3 for Unraid."
 Markdown="false"
 ---
 <?PHP
@@ -54,11 +54,11 @@ function bbui_python_runtime_status() {
     'min_version' => '3.10',
   ];
   if ($path === '') {
-    $status['reason'] = 'Python 3 nicht gefunden.';
+    $status['reason'] = 'Python 3 was not found.';
     return $status;
   }
   if (!is_executable($path)) {
-    $status['reason'] = "python3 ist nicht ausführbar: $path";
+    $status['reason'] = "python3 is not executable: $path";
     return $status;
   }
   $cmd = escapeshellarg($path) . " -c " . escapeshellarg("import sys; print('.'.join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)") . " 2>/dev/null";
@@ -68,11 +68,11 @@ function bbui_python_runtime_status() {
   $version = trim((string)($lines[0] ?? ''));
   $status['version'] = $version;
   if ($version === '') {
-    $status['reason'] = "Python-Version konnte nicht ermittelt werden.";
+    $status['reason'] = "The Python version could not be determined.";
     return $status;
   }
   if ($rc !== 0) {
-    $status['reason'] = "Python $version ist zu alt. Erforderlich ist Python 3.10 oder neuer.";
+    $status['reason'] = "Python $version is too old. Python 3.10 or newer is required.";
     return $status;
   }
   $status['ok'] = true;
@@ -87,15 +87,15 @@ if (file_exists($plg)) {
   if (preg_match('/<!ENTITY version\s+"([^"]+)"/', $plg_content, $m)) $version = $m[1];
 }
 
-// Aktionen via GET-Parameter (Unraid fängt form-POST ab und öffnet neues Fenster)
-// Kein sleep() hier – JS zeigt Loading-State und lädt nach Delay neu
+// Actions use a GET parameter because Unraid intercepts form POSTs and opens a new window.
+// Do not sleep here; JavaScript shows the loading state and reloads after a delay.
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 $python_status = bbui_python_runtime_status();
 $python_ok = $python_status['ok'];
 $warn_msg = '';
 
 if (($action === 'start' || $action === 'restart') && !$python_ok) {
-  $warn_msg = $python_status['reason'] . " Bitte zuerst das Plugin 'Python 3 for Unraid' installieren oder aktualisieren.";
+  $warn_msg = $python_status['reason'] . " Install or update the 'Python 3 for Unraid' plugin first.";
 } elseif ($action === 'start') {
   shell_exec("$RC start >/dev/null 2>&1 &");
 } elseif ($action === 'stop') {
@@ -230,11 +230,11 @@ $ui_url  = "http://$ip:$port";
     <div class="bbui-runtime <?= $python_ok ? 'ok' : 'warn' ?>">
       <strong>Python Runtime:</strong>
       <?php if ($python_ok): ?>
-        OK, Python <?= htmlspecialchars($python_status['version']) ?> unter <code><?= htmlspecialchars($python_status['path']) ?></code>
+        OK, Python <?= htmlspecialchars($python_status['version']) ?> at <code><?= htmlspecialchars($python_status['path']) ?></code>
       <?php else: ?>
         <?= htmlspecialchars($python_status['reason']) ?><br>
-        Für die Borg Backup UI wird <strong>Python 3.10 oder neuer</strong> benötigt.
-        Offizielle Voraussetzung: <strong>Python 3 for Unraid</strong> über die Unraid-Apps installieren oder aktualisieren.
+        Borg Backup UI requires <strong>Python 3.10 or newer</strong>.
+        Official prerequisite: install or update <strong>Python 3 for Unraid</strong> through Unraid Apps.
       <?php endif; ?>
     </div>
 
@@ -254,7 +254,7 @@ $ui_url  = "http://$ip:$port";
     <div class="bbui-btn-row" id="bbui-open-row">
       <?php if ($running): ?>
         <a href="<?= htmlspecialchars($ui_url) ?>" target="_blank" class="bbui-btn primary">
-          &#10149; Borg Backup UI öffnen
+          &#10149; Open Borg Backup UI
         </a>
       <?php endif ?>
     </div>
@@ -264,9 +264,9 @@ $ui_url  = "http://$ip:$port";
     <div class="bbui-btn-row" id="bbui-ctrl-btns">
       <?php if ($running): ?>
         <button type="button" class="bbui-btn danger" onclick="bbui_action('stop')">&#9632; Stop</button>
-        <button type="button" class="bbui-btn"        onclick="bbui_action('restart')" <?= $python_ok ? '' : 'disabled title="Python 3 fehlt oder ist zu alt"' ?>>&#8635; Restart</button>
+        <button type="button" class="bbui-btn"        onclick="bbui_action('restart')" <?= $python_ok ? '' : 'disabled title="Python 3 is missing or too old"' ?>>&#8635; Restart</button>
       <?php else: ?>
-        <button type="button" class="bbui-btn primary" onclick="bbui_action('start')" <?= $python_ok ? '' : 'disabled title="Python 3 fehlt oder ist zu alt"' ?>>&#9654; Start</button>
+        <button type="button" class="bbui-btn primary" onclick="bbui_action('start')" <?= $python_ok ? '' : 'disabled title="Python 3 is missing or too old"' ?>>&#9654; Start</button>
       <?php endif ?>
     </div>
 
@@ -275,7 +275,7 @@ $ui_url  = "http://$ip:$port";
       var labels = {start:'STARTING...', stop:'STOPPING...', restart:'RESTARTING...'};
       document.getElementById('bbui-dot').className = 'bbui-dot pending';
       document.getElementById('bbui-status-text').textContent = labels[action] || '...';
-      document.getElementById('bbui-ctrl-btns').innerHTML = '<span style="color:#888;font-size:13px">&#8987; Bitte warten...</span>';
+      document.getElementById('bbui-ctrl-btns').innerHTML = '<span style="color:#888;font-size:13px">&#8987; Please wait...</span>';
       document.getElementById('bbui-open-row').innerHTML = '';
       fetch('?action=' + action, {credentials: 'same-origin'}).catch(function(){});
       setTimeout(function(){ location.reload(); }, action === 'restart' ? 2500 : 1500);
@@ -302,11 +302,11 @@ $ui_url  = "http://$ip:$port";
           </td>
         </tr>
         <tr>
-          <td>Bind Address</td>
+          <td>Bind address</td>
           <td>
             <select class="bbui-select" name="BIND">
-              <option value="0.0.0.0"   <?= $bind === '0.0.0.0'   ? 'selected' : '' ?>>0.0.0.0 &nbsp;(alle Interfaces)</option>
-              <option value="127.0.0.1" <?= $bind === '127.0.0.1' ? 'selected' : '' ?>>127.0.0.1 &nbsp;(nur lokal)</option>
+              <option value="0.0.0.0"   <?= $bind === '0.0.0.0'   ? 'selected' : '' ?>>0.0.0.0 &nbsp;(all interfaces)</option>
+              <option value="127.0.0.1" <?= $bind === '127.0.0.1' ? 'selected' : '' ?>>127.0.0.1 &nbsp;(local only)</option>
             </select>
           </td>
         </tr>
