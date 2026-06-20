@@ -30,20 +30,20 @@ def send_test_email(ui_config: dict, recipient: str = "") -> dict:
     if not sender:
         return {"success": False, "message": "No sender configured (GLOBAL_MAIL_SENDER or GLOBAL_SMTP_USER).", "message_code": "smtp_sender_missing"}
 
-    diag = f"[Host={host}:{port}, TLS={use_tls}, User={'✓' if user else '✗ (leer)'}, Pass={'✓' if password else '✗ (leer)'}]"
+    diag = f"[Host={host}:{port}, TLS={use_tls}, User={'set' if user else 'empty'}, Pass={'set' if password else 'empty'}]"
 
     msg = EmailMessage()
-    msg["Subject"] = "Borg Backup UI – Test-E-Mail"
+    msg["Subject"] = "Borg Backup UI - Test Email"
     msg["From"] = sender
     msg["To"] = to_addr
     msg.set_content(
-        "Das ist eine Test-E-Mail von Borg Backup UI.\n\n"
-        "Die SMTP-Konfiguration ist korrekt."
+        "This is a test email from Borg Backup UI.\n\n"
+        "The SMTP configuration is working correctly."
     )
 
     def _login_if_needed(smtp_obj):
         if not user:
-            return "kein SMTP-Benutzer konfiguriert – Login übersprungen"
+            return "No SMTP user configured; login skipped"
         try:
             smtp_obj.login(user, password)
             return None

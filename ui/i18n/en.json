@@ -67,6 +67,8 @@
       "smtp_recipient_missing": "No email recipient is configured.",
       "smtp_sender_missing": "No email sender is configured.",
       "smtp_test_sent": "Test email sent to {recipient}.",
+      "weekly_report_sent": "Weekly report sent to {recipient}.",
+      "weekly_report_generation_failed": "The weekly report could not be generated.",
       "smtp_auth_failed": "SMTP authentication failed.",
       "smtp_failed": "The SMTP request failed.",
       "smtp_connection_failed": "The connection to the SMTP server failed.",

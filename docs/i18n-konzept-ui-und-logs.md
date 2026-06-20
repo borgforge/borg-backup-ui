@@ -1,9 +1,9 @@
-# Konzept: Spracheinstellung Deutsch / English (UI + Logs)
+# Konzept: Spracheinstellung Deutsch / English (UI)
 
 ## Ziel
 - In **Einstellungen** als erstes Feld: `Sprache / Language` mit `de` und `en`.
 - Alle sichtbaren UI-Texte zweisprachig.
-- Log-Ausgaben (UI-Joblogs, Restore-Test-Logs, Runner-Logs) ebenfalls nach Sprache.
+- Alle Ausgaben ausserhalb der interaktiven UI bleiben ausschliesslich Englisch.
 - Rückwärtskompatibel für bestehende Installationen.
 
 ## Nicht-Ziele (Phase 1)
@@ -14,16 +14,13 @@
 ## UX/Produktentscheidung
 1. Standardwert bei Neuinstallation: `de`.
 2. Bestehende Installationen ohne gesetzte Sprache: Fallback `de`.
-3. Die dauerhafte globale Sprache wird in einer spaeteren Teilumsetzung zentral
-   in `backup.conf` gespeichert:
-   - `UI_LANGUAGE=de` oder `UI_LANGUAGE=en`
-4. Die Infrastruktur aus Issue `#12` speichert die UI-Auswahl zunaechst lokal
-   unter `borg-backup-ui.language`. Die Settings-Umsetzung ersetzt diese
-   Zwischenloesung durch die globale Konfiguration.
-5. Wechsel in Einstellungen wirkt:
-   - Sofort für UI (nach Reload oder dynamischem Re-Render)
-   - Für neue Logs ab nächstem Joblauf
-6. Alte Logs bleiben in bisheriger Sprache erhalten.
+3. Die UI-Auswahl wird im Browser unter `borg-backup-ui.language` gespeichert.
+4. Ein Wechsel wirkt sofort auf die UI (nach Reload oder dynamischem Re-Render).
+5. Die UI-Sprache beeinflusst keine technischen oder automatisch erzeugten
+   Ausgaben.
+6. Logs, E-Mails, Wochenberichte, Unraid-Benachrichtigungen und Meldungen an
+   VMs werden durch Borg Backup UI ausschliesslich auf Englisch erzeugt.
+7. Alte Logs und bereits gespeicherte Statusdaten werden nicht umgeschrieben.
 
 ## Architektur
 
@@ -39,37 +36,33 @@
   - Navigation, Buttons, Dialoge, Tabellenköpfe, Statusmeldungen
 
 ### 2) API/Settings
-- `api/config_api.py`:
-  - Default ergänzen: `UI_LANGUAGE=de`
-  - `get_settings_data()` liefert `UI_LANGUAGE`
-- Settings-UI:
-  - Erste Karte/Feld: Sprache (Deutsch/English)
-  - Speichern über bestehenden `/api/settings`-Flow
+- Die Spracheinstellung ist eine reine UI-Einstellung.
+- APIs liefern stabile `message_code`- und `message_params`-Werte fuer
+  lokalisierbare UI-Rueckmeldungen.
+- Englische Klartexte bleiben als maschinen- und clientkompatible Fallbacks
+  erhalten.
 
 ### 3) Server/Backend-Meldungen
-- Backend-Fehlermeldungen aktuell oft als Klartext in Exceptions.
-- Einführung einfacher Übersetzungshilfe in Python:
-  - `lib/i18n.py` mit `tr(lang, key, **kwargs)`
-  - Sprache aus expandierter Config
-- Schrittweise Umstellung:
-  - zuerst nutzernahe API-Meldungen (Validation, Jobstart, Restore-Test)
-  - danach restliche Admin/Fehlermeldungen
+- Backend-Fallbacktexte, technische Fehler und Fehlercodes bleiben Englisch.
+- Die UI uebersetzt bekannte Meldungscodes ueber ihre Sprachressourcen.
+- Maschinenlesbare Werte und Fehlercodes werden nicht lokalisiert.
 
-### 4) Logs (Runner + Restore-Test)
-- `wizard_runner.py`, `borg_restore_test.py`, relevante APIs:
-  - feste Logtexte auf `tr(...)` umstellen
-  - Sprachwert beim Start des Jobs einmal ermitteln und konstant verwenden
+### 4) Externe Ausgaben
+- Eigene Logtexte, Runner-Ausgaben und Restore-Test-Logs sind Englisch.
+- E-Mail-Betreff und -Inhalt, einschliesslich Test- und Backup-Fehlermails,
+  sind Englisch.
+- Der automatisch erzeugte Wochenbericht ist in Text- und HTML-Form Englisch.
+- Unraid- und VM-Benachrichtigungen sind Englisch.
 - Wichtig:
   - Tool-Ausgaben von borg/ssh bleiben unverändert (extern erzeugt)
-  - nur unsere eigenen Präfix-/Statuszeilen werden übersetzt
+  - Inhalte aus alten Logs oder Statusdateien koennen weiterhin historischen
+    deutschen Text enthalten
 
 ## Schlüsselstruktur (Vorschlag)
 - UI Keys:
   - `nav.dashboard`, `nav.jobs`, `jobs.run_now`, `restore.level`, ...
-- Backend Keys:
-  - `err.global_data_dir_required`, `err.job_not_found`, ...
-- Log Keys:
-  - `log.backup_start`, `log.level1_start`, `log.restore_success`, ...
+- API message codes:
+  - `smtp_test_sent`, `weekly_report_sent`, `job_not_found`, ...
 
 Konvention:
 - Namespace nach Domäne (`nav.*`, `settings.*`, `restore.*`, `log.*`, `err.*`)
@@ -81,18 +74,16 @@ Konvention:
 1. UI-i18n-Layer (`t()`) und Sprachressourcen einführen.
 2. Auswahl lokal speichern, bis die Settings-Anbindung umgesetzt ist.
 3. Navigation und Sidebar als kleine Referenzflaeche umstellen.
-4. `UI_LANGUAGE` in Config und Settings-Select in der zugeordneten
-   Teilumsetzung ergänzen.
 
 ### Phase B: Vollständige UI
 1. Alle statischen UI-Texte ersetzen.
 2. Dialoge/Toasts/Statusmeldungen ersetzen.
 3. Fehlermeldungen aus API konsistent darstellen.
 
-### Phase C: Logs & Backend
-1. Restore-Test-Logs übersetzen.
-2. Wizard-Runner-Logs übersetzen.
-3. API-Fehlermeldungen mit `tr()` konsolidieren.
+### Phase C: Externe Ausgaben & Backend
+1. Eigene technische Logs auf Englisch vereinheitlichen.
+2. E-Mails, Wochenberichte und Benachrichtigungen auf Englisch vereinheitlichen.
+3. API-Meldungscodes fuer lokalisierbare UI-Rueckmeldungen konsolidieren.
 
 ### Phase D: Qualität
 1. Missing-Key-Check (de/en-Parität).
@@ -102,14 +93,15 @@ Konvention:
 ## Teststrategie
 - Manuell:
   - Sprache de/en wechseln -> UI neu rendern -> Texte korrekt.
-  - Job starten in de/en -> neue Logdatei in korrekter Sprache.
-  - Restore-Test starten in de/en -> Status/Logs korrekt.
+  - Job in beiden UI-Sprachen starten -> neue Logdatei bleibt Englisch.
+  - Testmail und Wochenbericht senden -> Betreff und Inhalt sind Englisch.
 - Automatisiert:
   - Ressourcen muessen gueltiges JSON enthalten.
   - Deutsche und englische Schluessel muessen identisch sein.
   - Im HTML referenzierte Schluessel muessen in beiden Ressourcen existieren.
   - Der deutsche Fallback darf nicht durch Browser-Spracherkennung ersetzt
     werden.
+  - Eigene technische Logtexte und erzeugte Mailinhalte muessen Englisch sein.
 
 ## Wiederholbares Hardcode-Audit
 - Jede Seitenmigration sucht in den zugeordneten HTML- und JavaScript-Dateien
@@ -128,13 +120,12 @@ Konvention:
 - Risiko: Fehlertexte aus externen Tools nicht übersetzbar.
   - Maßnahme: klar trennen zwischen internen und externen Meldungen.
 
-## Offene Entscheidungen
-1. Soll `UI_LANGUAGE` auch E-Mail-Report-Texte steuern?
-2. Soll Sprache langfristig global bleiben oder pro Benutzer gelten?
+## Offene Entscheidung
+1. Soll die UI-Sprache langfristig browserlokal bleiben oder pro Benutzer
+   gespeichert werden?
 
 ## Empfohlener Start
 - Nach der Infrastruktur aus Issue `#12` die Seiten schrittweise und
   domaenenweise umstellen.
-- Danach `UI_LANGUAGE` global anbinden sowie Logs in Restore-Test und Runner
-  umstellen.
+- Danach externe Ausgaben auf Englisch vereinheitlichen.
 - So ist der sichtbare Mehrwert früh da, mit kontrolliertem Risiko.

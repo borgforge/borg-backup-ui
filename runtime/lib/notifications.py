@@ -223,11 +223,11 @@ def send_backup_log_mail(
         True wenn Versand erfolgreich, False bei Fehler
     """
     duration_str = _format_duration(duration_seconds)
-    subject = f"Borg Backup Zusammenfassung ({backup_type}) - {date_tag}"
+    subject = f"Borg Backup Summary ({backup_type}) - {date_tag}"
 
     header_lines = [
-        f"Backup-Dauer: {duration_str}",
-        f"Exit-Code:    {exit_code}",
+        f"Backup duration: {duration_str}",
+        f"Exit code:       {exit_code}",
         "=" * 42,
         "",
     ]
