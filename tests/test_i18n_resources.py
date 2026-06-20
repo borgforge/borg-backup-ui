@@ -74,9 +74,15 @@ def test_javascript_translation_keys_exist_in_both_resources():
     for path in (ROOT / "ui" / "js").rglob("*.js"):
         source = path.read_text(encoding="utf-8")
         referenced.update(re.findall(
-            r"['\"]((?:app|dashboard|history|jobs|language|nav|reports|schedule|settings|sidebar|storage|wizard)\.[a-zA-Z0-9.]+)['\"]",
+            r"['\"]((?:app|dashboard|history|jobs|language|nav|reports|restore|restoreTests|schedule|settings|sidebar|storage|wizard)\.[a-zA-Z0-9.]+)['\"]",
             source,
         ))
+        referenced.update(
+            f"restore.{key}" for key in re.findall(r"restoreT\(['\"]([a-zA-Z0-9.]+)['\"]", source)
+        )
+        referenced.update(
+            f"restoreTests.{key}" for key in re.findall(r"restoreTestsT\(['\"]([a-zA-Z0-9.]+)['\"]", source)
+        )
 
     assert referenced
     assert referenced <= _flatten_keys(_load("de"))
@@ -126,3 +132,22 @@ def test_job_health_error_codes_have_translations():
 
     assert codes
     assert {f"settings.health.jobErrors.{code}" for code in codes} <= keys
+
+
+def test_restore_pages_use_localization_helpers_for_dynamic_content():
+    restore = (ROOT / "ui" / "js" / "pages" / "restore.js").read_text(encoding="utf-8")
+    restore_tests = (ROOT / "ui" / "js" / "pages" / "restore-tests.js").read_text(encoding="utf-8")
+
+    assert "bbui:language-changed" in restore
+    assert "bbui:language-changed" in restore_tests
+    assert "restoreT('confirmStart')" in restore
+    assert "restoreTestsT('confirmTitle')" in restore_tests
+    assert "toLocaleTimeString(restoreTestsLocale())" in restore_tests
+
+    for text in (
+        "Plan nicht verfügbar.",
+        "Keine Prüfberichte für den aktuellen Filter gefunden.",
+        "Restore-Test starten",
+        "Geprüfte Stichproben-Dateien",
+    ):
+        assert text not in restore_tests
