@@ -25,7 +25,7 @@ _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 def _validate_job_key(job_key: str) -> str:
     key = str(job_key or "").strip()
     if not _JOB_KEY_RX.fullmatch(key):
-        raise ValueError("Ungültiger Job-Key")
+        raise ValueError("Invalid job key")
     return key
 
 
@@ -276,7 +276,7 @@ class JobManager:
         with self._lock:
             state = self._states.get(job_key)
             if state is not None and not state.finished:
-                return False, "Job läuft bereits"
+                return False, "Job is already running"
 
         env = dict(os.environ)
         # Damit das Script seine lib/ findet
@@ -295,7 +295,7 @@ class JobManager:
                 cwd=str(cwd),
             )
         except OSError as exc:
-            return False, f"Start fehlgeschlagen: {exc}"
+            return False, f"Start failed: {exc}"
 
         new_state = _JobState(proc, datetime.now())
         with self._lock:
@@ -362,7 +362,7 @@ class JobManager:
         with self._lock:
             state = self._states.get(job_key)
         if state is None:
-            yield "event: error\ndata: Job nicht gefunden\n\n"
+            yield "event: error\ndata: Job not found\n\n"
             return
 
         # Heartbeat damit der Browser nicht timeoutet

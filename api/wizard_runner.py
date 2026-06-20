@@ -144,8 +144,8 @@ def _ensure_borg_available() -> str:
             continue
 
     raise FileNotFoundError(
-        "borg command nicht gefunden "
-        f"(weder im PATH noch in runtime/bin/borg). checked={checked} uid={os.geteuid()}"
+        "borg command not found "
+        f"(neither in PATH nor runtime/bin/borg). checked={checked} uid={os.geteuid()}"
     )
 
 
@@ -328,7 +328,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
             meta_path = candidate
             break
     if meta_path is None:
-        raise FileNotFoundError(f"Job-Metadatei nicht gefunden: {job_key}")
+        raise FileNotFoundError(f"Job metadata file not found: {job_key}")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
 
     env = dict(os.environ)
@@ -339,13 +339,13 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     type_id = str(meta.get("backup_type") or "").strip().lower()
     location = str(meta.get("location") or "local").strip().lower()
     if not type_id:
-        raise ValueError("backup_type fehlt in Job-Metadaten")
+        raise ValueError("backup_type is missing from job metadata")
     if location not in {"local", "usb", "smb", "storagebox", "custom"}:
-        raise ValueError(f"ungueltige location in Job-Metadaten: {location}")
+        raise ValueError(f"invalid location in job metadata: {location}")
     if location == "storagebox":
         storage_profile_key = str(meta.get("storage_profile_key") or "").strip().lower()
         if not storage_profile_key:
-            raise ValueError("Storage-Profil fehlt in Job-Metadaten (storage_profile_key).")
+            raise ValueError("Storage profile is missing from job metadata (storage_profile_key).")
         try:
             from config_api import read_settings_payload
             payload = read_settings_payload({"BACKUP_SCRIPTS_DIR": str(backup_scripts_dir)})
@@ -359,13 +359,13 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
                     selected = row
                     break
             if not isinstance(selected, dict):
-                raise ValueError(f"Storage-Profil nicht gefunden: {storage_profile_key}")
+                raise ValueError(f"Storage profile not found: {storage_profile_key}")
             env["STORAGEBOX_HOST"] = str(selected.get("host", "")).strip()
             env["STORAGEBOX_PORT"] = str(selected.get("port", "23")).strip() or "23"
             env["STORAGEBOX_USER"] = str(selected.get("user", "")).strip()
             env["STORAGEBOX_BASE_PATH"] = str(selected.get("base_path", "/./backup")).strip() or "/./backup"
         except Exception as exc:
-            raise ValueError(f"Storage-Profil-Auflösung fehlgeschlagen: {exc}")
+            raise ValueError(f"Storage profile resolution failed: {exc}")
     elif location == "smb":
         try:
             from config_api import read_settings_payload
@@ -373,7 +373,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
             smb_rows = payload.get("smb_profiles") if isinstance(payload.get("smb_profiles"), list) else []
             env["SMB_PROFILES_JSON"] = json.dumps(smb_rows, ensure_ascii=False)
         except Exception as exc:
-            raise ValueError(f"SMB-Profil-Auflösung fehlgeschlagen: {exc}")
+            raise ValueError(f"SMB profile resolution failed: {exc}")
 
     tu = _type_upper(type_id)
     cache_base = env.get("GLOBAL_BORG_CACHE_BASE", "/mnt/cache/borg-cache")
@@ -446,7 +446,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
         pass_file = env.get(pass_key, pass_default)
         pass_path = Path(pass_file)
         if not pass_path.exists():
-            raise FileNotFoundError(f"Passphrase-Datei nicht gefunden: {pass_file}")
+            raise FileNotFoundError(f"Passphrase file not found: {pass_file}")
         os.environ["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pass_file))}"
 
     os.environ["BORG_REPO"] = env["BORG_REPO"]
@@ -504,12 +504,12 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
 
     profile_key = str(meta.get("smb_profile_key") or "").strip()
     if not profile_key:
-        raise ValueError("SMB-Profil fehlt in Job-Metadaten (smb_profile_key).")
+        raise ValueError("SMB profile is missing from job metadata (smb_profile_key).")
 
     profiles = _parse_smb_profiles(env)
     profile = profiles.get(profile_key)
     if not isinstance(profile, dict):
-        raise ValueError(f"SMB-Profil nicht gefunden: {profile_key}")
+        raise ValueError(f"SMB profile not found: {profile_key}")
 
     server = str(profile.get("server", "")).strip()
     share = str(profile.get("share", "")).strip().lstrip("/")
@@ -517,7 +517,7 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
     username = str(profile.get("username", "")).strip()
     password_file = str(profile.get("password_file", "")).strip()
     if not server or not share or not mount_path or not username or not password_file:
-        raise ValueError(f"SMB-Profil unvollständig: {profile_key}")
+        raise ValueError(f"SMB profile is incomplete: {profile_key}")
 
     mp = Path(mount_path)
     mp.mkdir(parents=True, exist_ok=True)
@@ -553,8 +553,8 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
     cmd = ["mount", "-t", "cifs", src, mount_path, "-o", ",".join(opts)]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
     if res.returncode != 0:
-        msg = (res.stderr or res.stdout or "SMB-Mount fehlgeschlagen").strip()
-        raise RuntimeError(f"SMB-Mount fehlgeschlagen ({src} -> {mount_path}): {msg}")
+        msg = (res.stderr or res.stdout or "SMB mount failed").strip()
+        raise RuntimeError(f"SMB mount failed ({src} -> {mount_path}): {msg}")
     sess.mounted_by_runner = True
     logging.info("SMB mount succeeded: %s -> %s", src, mount_path)
     return sess
@@ -622,18 +622,18 @@ def _guard_remote_repo_init(env: dict, meta: dict) -> tuple[bool, str]:
     if not bool(meta.get("create_repo_if_missing", False)):
         return True, ""
     if not bool(meta.get("remote_init_confirmed", False)):
-        return False, "Remote-Init nicht bestätigt."
+        return False, "Remote initialization is not confirmed."
 
     repo = str(env.get("BORG_REPO", "")).strip()
     if not repo.startswith("ssh://"):
-        return False, "Storagebox-Repo ist keine ssh:// URI."
+        return False, "Storage Box repository is not an ssh:// URI."
     parts = urlsplit(repo)
     if ".." in (parts.path or ""):
-        return False, "Ungueltiger Repo-Pfad ('..' nicht erlaubt)."
+        return False, "Invalid repository path ('..' is not allowed)."
     base_norm = _normalize_storage_base_for_repo(str(env.get("STORAGEBOX_BASE_PATH", "/./backup")))
     repo_path = str(parts.path or "")
     if not repo_path.startswith(base_norm.rstrip("/") + "/"):
-        return False, f"Repo-Pfad liegt nicht unter STORAGEBOX_BASE_PATH ({base_norm})."
+        return False, f"Repository path is not below STORAGEBOX_BASE_PATH ({base_norm})."
     return True, ""
 
 
@@ -773,7 +773,7 @@ def main() -> int:
             runner = BorgRunner(borg_config)
             create_exit = runner.create(job_config.backup_paths, archive_prefix)
             if create_exit >= 2:
-                job.set_result(create_exit, final_msg=f"borg create fehlgeschlagen (Exit {create_exit})")
+                job.set_result(create_exit, final_msg=f"borg create failed (exit {create_exit})")
                 return create_exit
 
             maint_exit = runner.maintenance()

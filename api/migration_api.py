@@ -13,12 +13,12 @@ from typing import Any, Dict, List
 
 
 DEPRECATED_CONF_KEYS: Dict[str, str] = {
-    "BORG_PASSPHRASE_FILE_LOCAL": "Passphrase-Pfad wird inzwischen pro Job gespeichert",
-    "BORG_PASSPHRASE_FILE_STORAGEBOX": "Passphrase-Pfad wird inzwischen pro Job gespeichert",
-    "GLOBAL_DOCKER_STOP_TIMEOUT": "ersetzt durch DOCKER_STOP_TIMEOUT",
-    "GLOBAL_DOCKER_STOP_WAIT": "ersetzt durch DOCKER_STOP_WAIT",
-    "GLOBAL_DOCKER_START_WAIT": "ersetzt durch DOCKER_START_WAIT",
-    "STORAGEBOX_BASE": "Alias wurde durch STORAGEBOX_BASE_PATH ersetzt",
+    "BORG_PASSPHRASE_FILE_LOCAL": "Passphrase path is now stored per job",
+    "BORG_PASSPHRASE_FILE_STORAGEBOX": "Passphrase path is now stored per job",
+    "GLOBAL_DOCKER_STOP_TIMEOUT": "replaced by DOCKER_STOP_TIMEOUT",
+    "GLOBAL_DOCKER_STOP_WAIT": "replaced by DOCKER_STOP_WAIT",
+    "GLOBAL_DOCKER_START_WAIT": "replaced by DOCKER_START_WAIT",
+    "STORAGEBOX_BASE": "alias replaced by STORAGEBOX_BASE_PATH",
 }
 PROTECTED_CONF_KEYS = {
     "MIGRATION_STORAGE_PATHS_VERSION",
@@ -105,7 +105,7 @@ def _read_migration_state(config_dir: Path) -> Dict[str, Any]:
 
 def _deprecated_reason(key: str) -> str:
     if key.startswith("BORG_PASSPHRASE_FILE_"):
-        return "Passphrase-Pfad wird inzwischen pro Job gespeichert"
+        return "Passphrase path is now stored per job"
     return DEPRECATED_CONF_KEYS.get(key, "")
 
 
@@ -118,7 +118,7 @@ def _cleanup_candidates(raw_conf: Dict[str, str], example_keys: List[str]) -> Li
     return [
         {
             "key": key,
-            "reason": _deprecated_reason(key) or "nicht mehr im aktuellen backup.conf.example enthalten",
+            "reason": _deprecated_reason(key) or "no longer present in the current backup.conf.example",
             "known": bool(_deprecated_reason(key)),
         }
         for key in legacy_keys
@@ -179,7 +179,7 @@ def build_legacy_cleanup_plan(ui_config: dict, *, mode: str = "comment_out") -> 
     mode_norm = str(mode or "comment_out").strip().lower()
     if mode_norm not in {"comment_out", "remove"}:
         mode_norm = "comment_out"
-    action = "auskommentieren" if mode_norm == "comment_out" else "entfernen"
+    action = "comment out" if mode_norm == "comment_out" else "remove"
 
     planned = []
     for row in candidates:
@@ -199,7 +199,7 @@ def build_legacy_cleanup_plan(ui_config: dict, *, mode: str = "comment_out") -> 
         "backup_required": True,
         "rollback": {
             "available": True,
-            "method": "backup_conf_snapshot vor Apply; Restore ueber Config-Backups & Rollback",
+            "method": "backup_conf_snapshot before apply; restore through config backups and rollback",
         },
         "candidate_count": len(planned),
         "known_deprecated_count": sum(1 for row in planned if row.get("known")),
@@ -216,11 +216,11 @@ def apply_legacy_cleanup(ui_config: dict, *, mode: str = "comment_out", confirm:
     before writing. Existing comments are left untouched.
     """
     if str(confirm or "").strip() != "AUSKOMMENTIEREN":
-        raise ValueError("Bestaetigung fehlt")
+        raise ValueError("Confirmation is missing")
 
     mode_norm = str(mode or "comment_out").strip().lower()
     if mode_norm != "comment_out":
-        raise ValueError("Nur Modus comment_out ist derzeit erlaubt")
+        raise ValueError("Only comment_out mode is currently allowed")
 
     from config_api import backup_conf_snapshot
 
@@ -242,7 +242,7 @@ def apply_legacy_cleanup(ui_config: dict, *, mode: str = "comment_out", confirm:
     config_dir = _config_dir(ui_config)
     conf_file = config_dir / "backup.conf"
     if not conf_file.exists() or not conf_file.is_file():
-        raise FileNotFoundError("backup.conf nicht gefunden")
+        raise FileNotFoundError("backup.conf not found")
 
     old_lines = conf_file.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
     out: List[str] = []
@@ -353,38 +353,38 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
         storage_marker = _disabled_assignment_value(conf_lines, "MIGRATION_STORAGE_PATHS_VERSION")
     if storage_state_name in {"applied", "baseline_detected", "imported_from_legacy_marker", "not_applicable"}:
         storage_status = "applied"
-        storage_reason = "Storage-Pfadmigration ist im Migrationsstatus erledigt."
+        storage_reason = "Storage path migration is complete in migration state."
     elif storage_state_name == "failed":
         storage_status = "failed"
-        storage_reason = "Storage-Pfadmigration ist im Migrationsstatus fehlerhaft."
+        storage_reason = "Storage path migration is marked as failed in migration state."
     else:
         storage_status = "applied" if storage_marker == "1" else ("failed" if storage_marker == "0" else "pending")
         storage_reason = (
-            "Alter Marker fuer Storage-Pfadmigration ist gesetzt."
+            "The legacy storage path migration marker is set."
             if storage_status == "applied"
-            else ("Alter Marker fuer Storage-Pfadmigration meldet Fehler oder unvollstaendigen Lauf." if storage_status == "failed" else "Nachweis fuer Storage-Pfadmigration fehlt.")
+            else ("The legacy storage path migration marker reports a failed or incomplete run." if storage_status == "failed" else "Storage path migration evidence is missing.")
         )
 
     items = [
         _status_item(
             "setup_jobs_dir",
-            "Job-Metadaten-Verzeichnis",
+            "Job metadata directory",
             "applied" if jobs_dir.is_dir() else "pending",
-            "Job-Metadaten-Verzeichnis ist vorhanden." if jobs_dir.is_dir() else "Job-Metadaten-Verzeichnis fehlt.",
+            "Job metadata directory exists." if jobs_dir.is_dir() else "Job metadata directory is missing.",
             category="setup",
             details={"jobs_dir": str(jobs_dir)},
         ),
         _status_item(
             "setup_settings_json",
-            "Profildaten in settings.json",
+            "Profile data in settings.json",
             "applied" if settings_file.exists() else "pending",
-            "settings.json ist vorhanden." if settings_file.exists() else "settings.json fehlt.",
+            "settings.json exists." if settings_file.exists() else "settings.json is missing.",
             category="setup",
             details={"settings_file": str(settings_file), "profile_count": profile_count},
         ),
         _status_item(
             "setup_runtime_paths",
-            "Runtime-Pfade aus GLOBAL_DATA_DIR",
+            "Runtime paths from GLOBAL_DATA_DIR",
             storage_status,
             storage_reason,
             category="setup",
@@ -397,9 +397,9 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
         ),
         _status_item(
             "config_backup_conf_schema",
-            "backup.conf-Schema aus backup.conf.example",
+            "backup.conf schema from backup.conf.example",
             "applied" if conf_file.exists() and not schema_missing else "pending",
-            "backup.conf enthaelt alle aktuellen Schema-Keys." if conf_file.exists() and not schema_missing else "backup.conf fehlen Schema-Keys.",
+            "backup.conf contains all current schema keys." if conf_file.exists() and not schema_missing else "backup.conf is missing schema keys.",
             category="config",
             details={
                 "conf_file": config_state.get("conf_file") or str(conf_file),
@@ -410,9 +410,9 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
         ),
         _status_item(
             "legacy_deprecated_keys_cleanup_v1",
-            "Deprecated backup.conf Cleanup-Kandidaten",
+            "Deprecated backup.conf cleanup candidates",
             "pending" if cleanup_candidates else "not_needed",
-            "Legacy-/Deprecated-Keys sind vorhanden und können bereinigt werden." if cleanup_candidates else "Keine Legacy-/Deprecated-Keys gefunden.",
+            "Legacy/deprecated keys are present and can be cleaned up." if cleanup_candidates else "No legacy/deprecated keys found.",
             category="planned_migration",
             stage="planned",
             destructive=True,

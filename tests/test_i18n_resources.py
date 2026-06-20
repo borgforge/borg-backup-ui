@@ -49,13 +49,25 @@ def test_german_and_english_resources_have_matching_keys():
     assert _flatten_keys(_load("de")) == _flatten_keys(_load("en"))
 
 
-def test_user_facing_ui_has_no_untracked_hardcoded_text():
+def test_user_facing_ui_and_backend_have_no_untracked_hardcoded_text():
     audit = _load_i18n_audit()
-    findings = audit.audit(ROOT)
+    findings = audit.audit(ROOT, include_backend=True)
 
     assert not findings, "Hardcoded UI text found:\n" + "\n".join(
         finding.format() for finding in findings
     )
+
+
+def test_historical_german_compatibility_parsers_remain_available():
+    settings = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
+    report_mail = (ROOT / "api" / "report_mail_api.py").read_text(encoding="utf-8")
+
+    assert "Verschiebe-Fehler" in settings
+    assert "Job-Layout geprüft" in settings
+    assert "move errors" in settings
+    assert "Storage paths updated" in settings
+    assert "FEHLER|WARNUNG" in report_mail
+    assert "FEHLGESCHLAGEN" in report_mail
 
 
 def test_resources_have_no_duplicate_keys_and_matching_placeholders():

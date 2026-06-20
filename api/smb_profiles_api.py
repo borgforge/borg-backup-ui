@@ -71,16 +71,16 @@ def validate_smb_profiles_json(raw_value: str) -> List[Dict[str, str]]:
     try:
         decoded = json.loads(str(raw_value or "[]"))
     except (json.JSONDecodeError, TypeError, ValueError):
-        raise ValueError("SMB_PROFILES_JSON ist kein gültiges JSON.")
+        raise ValueError("SMB_PROFILES_JSON is not valid JSON.")
     if not isinstance(decoded, list):
-        raise ValueError("SMB_PROFILES_JSON muss eine Liste sein.")
+        raise ValueError("SMB_PROFILES_JSON must be a list.")
     normalized = normalize_smb_profile_rows(decoded)
     if len(normalized) != len([x for x in decoded if isinstance(x, dict)]):
-        raise ValueError("SMB-Profile sind unvollständig. Pflicht: Name, Server, Share, Mount-Pfad, Benutzer.")
+        raise ValueError("SMB profiles are incomplete. Required: name, server, share, mount path, username.")
     for row in normalized:
         pf = str(row.get("password_file", "")).strip()
         if not pf.startswith("/"):
-            raise ValueError(f"SMB-Profil '{row.get('name','')}' hat keine absolute Passwort-Datei.")
+            raise ValueError(f"SMB profile '{row.get('name','')}' does not have an absolute password file path.")
     return normalized
 
 
@@ -100,7 +100,7 @@ def prepare_smb_profiles_for_save(raw_value: str) -> List[Dict[str, str]]:
             secret_file.write_text(f"username={username}\npassword={smb_password}\n", encoding="utf-8")
             secret_file.chmod(0o600)
         elif not secret_file.is_file():
-            raise ValueError(f"SMB-Profil '{row.get('name','')}' benötigt ein Passwort (beim ersten Speichern).")
+            raise ValueError(f"SMB profile '{row.get('name','')}' requires a password when first saved.")
 
         final_rows.append({
             "key": key,
@@ -264,14 +264,14 @@ def run_smb_profile_action(ui_config: dict, profile_key: str, action: str) -> Di
     key = str(profile_key or "").strip().lower()
     act = str(action or "").strip().lower()
     if not key:
-        raise ValueError("profile_key fehlt")
+        raise ValueError("profile_key is missing")
     if act not in {"mount", "unmount", "test"}:
-        raise ValueError("Ungültige Aktion")
+        raise ValueError("Invalid action")
 
     profiles = {str(p.get("key") or "").strip().lower(): p for p in get_smb_profiles_with_status(ui_config)}
     profile = profiles.get(key)
     if not profile:
-        raise ValueError(f"SMB-Profil nicht gefunden: {key}")
+        raise ValueError(f"SMB profile not found: {key}")
 
     if act == "test":
         result = test_smb_profiles_status([{
@@ -338,8 +338,8 @@ def validate_smb_profile_usage_before_save(ui_config: dict, new_rows: List[Dict[
     if blocked:
         details = "; ".join(f"{k}: {', '.join(v[:5])}" for k, v in blocked)
         raise ValueError(
-            "SMB-Profil kann nicht gelöscht werden, da es noch von Jobs genutzt wird. "
-            f"Bitte Jobs zuerst umstellen: {details}"
+            "SMB profile cannot be deleted because jobs still use it. "
+            f"Update those jobs first: {details}"
         )
 
 
@@ -570,7 +570,7 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
                 mnt = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
                 if mnt.returncode == 0:
                     break
-                errors.append(f"vers={v}: {(mnt.stderr or mnt.stdout or 'mount fehlgeschlagen').strip()}")
+                errors.append(f"vers={v}: {(mnt.stderr or mnt.stdout or 'mount failed').strip()}")
             if not mnt or mnt.returncode != 0:
                 item["message"] = "SMB test mount failed: " + " | ".join(errors[:3])
                 item["checks"]["mount_msg"] = item["message"]

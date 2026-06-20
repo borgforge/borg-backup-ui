@@ -86,13 +86,13 @@ def _job_smb_meta(config: dict, job_key: str) -> Optional[dict]:
 def _validate_mount_option_value(val: str) -> str:
     raw = str(val or "").strip()
     if not raw:
-        raise ValueError("Leerer SMB-Optionswert ist nicht erlaubt")
+        raise ValueError("Empty SMB option values are not allowed")
     if "," in raw:
-        raise ValueError(f"Ungültiger SMB-Optionswert (Komma nicht erlaubt): {raw}")
+        raise ValueError(f"Invalid SMB option value (commas are not allowed): {raw}")
     if "=" in raw:
-        raise ValueError(f"Ungültiger SMB-Optionswert (= nicht erlaubt): {raw}")
+        raise ValueError(f"Invalid SMB option value (= is not allowed): {raw}")
     if not re.fullmatch(r"[\w.:/+@-]+", raw):
-        raise ValueError(f"Ungültiger SMB-Optionswert: {raw}")
+        raise ValueError(f"Invalid SMB option value: {raw}")
     return raw
 
 
@@ -109,7 +109,7 @@ def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
     profile_key = str(meta.get("smb_profile_key") or "").strip()
     profile = profiles.get(profile_key)
     if not isinstance(profile, dict):
-        raise ValueError(f"SMB-Profil nicht gefunden: {profile_key}")
+        raise ValueError(f"SMB profile not found: {profile_key}")
 
     server = str(profile.get("server", "")).strip()
     share = str(profile.get("share", "")).strip().lstrip("/")
@@ -117,7 +117,7 @@ def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
     username = str(profile.get("username", "")).strip()
     password_file = str(profile.get("password_file", "")).strip()
     if not server or not share or not mount_path or not username or not password_file:
-        raise ValueError(f"SMB-Profil unvollständig: {profile_key}")
+        raise ValueError(f"SMB profile is incomplete: {profile_key}")
 
     mp = Path(mount_path)
     mp.mkdir(parents=True, exist_ok=True)
@@ -156,8 +156,8 @@ def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
     cmd = ["mount", "-t", "cifs", src, mount_path, "-o", ",".join(opts)]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
     if res.returncode != 0:
-        msg = (res.stderr or res.stdout or "SMB-Mount fehlgeschlagen").strip()
-        raise RuntimeError(f"SMB-Mount fehlgeschlagen ({src} -> {mount_path}): {msg}")
+        msg = (res.stderr or res.stdout or "SMB mount failed").strip()
+        raise RuntimeError(f"SMB mount failed ({src} -> {mount_path}): {msg}")
 
     guard.mounted_by_guard = True
     return guard

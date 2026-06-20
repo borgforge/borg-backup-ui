@@ -107,13 +107,13 @@ def _storagebox_auth_test(p: dict) -> tuple[bool, str]:
             "host key verification failed",
         ]
         if any(m in lower for m in auth_error_markers):
-            msg = combined.splitlines()[-1:] or ["SSH-Authentifizierung fehlgeschlagen"]
+            msg = combined.splitlines()[-1:] or ["SSH authentication failed"]
             return False, msg[0][:240]
 
         pq_warning = "post-quantum key exchange algorithm" in lower
         if pq_warning:
-            return True, "SSH-Authentifizierung erfolgreich (Hinweis: PQ-KEX-Warnung vom Server)"
-        return True, "SSH-Authentifizierung erfolgreich"
+            return True, "SSH authentication succeeded (note: server PQ-KEX warning)"
+        return True, "SSH authentication succeeded"
     except Exception as exc:
         return False, str(exc)
 
@@ -121,7 +121,7 @@ def _storagebox_auth_test(p: dict) -> tuple[bool, str]:
 def _storagebox_remote_borg_test(p: dict) -> tuple[bool, str]:
     target = _detect_storage_target_type(p)
     if target.get("target_type") == "storagebox":
-        return True, "Borg-Pruefung fuer Storagebox uebersprungen (restricted shell)."
+        return True, "Borg check skipped for Storage Box (restricted shell)."
     try:
         res = subprocess.run(
             _storagebox_ssh_base_cmd(p) + ["borg --version"],
@@ -132,11 +132,11 @@ def _storagebox_remote_borg_test(p: dict) -> tuple[bool, str]:
         combined = _sanitize_ssh_noise((res.stdout or "") + "\n" + (res.stderr or ""))
         lower = combined.lower()
         if res.returncode == 0:
-            first = (combined.splitlines() or ["borg vorhanden"])[0]
+            first = (combined.splitlines() or ["borg available"])[0]
             return True, first[:240]
         if "command not found" in lower or "borg: not found" in lower:
-            return False, "Auf dem Zielsystem ist borg nicht installiert oder nicht im PATH."
-        return False, (combined.splitlines()[-1:] or ["Borg-Pruefung fehlgeschlagen"])[0][:240]
+            return False, "borg is not installed or not in PATH on the target system."
+        return False, (combined.splitlines()[-1:] or ["Borg check failed"])[0][:240]
     except Exception as exc:
         return False, str(exc)
 
@@ -148,9 +148,9 @@ def _detect_storage_target_type(p: dict) -> dict:
     base = str(p.get("base_path", "")).strip()
 
     if host.endswith(".your-storagebox.de") or (port == "23" and (base.startswith("./") or base.startswith("/./"))):
-        return {"target_type": "storagebox", "method": "heuristic", "hint": "Host/Port/Basispfad entspricht Storagebox-Muster"}
+        return {"target_type": "storagebox", "method": "heuristic", "hint": "Host, port, and base path match the Storage Box pattern"}
     if host.endswith(".synology.me") or host.endswith(".diskstation.me") or base.startswith("/volume"):
-        return {"target_type": "synology", "method": "heuristic", "hint": "Host/Basispfad entspricht Synology-Muster"}
+        return {"target_type": "synology", "method": "heuristic", "hint": "Host and base path match the Synology pattern"}
 
     try:
         probe = subprocess.run(
@@ -161,13 +161,13 @@ def _detect_storage_target_type(p: dict) -> dict:
         )
         combined = ((probe.stdout or "") + "\n" + (probe.stderr or "")).lower()
         if "welcome to your storage box" in combined or "restricted shell" in combined:
-            return {"target_type": "storagebox", "method": "probe", "hint": "Remote-Banner zeigt Storagebox restricted shell"}
+            return {"target_type": "storagebox", "method": "probe", "hint": "Remote banner indicates a Storage Box restricted shell"}
         if "synology" in combined or "diskstation" in combined:
-            return {"target_type": "synology", "method": "probe", "hint": "Remote-Banner/Output deutet auf Synology"}
+            return {"target_type": "synology", "method": "probe", "hint": "Remote banner or output indicates Synology"}
     except Exception:
         pass
 
-    return {"target_type": "generic", "method": "heuristic", "hint": "Kein spezifisches Muster erkannt"}
+    return {"target_type": "generic", "method": "heuristic", "hint": "No specific pattern detected"}
 
 
 def _storage_context(ui_config: dict, profile_key: str = "") -> tuple[dict, dict]:
@@ -186,8 +186,8 @@ def get_storagebox_setup_status(ui_config: dict, profile_key: str = "") -> dict:
     key_exists = bool(str(key_file) and key_file.exists())
     pub_exists = bool(str(pub_file) and pub_file.exists())
     profile_complete = _storagebox_is_profile_complete(p)
-    target = _detect_storage_target_type(p) if profile_complete else {"target_type": "generic", "method": "none", "hint": "Profil unvollständig"}
-    auth_ok, auth_msg = (False, "Profil unvollständig")
+    target = _detect_storage_target_type(p) if profile_complete else {"target_type": "generic", "method": "none", "hint": "Profile is incomplete"}
+    auth_ok, auth_msg = (False, "Profile is incomplete")
     if profile_complete and key_exists:
         auth_ok, auth_msg = _storagebox_auth_test(p)
     return {
@@ -222,7 +222,7 @@ def storagebox_key_generate(ui_config: dict, profile_key: str = "") -> dict:
     _conf, p = _storage_context(ui_config, profile_key)
     key_path = Path(p["ssh_key"])
     if not str(key_path):
-        raise ValueError("BORG_SSH_KEY ist nicht gesetzt")
+        raise ValueError("BORG_SSH_KEY is not set")
     key_path.parent.mkdir(parents=True, exist_ok=True)
     if key_path.exists():
         return {"generated": False, "message": f"SSH key already exists: {key_path}", "message_code": "storagebox_key_exists", "message_params": {"path": str(key_path)}}
@@ -233,7 +233,7 @@ def storagebox_key_generate(ui_config: dict, profile_key: str = "") -> dict:
         timeout=20,
     )
     if res.returncode != 0:
-        raise RuntimeError((res.stderr or res.stdout or "ssh-keygen fehlgeschlagen").strip())
+        raise RuntimeError((res.stderr or res.stdout or "ssh-keygen failed").strip())
     return {"generated": True, "message": f"SSH key created: {key_path}", "message_code": "storagebox_key_created", "message_params": {"path": str(key_path)}}
 
 
@@ -241,7 +241,7 @@ def storagebox_key_public(ui_config: dict, profile_key: str = "") -> dict:
     _conf, p = _storage_context(ui_config, profile_key)
     pub_path = Path(str(p["ssh_key"]) + ".pub")
     if not pub_path.exists():
-        raise FileNotFoundError(f"Public Key nicht gefunden: {pub_path}")
+        raise FileNotFoundError(f"Public key not found: {pub_path}")
     text = pub_path.read_text(encoding="utf-8", errors="replace").strip()
     return {"public_key": text, "pub_path": str(pub_path)}
 
@@ -249,16 +249,16 @@ def storagebox_key_public(ui_config: dict, profile_key: str = "") -> dict:
 def storagebox_key_deploy(ui_config: dict, password: str, profile_key: str = "") -> dict:
     _conf, p = _storage_context(ui_config, profile_key)
     if not _storagebox_is_profile_complete(p):
-        raise ValueError("Storagebox-Profil unvollständig")
+        raise ValueError("Storage Box profile is incomplete")
     pub = storagebox_key_public(ui_config, profile_key=profile_key).get("public_key", "")
     if not pub:
-        raise ValueError("Public Key leer")
+        raise ValueError("Public key is empty")
     if not shutil.which("sshpass"):
-        raise RuntimeError("sshpass ist nicht installiert")
+        raise RuntimeError("sshpass is not installed")
     cmd = ["sshpass", "-p", password] + _storagebox_ssh_base_cmd(p, batch_mode=False) + ["install-ssh-key"]
     res = subprocess.run(cmd, input=pub + "\n", capture_output=True, text=True, timeout=25)
     if res.returncode != 0:
-        msg = (res.stderr or res.stdout or "Key-Deploy fehlgeschlagen").strip()
+        msg = (res.stderr or res.stdout or "Key deployment failed").strip()
         raise RuntimeError(msg[:320])
     return {"deployed": True, "message": "Public key installed on Storage Box", "message_code": "storagebox_key_deployed"}
 
@@ -267,7 +267,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
     _conf, p = _storage_context(ui_config, profile_key)
     target = _detect_storage_target_type(p)
     if not _storagebox_is_profile_complete(p):
-        raise ValueError("Storagebox-Profil unvollständig")
+        raise ValueError("Storage Box profile is incomplete")
     auth_ok, auth_msg = _storagebox_auth_test(p)
     if not auth_ok:
         return {
@@ -309,7 +309,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         timeout=10,
     )
     if exists_cmd.returncode != 0:
-        detail = _sanitize_ssh_noise(exists_cmd.stderr or exists_cmd.stdout or "Pfadprüfung fehlgeschlagen")
+        detail = _sanitize_ssh_noise(exists_cmd.stderr or exists_cmd.stdout or "Path check failed")
         return {
             "success": False,
             "message": f"Path not found or not readable: {base}",
@@ -333,7 +333,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
 
     mk = subprocess.run(_storagebox_ssh_base_cmd(p) + [f"mkdir {shlex.quote(probe_dir)}"], capture_output=True, text=True, timeout=12)
     if mk.returncode != 0:
-        msg = _sanitize_ssh_noise(mk.stderr or mk.stdout or "Schreibtest (mkdir) fehlgeschlagen")
+        msg = _sanitize_ssh_noise(mk.stderr or mk.stdout or "Write test (mkdir) failed")
         return {
             "success": False,
             "message": f"Path is not writable: {base}",
@@ -347,7 +347,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         }
     touch = subprocess.run(_storagebox_ssh_base_cmd(p) + [f"touch {shlex.quote(probe_file)}"], capture_output=True, text=True, timeout=12)
     if touch.returncode != 0:
-        msg = _sanitize_ssh_noise(touch.stderr or touch.stdout or "Schreibtest (touch) fehlgeschlagen")
+        msg = _sanitize_ssh_noise(touch.stderr or touch.stdout or "Write test (touch) failed")
         subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rmdir {shlex.quote(probe_dir)}"], capture_output=True, text=True, timeout=8)
         return {
             "success": False,
@@ -362,7 +362,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         }
     stat = subprocess.run(_storagebox_ssh_base_cmd(p) + [f"stat {shlex.quote(probe_file)}"], capture_output=True, text=True, timeout=12)
     if stat.returncode != 0:
-        msg = _sanitize_ssh_noise(stat.stderr or stat.stdout or "Schreibtest (stat) fehlgeschlagen")
+        msg = _sanitize_ssh_noise(stat.stderr or stat.stdout or "Write test (stat) failed")
         subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rm {shlex.quote(probe_file)}"], capture_output=True, text=True, timeout=8)
         subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rmdir {shlex.quote(probe_dir)}"], capture_output=True, text=True, timeout=8)
         return {
@@ -377,7 +377,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         }
     rmf = subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rm {shlex.quote(probe_file)}"], capture_output=True, text=True, timeout=12)
     if rmf.returncode != 0:
-        msg = _sanitize_ssh_noise(rmf.stderr or rmf.stdout or "Schreibtest (rm) fehlgeschlagen")
+        msg = _sanitize_ssh_noise(rmf.stderr or rmf.stdout or "Write test (rm) failed")
         subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rmdir {shlex.quote(probe_dir)}"], capture_output=True, text=True, timeout=8)
         return {
             "success": False,
@@ -391,7 +391,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         }
     rmdir = subprocess.run(_storagebox_ssh_base_cmd(p) + [f"rmdir {shlex.quote(probe_dir)}"], capture_output=True, text=True, timeout=12)
     if rmdir.returncode != 0:
-        msg = _sanitize_ssh_noise(rmdir.stderr or rmdir.stdout or "Schreibtest (rmdir) fehlgeschlagen")
+        msg = _sanitize_ssh_noise(rmdir.stderr or rmdir.stdout or "Write test (rmdir) failed")
         return {
             "success": False,
             "message": "Write test succeeded, but cleanup failed.",
@@ -428,10 +428,10 @@ class _StorageKeyDeployManager:
     def start(self, ui_config: dict, target_override: str = "", profile_key: str = "") -> Dict[str, Any]:
         _conf, p = _storage_context(ui_config, profile_key)
         if not _storagebox_is_profile_complete(p):
-            raise ValueError("Storage-Profil unvollständig")
+            raise ValueError("Storage profile is incomplete")
         pub = storagebox_key_public(ui_config, profile_key=profile_key).get("public_key", "")
         if not pub:
-            raise ValueError("Public Key leer")
+            raise ValueError("Public key is empty")
 
         det = _detect_storage_target_type(p)
         target = str(target_override or det.get("target_type") or "generic").strip().lower()
@@ -530,18 +530,18 @@ class _StorageKeyDeployManager:
                         pass
                 sess["status"] = "timeout"
                 sess["timed_out"] = True
-                self._append(sess, "\n[error] Session-Timeout erreicht (180s)\n")
+                self._append(sess, "\n[error] Session timeout reached (180s)\n")
 
     def input_text(self, session_id: str, text: str) -> Dict[str, Any]:
         with self._lock:
             sess = self._sessions.get(session_id)
             if not sess:
-                raise ValueError("Deploy-Session nicht gefunden")
+                raise ValueError("Deployment session not found")
             if sess.get("status") != "running":
                 return {"sent": False, "status": sess.get("status")}
             fd = sess.get("fd")
             if fd is None:
-                raise RuntimeError("Session ohne TTY")
+                raise RuntimeError("Session has no TTY")
             safe = str(text or "")
             os.write(fd, (safe + "\n").encode("utf-8"))
             sess["updated_at"] = time.time()
@@ -551,7 +551,7 @@ class _StorageKeyDeployManager:
         with self._lock:
             sess = self._sessions.get(session_id)
             if not sess:
-                raise ValueError("Deploy-Session nicht gefunden")
+                raise ValueError("Deployment session not found")
             pid = sess.get("pid")
             if pid:
                 try:
@@ -569,7 +569,7 @@ class _StorageKeyDeployManager:
         with self._lock:
             sess = self._sessions.get(session_id)
             if not sess:
-                raise ValueError("Deploy-Session nicht gefunden")
+                raise ValueError("Deployment session not found")
             return {
                 "session_id": session_id,
                 "status": sess.get("status"),

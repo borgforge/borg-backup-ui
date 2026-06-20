@@ -98,7 +98,7 @@ def test_unreferenced_storage_profile_with_empty_host_is_blocked():
         "base_path": "/./backup",
     }])
 
-    with pytest.raises(ValueError, match="Storage-Profil 'storage-1' ist unvollständig"):
+    with pytest.raises(ValueError, match="Storage profile 'storage-1' is incomplete"):
         validate_storage_profiles_complete_before_save(next_rows)
 
 
@@ -128,7 +128,7 @@ def test_referenced_storage_profile_with_empty_host_is_blocked(tmp_path: Path, m
         "base_path": "/./backup",
     }])
 
-    with pytest.raises(ValueError, match="darf nicht unvollständig gespeichert werden"):
+    with pytest.raises(ValueError, match="cannot be saved incomplete"):
         config_api.validate_storage_profile_usage_before_save(cfg, next_rows)
 
 
@@ -171,7 +171,7 @@ def test_storagebox_legacy_update_blocks_incomplete_referenced_profile(tmp_path:
     handler.config = cfg
     handler._read_json_body = lambda: {"updates": {"STORAGEBOX_HOST": ""}}
 
-    with pytest.raises(ValueError, match="Storage-Profil 'storage-1' ist unvollständig"):
+    with pytest.raises(ValueError, match="Storage profile 'storage-1' is incomplete"):
         handler._put_settings()
 
 
@@ -202,5 +202,5 @@ def test_settings_save_blocks_new_incomplete_storage_profile(tmp_path: Path, mon
         }
     }
 
-    with pytest.raises(ValueError, match="Storage-Profil 'storage-1' ist unvollständig"):
+    with pytest.raises(ValueError, match="Storage profile 'storage-1' is incomplete"):
         handler._put_settings()

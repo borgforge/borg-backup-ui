@@ -152,39 +152,39 @@ def update_restore_test_policy(config: dict, job_key: str, policy_raw: dict) -> 
     from jobs_api import resolve_data_root
     key = str(job_key or "").strip()
     if not key:
-        raise ValueError("job_key fehlt")
+        raise ValueError("job_key is missing")
     if not re.fullmatch(r"[A-Za-z0-9_]+", key):
-        raise ValueError("Ungültiger job_key")
+        raise ValueError("Invalid job_key")
     if not isinstance(policy_raw, dict):
-        raise ValueError("policy muss ein Objekt sein")
+        raise ValueError("policy must be an object")
     mode_raw = str(policy_raw.get("mode") or "").strip().lower()
     if mode_raw and mode_raw not in {"scheduled", "manual_only", "off", "inherit", "on", "manual"}:
-        raise ValueError("Ungültiger Policy-Modus")
+        raise ValueError("Invalid policy mode")
     if "interval_days" in policy_raw:
         try:
             interval_value = int(str(policy_raw.get("interval_days")).strip())
         except Exception:
-            raise ValueError("interval_days muss eine Zahl sein")
+            raise ValueError("interval_days must be a number")
         if interval_value < 1:
-            raise ValueError("interval_days muss >= 1 sein")
+            raise ValueError("interval_days must be >= 1")
     if "level" in policy_raw:
         try:
             level_value = int(str(policy_raw.get("level")).strip())
         except Exception:
-            raise ValueError("level muss eine Zahl sein")
+            raise ValueError("level must be a number")
         if level_value not in {1, 2, 3}:
-            raise ValueError("level muss 1, 2 oder 3 sein")
+            raise ValueError("level must be 1, 2, or 3")
 
     data_root = resolve_data_root(config)
     meta_file = data_root / "config" / "jobs" / f"{key}.json"
     if not meta_file.exists():
-        raise FileNotFoundError(f"Job nicht gefunden: {key}")
+        raise FileNotFoundError(f"Job not found: {key}")
     try:
         raw = json.loads(meta_file.read_text(encoding="utf-8"))
     except Exception as exc:
-        raise RuntimeError(f"Job-Metadaten fehlerhaft: {key}") from exc
+        raise RuntimeError(f"Job metadata is invalid: {key}") from exc
     if not isinstance(raw, dict):
-        raise RuntimeError(f"Job-Metadaten fehlerhaft: {key}")
+        raise RuntimeError(f"Job metadata is invalid: {key}")
 
     interval_default = max(1, _safe_int(config.get("RESTORE_TEST_INTERVAL_DAYS"), 30))
     location = raw.get("location", "")
@@ -286,11 +286,11 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
 def delete_restore_test(config: dict, job_key: str) -> dict:
     key = str(job_key or "").strip()
     if not key:
-        raise ValueError("job_key fehlt")
+        raise ValueError("job_key is missing")
     test_dir = resolve_restore_test_dir(config)
     target = test_dir / f"{key}.test"
     if not target.exists():
-        raise FileNotFoundError(f"Restore-Test nicht gefunden: {target.name}")
+        raise FileNotFoundError(f"Restore test not found: {target.name}")
     target.unlink()
     return {"deleted": True, "job_key": key}
 
@@ -302,19 +302,19 @@ def _time_ago(date_str: str):
         delta = datetime.now() - datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
         secs = int(delta.total_seconds())
         if secs < 60:
-            return "gerade eben"
+            return "just now"
         if secs < 3600:
-            return f"vor {secs // 60} Min."
+            return f"{secs // 60} min ago"
         if secs < 86400:
-            return f"vor {secs // 3600} Std."
+            return f"{secs // 3600} hr ago"
         d = secs // 86400
         if d == 1:
-            return "gestern"
+            return "yesterday"
         if d < 30:
-            return f"vor {d} Tagen"
+            return f"{d} days ago"
         if d < 365:
-            return f"vor {d // 30} Mon."
-        return f"vor {d // 365} Jahren"
+            return f"{d // 30} months ago"
+        return f"{d // 365} years ago"
     except ValueError:
         return None
 

@@ -76,5 +76,5 @@ def test_save_storagebox_job_existing_repo_disables_create_if_missing(tmp_path: 
 def test_save_storagebox_job_missing_repo_requires_confirm(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(2))
 
-    with pytest.raises(ValueError, match="Remote-Repository-Anlage nicht bestätigt"):
+    with pytest.raises(ValueError, match="Remote repository creation is not confirmed"):
         save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})

@@ -38,7 +38,7 @@ _GERMAN_JS_TEXT = re.compile(
 _GERMAN_BACKEND_TEXT = re.compile(
     r"[ÄÖÜäöüß]|\b(?:Alle|Alter|Änderung|Datei|Elemente|Entschlüsselung|Fehler|"
     r"Fehlgeschlagen|gefunden|geprüft|gestern|Jahren|Kein|Keine|konnte|läuft|"
-    r"Migration|Monaten|Nachweis|nicht|Noch|Pfad|Profil|Prüfung|Stunden|Tagen|"
+    r"Bestaetigung|Monaten|Nachweis|nicht|Noch|Passwort|Pfad|Profil|Prüfung|Stunden|Tagen|"
     r"Ungültig|Ungültige|Unbekanntes|verschoben|Verschlüsselung|vor|Warnung)\b",
     re.IGNORECASE,
 )
@@ -51,6 +51,11 @@ _JS_COMPATIBILITY_LITERALS = {
 _JS_INTERNAL_LITERALS = {"hilfe"}
 _BACKEND_COMPATIBILITY_LITERALS = {
     "sonstiges",
+    "fehler",
+    "migration-state.json",
+    "warnung",
+    r"(^|\s)(FEHLER|WARNUNG)[:\s]",
+    r"(^|\s)(FAILED|FEHLGESCHLAGEN)[:\s]?",
 }
 
 
@@ -209,6 +214,8 @@ def audit(root: Path = ROOT, *, include_backend: bool = False) -> list[Finding]:
     if include_backend:
         for path in sorted((root / "api").rglob("*.py")):
             findings.extend(audit_backend_python(path))
+        for path in sorted((root / "runtime").rglob("*.py")):
+            findings.extend(audit_backend_python(path))
     return findings
 
 
@@ -221,7 +228,8 @@ def main() -> int:
         for finding in findings:
             print(f"- {finding.format()}", file=sys.stderr)
         return 1
-    print("OK: no hardcoded user-facing UI text found")
+    scope = "UI/backend" if include_backend else "UI"
+    print(f"OK: no hardcoded user-facing {scope} text found")
     return 0
 
 

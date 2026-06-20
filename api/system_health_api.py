@@ -14,10 +14,10 @@ def _read_migration_state(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {
             "success": False,
-            "message": "Noch kein Migrationslauf protokolliert.",
+            "message": "No migration run has been recorded yet.",
             "timestamp": "",
             "reason_code": "none",
-            "reason_text": "Noch kein Lauf",
+            "reason_text": "No run yet",
             "details": {},
         }
     try:
@@ -35,10 +35,10 @@ def _read_migration_state(path: Path) -> Dict[str, Any]:
     except Exception:
         return {
             "success": False,
-            "message": "Migrationsstatus nicht lesbar.",
+            "message": "Migration status is not readable.",
             "timestamp": "",
             "reason_code": "unreadable",
-            "reason_text": "Migrationsstatus nicht lesbar",
+            "reason_text": "Migration status is not readable",
             "details": {},
         }
 
@@ -119,12 +119,12 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
     if not timestamp:
         return {
             "status": "none",
-            "state": "Noch kein Lauf",
+            "state": "No run yet",
             "last_run": "",
             "last_effective_run": last_effective_ts,
             "last_effective_exists": bool(last_effective_ts),
             "reason_code": "none",
-            "reason": "Noch kein Migrationslauf protokolliert",
+            "reason": "No migration run has been recorded yet",
             "actions": [],
             "errors": [],
             "technical_message": "",
@@ -143,28 +143,28 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
     moved = _as_int(storage.get("moved"))
     move_errors = _as_int(storage.get("move_errors"))
     if moved > 0:
-        actions.append(f"{moved} Elemente verschoben")
+        actions.append(f"{moved} items moved")
     if bool(storage.get("changed")):
-        actions.append("Storage-Pfade aktualisiert")
+        actions.append("Storage paths updated")
     if bool(storage.get("settings_changed")):
-        actions.append("Profileinstellungen angepasst")
+        actions.append("Profile settings updated")
     if bool(storage.get("forced_conf_write")):
-        actions.append("backup.conf korrigiert")
+        actions.append("backup.conf corrected")
     if str(jobs.get("status", "")).strip().lower() not in {"", "ok"}:
         errors.append(f"Job-Layout: {jobs.get('error') or jobs.get('status')}")
     if move_errors > 0:
-        errors.append(f"{move_errors} Verschiebe-Fehler")
+        errors.append(f"{move_errors} move errors")
     if not ok and not errors:
-        errors.append("Migration fehlgeschlagen")
+        errors.append("Migration failed")
 
     reason = reason_text or (
-        "Änderung des Cache/Remotes inkl. backup.conf-Anpassung"
+        "Cache/remotes changed, including backup.conf update"
         if reason_code == "storage_paths_changed"
-        else ("Keine Änderungen nötig" if reason_code == "no_changes" else ("Migration ausgeführt" if ok else "Migration mit Fehlern"))
+        else ("No changes required" if reason_code == "no_changes" else ("Migration completed" if ok else "Migration completed with errors"))
     )
     return {
         "status": "success" if ok else "failed",
-        "state": "Erfolgreich" if ok else "Fehlgeschlagen",
+        "state": "Successful" if ok else "Failed",
         "last_run": timestamp,
         "last_effective_run": last_effective_ts,
         "last_effective_exists": bool(last_effective_ts),
@@ -210,7 +210,7 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
                 "job_key": meta_file.stem,
                 "name": meta_file.stem,
                 "state": "bad",
-                "errors": [f"Job-Metadaten nicht lesbar: {exc}"],
+                "errors": [f"Job metadata is not readable: {exc}"],
                 "error_details": [{"code": "metadata_unreadable", "params": {"message": str(exc)}}],
                 "warnings": [],
             })
@@ -231,25 +231,25 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
         repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
         repo = str(repo_cfg.get("default") or "").strip()
         if not repo:
-            add_error("repository_missing", "Repository fehlt")
+            add_error("repository_missing", "Repository is missing")
         elif location == "storagebox":
             if not repo.startswith("ssh://"):
-                add_error("storagebox_repo_not_ssh", "Storagebox-Repository ist keine ssh:// URI")
+                add_error("storagebox_repo_not_ssh", "Storage Box repository is not an ssh:// URI")
             else:
                 parts = urlsplit(repo)
                 if not parts.netloc or not parts.path.startswith("/"):
-                    add_error("storagebox_repo_incomplete", "Storagebox-Repository-URI ist unvollständig")
+                    add_error("storagebox_repo_incomplete", "Storage Box repository URI is incomplete")
                 if ":23." in repo:
-                    add_error("storagebox_repo_port_slash", "Storagebox-Repository-URI enthält fehlenden Slash nach Port")
+                    add_error("storagebox_repo_port_slash", "Storage Box repository URI is missing a slash after the port")
 
         paths_cfg = raw.get("paths") if isinstance(raw.get("paths"), dict) else {}
         source_paths = _split_job_paths(paths_cfg.get("default"))
         if not source_paths:
-            add_error("source_paths_missing", "Quellpfade fehlen")
+            add_error("source_paths_missing", "Source paths are missing")
         else:
             missing = [p for p in source_paths if not Path(p).exists()]
             if missing:
-                add_error("source_paths_not_found", f"{len(missing)} Quellpfad(e) nicht vorhanden", count=len(missing))
+                add_error("source_paths_not_found", f"{len(missing)} source path(s) do not exist", count=len(missing))
 
         encryption = str(raw.get("encryption") or "").strip().lower()
         pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
@@ -257,23 +257,23 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
         pass_path = str(pass_cfg.get("default") or "").strip()
         if encryption != "none" and pass_mode != "none":
             if not pass_path:
-                add_error("passphrase_metadata_missing", "Passphrase-Datei fehlt in Metadaten")
+                add_error("passphrase_metadata_missing", "Passphrase file is missing from metadata")
             elif not Path(pass_path).is_file():
-                add_error("passphrase_file_missing", "Passphrase-Datei nicht vorhanden")
+                add_error("passphrase_file_missing", "Passphrase file does not exist")
 
         if location == "storagebox":
             profile_key = str(raw.get("storage_profile_key") or "").strip().lower()
             profile = storage_by_key.get(profile_key)
             if not profile_key:
-                add_error("storage_profile_missing", "Storage-Profil fehlt")
+                add_error("storage_profile_missing", "Storage profile is missing")
             elif profile is None:
-                add_error("storage_profile_not_found", f"Storage-Profil '{profile_key}' nicht gefunden", profile=profile_key)
+                add_error("storage_profile_not_found", f"Storage profile '{profile_key}' not found", profile=profile_key)
             else:
                 ssh_key = str(profile.get("ssh_key_path") or "").strip()
                 if ssh_key and not Path(ssh_key).is_file():
-                    add_error("ssh_key_file_missing", "SSH-Key-Datei nicht vorhanden")
+                    add_error("ssh_key_file_missing", "SSH key file does not exist")
                 if not str(profile.get("host") or "").strip() or not str(profile.get("user") or "").strip():
-                    add_error("storage_profile_incomplete", "Storage-Profil ist unvollständig")
+                    add_error("storage_profile_incomplete", "Storage profile is incomplete")
 
         state = "bad" if errors else ("warn" if warnings else "ok")
         items.append({
@@ -396,11 +396,11 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             bad_perm.append({"path": str(p), "mode": _mode_octal(p)})
 
     secrets_permissions_ok = len(bad_perm) == 0
-    perm_msg = "Alle geprüften Secret-Dateien haben 600."
+    perm_msg = "All checked secret files have mode 600."
     if not secret_candidates:
-        perm_msg = "Keine Secret-Dateien für Rechteprüfung gefunden."
+        perm_msg = "No secret files were found for permission checks."
     elif bad_perm:
-        perm_msg = f"{len(bad_perm)} Datei(en) mit abweichenden Rechten."
+        perm_msg = f"{len(bad_perm)} file(s) have unexpected permissions."
     job_health = _collect_job_health(config, jobs_dir)
 
     return {

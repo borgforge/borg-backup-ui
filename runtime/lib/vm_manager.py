@@ -650,13 +650,13 @@ class VmManager:
                 "err": base64.b64decode(err_data).decode("utf-8", errors="replace").strip() if err_data else "",
             }
         except (json.JSONDecodeError, binascii.Error, UnicodeDecodeError, ValueError, TypeError):
-            return {"exited": False, "exitcode": 0, "out": "", "err": "guest-exec-status konnte nicht gelesen werden"}
+            return {"exited": False, "exitcode": 0, "out": "", "err": "guest-exec-status could not be read"}
 
     @staticmethod
     def _compact_guest_error(text: str) -> str:
         """Kürzt Diagnoseausgaben für normale INFO-Logs."""
         compact = " ".join(str(text or "").strip().split())
-        return compact[:240] if compact else "keine Details"
+        return compact[:240] if compact else "no details"
 
     @staticmethod
     def _parse_who_output(json_str: str) -> List[str]:
@@ -684,11 +684,11 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    parser = argparse.ArgumentParser(description="vm_manager.py – Diagnose")
+    parser = argparse.ArgumentParser(description="vm_manager.py - diagnostics")
     subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser("status", help="Zeigt laufende VMs")
-    shutdown_p = subparsers.add_parser("shutdown", help="Fährt alle VMs herunter")
-    subparsers.add_parser("start", help="Startet alle zuvor gestoppten VMs")
+    subparsers.add_parser("status", help="Show running VMs")
+    shutdown_p = subparsers.add_parser("shutdown", help="Shut down all VMs")
+    subparsers.add_parser("start", help="Start all previously stopped VMs")
 
     args = parser.parse_args()
 

@@ -170,7 +170,7 @@ def _split_crontab(text: str):
 def _validate_cron(expr: str) -> None:
     parts = expr.strip().split()
     if len(parts) != 5:
-        raise ValueError(f"Cron braucht genau 5 Felder (gefunden: {len(parts)})")
+        raise ValueError(f"Cron requires exactly 5 fields (found: {len(parts)})")
     for p in parts:
         if not re.match(r'^[\d\*/,\-]+$', p):
-            raise ValueError(f"Ungültiges Cron-Feld: {p!r}")
+            raise ValueError(f"Invalid cron field: {p!r}")

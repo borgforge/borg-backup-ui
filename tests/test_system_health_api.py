@@ -16,9 +16,9 @@ def test_migration_summary_without_run():
     summary = _build_migration_summary({}, {"last_event": {}, "last_effective_event": {}})
 
     assert summary["status"] == "none"
-    assert summary["state"] == "Noch kein Lauf"
+    assert summary["state"] == "No run yet"
     assert summary["last_run"] == ""
-    assert summary["reason"] == "Noch kein Migrationslauf protokolliert"
+    assert summary["reason"] == "No migration run has been recorded yet"
     assert summary["actions"] == []
     assert summary["errors"] == []
 
@@ -86,15 +86,15 @@ def test_migration_summary_extracts_actions_and_errors():
     })
 
     assert summary["status"] == "failed"
-    assert summary["state"] == "Fehlgeschlagen"
+    assert summary["state"] == "Failed"
     assert summary["last_run"] == "2026-06-06T23:40:00"
     assert summary["last_effective_run"] == "2026-06-06T23:41:00"
-    assert summary["reason"] == "Änderung des Cache/Remotes inkl. backup.conf-Anpassung"
-    assert "2 Elemente verschoben" in summary["actions"]
-    assert "Storage-Pfade aktualisiert" in summary["actions"]
-    assert "Profileinstellungen angepasst" in summary["actions"]
-    assert "backup.conf korrigiert" in summary["actions"]
-    assert "1 Verschiebe-Fehler" in summary["errors"]
+    assert summary["reason"] == "Cache/remotes changed, including backup.conf update"
+    assert "2 items moved" in summary["actions"]
+    assert "Storage paths updated" in summary["actions"]
+    assert "Profile settings updated" in summary["actions"]
+    assert "backup.conf corrected" in summary["actions"]
+    assert "1 move errors" in summary["errors"]
     assert "Job-Layout: jobs unreadable" in summary["errors"]
 
 
@@ -155,7 +155,7 @@ def test_collect_job_health_flags_broken_storagebox_repo_uri(tmp_path, monkeypat
     health = _collect_job_health({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, jobs_dir)
 
     assert health["summary"]["failed"] == 1
-    assert "fehlenden Slash" in " ".join(health["items"][0]["errors"])
+    assert "missing a slash" in " ".join(health["items"][0]["errors"])
     assert [row["code"] for row in health["items"][0]["error_details"]] == [
         "storagebox_repo_port_slash",
     ]
