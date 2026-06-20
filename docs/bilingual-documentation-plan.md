@@ -162,9 +162,11 @@ alle folgenden Punkte erfuellt sind:
    `PASS` dokumentiert.
 4. Der finale Release fuer Issue `#11` wurde gebaut, ueber den Test-Channel
    installiert und erfolgreich geprueft.
-5. Version, Paket, Manifest und MD5 stimmen zwischen Test und Promotion
+5. Das UI-Redesign aus Umbrella-Issue `#27` einschliesslich der Teil-Issues
+   `#28` bis `#35` ist abgeschlossen und final validiert.
+6. Version, Paket, Manifest und MD5 stimmen zwischen Test und Promotion
    ueberein.
-6. Der Maintainer hat die Community-Apps-Veroeffentlichung ausdruecklich
+7. Der Maintainer hat die Community-Apps-Veroeffentlichung ausdruecklich
    freigegeben.
 
 Vor Erfuellung aller Punkte bleiben interne Test-Channel-Informationen auf
