@@ -30,6 +30,25 @@
     "healthUnavailable": "Systemzustand konnte nicht geladen werden.",
     "logout": "Abmelden"
   },
+  "common": {
+    "close": "Schließen",
+    "error": "Fehler",
+    "success": "Erfolg",
+    "notice": "Hinweis",
+    "logFile": "Log-Datei"
+  },
+  "permissions": {
+    "viewerReadOnly": "Keine Berechtigung (Viewer: nur Ansicht).",
+    "viewerActionDenied": "Viewer: nur Ansicht. Aktion nicht erlaubt.",
+    "adminSettingsOnly": "Nur Admin darf Einstellungen speichern."
+  },
+  "help": {
+    "title": "Hilfe & Dokumentation",
+    "subtitle": "Bedienung, Troubleshooting und visuelle Anleitungen",
+    "refresh": "Aktualisieren",
+    "loading": "Lade Dokumentation...",
+    "loadFailed": "Dokumentation konnte nicht geladen werden: {message}"
+  },
   "api": {
     "errors": {
       "unknown": "Die Anfrage ist fehlgeschlagen.",
@@ -330,6 +349,7 @@
     "keepingExisting": "Vorhandene Passphrase wird beibehalten",
     "warningLabel": "Achtung:",
     "replaceWarningText": "Eine neue Passphrase macht das vorhandene Repository dauerhaft unlesbar!",
+    "passphrase": "Passphrase",
     "passphraseStoredHint": "(wird in <code>/boot/config/borg-backup/secrets/.borg-passphrase-&lt;typ&gt;_&lt;location&gt;</code> gespeichert)",
     "storedPrefix": "(wird in",
     "storedSuffix": "gespeichert)",
@@ -344,6 +364,7 @@
     "description": "Beschreibung",
     "optionalHint": "(optional)",
     "markdownHelp": "Markdown-Hilfe",
+    "listExample": "- Punkt 1",
     "descriptionMarkdown": "Das Feld Beschreibung erlaubt Markdown.",
     "descriptionPlaceholder": "z.B. **Paperless**\n- Appdata sichern\n- Ziel: /mnt/backup/borg-backup-meinedaten",
     "loadingPreview": "Lade Flow-Vorschau...",

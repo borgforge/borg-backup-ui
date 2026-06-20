@@ -30,6 +30,25 @@
     "healthUnavailable": "System health could not be loaded.",
     "logout": "Log out"
   },
+  "common": {
+    "close": "Close",
+    "error": "Error",
+    "success": "Success",
+    "notice": "Notice",
+    "logFile": "Log file"
+  },
+  "permissions": {
+    "viewerReadOnly": "Permission denied (viewer role is read-only).",
+    "viewerActionDenied": "Viewer role is read-only. This action is not allowed.",
+    "adminSettingsOnly": "Only administrators may save settings."
+  },
+  "help": {
+    "title": "Help & Documentation",
+    "subtitle": "Usage, troubleshooting, and visual guides",
+    "refresh": "Refresh",
+    "loading": "Loading documentation...",
+    "loadFailed": "Documentation could not be loaded: {message}"
+  },
   "api": {
     "errors": {
       "unknown": "The request failed.",
@@ -330,6 +349,7 @@
     "keepingExisting": "Existing passphrase will be retained",
     "warningLabel": "Warning:",
     "replaceWarningText": "A new passphrase will make the existing repository permanently unreadable!",
+    "passphrase": "Passphrase",
     "passphraseStoredHint": "(stored in <code>/boot/config/borg-backup/secrets/.borg-passphrase-&lt;type&gt;_&lt;location&gt;</code>)",
     "storedPrefix": "(stored in",
     "storedSuffix": ")",
@@ -344,6 +364,7 @@
     "description": "Description",
     "optionalHint": "(optional)",
     "markdownHelp": "Markdown help",
+    "listExample": "- Item 1",
     "descriptionMarkdown": "The description field supports Markdown.",
     "descriptionPlaceholder": "e.g. **Paperless**\n- Back up Appdata\n- Target: /mnt/backup/borg-backup-mydata",
     "loadingPreview": "Loading flow preview...",

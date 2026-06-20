@@ -6,7 +6,18 @@
   const core = () => window.BBUI?.core;
   const theme = () => window.BBUI?.components?.theme;
   const logViewer = () => window.BBUI?.components?.logViewer;
+  const t = (key) => window.BBUI?.components?.i18n?.t?.(key) || key;
   let roleUiObserver = null;
+
+  function _updateCurrentUserLabel() {
+    const el = document.getElementById('auth-current-user');
+    if (!el) return;
+    const username = String(el.dataset.username || '').trim();
+    const role = String(el.dataset.role || '').trim();
+    el.textContent = username
+      ? `${t('settings.users.signedIn')} ${username}${role ? ` (${role})` : ''}`
+      : '';
+  }
 
   function _currentRole() {
     return String(core()?.getCurrentRole?.() || 'viewer').toLowerCase();
@@ -45,7 +56,7 @@
     if (settingsNav) settingsNav.style.display = canSettings ? '' : 'none';
     _setHidden('#sidebar-system-health', !canSettings);
 
-    const viewerHint = 'Keine Berechtigung (Viewer: nur Ansicht).';
+    const viewerHint = t('permissions.viewerReadOnly');
     _setHidden('#jobs-new-btn, #jobs-empty-create-btn', isViewer);
     _setHidden('[data-jobs-action="start-job"]', isViewer);
     _setHidden('[data-jobs-action="toggle-menu"]', isViewer);
@@ -60,7 +71,7 @@
 
     _setDisabled('#restore-confirm-check', isViewer, viewerHint);
     _setDisabled('#restore-target-path, #restore-conflict-mode, #restore-dry-run, #restore-preserve-owner', isViewer, viewerHint);
-    _setDisabled('#settings-save-btn', !_isAdmin(), 'Nur Admin darf Einstellungen speichern.');
+    _setDisabled('#settings-save-btn', !_isAdmin(), t('permissions.adminSettingsOnly'));
   }
 
   function _startRoleUiObserver() {
@@ -194,7 +205,7 @@
       event.preventDefault();
       event.stopPropagation();
       if (typeof showMsg === 'function') {
-        showMsg('jobs-message', 'warning', 'Viewer: nur Ansicht. Aktion nicht erlaubt.');
+        showMsg('jobs-message', 'warning', t('permissions.viewerActionDenied'));
       }
     }, true);
   }
@@ -300,7 +311,9 @@
       const u = String(a.current_user || '').trim();
       const role = String(a.current_role || '').trim();
       core()?.setCurrentRole?.(role || 'viewer');
-      el.textContent = u ? `Angemeldet: ${u}${role ? ` (${role})` : ''}` : '';
+      el.dataset.username = u;
+      el.dataset.role = role;
+      _updateCurrentUserLabel();
       const canSettings = String(role || '').toLowerCase() === 'admin';
       applyRoleUiGates();
       core()?.updateSidebarSystemHealth?.(true);
@@ -328,6 +341,10 @@
     bindCoreNavigation();
     bindMainActions();
     bindWizardActions();
+    window.addEventListener('bbui:language-changed', () => {
+      _updateCurrentUserLabel();
+      applyRoleUiGates();
+    });
     runStartup();
   }
 

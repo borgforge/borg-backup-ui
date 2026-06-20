@@ -2,6 +2,10 @@
 
 let _helpLoaded = false;
 
+function helpT(key, params = {}) {
+  return window.BBUI?.components?.i18n?.t?.(`help.${key}`, params) || key;
+}
+
 function _helpInline(mdText) {
   return escHtml(String(mdText || ''))
     .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g, (_m, alt, src, title) => {
@@ -83,7 +87,7 @@ async function helpInit(force = false) {
   const box = document.getElementById('help-content');
   if (!box) return;
   hideEl('help-message');
-  box.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><span>Lade Dokumentation...</span></div>';
+  box.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>${escHtml(helpT('loading'))}</span></div>`;
   try {
     const res = await fetch('/ui/docs/help.md', { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -93,7 +97,7 @@ async function helpInit(force = false) {
   } catch (err) {
     _helpLoaded = false;
     box.innerHTML = '';
-    showMsg('help-message', 'error', `Dokumentation konnte nicht geladen werden: ${err.message}`);
+    showMsg('help-message', 'error', helpT('loadFailed', { message: err.message }));
   }
 }
 

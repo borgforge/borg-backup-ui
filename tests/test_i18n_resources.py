@@ -1,10 +1,22 @@
 import json
+import importlib.util
 import re
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 I18N_DIR = ROOT / "ui" / "i18n"
+
+
+def _load_i18n_audit():
+    path = ROOT / "plugin" / "i18n_audit.py"
+    spec = importlib.util.spec_from_file_location("i18n_audit", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _flatten_keys(value, prefix=""):
@@ -35,6 +47,15 @@ def _flatten_values(value, prefix=""):
 
 def test_german_and_english_resources_have_matching_keys():
     assert _flatten_keys(_load("de")) == _flatten_keys(_load("en"))
+
+
+def test_user_facing_ui_has_no_untracked_hardcoded_text():
+    audit = _load_i18n_audit()
+    findings = audit.audit(ROOT)
+
+    assert not findings, "Hardcoded UI text found:\n" + "\n".join(
+        finding.format() for finding in findings
+    )
 
 
 def test_resources_have_no_duplicate_keys_and_matching_placeholders():
