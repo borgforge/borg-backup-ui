@@ -106,11 +106,37 @@ Konvention:
 ## Wiederholbares Hardcode-Audit
 - Jede Seitenmigration sucht in den zugeordneten HTML- und JavaScript-Dateien
   nach sichtbaren Texten und ueberfuehrt sie domaenenweise.
-- Vor Abschluss des Umbrella-Issues prueft Issue `#25` alle UI-Dateien erneut.
-- Hilfreiche Ausgangssuche:
-  `rg -n "textContent|innerHTML|placeholder|title=|aria-label|>[^<]+<" ui`
+- Der wiederholbare Abschlusscheck aus Issue `#25` wird ausgefuehrt mit:
+  `python3 plugin/i18n_audit.py`
+- Der Audit prueft `ui/index.html` auf sichtbare Textknoten ohne
+  `data-i18n*`-Markierung und `ui/js/**/*.js` auf deutsche String-Literale.
+- `python3 plugin/i18n_audit.py --backend` erweitert das Inventar um deutsche
+  String-Literale in `api/**/*.py`. Die dort gefundenen Altlasten werden in
+  Folge-Issue `#47` bereinigt; bis dahin ist dieser Modus bewusst ein
+  Inventarcheck und kein Merge-Gate.
+- `tests/test_i18n_resources.py` fuehrt denselben Audit bei jedem Testlauf aus.
+- Technische Produktnamen, Pfade, Konfigurationswerte, Formatnamen und reine
+  interne Routen-IDs sind keine zu uebersetzenden UI-Texte.
+- Historische deutsche Backendtexte, die nur zur Rueckwaertskompatibilitaet
+  erkannt und anschliessend auf lokalisierte Codes abgebildet werden, sind
+  explizit als Kompatibilitaetswerte dokumentiert.
 - Externe Borg-, SSH- und Betriebssystemausgaben werden dabei nicht als eigene
   UI-Texte bewertet.
+
+### Abschlussinventar aus Issue #25
+- Migriert wurden die verbliebenen Texte der Hilfe-Seite, generische Dialog- und
+  Logtitel, Rollenhinweise und Toast-Fallbacktitel.
+- Die Unraid-Control-Page bleibt bewusst Englisch und wird durch
+  `tests/test_plugin_control_page.py` abgesichert.
+- Eigene Logs, E-Mails, Reports und Benachrichtigungen bleiben gemaess Issue
+  `#23` bewusst Englisch.
+- API-Klartexte bleiben englische Fallbacks; die UI verwendet uebersetzte
+  `message_code`- und `error_code`-Werte.
+- Der eigentliche Inhalt von `ui/docs/help.md` gehoert zur zweisprachigen
+  Dokumentationsstrategie in Issue `#22` und ist nicht Teil dieses UI-Audits.
+- Verbleibende deutsche Backend-Fallbacks, Diagnosetexte und generierte
+  Runner-Texte sind reproduzierbar inventarisiert und werden in Issue `#47`
+  auf Englisch vereinheitlicht.
 
 ## Risiken & Gegenmaßnahmen
 - Risiko: Inkonsistente Texte bei gemischter Hardcode/i18n-Nutzung.

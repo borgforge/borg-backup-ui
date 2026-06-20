@@ -771,8 +771,8 @@
     <div id="page-hilfe" class="page">
       <div class="page-header">
         <div>
-          <h1>Hilfe &amp; Dokumentation</h1>
-          <p class="page-subtitle">Bedienung, Troubleshooting und visuelle Anleitungen</p>
+          <h1 data-i18n="help.title">Hilfe &amp; Dokumentation</h1>
+          <p class="page-subtitle" data-i18n="help.subtitle">Bedienung, Troubleshooting und visuelle Anleitungen</p>
         </div>
         <div class="header-actions">
           <button class="btn btn-secondary" id="help-refresh-btn">
@@ -780,7 +780,7 @@
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
-            Aktualisieren
+            <span data-i18n="help.refresh">Aktualisieren</span>
           </button>
         </div>
       </div>
@@ -788,7 +788,7 @@
       <div id="help-content" class="help-doc">
         <div class="loading-spinner">
           <div class="spinner"></div>
-          <span>Lade Dokumentation...</span>
+          <span data-i18n="help.loading">Lade Dokumentation...</span>
         </div>
       </div>
     </div>
@@ -884,7 +884,7 @@
 <div id="settings-dialog-modal" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3 id="settings-dialog-title">Eingabe</h3>
+      <h3 id="settings-dialog-title" data-i18n="settings.dialog.input">Eingabe</h3>
       <button class="modal-close" id="settings-dialog-close-btn" data-i18n-aria-label="settings.dialog.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
@@ -901,7 +901,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="settings-dialog-cancel-btn" data-i18n="settings.dialog.cancel">Abbrechen</button>
-      <button class="btn btn-primary" id="settings-dialog-confirm-btn">Bestätigen</button>
+      <button class="btn btn-primary" id="settings-dialog-confirm-btn" data-i18n="settings.dialog.confirm">Bestätigen</button>
     </div>
   </div>
 </div>
@@ -1224,7 +1224,7 @@
 
         <div id="wizard-passphrase-form" class="settings-body">
           <div class="form-group">
-            <label class="form-label">Passphrase <span class="form-hint"><span data-i18n="wizard.storedPrefix">(wird in</span> <code>/boot/config/borg-backup/secrets/.borg-passphrase-&lt;typ&gt;_&lt;location&gt;</code> <span data-i18n="wizard.storedSuffix">gespeichert)</span></span></label>
+            <label class="form-label"><span data-i18n="wizard.passphrase">Passphrase</span> <span class="form-hint"><span data-i18n="wizard.storedPrefix">(wird in</span> <code>/boot/config/borg-backup/secrets/.borg-passphrase-&lt;typ&gt;_&lt;location&gt;</code> <span data-i18n="wizard.storedSuffix">gespeichert)</span></span></label>
             <div class="passphrase-input-wrap">
               <input class="form-input mono" type="password" id="wiz-passphrase"
                 placeholder="Passphrase eingeben oder generieren" data-i18n-placeholder="wizard.passphrasePlaceholder"
@@ -1391,7 +1391,7 @@
       <ul style="margin-left:18px;color:var(--text-secondary);font-size:13px;line-height:1.5">
         <li><code>**fett**</code> <span data-i18n="wizard.boldHelp">für Fettdruck</span></li>
         <li><code>*kursiv*</code> <span data-i18n="wizard.italicHelp">für Kursiv</span></li>
-        <li><code>- Punkt 1</code> <span data-i18n="wizard.listHelp">für Listen</span></li>
+        <li><code data-i18n="wizard.listExample">- Punkt 1</code> <span data-i18n="wizard.listHelp">für Listen</span></li>
         <li data-i18n="wizard.paragraphHelp">Absätze durch Leerzeilen trennen</li>
       </ul>
       <p class="text-muted" style="margin-top:10px" data-i18n="wizard.example">Beispiel:</p>
@@ -1504,8 +1504,8 @@ Backup der wichtigsten Fotoverzeichnisse.
 <div id="log-viewer-modal" class="modal-backdrop hidden">
   <div class="modal modal-log">
     <div class="modal-header">
-      <h3 id="log-viewer-title">Log-Datei</h3>
-      <button class="modal-close" id="log-viewer-close-btn">
+      <h3 id="log-viewer-title" data-i18n="common.logFile">Log-Datei</h3>
+      <button class="modal-close" id="log-viewer-close-btn" data-i18n-aria-label="common.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
@@ -1513,7 +1513,7 @@ Backup der wichtigsten Fotoverzeichnisse.
       </button>
     </div>
     <div id="log-viewer-body" class="log-viewer-body">
-      <div class="loading-spinner"><div class="spinner"></div><span>Lade Log...</span></div>
+      <div class="loading-spinner"><div class="spinner"></div><span data-i18n="api.messages.logLoading">Lade Log...</span></div>
     </div>
   </div>
 </div>
