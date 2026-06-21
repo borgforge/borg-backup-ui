@@ -53,6 +53,11 @@ separately.
 - Reuse shared primitives instead of page-specific copies: surfaces, headers,
   sidebars, navigation entries, badges, tables, forms, notices, empty states,
   action groups, and log panels.
+- Job selection sidebars must render the configured job icon and icon color
+  stored in the job metadata, with the backup-type icon only as a fallback.
+- Location sidebars must reuse the Local, USB, SMB, and Storagebox SVG icons
+  from the existing Storage page. Do not add a Custom location unless the
+  application supports creating and using that location.
 
 ## Responsive contract
 
