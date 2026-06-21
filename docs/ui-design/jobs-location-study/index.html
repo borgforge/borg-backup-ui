@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Jobs - Location Design Study</title>
+  <link rel="stylesheet" href="../jobs-design-study/study.css">
+  <link rel="stylesheet" href="location-study.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand"><span class="brand-mark">B</span><span>Borg Backup<small>UI</small></span></div>
+      <nav class="nav"><div>Dashboard</div><div class="active">Jobs</div><div>Storage</div><div>History</div><div>Berichte</div><div>Browse &amp; Restore</div><div>Restore Tests</div><div>Einstellungen</div><div>Hilfe</div></nav>
+      <div class="rail-foot"><b>● Systemstatus: alles OK</b>admin · 19.06.2026, 09:15<br>Version 2026.06</div>
+    </aside>
+    <main>
+      <div class="study-bar">
+        <span>Jobs · Varianten auf Basis des Control Boards</span>
+        <div class="study-controls">
+          <div class="segmented"><button data-variant-choice="a">A1</button><button data-variant-choice="b">A2</button><button data-variant-choice="c">A3</button></div>
+          <button class="theme" id="theme-toggle" title="Hell/Dunkel">☀</button>
+        </div>
+      </div>
+      <header class="page-head">
+        <div><h1>Jobs</h1><span class="subtitle">Backup-Jobs starten und überwachen</span></div>
+        <div class="actions"><button class="btn">↻ Aktualisieren</button><button class="btn primary">＋ Neuer Job</button></div>
+      </header>
+      <div class="ready"><span><b>● System bereit</b> · Globale Datenablage aktiv · 4 Jobs geladen</span><span class="badge info">1 läuft</span></div>
+      <section class="variant" data-variant="a"><div id="variant-a"></div></section>
+      <section class="variant" data-variant="b"><div id="variant-b"></div></section>
+      <section class="variant" data-variant="c"><div id="variant-c"></div></section>
+      <section class="log-panel">
+        <div class="log-head"><div><strong>Log: Appdata Nightly</strong> <span class="badge info"><span class="dot"></span>Läuft…</span></div><div class="log-tools"><button class="btn sm">Leeren</button><button class="btn icon sm">×</button></div></div>
+        <pre>09:14:02  Job gestartet
+09:14:04  Docker-Container werden gestoppt...
+09:14:11  VM-Metadaten werden gesichert...
+09:15:07  Verarbeite Dateien...</pre>
+        <div class="scroll-hint"><button class="btn sm">↓ Zum Ende springen</button></div>
+      </section>
+    </main>
+  </div>
+  <script src="location-study.js"></script>
+</body>
+</html>
