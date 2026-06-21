@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.21.1200">
+<!ENTITY version   "2026.06.21.1227">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,8 +18,9 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.21.1200###
-- TEST CHANNEL: Shared responsive UI design foundation and readable light-theme status fields (#28).
+###2026.06.21.1227###
+- UI (#29):
+  - Dashboard and Jobs use a shared location workflow with responsive light and dark layouts.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -41,7 +42,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>b0ff99085de6763f6e2c9e1b736686d9</MD5>
+<MD5>888179dd59b7faa1968921c4bf9b4919</MD5>
 </FILE>
 
 <!--
