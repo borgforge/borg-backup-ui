@@ -17,6 +17,7 @@ window.BBUI.restoreTestsState = window.BBUI.restoreTestsState || {
   filteredReports: [],
   logState: null,
   logExitCode: null,
+  selectedJob: 'all',
 };
 const restoreTestsState = window.BBUI.restoreTestsState;
 
@@ -35,6 +36,64 @@ function restoreTestsLocationLabel(location) {
   return key
     ? (window.BBUI?.components?.i18n?.t?.(`storage.${key}`) || normalized)
     : (location || '—');
+}
+
+function restoreTestsJobCount(count) {
+  return restoreTestsT(count === 1 ? 'jobCountOne' : 'jobCountMany', { count });
+}
+
+function restoreTestsJobIcon(job) {
+  const icon = resolveJobIcon(job);
+  const color = resolveJobIconColor(job);
+  const colorClass = color ? ` type-icon-color-${color}` : '';
+  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+}
+
+function renderRestoreTestsSidebar() {
+  const list = document.getElementById('rt-sidebar-job-list');
+  if (!list) return;
+  const query = String(document.getElementById('rt-sidebar-search')?.value || '').trim().toLowerCase();
+  const jobs = (restoreTestsState.jobs || []).filter((job) => `${job.display_name || ''} ${job.name || ''} ${job.key || ''} ${job.location || ''}`.toLowerCase().includes(query));
+  if (!jobs.length) {
+    list.innerHTML = `<div class="ui-empty rt-sidebar-empty">${escHtml(restoreTestsT('noMatchingJobs'))}</div>`;
+    return;
+  }
+  const planByKey = new Map((restoreTestsState.plan?.jobs || []).map((job) => [String(job.job_key), job]));
+  const allActive = restoreTestsState.selectedJob === 'all';
+  const allEntry = `<button class="rt-sidebar-job is-all ${allActive ? 'is-active' : ''}" data-rt-sidebar-job="all" ${allActive ? 'aria-current="page"' : ''}><span class="location-nav-glyph all">${locationIcon('all')}</span><span><strong>${escHtml(restoreTestsT('allJobs'))}</strong><small>${escHtml(restoreTestsT('overview'))}</small></span><span class="ui-badge">${jobs.length}</span></button>`;
+  const order = ['storagebox', 'usb', 'smb', 'local'];
+  const groups = order.map((location) => {
+    const locationJobs = jobs.filter((job) => String(job.location || '').toLowerCase() === location);
+    if (!locationJobs.length) return '';
+    return `<section class="rt-sidebar-group"><header>${escHtml(restoreTestsLocationLabel(location))}<span>${locationJobs.length}</span></header>${locationJobs.map((job) => {
+      const planJob = planByKey.get(String(job.key));
+      const stateClass = planJob?.is_overdue ? 'warning' : planJob?.enabled === false ? 'disabled' : 'success';
+      const active = restoreTestsState.selectedJob === String(job.key);
+      return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.key)}</strong><small>${escHtml(job.key)}</small></span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
+    }).join('')}</section>`;
+  }).join('');
+  list.innerHTML = allEntry + groups;
+  list.querySelectorAll('[data-rt-sidebar-job]').forEach((button) => button.addEventListener('click', () => {
+    restoreTestsState.selectedJob = button.dataset.rtSidebarJob || 'all';
+    renderRestoreTestsSidebar();
+    renderRestorePlan(restoreTestsState.plan);
+    renderRestoreTests(restoreTestsState.data || []);
+    updateRestoreTestsWorkspace();
+  }));
+}
+
+function updateRestoreTestsWorkspace() {
+  const selected = restoreTestsState.selectedJob;
+  const selectedJob = (restoreTestsState.jobs || []).find((job) => String(job.key) === selected);
+  const visibleCount = selected === 'all' ? (restoreTestsState.jobs || []).length : (selectedJob ? 1 : 0);
+  const title = document.getElementById('rt-workspace-title');
+  const count = document.getElementById('rt-workspace-count');
+  const kicker = document.getElementById('rt-workspace-kicker');
+  const subtitle = document.getElementById('rt-workspace-subtitle');
+  if (title) title.textContent = selectedJob?.display_name || selectedJob?.name || (selected === 'all' ? restoreTestsT('allJobs') : selected);
+  if (count) count.textContent = restoreTestsJobCount(visibleCount);
+  if (kicker) kicker.textContent = restoreTestsT(restoreTestsState.subtab === 'reports' ? 'reportsTab' : 'planTab');
+  if (subtitle) subtitle.textContent = restoreTestsT(restoreTestsState.subtab === 'reports' ? 'reportsWorkspaceSubtitle' : 'planWorkspaceSubtitle');
 }
 
 function restoreTestFailureMessage(test) {
@@ -278,6 +337,8 @@ async function refreshRestoreTests() {
     renderRestoreTestsSubtab();
     _updateRTScheduleBtn();
     await refreshRestoreTestJobOptions();
+    renderRestoreTestsSidebar();
+    updateRestoreTestsWorkspace();
   } catch (err) {
     showMsg('restore-tests-message', 'error', restoreTestsT('errorValue', { message: err.message }));
   } finally {
@@ -288,6 +349,7 @@ async function refreshRestoreTests() {
 function switchRestoreTestsSubtab(tab) {
   restoreTestsState.subtab = tab === 'reports' ? 'reports' : 'plan';
   renderRestoreTestsSubtab();
+  updateRestoreTestsWorkspace();
 }
 
 function renderRestoreTestsSubtab() {
@@ -313,16 +375,8 @@ function renderRestorePlan(plan) {
     contentEl.innerHTML = `<div class="status-message warning">${escHtml(restoreTestsT('planLoadFailed'))}</div>`;
     return;
   }
-  const s = plan.summary || {};
-  summaryEl.textContent = restoreTestsT('planSummary', {
-    total: s.total || 0,
-    scheduled: s.scheduled || 0,
-    manual: s.manual_only || 0,
-    off: s.off || 0,
-    overdue: s.overdue || 0,
-  });
   const locOrder = { local: 1, usb: 2, smb: 3, storagebox: 4, custom: 5 };
-  const sortedJobs = [...plan.jobs].sort((a, b) => {
+  const sortedJobs = [...plan.jobs].filter((job) => restoreTestsState.selectedJob === 'all' || String(job.job_key) === restoreTestsState.selectedJob).sort((a, b) => {
     const la = String(a?.location || '').toLowerCase();
     const lb = String(b?.location || '').toLowerCase();
     const oa = locOrder[la] || 99;
@@ -332,6 +386,14 @@ function renderRestorePlan(plan) {
     const nb = String(b?.display_name || b?.job_key || '').toLowerCase();
     return na.localeCompare(nb, restoreTestsLocale());
   });
+  const planSummary = {
+    total: sortedJobs.length,
+    scheduled: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'scheduled').length,
+    manual: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'manual_only').length,
+    off: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'off').length,
+    overdue: sortedJobs.filter((job) => job.is_overdue).length,
+  };
+  summaryEl.innerHTML = `<section class="rt-plan-summary"><header><div><strong>${escHtml(restoreTestsT('summaryTitle'))}</strong><small>${escHtml(restoreTestsT('summarySubtitle'))}</small></div></header><div><span><small>${escHtml(restoreTestsT('summaryTotal'))}</small><b>${planSummary.total}</b></span><span class="planned"><small>${escHtml(restoreTestsT('summaryScheduled'))}</small><b>${planSummary.scheduled}</b></span><span><small>${escHtml(restoreTestsT('summaryManual'))}</small><b>${planSummary.manual}</b></span><span><small>${escHtml(restoreTestsT('summaryOff'))}</small><b>${planSummary.off}</b></span><span class="attention"><small>${escHtml(restoreTestsT('summaryOverdue'))}</small><b>${planSummary.overdue}</b></span></div></section>`;
   const rows = sortedJobs.map((j) => {
     const p = j.policy || {};
     const mode = String(p.mode || 'off');
@@ -490,7 +552,9 @@ async function refreshRestoreTestJobOptions() {
     const res = await fetch('/api/jobs');
     if (!res.ok) return;
     const data = await res.json();
-    restoreTestsState.jobs = (data.jobs || []).filter(j => j.enabled !== false);
+    restoreTestsState.jobs = (data.jobs || []).filter(j => !j.is_utility);
+    renderRestoreTestsSidebar();
+    updateRestoreTestsWorkspace();
     refreshRestoreTestJobsForSelection();
   } catch (_) {}
 }
@@ -580,6 +644,7 @@ function _getFilteredRTReports(tests) {
   const rangeDays = Number(range || 0);
   const filtered = [...tests].filter((t) => {
     const key = String(t.job_key || t.type || '').toLowerCase();
+    if (restoreTestsState.selectedJob !== 'all' && key !== String(restoreTestsState.selectedJob).toLowerCase()) return false;
     if (jobNeedle && !key.includes(jobNeedle)) return false;
     if (location !== 'all' && String(t.location || '').toLowerCase() !== location) return false;
     const stale = t.test_result === 'success' && isStaleDate(t.test_date);
@@ -916,6 +981,8 @@ window.addEventListener?.('bbui:language-changed', () => {
   renderRTReportFilterOptions(restoreTestsState.data || []);
   renderRestoreTests(restoreTestsState.data || []);
   renderRestoreTestsSubtab();
+  renderRestoreTestsSidebar();
+  updateRestoreTestsWorkspace();
   refreshRestoreTestJobsForSelection();
   if (restoreTestsState.logState) {
     setRTLogStatus(restoreTestsState.logState, restoreTestsState.logExitCode);

@@ -26,6 +26,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Berichte folgen der freigegebenen Variante C mit durchsuchbarer Job-Sidebar, Kennzahlen-Ledger, Trendtabelle mit Sparklines und monatlicher Statustabelle.
   - Bestehende Lauf-, Restore-, Repository-, Log- und Borg-Detaildaten bleiben erhalten.
 
+### Issue #31
+- UI (#31):
+  - Restore Tests verwendet eine nach Location gruppierte Job-Sidebar mit Suche und den konfigurierten Job-Icons.
+  - Planung, Laufzeithinweise, Policy-Tabelle, Live-Log und Prüfberichte sind in einem gemeinsamen responsiven Workspace zusammengeführt.
+  - Plan- und Berichtszusammenfassungen erhalten höhere visuelle Priorität; technische Nachweise und Detaildaten bleiben verfügbar.
+
 ## Archivierte Manifest-Historie
 
 ###2026.06.15.1213###
