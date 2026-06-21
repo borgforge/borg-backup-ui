@@ -28,6 +28,14 @@ def test_history_preserves_filter_pagination_and_detail_contracts() -> None:
         "renderRestoreReportSteps",
     ):
         assert contract in script
+    for obsolete_id in (
+        "bericht-size-chart", "bericht-dedup-chart",
+        "bericht-dur-chart", "bericht-status-chart",
+    ):
+        assert f'id="{obsolete_id}"' not in html
+    assert 'class="report-metric-ledger"' in html
+    assert 'class="report-trend-table"' in html
+    assert 'class="report-status-table"' in html
 
 
 def test_reports_preserves_selection_search_and_analysis_contracts() -> None:
@@ -35,14 +43,14 @@ def test_reports_preserves_selection_search_and_analysis_contracts() -> None:
     script = _read("ui/js/pages/reports.js")
     for element_id in (
         "bericht-job-sel", "report-job-search", "report-job-list",
-        "bericht-body", "bericht-borginfo-btn", "bericht-size-chart",
-        "bericht-dedup-chart", "bericht-dur-chart", "bericht-status-chart",
+        "bericht-body", "bericht-borginfo-btn", "br-run-badge",
+        "bericht-trend-body", "bericht-status-body",
     ):
         assert f'id="{element_id}"' in html
     for contract in (
         "data-report-job", "/api/reports/data?job=", "/api/restore/repo-stats?job=",
         "_berichtRenderGrowthCards", "_berichtRestoreVerification",
-        "_berichtStatusChart",
+        "_berichtTrendTable", "_berichtSparkline", "_berichtStatusTable",
     ):
         assert contract in script
 
@@ -54,4 +62,6 @@ def test_history_reports_layout_is_responsive_and_compact() -> None:
     assert "overflow-x: auto" in css
     assert ".history-detail-panel" in css
     assert ".report-job-list" in css
-    assert "max-height: 11rem" in css
+    assert ".report-metric-ledger" in css
+    assert ".report-sparkline" in css
+    assert ".report-status-distribution" in css

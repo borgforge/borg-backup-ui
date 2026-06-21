@@ -119,6 +119,7 @@ function _berichtUpdateSelection(job) {
 function _berichtRender(d) {
   const successPct = d.run_count > 0 ? Math.round(d.success_count / d.run_count * 100) : 0;
   document.getElementById('br-runs').textContent      = d.run_count;
+  document.getElementById('br-run-badge').textContent = reportsT('runCount', { count: d.run_count });
   document.getElementById('br-success').textContent   = `${d.success_count} (${successPct}%)`;
   document.getElementById('br-avg-dur').textContent   = d.avg_duration_fmt || '—';
   document.getElementById('br-repo-size').textContent = d.latest_repository_size_fmt || '—';
@@ -132,10 +133,104 @@ function _berichtRender(d) {
   borgInfoButton.textContent = reportsT('load');
   _berichtBorgInfoMsg('');
 
-  _berichtSizeChart(d.runs || []);
-  _berichtDedupChart(d.runs || []);
-  _berichtDurChart(d.runs || []);
-  _berichtStatusChart(d.monthly_status || []);
+  _berichtTrendTable(d.runs || []);
+  _berichtStatusTable(d.monthly_status || []);
+}
+
+function _berichtTrendTable(runs) {
+  const body = document.getElementById('bericht-trend-body');
+  if (!body) return;
+  const rows = Array.isArray(runs) ? runs : [];
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="6">${escHtml(reportsT('noData'))}</td></tr>`;
+    return;
+  }
+  const last = rows[rows.length - 1];
+  const last7 = rows.slice(-7);
+  const last30 = rows.slice(-30);
+  const metricRows = [
+    {
+      label: reportsT('repoSizeMetric'), detail: reportsT('occupiedStorage'),
+      values: rows.map((row) => Number(row.repository_size || 0)).filter((value) => value > 0),
+      current: _fmtBytes(last.repository_size || 0),
+      seven: _fmtDeltaAgainst(last.repository_size, last7[0]?.repository_size),
+      thirty: _fmtDeltaAgainst(last.repository_size, last30[0]?.repository_size),
+      format: _fmtBytes, color: 'var(--ui-color-accent)',
+    },
+    {
+      label: reportsT('uniqueDataMetric'), detail: reportsT('perBackupRun'),
+      values: rows.map((row) => Number(row.deduplicated_size || 0)).filter((value) => value > 0),
+      current: _fmtBytes(last.deduplicated_size || 0),
+      seven: reportsT('averageValue', { value: _fmtBytes(_average(last7.map((row) => row.deduplicated_size))) }),
+      thirty: reportsT('averageValue', { value: _fmtBytes(_average(last30.map((row) => row.deduplicated_size))) }),
+      format: _fmtBytes, color: 'var(--ui-state-success-fg)',
+    },
+    {
+      label: reportsT('durationMetric'), detail: reportsT('executionTime'),
+      values: rows.map((row) => Number(row.duration_seconds || 0)).filter((value) => value > 0),
+      current: _fmtDuration(last.duration_seconds),
+      seven: _fmtDurationDelta(last.duration_seconds, _average(last7.map((row) => row.duration_seconds))),
+      thirty: _fmtDurationDelta(last.duration_seconds, _average(last30.map((row) => row.duration_seconds))),
+      format: _fmtDuration, color: 'var(--ui-state-warning-fg)',
+    },
+  ];
+  body.innerHTML = metricRows.map((metric) => {
+    const min = metric.values.length ? Math.min(...metric.values) : 0;
+    const max = metric.values.length ? Math.max(...metric.values) : 0;
+    return `<tr><td><strong>${escHtml(metric.label)}</strong><small>${escHtml(metric.detail)}</small></td><td><b>${escHtml(metric.current)}</b></td><td>${escHtml(metric.seven)}</td><td>${escHtml(metric.thirty)}</td><td>${escHtml(`${metric.format(min)} / ${metric.format(max)}`)}</td><td>${_berichtSparkline(metric.values.slice(-30), metric.color, metric.label)}</td></tr>`;
+  }).join('');
+}
+
+function _average(values) {
+  const valid = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : 0;
+}
+
+function _fmtDeltaAgainst(current, previous) {
+  if (!Number(current) || !Number(previous)) return '—';
+  return _fmtDelta(Number(current) - Number(previous));
+}
+
+function _fmtDurationDelta(current, average) {
+  if (!Number(current) || !Number(average)) return '—';
+  const delta = Number(current) - Number(average);
+  return `${delta >= 0 ? '+' : '-'}${_fmtDuration(Math.abs(delta))}`;
+}
+
+function _berichtSparkline(values, color, label) {
+  const points = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  if (points.length < 2) return `<span>${escHtml(reportsT('noData'))}</span>`;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const coordinates = points.map((value, index) => `${4 + index * (172 / (points.length - 1))},${31 - ((value - min) / range) * 25}`).join(' ');
+  const lastY = 31 - ((points[points.length - 1] - min) / range) * 25;
+  return `<svg class="report-sparkline" viewBox="0 0 180 36" role="img" aria-label="${escHtml(reportsT('trendFor', { metric: label }))}"><polyline points="${coordinates}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="176" cy="${lastY}" r="3" fill="${color}"/></svg>`;
+}
+
+function _berichtStatusTable(monthly) {
+  const body = document.getElementById('bericht-status-body');
+  if (!body) return;
+  const rows = Array.isArray(monthly) ? [...monthly].reverse() : [];
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="7">${escHtml(reportsT('noData'))}</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map((month) => {
+    const success = Number(month.success || 0);
+    const warning = Number(month.warning || 0);
+    const error = Number(month.error || 0);
+    const total = success + warning + error;
+    const rate = total ? Math.round(success / total * 100) : 0;
+    const label = _reportMonthLabel(month.month);
+    return `<tr><td><strong>${escHtml(label)}</strong></td><td>${total}</td><td class="report-value-success">${success}</td><td class="report-value-warning">${warning}</td><td class="report-value-error">${error}</td><td><div class="report-status-distribution" aria-label="${escHtml(reportsT('distributionLabel', { success, warning, error }))}"><span class="success" style="width:${total ? success / total * 100 : 0}%"></span><span class="warning" style="width:${total ? warning / total * 100 : 0}%"></span><span class="error" style="width:${total ? error / total * 100 : 0}%"></span></div></td><td>${rate}%</td></tr>`;
+  }).join('');
+}
+
+function _reportMonthLabel(value) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(value || ''));
+  if (!match) return value || '—';
+  return new Intl.DateTimeFormat(window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE', { month: 'long', year: 'numeric' }).format(new Date(Number(match[1]), Number(match[2]) - 1, 1));
 }
 
 function _berichtRenderGrowthCards(runs) {
