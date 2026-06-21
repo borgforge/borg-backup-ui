@@ -136,6 +136,32 @@ def test_i18n_keeps_german_as_explicit_fallback():
     assert "navigator.language" not in component
 
 
+def test_in_app_help_has_bilingual_parity_and_no_public_urls():
+    help_de = (ROOT / "ui" / "docs" / "help.md").read_text(encoding="utf-8")
+    help_en = (ROOT / "ui" / "docs" / "help.en.md").read_text(encoding="utf-8")
+
+    def structure(markdown):
+        headings = [len(match.group(1)) for match in re.finditer(r"^(#{1,3}) ", markdown, re.MULTILINE)]
+        bullets = len(re.findall(r"^- ", markdown, re.MULTILINE))
+        return headings, bullets
+
+    assert structure(help_de) == structure(help_en)
+    assert len(help_de.splitlines()) == len(help_en.splitlines())
+    assert "http://" not in help_de and "https://" not in help_de
+    assert "http://" not in help_en and "https://" not in help_en
+
+
+def test_in_app_help_follows_language_with_german_fallback_and_live_reload():
+    source = (ROOT / "ui" / "js" / "pages" / "help.js").read_text(encoding="utf-8")
+
+    assert "getLanguage?.() === 'en' ? 'en' : 'de'" in source
+    assert "language === 'en' ? '/ui/docs/help.en.md' : '/ui/docs/help.md'" in source
+    assert "if (language === 'de') throw new Error" in source
+    assert "fetch(helpDocumentPath('de')" in source
+    assert "requestId !== _helpRequestId" in source
+    assert "'bbui:language-changed', () => helpInit(true)" in source
+
+
 def test_settings_dynamic_content_uses_localization_helpers():
     settings = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
 

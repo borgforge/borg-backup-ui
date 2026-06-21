@@ -1,9 +1,28 @@
 'use strict';
 
-let _helpLoaded = false;
+let _helpLoadedLanguage = '';
+let _helpRequestId = 0;
 
 function helpT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`help.${key}`, params) || key;
+}
+
+function helpLanguage() {
+  return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en' : 'de';
+}
+
+function helpDocumentPath(language) {
+  return language === 'en' ? '/ui/docs/help.en.md' : '/ui/docs/help.md';
+}
+
+async function fetchHelpDocument(language) {
+  const primary = await fetch(helpDocumentPath(language), { cache: 'no-store' });
+  if (primary.ok) return primary.text();
+  if (language === 'de') throw new Error(`HTTP ${primary.status}`);
+
+  const fallback = await fetch(helpDocumentPath('de'), { cache: 'no-store' });
+  if (!fallback.ok) throw new Error(`HTTP ${fallback.status}`);
+  return fallback.text();
 }
 
 function _helpInline(mdText) {
@@ -83,22 +102,25 @@ function _renderHelpMarkdown(md) {
 }
 
 async function helpInit(force = false) {
-  if (_helpLoaded && !force) return;
+  const language = helpLanguage();
+  if (_helpLoadedLanguage === language && !force) return;
   const box = document.getElementById('help-content');
   if (!box) return;
+  const requestId = ++_helpRequestId;
   hideEl('help-message');
   box.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>${escHtml(helpT('loading'))}</span></div>`;
   try {
-    const res = await fetch('/ui/docs/help.md', { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const md = await res.text();
+    const md = await fetchHelpDocument(language);
+    if (requestId !== _helpRequestId) return;
     box.innerHTML = _renderHelpMarkdown(md);
-    _helpLoaded = true;
+    _helpLoadedLanguage = language;
   } catch (err) {
-    _helpLoaded = false;
+    if (requestId !== _helpRequestId) return;
+    _helpLoadedLanguage = '';
     box.innerHTML = '';
     showMsg('help-message', 'error', helpT('loadFailed', { message: err.message }));
   }
 }
 
+window.addEventListener?.('bbui:language-changed', () => helpInit(true));
 window.helpInit = helpInit;
