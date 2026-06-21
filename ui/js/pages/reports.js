@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 window.BBUI = window.BBUI || {};
-window.BBUI.reportState = window.BBUI.reportState || { data: null, job: null, borgInfo: null, borgInfoLoaded: false };
+window.BBUI.reportState = window.BBUI.reportState || { data: null, job: null, jobs: [], borgInfo: null, borgInfoLoaded: false };
 const reportState = window.BBUI.reportState;
 
 function reportsT(key, params = {}) {
@@ -18,12 +18,36 @@ async function berichtInit() {
   document.getElementById('bericht-empty').style.display = '';
   _berichtMsg('');
   try {
-    const data = await (await fetch('/api/reports/jobs')).json();
-    for (const job of (data.jobs || [])) {
+    const [reportResponse, jobsResponse] = await Promise.all([
+      fetch('/api/reports/jobs'),
+      fetch('/api/jobs'),
+    ]);
+    const data = await reportResponse.json();
+    if (!reportResponse.ok || data.error) throw new Error(apiErrorMessage(data, reportResponse.status));
+    const jobsData = jobsResponse.ok ? await jobsResponse.json() : { jobs: [] };
+    const configuredJobs = jobsData.jobs || [];
+    reportState.jobs = (data.jobs || []).map((job) => {
+      const configured = configuredJobs.find((candidate) => String(candidate.key) === String(job.key))
+        || configuredJobs.find((candidate) => String(candidate.backup_type || '').toLowerCase() === String(job.backup_type || '').toLowerCase()
+          && String(candidate.location || '').toLowerCase() === String(job.location || '').toLowerCase());
+      return {
+        ...job,
+        display_name: configured?.display_name || configured?.name || job.display_name,
+        icon: configured?.icon || '',
+        icon_color: configured?.icon_color || '',
+      };
+    });
+    for (const job of reportState.jobs) {
       const opt = document.createElement('option');
       opt.value = job.key;
       opt.textContent = job.display_name;
       sel.appendChild(opt);
+    }
+    _berichtRenderJobSidebar();
+    const search = document.getElementById('report-job-search');
+    if (search && !search.dataset.bound) {
+      search.dataset.bound = 'true';
+      search.addEventListener('input', _berichtRenderJobSidebar);
     }
   } catch (e) {
     _berichtMsg(reportsT('jobsLoadError', { message: e.message }), true);
@@ -41,6 +65,8 @@ async function berichtLoad() {
     reportState.borgInfo = null;
     reportState.borgInfoLoaded = false;
     document.getElementById('bericht-empty').style.display = '';
+    _berichtRenderJobSidebar();
+    _berichtUpdateSelection(null);
     return;
   }
   document.getElementById('bericht-empty').style.display = 'none';
@@ -54,11 +80,14 @@ async function berichtLoad() {
     if (!reportRes.ok || data.error) { _berichtMsg(reportsT('error', { message: apiErrorMessage(data, reportRes.status) }), true); return; }
     const jobsData = jobsRes.ok ? await jobsRes.json() : { jobs: [] };
     const selected = (jobsData.jobs || []).find((j) => String(j.key) === String(jobKey));
+    const reportJob = reportState.jobs.find((job) => String(job.key) === String(jobKey));
     reportState.data = data;
-    reportState.job = selected || null;
+    reportState.job = selected ? { ...(reportJob || {}), ...selected } : (reportJob || null);
     reportState.borgInfo = null;
     reportState.borgInfoLoaded = false;
     _berichtRestoreVerification(reportState.job);
+    _berichtRenderJobSidebar();
+    _berichtUpdateSelection(reportState.job);
     _berichtMsg('');
     _berichtRender(data);
     document.getElementById('bericht-body').style.display = '';
@@ -67,9 +96,50 @@ async function berichtLoad() {
   }
 }
 
+function _berichtLocationLabel(location) {
+  const key = { local: 'jobs.locationLocal', usb: 'jobs.locationUsb', smb: 'jobs.locationSmb', storagebox: 'jobs.locationStoragebox' }[String(location || '').toLowerCase()];
+  return key ? window.BBUI?.components?.i18n?.t?.(key) || location : location || '—';
+}
+
+function _berichtJobIcon(job) {
+  const icon = resolveJobIcon(job);
+  const color = resolveJobIconColor(job);
+  const colorClass = color ? ` type-icon-color-${color}` : '';
+  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} report-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+}
+
+function _berichtRenderJobSidebar() {
+  const list = document.getElementById('report-job-list');
+  if (!list) return;
+  const query = String(document.getElementById('report-job-search')?.value || '').trim().toLowerCase();
+  const selected = document.getElementById('bericht-job-sel')?.value || '';
+  const jobs = (reportState.jobs || []).filter((job) => `${job.display_name || ''} ${job.key || ''} ${job.location || ''}`.toLowerCase().includes(query));
+  if (!jobs.length) {
+    list.innerHTML = `<div class="ui-empty report-job-empty">${escHtml(reportsT('noMatchingJobs'))}</div>`;
+    return;
+  }
+  const order = ['storagebox', 'usb', 'smb', 'local'];
+  const locations = [...new Set(jobs.map((job) => String(job.location || 'local').toLowerCase()))]
+    .sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)));
+  list.innerHTML = locations.map((location) => `<section class="report-job-group"><h3>${escHtml(_berichtLocationLabel(location))}</h3>${jobs.filter((job) => String(job.location || 'local').toLowerCase() === location).map((job) => `<button class="report-job ${String(job.key) === selected ? 'is-active' : ''}" data-report-job="${escHtml(job.key)}" ${String(job.key) === selected ? 'aria-current="page"' : ''}>${_berichtJobIcon(job)}<span><strong>${escHtml(job.display_name || job.key)}</strong><small>${escHtml(job.key)}</small></span><span class="report-job-dot"></span></button>`).join('')}</section>`).join('');
+  list.querySelectorAll('[data-report-job]').forEach((button) => button.addEventListener('click', () => {
+    const select = document.getElementById('bericht-job-sel');
+    if (select) select.value = button.dataset.reportJob || '';
+    berichtLoad();
+  }));
+}
+
+function _berichtUpdateSelection(job) {
+  const title = document.getElementById('report-selection-title');
+  const subtitle = document.getElementById('report-selection-subtitle');
+  if (title) title.textContent = job?.display_name || reportsT('noJobSelected');
+  if (subtitle) subtitle.textContent = job ? `${_berichtLocationLabel(job.location)} · ${job.key}` : reportsT('workspaceSubtitle');
+}
+
 function _berichtRender(d) {
   const successPct = d.run_count > 0 ? Math.round(d.success_count / d.run_count * 100) : 0;
   document.getElementById('br-runs').textContent      = d.run_count;
+  document.getElementById('br-run-badge').textContent = reportsT('runCount', { count: d.run_count });
   document.getElementById('br-success').textContent   = `${d.success_count} (${successPct}%)`;
   document.getElementById('br-avg-dur').textContent   = d.avg_duration_fmt || '—';
   document.getElementById('br-repo-size').textContent = d.latest_repository_size_fmt || '—';
@@ -83,10 +153,104 @@ function _berichtRender(d) {
   borgInfoButton.textContent = reportsT('load');
   _berichtBorgInfoMsg('');
 
-  _berichtSizeChart(d.runs || []);
-  _berichtDedupChart(d.runs || []);
-  _berichtDurChart(d.runs || []);
-  _berichtStatusChart(d.monthly_status || []);
+  _berichtTrendTable(d.runs || []);
+  _berichtStatusTable(d.monthly_status || []);
+}
+
+function _berichtTrendTable(runs) {
+  const body = document.getElementById('bericht-trend-body');
+  if (!body) return;
+  const rows = Array.isArray(runs) ? runs : [];
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="6">${escHtml(reportsT('noData'))}</td></tr>`;
+    return;
+  }
+  const last = rows[rows.length - 1];
+  const last7 = rows.slice(-7);
+  const last30 = rows.slice(-30);
+  const metricRows = [
+    {
+      label: reportsT('repoSizeMetric'), detail: reportsT('occupiedStorage'),
+      values: rows.map((row) => Number(row.repository_size || 0)).filter((value) => value > 0),
+      current: _fmtBytes(last.repository_size || 0),
+      seven: _fmtDeltaAgainst(last.repository_size, last7[0]?.repository_size),
+      thirty: _fmtDeltaAgainst(last.repository_size, last30[0]?.repository_size),
+      format: _fmtBytes, color: 'var(--ui-color-accent)',
+    },
+    {
+      label: reportsT('uniqueDataMetric'), detail: reportsT('perBackupRun'),
+      values: rows.map((row) => Number(row.deduplicated_size || 0)).filter((value) => value > 0),
+      current: _fmtBytes(last.deduplicated_size || 0),
+      seven: reportsT('averageValue', { value: _fmtBytes(_average(last7.map((row) => row.deduplicated_size))) }),
+      thirty: reportsT('averageValue', { value: _fmtBytes(_average(last30.map((row) => row.deduplicated_size))) }),
+      format: _fmtBytes, color: 'var(--ui-state-success-fg)',
+    },
+    {
+      label: reportsT('durationMetric'), detail: reportsT('executionTime'),
+      values: rows.map((row) => Number(row.duration_seconds || 0)).filter((value) => value > 0),
+      current: _fmtDuration(last.duration_seconds),
+      seven: _fmtDurationDelta(last.duration_seconds, _average(last7.map((row) => row.duration_seconds))),
+      thirty: _fmtDurationDelta(last.duration_seconds, _average(last30.map((row) => row.duration_seconds))),
+      format: _fmtDuration, color: 'var(--ui-state-warning-fg)',
+    },
+  ];
+  body.innerHTML = metricRows.map((metric) => {
+    const min = metric.values.length ? Math.min(...metric.values) : 0;
+    const max = metric.values.length ? Math.max(...metric.values) : 0;
+    return `<tr><td><strong>${escHtml(metric.label)}</strong><small>${escHtml(metric.detail)}</small></td><td><b>${escHtml(metric.current)}</b></td><td>${escHtml(metric.seven)}</td><td>${escHtml(metric.thirty)}</td><td>${escHtml(`${metric.format(min)} / ${metric.format(max)}`)}</td><td>${_berichtSparkline(metric.values.slice(-30), metric.color, metric.label)}</td></tr>`;
+  }).join('');
+}
+
+function _average(values) {
+  const valid = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : 0;
+}
+
+function _fmtDeltaAgainst(current, previous) {
+  if (!Number(current) || !Number(previous)) return '—';
+  return _fmtDelta(Number(current) - Number(previous));
+}
+
+function _fmtDurationDelta(current, average) {
+  if (!Number(current) || !Number(average)) return '—';
+  const delta = Number(current) - Number(average);
+  return `${delta >= 0 ? '+' : '-'}${_fmtDuration(Math.abs(delta))}`;
+}
+
+function _berichtSparkline(values, color, label) {
+  const points = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  if (points.length < 2) return `<span>${escHtml(reportsT('noData'))}</span>`;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const coordinates = points.map((value, index) => `${4 + index * (172 / (points.length - 1))},${31 - ((value - min) / range) * 25}`).join(' ');
+  const lastY = 31 - ((points[points.length - 1] - min) / range) * 25;
+  return `<svg class="report-sparkline" viewBox="0 0 180 36" role="img" aria-label="${escHtml(reportsT('trendFor', { metric: label }))}"><polyline points="${coordinates}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="176" cy="${lastY}" r="3" fill="${color}"/></svg>`;
+}
+
+function _berichtStatusTable(monthly) {
+  const body = document.getElementById('bericht-status-body');
+  if (!body) return;
+  const rows = Array.isArray(monthly) ? [...monthly].reverse() : [];
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="7">${escHtml(reportsT('noData'))}</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map((month) => {
+    const success = Number(month.success || 0);
+    const warning = Number(month.warning || 0);
+    const error = Number(month.error || 0);
+    const total = success + warning + error;
+    const rate = total ? Math.round(success / total * 100) : 0;
+    const label = _reportMonthLabel(month.month);
+    return `<tr><td><strong>${escHtml(label)}</strong></td><td>${total}</td><td class="report-value-success">${success}</td><td class="report-value-warning">${warning}</td><td class="report-value-error">${error}</td><td><div class="report-status-distribution" aria-label="${escHtml(reportsT('distributionLabel', { success, warning, error }))}"><span class="success" style="width:${total ? success / total * 100 : 0}%"></span><span class="warning" style="width:${total ? warning / total * 100 : 0}%"></span><span class="error" style="width:${total ? error / total * 100 : 0}%"></span></div></td><td>${rate}%</td></tr>`;
+  }).join('');
+}
+
+function _reportMonthLabel(value) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(value || ''));
+  if (!match) return value || '—';
+  return new Intl.DateTimeFormat(window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE', { month: 'long', year: 'numeric' }).format(new Date(Number(match[1]), Number(match[2]) - 1, 1));
 }
 
 function _berichtRenderGrowthCards(runs) {
@@ -470,6 +634,8 @@ window.addEventListener?.('bbui:language-changed', () => {
   }
   const button = document.getElementById('bericht-borginfo-btn');
   if (button) button.textContent = reportState.borgInfoLoaded ? reportsT('refresh') : reportsT('load');
+  _berichtRenderJobSidebar();
+  _berichtUpdateSelection(reportState.job);
 });
 
 function _berichtBorgInfoMsg(msg, isError) {
