@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/ui/style.css">
   <link rel="stylesheet" href="/ui/design-system.css">
   <link rel="stylesheet" href="/ui/dashboard-jobs.css">
+  <link rel="stylesheet" href="/ui/history-reports.css">
 </head>
 <body>
 
@@ -274,7 +275,7 @@
 
     <!-- Storage Page -->
     <div id="page-storage" class="page">
-      <div class="page-header">
+      <div class="page-header ui-page-header">
         <div>
           <h1 data-i18n="storage.title">Storage</h1>
           <p class="page-subtitle" data-i18n="storage.subtitle">Borg Repositories verwalten</p>
@@ -349,8 +350,14 @@
         </div>
       </div>
 
-      <!-- Filter Bar -->
-      <div class="history-filters">
+      <div class="history-layout ui-context-layout">
+        <aside class="history-sidebar ui-context-sidebar" data-i18n-aria-label="history.locations" aria-label="Locations">
+          <div class="ui-context-sidebar__header"><small data-i18n="history.grouping">Grouping</small><strong data-i18n="history.locations">Locations</strong></div>
+          <nav id="history-location-list" class="ui-context-nav"></nav>
+        </aside>
+        <section class="history-workspace ui-workspace">
+          <header class="ui-workspace-header"><div class="ui-workspace-header__title"><small data-i18n="history.selection">Selection</small><h2 id="history-selection-title" data-i18n="history.allLocations">All locations</h2><span class="ui-workspace-header__subtitle" data-i18n="history.workspaceSubtitle">Backup runs and restore-test reports</span></div><span id="history-selection-count" class="ui-badge"></span></header>
+      <div class="history-filters ui-filter-bar">
         <select class="history-filter-select" id="history-filter-type">
           <option value="" data-i18n="history.allTypes">Alle Typen</option>
           <option value="flash">Flash</option>
@@ -360,7 +367,7 @@
           <option value="sonstiges" data-i18n="history.other">Sonstiges</option>
           <option value="custom">Custom</option>
         </select>
-        <select class="history-filter-select" id="history-filter-location">
+        <select class="history-filter-select history-location-contract" id="history-filter-location" aria-hidden="true" tabindex="-1">
           <option value="" data-i18n="history.allLocations">Alle Locations</option>
           <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
           <option value="usb">USB</option>
@@ -382,21 +389,32 @@
       <div id="history-content">
         <div class="loading-spinner"><div class="spinner"></div><span data-i18n="history.loading">Lade History...</span></div>
       </div>
+        </section>
+      </div>
     </div>
 
     <!-- Berichte Page -->
     <div id="page-berichte" class="page">
-      <div class="page-header">
+      <div class="page-header ui-page-header">
         <div>
           <h1 data-i18n="reports.title">Berichte</h1>
           <p class="page-subtitle" data-i18n="reports.subtitle">Historische Auswertung der Backup-Jobs</p>
         </div>
         <div class="header-actions">
-          <select id="bericht-job-sel" class="restore-select" style="min-width:240px">
+          <select id="bericht-job-sel" class="report-select-contract" aria-hidden="true" tabindex="-1">
             <option value="" data-i18n="reports.selectJob">— Job wählen —</option>
           </select>
         </div>
       </div>
+
+      <div class="report-layout ui-context-layout">
+        <aside class="report-sidebar ui-context-sidebar" data-i18n-aria-label="reports.jobs" aria-label="Jobs">
+          <div class="ui-context-sidebar__header"><small data-i18n="reports.selection">Selection</small><strong data-i18n="reports.jobs">Backup jobs</strong></div>
+          <label class="report-search"><span data-i18n="reports.search">Search</span><input id="report-job-search" type="search" data-i18n-placeholder="reports.searchPlaceholder" placeholder="Search jobs"></label>
+          <nav id="report-job-list" class="report-job-list"></nav>
+        </aside>
+        <section class="report-workspace ui-workspace">
+          <header class="ui-workspace-header"><div class="ui-workspace-header__title"><small data-i18n="reports.analysis">Analysis</small><h2 id="report-selection-title" data-i18n="reports.noJobSelected">No job selected</h2><span id="report-selection-subtitle" class="ui-workspace-header__subtitle" data-i18n="reports.workspaceSubtitle">Exact run, growth, and repository values</span></div></header>
 
       <div id="bericht-msg" class="status-message hidden"></div>
 
@@ -538,6 +556,8 @@
           <div id="bericht-status-chart" class="rs-chart-scroll"></div>
         </div>
 
+      </div>
+        </section>
       </div>
     </div>
 

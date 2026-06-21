@@ -1,0 +1,121 @@
+/* History and Reports redesign (#30). */
+
+#page-history,
+#page-berichte { max-width: 1600px; }
+
+.history-location-contract,
+.report-select-contract { display: none !important; }
+
+.history-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ui-space-2);
+  margin-bottom: var(--ui-space-3);
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface);
+}
+
+.history-count-label { margin-left: auto; align-self: center; }
+.history-workspace,
+#history-content { min-width: 0; max-width: 100%; }
+.history-content-table { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; }
+.history-content-table > .history-table { display: table; width: 100%; min-width: 940px; overflow: visible; white-space: normal; }
+.history-content-table > .history-table thead,
+.history-content-table > .history-table tbody { display: table-row-group; width: auto; }
+.history-content-table > .history-table thead { display: table-header-group; }
+
+.history-detail-row > td { padding: 0; }
+.history-detail-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border: 0;
+  border-top: 1px solid var(--ui-color-border);
+  background: var(--ui-color-surface);
+}
+.history-detail-group {
+  flex: 1 1 9rem;
+  min-width: 0;
+  min-height: 3.3rem;
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border-right: 1px solid var(--ui-color-border);
+  border-bottom: 1px solid var(--ui-color-border);
+  background: var(--ui-color-surface-subtle);
+}
+.history-detail-value { overflow-wrap: anywhere; }
+.history-error-msg { margin: var(--ui-space-3); }
+.history-pagination { padding-bottom: var(--ui-space-1); }
+
+.report-sidebar { overflow: hidden; }
+.report-search { display: grid; gap: var(--ui-space-1); padding: var(--ui-space-3); border-bottom: 1px solid var(--ui-color-border); }
+.report-search span { color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); font-weight: var(--ui-font-weight-semibold); text-transform: uppercase; }
+.report-search input { width: 100%; min-width: 0; }
+.report-job-list { display: grid; max-height: calc(100vh - 18rem); overflow-y: auto; padding: var(--ui-space-1); }
+.report-job-group h3 { margin: var(--ui-space-2); color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); text-transform: uppercase; }
+.report-job {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 0.5rem;
+  align-items: center;
+  gap: var(--ui-space-2);
+  width: 100%;
+  padding: var(--ui-space-2);
+  border: 0;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--ui-color-text);
+  text-align: left;
+}
+.report-job:hover { background: var(--ui-color-surface-subtle); }
+.report-job.is-active { background: var(--ui-color-surface-raised); box-shadow: inset 3px 0 var(--ui-color-accent); }
+.report-job strong, .report-job small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-job small { margin-top: 2px; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.report-job-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--ui-state-neutral-fg); }
+.report-job.is-active .report-job-dot { background: var(--ui-color-accent); }
+.report-job-empty { padding: var(--ui-space-4); }
+
+#bericht-empty { margin: 0; }
+#bericht-body .repo-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: var(--ui-space-3) !important;
+  overflow: hidden;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-border);
+}
+#bericht-body .repo-stat-card { min-width: 0; padding: var(--ui-space-3); border: 0; border-radius: 0; box-shadow: none; }
+#bericht-body .repo-stat-value { font-size: var(--ui-font-size-lg); overflow-wrap: anywhere; }
+.bericht-borginfo-section { margin-bottom: var(--ui-space-3); }
+#bericht-body { min-width: 0; }
+#bericht-body > .bericht-chart-card {
+  display: inline-block;
+  width: calc(50% - var(--ui-space-2));
+  min-width: 0;
+  margin: 0 var(--ui-space-2) var(--ui-space-3) 0;
+  vertical-align: top;
+}
+.bericht-chart-card .rs-chart-scroll { min-height: 9rem; max-height: 11rem; overflow: auto; }
+.bericht-chart-card svg { max-height: 9.5rem; }
+
+@media (max-width: 1279px) {
+  #bericht-body .repo-stats-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1023px) {
+  .history-sidebar .ui-context-nav__item { min-width: 12.5rem; }
+  .report-job-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; }
+  .report-job-group { display: flex; min-width: max-content; }
+  .report-job-group h3 { align-self: center; }
+  .report-job { min-width: 13rem; }
+}
+
+@media (max-width: 767px) {
+  .history-filters { align-items: stretch; flex-direction: column; }
+  .history-count-label { margin-left: 0; }
+  .history-detail-group { flex-basis: 100%; }
+  #bericht-body .repo-stats-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #bericht-body > .bericht-chart-card { display: block; width: 100%; margin-right: 0; }
+}

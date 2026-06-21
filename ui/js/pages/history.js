@@ -1,8 +1,9 @@
 // ── History ───────────────────────────────────────────────────────────────────
 
 window.BBUI = window.BBUI || {};
-window.BBUI.historyState = window.BBUI.historyState || { loaded: false, data: null, page: 1, perPage: 20 };
+window.BBUI.historyState = window.BBUI.historyState || { loaded: false, data: null, page: 1, perPage: 20, selectedLocation: '', locationCounts: null };
 const historyState = window.BBUI.historyState;
+const HISTORY_LOCATIONS = ['storagebox', 'usb', 'smb', 'local', 'custom'];
 
 function historyT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`history.${key}`, params) || `history.${key}`;
@@ -49,8 +50,11 @@ function applyHistoryFilters() {
 }
 
 function renderHistory(data) {
+  renderHistoryLocationSidebar(data.entries || []);
   const countEl = document.getElementById('history-count');
   if (countEl) countEl.textContent = historyT('entryCount', { count: data.total });
+  const selectionCount = document.getElementById('history-selection-count');
+  if (selectionCount) selectionCount.textContent = historyT('entryCount', { count: data.total });
 
   const el = document.getElementById('history-content');
   if (!el) return;
@@ -67,7 +71,7 @@ function renderHistory(data) {
   const nextDisabled = page >= totalPages ? 'disabled' : '';
 
   el.innerHTML = `
-    <table class="history-table">
+    <div class="history-content-table"><table class="history-table">
       <thead>
         <tr>
           <th></th>
@@ -83,12 +87,46 @@ function renderHistory(data) {
       <tbody id="history-tbody">
         ${rows}
       </tbody>
-    </table>
+    </table></div>
     <div class="history-pagination" style="display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-top:10px">
       <span style="color:var(--text-muted);font-size:12px">${escHtml(historyT('page', { page, totalPages }))}</span>
       <button class="btn btn-secondary btn-sm" data-history-action="page-prev" ${prevDisabled}>${escHtml(historyT('previous'))}</button>
       <button class="btn btn-secondary btn-sm" data-history-action="page-next" ${nextDisabled}>${escHtml(historyT('next'))}</button>
     </div>`;
+}
+
+function historyLocationGlyph(location) {
+  return { all: '≡', storagebox: '↗', usb: '▯', smb: '⌁', local: '⌂', custom: '⌘' }[location] || '○';
+}
+
+function renderHistoryLocationSidebar(entries) {
+  const list = document.getElementById('history-location-list');
+  const title = document.getElementById('history-selection-title');
+  const selected = document.getElementById('history-filter-location')?.value || '';
+  historyState.selectedLocation = selected;
+  if (!selected) {
+    historyState.locationCounts = Object.fromEntries(HISTORY_LOCATIONS.map((location) => [
+      location,
+      entries.filter((entry) => String(entry.location || '').toLowerCase() === location).length,
+    ]));
+    historyState.locationCounts.all = Number(historyState.data?.total || entries.length);
+  }
+  const counts = historyState.locationCounts || {};
+  if (title) title.textContent = selected ? historyLocationLabel(selected) : historyT('allLocations');
+  if (!list) return;
+  const locations = ['all', ...HISTORY_LOCATIONS];
+  list.innerHTML = locations.map((location) => {
+    const value = location === 'all' ? '' : location;
+    const count = Number(counts[location] ?? (location === 'all' ? entries.length : 0));
+    const label = location === 'all' ? historyT('allLocations') : historyLocationLabel(location);
+    const detail = location === 'all' ? historyT('overview') : historyT('entryCount', { count });
+    return `<button class="ui-context-nav__item ${selected === value ? 'is-active' : ''}" data-history-location="${value}" ${selected === value ? 'aria-current="page"' : ''}><span class="location-nav-glyph">${historyLocationGlyph(location)}</span><span class="location-nav-copy"><strong>${escHtml(label)}</strong><small>${escHtml(detail)}</small></span><span class="ui-badge location-nav-count">${count}</span></button>`;
+  }).join('');
+  list.querySelectorAll('[data-history-location]').forEach((button) => button.addEventListener('click', () => {
+    const select = document.getElementById('history-filter-location');
+    if (select) select.value = button.dataset.historyLocation || '';
+    applyHistoryFilters();
+  }));
 }
 
 function renderHistoryRow(e, idx) {
