@@ -233,7 +233,7 @@ function jobsLocationName(location) {
 }
 
 function jobsLocationGlyph(location) {
-  return { all: '≡', storagebox: '↗', usb: '▯', smb: '⌁', local: '⌂', utility: '⌘' }[location] || '○';
+  return locationIcon(location);
 }
 
 function jobsCount(count) {
@@ -249,7 +249,7 @@ function renderJobsLocationSidebar(jobs) {
     const label = location === 'all' ? jobsT('jobs.allLocations') : jobsLocationName(location);
     const detail = location === 'all' ? jobsT('jobs.overview') : jobsCount(count);
     return `<button class="ui-context-nav__item ${jobsState.selectedLocation === location ? 'is-active' : ''}" data-jobs-location="${location}" ${jobsState.selectedLocation === location ? 'aria-current="page"' : ''}>
-      <span class="location-nav-glyph">${jobsLocationGlyph(location)}</span>
+      <span class="location-nav-glyph ${location}">${jobsLocationGlyph(location)}</span>
       <span class="location-nav-copy"><strong>${escHtml(label)}</strong><small>${escHtml(detail)}</small></span>
       <span class="ui-badge location-nav-count">${count}</span>
     </button>`;
@@ -277,7 +277,7 @@ function renderJobsLocationGroup(location, jobs) {
   return `<section class="jobs-location-group">
     <header class="jobs-location-group__header">
       <div class="jobs-location-group__identity">
-        <span class="location-nav-glyph">${jobsLocationGlyph(location)}</span>
+        <span class="location-nav-glyph ${location}">${jobsLocationGlyph(location)}</span>
         <span><h3>${escHtml(jobsLocationName(location))}</h3><small>${escHtml(jobsCount(jobs.length))}</small></span>
       </div>
       <span class="ui-badge">${jobs.length}</span>

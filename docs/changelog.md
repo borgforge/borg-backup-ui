@@ -22,6 +22,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #30
 - UI (#30):
   - History verwendet eine Standortnavigation mit kompakten Typ-/Statusfiltern, paginierter Tabelle und flexiblem Detailband.
+  - History zaehlt Lokationen ueber den vollstaendigen gefilterten Bestand statt nur ueber die aktuelle Seite und verwendet die Storage-Location-Icons.
   - Berichte folgen der freigegebenen Variante C mit durchsuchbarer Job-Sidebar, Kennzahlen-Ledger, Trendtabelle mit Sparklines und monatlicher Statustabelle.
   - Bestehende Lauf-, Restore-, Repository-, Log- und Borg-Detaildaten bleiben erhalten.
 

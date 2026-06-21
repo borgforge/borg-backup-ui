@@ -1,9 +1,9 @@
 // ── History ───────────────────────────────────────────────────────────────────
 
 window.BBUI = window.BBUI || {};
-window.BBUI.historyState = window.BBUI.historyState || { loaded: false, data: null, page: 1, perPage: 20, selectedLocation: '', locationCounts: null };
+window.BBUI.historyState = window.BBUI.historyState || { loaded: false, data: null, page: 1, perPage: 20, selectedLocation: '' };
 const historyState = window.BBUI.historyState;
-const HISTORY_LOCATIONS = ['storagebox', 'usb', 'smb', 'local', 'custom'];
+const HISTORY_LOCATIONS = ['storagebox', 'usb', 'smb', 'local'];
 
 function historyT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`history.${key}`, params) || `history.${key}`;
@@ -50,7 +50,7 @@ function applyHistoryFilters() {
 }
 
 function renderHistory(data) {
-  renderHistoryLocationSidebar(data.entries || []);
+  renderHistoryLocationSidebar(data);
   const countEl = document.getElementById('history-count');
   if (countEl) countEl.textContent = historyT('entryCount', { count: data.total });
   const selectionCount = document.getElementById('history-selection-count');
@@ -95,32 +95,27 @@ function renderHistory(data) {
     </div>`;
 }
 
-function historyLocationGlyph(location) {
-  return { all: '≡', storagebox: '↗', usb: '▯', smb: '⌁', local: '⌂', custom: '⌘' }[location] || '○';
+function historyLocationDetail(location) {
+  return historyT({ storagebox: 'locationRemote', usb: 'locationLocal', smb: 'locationNetwork', local: 'locationLocal' }[location] || 'overview');
 }
 
-function renderHistoryLocationSidebar(entries) {
+function renderHistoryLocationSidebar(data) {
   const list = document.getElementById('history-location-list');
   const title = document.getElementById('history-selection-title');
   const selected = document.getElementById('history-filter-location')?.value || '';
   historyState.selectedLocation = selected;
-  if (!selected) {
-    historyState.locationCounts = Object.fromEntries(HISTORY_LOCATIONS.map((location) => [
-      location,
-      entries.filter((entry) => String(entry.location || '').toLowerCase() === location).length,
-    ]));
-    historyState.locationCounts.all = Number(historyState.data?.total || entries.length);
-  }
-  const counts = historyState.locationCounts || {};
+  const entries = data.entries || [];
+  const counts = data.location_counts || Object.fromEntries(HISTORY_LOCATIONS.map((location) => [location, entries.filter((entry) => String(entry.location || '').toLowerCase() === location).length]));
+  const allCount = Number(data.location_total ?? Object.values(counts).reduce((sum, count) => sum + Number(count || 0), 0));
   if (title) title.textContent = selected ? historyLocationLabel(selected) : historyT('allLocations');
   if (!list) return;
   const locations = ['all', ...HISTORY_LOCATIONS];
   list.innerHTML = locations.map((location) => {
     const value = location === 'all' ? '' : location;
-    const count = Number(counts[location] ?? (location === 'all' ? entries.length : 0));
+    const count = location === 'all' ? allCount : Number(counts[location] || 0);
     const label = location === 'all' ? historyT('allLocations') : historyLocationLabel(location);
-    const detail = location === 'all' ? historyT('overview') : historyT('entryCount', { count });
-    return `<button class="ui-context-nav__item ${selected === value ? 'is-active' : ''}" data-history-location="${value}" ${selected === value ? 'aria-current="page"' : ''}><span class="location-nav-glyph">${historyLocationGlyph(location)}</span><span class="location-nav-copy"><strong>${escHtml(label)}</strong><small>${escHtml(detail)}</small></span><span class="ui-badge location-nav-count">${count}</span></button>`;
+    const detail = location === 'all' ? historyT('overview') : historyLocationDetail(location);
+    return `<button class="ui-context-nav__item ${selected === value ? 'is-active' : ''}" data-history-location="${value}" ${selected === value ? 'aria-current="page"' : ''}><span class="location-nav-glyph history-location-icon ${location}">${locationIcon(location)}</span><span class="location-nav-copy"><strong>${escHtml(label)}</strong><small>${escHtml(detail)}</small></span><span class="ui-badge location-nav-count">${count}</span></button>`;
   }).join('');
   list.querySelectorAll('[data-history-location]').forEach((button) => button.addEventListener('click', () => {
     const select = document.getElementById('history-filter-location');

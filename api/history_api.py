@@ -42,6 +42,7 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
         per_page = 20
 
     entries = []
+    location_counts = {location: 0 for location in ("storagebox", "usb", "smb", "local")}
     known_types = {"flash", "appdata", "photos", "vms", "sonstiges"}
     for f in sorted(status_dir.glob("*.status"), reverse=True):
         # Filename: YYYY-MM-DD_HH-MM-SS_type_location.status
@@ -71,9 +72,13 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
                     continue
             elif filt_type != bt_low:
                 continue
-        if filters.get("location") and filters["location"] != location.lower():
-            continue
         if filters.get("status") and filters["status"] != status:
+            continue
+
+        normalized_location = str(raw.get("location", location) or location).strip().lower()
+        if normalized_location in location_counts:
+            location_counts[normalized_location] += 1
+        if filters.get("location") and filters["location"] != normalized_location:
             continue
 
         entries.append({
@@ -129,4 +134,6 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
         "page": page,
         "per_page": per_page,
         "total_pages": total_pages,
+        "location_counts": location_counts,
+        "location_total": sum(location_counts.values()),
     }

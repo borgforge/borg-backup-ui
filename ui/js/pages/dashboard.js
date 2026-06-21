@@ -237,7 +237,7 @@ function dashboardLocationKey(backup) {
 }
 
 function dashboardLocationGlyph(location) {
-  return { all: '≡', storagebox: '↗', usb: '▯', smb: '⌁', local: '⌂' }[location] || '○';
+  return locationIcon(location);
 }
 
 function dashboardBackupCount(count) {
@@ -255,7 +255,7 @@ function renderDashboardLocationSidebar(backups) {
     const label = location === 'all' ? dashboardT('dashboard.allLocations') : dashboardLocationLabel(location);
     const detail = location === 'all' ? dashboardT('jobs.overview') : dashboardBackupCount(count);
     return `<button class="ui-context-nav__item ${dashboardSelectedLocation === location ? 'is-active' : ''}" data-dashboard-location="${location}" ${dashboardSelectedLocation === location ? 'aria-current="page"' : ''}>
-      <span class="location-nav-glyph">${dashboardLocationGlyph(location)}</span>
+      <span class="location-nav-glyph ${location}">${dashboardLocationGlyph(location)}</span>
       <span class="location-nav-copy"><strong>${escHtml(label)}</strong><small>${escHtml(detail)}</small></span>
       <span class="ui-badge location-nav-count">${count}</span>
     </button>`;

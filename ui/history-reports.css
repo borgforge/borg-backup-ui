@@ -18,9 +18,13 @@
 }
 
 .history-count-label { margin-left: auto; align-self: center; }
+.history-sidebar .ui-context-nav__item {
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  padding: var(--ui-space-2);
+}
 .history-workspace,
 #history-content { min-width: 0; max-width: 100%; }
-.history-content-table { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; }
+.history-content-table { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
 .history-content-table > .history-table { display: table; width: 100%; min-width: 940px; overflow: visible; white-space: normal; }
 .history-content-table > .history-table thead,
 .history-content-table > .history-table tbody { display: table-row-group; width: auto; }

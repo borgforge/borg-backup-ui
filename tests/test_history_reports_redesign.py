@@ -28,6 +28,9 @@ def test_history_preserves_filter_pagination_and_detail_contracts() -> None:
         "renderRestoreReportSteps",
     ):
         assert contract in script
+    assert "data.location_counts" in script
+    assert "locationIcon(location)" in script
+    assert "'custom'" not in script.split("const HISTORY_LOCATIONS", 1)[1].split(";", 1)[0]
     for obsolete_id in (
         "bericht-size-chart", "bericht-dedup-chart",
         "bericht-dur-chart", "bericht-status-chart",
@@ -68,3 +71,19 @@ def test_history_reports_layout_is_responsive_and_compact() -> None:
     assert ".report-metric-ledger" in css
     assert ".report-sparkline" in css
     assert ".report-status-distribution" in css
+
+
+def test_location_sidebars_reuse_storage_icons() -> None:
+    formatting = _read("ui/js/utils/format.js")
+    dashboard = _read("ui/js/pages/dashboard.js")
+    jobs = _read("ui/js/pages/jobs.js")
+    storage = _read("ui/js/pages/storage.js")
+    for distinctive_path in (
+        'M17 8h1a4 4 0 0 1 0 8h-1',
+        'M3 7h18',
+        'M22 12h-4l-3 9L9 3l-3 9H2',
+    ):
+        assert distinctive_path in formatting
+        assert distinctive_path in storage
+    assert "return locationIcon(location);" in dashboard
+    assert "return locationIcon(location);" in jobs
