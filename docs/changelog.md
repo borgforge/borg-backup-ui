@@ -31,6 +31,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Restore Tests verwendet eine nach Location gruppierte Job-Sidebar mit Suche und den konfigurierten Job-Icons.
   - Planung, Laufzeithinweise, Policy-Tabelle, Live-Log und Prüfberichte sind in einem gemeinsamen responsiven Workspace zusammengeführt.
   - Plan- und Berichtszusammenfassungen erhalten höhere visuelle Priorität; technische Nachweise und Detaildaten bleiben verfügbar.
+  - Prüfberichte folgen der freigegebenen Nachweisstruktur mit Ergebnis, Gesamturteil, Ausführung, Prüfumfang, kompakter Schrittfolge und einklappbaren technischen Nachweisen.
 
 ## Archivierte Manifest-Historie
 

@@ -48,3 +48,15 @@ def test_restore_tests_layout_is_responsive_and_prioritizes_summaries() -> None:
     assert ".rt-sidebar-job-list" in css
     assert "overflow-x: auto" in css
     assert "#restore-tests-summary" in css
+
+
+def test_verification_report_matches_approved_detail_hierarchy() -> None:
+    script = _read("ui/js/pages/restore-tests.js")
+    css = _read("ui/restore-tests-redesign.css")
+    for contract in (
+        "rt-report-result", "rt-report-verdict", "rt-report-sections",
+        "rt-steps-heading", "rt-technical-evidence", "renderRTTechnicalEvidence",
+    ):
+        assert contract in script or contract in css
+    assert "const successful = t.test_result === 'success'" in script
+    assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in css
