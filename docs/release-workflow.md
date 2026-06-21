@@ -183,7 +183,10 @@ BORG_UI_ALLOW_DEFERRED_RELEASE=1 ./plugin/mr-preflight.sh
 Redesign-specific sequence:
 
 - Merge incremental redesign issues `#28` through `#34` without a stable
-  release version, release artifact, or test-channel deployment.
+  release version or stable release artifact.
+- Test-channel candidates may be deployed at any time during the redesign. The
+  generated stable build files must be removed from the incremental PR branch
+  after the remote test-channel manifest and package have been verified.
 - In issue `#35`, build and deploy a test-channel candidate first.
 - Create and promote the stable release only after the user explicitly approves
   the tested candidate.

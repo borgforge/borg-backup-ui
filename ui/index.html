@@ -9,6 +9,7 @@
   <link rel="icon" type="image/png" href="/ui/assets/favicon.png">
   <link rel="stylesheet" href="/ui/style.css">
   <link rel="stylesheet" href="/ui/design-system.css">
+  <link rel="stylesheet" href="/ui/dashboard-jobs.css">
 </head>
 <body>
 
@@ -134,7 +135,7 @@
 
     <!-- Dashboard Page -->
     <div id="page-dashboard" class="page active">
-      <div class="page-header">
+      <div class="page-header ui-page-header">
         <div>
           <h1 data-i18n="dashboard.title">Dashboard</h1>
           <p class="page-subtitle" data-i18n="dashboard.subtitle">Backup-Übersicht</p>
@@ -150,28 +151,49 @@
           </button>
         </div>
       </div>
-      <div class="dashboard-summary-section">
-        <div class="dashboard-summary-title" data-i18n="dashboard.backupRuns">Backup-Läufe</div>
-        <div id="summary-bar" class="summary-bar"></div>
-      </div>
-      <div class="dashboard-summary-section">
-        <div class="dashboard-summary-title" data-i18n="dashboard.restoreProof">Restore-Nachweis</div>
-        <div id="restore-summary-bar" class="summary-bar"></div>
+      <div class="dashboard-summary-pair">
+        <section class="dashboard-summary-section">
+          <div class="dashboard-summary-title" data-i18n="dashboard.backupRuns">Backup-Läufe</div>
+          <div id="summary-bar" class="summary-bar dashboard-summary-grid"></div>
+        </section>
+        <section class="dashboard-summary-section">
+          <div class="dashboard-summary-title" data-i18n="dashboard.restoreProof">Restore-Nachweis</div>
+          <div id="restore-summary-bar" class="summary-bar dashboard-summary-grid"></div>
+        </section>
       </div>
       <div id="dashboard-data-dir-warning" class="status-message hidden"></div>
       <div id="dashboard-system-warning" class="status-message hidden"></div>
       <div id="status-message" class="status-message hidden"></div>
-      <div id="backup-grid" class="backup-grid">
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-          <span data-i18n="dashboard.loading">Lade Backup-Status...</span>
-        </div>
+      <div class="dashboard-location-layout ui-context-layout">
+        <aside class="dashboard-location-sidebar ui-context-sidebar" aria-label="Lokationen" data-i18n-aria-label="dashboard.locations">
+          <div class="ui-context-sidebar__header">
+            <small data-i18n="dashboard.grouping">Gruppierung</small>
+            <strong data-i18n="dashboard.locations">Lokationen</strong>
+          </div>
+          <nav id="dashboard-location-list" class="ui-context-nav"></nav>
+        </aside>
+        <section class="dashboard-workspace ui-workspace">
+          <header class="ui-workspace-header">
+            <div class="ui-workspace-header__title">
+              <small data-i18n="dashboard.selection">Auswahl</small>
+              <h2 id="dashboard-selection-title" data-i18n="dashboard.allLocations">Alle Lokationen</h2>
+              <span class="ui-workspace-header__subtitle" data-i18n="dashboard.inventorySubtitle">Lauf-, Restore- und Speicherdaten</span>
+            </div>
+            <span class="ui-badge" id="dashboard-selection-count"></span>
+          </header>
+          <div id="backup-grid" class="dashboard-table-wrap ui-table-wrap">
+            <div class="loading-spinner">
+              <div class="spinner"></div>
+              <span data-i18n="dashboard.loading">Lade Backup-Status...</span>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
     <!-- Jobs Page -->
     <div id="page-jobs" class="page">
-      <div class="page-header">
+      <div class="page-header ui-page-header">
         <div>
           <h1 data-i18n="jobs.title">Jobs</h1>
           <p class="page-subtitle" data-i18n="jobs.subtitle">Backup-Jobs starten und überwachen</p>
@@ -196,38 +218,57 @@
 
       <div id="jobs-message" class="status-message hidden"></div>
       <div id="jobs-data-dir-warning" class="status-message hidden"></div>
-      <div id="jobs-grid" class="backup-grid">
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-          <span data-i18n="jobs.loading">Lade Jobs...</span>
-        </div>
-      </div>
+      <div class="jobs-location-layout ui-context-layout">
+        <aside class="jobs-location-sidebar ui-context-sidebar" aria-label="Lokationen" data-i18n-aria-label="jobs.locations">
+          <div class="ui-context-sidebar__header">
+            <small data-i18n="jobs.grouping">Gruppierung</small>
+            <strong data-i18n="jobs.locations">Lokationen</strong>
+          </div>
+          <nav id="jobs-location-list" class="ui-context-nav"></nav>
+        </aside>
+        <section class="jobs-workspace ui-workspace">
+          <header class="ui-workspace-header">
+            <div class="ui-workspace-header__title">
+              <small data-i18n="jobs.selection">Auswahl</small>
+              <h2 id="jobs-selection-title" data-i18n="jobs.allLocations">Alle Lokationen</h2>
+              <span class="ui-workspace-header__subtitle" data-i18n="jobs.workspaceSubtitle">Zugeordnete Backup-Jobs und Betriebszustand</span>
+            </div>
+            <span class="ui-badge" id="jobs-selection-count"></span>
+          </header>
+          <div id="jobs-grid" class="jobs-groups">
+            <div class="loading-spinner">
+              <div class="spinner"></div>
+              <span data-i18n="jobs.loading">Lade Jobs...</span>
+            </div>
+          </div>
 
-      <!-- Log Panel (wird eingeblendet wenn Job läuft) -->
-      <div id="log-panel" class="log-panel hidden">
-        <div class="log-panel-header">
-          <div class="log-panel-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            <span id="log-panel-title-text" data-i18n="jobs.logOutput">Log-Ausgabe</span>
+          <!-- Log Panel (wird eingeblendet wenn Job läuft) -->
+          <div id="log-panel" class="log-panel hidden">
+            <div class="log-panel-header">
+              <div class="log-panel-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span id="log-panel-title-text" data-i18n="jobs.logOutput">Log-Ausgabe</span>
+              </div>
+              <div class="log-panel-actions">
+                <span id="log-status-badge" class="badge"></span>
+                <button class="btn btn-secondary btn-sm" id="jobs-log-clear-btn" data-i18n="jobs.clear">Leeren</button>
+                <button class="btn btn-secondary btn-sm" id="jobs-log-close-btn" data-i18n-aria-label="jobs.close" aria-label="Schließen">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <pre id="log-output" class="log-output"></pre>
+            <div id="log-scroll-hint" class="log-scroll-hint">
+              <button id="jobs-log-scroll-end-btn">&#8595; <span data-i18n="jobs.jumpToEnd">Zum Ende springen</span></button>
+            </div>
           </div>
-          <div class="log-panel-actions">
-            <span id="log-status-badge" class="badge"></span>
-            <button class="btn btn-secondary btn-sm" id="jobs-log-clear-btn" data-i18n="jobs.clear">Leeren</button>
-            <button class="btn btn-secondary btn-sm" id="jobs-log-close-btn" data-i18n-aria-label="jobs.close" aria-label="Schließen">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-        <pre id="log-output" class="log-output"></pre>
-        <div id="log-scroll-hint" class="log-scroll-hint">
-          <button id="jobs-log-scroll-end-btn">&#8595; <span data-i18n="jobs.jumpToEnd">Zum Ende springen</span></button>
-        </div>
+        </section>
       </div>
     </div>
 

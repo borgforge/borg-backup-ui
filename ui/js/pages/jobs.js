@@ -15,8 +15,10 @@ window.BBUI.jobsState = window.BBUI.jobsState || {
   logAutoScroll: true,
   pollingTimer: null,
   lastRunningSnapshot: '{}',  // JSON-String der zuletzt bekannten Running-States
+  selectedLocation: 'all',
 };
 const jobsState = window.BBUI.jobsState;
+const JOBS_LOCATION_ORDER = ['storagebox', 'usb', 'smb', 'local', 'utility'];
 
 window.BBUI.scheduleModalState = window.BBUI.scheduleModalState || {
   jobKey: null,
@@ -166,6 +168,8 @@ function renderJobsGrid(jobs) {
 
   if (!jobs || jobs.length === 0) {
     if (jobsNewBtn) jobsNewBtn.classList.add('hidden');
+    renderJobsLocationSidebar([]);
+    updateJobsSelection([]);
     el.innerHTML = '';
     showJobsEmpty(`${jobsT('jobs.empty')}<br><button class="btn btn-primary btn-sm" id="jobs-empty-create-btn" data-jobs-action="open-wizard" style="margin-top:10px">${jobsT('jobs.createFirst')}</button>`);
     // Defensive fallback: keep direct binding in case delegated handlers are unavailable.
@@ -175,41 +179,29 @@ function renderJobsGrid(jobs) {
   if (jobsNewBtn) jobsNewBtn.classList.remove('hidden');
 
   const typeOrder = { flash: 0, appdata: 1, photos: 2, VMs: 3, vms: 3, sonstiges: 4 };
-  const locOrder  = ['local', 'usb', 'smb', 'storagebox'];
+  const visible = jobs
+    .filter((job) => jobsState.selectedLocation === 'all' || jobsLocationKey(job) === jobsState.selectedLocation)
+    .sort((a, b) => {
+      const locationDelta = JOBS_LOCATION_ORDER.indexOf(jobsLocationKey(a))
+        - JOBS_LOCATION_ORDER.indexOf(jobsLocationKey(b));
+      if (locationDelta) return locationDelta;
+      return (typeOrder[a.backup_type] ?? 99) - (typeOrder[b.backup_type] ?? 99);
+    });
 
-  const backupJobs = jobs.filter(j => !j.is_utility);
-  const utilityJobs = jobs.filter(j => j.is_utility);
+  renderJobsLocationSidebar(jobs);
+  updateJobsSelection(visible);
 
-  const groups = {};
-  for (const loc of locOrder) groups[loc] = [];
-  for (const job of backupJobs) {
-    const loc = job.location in groups ? job.location : 'local';
-    groups[loc].push(job);
+  if (visible.length === 0) {
+    el.innerHTML = `<div class="ui-empty">${escHtml(jobsT('jobs.noLocationJobs'))}</div>`;
+  } else {
+    const groups = jobsState.selectedLocation === 'all'
+      ? JOBS_LOCATION_ORDER
+      : [jobsState.selectedLocation];
+    el.innerHTML = groups.map((location) => {
+      const locationJobs = visible.filter((job) => jobsLocationKey(job) === location);
+      return locationJobs.length ? renderJobsLocationGroup(location, locationJobs) : '';
+    }).join('');
   }
-  for (const loc of locOrder) {
-    groups[loc].sort((a, b) => (typeOrder[a.backup_type] ?? 99) - (typeOrder[b.backup_type] ?? 99));
-  }
-
-  let html = locOrder
-    .filter(loc => groups[loc].length > 0)
-    .map(loc => `
-      <div class="jobs-location-group">
-        <div class="jobs-location-header">${jobsLocationLabel(loc)}</div>
-        <div class="jobs-group-grid">${groups[loc].map(renderJobCard).join('')}</div>
-        <div class="group-log-slot" id="log-slot-${loc}"></div>
-      </div>`)
-    .join('');
-
-  if (utilityJobs.length > 0) {
-    html += `
-      <div class="jobs-location-group">
-        <div class="jobs-location-header">${jobsT('jobs.otherScripts')}</div>
-        <div class="jobs-group-grid">${utilityJobs.map(renderJobCard).join('')}</div>
-        <div class="group-log-slot" id="log-slot-utility"></div>
-      </div>`;
-  }
-
-  el.innerHTML = html;
 
   if (rescuedSlotId) {
     const newSlot = document.getElementById(rescuedSlotId);
@@ -230,15 +222,76 @@ function renderJobsGrid(jobs) {
   }
 }
 
+function jobsLocationKey(job) {
+  if (job?.is_utility) return 'utility';
+  const location = String(job?.location || '').toLowerCase();
+  return JOBS_LOCATION_ORDER.includes(location) && location !== 'utility' ? location : 'local';
+}
+
+function jobsLocationName(location) {
+  return location === 'utility' ? jobsT('jobs.otherScripts') : jobsLocationLabel(location);
+}
+
+function jobsLocationGlyph(location) {
+  return { all: '≡', storagebox: '↗', usb: '▯', smb: '⌁', local: '⌂', utility: '⌘' }[location] || '○';
+}
+
+function jobsCount(count) {
+  return jobsT(count === 1 ? 'jobs.jobCountOne' : 'jobs.jobCountMany', { count });
+}
+
+function renderJobsLocationSidebar(jobs) {
+  const el = document.getElementById('jobs-location-list');
+  if (!el) return;
+  const locations = ['all', ...JOBS_LOCATION_ORDER.filter((location) => location !== 'utility' || jobs.some((job) => job.is_utility))];
+  el.innerHTML = locations.map((location) => {
+    const count = location === 'all' ? jobs.length : jobs.filter((job) => jobsLocationKey(job) === location).length;
+    const label = location === 'all' ? jobsT('jobs.allLocations') : jobsLocationName(location);
+    const detail = location === 'all' ? jobsT('jobs.overview') : jobsCount(count);
+    return `<button class="ui-context-nav__item ${jobsState.selectedLocation === location ? 'is-active' : ''}" data-jobs-location="${location}" ${jobsState.selectedLocation === location ? 'aria-current="page"' : ''}>
+      <span class="location-nav-glyph">${jobsLocationGlyph(location)}</span>
+      <span class="location-nav-copy"><strong>${escHtml(label)}</strong><small>${escHtml(detail)}</small></span>
+      <span class="ui-badge location-nav-count">${count}</span>
+    </button>`;
+  }).join('');
+  el.querySelectorAll('[data-jobs-location]').forEach((button) => {
+    button.addEventListener('click', () => {
+      jobsState.selectedLocation = button.dataset.jobsLocation || 'all';
+      renderJobsGrid(jobs);
+    });
+  });
+}
+
+function updateJobsSelection(visible) {
+  const title = document.getElementById('jobs-selection-title');
+  const count = document.getElementById('jobs-selection-count');
+  if (title) {
+    title.textContent = jobsState.selectedLocation === 'all'
+      ? jobsT('jobs.allLocations')
+      : jobsLocationName(jobsState.selectedLocation);
+  }
+  if (count) count.textContent = jobsCount(visible.length);
+}
+
+function renderJobsLocationGroup(location, jobs) {
+  return `<section class="jobs-location-group">
+    <header class="jobs-location-group__header">
+      <div class="jobs-location-group__identity">
+        <span class="location-nav-glyph">${jobsLocationGlyph(location)}</span>
+        <span><h3>${escHtml(jobsLocationName(location))}</h3><small>${escHtml(jobsCount(jobs.length))}</small></span>
+      </div>
+      <span class="ui-badge">${jobs.length}</span>
+    </header>
+    <div class="jobs-location-group__body">${jobs.map(renderJobCard).join('')}<div class="group-log-slot" id="log-slot-${location}"></div></div>
+  </section>`;
+}
+
 function renderJobCard(job) {
   const isRunning = job.running;
-  const locClass  = (job.location || '').toLowerCase();
   const titleName = job.name || job.display_name || capitalize(job.backup_type);
   const iconKey = resolveJobIcon(job);
   const iconColorKey = resolveJobIconColor(job);
   const iconColorClass = iconColorKey ? ` type-icon-color-${iconColorKey}` : '';
-
-  const locationName = jobsLocationLabel(job.location);
 
   const schedules = _coreSchedules();
   const sched = schedules[job.key];
@@ -284,14 +337,17 @@ function renderJobCard(job) {
        </div>`
     : '');
 
-  const lastRunHtml = job.last_status
-    ? `<div class="job-last-run">
-         ${jobsT('jobs.lastRun')} <span>${job.last_time_ago || '—'}</span>
-         <span class="badge ${job.last_status}" style="margin-left:6px;vertical-align:middle">
-           <span class="badge-dot"></span>${statusLabel(job.last_status)}
-         </span>
-       </div>`
-    : `<div class="job-last-run">${jobsT('jobs.neverRun')}</div>`;
+  const stateClass = isRunning ? 'info' : job.enabled === false ? 'warning' : (job.last_status || 'unknown');
+  const stateLabel = isRunning
+    ? jobsT('jobs.running')
+    : job.enabled === false
+      ? jobsT('jobs.disabled')
+      : job.last_status
+        ? statusLabel(job.last_status)
+        : jobsT('jobs.ready');
+  const lastRunText = job.last_status
+    ? `${jobsT('jobs.lastRun')} ${job.last_time_ago || '—'}`
+    : jobsT('jobs.neverRun');
   const verificationHtml = renderJobRestoreVerification(job);
 
   const startDisabled = !_isDataDirReady();
@@ -309,24 +365,36 @@ function renderJobCard(job) {
          ${jobsT('jobs.startAction')}
        </button>`;
 
-  return `
-    <div class="job-card ${isRunning ? 'running' : ''}" id="job-card-${job.key}">
-      <div class="job-card-header">
-        <div class="job-card-title">
-          <div class="type-icon type-icon-${(job.backup_type||'sonstiges').toLowerCase()}${iconColorClass}">${typeIcon(iconKey)}</div>
-          <div>
-            <div class="type-name">${escHtml(titleName)}</div>
-          </div>
-        </div>
-        <div class="job-card-badges">
-          <span class="loc-badge ${locClass}">${locationName}</span>
-          <div class="job-card-menu">
+  return `<article class="jobs-redesign-row ${isRunning ? 'is-running' : ''} ${job.enabled === false ? 'is-disabled' : ''}" id="job-card-${escHtml(job.key)}">
+    <div class="jobs-redesign-cell jobs-redesign-main">
+      <div class="job-card-title">
+        <div class="type-icon type-icon-${escHtml(String(job.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</div>
+        <div><div class="type-name">${escHtml(titleName)}</div><span class="type-sub">${escHtml(job.key)}</span></div>
+      </div>
+      ${job.description ? `<div class="job-description">${renderDescriptionMarkdown(job.description)}</div>` : ''}
+      <div class="job-meta">${features.join('')}</div>
+      ${job.enabled === false ? `<div class="status-message warning-state jobs-redesign-disabled-note">${jobsT('jobs.disabled')}</div>` : ''}
+    </div>
+    <div class="jobs-redesign-cell jobs-redesign-operation">
+      <span class="jobs-redesign-label">${jobsT('jobs.operatingState')}</span>
+      <span class="badge ${stateClass}"><span class="badge-dot"></span>${escHtml(stateLabel)}</span>
+      <span class="jobs-redesign-detail">${escHtml(lastRunText)}</span>
+    </div>
+    <div class="jobs-redesign-cell jobs-redesign-policy">
+      <span class="jobs-redesign-label">${jobsT('jobs.policy')}</span>
+      ${policyHtml || `<span class="jobs-redesign-detail">—</span>`}
+      ${verificationHtml}
+      ${schedHtml || (job.enabled === false ? `<span class="jobs-redesign-detail">${jobsT('jobs.scheduleDisabled')}</span>` : '')}
+    </div>
+    <div class="jobs-redesign-cell jobs-redesign-actions">
+      ${actionHtml}
+      <div class="job-card-menu">
             <button class="job-menu-btn" data-jobs-action="toggle-menu" data-job-key="${escHtml(job.key)}" title="${jobsT('jobs.options')}" aria-label="${jobsT('jobs.options')}">
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                 <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
               </svg>
             </button>
-            <div class="job-menu-dropdown hidden" id="job-menu-${job.key}">
+            <div class="job-menu-dropdown hidden" id="job-menu-${escHtml(job.key)}">
               ${job.standard === 'legacy'
                 ? `<button class="job-menu-item" data-jobs-action="adopt-legacy" data-job-key="${escHtml(job.key)}">
                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -367,14 +435,8 @@ function renderJobCard(job) {
               </button>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="job-meta">${features.join('')}</div>
-      ${job.enabled === false ? `<div class="status-message warning-state job-disabled-note">${jobsT('jobs.disabled')}</div>` : ''}
-      ${job.description ? `<div class="job-description">${renderDescriptionMarkdown(job.description)}</div>` : ''}
-      <div class="job-last-run-wrap">${policyHtml}${lastRunHtml}${verificationHtml}${schedHtml}</div>
-      <div class="job-actions">${actionHtml}</div>
-    </div>`;
+    </div>
+  </article>`;
 }
 
 function renderJobRestoreVerification(job) {
@@ -393,7 +455,7 @@ function renderJobRestoreVerification(job) {
     job.restore_verification_last_test_date ? jobsT('jobs.lastTest', { date: job.restore_verification_last_test_date }) : '',
     job.restore_verification_valid_until ? jobsT('jobs.validUntil', { date: job.restore_verification_valid_until }) : '',
   ].filter(Boolean).join(' · ');
-  return `<div class="job-restore-proof"><span class="restore-v-badge ${item.cls}" title="${escHtml(detail || item.text)}">${item.text}</span></div>`;
+  return `<div class="job-restore-proof"><span class="restore-v-badge ${item.cls}" title="${escHtml(detail || item.text)}">${item.text}</span>${detail ? `<span class="jobs-redesign-detail">${escHtml(detail)}</span>` : ''}</div>`;
 }
 
 function resolveJobIcon(job) {
@@ -729,7 +791,7 @@ function openLogPanel(jobKey) {
 
   const logPanel = document.getElementById('log-panel');
   if (job) {
-    const slotId = job.is_utility ? 'log-slot-utility' : `log-slot-${job.location}`;
+    const slotId = `log-slot-${jobsLocationKey(job)}`;
     const slot = document.getElementById(slotId);
     if (slot) slot.appendChild(logPanel);
   }
