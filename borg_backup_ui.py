@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.15.1213"
+APP_VERSION = "2026.06.21.1146"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -2688,6 +2688,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 })();
 </script>
 <link rel="stylesheet" href="/ui/style.css">
+<link rel="stylesheet" href="/ui/design-system.css">
 <script src="/ui/js/components/i18n.js"></script>
 <style>
   .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -2775,6 +2776,7 @@ if(document.getElementById('login-username')){document.getElementById('login-use
 })();
 </script>
 <link rel="stylesheet" href="/ui/style.css">
+<link rel="stylesheet" href="/ui/design-system.css">
 <script src="/ui/js/components/i18n.js"></script>
 <style>
   .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
