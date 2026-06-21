@@ -224,15 +224,21 @@ Ausnahme fuer ausdruecklich freigegebene Umbrella-Features:
 
 * Schrittweise Teil-PRs duerfen Plugin-Code ohne Release-Artefakt aendern,
   wenn der Nutzer dies fuer das Umbrella-Feature freigegeben hat.
-* Aktuell gilt diese Ausnahme fuer die Zweisprachigkeit aus Issue `#11`.
+* Diese Ausnahme gilt fuer die Zweisprachigkeit aus Issue `#11` und fuer das
+  einheitliche UI-Redesign aus Umbrella-Issue `#27`.
+* Die Redesign-Teil-Issues `#28` bis `#34` werden ohne stabile Release-Version,
+  Release-Artefakt oder Test-Channel-Deploy gemergt.
+* Issue `#35` erstellt zuerst einen Test-Channel-Kandidaten. Eine stabile
+  Release-Version und Promotion nach `main` erfolgen erst nach ausdruecklicher
+  Freigabe des Nutzers.
 * Der PR muss dokumentieren, dass der Release-Build bewusst auf den finalen
   Feature-Abschluss verschoben wird.
 * Preflight muss in diesem Fall explizit mit
   `BORG_UI_ALLOW_DEFERRED_RELEASE=1 ./plugin/mr-preflight.sh` ausgefuehrt
   werden.
-* Bugfixes, Security-Fixes, Maintenance-Releases und finale Feature-Releases
-  bleiben von dieser Ausnahme unberuehrt und benoetigen weiterhin Build,
-  Changelog, Release-Artefakt und Test-Channel-Schritte.
+* Bugfixes, Security-Fixes und andere Maintenance- oder Feature-Releases
+  bleiben von dieser Ausnahme unberuehrt. Der finale Redesign-Release folgt dem
+  Test-Channel- und Freigabeablauf aus Issue `#35`.
 
 Unter `releases/` bleiben in `main` ausschliesslich die letzten 5
 `borg-backup-ui-*.txz`-Release-Artefakte.

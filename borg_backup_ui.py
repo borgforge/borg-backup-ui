@@ -2688,6 +2688,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 })();
 </script>
 <link rel="stylesheet" href="/ui/style.css">
+<link rel="stylesheet" href="/ui/design-system.css">
 <script src="/ui/js/components/i18n.js"></script>
 <style>
   .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -2775,6 +2776,7 @@ if(document.getElementById('login-username')){document.getElementById('login-use
 })();
 </script>
 <link rel="stylesheet" href="/ui/style.css">
+<link rel="stylesheet" href="/ui/design-system.css">
 <script src="/ui/js/components/i18n.js"></script>
 <style>
   .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}

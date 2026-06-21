@@ -34,7 +34,8 @@ fi
 echo "==> Prüfe Release-Regel für Plugin-Code"
 changed_files="$(git diff --name-only "${base_ref}...HEAD")"
 plugin_code_changed=0
-release_build_changed=0
+release_manifest_changed=0
+release_artifact_changed=0
 deferred_release_allowed="${BORG_UI_ALLOW_DEFERRED_RELEASE:-0}"
 
 while IFS= read -r file; do
@@ -44,11 +45,19 @@ while IFS= read -r file; do
       ;;
   esac
   case "${file}" in
-    borg_backup_ui.py|borg-backup-ui.plg|releases/borg-backup-ui-*.txz)
-      release_build_changed=1
+    borg-backup-ui.plg)
+      release_manifest_changed=1
+      ;;
+    releases/borg-backup-ui-*.txz)
+      release_artifact_changed=1
       ;;
   esac
 done <<< "${changed_files}"
+
+release_build_changed=0
+if [[ "${release_manifest_changed}" -eq 1 && "${release_artifact_changed}" -eq 1 ]]; then
+  release_build_changed=1
+fi
 
 if [[ "${plugin_code_changed}" -eq 1 && "${release_build_changed}" -eq 0 && "${deferred_release_allowed}" == "1" ]]; then
   echo "Hinweis: Plugin-Code wurde geändert, aber kein Release-Build ist im Branch enthalten."
