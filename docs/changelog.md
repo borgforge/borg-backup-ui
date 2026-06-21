@@ -12,6 +12,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Responsive Regeln fuer Desktop, Tablet und Mobile sowie sichtbare Fokus-, Lade-, Leer-, Warn-, Fehler-, Lauf- und Erfolgszustaende definiert.
   - Statusfelder im hellen Design verwenden explizite kontrastreiche Vorder- und Hintergrundfarben.
 
+### Issue #29
+- UI (#29):
+  - Dashboard und Jobs verwenden einen gemeinsamen standortbasierten Arbeitsablauf mit Filterleiste und Auswahlzusammenfassung.
+  - Das Dashboard zeigt Lauf-, Restore-, Speicher-, Wachstums- und Repository-Pruefdaten in einer kompakten Tabelle.
+  - Jobs bleiben nach Standort gruppiert und behalten Start-, Log-, Zeitplan-, Legacy- und weitere Aktionsfunktionen.
+  - Desktop-, Tablet- sowie helle und dunkle Darstellung wurden fuer die neuen Ansichten abgestimmt.
+
 ## Archivierte Manifest-Historie
 
 ###2026.06.15.1213###

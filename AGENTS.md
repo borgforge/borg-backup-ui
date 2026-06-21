@@ -226,8 +226,9 @@ Ausnahme fuer ausdruecklich freigegebene Umbrella-Features:
   wenn der Nutzer dies fuer das Umbrella-Feature freigegeben hat.
 * Diese Ausnahme gilt fuer die Zweisprachigkeit aus Issue `#11` und fuer das
   einheitliche UI-Redesign aus Umbrella-Issue `#27`.
-* Die Redesign-Teil-Issues `#28` bis `#34` werden ohne stabile Release-Version,
-  Release-Artefakt oder Test-Channel-Deploy gemergt.
+* Die Redesign-Teil-Issues `#28` bis `#34` werden ohne stabile Release-Version
+  oder stabiles Release-Artefakt gemergt. Test-Channel-Kandidaten duerfen
+  jederzeit erstellt werden und bleiben vom PR-Arbeitsstand getrennt.
 * Issue `#35` erstellt zuerst einen Test-Channel-Kandidaten. Eine stabile
   Release-Version und Promotion nach `main` erfolgen erst nach ausdruecklicher
   Freigabe des Nutzers.

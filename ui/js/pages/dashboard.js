@@ -18,6 +18,8 @@ function dashboardLocationLabel(location) {
 }
 
 let dashboardSystemHealth = null;
+let dashboardSelectedLocation = 'all';
+const DASHBOARD_LOCATION_ORDER = ['storagebox', 'usb', 'smb', 'local'];
 
 async function fetchStatus() {
   const res = await fetch('/api/status');
@@ -191,144 +193,121 @@ function renderBackupGrid(backups) {
   if (!el) return;
 
   if (!backups || backups.length === 0) {
-    el.innerHTML = '';
-    showEmpty(`${dashboardT('dashboard.emptyStatus')}<br>${dashboardT('dashboard.emptyQuestion')}`);
+    renderDashboardLocationSidebar([]);
+    updateDashboardSelection([]);
+    el.innerHTML = `<div class="ui-empty">${escHtml(dashboardT('dashboard.emptyStatus'))}<br>${escHtml(dashboardT('dashboard.emptyQuestion'))}</div>`;
     return;
   }
 
   const typeOrder = { flash: 0, appdata: 1, photos: 2, VMs: 3, vms: 3, sonstiges: 4 };
-  const locOrder  = ['local', 'usb', 'smb', 'storagebox'];
+  const visible = backups
+    .filter((backup) => dashboardSelectedLocation === 'all' || dashboardLocationKey(backup) === dashboardSelectedLocation)
+    .sort((a, b) => {
+      const locationDelta = DASHBOARD_LOCATION_ORDER.indexOf(dashboardLocationKey(a))
+        - DASHBOARD_LOCATION_ORDER.indexOf(dashboardLocationKey(b));
+      if (locationDelta) return locationDelta;
+      return (typeOrder[a.backup_type] ?? 99) - (typeOrder[b.backup_type] ?? 99);
+    });
 
-  const groups = {};
-  for (const loc of locOrder) groups[loc] = [];
-  for (const b of backups) {
-    const loc = b.location in groups ? b.location : 'local';
-    groups[loc].push(b);
+  renderDashboardLocationSidebar(backups);
+  updateDashboardSelection(visible);
+
+  if (visible.length === 0) {
+    el.innerHTML = `<div class="ui-empty">${escHtml(dashboardT('dashboard.noLocationBackups'))}</div>`;
+    return;
   }
-  for (const loc of locOrder) {
-    groups[loc].sort((a, b) => (typeOrder[a.backup_type] ?? 99) - (typeOrder[b.backup_type] ?? 99));
-  }
 
-  const html = locOrder
-    .filter(loc => groups[loc].length > 0)
-    .map(loc => `
-      <div class="jobs-location-group">
-        <div class="jobs-location-header">${dashboardLocationLabel(loc)}</div>
-        <div class="jobs-group-grid">${groups[loc].map(renderCard).join('')}</div>
-      </div>`)
-    .join('');
-
-  el.innerHTML = html;
+  el.innerHTML = `
+    <table class="ui-table dashboard-inventory-table">
+      <thead><tr>
+        <th>${dashboardT('dashboard.backupColumn')}</th>
+        <th>${dashboardT('dashboard.locationColumn')}</th>
+        <th>${dashboardT('dashboard.runStatusColumn')}</th>
+        <th>${dashboardT('dashboard.restoreColumn')}</th>
+        <th>${dashboardT('dashboard.storageColumn')}</th>
+        <th>${dashboardT('dashboard.growthCheckColumn')}</th>
+      </tr></thead>
+      <tbody>${visible.map(renderDashboardInventoryRow).join('')}</tbody>
+    </table>`;
 }
 
-function renderCard(b) {
-  if (b.never_run) return renderNeverRunCard(b);
-  const statusClass = b.status || 'unknown';
-  const locClass    = (b.location || '').toLowerCase();
-
-  const statusLabel = {
-    success: dashboardT('dashboard.successful'),
-    skipped: dashboardT('dashboard.skipped'),
-    warning: dashboardT('jobs.statusWarning'),
-    error: dashboardT('jobs.statusError'),
-  }[b.status] || b.status || dashboardT('dashboard.unknown');
-
-  const locationLabel = dashboardLocationLabel(b.location);
-
-  const typeLabel = capitalize(b.backup_type || '—');
-  const restoreVerification = renderRestoreVerificationBadge(b);
-  const skipReasonKey = `dashboard.skipReasons.${b.skip_reason_code || 'skipped'}`;
-  const translatedSkipReason = dashboardT(skipReasonKey);
-  const skipReason = translatedSkipReason === skipReasonKey
-    ? dashboardT('dashboard.skipDefault')
-    : translatedSkipReason;
-
-  const errorSection = b.status === 'error'
-    ? `<div class="error-msg">${escHtml(dashboardT('dashboard.backupFailedDetails'))}</div>`
-    : '';
-  const skipSection = b.status === 'skipped'
-    ? `<div class="error-msg" style="color:var(--warning)">${escHtml(skipReason)}</div>`
-    : '';
-
-  const growthClass = b.growth_bytes == null ? 'neutral'
-    : b.growth_bytes > 0 ? 'positive' : 'negative';
-
-  let effectiveCheckStatus = b.repository_check_status;
-  if (effectiveCheckStatus === 'ok' && isStaleDate(b.repository_check_date)) {
-    effectiveCheckStatus = 'overdue';
-  }
-  const repoCheckHtml = effectiveCheckStatus
-    ? `<div class="repo-check ${effectiveCheckStatus}">
-         ${repoCheckIcon(effectiveCheckStatus)}
-         ${repoCheckLabel({...b, repository_check_status: effectiveCheckStatus})}
-       </div>`
-    : '';
-
-  const sizeSection = b.original_size > 0 ? `
-    <div class="size-grid">
-      <div class="size-row">
-        <span class="size-label">${dashboardT('dashboard.source')}</span>
-        <span class="size-value">${b.original_size_formatted}</span>
-      </div>
-      <div class="size-row">
-        <span class="size-label">${dashboardT('dashboard.compressed')}</span>
-        <span class="size-value">${b.compressed_size_formatted}
-          ${b.compression_pct ? `<span class="size-pct">-${b.compression_pct}</span>` : ''}
-        </span>
-      </div>
-      <div class="size-row">
-        <span class="size-label">${dashboardT('dashboard.deduplicated')}</span>
-        <span class="size-value">${b.deduplicated_size_formatted}
-          ${b.dedup_pct ? `<span class="size-pct">-${b.dedup_pct}</span>` : ''}
-        </span>
-      </div>
-      <div class="size-row">
-        <span class="size-label">${dashboardT('dashboard.repository')}</span>
-        <span class="size-value">${b.repository_size_formatted}</span>
-      </div>
-    </div>
-    <div class="growth-row">
-      <span>${dashboardT('dashboard.weeklyGrowth')}</span>
-      <span class="growth-value ${growthClass}">${b.growth_formatted}</span>
-    </div>` : `<div class="size-label" style="color:var(--text-muted);margin-top:8px">${dashboardT('dashboard.noSizeData')}</div>`;
-
-  return `
-    <div class="backup-card ${statusClass}">
-      <div class="card-header">
-        <div class="card-title">
-          <div class="type-icon type-icon-${(b.backup_type||'sonstiges').toLowerCase()}">${typeIcon(b.backup_type)}</div>
-          <div>
-            <div class="type-name">${typeLabel}</div>
-            ${b.archive_name ? `<div class="type-sub" title="${escHtml(b.archive_name)}">${escHtml(truncate(b.archive_name, 32))}</div>` : ''}
-          </div>
-        </div>
-        <div class="card-badges">
-          ${b.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
-          <span class="badge ${statusClass}">
-            <span class="badge-dot"></span>
-            ${statusLabel}
-          </span>
-          <span class="loc-badge ${locClass}">${locationLabel}</span>
-          ${restoreVerification}
-        </div>
-      </div>
-
-      <div class="card-time">
-        <span class="time-ago">${b.time_ago || '—'}</span>
-        <span class="duration">${b.duration_formatted || ''}</span>
-      </div>
-
-      <div class="card-divider"></div>
-
-      ${sizeSection}
-      ${errorSection}
-      ${skipSection}
-      ${repoCheckHtml}
-    </div>`;
+function dashboardLocationKey(backup) {
+  const location = String(backup?.location || '').toLowerCase();
+  return DASHBOARD_LOCATION_ORDER.includes(location) ? location : 'local';
 }
 
-function renderRestoreVerificationBadge(b) {
-  const status = String(b.restore_verification_status || '').toLowerCase();
+function dashboardLocationGlyph(location) {
+  return { all: '≡', storagebox: '↗', usb: '▯', smb: '⌁', local: '⌂' }[location] || '○';
+}
+
+function dashboardBackupCount(count) {
+  return dashboardT(count === 1 ? 'dashboard.backupCountOne' : 'dashboard.backupCountMany', { count });
+}
+
+function renderDashboardLocationSidebar(backups) {
+  const el = document.getElementById('dashboard-location-list');
+  if (!el) return;
+  const entries = ['all', ...DASHBOARD_LOCATION_ORDER];
+  el.innerHTML = entries.map((location) => {
+    const count = location === 'all'
+      ? backups.length
+      : backups.filter((backup) => dashboardLocationKey(backup) === location).length;
+    const label = location === 'all' ? dashboardT('dashboard.allLocations') : dashboardLocationLabel(location);
+    const detail = location === 'all' ? dashboardT('jobs.overview') : dashboardBackupCount(count);
+    return `<button class="ui-context-nav__item ${dashboardSelectedLocation === location ? 'is-active' : ''}" data-dashboard-location="${location}" ${dashboardSelectedLocation === location ? 'aria-current="page"' : ''}>
+      <span class="location-nav-glyph">${dashboardLocationGlyph(location)}</span>
+      <span class="location-nav-copy"><strong>${escHtml(label)}</strong><small>${escHtml(detail)}</small></span>
+      <span class="ui-badge location-nav-count">${count}</span>
+    </button>`;
+  }).join('');
+  el.querySelectorAll('[data-dashboard-location]').forEach((button) => {
+    button.addEventListener('click', () => {
+      dashboardSelectedLocation = button.dataset.dashboardLocation || 'all';
+      renderBackupGrid(backups);
+    });
+  });
+}
+
+function updateDashboardSelection(visible) {
+  const title = document.getElementById('dashboard-selection-title');
+  const count = document.getElementById('dashboard-selection-count');
+  if (title) {
+    title.textContent = dashboardSelectedLocation === 'all'
+      ? dashboardT('dashboard.allLocations')
+      : dashboardLocationLabel(dashboardSelectedLocation);
+  }
+  if (count) count.textContent = dashboardBackupCount(visible.length);
+}
+
+function dashboardRunStatus(backup) {
+  if (backup.never_run) return { cls: 'unknown', label: dashboardT('dashboard.neverExecuted') };
+  const status = String(backup.status || 'unknown').toLowerCase();
+  return {
+    cls: status,
+    label: {
+      success: dashboardT('dashboard.successful'),
+      skipped: dashboardT('dashboard.skipped'),
+      warning: dashboardT('jobs.statusWarning'),
+      error: dashboardT('jobs.statusError'),
+    }[status] || dashboardT('dashboard.unknown'),
+  };
+}
+
+function dashboardRunMessage(backup) {
+  if (backup.never_run) return { cls: '', text: dashboardT('dashboard.neverExecutedHint') };
+  if (backup.status === 'error') {
+    return { cls: 'error', text: backup.error_message || backup.message || dashboardT('dashboard.backupFailedDetails') };
+  }
+  if (backup.status === 'skipped') {
+    const key = `dashboard.skipReasons.${backup.skip_reason_code || 'skipped'}`;
+    const translated = dashboardT(key);
+    return { cls: 'warning', text: translated === key ? dashboardT('dashboard.skipDefault') : translated };
+  }
+  return { cls: '', text: '' };
+}
+
+function renderDashboardRestoreVerificationBadge(backup) {
+  const status = String(backup.restore_verification_status || '').toLowerCase();
   if (!status) return '';
   const map = {
     verified: { cls: 'success', text: dashboardT('jobs.restoreVerified') },
@@ -340,35 +319,44 @@ function renderRestoreVerificationBadge(b) {
   const m = map[status];
   if (!m) return '';
   const details = [
-    b.restore_verification_last_test_date ? dashboardT('jobs.lastTest', { date: b.restore_verification_last_test_date }) : '',
-    b.restore_verification_valid_until ? dashboardT('jobs.validUntil', { date: b.restore_verification_valid_until }) : '',
+    backup.restore_verification_last_test_date ? dashboardT('jobs.lastTest', { date: backup.restore_verification_last_test_date }) : '',
+    backup.restore_verification_valid_until ? dashboardT('jobs.validUntil', { date: backup.restore_verification_valid_until }) : '',
   ].filter(Boolean).join(' · ');
-  return `<span class="restore-v-badge ${m.cls}" title="${escHtml(details || m.text)}">${m.text}</span>`;
+  return `<span class="restore-v-badge ${m.cls}" title="${escHtml(details || m.text)}">${m.text}</span>${details ? `<span class="dashboard-cell-detail">${escHtml(details)}</span>` : ''}`;
 }
 
-function renderNeverRunCard(b) {
-  const locClass  = (b.location || '').toLowerCase();
-  const locLbl = dashboardLocationLabel(b.location);
-  const typeLabel = capitalize(b.backup_type || '—');
+function renderDashboardInventoryRow(backup) {
+  const location = dashboardLocationKey(backup);
+  const run = dashboardRunStatus(backup);
+  const message = dashboardRunMessage(backup);
+  const growthClass = backup.growth_bytes == null ? 'neutral' : backup.growth_bytes > 0 ? 'positive' : 'negative';
+  let checkStatus = backup.repository_check_status;
+  if (checkStatus === 'ok' && isStaleDate(backup.repository_check_date)) checkStatus = 'overdue';
+  const checkLabel = checkStatus ? repoCheckLabel({ ...backup, repository_check_status: checkStatus }) : dashboardT('dashboard.checkUnknown');
+  const type = capitalize(backup.backup_type || '—');
+  const identityDetail = backup.archive_name || backup.key || dashboardT('dashboard.neverExecuted');
+  const runDetail = [backup.time_ago || '', backup.duration_formatted || ''].filter(Boolean).join(' · ') || '—';
+  const hasSizes = Number(backup.original_size || 0) > 0;
+  const sizePrimary = hasSizes ? (backup.deduplicated_size_formatted || '—') : dashboardT('dashboard.noSizeData');
+  const sizeDetail = hasSizes
+    ? `${dashboardT('dashboard.source')}: ${backup.original_size_formatted || '—'} · ${dashboardT('dashboard.compressed')}: ${backup.compressed_size_formatted || '—'} · ${dashboardT('dashboard.repository')}: ${backup.repository_size_formatted || '—'}`
+    : '';
+  const growth = backup.growth_formatted || '—';
 
-  return `
-    <div class="backup-card never-run">
-      <div class="card-header">
-        <div class="card-title">
-          <div class="type-icon type-icon-${(b.backup_type||'sonstiges').toLowerCase()}">${typeIcon(b.backup_type)}</div>
-          <div>
-            <div class="type-name">${typeLabel}</div>
-          </div>
-        </div>
-        <div class="card-badges">
-          ${b.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
-          <span class="badge unknown"><span class="badge-dot"></span>${dashboardT('dashboard.neverExecuted')}</span>
-          <span class="loc-badge ${locClass}">${locLbl}</span>
-        </div>
-      </div>
-      <div class="card-divider"></div>
-      <div class="never-run-hint">${dashboardT('dashboard.neverExecutedHint')}</div>
-    </div>`;
+  return `<tr class="dashboard-inventory-row ${run.cls}">
+    <td><div class="dashboard-backup-identity">
+      <span class="type-icon type-icon-${escHtml(String(backup.backup_type || 'sonstiges').toLowerCase())}">${typeIcon(backup.backup_type)}</span>
+      <span><strong class="dashboard-cell-primary">${escHtml(type)}</strong><span class="dashboard-cell-detail mono" title="${escHtml(identityDetail)}">${escHtml(identityDetail)}</span></span>
+    </div></td>
+    <td><span class="loc-badge ${location}">${escHtml(dashboardLocationLabel(location))}</span></td>
+    <td><div class="dashboard-table-badges">
+      ${backup.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
+      <span class="badge ${run.cls}"><span class="badge-dot"></span>${escHtml(run.label)}</span>
+    </div><span class="dashboard-cell-detail">${escHtml(runDetail)}</span>${message.text ? `<div class="dashboard-table-message ${message.cls}">${escHtml(message.text)}</div>` : ''}</td>
+    <td>${renderDashboardRestoreVerificationBadge(backup) || `<span class="dashboard-cell-detail">${dashboardT('dashboard.unknown')}</span>`}</td>
+    <td><strong class="dashboard-cell-primary">${escHtml(sizePrimary)}</strong>${sizeDetail ? `<span class="dashboard-cell-detail">${escHtml(sizeDetail)}</span>` : ''}</td>
+    <td><strong class="dashboard-cell-primary dashboard-growth ${growthClass}">${escHtml(growth)}</strong><span class="dashboard-cell-detail repo-check ${escHtml(checkStatus || 'unknown')}">${repoCheckIcon(checkStatus)} ${escHtml(checkLabel)}</span></td>
+  </tr>`;
 }
 
 function typeIcon(type) {
