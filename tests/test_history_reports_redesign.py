@@ -51,6 +51,8 @@ def test_reports_preserves_selection_search_and_analysis_contracts() -> None:
         "data-report-job", "/api/reports/data?job=", "/api/restore/repo-stats?job=",
         "_berichtRenderGrowthCards", "_berichtRestoreVerification",
         "_berichtTrendTable", "_berichtSparkline", "_berichtStatusTable",
+        "resolveJobIcon(job)", "resolveJobIconColor(job)", "typeIcon(icon)",
+        "configured?.icon", "configured?.icon_color",
     ):
         assert contract in script
 
@@ -62,6 +64,7 @@ def test_history_reports_layout_is_responsive_and_compact() -> None:
     assert "overflow-x: auto" in css
     assert ".history-detail-panel" in css
     assert ".report-job-list" in css
+    assert ".report-job-icon" in css
     assert ".report-metric-ledger" in css
     assert ".report-sparkline" in css
     assert ".report-status-distribution" in css

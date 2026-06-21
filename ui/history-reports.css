@@ -69,6 +69,7 @@
 }
 .report-job:hover { background: var(--ui-color-surface-subtle); }
 .report-job.is-active { background: var(--ui-color-surface-raised); box-shadow: inset 3px 0 var(--ui-color-accent); }
+.report-job-icon { width: 2rem; height: 2rem; }
 .report-job strong, .report-job small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .report-job small { margin-top: 2px; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
 .report-job-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--ui-state-neutral-fg); }
