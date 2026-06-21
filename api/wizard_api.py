@@ -631,26 +631,27 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     use_docker = bool(params.get("use_docker", False))
     use_vm = bool(params.get("use_vm", False))
 
-    steps = [
-        "Prechecks (Prerequisites, Parity, Pfade)",
-        "Resource-Locks (repo, optional docker-control/vm-control)",
-    ]
+    steps = []
+    step_codes = []
+
+    def add_step(code: str, message: str, **params) -> None:
+        steps.append(message)
+        step_codes.append({"code": code, "params": params})
+
+    add_step("prechecks", "Prechecks (prerequisites, parity, paths)")
+    add_step("resourceLocksAcquire", "Acquire resource locks (repo, optional docker-control/vm-control)")
     if use_docker:
-        steps.append("Docker-Container stoppen")
+        add_step("dockerStop", "Stop Docker containers")
     if use_vm:
-        steps.append("VMs herunterfahren")
-    steps.extend(
-        [
-            f"Borg Create ({len(source_paths)} Quelle(n))",
-            "Borg Wartung (Prune -> Compact -> Check)",
-            "Status/Benachrichtigung schreiben",
-        ]
-    )
+        add_step("vmStop", "Shut down VMs")
+    add_step("borgCreate", f"Borg create ({len(source_paths)} source(s))", count=len(source_paths))
+    add_step("borgMaintenance", "Borg maintenance (prune -> compact -> check)")
+    add_step("statusNotification", "Write status and notification")
     if use_vm:
-        steps.append("VMs starten")
+        add_step("vmStart", "Start VMs")
     if use_docker:
-        steps.append("Docker-Container starten")
-    steps.append("Resource-Locks freigeben")
+        add_step("dockerStart", "Start Docker containers")
+    add_step("resourceLocksRelease", "Release resource locks")
 
     remote_repo = _storagebox_repo_status({**params, "repo_path": repo_path}, ui_config, scripts_dir)
     return {
@@ -665,6 +666,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "vm": use_vm,
         },
         "steps": steps,
+        "step_codes": step_codes,
         "remote_repo": remote_repo,
     }
 

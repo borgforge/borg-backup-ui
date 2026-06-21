@@ -909,7 +909,17 @@ async function _wizardPreview() {
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
 
     const flow = data.flow || {};
-    const steps = Array.isArray(flow.steps) ? flow.steps : [];
+    const fallbackSteps = Array.isArray(flow.steps) ? flow.steps : [];
+    const stepCodes = Array.isArray(flow.step_codes) ? flow.step_codes : [];
+    const steps = stepCodes.length
+      ? stepCodes.map((step, index) => {
+        const code = String(step?.code || '').trim();
+        if (!code) return fallbackSteps[index] || '-';
+        const key = `wizard.flowSteps.${code}`;
+        const translated = wizardT(key, step?.params || {});
+        return translated === key ? (fallbackSteps[index] || code) : translated;
+      })
+      : fallbackSteps;
     const summary = flow.summary || {};
     const remoteRepo = flow.remote_repo && typeof flow.remote_repo === 'object' ? flow.remote_repo : null;
     wizardState.remoteRepoStatus = remoteRepo;

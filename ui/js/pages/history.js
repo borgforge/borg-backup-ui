@@ -93,10 +93,7 @@ function renderHistory(data) {
 
 function renderHistoryRow(e, idx) {
   if (e.entry_kind === 'restore_test_report') return renderRestoreReportRow(e, idx);
-  const skipKey = `dashboard.skipReasons.${e.skip_reason_code || 'skipped'}`;
-  const skipTranslation = window.BBUI?.components?.i18n?.t?.(skipKey) || skipKey;
-  const detailReason = skipTranslation === skipKey ? historyT('skippedReason', { reason: '' }) : skipTranslation;
-  const detailError = e.status === 'error' ? historyT('backupFailedDetails') : detailReason;
+  const detailError = historyRunDetailMessage(e);
   const statusBadge = `<span class="history-status-badge ${e.status}">${historyStatusLabel(e.status)}</span>`;
   const locClass = e.location || '';
   const typeLabel = historyTypeLabel(e.backup_type);
@@ -137,6 +134,18 @@ function renderHistoryRow(e, idx) {
         </div>
       </td>
     </tr>`;
+}
+
+function historyRunDetailMessage(entry) {
+  const status = String(entry?.status || '').toLowerCase();
+  if (status === 'error') return historyT('backupFailedDetails');
+  if (status !== 'skipped') return '';
+
+  const skipKey = `dashboard.skipReasons.${entry?.skip_reason_code || 'skipped'}`;
+  const translated = window.BBUI?.components?.i18n?.t?.(skipKey) || skipKey;
+  return translated === skipKey
+    ? (window.BBUI?.components?.i18n?.t?.('dashboard.skipReasons.skipped') || '')
+    : translated;
 }
 
 function renderRestoreReportRow(e, idx) {

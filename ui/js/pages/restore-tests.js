@@ -46,6 +46,7 @@ function restoreTestFailureMessage(test) {
 
 function restoreTestStepMessage(step) {
   const label = rtStepLabel(String(step?.step_id || ''));
+  if (step?.step_id === 'cleanup' && step?.status === 'passed') return restoreTestsT('cleanupCompleted');
   if (step?.status === 'passed') return restoreTestsT('stepPassed', { step: label });
   if (step?.status === 'failed') return restoreTestsT('stepFailed', { step: label });
   if (step?.status === 'not_tested') return restoreTestsT('notTested');
@@ -847,7 +848,7 @@ function renderRTStepDetails(step, report) {
   }
   if (stepId === 'cleanup') {
     return rtStepDetailsBlock([
-      [restoreTestsT('cleanupStatus'), step.message],
+      [restoreTestsT('cleanupStatus'), restoreTestStepMessage(step)],
       [restoreTestsT('testTime'), step.timestamp],
       [restoreTestsT('exitCode'), report.test_exit_code],
     ]);
