@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.21.1146">
+<!ENTITY version   "2026.06.15.1213">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "&gitlab;/-/raw/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,9 +18,6 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.21.1146###
-- Gemeinsame responsive UI-Grundlage und lesbare Statusfelder im hellen Design eingefuehrt (#28).
-
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
   - Wochenbericht zeigt die Erfolgsquote der letzten 7 Tage statt der historischen Gesamtquote.
@@ -41,7 +38,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>1bccf636e4a8557f58eba2d7e5e1f242</MD5>
+<MD5>9cfb56b151253a24c9578f427b7dfedb</MD5>
 </FILE>
 
 <!--

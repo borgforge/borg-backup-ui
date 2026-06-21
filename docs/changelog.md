@@ -4,7 +4,9 @@ Historische Release- und Entwicklungsnotizen fuer borg-backup-ui.
 
 Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrelevante Zusammenfassung des aktuellen Stands.
 
-###2026.06.21.1146###
+## Unreleased unified UI redesign
+
+### Issue #28
 - UI (#28):
   - Gemeinsame Design-Tokens und wiederverwendbare Komponenten fuer Seitenkopf, Kontextnavigation, Workspace, Tabellen, Formulare, Statusfelder, Zusammenfassungen, Logs und Aktionen eingefuehrt.
   - Responsive Regeln fuer Desktop, Tablet und Mobile sowie sichtbare Fokus-, Lade-, Leer-, Warn-, Fehler-, Lauf- und Erfolgszustaende definiert.

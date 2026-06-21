@@ -165,6 +165,7 @@ user-facing work that would otherwise create half-finished release artifacts.
 Current approved umbrella feature:
 
 - German and English localization, tracked by issue `#11`
+- unified UI redesign, tracked by umbrella issue `#27`
 
 Rules for deferred release-build PRs:
 
@@ -179,9 +180,17 @@ Rules for deferred release-build PRs:
 BORG_UI_ALLOW_DEFERRED_RELEASE=1 ./plugin/mr-preflight.sh
 ```
 
-Bug fixes, security fixes, maintenance releases, and final feature-release PRs
-must still include the normal changelog, build, release artifact, and
-test-channel workflow.
+Redesign-specific sequence:
+
+- Merge incremental redesign issues `#28` through `#34` without a stable
+  release version, release artifact, or test-channel deployment.
+- In issue `#35`, build and deploy a test-channel candidate first.
+- Create and promote the stable release only after the user explicitly approves
+  the tested candidate.
+
+Bug fixes, security fixes, and unrelated maintenance or feature releases must
+still include the normal changelog, build, release artifact, and test-channel
+workflow. The final redesign release follows the approval sequence above.
 
 Fuer neue Releases muss `borg-backup-ui.plg` genau einen `###NEXT###`-Block
 enthalten. `plugin/build.sh` ersetzt diesen Block durch die neue Version und
