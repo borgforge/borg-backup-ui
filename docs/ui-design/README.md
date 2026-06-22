@@ -32,6 +32,20 @@ There is no separate approved Storage study. Storage must derive its surfaces,
 context sidebar, workspace, tables, and status presentation from this shared
 foundation in [#34](https://github.com/borgforge/borg-backup-ui/issues/34).
 
+### Storage candidates
+
+The unapproved `storage-study` provides three candidates for the decision in
+issue #34. All three retain repository tests, SMB mount controls, manual Borg
+check levels, load warnings, and log actions.
+
+| Candidate | Focus | Screenshot |
+| --- | --- | --- |
+| A | Location sidebar with repository workspace | [Dark](screenshots/storage-variant-a-dark.png) / [Light](screenshots/storage-variant-a-light.png) |
+| B | Dense location board with persistent check controls | [Dark](screenshots/storage-variant-b-dark.png) / [Light](screenshots/storage-variant-b-light.png) |
+| C | Repository inspector with detail and check context | [Dark](screenshots/storage-variant-c-dark.png) / [Light](screenshots/storage-variant-c-light.png) |
+
+No Storage candidate is approved until the maintainer selects a variant.
+
 Help keeps its existing content in the new visual foundation. A contextual
 table-of-contents sidebar may be added where it improves navigation. Rewriting
 the standalone handbook is outside this redesign and remains tracked
