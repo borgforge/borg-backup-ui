@@ -33,3 +33,10 @@ def test_storage_study_reuses_location_icons_and_responsive_states() -> None:
     assert "html[data-theme=light]" in css
     assert "@media(max-width:1100px)" in css
     assert "@media(max-width:720px)" in css
+
+
+def test_approved_variant_a_omits_summary_ledger() -> None:
+    script = _read("docs/ui-design/storage-study/storage.js")
+    variant_a = script.split("const variantA", 1)[1].split("const band", 1)[0]
+    assert "summary()" not in variant_a
+    assert "Alle Standorte" in script
