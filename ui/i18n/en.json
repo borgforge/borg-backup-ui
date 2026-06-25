@@ -547,6 +547,8 @@
     "neverExecutedHint": "This job has never run.",
     "checkOk": "Check OK{date}",
     "checkOverdue": "Check overdue – next: {date}",
+    "checkOverdueShort": "Check overdue",
+    "nextCheck": "Next check: {date}",
     "checkUnknown": "Check status unknown"
   },
   "history": {

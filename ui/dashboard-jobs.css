@@ -98,15 +98,15 @@
 }
 
 .dashboard-inventory-table {
-  min-width: 1120px;
+  min-width: 1280px;
   table-layout: fixed;
 }
 
-.dashboard-inventory-table th:nth-child(1) { width: 22%; }
+.dashboard-inventory-table th:nth-child(1) { width: 23%; }
 .dashboard-inventory-table th:nth-child(2) { width: 8%; }
-.dashboard-inventory-table th:nth-child(3) { width: 14%; }
-.dashboard-inventory-table th:nth-child(4) { width: 18%; }
-.dashboard-inventory-table th:nth-child(5) { width: 20%; }
+.dashboard-inventory-table th:nth-child(3) { width: 13%; }
+.dashboard-inventory-table th:nth-child(4) { width: 17%; }
+.dashboard-inventory-table th:nth-child(5) { width: 21%; }
 .dashboard-inventory-table th:nth-child(6) { width: 18%; }
 
 .dashboard-backup-identity {
@@ -141,6 +141,8 @@
 
 .dashboard-cell-detail.mono {
   font-family: var(--ui-font-mono);
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .dashboard-table-badges {
@@ -164,6 +166,18 @@
 .dashboard-growth.negative { color: var(--ui-state-success-fg); }
 .dashboard-growth.neutral { color: var(--ui-color-text-subtle); }
 .dashboard-inventory-table .repo-check { line-height: 1.45; }
+.dashboard-storage-facts {
+  display: grid;
+  gap: 2px;
+  margin-top: 3px;
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.35;
+}
+.dashboard-storage-facts b { color: var(--ui-color-text-muted); font-weight: var(--ui-font-weight-medium); }
+.dashboard-check-line { display: flex; align-items: center; gap: 3px; }
+.dashboard-check-line svg { flex: 0 0 auto; }
+.dashboard-check-date { display: block; margin-top: 2px; padding-left: 15px; white-space: nowrap; }
 
 /* Jobs workspace */
 .jobs-groups {

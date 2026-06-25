@@ -52,15 +52,17 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Storage (#72):
   - Repositorys werden in der Gesamtansicht nach Standort gruppiert; SMB-Profile erscheinen nur noch im SMB-Kontext.
   - Ergebnisse von Repository-Tests bieten nach Erfolg und Fehler einen sichtbaren Detailzugang.
+  - Repositorys verwenden die in den zugehörigen Job-Dateien konfigurierten Icons; leere Ergebnisplätze werden vor einem Test nicht angezeigt.
 - Restore Tests (#76):
   - Überfälligkeit wird in der Planübersicht nur noch über den Zahlenwert hervorgehoben.
   - Sidebar-Zustände und technische Nachweise verwenden konsistente Farben und füllen keine leeren Rasterzellen.
 - Dashboard (#77):
-  - Spaltenbreiten und Umbruchregeln für Backup-, Speicher- und Check-Daten wurden lesbarer abgestimmt.
+  - Spaltenbreiten sowie Backup-, Speicher- und Check-Daten wurden in klar getrennte, lesbare Zeilen gegliedert.
 - Jobs (#78):
   - Vollständige Job-Beschreibungen bleiben sichtbar; Richtlinie und Restore-Test-Zeitpunkte sind übersichtlich angeordnet.
 - History (#73):
   - Erfolgsstatus, Fehlerhinweise sowie Archiv- und Check-Details wurden sprachlich und visuell überarbeitet.
+  - Unbelegte Bereiche der Detailzeile verwenden dieselbe Hintergrundfarbe wie die vorhandenen Detailfelder.
 - Berichte (#74):
   - Borg-Repository-Informationen verteilen nur vorhandene Kennzahlen ohne leere Füllspalte.
 - Sprachauswahl (#75):

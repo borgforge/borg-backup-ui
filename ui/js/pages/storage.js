@@ -6,6 +6,7 @@ window.BBUI = window.BBUI || {};
 window.BBUI.storageState = window.BBUI.storageState || {
   loaded: false,
   data: null,
+  jobs: [],
   smbActionResults: {},
   selectedLocation: 'all',
   search: '',
@@ -91,9 +92,13 @@ function storageVisibleRepositories(data) {
 async function refreshStorage() {
   hideEl('storage-message');
   try {
-    const res = await fetch('/api/storage');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    storageState.data = await res.json();
+    const [storageRes, jobsRes] = await Promise.all([
+      fetch('/api/storage'),
+      fetch('/api/jobs'),
+    ]);
+    if (!storageRes.ok) throw new Error(`HTTP ${storageRes.status}`);
+    storageState.data = await storageRes.json();
+    storageState.jobs = jobsRes.ok ? (await jobsRes.json()).jobs || [] : [];
     storageState.loaded = true;
     renderStorage(storageState.data);
   } catch (err) {
@@ -212,11 +217,15 @@ function renderStorageRepositoryRow(repo, profiles) {
   const unavailable = repo.location === 'smb' && profile && !profile.is_mounted;
   const statusText = unavailable ? storageT('storage.notMounted') : storageT('storage.configured');
   const statusClass = unavailable ? 'warning' : 'success';
+  const job = storageJobForRepository(repo);
+  const icon = typeof resolveJobIcon === 'function' ? resolveJobIcon(job || repo) : repo.backup_type;
+  const color = typeof resolveJobIconColor === 'function' ? resolveJobIconColor(job || repo) : '';
+  const iconColorClass = color ? ` type-icon-color-${color}` : '';
 
   return `<tr>
     <td>
       <div class="storage-repository-main">
-        <span class="location-nav-glyph ${repo.location}">${storageLocationIcon(repo.location)}</span>
+        <span class="type-icon type-icon-${escHtml(String(repo.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(icon)}</span>
         <span>
           <strong>${escHtml(storageTypeLabel(repo))}</strong>
           <small>${escHtml(repo.conf_key || '')}</small>
@@ -238,10 +247,22 @@ function renderStorageRepositoryRow(repo, profiles) {
           id="${detailsBtnId}"
           data-storage-action="show-test-details"
           data-result-id="${resultId}">${storageT('storage.details')}</button>
-        <span class="test-result" id="${resultId}"></span>
+        <span class="test-result hidden" id="${resultId}"></span>
       </div>
     </td>
   </tr>`;
+}
+
+function storageJobForRepository(repo) {
+  const jobs = Array.isArray(storageState.jobs) ? storageState.jobs : [];
+  const confKey = String(repo?.conf_key || '');
+  const jobKey = confKey.startsWith('JOB:') ? confKey.slice(4) : '';
+  return jobs.find((job) => jobKey && String(job.key || '') === jobKey)
+    || jobs.find((job) =>
+      String(job.backup_type || '').toLowerCase() === String(repo?.backup_type || '').toLowerCase()
+      && String(job.location || '').toLowerCase() === String(repo?.location || '').toLowerCase()
+    )
+    || null;
 }
 
 function renderStorageRepositoryRows(repos, profiles) {

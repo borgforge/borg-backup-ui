@@ -122,6 +122,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.storage-row-actions .test-result:empty { display: none; }
 
 .storage-empty {
   padding: var(--ui-space-6);
