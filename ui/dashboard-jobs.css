@@ -98,20 +98,16 @@
 }
 
 .dashboard-inventory-table {
-  min-width: 940px;
+  min-width: 1120px;
   table-layout: fixed;
 }
 
-.dashboard-inventory-table th:nth-child(1) { width: 20%; }
-.dashboard-inventory-table th:nth-child(2) { width: 10%; }
-.dashboard-inventory-table th:nth-child(3) { width: 17%; }
+.dashboard-inventory-table th:nth-child(1) { width: 22%; }
+.dashboard-inventory-table th:nth-child(2) { width: 8%; }
+.dashboard-inventory-table th:nth-child(3) { width: 14%; }
 .dashboard-inventory-table th:nth-child(4) { width: 18%; }
-.dashboard-inventory-table th:nth-child(5) { width: 18%; }
-.dashboard-inventory-table th:nth-child(6) { width: 17%; }
-
-.dashboard-inventory-table td {
-  overflow-wrap: anywhere;
-}
+.dashboard-inventory-table th:nth-child(5) { width: 20%; }
+.dashboard-inventory-table th:nth-child(6) { width: 18%; }
 
 .dashboard-backup-identity {
   display: grid;
@@ -140,6 +136,7 @@
   color: var(--ui-color-text-subtle);
   font-size: var(--ui-font-size-xs);
   line-height: 1.4;
+  overflow-wrap: break-word;
 }
 
 .dashboard-cell-detail.mono {
@@ -166,6 +163,7 @@
 .dashboard-growth.positive { color: var(--ui-state-warning-fg); }
 .dashboard-growth.negative { color: var(--ui-state-success-fg); }
 .dashboard-growth.neutral { color: var(--ui-color-text-subtle); }
+.dashboard-inventory-table .repo-check { line-height: 1.45; }
 
 /* Jobs workspace */
 .jobs-groups {
@@ -248,9 +246,11 @@
 }
 
 .jobs-redesign-main .job-description {
+  display: block;
   min-height: 0;
   margin: var(--ui-space-2) 0;
-  -webkit-line-clamp: 2;
+  overflow: visible;
+  -webkit-line-clamp: unset;
 }
 
 .jobs-redesign-main .job-meta {
@@ -292,6 +292,18 @@
   align-items: flex-start;
   flex-direction: column;
   gap: var(--ui-space-1);
+}
+
+.jobs-restore-dates {
+  display: grid;
+  gap: 2px;
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.4;
+}
+
+.jobs-restore-dates > span {
+  overflow-wrap: normal;
 }
 
 .jobs-redesign-policy .job-policy {

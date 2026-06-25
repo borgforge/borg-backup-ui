@@ -48,6 +48,30 @@
 .storage-repository-table th:nth-child(4) { width: 14%; }
 .storage-repository-table th:nth-child(5) { width: 22%; }
 
+.storage-location-group-row > td {
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border-top: 1px solid var(--ui-color-border-strong);
+  border-bottom: 1px solid var(--ui-color-border);
+  background: var(--ui-color-surface-subtle);
+}
+
+.storage-location-group {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.storage-location-group-row strong,
+.storage-location-group-row small {
+  display: block;
+}
+
+.storage-location-group-row small {
+  margin-top: 2px;
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+}
+
 .storage-repository-main {
   display: flex;
   align-items: center;

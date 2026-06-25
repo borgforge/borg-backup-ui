@@ -4,8 +4,8 @@
   },
   "language": {
     "label": "Sprache",
-    "german": "Deutsch",
-    "english": "English"
+    "german": "🇩🇪 Deutsch",
+    "english": "🇬🇧 English"
   },
   "auth": {
     "loginTitle": "Anmeldung",
@@ -212,7 +212,7 @@
     "jobCountOne": "{count} Job",
     "jobCountMany": "{count} Jobs",
     "operatingState": "Betriebszustand",
-    "policy": "Policy",
+    "policy": "Richtlinie",
     "ready": "Bereit",
     "noLocationJobs": "Diesem Standort sind keine Jobs zugeordnet.",
     "refresh": "Aktualisieren",
@@ -565,7 +565,7 @@
     "other": "Sonstiges",
     "allLocations": "Alle Standorte",
     "allStatuses": "Alle Status",
-    "statusSuccess": "Erfolg",
+    "statusSuccess": "Erfolgreich",
     "statusSkipped": "Übersprungen",
     "statusWarning": "Warnung",
     "statusError": "Fehler",

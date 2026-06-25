@@ -146,18 +146,18 @@ function renderHistoryRow(e, idx) {
     </tr>
     <tr id="${detailId}" class="history-detail-row" style="display:none">
       <td colspan="8">
-        ${detailError ? `<div class="history-error-msg">${e.status === 'skipped' ? '' : escHtml(historyT('errorPrefix'))}${escHtml(detailError)}</div>` : ''}
+        ${detailError ? renderHistoryError(detailError, e.status === 'skipped') : ''}
         <div class="history-detail-panel">
-          ${detailGroup(historyT('archive'), e.archive_name)}
+          ${detailGroup(historyT('archive'), e.archive_name, 'archive')}
           ${detailGroup(historyT('compressed'), e.compressed_size_fmt)}
           ${detailGroup(historyT('repositorySize'), e.repository_size_fmt)}
           ${detailGroup(historyT('files'), e.files_count != null ? e.files_count.toLocaleString(historyLocale()) : null)}
           ${detailGroup(historyT('exitCode'), e.exit_code != null ? String(e.exit_code) : null)}
-          ${detailGroup(historyT('lastCheck'), e.repository_check_date)}
-          ${detailGroup(historyT('nextCheck'), e.repository_next_check)}
+          ${detailGroup(historyT('lastCheck'), e.repository_check_date, 'datetime')}
+          ${detailGroup(historyT('nextCheck'), e.repository_next_check, 'datetime')}
           ${detailGroup(historyT('checkStatus'), e.repository_check_status)}
           ${e.log_file ? `
-          <div class="history-detail-group">
+          <div class="history-detail-group history-detail-group--log">
             <div class="history-detail-label">${escHtml(historyT('logFile'))}</div>
             <div class="history-detail-value" style="display:flex;align-items:center;gap:8px">
               <span style="color:var(--text-muted);font-size:11px" title="${escHtml(e.log_file)}">${escHtml(e.log_file.split('/').pop())}</span>
@@ -209,11 +209,11 @@ function renderRestoreReportRow(e, idx) {
     </tr>
     <tr id="${detailId}" class="history-detail-row" style="display:none">
       <td colspan="8">
-        ${detailError ? `<div class="history-error-msg">${escHtml(historyT('errorPrefix'))}${escHtml(detailError)}</div>` : ''}
+        ${detailError ? renderHistoryError(detailError) : ''}
         <div class="history-detail-panel">
           ${detailGroup(historyT('reportId'), e.report_id)}
           ${detailGroup(historyT('job'), e.job_key)}
-          ${detailGroup(historyT('archive'), e.archive_name)}
+          ${detailGroup(historyT('archive'), e.archive_name, 'archive')}
           ${detailGroup(historyT('locationDetail'), historyLocationLabel(e.location))}
           ${detailGroup(historyT('level'), e.test_level != null ? `L${e.test_level}` : null)}
           ${detailGroup(historyT('start'), e.start_ts)}
@@ -292,13 +292,18 @@ function toggleHistoryDetail(rowId, detailId) {
   chev?.classList.toggle('open', !open);
 }
 
-function detailGroup(label, value) {
+function detailGroup(label, value, valueClass = '') {
   if (value == null || value === '') return '';
   return `
-    <div class="history-detail-group">
+    <div class="history-detail-group ${valueClass ? `history-detail-group--${valueClass}` : ''}">
       <div class="history-detail-label">${escHtml(label)}</div>
-      <div class="history-detail-value">${escHtml(String(value))}</div>
+      <div class="history-detail-value ${valueClass ? `history-detail-value--${valueClass}` : ''}">${escHtml(String(value))}</div>
     </div>`;
+}
+
+function renderHistoryError(message, isNotice = false) {
+  const label = isNotice ? historyT('statusSkipped') : historyT('statusError');
+  return `<div class="history-error-msg ${isNotice ? 'is-notice' : ''}" role="${isNotice ? 'status' : 'alert'}"><strong>${escHtml(label)}</strong><span>${escHtml(message)}</span></div>`;
 }
 
 function historyStatusLabel(s) {

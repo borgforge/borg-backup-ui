@@ -121,10 +121,10 @@ function renderStorage(data) {
   }
 
   const rows = repos.length
-    ? repos.map((repo) => renderStorageRepositoryRow(repo, data.smb_profiles || [])).join('')
+    ? renderStorageRepositoryRows(repos, data.smb_profiles || [])
     : `<tr><td colspan="5"><div class="storage-empty">${storageT('storage.noMatchingRepositories')}</div></td></tr>`;
 
-  const showSmbProfiles = ['all', 'smb'].includes(storageState.selectedLocation || 'all');
+  const showSmbProfiles = (storageState.selectedLocation || 'all') === 'smb';
   el.innerHTML = `
     <section class="storage-repository-panel ui-panel">
       <div class="storage-repository-tools">
@@ -165,7 +165,7 @@ function storageLocationMeta(key, data) {
       ? `ssh ${data.storagebox_host}:${data.storagebox_port}`
       : storageT('storage.notConfigured');
   }
-  return storageT('storage.locationsHint');
+  return storageT('storage.overview');
 }
 
 function renderStorageLocationSidebar(data) {
@@ -242,6 +242,27 @@ function renderStorageRepositoryRow(repo, profiles) {
       </div>
     </td>
   </tr>`;
+}
+
+function renderStorageRepositoryRows(repos, profiles) {
+  if ((storageState.selectedLocation || 'all') !== 'all') {
+    return repos.map((repo) => renderStorageRepositoryRow(repo, profiles)).join('');
+  }
+  return STORAGE_LOCATION_ORDER.map((location) => {
+    const locationRepos = repos.filter((repo) => repo.location === location);
+    if (!locationRepos.length) return '';
+    return `<tr class="storage-location-group-row">
+      <td colspan="5">
+        <div class="storage-location-group">
+          <span class="location-nav-glyph ${location}">${storageLocationIcon(location)}</span>
+          <span>
+            <strong>${escHtml(storageLocationLabel(location))}</strong>
+            <small>${storageCount(locationRepos.length, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</small>
+          </span>
+        </div>
+      </td>
+    </tr>${locationRepos.map((repo) => renderStorageRepositoryRow(repo, profiles)).join('')}`;
+  }).join('');
 }
 
 function onStorageContentClick(event) {
@@ -376,9 +397,9 @@ async function testRepo(repoPath, resultId, repoConfKey = '') {
         el.textContent = `✗ ${first}`;
         el.dataset.fullOutput = out || `Exit ${data.exit_code}`;
         el.title = out || `Exit ${data.exit_code}`;
-        if (detailsBtn) detailsBtn.classList.remove('hidden');
       }
     }
+    if (detailsBtn) detailsBtn.classList.remove('hidden');
   } catch (err) {
     if (el) { el.className = 'test-result fail'; el.textContent = `✗ ${storageT('storage.error')}`; el.title = String(err?.message || storageT('storage.unknownError')); }
     if (el) el.dataset.fullOutput = String(err?.message || storageT('storage.unknownError'));
