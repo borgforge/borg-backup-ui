@@ -119,6 +119,17 @@ def test_settings_menu_reuses_storage_icons_and_has_no_duplicate_health_footer()
     assert ".settings-menu-icon svg" in css
 
 
+def test_profile_lists_reuse_storage_icons_and_hide_duplicate_config_path() -> None:
+    script = _read("ui/js/pages/settings.js")
+    html = _read("ui/index.html")
+
+    for location in ("usb", "smb", "storagebox"):
+        assert f"icon: locationIcon('{location}')" in script
+        assert f'class="settings-profile-symbol ${{type}}"' in script
+    assert "settings-conf-path" not in html
+    assert "`Config: ${data.conf_file}`" not in script
+
+
 def test_editable_backup_conf_keys_are_part_of_runtime_schema() -> None:
     script = _read("ui/js/pages/settings.js")
     example = _read("runtime/config/backup.conf.example")

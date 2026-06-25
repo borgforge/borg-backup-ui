@@ -377,6 +377,23 @@
   color: var(--ui-color-accent);
 }
 
+.settings-profile-symbol svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.settings-profile-symbol.usb {
+  color: var(--loc-usb);
+}
+
+.settings-profile-symbol.smb {
+  color: var(--loc-smb);
+}
+
+.settings-profile-symbol.storagebox {
+  color: var(--loc-storagebox);
+}
+
 .settings-profile-editor {
   min-width: 0;
 }
@@ -505,10 +522,6 @@
     align-items: stretch;
     width: 100%;
     flex-direction: column;
-  }
-
-  #settings-conf-path {
-    overflow-wrap: anywhere;
   }
 
   .settings-workspace-header {

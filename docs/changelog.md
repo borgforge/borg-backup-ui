@@ -63,6 +63,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Das Settings-Menü verwendet einheitliche SVG-Icons; Speicherziele übernehmen die Icons der Storage-Seite.
   - Die redundante Systemstatus-Zeile unterhalb des Settings-Menüs wurde entfernt.
   - `UI_SESSION_TIMEOUT_MINUTES` ist wieder Teil des aktiven `backup.conf`-Schemas und wird nicht mehr fälschlich als deprecated gemeldet.
+  - Profil-Listen verwenden dieselben Standort-Icons wie Storage und die Settings-Navigation.
+  - Der redundante absolute `backup.conf`-Pfad im Settings-Header wurde entfernt.
 
 ## Test-channel follow-up for 2026.06.25.1831
 

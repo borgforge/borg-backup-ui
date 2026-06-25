@@ -168,9 +168,6 @@ function _applyVersionInfo(version, author, borgVersion) {
 }
 
 function renderSettings(data, systemHealth) {
-  const pathEl = document.getElementById('settings-conf-path');
-  if (pathEl) pathEl.textContent = data.conf_file ? `Config: ${data.conf_file}` : '';
-
   const el = document.getElementById('settings-content');
   if (!el) return;
 
@@ -264,7 +261,7 @@ const SETTINGS_PROFILE_CONFIG = {
     rowSelector: '.usb-profile-row',
     nameSelector: '[data-usb-profile-name]',
     endpointSelector: '[data-usb-profile-path]',
-    symbol: '▯',
+    icon: locationIcon('usb'),
     fields: [
       ['[data-usb-profile-name]', 'profiles.name'],
       ['[data-usb-profile-path]', 'profiles.mountPath'],
@@ -275,7 +272,7 @@ const SETTINGS_PROFILE_CONFIG = {
     rowSelector: '.smb-profile-row',
     nameSelector: '[data-smb-profile-name]',
     endpointSelector: '[data-smb-profile-server]',
-    symbol: '⌁',
+    icon: locationIcon('smb'),
     fields: [
       ['[data-smb-profile-name]', 'profiles.name'],
       ['[data-smb-profile-server]', 'profiles.host'],
@@ -292,7 +289,7 @@ const SETTINGS_PROFILE_CONFIG = {
     rowSelector: '.storage-profile-row',
     nameSelector: '[data-storage-profile-name]',
     endpointSelector: '[data-storage-profile-host]',
-    symbol: '↗',
+    icon: locationIcon('storagebox'),
     fields: [
       ['[data-storage-profile-name]', 'profiles.name'],
       ['[data-storage-profile-host]', 'profiles.host'],
@@ -385,7 +382,7 @@ function syncSettingsProfileManager(type, selectLast = false) {
     const endpoint = row.querySelector(config.endpointSelector)?.value || settingsT('common.notChecked');
     const jobsCount = Number(row.dataset.usbJobsCount || row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
     return `<button type="button" class="settings-profile-list-item ${key === selectedKey ? 'active' : ''}" data-profile-ui-key="${escHtml(key)}">
-      <span class="settings-profile-symbol">${config.symbol}</span>
+      <span class="settings-profile-symbol ${type}">${config.icon}</span>
       <span><strong>${escHtml(name)}</strong><small>${escHtml(endpoint)}</small><em>${settingsT('common.jobsCount', { count: jobsCount })}</em></span>
       <b>›</b>
     </button>`;
