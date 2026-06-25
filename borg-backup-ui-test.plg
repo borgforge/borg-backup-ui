@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.0042">
+<!ENTITY version   "2026.06.26.0113">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,9 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.0042###
-- Settings redesign follow-up (#33):
-  - Reuse Storage location icons in profile lists.
-  - Remove the duplicate backup.conf path from the Settings header.
+###2026.06.26.0113###
+- Dashboard follow-up (#33):
+  - Label and localize last-run age and run duration.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +42,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>f67ea526259a088244b595671f40d077</MD5>
+<MD5>9063ea27b648fe710afcd0afe5a2ce2e</MD5>
 </FILE>
 
 <!--
