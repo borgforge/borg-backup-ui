@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.25.2229">
+<!ENTITY version   "2026.06.25.2255">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.25.2229###
-- UI test follow-up (#72-#78):
-  - Improved Storage grouping, visible test details, Restore Tests states, and technical evidence.
-  - Refined Dashboard, Jobs, History, and Reports layouts and added accessible language symbols.
+###2026.06.25.2255###
+- UI test review (#72, #73, #77):
+  - Storage now uses configured job icons and hides empty repository test result placeholders.
+  - Dashboard storage and overdue check details use structured rows; History detail gaps use the matching surface color.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>d745cca42466325723862e4cbcae1175</MD5>
+<MD5>48d05a022681092cc229ff8e7d3c3522</MD5>
 </FILE>
 
 <!--
