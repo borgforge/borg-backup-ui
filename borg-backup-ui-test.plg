@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.25.1802">
+<!ENTITY version   "2026.06.25.1831">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,9 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.25.1802###
-- Browse & Restore and sidebar consistency (#32, #70):
-  - Fixes restore review states and standardizes location ordering across redesigned pages.
+###2026.06.25.1831###
+- UI redesign (#34):
+  - Storage now uses the approved location sidebar and repository table.
+  - Help includes a responsive table of contents and shared dialogs use consistent responsive surfaces.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -42,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>452823ebce6cc0cc2ee50d075d3a4fce</MD5>
+<MD5>6c69121b54de5c042ea0defec0cc65c8</MD5>
 </FILE>
 
 <!--
