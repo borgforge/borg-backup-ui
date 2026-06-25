@@ -61,7 +61,7 @@ function renderRestoreTestsSidebar() {
   const planByKey = new Map((restoreTestsState.plan?.jobs || []).map((job) => [String(job.job_key), job]));
   const allActive = restoreTestsState.selectedJob === 'all';
   const allEntry = `<button class="rt-sidebar-job is-all ${allActive ? 'is-active' : ''}" data-rt-sidebar-job="all" ${allActive ? 'aria-current="page"' : ''}><span class="location-nav-glyph all">${locationIcon('all')}</span><span><strong>${escHtml(restoreTestsT('allJobs'))}</strong><small>${escHtml(restoreTestsT('overview'))}</small></span><span class="ui-badge">${jobs.length}</span></button>`;
-  const order = ['storagebox', 'usb', 'smb', 'local'];
+  const order = ['local', 'usb', 'smb', 'storagebox'];
   const groups = order.map((location) => {
     const locationJobs = jobs.filter((job) => String(job.location || '').toLowerCase() === location);
     if (!locationJobs.length) return '';

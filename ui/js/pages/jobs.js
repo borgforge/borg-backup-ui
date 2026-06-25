@@ -18,7 +18,7 @@ window.BBUI.jobsState = window.BBUI.jobsState || {
   selectedLocation: 'all',
 };
 const jobsState = window.BBUI.jobsState;
-const JOBS_LOCATION_ORDER = ['storagebox', 'usb', 'smb', 'local', 'utility'];
+const JOBS_LOCATION_ORDER = ['local', 'usb', 'smb', 'storagebox', 'utility'];
 
 window.BBUI.scheduleModalState = window.BBUI.scheduleModalState || {
   jobKey: null,

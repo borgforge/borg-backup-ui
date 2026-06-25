@@ -19,7 +19,7 @@ function dashboardLocationLabel(location) {
 
 let dashboardSystemHealth = null;
 let dashboardSelectedLocation = 'all';
-const DASHBOARD_LOCATION_ORDER = ['storagebox', 'usb', 'smb', 'local'];
+const DASHBOARD_LOCATION_ORDER = ['local', 'usb', 'smb', 'storagebox'];
 
 async function fetchStatus() {
   const res = await fetch('/api/status');

@@ -39,6 +39,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Archivwahl, Dateibrowser, Einzelauswahl, Zieloptionen, Sicherheitsprüfung und technische Precheck-Ausgabe sind in einem gemeinsamen responsiven Workspace zusammengeführt.
   - Downloadgrößenprüfung, Zielbeschränkung unter `/mnt/user`, Konflikt- und Owner-Verhalten sowie Restore-Polling bleiben unverändert.
 
+### Issue #70
+- UI (#70):
+  - Standort-Sidebars verwenden einheitlich die feste Reihenfolge Lokal, USB, SMB und Storagebox.
+  - Nicht vorhandene Standortgruppen werden ausgelassen; Auswahl, Zählung und Filter bleiben unverändert.
+
 ## Archivierte Manifest-Historie
 
 ###2026.06.15.1213###

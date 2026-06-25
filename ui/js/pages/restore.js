@@ -84,7 +84,7 @@ function renderRestoreJobSidebar() {
     list.innerHTML = `<div class="restore-sidebar-empty">${escHtml(restoreT('noMatchingJobs'))}</div>`;
     return;
   }
-  const order = ['storagebox', 'usb', 'smb', 'local'];
+  const order = ['local', 'usb', 'smb', 'storagebox'];
   list.innerHTML = order.map((location) => {
     const locationJobs = jobs.filter((job) => String(job.location || '').toLowerCase() === location);
     if (!locationJobs.length) return '';
