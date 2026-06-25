@@ -306,6 +306,44 @@ function dashboardRunMessage(backup) {
   return { cls: '', text: '' };
 }
 
+function dashboardRelativeRunTime(timestamp) {
+  const raw = String(timestamp || '').trim();
+  if (!raw) return dashboardT('dashboard.unknown');
+  const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return dashboardT('dashboard.unknown');
+
+  const diffSeconds = Math.round((parsed.getTime() - Date.now()) / 1000);
+  const absolute = Math.abs(diffSeconds);
+  let divisor = 1;
+  let unit = 'second';
+  if (absolute >= 86400) {
+    divisor = 86400;
+    unit = 'day';
+  } else if (absolute >= 3600) {
+    divisor = 3600;
+    unit = 'hour';
+  } else if (absolute >= 60) {
+    divisor = 60;
+    unit = 'minute';
+  }
+  const value = Math.round(diffSeconds / divisor);
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en' : 'de';
+  return new Intl.RelativeTimeFormat(language, { numeric: 'always' }).format(value, unit);
+}
+
+function dashboardRunDuration(seconds) {
+  let remaining = Math.max(0, Math.round(Number(seconds || 0)));
+  const hours = Math.floor(remaining / 3600);
+  remaining %= 3600;
+  const minutes = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours} ${dashboardT('dashboard.durationHoursShort')}`);
+  if (minutes) parts.push(`${minutes} ${dashboardT('dashboard.durationMinutesShort')}`);
+  if (secs || parts.length === 0) parts.push(`${secs} ${dashboardT('dashboard.durationSecondsShort')}`);
+  return parts.join(' ');
+}
+
 function renderDashboardRestoreVerificationBadge(backup) {
   const status = String(backup.restore_verification_status || '').toLowerCase();
   if (!status) return '';
@@ -335,7 +373,12 @@ function renderDashboardInventoryRow(backup) {
   const checkLabel = checkStatus ? repoCheckLabel({ ...backup, repository_check_status: checkStatus }) : dashboardT('dashboard.checkUnknown');
   const type = capitalize(backup.backup_type || '—');
   const identityDetail = backup.archive_name || backup.key || dashboardT('dashboard.neverExecuted');
-  const runDetail = [backup.time_ago || '', backup.duration_formatted || ''].filter(Boolean).join(' · ') || '—';
+  const runTime = dashboardRelativeRunTime(backup.timestamp);
+  const runDuration = dashboardRunDuration(backup.duration_seconds);
+  const runFacts = backup.never_run ? '' : `<span class="dashboard-run-facts">
+      <span><b>${escHtml(dashboardT('dashboard.lastRunTime'))}:</b> ${escHtml(runTime)}</span>
+      <span><b>${escHtml(dashboardT('dashboard.runDuration'))}:</b> ${escHtml(runDuration)}</span>
+    </span>`;
   const hasSizes = Number(backup.original_size || 0) > 0;
   const sizePrimary = hasSizes ? (backup.deduplicated_size_formatted || '—') : dashboardT('dashboard.noSizeData');
   const sizeFacts = hasSizes ? [
@@ -354,7 +397,7 @@ function renderDashboardInventoryRow(backup) {
     <td><div class="dashboard-table-badges">
       ${backup.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
       <span class="badge ${run.cls}"><span class="badge-dot"></span>${escHtml(run.label)}</span>
-    </div><span class="dashboard-cell-detail">${escHtml(runDetail)}</span>${message.text ? `<div class="dashboard-table-message ${message.cls}">${escHtml(message.text)}</div>` : ''}</td>
+    </div>${runFacts}${message.text ? `<div class="dashboard-table-message ${message.cls}">${escHtml(message.text)}</div>` : ''}</td>
     <td>${renderDashboardRestoreVerificationBadge(backup) || `<span class="dashboard-cell-detail">${dashboardT('dashboard.unknown')}</span>`}</td>
     <td><strong class="dashboard-cell-primary">${escHtml(sizePrimary)}</strong>${sizeFacts.length ? `<span class="dashboard-storage-facts">${sizeFacts.map(([label, value]) => `<span><b>${escHtml(label)}:</b> ${escHtml(value)}</span>`).join('')}</span>` : ''}</td>
     <td><strong class="dashboard-cell-primary dashboard-growth ${growthClass}">${escHtml(growth)}</strong>${renderDashboardRepositoryCheck(checkStatus, checkLabel, backup.repository_next_check)}</td>

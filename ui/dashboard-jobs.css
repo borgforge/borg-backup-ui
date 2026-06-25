@@ -160,6 +160,20 @@
   flex-wrap: wrap;
 }
 
+.dashboard-run-facts {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.35;
+}
+
+.dashboard-run-facts b {
+  color: var(--ui-color-text-muted);
+  font-weight: var(--ui-font-weight-medium);
+}
+
 .dashboard-table-message {
   margin-top: var(--ui-space-2);
   padding-left: var(--ui-space-2);

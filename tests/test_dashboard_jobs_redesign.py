@@ -87,6 +87,22 @@ def test_dashboard_jobs_locale_contract_matches() -> None:
         '"operatingState"',
         '"noLocationBackups"',
         '"noLocationJobs"',
+        '"lastRunTime"',
+        '"runDuration"',
+        '"durationSecondsShort"',
     ):
         assert key in english
         assert key in german
+
+
+def test_dashboard_labels_relative_time_and_duration_separately() -> None:
+    script = _read("ui/js/pages/dashboard.js")
+    css = _read("ui/dashboard-jobs.css")
+
+    assert "function dashboardRelativeRunTime(timestamp)" in script
+    assert "new Intl.RelativeTimeFormat" in script
+    assert "function dashboardRunDuration(seconds)" in script
+    assert "dashboard.lastRunTime" in script
+    assert "dashboard.runDuration" in script
+    assert "backup.time_ago" not in script
+    assert ".dashboard-run-facts" in css

@@ -65,6 +65,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - `UI_SESSION_TIMEOUT_MINUTES` ist wieder Teil des aktiven `backup.conf`-Schemas und wird nicht mehr fälschlich als deprecated gemeldet.
   - Profil-Listen verwenden dieselben Standort-Icons wie Storage und die Settings-Navigation.
   - Der redundante absolute `backup.conf`-Pfad im Settings-Header wurde entfernt.
+  - Der Dashboard-Laufstatus trennt und beschriftet den letzten Lauf und die Laufdauer; relative Zeiten und Einheiten folgen der gewählten UI-Sprache.
 
 ## Test-channel follow-up for 2026.06.25.1831
 
