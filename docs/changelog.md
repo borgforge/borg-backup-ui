@@ -66,6 +66,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Profil-Listen verwenden dieselben Standort-Icons wie Storage und die Settings-Navigation.
   - Der redundante absolute `backup.conf`-Pfad im Settings-Header wurde entfernt.
   - Der Dashboard-Laufstatus trennt und beschriftet den letzten Lauf und die Laufdauer; relative Zeiten und Einheiten folgen der gewählten UI-Sprache.
+  - Dashboard-Spalten und Detailzeilen wurden neu ausbalanciert; Restore-Daten und Speichergrößen stehen geordnet untereinander, Standort-Badges brechen nicht mehr um.
 
 ## Test-channel follow-up for 2026.06.25.1831
 

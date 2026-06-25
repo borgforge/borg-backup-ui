@@ -102,11 +102,11 @@
   table-layout: fixed;
 }
 
-.dashboard-inventory-table th:nth-child(1) { width: 23%; }
+.dashboard-inventory-table th:nth-child(1) { width: 22%; }
 .dashboard-inventory-table th:nth-child(2) { width: 8%; }
-.dashboard-inventory-table th:nth-child(3) { width: 13%; }
-.dashboard-inventory-table th:nth-child(4) { width: 17%; }
-.dashboard-inventory-table th:nth-child(5) { width: 21%; }
+.dashboard-inventory-table th:nth-child(3) { width: 16%; }
+.dashboard-inventory-table th:nth-child(4) { width: 19%; }
+.dashboard-inventory-table th:nth-child(5) { width: 17%; }
 .dashboard-inventory-table th:nth-child(6) { width: 18%; }
 
 .dashboard-backup-identity {
@@ -169,9 +169,30 @@
   line-height: 1.35;
 }
 
+.dashboard-run-facts > span,
+.dashboard-restore-facts > span,
+.dashboard-storage-facts > span {
+  white-space: nowrap;
+}
+
 .dashboard-run-facts b {
   color: var(--ui-color-text-muted);
   font-weight: var(--ui-font-weight-medium);
+}
+
+.dashboard-restore-facts {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.35;
+}
+
+.dashboard-inventory-table .loc-badge {
+  max-width: 100%;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .dashboard-table-message {

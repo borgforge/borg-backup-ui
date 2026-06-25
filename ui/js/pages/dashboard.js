@@ -359,8 +359,8 @@ function renderDashboardRestoreVerificationBadge(backup) {
   const details = [
     backup.restore_verification_last_test_date ? dashboardT('jobs.lastTest', { date: backup.restore_verification_last_test_date }) : '',
     backup.restore_verification_valid_until ? dashboardT('jobs.validUntil', { date: backup.restore_verification_valid_until }) : '',
-  ].filter(Boolean).join(' · ');
-  return `<span class="restore-v-badge ${m.cls}" title="${escHtml(details || m.text)}">${m.text}</span>${details ? `<span class="dashboard-cell-detail">${escHtml(details)}</span>` : ''}`;
+  ].filter(Boolean);
+  return `<span class="restore-v-badge ${m.cls}" title="${escHtml(details.join(' · ') || m.text)}">${m.text}</span>${details.length ? `<span class="dashboard-restore-facts">${details.map((detail) => `<span>${escHtml(detail)}</span>`).join('')}</span>` : ''}`;
 }
 
 function renderDashboardInventoryRow(backup) {

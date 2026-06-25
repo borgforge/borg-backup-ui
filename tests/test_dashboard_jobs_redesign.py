@@ -93,6 +93,7 @@ def test_dashboard_jobs_locale_contract_matches() -> None:
     ):
         assert key in english
         assert key in german
+    assert '"locationStoragebox": "Storagebox"' in english
 
 
 def test_dashboard_labels_relative_time_and_duration_separately() -> None:
@@ -106,3 +107,16 @@ def test_dashboard_labels_relative_time_and_duration_separately() -> None:
     assert "dashboard.runDuration" in script
     assert "backup.time_ago" not in script
     assert ".dashboard-run-facts" in css
+
+
+def test_dashboard_keeps_run_restore_and_storage_facts_aligned() -> None:
+    script = _read("ui/js/pages/dashboard.js")
+    css = _read("ui/dashboard-jobs.css")
+
+    assert "dashboard-restore-facts" in script
+    assert "details.map((detail)" in script
+    assert ".dashboard-inventory-table th:nth-child(3) { width: 16%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(4) { width: 19%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(5) { width: 17%; }" in css
+    assert ".dashboard-inventory-table .loc-badge" in css
+    assert "white-space: nowrap" in css

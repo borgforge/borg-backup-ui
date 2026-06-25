@@ -225,7 +225,7 @@
     "locationLocal": "Local",
     "locationUsb": "USB",
     "locationSmb": "SMB",
-    "locationStoragebox": "Storage Box",
+    "locationStoragebox": "Storagebox",
     "compressionShort": "Comp:",
     "retentionShort": "Ret:",
     "nextRun": "Next run: {date}",
