@@ -3,7 +3,7 @@
 window.BBUI = window.BBUI || {};
 window.BBUI.historyState = window.BBUI.historyState || { loaded: false, data: null, page: 1, perPage: 20, selectedLocation: '' };
 const historyState = window.BBUI.historyState;
-const HISTORY_LOCATIONS = ['storagebox', 'usb', 'smb', 'local'];
+const HISTORY_LOCATIONS = ['local', 'usb', 'smb', 'storagebox'];
 
 function historyT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`history.${key}`, params) || `history.${key}`;

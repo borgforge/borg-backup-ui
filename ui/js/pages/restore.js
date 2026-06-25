@@ -24,6 +24,8 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   autoPrecheckKey: '',
   completed: false,
   files: [],
+  jobs: [],
+  archives: [],
 };
 const restoreState = window.BBUI.restoreState;
 
@@ -39,10 +41,11 @@ function restoreSetStep(step) {
     if (panel) panel.style.display = i === next ? '' : 'none';
     const badge = document.getElementById(`restore-step-badge-${i}`);
     if (badge) {
-      badge.style.opacity = i === next ? '1' : '0.55';
-      badge.style.borderColor = i === next ? 'var(--accent)' : '';
-      badge.style.color = i === next ? 'var(--accent)' : '';
-      badge.style.background = i === next ? 'var(--state-info-dim)' : '';
+      badge.classList.toggle('is-active', i === next);
+      badge.classList.toggle('is-done', i < next);
+      badge.setAttribute('aria-current', i === next ? 'step' : 'false');
+      const number = badge.querySelector('span');
+      if (number) number.textContent = i < next ? '✓' : String(i);
     }
   }
   _restoreMsg('');
@@ -58,6 +61,102 @@ function restoreSetStep(step) {
   }
   if (next === 5) {
     restoreEnsureAutoPrecheck();
+  }
+  const status = document.getElementById('restore-step-status');
+  if (status) status.textContent = restoreT('stepStatus', { step: next, total: 5 });
+}
+
+function restoreJobIcon(job) {
+  const icon = resolveJobIcon(job);
+  const color = resolveJobIconColor(job);
+  const colorClass = color ? ` type-icon-color-${color}` : '';
+  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} restore-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+}
+
+function renderRestoreJobSidebar() {
+  const list = document.getElementById('restore-sidebar-job-list');
+  if (!list) return;
+  const query = String(document.getElementById('restore-sidebar-search')?.value || '').trim().toLowerCase();
+  const jobs = (restoreState.jobs || []).filter((job) =>
+    `${job.display_name || ''} ${job.name || ''} ${job.key || ''} ${job.location || ''}`.toLowerCase().includes(query)
+  );
+  if (!jobs.length) {
+    list.innerHTML = `<div class="restore-sidebar-empty">${escHtml(restoreT('noMatchingJobs'))}</div>`;
+    return;
+  }
+  const order = ['local', 'usb', 'smb', 'storagebox'];
+  list.innerHTML = order.map((location) => {
+    const locationJobs = jobs.filter((job) => String(job.location || '').toLowerCase() === location);
+    if (!locationJobs.length) return '';
+    return `<section class="restore-sidebar-group"><header>${escHtml(restoreLocationLabel(location))}<span>${locationJobs.length}</span></header>${locationJobs.map((job) => {
+      const active = String(job.key) === String(restoreState.job);
+      return `<button type="button" class="restore-sidebar-job ${active ? 'is-active' : ''}" data-restore-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.key)}</strong><small>${escHtml(job.key)}</small></span></button>`;
+    }).join('')}</section>`;
+  }).join('');
+}
+
+function restoreLocationLabel(location) {
+  const key = String(location || '').toLowerCase();
+  return ({
+    storagebox: restoreT('locationStoragebox'),
+    usb: restoreT('locationUsb'),
+    smb: restoreT('locationSmb'),
+    local: restoreT('locationLocal'),
+  })[key] || location || '—';
+}
+
+function renderRestoreSelectedJob() {
+  const card = document.getElementById('restore-selected-job-card');
+  const badge = document.getElementById('restore-job-ready-badge');
+  if (!card) return;
+  const job = (restoreState.jobs || []).find((item) => String(item.key) === String(restoreState.job));
+  if (!job) {
+    card.innerHTML = `<span class="muted">${escHtml(restoreT('chooseJob'))}</span>`;
+    if (badge) badge.textContent = '';
+    return;
+  }
+  card.innerHTML = `${restoreJobIcon(job)}<div><small>${escHtml(restoreT('selectedJob'))}</small><h3>${escHtml(job.display_name || job.name || job.key)}</h3><small>${escHtml(job.key)} · ${escHtml(restoreLocationLabel(job.location))}</small></div><span class="ready">${escHtml(restoreT('ready'))}</span>`;
+  if (badge) badge.textContent = restoreT('jobSelected');
+}
+
+function renderRestoreArchiveList() {
+  const list = document.getElementById('restore-archive-list');
+  const count = document.getElementById('restore-archive-count');
+  const context = document.getElementById('restore-archive-context');
+  if (!list) return;
+  const job = (restoreState.jobs || []).find((item) => String(item.key) === String(restoreState.job));
+  if (context) context.textContent = job?.display_name || job?.name || restoreState.job || '';
+  if (count) count.textContent = restoreT('archiveCount', { count: restoreState.archives.length });
+  list.innerHTML = restoreState.archives.map((archive) => {
+    const active = String(archive.name) === String(restoreState.archive);
+    const date = archive.start ? String(archive.start).substring(0, 19).replace('T', ' ') : '';
+    return `<button type="button" class="restore-archive-row ${active ? 'is-selected' : ''}" data-restore-archive="${escHtml(archive.name)}"><span class="restore-archive-radio">${active ? '●' : '○'}</span><span><strong>${escHtml(archive.name)}</strong><small>${escHtml(date)}</small></span><span class="ui-badge">${escHtml(restoreT('available'))}</span></button>`;
+  }).join('') || `<div class="restore-sidebar-empty">${escHtml(restoreT('noArchives'))}</div>`;
+}
+
+function onRestoreRedesignClick(event) {
+  const jobButton = event.target.closest('[data-restore-sidebar-job]');
+  if (jobButton) {
+    const select = document.getElementById('restore-job-sel');
+    if (!select) return;
+    select.value = jobButton.dataset.restoreSidebarJob || '';
+    restoreLoadArchives();
+    restoreSetStep(1);
+    return;
+  }
+  const archiveButton = event.target.closest('[data-restore-archive]');
+  if (archiveButton) {
+    const select = document.getElementById('restore-archive-sel');
+    if (!select) return;
+    select.value = archiveButton.dataset.restoreArchive || '';
+    restoreBrowse('');
+    restoreSetStep(2);
+    return;
+  }
+  const stepButton = event.target.closest('[data-restore-step]');
+  if (stepButton) {
+    const step = Number(stepButton.dataset.restoreStep || 1);
+    if (step <= restoreState.step || restoreCanAdvance(step - 1)) restoreSetStep(step);
   }
 }
 
@@ -124,6 +223,14 @@ function _restoreRenderSelectionSummary() {
   if (archEl) archEl.textContent = archive;
   if (countEl) countEl.textContent = String(selectedCount);
   if (targetEl) targetEl.textContent = target;
+  const modeEl = document.getElementById('restore-summary-mode');
+  const dryRunEl = document.getElementById('restore-summary-dry-run');
+  const mode = document.getElementById('restore-conflict-mode')?.selectedOptions?.[0]?.textContent || '—';
+  const dryRun = document.getElementById('restore-dry-run')?.checked;
+  if (modeEl) modeEl.textContent = mode;
+  if (dryRunEl) dryRunEl.textContent = dryRun ? restoreT('yes') : restoreT('no');
+  const browserContext = document.getElementById('restore-browser-context');
+  if (browserContext) browserContext.textContent = restoreState.archive || '';
 }
 
 function _restoreRenderSelectedBox() {
@@ -137,6 +244,8 @@ function _restoreRenderSelectedBox() {
   if (typeEl) typeEl.textContent = type;
   if (pathEl) pathEl.textContent = restoreState.selectedPath || '—';
   if (hintEl) hintEl.textContent = hint;
+  const nameEl = document.getElementById('restore-selection-name');
+  if (nameEl) nameEl.textContent = restoreState.selectedName || '—';
 }
 
 function _stopRestorePolling() {
@@ -175,6 +284,7 @@ async function _pollRestoreState(restoreId) {
       restoreUpdateConfirmState();
       restoreSetStep(5);
       if (data.skipped) {
+        setRestoreHeaderStatus('skipped');
         const reasonKey = {
           target_exists: 'targetExists',
           target_not_empty: 'targetNotEmpty',
@@ -182,6 +292,7 @@ async function _pollRestoreState(restoreId) {
         }[data.skip_reason_code] || 'targetExists';
         showMsg('restore-assist-msg', 'warning', restoreT('skipped', { reason: restoreT(reasonKey) }));
       } else {
+        setRestoreHeaderStatus('success');
         showMsg('restore-assist-msg', 'success', restoreT('success', { path: data.destination_path || '' }));
       }
       return;
@@ -190,6 +301,7 @@ async function _pollRestoreState(restoreId) {
       _stopRestorePolling();
       _setRestoreAssistBusy(false);
       restoreUpdateConfirmState();
+      setRestoreHeaderStatus('failed');
       showMsg('restore-assist-msg', 'error', restoreT('failed', { message: restoreT('unknownError') }));
       return;
     }
@@ -278,6 +390,7 @@ async function restoreInit() {
     const jobsRes = await fetch('/api/jobs', { credentials: 'include' });
     const jobsData = await jobsRes.json();
     const jobs = (jobsData.jobs || []).filter(j => !j.is_utility);
+    restoreState.jobs = jobs;
 
     for (const job of jobs) {
       if (job.is_utility) continue;
@@ -297,8 +410,11 @@ async function restoreInit() {
           opt.textContent = job.name || job.key;
           sel.appendChild(opt);
         }
+        restoreState.jobs = (checkData.jobs || []).map((job) => ({ ...job, location: job.location || 'local' }));
       }
     }
+    renderRestoreJobSidebar();
+    renderRestoreSelectedJob();
   } catch (e) {
     _restoreMsg(restoreT('loadJobsError', { message: e.message }), true);
   }
@@ -313,6 +429,7 @@ async function restoreLoadArchives() {
   restoreState.selectedName = '';
   restoreState.selectedType = '';
   restoreState.autoPrecheckKey = '';
+  restoreState.archives = [];
   const sel = document.getElementById('restore-archive-sel');
   if (sel) sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
   _restoreMsg('');
@@ -322,6 +439,8 @@ async function restoreLoadArchives() {
     _restoreRenderSelectedBox();
     return;
   }
+  renderRestoreJobSidebar();
+  renderRestoreSelectedJob();
   _restoreMsg(restoreT('loadingArchives'));
 
   try {
@@ -331,13 +450,15 @@ async function restoreLoadArchives() {
 
     const sel = document.getElementById('restore-archive-sel');
     sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
-    for (const a of (data.archives || [])) {
+    restoreState.archives = data.archives || [];
+    for (const a of restoreState.archives) {
       const opt = document.createElement('option');
       opt.value = a.name;
       const date = a.start ? a.start.substring(0, 19).replace('T', ' ') : '';
       opt.textContent = a.name + (date ? '  (' + date + ')' : '');
       sel.appendChild(opt);
     }
+    renderRestoreArchiveList();
     _restoreRenderSelectionSummary();
     _restoreMsg('');
   } catch (e) {
@@ -353,6 +474,7 @@ async function restoreBrowse(path) {
   restoreState.archive = archive;
   restoreState.path = path;
   _restoreRenderSelectionSummary();
+  renderRestoreArchiveList();
   _restoreMsg('');
   const browser = document.getElementById('restore-browser');
   const filelist = document.getElementById('restore-filelist');
@@ -622,6 +744,7 @@ async function restoreRunPrecheck() {
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     restoreState.precheck = data;
+    renderRestorePrecheck(data);
     const combinedDryRun = [data.dry_run_stdout || '', data.dry_run_stderr || '']
       .filter(Boolean)
       .join('\n')
@@ -644,12 +767,59 @@ async function restoreRunPrecheck() {
     showMsg('restore-assist-msg', data.ok ? 'success' : 'error', data.ok ? restoreT('precheckSuccess') : restoreT('precheckFailed'));
   } catch (err) {
     restoreState.precheck = null;
+    renderRestorePrecheck(null);
     if (out) out.textContent = '';
     showMsg('restore-assist-msg', 'error', restoreT('precheckError', { message: err.message }));
   } finally {
     _setRestoreAssistBusy(false);
     restoreUpdateConfirmState();
   }
+}
+
+function renderRestorePrecheck(data) {
+  const verdict = document.getElementById('restore-precheck-verdict');
+  const badge = document.getElementById('restore-precheck-badge');
+  const facts = document.getElementById('restore-system-check-facts');
+  if (!verdict || !facts) return;
+  if (!data) {
+    verdict.classList.add('hidden');
+    facts.innerHTML = '';
+    if (badge) {
+      badge.textContent = restoreT('precheckPending');
+      badge.classList.remove('success', 'warning', 'error');
+    }
+    return;
+  }
+  const ok = !!data.ok;
+  verdict.classList.remove('hidden');
+  verdict.classList.toggle('error', !ok);
+  verdict.innerHTML = `<span class="restore-precheck-verdict-mark">${ok ? '✓' : '!'}</span><span><strong>${escHtml(restoreT(ok ? 'precheckVerdictOk' : 'precheckVerdictFailed'))}</strong><small>${escHtml(restoreT(ok ? 'precheckVerdictOkDetail' : 'precheckVerdictFailedDetail'))}</small></span>`;
+  facts.innerHTML = [
+    [restoreT('mountpointLabel'), data.target_mountpoint || '—'],
+    [restoreT('freeSpaceLabel'), _restoreFmtSize(data.target_free_bytes || 0)],
+    [restoreT('destinationExistsLabel'), data.destination_exists ? restoreT('yes') : restoreT('no')],
+    [restoreT('dryRunExitLabel'), data.dry_run_exit_code ?? '—'],
+  ].map(([label, value]) => `<div><small>${escHtml(label)}</small><strong>${escHtml(String(value))}</strong></div>`).join('');
+  if (badge) {
+    badge.textContent = restoreT(ok ? 'precheckSuccessful' : 'precheckFailedShort');
+    badge.classList.remove('success', 'warning', 'error');
+    badge.classList.add(ok ? 'success' : 'error');
+  }
+}
+
+function setRestoreHeaderStatus(state) {
+  const badge = document.getElementById('restore-precheck-badge');
+  if (!badge) return;
+  const key = {
+    success: 'restoreSuccessfulShort',
+    skipped: 'restoreSkippedShort',
+    failed: 'restoreFailedShort',
+  }[state] || 'precheckSuccessful';
+  badge.textContent = restoreT(key);
+  badge.classList.remove('success', 'warning', 'error');
+  if (state === 'success') badge.classList.add('success');
+  if (state === 'skipped') badge.classList.add('warning');
+  if (state === 'failed') badge.classList.add('error');
 }
 
 function _currentPrecheckKey() {
@@ -837,6 +1007,7 @@ function restorePrecheckInputsChanged() {
   restoreState.precheck = null;
   restoreState.autoPrecheckKey = '';
   restoreState.completed = false;
+  _restoreRenderSelectionSummary();
   restoreUpdateConfirmState();
   if (restoreState.step === 5) {
     restoreEnsureAutoPrecheck();
@@ -849,6 +1020,10 @@ window.addEventListener?.('bbui:language-changed', () => {
   if (Array.isArray(restoreState.files) && restoreState.files.length) {
     _restoreRenderFiles(restoreState.files);
   }
+  renderRestoreJobSidebar();
+  renderRestoreSelectedJob();
+  renderRestoreArchiveList();
+  renderRestorePrecheck(restoreState.precheck);
   const backBtn = document.getElementById('restore-step-back-btn');
   const nextBtn = document.getElementById('restore-step-next-btn');
   if (backBtn) {

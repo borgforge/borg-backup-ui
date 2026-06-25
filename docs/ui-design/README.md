@@ -53,6 +53,10 @@ navigation and filters. Compact table headers use `Ort`. English uses
 `Locations`, `All locations`, and `Location`. Internal API fields and code may
 keep the existing `location` identifiers.
 
+Location-grouped navigation uses one fixed order: Local, USB, SMB, Storagebox.
+Missing groups are omitted without changing the relative order. The order is
+not user-configurable.
+
 - Preserve the existing primary navigation and route structure.
 - Use a consistent page header for title, context, and primary actions.
 - Use a context sidebar for locations, jobs, settings sections, or help topics

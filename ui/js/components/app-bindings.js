@@ -128,6 +128,8 @@
     document.getElementById('bericht-borginfo-btn')?.addEventListener('click', berichtLoadBorgInfo);
     document.getElementById('restore-job-sel')?.addEventListener('change', restoreLoadArchives);
     document.getElementById('restore-archive-sel')?.addEventListener('change', () => restoreBrowse(''));
+    document.getElementById('restore-wizard')?.addEventListener('click', onRestoreRedesignClick);
+    document.getElementById('restore-sidebar-search')?.addEventListener('input', renderRestoreJobSidebar);
     document.getElementById('restore-browser')?.addEventListener('click', onRestoreBrowserClick);
     document.getElementById('restore-start-btn')?.addEventListener('click', restoreStart);
     document.getElementById('restore-step-next-btn')?.addEventListener('click', restoreStepNext);

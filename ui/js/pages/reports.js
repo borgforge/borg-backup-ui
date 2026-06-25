@@ -118,7 +118,7 @@ function _berichtRenderJobSidebar() {
     list.innerHTML = `<div class="ui-empty report-job-empty">${escHtml(reportsT('noMatchingJobs'))}</div>`;
     return;
   }
-  const order = ['storagebox', 'usb', 'smb', 'local'];
+  const order = ['local', 'usb', 'smb', 'storagebox'];
   const locations = [...new Set(jobs.map((job) => String(job.location || 'local').toLowerCase()))]
     .sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)));
   list.innerHTML = locations.map((location) => `<section class="report-job-group"><h3>${escHtml(_berichtLocationLabel(location))}</h3>${jobs.filter((job) => String(job.location || 'local').toLowerCase() === location).map((job) => `<button class="report-job ${String(job.key) === selected ? 'is-active' : ''}" data-report-job="${escHtml(job.key)}" ${String(job.key) === selected ? 'aria-current="page"' : ''}>${_berichtJobIcon(job)}<span><strong>${escHtml(job.display_name || job.key)}</strong><small>${escHtml(job.key)}</small></span><span class="report-job-dot"></span></button>`).join('')}</section>`).join('');
