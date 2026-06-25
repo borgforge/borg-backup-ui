@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/ui/dashboard-jobs.css">
   <link rel="stylesheet" href="/ui/history-reports.css">
   <link rel="stylesheet" href="/ui/restore-tests-redesign.css">
+  <link rel="stylesheet" href="/ui/browse-restore-redesign.css">
 </head>
 <body>
 
@@ -521,19 +522,11 @@
 
     <!-- Browse & Restore Page -->
     <div id="page-restore" class="page">
-      <div class="page-header">
+      <div class="page-header ui-page-header">
         <div>
           <h1 data-i18n="restore.title">Browse &amp; Restore</h1>
           <p class="page-subtitle" data-i18n="restore.subtitle">Geführter Assistent in festen Schritten</p>
         </div>
-      </div>
-
-      <div id="restore-stepper" class="history-filters" style="margin-bottom:10px">
-        <span class="history-type-badge" id="restore-step-badge-1" data-i18n="restore.stepJob">1 Job</span>
-        <span class="history-type-badge" id="restore-step-badge-2" data-i18n="restore.stepArchive">2 Archiv</span>
-        <span class="history-type-badge" id="restore-step-badge-3" data-i18n="restore.stepSelection">3 Auswahl</span>
-        <span class="history-type-badge" id="restore-step-badge-4" data-i18n="restore.stepTargetMode">4 Ziel &amp; Modus</span>
-        <span class="history-type-badge" id="restore-step-badge-5" data-i18n="restore.stepCheckStart">5 Prüfen &amp; Start</span>
       </div>
 
       <div id="restore-msg" class="restore-msg hidden"></div>
@@ -548,43 +541,66 @@
         <div class="page-empty-state-desc" data-i18n="restore.emptyDescription">Wähle zuerst einen Job. Danach führt dich der Assistent durch alle Schritte.</div>
       </div>
 
-      <div id="restore-wizard" class="card" style="display:none">
+      <div id="restore-wizard" class="restore-redesign-layout ui-context-layout" style="display:none">
+        <aside class="restore-job-sidebar ui-context-sidebar" data-i18n-aria-label="restore.backupJobs" aria-label="Backup jobs">
+          <div class="ui-context-sidebar__header"><small data-i18n="restore.stepOne">Schritt 1</small><strong data-i18n="restore.selectJob">Backup-Job auswählen</strong></div>
+          <label class="restore-job-search"><span data-i18n="restore.search">Suche</span><input id="restore-sidebar-search" type="search" data-i18n-placeholder="restore.searchPlaceholder" placeholder="Job suchen"></label>
+          <nav id="restore-sidebar-job-list" class="restore-sidebar-job-list"></nav>
+          <footer data-i18n="restore.backupJobsOnly">Nur Backup-Jobs werden angezeigt.</footer>
+        </aside>
+        <section class="restore-redesign-workspace ui-workspace">
+          <nav id="restore-stepper" class="restore-stepper" data-i18n-aria-label="restore.steps" aria-label="Restore steps">
+            <button type="button" id="restore-step-badge-1" data-restore-step="1"><span>1</span><b data-i18n="restore.stepJobShort">Job</b></button>
+            <button type="button" id="restore-step-badge-2" data-restore-step="2"><span>2</span><b data-i18n="restore.stepArchiveShort">Archiv</b></button>
+            <button type="button" id="restore-step-badge-3" data-restore-step="3"><span>3</span><b data-i18n="restore.stepSelectionShort">Auswahl</b></button>
+            <button type="button" id="restore-step-badge-4" data-restore-step="4"><span>4</span><b data-i18n="restore.stepTargetShort">Ziel &amp; Modus</b></button>
+            <button type="button" id="restore-step-badge-5" data-restore-step="5"><span>5</span><b data-i18n="restore.stepCheckShort">Prüfen &amp; Start</b></button>
+          </nav>
         <div class="settings-body two-col" style="padding-top:10px">
           <div class="form-group" style="grid-column:1/-1" id="restore-step-panel-1">
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepOne">Schritt 1</small><h2 data-i18n="restore.selectJob">Backup-Job auswählen</h2><p data-i18n="restore.jobSidebarHint">Die verfügbaren Jobs sind links nach Standort gruppiert.</p></div><span id="restore-job-ready-badge" class="ui-badge"></span></header>
             <label class="form-label" data-i18n="restore.selectJob">1. Job auswählen</label>
             <select id="restore-job-sel" class="restore-select">
               <option value="" data-i18n="restore.chooseJob">— Job wählen —</option>
             </select>
-            <div class="text-muted" style="font-size:12px;margin-top:8px" data-i18n="restore.backupJobsOnly">Nur Backup-Jobs werden angezeigt.</div>
+            <div id="restore-selected-job-card" class="restore-selected-job-card"></div>
           </div>
 
           <div class="form-group" style="grid-column:1/-1; display:none" id="restore-step-panel-2">
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepTwo">Schritt 2</small><h2 data-i18n="restore.selectArchive">Archiv auswählen</h2><p id="restore-archive-context"></p></div><span id="restore-archive-count" class="ui-badge"></span></header>
             <label class="form-label" data-i18n="restore.selectArchive">2. Archiv auswählen</label>
             <select id="restore-archive-sel" class="restore-select">
               <option value="" data-i18n="restore.chooseArchive">— Archiv wählen —</option>
             </select>
+            <div id="restore-archive-list" class="restore-archive-list"></div>
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-3">
-            <div class="repo-stats-chart-title"><span data-i18n="restore.stepSelection">3 Auswahl</span></div>
-            <div id="restore-browser">
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepThree">Schritt 3</small><h2 data-i18n="restore.selectElement">Element auswählen</h2><p id="restore-browser-context"></p></div><span class="ui-badge" data-i18n="restore.singleSelection">Maximal eine Auswahl</span></header>
+            <div class="restore-browser-layout">
+            <div id="restore-browser" class="restore-file-browser">
               <div class="restore-breadcrumb" id="restore-breadcrumb"></div>
               <div id="restore-filelist"></div>
             </div>
-            <div class="text-muted" style="font-size:12px;margin-top:8px" data-i18n="restore.selectionHelp">
-              Hinweis: Symbol <strong>⬇</strong> lädt eine Datei sofort herunter. Symbol <strong>✓</strong> wählt Datei oder Verzeichnis für die Wiederherstellung aus. Es ist immer nur <strong>eine</strong> Auswahl gleichzeitig möglich.
+            <aside class="restore-selection-panel">
+              <header><span data-i18n="restore.currentSelection">Aktuelle Auswahl</span><strong id="restore-selection-name">—</strong></header>
+              <div class="restore-selection-facts">
+                <div><small data-i18n="restore.type">Typ</small><strong id="restore-selected-type">—</strong></div>
+                <div><small data-i18n="restore.path">Pfad</small><strong id="restore-selected-path">—</strong></div>
+                <div><small data-i18n="restore.hint">Hinweis</small><strong id="restore-selected-hint">—</strong></div>
+              </div>
+              <button class="btn btn-secondary btn-sm" id="restore-clear-selection-btn" data-i18n="restore.removeSelection">Auswahl entfernen</button>
+            </aside>
             </div>
-            <div class="status-message" style="margin-top:10px">
-              <strong data-i18n="restore.selection">Auswahl</strong><br>
-              <span data-i18n="restore.type">Typ:</span> <span id="restore-selected-type">—</span><br>
-              <span data-i18n="restore.path">Pfad:</span> <span id="restore-selected-path">—</span><br>
-              <span data-i18n="restore.hint">Hinweis:</span> <span id="restore-selected-hint">—</span><br>
-              <button class="btn btn-secondary btn-sm" id="restore-clear-selection-btn" style="margin-top:8px" data-i18n="restore.removeSelection">Auswahl entfernen</button>
+            <div class="restore-browser-hint" data-i18n="restore.selectionHelp">
+              Hinweis: Symbol <strong>⬇</strong> lädt eine Datei sofort herunter. Symbol <strong>✓</strong> wählt Datei oder Verzeichnis für die Wiederherstellung aus. Es ist immer nur <strong>eine</strong> Auswahl gleichzeitig möglich.
             </div>
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-4">
-            <div class="repo-stats-chart-title"><span data-i18n="restore.stepTargetMode">4 Ziel &amp; Modus</span></div>
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepFour">Schritt 4</small><h2 data-i18n="restore.targetModeTitle">Ziel und Wiederherstellungsmodus</h2><p data-i18n="restore.targetModeSubtitle">Quelle und Ziel vor der Vorprüfung festlegen.</p></div><span class="ui-badge" data-i18n="restore.dryRunActive">Testlauf aktiv</span></header>
+            <div class="restore-target-grid">
+            <section class="restore-form-section"><header data-i18n="restore.sourceTarget">Quell- und Zielpfad</header>
             <div class="form-group" style="grid-column:1/-1">
               <label class="form-label" data-i18n="restore.sourcePath">Quellpfad (Archiv)</label>
               <input id="restore-source-path" class="form-input mono" type="text" readonly value="">
@@ -595,6 +611,8 @@
               <datalist id="restore-target-suggestions"></datalist>
               <div class="text-muted" style="font-size:12px;margin-top:6px" data-i18n="restore.targetSuggestion">Vorschlag: /mnt/user/restore</div>
             </div>
+            </section>
+            <section class="restore-form-section"><header data-i18n="restore.targetBehavior">Verhalten am Ziel</header>
             <div class="form-group">
               <label class="form-label" data-i18n="restore.conflictStrategy">Konfliktstrategie</label>
               <select id="restore-conflict-mode" class="form-input">
@@ -611,32 +629,48 @@
               <input id="restore-preserve-owner" type="checkbox">
               <span data-i18n="restore.preserveOwner">Original Owner/Group beibehalten</span>
             </label>
+            </section>
+            </div>
+            <div class="restore-safety-note" data-i18n="restore.targetRestrictionHint">Der Zielpfad wird serverseitig geprüft. Eine Wiederherstellung außerhalb von /mnt/user ist nicht zulässig.</div>
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-5">
-            <div class="repo-stats-chart-title"><span data-i18n="restore.stepCheckStart">5 Prüfen &amp; Start</span></div>
-            <div class="status-message">
-              <strong data-i18n="restore.currentSelection">Aktuelle Auswahl</strong><br>
-              <span data-i18n="restore.job">Job:</span> <span id="restore-summary-job">—</span> ·
-              <span data-i18n="restore.archive">Archiv:</span> <span id="restore-summary-archive">—</span> ·
-              <span data-i18n="restore.element">Element:</span> <span id="restore-summary-count">0</span> ·
-              <span data-i18n="restore.target">Zielordner:</span> <span id="restore-summary-target">—</span>
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepFive">Schritt 5</small><h2 data-i18n="restore.checkStartTitle">Prüfen und starten</h2><p data-i18n="restore.checkStartSubtitle">Automatische Vorprüfung und ausdrückliche Bestätigung.</p></div><span id="restore-precheck-badge" class="ui-badge"></span></header>
+            <div id="restore-precheck-verdict" class="restore-precheck-verdict hidden"></div>
+            <div class="restore-review-grid">
+            <section><header data-i18n="restore.restoreSection">Wiederherstellung</header><div class="restore-review-facts">
+              <div><small data-i18n="restore.job">Job</small><strong id="restore-summary-job">—</strong></div>
+              <div><small data-i18n="restore.archive">Archiv</small><strong id="restore-summary-archive">—</strong></div>
+              <div><small data-i18n="restore.element">Element</small><strong id="restore-summary-count">0</strong></div>
+            </div></section>
+            <section><header data-i18n="restore.targetModeSection">Ziel und Modus</header><div class="restore-review-facts">
+              <div><small data-i18n="restore.target">Zielordner</small><strong id="restore-summary-target">—</strong></div>
+              <div><small data-i18n="restore.conflictStrategy">Konfliktstrategie</small><strong id="restore-summary-mode">—</strong></div>
+              <div><small data-i18n="restore.dryRun">Testlauf</small><strong id="restore-summary-dry-run">—</strong></div>
+            </div></section>
+            <section><header data-i18n="restore.systemCheck">Systemprüfung</header><div id="restore-system-check-facts" class="restore-review-facts"></div></section>
             </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
-              <button class="btn btn-secondary btn-sm" id="restore-start-btn" disabled data-i18n="restore.start">Wiederherstellen starten</button>
+            <div class="status-message restore-legacy-summary">
+              <strong data-i18n="restore.currentSelection">Aktuelle Auswahl</strong><br>
+              <span data-i18n="restore.selectionReady">Auswahl ist für die Vorprüfung vorbereitet.</span>
             </div>
             <label class="form-checkbox-row" style="margin-top:10px">
               <input id="restore-confirm-check" type="checkbox">
               <span data-i18n="restore.confirmSummary">Zusammenfassung geprüft – Wiederherstellung ausführen</span>
             </label>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
+              <button class="btn btn-primary" id="restore-start-btn" disabled data-i18n="restore.start">Wiederherstellen starten</button>
+            </div>
             <div id="restore-assist-msg" class="status-message hidden"></div>
-            <pre id="restore-precheck-output" class="log-output" style="max-height:260px; min-height:100px"></pre>
+            <details class="restore-precheck-output"><summary data-i18n="restore.showTechnicalPrecheck">Technische Precheck-Ausgabe anzeigen</summary><pre id="restore-precheck-output" class="log-output" style="max-height:260px; min-height:100px"></pre></details>
           </div>
         </div>
-        <div class="modal-footer" style="border-top:none; padding-top:0">
+        <div class="restore-wizard-actions">
           <button class="btn btn-secondary btn-sm" id="restore-step-back-btn" disabled data-i18n="restore.back">Zurück</button>
+          <span id="restore-step-status"></span>
           <button class="btn btn-primary btn-sm" id="restore-step-next-btn" data-i18n="restore.next">Weiter</button>
         </div>
+        </section>
       </div>
     </div>
 

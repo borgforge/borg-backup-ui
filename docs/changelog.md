@@ -33,6 +33,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Plan- und Berichtszusammenfassungen erhalten höhere visuelle Priorität; technische Nachweise und Detaildaten bleiben verfügbar.
   - Prüfberichte folgen der freigegebenen Nachweisstruktur mit Ergebnis, Gesamturteil, Ausführung, Prüfumfang, kompakter Schrittfolge und einklappbaren technischen Nachweisen.
 
+### Issue #32
+- UI (#32):
+  - Browse & Restore verwendet eine nach Standort gruppierte Job-Sidebar mit den konfigurierten Job-Icons und einen klaren Fünf-Schritt-Workflow.
+  - Archivwahl, Dateibrowser, Einzelauswahl, Zieloptionen, Sicherheitsprüfung und technische Precheck-Ausgabe sind in einem gemeinsamen responsiven Workspace zusammengeführt.
+  - Downloadgrößenprüfung, Zielbeschränkung unter `/mnt/user`, Konflikt- und Owner-Verhalten sowie Restore-Polling bleiben unverändert.
+
 ## Archivierte Manifest-Historie
 
 ###2026.06.15.1213###
