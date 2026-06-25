@@ -357,10 +357,15 @@ function renderDashboardRestoreVerificationBadge(backup) {
   const m = map[status];
   if (!m) return '';
   const details = [
-    backup.restore_verification_last_test_date ? dashboardT('jobs.lastTest', { date: backup.restore_verification_last_test_date }) : '',
-    backup.restore_verification_valid_until ? dashboardT('jobs.validUntil', { date: backup.restore_verification_valid_until }) : '',
+    backup.restore_verification_last_test_date
+      ? [dashboardT('dashboard.lastTestLabel'), backup.restore_verification_last_test_date]
+      : null,
+    backup.restore_verification_valid_until
+      ? [dashboardT('dashboard.validUntilLabel'), backup.restore_verification_valid_until]
+      : null,
   ].filter(Boolean);
-  return `<span class="restore-v-badge ${m.cls}" title="${escHtml(details.join(' · ') || m.text)}">${m.text}</span>${details.length ? `<span class="dashboard-restore-facts">${details.map((detail) => `<span>${escHtml(detail)}</span>`).join('')}</span>` : ''}`;
+  const title = details.map(([label, value]) => `${label}: ${value}`).join(' · ');
+  return `<span class="restore-v-badge ${m.cls}" title="${escHtml(title || m.text)}">${m.text}</span>${details.length ? `<span class="dashboard-restore-facts">${details.map(([label, value]) => `<span class="dashboard-fact-row"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`).join('')}</span>` : ''}`;
 }
 
 function renderDashboardInventoryRow(backup) {
@@ -376,12 +381,12 @@ function renderDashboardInventoryRow(backup) {
   const runTime = dashboardRelativeRunTime(backup.timestamp);
   const runDuration = dashboardRunDuration(backup.duration_seconds);
   const runFacts = backup.never_run ? '' : `<span class="dashboard-run-facts">
-      <span><b>${escHtml(dashboardT('dashboard.lastRunTime'))}:</b> ${escHtml(runTime)}</span>
-      <span><b>${escHtml(dashboardT('dashboard.runDuration'))}:</b> ${escHtml(runDuration)}</span>
+      <span class="dashboard-fact-row"><b>${escHtml(dashboardT('dashboard.lastRunTime'))}:</b><span>${escHtml(runTime)}</span></span>
+      <span class="dashboard-fact-row"><b>${escHtml(dashboardT('dashboard.runDuration'))}:</b><span>${escHtml(runDuration)}</span></span>
     </span>`;
   const hasSizes = Number(backup.original_size || 0) > 0;
-  const sizePrimary = hasSizes ? (backup.deduplicated_size_formatted || '—') : dashboardT('dashboard.noSizeData');
   const sizeFacts = hasSizes ? [
+    [dashboardT('dashboard.deduplicated'), backup.deduplicated_size_formatted || '—', true],
     [dashboardT('dashboard.source'), backup.original_size_formatted || '—'],
     [dashboardT('dashboard.compressed'), backup.compressed_size_formatted || '—'],
     [dashboardT('dashboard.repository'), backup.repository_size_formatted || '—'],
@@ -399,7 +404,7 @@ function renderDashboardInventoryRow(backup) {
       <span class="badge ${run.cls}"><span class="badge-dot"></span>${escHtml(run.label)}</span>
     </div>${runFacts}${message.text ? `<div class="dashboard-table-message ${message.cls}">${escHtml(message.text)}</div>` : ''}</td>
     <td>${renderDashboardRestoreVerificationBadge(backup) || `<span class="dashboard-cell-detail">${dashboardT('dashboard.unknown')}</span>`}</td>
-    <td><strong class="dashboard-cell-primary">${escHtml(sizePrimary)}</strong>${sizeFacts.length ? `<span class="dashboard-storage-facts">${sizeFacts.map(([label, value]) => `<span><b>${escHtml(label)}:</b> ${escHtml(value)}</span>`).join('')}</span>` : ''}</td>
+    <td>${sizeFacts.length ? `<span class="dashboard-storage-facts">${sizeFacts.map(([label, value, primary]) => `<span class="dashboard-fact-row ${primary ? 'primary' : ''}"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`).join('')}</span>` : `<span class="dashboard-cell-detail">${dashboardT('dashboard.noSizeData')}</span>`}</td>
     <td><strong class="dashboard-cell-primary dashboard-growth ${growthClass}">${escHtml(growth)}</strong>${renderDashboardRepositoryCheck(checkStatus, checkLabel, backup.repository_next_check)}</td>
   </tr>`;
 }

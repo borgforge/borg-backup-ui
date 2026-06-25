@@ -89,6 +89,8 @@ def test_dashboard_jobs_locale_contract_matches() -> None:
         '"noLocationJobs"',
         '"lastRunTime"',
         '"runDuration"',
+        '"lastTestLabel"',
+        '"validUntilLabel"',
         '"durationSecondsShort"',
     ):
         assert key in english
@@ -114,7 +116,10 @@ def test_dashboard_keeps_run_restore_and_storage_facts_aligned() -> None:
     css = _read("ui/dashboard-jobs.css")
 
     assert "dashboard-restore-facts" in script
-    assert "details.map((detail)" in script
+    assert "details.map(([label, value])" in script
+    assert "dashboard.deduplicated" in script
+    assert "dashboard-fact-row" in script
+    assert "grid-template-columns: 6.5rem minmax(0, 1fr)" in css
     assert ".dashboard-inventory-table th:nth-child(3) { width: 16%; }" in css
     assert ".dashboard-inventory-table th:nth-child(4) { width: 19%; }" in css
     assert ".dashboard-inventory-table th:nth-child(5) { width: 17%; }" in css

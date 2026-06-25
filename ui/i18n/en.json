@@ -547,6 +547,8 @@
     "neverExecutedHint": "This job has never run.",
     "lastRunTime": "Last run",
     "runDuration": "Duration",
+    "lastTestLabel": "Last test",
+    "validUntilLabel": "Valid until",
     "durationHoursShort": "hr",
     "durationMinutesShort": "min",
     "durationSecondsShort": "sec",

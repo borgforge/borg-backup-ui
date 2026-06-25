@@ -547,6 +547,8 @@
     "neverExecutedHint": "Dieser Job wurde noch nie ausgeführt.",
     "lastRunTime": "Letzter Lauf",
     "runDuration": "Dauer",
+    "lastTestLabel": "Letzter Test",
+    "validUntilLabel": "Gültig bis",
     "durationHoursShort": "Std.",
     "durationMinutesShort": "Min.",
     "durationSecondsShort": "Sek.",
