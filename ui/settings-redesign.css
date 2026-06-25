@@ -112,35 +112,9 @@
   color: var(--ui-color-accent);
 }
 
-.settings-side-menu > footer {
-  display: flex;
-  align-items: center;
-  gap: var(--ui-space-2);
-  padding: var(--ui-space-3);
-  border-top: 1px solid var(--ui-color-border);
-  background: var(--ui-color-surface-subtle);
-}
-
-.settings-side-menu > footer strong,
-.settings-side-menu > footer small {
-  display: block;
-}
-
-.settings-side-menu > footer small {
-  margin-top: 2px;
-  color: var(--ui-color-text-subtle);
-  font-size: var(--ui-font-size-xs);
-}
-
-.settings-menu-status-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--ui-state-success-fg);
-}
-
-.settings-side-menu > footer.attention .settings-menu-status-dot {
-  background: var(--ui-state-warning-fg);
+.settings-menu-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 .settings-workspace {
@@ -513,8 +487,7 @@
     overflow-x: auto;
   }
 
-  .settings-menu-group,
-  .settings-side-menu > footer {
+  .settings-menu-group {
     display: none;
   }
 

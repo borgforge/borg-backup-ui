@@ -49,15 +49,15 @@ function settingsLocale() {
 
 function getSettingsTabs() {
   const tabs = [
-  { key: 'general', label: settingsT('tabs.general'), group: 'system', description: settingsT('menu.generalDescription'), icon: '⚙' },
-  { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: '♙' },
-  { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: '▣' },
-  { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: '✓' },
-  { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: '▯' },
-  { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: '⌁' },
-  { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: '↗' },
-  { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: '⇄' },
-  { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: '⌘' },
+  { key: 'general', label: settingsT('tabs.general'), group: 'system', description: settingsT('menu.generalDescription'), icon: settingsMenuIcon('general') },
+  { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: settingsMenuIcon('users') },
+  { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: settingsMenuIcon('backup') },
+  { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: settingsMenuIcon('restore') },
+  { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: locationIcon('usb') },
+  { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: locationIcon('smb') },
+  { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: locationIcon('storagebox') },
+  { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: settingsMenuIcon('transfer') },
+  { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: settingsMenuIcon('advanced') },
   ];
   const auth = settingsState.authStatus || {};
   const isAdmin = String(auth.current_role || '').toLowerCase() === 'admin';
@@ -65,6 +65,18 @@ function getSettingsTabs() {
     return tabs.filter((t) => t.key !== 'users');
   }
   return tabs;
+}
+
+function settingsMenuIcon(key) {
+  const icons = {
+    general: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3v-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1 2.8-2.8.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3h4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.2v4h-.2a1.7 1.7 0 0 0-1.4 1z"/></svg>',
+    users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M3 21v-2a6 6 0 0 1 12 0v2"/><path d="M16 4.5a4 4 0 0 1 0 7"/><path d="M18 15a5 5 0 0 1 3 4.6V21"/></svg>',
+    backup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v13H4z"/><path d="M7 3h10v4H7z"/><path d="M8 12h8M8 16h5"/></svg>',
+    restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
+    transfer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h13l-3-3M17 17H4l3 3"/><path d="M20 7l-3 3M4 17l3-3"/></svg>',
+    advanced: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h7M15 18h5"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="13" cy="18" r="2"/></svg>',
+  };
+  return icons[key] || icons.general;
 }
 
 async function refreshSettings() {
@@ -166,7 +178,6 @@ function renderSettings(data, systemHealth) {
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
   if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
   const profileTab = ['usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
-  const healthAttention = settingsHealthNeedsAttention(systemHealth);
   const saveBtn = document.getElementById('settings-save-btn');
   if (saveBtn) saveBtn.classList.toggle('hidden', profileTab);
   el.innerHTML = `
@@ -174,10 +185,6 @@ function renderSettings(data, systemHealth) {
       <aside class="settings-side-menu">
         <header><small>${settingsT('menu.configuration')}</small><strong>${settingsT('menu.areas')}</strong></header>
         <nav>${renderSettingsMenu(tabs)}</nav>
-        <footer class="${healthAttention ? 'attention' : ''}">
-          <span class="settings-menu-status-dot"></span>
-          <span><strong>${settingsT(healthAttention ? 'menu.healthAttention' : 'menu.healthOk')}</strong><small>${settingsT('menu.healthHint')}</small></span>
-        </footer>
       </aside>
       <section class="settings-workspace">
         <header class="settings-workspace-header">
@@ -249,14 +256,6 @@ function renderSettingsMenu(tabs) {
       <b>›</b>
     </button>`;
   }).join('');
-}
-
-function settingsHealthNeedsAttention(health) {
-  const checks = health?.checks && typeof health.checks === 'object' ? Object.values(health.checks) : [];
-  const checkFailed = checks.some((value) => value === false);
-  const migrationFailed = String(health?.migration_summary?.status || '').toLowerCase() === 'failed';
-  const jobFailed = Number(health?.job_health?.summary?.failed || 0) > 0;
-  return checkFailed || migrationFailed || jobFailed;
 }
 
 const SETTINGS_PROFILE_CONFIG = {

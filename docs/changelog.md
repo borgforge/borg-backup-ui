@@ -60,6 +60,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - SSH-Status- und Verbindungstests aktualisieren nur den Ergebnisbereich und laden die Settings-Seite nicht mehr neu.
   - Bereits geladene Einstellungen bleiben bei Aktualisierungen sichtbar; Benutzerkonten werden nachgelagert geladen.
   - Die Unraid-Kontrollseite erkennt die Versionsnummer aus Test- und Stable-Manifesten.
+  - Das Settings-Menü verwendet einheitliche SVG-Icons; Speicherziele übernehmen die Icons der Storage-Seite.
+  - Die redundante Systemstatus-Zeile unterhalb des Settings-Menüs wurde entfernt.
+  - `UI_SESSION_TIMEOUT_MINUTES` ist wieder Teil des aktiven `backup.conf`-Schemas und wird nicht mehr fälschlich als deprecated gemeldet.
 
 ## Test-channel follow-up for 2026.06.25.1831
 

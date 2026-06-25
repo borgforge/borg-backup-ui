@@ -99,6 +99,18 @@ def test_analyze_backup_conf_state_separates_active_and_disabled_legacy_keys(tmp
     assert state["protected_internal_keys"]["disabled"] == ["MIGRATION_STORAGE_PATHS_VERSION"]
 
 
+def test_active_ui_session_timeout_is_not_deprecated(tmp_path: Path):
+    cfg = _write_conf_tree(
+        tmp_path,
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\nUI_SESSION_TIMEOUT_MINUTES="30"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\nUI_SESSION_TIMEOUT_MINUTES="30"\n',
+    )
+
+    state = analyze_backup_conf_state(cfg)
+
+    assert state["deprecated_active_keys"] == []
+
+
 def test_registry_reports_schema_missing_and_storage_marker(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,

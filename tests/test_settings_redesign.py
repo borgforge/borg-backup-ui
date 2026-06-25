@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,7 +33,6 @@ def test_settings_keeps_all_nine_areas_in_grouped_side_menu() -> None:
     for group in ("system", "operations", "storage", "maintenance"):
         assert f"group: '{group}'" in script
     assert "function renderSettingsMenu(tabs)" in script
-    assert "function settingsHealthNeedsAttention(health)" in script
     assert 'class="settings-redesign-layout"' in script
 
 
@@ -106,3 +106,25 @@ def test_settings_status_checks_do_not_reload_the_page() -> None:
     assert "refreshSettings()" not in connection_test
     assert "_storageboxRenderChecks()" in key_status
     assert "_storageboxRenderChecks()" in connection_test
+
+
+def test_settings_menu_reuses_storage_icons_and_has_no_duplicate_health_footer() -> None:
+    script = _read("ui/js/pages/settings.js")
+    css = _read("ui/settings-redesign.css")
+
+    for location in ("usb", "smb", "storagebox"):
+        assert f"icon: locationIcon('{location}')" in script
+    assert "function settingsMenuIcon(key)" in script
+    assert "settings-menu-status-dot" not in script
+    assert ".settings-menu-icon svg" in css
+
+
+def test_editable_backup_conf_keys_are_part_of_runtime_schema() -> None:
+    script = _read("ui/js/pages/settings.js")
+    example = _read("runtime/config/backup.conf.example")
+    schema_keys = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", example, re.MULTILINE))
+    literal_keys = set(re.findall(r"data-key=[\"']([A-Z][A-Z0-9_]*)[\"']", script))
+    literal_keys.update(re.findall(r"f(?:text|num|mono|pwd)\('([A-Z][A-Z0-9_]*)'", script))
+
+    settings_json_keys = {"USB_PROFILES_JSON", "SMB_PROFILES_JSON", "STORAGE_PROFILES_JSON"}
+    assert literal_keys - settings_json_keys <= schema_keys

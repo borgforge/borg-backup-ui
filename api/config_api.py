@@ -92,6 +92,7 @@ _DEFAULTS: Dict[str, str] = {
     "DOCKER_STOP_WAIT": "5",
     "DOCKER_START_WAIT": "5",
     "ABORT_ON_PARITY_CHECK": "true",
+    "UI_SESSION_TIMEOUT_MINUTES": "30",
     "RESTORE_TEST_LEVEL": "2",
     "RESTORE_TEST_INTERVAL_DAYS": "30",
     "RESTORE_TEST_LOCATION": "local",
