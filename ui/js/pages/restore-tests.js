@@ -17,6 +17,7 @@ window.BBUI.restoreTestsState = window.BBUI.restoreTestsState || {
   filteredReports: [],
   logState: null,
   logExitCode: null,
+  selectedJob: 'all',
 };
 const restoreTestsState = window.BBUI.restoreTestsState;
 
@@ -35,6 +36,64 @@ function restoreTestsLocationLabel(location) {
   return key
     ? (window.BBUI?.components?.i18n?.t?.(`storage.${key}`) || normalized)
     : (location || '—');
+}
+
+function restoreTestsJobCount(count) {
+  return restoreTestsT(count === 1 ? 'jobCountOne' : 'jobCountMany', { count });
+}
+
+function restoreTestsJobIcon(job) {
+  const icon = resolveJobIcon(job);
+  const color = resolveJobIconColor(job);
+  const colorClass = color ? ` type-icon-color-${color}` : '';
+  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+}
+
+function renderRestoreTestsSidebar() {
+  const list = document.getElementById('rt-sidebar-job-list');
+  if (!list) return;
+  const query = String(document.getElementById('rt-sidebar-search')?.value || '').trim().toLowerCase();
+  const jobs = (restoreTestsState.jobs || []).filter((job) => `${job.display_name || ''} ${job.name || ''} ${job.key || ''} ${job.location || ''}`.toLowerCase().includes(query));
+  if (!jobs.length) {
+    list.innerHTML = `<div class="ui-empty rt-sidebar-empty">${escHtml(restoreTestsT('noMatchingJobs'))}</div>`;
+    return;
+  }
+  const planByKey = new Map((restoreTestsState.plan?.jobs || []).map((job) => [String(job.job_key), job]));
+  const allActive = restoreTestsState.selectedJob === 'all';
+  const allEntry = `<button class="rt-sidebar-job is-all ${allActive ? 'is-active' : ''}" data-rt-sidebar-job="all" ${allActive ? 'aria-current="page"' : ''}><span class="location-nav-glyph all">${locationIcon('all')}</span><span><strong>${escHtml(restoreTestsT('allJobs'))}</strong><small>${escHtml(restoreTestsT('overview'))}</small></span><span class="ui-badge">${jobs.length}</span></button>`;
+  const order = ['storagebox', 'usb', 'smb', 'local'];
+  const groups = order.map((location) => {
+    const locationJobs = jobs.filter((job) => String(job.location || '').toLowerCase() === location);
+    if (!locationJobs.length) return '';
+    return `<section class="rt-sidebar-group"><header>${escHtml(restoreTestsLocationLabel(location))}<span>${locationJobs.length}</span></header>${locationJobs.map((job) => {
+      const planJob = planByKey.get(String(job.key));
+      const stateClass = planJob?.is_overdue ? 'warning' : planJob?.enabled === false ? 'disabled' : 'success';
+      const active = restoreTestsState.selectedJob === String(job.key);
+      return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.key)}</strong><small>${escHtml(job.key)}</small></span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
+    }).join('')}</section>`;
+  }).join('');
+  list.innerHTML = allEntry + groups;
+  list.querySelectorAll('[data-rt-sidebar-job]').forEach((button) => button.addEventListener('click', () => {
+    restoreTestsState.selectedJob = button.dataset.rtSidebarJob || 'all';
+    renderRestoreTestsSidebar();
+    renderRestorePlan(restoreTestsState.plan);
+    renderRestoreTests(restoreTestsState.data || []);
+    updateRestoreTestsWorkspace();
+  }));
+}
+
+function updateRestoreTestsWorkspace() {
+  const selected = restoreTestsState.selectedJob;
+  const selectedJob = (restoreTestsState.jobs || []).find((job) => String(job.key) === selected);
+  const visibleCount = selected === 'all' ? (restoreTestsState.jobs || []).length : (selectedJob ? 1 : 0);
+  const title = document.getElementById('rt-workspace-title');
+  const count = document.getElementById('rt-workspace-count');
+  const kicker = document.getElementById('rt-workspace-kicker');
+  const subtitle = document.getElementById('rt-workspace-subtitle');
+  if (title) title.textContent = selectedJob?.display_name || selectedJob?.name || (selected === 'all' ? restoreTestsT('allJobs') : selected);
+  if (count) count.textContent = restoreTestsJobCount(visibleCount);
+  if (kicker) kicker.textContent = restoreTestsT(restoreTestsState.subtab === 'reports' ? 'reportsTab' : 'planTab');
+  if (subtitle) subtitle.textContent = restoreTestsT(restoreTestsState.subtab === 'reports' ? 'reportsWorkspaceSubtitle' : 'planWorkspaceSubtitle');
 }
 
 function restoreTestFailureMessage(test) {
@@ -278,6 +337,8 @@ async function refreshRestoreTests() {
     renderRestoreTestsSubtab();
     _updateRTScheduleBtn();
     await refreshRestoreTestJobOptions();
+    renderRestoreTestsSidebar();
+    updateRestoreTestsWorkspace();
   } catch (err) {
     showMsg('restore-tests-message', 'error', restoreTestsT('errorValue', { message: err.message }));
   } finally {
@@ -288,6 +349,7 @@ async function refreshRestoreTests() {
 function switchRestoreTestsSubtab(tab) {
   restoreTestsState.subtab = tab === 'reports' ? 'reports' : 'plan';
   renderRestoreTestsSubtab();
+  updateRestoreTestsWorkspace();
 }
 
 function renderRestoreTestsSubtab() {
@@ -313,16 +375,8 @@ function renderRestorePlan(plan) {
     contentEl.innerHTML = `<div class="status-message warning">${escHtml(restoreTestsT('planLoadFailed'))}</div>`;
     return;
   }
-  const s = plan.summary || {};
-  summaryEl.textContent = restoreTestsT('planSummary', {
-    total: s.total || 0,
-    scheduled: s.scheduled || 0,
-    manual: s.manual_only || 0,
-    off: s.off || 0,
-    overdue: s.overdue || 0,
-  });
   const locOrder = { local: 1, usb: 2, smb: 3, storagebox: 4, custom: 5 };
-  const sortedJobs = [...plan.jobs].sort((a, b) => {
+  const sortedJobs = [...plan.jobs].filter((job) => restoreTestsState.selectedJob === 'all' || String(job.job_key) === restoreTestsState.selectedJob).sort((a, b) => {
     const la = String(a?.location || '').toLowerCase();
     const lb = String(b?.location || '').toLowerCase();
     const oa = locOrder[la] || 99;
@@ -332,6 +386,14 @@ function renderRestorePlan(plan) {
     const nb = String(b?.display_name || b?.job_key || '').toLowerCase();
     return na.localeCompare(nb, restoreTestsLocale());
   });
+  const planSummary = {
+    total: sortedJobs.length,
+    scheduled: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'scheduled').length,
+    manual: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'manual_only').length,
+    off: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'off').length,
+    overdue: sortedJobs.filter((job) => job.is_overdue).length,
+  };
+  summaryEl.innerHTML = `<section class="rt-plan-summary"><header><div><strong>${escHtml(restoreTestsT('summaryTitle'))}</strong><small>${escHtml(restoreTestsT('summarySubtitle'))}</small></div></header><div><span><small>${escHtml(restoreTestsT('summaryTotal'))}</small><b>${planSummary.total}</b></span><span class="planned"><small>${escHtml(restoreTestsT('summaryScheduled'))}</small><b>${planSummary.scheduled}</b></span><span><small>${escHtml(restoreTestsT('summaryManual'))}</small><b>${planSummary.manual}</b></span><span><small>${escHtml(restoreTestsT('summaryOff'))}</small><b>${planSummary.off}</b></span><span class="attention"><small>${escHtml(restoreTestsT('summaryOverdue'))}</small><b>${planSummary.overdue}</b></span></div></section>`;
   const rows = sortedJobs.map((j) => {
     const p = j.policy || {};
     const mode = String(p.mode || 'off');
@@ -490,7 +552,9 @@ async function refreshRestoreTestJobOptions() {
     const res = await fetch('/api/jobs');
     if (!res.ok) return;
     const data = await res.json();
-    restoreTestsState.jobs = (data.jobs || []).filter(j => j.enabled !== false);
+    restoreTestsState.jobs = (data.jobs || []).filter(j => !j.is_utility);
+    renderRestoreTestsSidebar();
+    updateRestoreTestsWorkspace();
     refreshRestoreTestJobsForSelection();
   } catch (_) {}
 }
@@ -538,8 +602,10 @@ function renderRestoreTests(tests) {
   summaryEl.innerHTML = `
     <div class="stat-tile total"><div><div class="stat-value">${filtered.length}</div><div class="stat-label">${escHtml(restoreTestsT('reports'))}</div></div></div>
     <div class="stat-tile success"><div><div class="stat-value">${ok}</div><div class="stat-label">${escHtml(restoreTestsT('verified'))}</div></div></div>
+    <div class="stat-tile error"><div><div class="stat-value">${failed}</div><div class="stat-label">${escHtml(restoreTestsT('failed'))}</div></div></div>
+    <div class="stat-tile neutral"><div><div class="stat-value">${unavail}</div><div class="stat-label">${escHtml(restoreTestsT('unavailable'))}</div></div></div>
     <div class="stat-tile warning"><div><div class="stat-value">${stale}</div><div class="stat-label">${escHtml(restoreTestsT('overdue'))}</div></div></div>
-    <div class="stat-tile error"><div><div class="stat-value">${failed + unavail}</div><div class="stat-label">${escHtml(restoreTestsT('problematic'))}</div></div></div>`;
+  `;
   summaryEl.classList.remove('hidden');
 
   if (!filtered.length) {
@@ -580,6 +646,7 @@ function _getFilteredRTReports(tests) {
   const rangeDays = Number(range || 0);
   const filtered = [...tests].filter((t) => {
     const key = String(t.job_key || t.type || '').toLowerCase();
+    if (restoreTestsState.selectedJob !== 'all' && key !== String(restoreTestsState.selectedJob).toLowerCase()) return false;
     if (jobNeedle && !key.includes(jobNeedle)) return false;
     if (location !== 'all' && String(t.location || '').toLowerCase() !== location) return false;
     const stale = t.test_result === 'success' && isStaleDate(t.test_date);
@@ -695,6 +762,14 @@ function renderRTReportRow(t, idx) {
   const reportId = t.report_id || t.test_id;
   const archive = t.tested_archive || t.archive_name;
   const location = restoreTestsLocationLabel(t.location || '');
+  const steps = Array.isArray(t.steps) ? t.steps : [];
+  const passedSteps = steps.filter((step) => String(step.status || '').toLowerCase() === 'passed').length;
+  const successful = t.test_result === 'success';
+  const allStepsPassed = steps.length > 0 && passedSteps === steps.length;
+  const validUntil = t.valid_until || t.valid_until_date;
+  const archiveStats = t.archive_stats || {};
+  const testedFiles = t.tested_files_count ?? t.tested_files;
+  const testedFolders = t.tested_folders_count;
   return `
     <tr id="${rowId}" class="history-row history-restore-row" data-rt-action="toggle-detail" data-row-id="${rowId}" data-detail-id="${detailId}">
       <td><svg class="history-chevron" id="rtchev-${idx}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></td>
@@ -710,42 +785,51 @@ function renderRTReportRow(t, idx) {
     <tr id="${detailId}" class="history-detail-row" style="display:none">
       <td colspan="9">
         <div class="rt-report-card">
-          <div class="rt-report-card-head">
+          <div class="rt-report-card-head rt-report-hero">
             <div>
               <div class="rt-report-kicker">${escHtml(restoreTestsT('report'))}</div>
               <div class="rt-report-title">${escHtml(t.job_key || t.type || 'Restore Test')}</div>
               <div class="rt-report-subtitle">${escHtml(archive || restoreTestsT('noArchive'))}</div>
             </div>
-            <div class="rt-report-actions">
-              <span class="history-status-badge ${status.className}">${escHtml(status.className === 'success' ? restoreTestsT('successful') : status.label)}</span>
+            <div class="rt-report-result ${successful ? 'success' : 'error'}">
+              <span class="rt-report-result-mark">${successful ? '&#10003;' : '!'}</span>
+              <span><strong>${escHtml(restoreTestsT(successful ? 'restorabilityVerified' : 'verificationFailed'))}</strong>${validUntil ? `<small>${escHtml(restoreTestsT('proofValidUntil', { date: validUntil }))}</small>` : ''}</span>
             </div>
           </div>
           ${detailError ? `<div class="rt-report-alert">${escHtml(restoreTestsT('errorValue', { message: detailError }))}</div>` : ''}
-          <div class="rt-report-meta-grid">
-            ${rtReportMetaItem(restoreTestsT('reportId'), reportId, true)}
-            ${rtReportMetaItem(restoreTestsT('site'), location)}
-            ${rtReportMetaItem(restoreTestsT('level'), t.test_level != null ? `L${t.test_level}` : null)}
-            ${rtReportMetaItem(restoreTestsT('start'), t.start_ts || t.started_at)}
-            ${rtReportMetaItem(restoreTestsT('end'), t.end_ts || t.finished_at || t.test_date)}
-            ${rtReportMetaItem(restoreTestsT('duration'), t.duration_formatted || '—')}
-            ${rtReportMetaItem(restoreTestsT('originalSize'), stats.original || '—')}
-            ${rtReportMetaItem(restoreTestsT('coverage'), `${covTxt}${t.coverage_basis ? ` (${t.coverage_basis})` : ''}`)}
-            ${rtReportMetaItem(restoreTestsT('overallStatus'), status.label)}
-            ${rtReportMetaItem(restoreTestsT('validUntil'), t.valid_until || t.valid_until_date)}
-            ${rtReportMetaItem(restoreTestsT('errorCode'), t.failure_code)}
+          <div class="rt-report-verdict">
+            <span><strong>${escHtml(restoreTestsT('overallResult', { status: status.label }))}</strong><small>${escHtml(restoreTestsT(allStepsPassed ? 'allStepsPassed' : 'stepsNeedAttention', { count: steps.length }))}</small></span>
+            <span class="history-status-badge ${status.className}">${escHtml(covTxt)} ${escHtml(restoreTestsT('coverage'))}</span>
           </div>
-          ${renderRTStepsTable(t.steps || [], t)}
+          <div class="rt-report-sections">
+            ${rtReportSection(restoreTestsT('execution'), [
+              [restoreTestsT('reportId'), reportId, true],
+              [restoreTestsT('site'), location],
+              [restoreTestsT('level'), t.test_level != null ? `L${t.test_level}` : null],
+              [restoreTestsT('start'), t.start_ts || t.started_at],
+              [restoreTestsT('end'), t.end_ts || t.finished_at || t.test_date],
+              [restoreTestsT('duration'), t.duration_formatted || '—'],
+            ])}
+            ${rtReportSection(restoreTestsT('testScope'), [
+              [restoreTestsT('originalSize'), stats.original || '—'],
+              [restoreTestsT('archiveFiles'), archiveStats.files_count],
+              [restoreTestsT('testedFiles'), testedFiles],
+              [restoreTestsT('testedFolders'), testedFolders],
+              [restoreTestsT('coverage'), `${covTxt}${t.coverage_basis ? ` (${t.coverage_basis})` : ''}`],
+              [restoreTestsT('errorCode'), t.failure_code || '—'],
+            ])}
+          </div>
+          ${renderRTStepsTable(steps, t)}
+          ${renderRTTechnicalEvidence(t, steps)}
         </div>
       </td>
     </tr>`;
 }
 
-function rtReportMetaItem(label, value, mono = false) {
-  if (value == null || value === '') return '';
-  return `<div class="rt-report-meta-item">
-    <div class="rt-report-meta-label">${escHtml(label)}</div>
-    <div class="rt-report-meta-value ${mono ? 'rt-report-mono' : ''}">${escHtml(String(value))}</div>
-  </div>`;
+function rtReportSection(title, items) {
+  const rows = (items || []).filter(([, value]) => value != null && value !== '').map(([label, value, mono]) => `
+    <div><dt>${escHtml(label)}</dt><dd class="${mono ? 'rt-report-mono' : ''}">${escHtml(String(value))}</dd></div>`).join('');
+  return `<section><header>${escHtml(title)}</header><dl>${rows}</dl></section>`;
 }
 
 function renderRTStepsTable(steps, report = {}) {
@@ -762,23 +846,41 @@ function renderRTStepsTable(steps, report = {}) {
       <div class="rt-step-main">
         <div class="rt-step-head">
           <div class="rt-step-title">${escHtml(rtStepLabel(String(s.step_id || '')))}</div>
-          <span class="rt-step-status ${statusClass}">${escHtml(statusText || '—')}</span>
         </div>
         <div class="rt-step-message">${escHtml(restoreTestStepMessage(s))}</div>
-        <div class="rt-step-facts">
-          ${s.timestamp ? `<span>${escHtml(restoreTestsT('timestampValue', { value: s.timestamp }))}</span>` : ''}
-          ${s.error_code ? `<span>${escHtml(restoreTestsT('errorCodeValue', { value: s.error_code }))}</span>` : ''}
-        </div>
         <div class="rt-step-command">${escHtml(s.command || '—')}</div>
-        ${renderRTStepDetails(s, report)}
       </div>
+      <span class="rt-step-status ${statusClass}">${escHtml(statusText || '—')}</span>
       <div class="rt-step-duration">${escHtml(dur)}</div>
     </div>`;
   }).join('');
+  const passed = rows ? steps.filter((step) => String(step.status || '').toLowerCase() === 'passed').length : 0;
   return `<div class="rt-steps-panel">
-    <div class="rt-steps-title">${escHtml(restoreTestsT('steps'))}</div>
+    <div class="rt-steps-heading"><span><strong>${escHtml(restoreTestsT('steps'))}</strong><small>${escHtml(restoreTestsT('stepsSubtitle'))}</small></span><span class="history-status-badge ${passed === steps.length ? 'success' : 'warning'}">${escHtml(restoreTestsT('stepsPassedCount', { passed, total: steps.length }))}</span></div>
     <div class="rt-steps-list">${list}</div>
   </div>`;
+}
+
+function renderRTTechnicalEvidence(report, steps) {
+  const stats = report.archive_stats || {};
+  const fmt = report.archive_stats_formatted || {};
+  const l3 = report.level3_details || {};
+  const summary = rtStepDetailsBlock([
+    [restoreTestsT('repository'), report.repository, true],
+    [restoreTestsT('compressedSize'), fmt.compressed],
+    [restoreTestsT('deduplicatedSize'), fmt.deduplicated],
+    [restoreTestsT('archiveFiles'), stats.files_count],
+    [restoreTestsT('sampleSize'), l3.sample_size],
+    [restoreTestsT('reportSchema'), report.report_schema_version],
+    [restoreTestsT('exitCode'), report.test_exit_code],
+  ]);
+  const stepEvidence = (steps || []).map((step) => {
+    const details = renderRTStepDetails(step, report);
+    if (!details && !step.timestamp && !step.error_code) return '';
+    return `<details class="rt-technical-step"><summary>${escHtml(restoreTestsT('stepEvidence', { step: rtStepLabel(String(step.step_id || '')) }))}</summary><div>${step.timestamp ? `<div class="rt-step-facts"><span>${escHtml(restoreTestsT('timestampValue', { value: step.timestamp }))}</span>${step.error_code ? `<span>${escHtml(restoreTestsT('errorCodeValue', { value: step.error_code }))}</span>` : ''}</div>` : ''}${details}</div></details>`;
+  }).join('');
+  if (!summary && !stepEvidence) return '';
+  return `<details class="rt-technical-evidence"><summary>${escHtml(restoreTestsT('technicalEvidence'))}</summary><div>${summary}${stepEvidence}</div></details>`;
 }
 
 function rtStepLabel(stepId) {
@@ -916,6 +1018,8 @@ window.addEventListener?.('bbui:language-changed', () => {
   renderRTReportFilterOptions(restoreTestsState.data || []);
   renderRestoreTests(restoreTestsState.data || []);
   renderRestoreTestsSubtab();
+  renderRestoreTestsSidebar();
+  updateRestoreTestsWorkspace();
   refreshRestoreTestJobsForSelection();
   if (restoreTestsState.logState) {
     setRTLogStatus(restoreTestsState.logState, restoreTestsState.logExitCode);

@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/ui/design-system.css">
   <link rel="stylesheet" href="/ui/dashboard-jobs.css">
   <link rel="stylesheet" href="/ui/history-reports.css">
+  <link rel="stylesheet" href="/ui/restore-tests-redesign.css">
 </head>
 <body>
 
@@ -641,7 +642,7 @@
 
     <!-- Restore Tests Page -->
     <div id="page-restore-tests" class="page">
-      <div class="page-header">
+      <div class="page-header ui-page-header">
         <div>
           <h1 data-i18n="restoreTests.title">Restore Tests</h1>
           <p class="page-subtitle" data-i18n="restoreTests.subtitle">Verifizierung der Wiederherstellbarkeit</p>
@@ -667,6 +668,14 @@
         <button type="button" class="segmented-btn active" id="rt-subtab-plan-btn" data-i18n="restoreTests.planTab">Planung &amp; Policy</button>
         <button type="button" class="segmented-btn" id="rt-subtab-reports-btn" data-i18n="restoreTests.reportsTab">Prüfberichte</button>
       </div>
+      <div class="rt-redesign-layout ui-context-layout">
+        <aside class="rt-job-sidebar ui-context-sidebar" data-i18n-aria-label="restoreTests.backupJobs" aria-label="Backup jobs">
+          <div class="ui-context-sidebar__header"><small data-i18n="restoreTests.selection">Auswahl</small><strong data-i18n="restoreTests.backupJobs">Backup-Jobs</strong></div>
+          <label class="rt-job-search"><span data-i18n="restoreTests.search">Suche</span><input id="rt-sidebar-search" type="search" data-i18n-placeholder="restoreTests.searchPlaceholder" placeholder="Job suchen"></label>
+          <nav id="rt-sidebar-job-list" class="rt-sidebar-job-list"></nav>
+        </aside>
+        <section class="rt-redesign-workspace ui-workspace">
+          <header class="ui-workspace-header"><div class="ui-workspace-header__title"><small id="rt-workspace-kicker" data-i18n="restoreTests.planTab">Planung &amp; Policy</small><h2 id="rt-workspace-title" data-i18n="restoreTests.allJobs">Alle Jobs</h2><span id="rt-workspace-subtitle" class="ui-workspace-header__subtitle" data-i18n="restoreTests.planWorkspaceSubtitle">Intervalle, Testlevel und Fälligkeit steuern</span></div><span id="rt-workspace-count" class="ui-badge"></span></header>
       <div class="restore-tests-hint" style="margin-bottom:12px">
         <div class="restore-tests-hint-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
@@ -759,6 +768,8 @@
           </div>
         </div>
         <pre id="rt-log-output" class="log-output"></pre>
+      </div>
+        </section>
       </div>
     </div>
 

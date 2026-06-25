@@ -150,6 +150,7 @@
     document.getElementById('rt-run-btn')?.addEventListener('click', runRestoreTestNow);
     document.getElementById('rt-subtab-plan-btn')?.addEventListener('click', () => switchRestoreTestsSubtab('plan'));
     document.getElementById('rt-subtab-reports-btn')?.addEventListener('click', () => switchRestoreTestsSubtab('reports'));
+    document.getElementById('rt-sidebar-search')?.addEventListener('input', renderRestoreTestsSidebar);
     document.getElementById('rt-report-filter-job')?.addEventListener('input', onRTReportFilterChange);
     document.getElementById('rt-report-filter-location')?.addEventListener('change', onRTReportFilterChange);
     document.getElementById('rt-report-filter-status')?.addEventListener('change', onRTReportFilterChange);
