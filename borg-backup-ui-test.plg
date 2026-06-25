@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.0113">
+<!ENTITY version   "2026.06.26.0135">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,9 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.0113###
-- Dashboard follow-up (#33):
-  - Label and localize last-run age and run duration.
+###2026.06.26.0135###
+- Dashboard layout follow-up (#33):
+  - Balance run, restore, and storage columns and keep detail rows aligned.
+  - Use the Storagebox product name consistently in English.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -42,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>9063ea27b648fe710afcd0afe5a2ce2e</MD5>
+<MD5>ab62518bcaedb828f1fc78d14e31b314</MD5>
 </FILE>
 
 <!--
