@@ -1,0 +1,317 @@
+/* Storage, Help, and shared surface redesign (#34). */
+
+#page-storage,
+#page-hilfe {
+  max-width: 1600px;
+}
+
+/* Storage Variant A */
+.storage-location-sidebar .ui-context-nav__item {
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+}
+
+.storage-location-entry .location-nav-glyph.all {
+  color: var(--ui-color-accent);
+}
+
+.storage-repository-panel {
+  min-width: 0;
+}
+
+.storage-repository-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  padding: var(--ui-space-3) var(--ui-space-4);
+  border-bottom: 1px solid var(--ui-color-border);
+  background: var(--ui-color-surface-subtle);
+}
+
+.storage-repository-tools input {
+  width: min(22rem, 45%);
+}
+
+.storage-table-wrap {
+  overflow-x: auto;
+}
+
+.storage-repository-table {
+  width: 100%;
+  min-width: 800px;
+  table-layout: fixed;
+}
+
+.storage-repository-table th:nth-child(1) { width: 20%; }
+.storage-repository-table th:nth-child(2) { width: 12%; }
+.storage-repository-table th:nth-child(3) { width: 32%; }
+.storage-repository-table th:nth-child(4) { width: 14%; }
+.storage-repository-table th:nth-child(5) { width: 22%; }
+
+.storage-repository-main {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-3);
+  min-width: 0;
+}
+
+.storage-repository-main > span:last-child {
+  min-width: 0;
+}
+
+.storage-repository-main strong,
+.storage-repository-main small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-repository-main small {
+  margin-top: 2px;
+  color: var(--ui-color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-xs);
+}
+
+.storage-repository-path {
+  display: block;
+  overflow: hidden;
+  color: var(--ui-color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+.storage-row-actions .test-result {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-empty {
+  padding: var(--ui-space-6);
+  color: var(--ui-color-text-muted);
+  text-align: center;
+}
+
+.storage-smb-panel .ui-panel__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+}
+
+.storage-smb-panel .ui-panel__header span {
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-sm);
+}
+
+.storage-smb-profile-list {
+  display: grid;
+}
+
+.storage-smb-profile {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto auto minmax(17rem, auto);
+  align-items: center;
+  gap: var(--ui-space-3);
+  min-width: 0;
+  padding: var(--ui-space-3) var(--ui-space-4);
+  border-bottom: 1px solid var(--ui-color-border);
+}
+
+.storage-smb-profile:last-child {
+  border-bottom: 0;
+}
+
+.storage-smb-profile strong,
+.storage-smb-profile small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-smb-profile small,
+.storage-smb-repo-count {
+  margin-top: 2px;
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-xs);
+}
+
+#storage-check-card {
+  margin-top: 0;
+  border-color: var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface);
+}
+
+#storage-check-card .check-card-header {
+  background: var(--ui-color-surface-subtle);
+}
+
+#storage-check-card .check-log-output {
+  width: 100%;
+  max-width: 100%;
+  min-height: 12rem;
+  overflow: auto;
+}
+
+/* Help */
+.help-redesign-layout {
+  align-items: start;
+}
+
+.help-toc-sidebar {
+  max-height: calc(100vh - 3rem);
+}
+
+#help-toc {
+  max-height: calc(100vh - 9rem);
+  overflow-y: auto;
+}
+
+.help-toc-entry {
+  display: block;
+  min-height: auto;
+  text-decoration: none;
+}
+
+.help-toc-entry.is-subsection {
+  padding-left: var(--ui-space-5);
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+}
+
+.help-doc {
+  min-width: 0;
+  padding: var(--ui-space-5);
+  border-color: var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface);
+  scroll-margin-top: var(--ui-space-4);
+}
+
+.help-doc h2,
+.help-doc h3 {
+  scroll-margin-top: var(--ui-space-4);
+}
+
+.help-doc h2:first-child {
+  margin-top: 0;
+}
+
+/* Shared dialogs and feedback surfaces */
+.modal-backdrop {
+  padding: var(--ui-space-4);
+  overflow-y: auto;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - (2 * var(--ui-space-4)));
+  border-color: var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-color-surface);
+}
+
+.modal-header,
+.modal-footer {
+  flex: 0 0 auto;
+  background: var(--ui-color-surface-subtle);
+}
+
+.modal-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.modal-close {
+  border-radius: var(--ui-radius-sm);
+}
+
+.modal-close:focus-visible,
+.nav-item:focus-visible,
+.mobile-nav-toggle:focus-visible {
+  outline: 2px solid var(--ui-color-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1023px) {
+  .storage-location-sidebar .ui-context-nav__item {
+    min-width: 13rem;
+  }
+
+  .help-toc-sidebar {
+    max-height: none;
+  }
+
+  #help-toc {
+    max-height: none;
+  }
+
+  .help-toc-entry {
+    min-width: 12rem;
+  }
+
+  .help-toc-entry.is-subsection {
+    padding-left: var(--ui-space-3);
+  }
+}
+
+@media (max-width: 767px) {
+  .storage-repository-tools,
+  .storage-smb-panel .ui-panel__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .storage-repository-tools input {
+    width: 100%;
+  }
+
+  .storage-smb-profile {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .storage-smb-profile .storage-row-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .check-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .check-row > * {
+    width: 100%;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal,
+  .modal-wizard,
+  .modal-log {
+    width: 100%;
+    max-width: 100%;
+    max-height: 96vh;
+    border-radius: var(--ui-radius-lg) var(--ui-radius-lg) 0 0;
+  }
+}

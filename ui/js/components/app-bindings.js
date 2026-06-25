@@ -116,8 +116,11 @@
     document.getElementById('jobs-log-scroll-end-btn')?.addEventListener('click', scrollLogToBottom);
     document.getElementById('history-refresh-btn')?.addEventListener('click', refreshHistory);
     document.getElementById('history-content')?.addEventListener('click', onHistoryContentClick);
+    document.getElementById('storage-refresh-btn')?.addEventListener('click', refreshStorage);
+    document.getElementById('storage-location-list')?.addEventListener('click', onStorageLocationClick);
     document.getElementById('check-level-select')?.addEventListener('change', checkUpdateModeHint);
     document.getElementById('storage-content')?.addEventListener('click', onStorageContentClick);
+    document.getElementById('storage-content')?.addEventListener('input', onStorageSearchInput);
     document.getElementById('check-run-btn')?.addEventListener('click', checkRun);
     document.getElementById('check-clear-log-btn')?.addEventListener('click', checkClearLog);
     document.getElementById('check-close-log-btn')?.addEventListener('click', checkCloseLog);

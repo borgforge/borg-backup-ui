@@ -16,6 +16,7 @@ def test_all_location_sidebars_use_the_shared_fixed_order() -> None:
         "ui/js/pages/reports.js": "const order",
         "ui/js/pages/restore-tests.js": "const order",
         "ui/js/pages/restore.js": "const order",
+        "ui/js/pages/storage.js": "STORAGE_LOCATION_ORDER",
     }
     for path, marker in sources.items():
         source = _read(path)

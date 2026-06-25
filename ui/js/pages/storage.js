@@ -3,7 +3,13 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 window.BBUI = window.BBUI || {};
-window.BBUI.storageState = window.BBUI.storageState || { loaded: false, data: null, smbActionResults: {} };
+window.BBUI.storageState = window.BBUI.storageState || {
+  loaded: false,
+  data: null,
+  smbActionResults: {},
+  selectedLocation: 'all',
+  search: '',
+};
 const storageState = window.BBUI.storageState;
 
 function storageT(key, params = {}) {
@@ -12,6 +18,74 @@ function storageT(key, params = {}) {
 
 function storageCount(count, singularKey, pluralKey) {
   return storageT(count === 1 ? singularKey : pluralKey, { count });
+}
+
+const STORAGE_LOCATION_ORDER = ['local', 'usb', 'smb', 'storagebox'];
+
+function storageLocationIcon(key) {
+  const icons = {
+    all: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>`,
+    local: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="2" y="2" width="20" height="8" rx="2"/>
+      <rect x="2" y="14" width="20" height="8" rx="2"/>
+      <line x1="6" y1="6" x2="6.01" y2="6" stroke-width="3"/>
+      <line x1="6" y1="18" x2="6.01" y2="18" stroke-width="3"/>
+    </svg>`,
+    usb: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M17 8h1a4 4 0 0 1 0 8h-1"/>
+      <path d="M3 8h11v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z"/>
+      <line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/>
+      <line x1="8" y1="4" x2="8" y2="10"/>
+    </svg>`,
+    smb: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 7h18"/><path d="M3 12h18"/><path d="M3 17h18"/>
+    </svg>`,
+    storagebox: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+    </svg>`,
+  };
+  return icons[key] || icons.all;
+}
+
+function storageLocationLabel(key) {
+  return {
+    all: storageT('storage.allLocations'),
+    local: storageT('storage.local'),
+    usb: storageT('storage.usbDrive'),
+    smb: storageT('storage.smb'),
+    storagebox: storageT('storage.storagebox'),
+  }[key] || key;
+}
+
+function storageTypeLabel(repo) {
+  return {
+    flash: 'FLASH',
+    appdata: 'APPDATA',
+    photos: 'PHOTOS',
+    VMs: 'VMs',
+    vms: 'VMs',
+    sonstiges: storageT('storage.typeOther'),
+  }[repo.backup_type] || String(repo.backup_type || '').toUpperCase();
+}
+
+function storageRepositories(data) {
+  const groups = data?.groups || {};
+  return STORAGE_LOCATION_ORDER.flatMap((location) =>
+    (Array.isArray(groups[location]) ? groups[location] : []).map((repo) => ({ ...repo, location }))
+  );
+}
+
+function storageVisibleRepositories(data) {
+  const location = storageState.selectedLocation || 'all';
+  const query = String(storageState.search || '').trim().toLocaleLowerCase();
+  return storageRepositories(data).filter((repo) => {
+    if (location !== 'all' && repo.location !== location) return false;
+    if (!query) return true;
+    return [repo.backup_type, repo.conf_key, repo.path_display, storageLocationLabel(repo.location)]
+      .some((value) => String(value || '').toLocaleLowerCase().includes(query));
+  });
 }
 
 async function refreshStorage() {
@@ -32,99 +106,142 @@ function renderStorage(data) {
   const el = document.getElementById('storage-content');
   if (!el) return;
 
-  const groups = data.groups || {};
+  renderStorageLocationSidebar(data);
+  const repos = storageVisibleRepositories(data);
+  const title = storageLocationLabel(storageState.selectedLocation || 'all');
+  const header = document.getElementById('storage-workspace-header');
+  if (header) {
+    header.innerHTML = `
+      <div class="ui-workspace-header__title">
+        <small>${storageT('storage.overview')}</small>
+        <h2>${escHtml(title)}</h2>
+        <span class="ui-workspace-header__subtitle">${storageT('storage.overviewHint')}</span>
+      </div>
+      <span class="badge neutral">${storageCount(repos.length, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</span>`;
+  }
 
-  const sections = [
-    {
-      key: 'local',
-      cssClass: 'local',
-      title: storageT('storage.local'),
-      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="2" y="2" width="20" height="8" rx="2"/>
-        <rect x="2" y="14" width="20" height="8" rx="2"/>
-        <line x1="6" y1="6" x2="6.01" y2="6" stroke-width="3"/>
-        <line x1="6" y1="18" x2="6.01" y2="18" stroke-width="3"/>
-      </svg>`,
-      meta: groups.local?.[0]?.path_display?.replace(/\/borg-backup-.*/, '') || '',
-    },
-    {
-      key: 'usb',
-      cssClass: 'usb',
-      title: storageT('storage.usbDrive'),
-      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M17 8h1a4 4 0 0 1 0 8h-1"/>
-        <path d="M3 8h11v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z"/>
-        <line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/>
-        <line x1="8" y1="4" x2="8" y2="10"/>
-      </svg>`,
-      meta: data.usb_mount || '',
-    },
-    {
-      key: 'smb',
-      cssClass: 'smb',
-      title: storageT('storage.smb'),
-      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 7h18"/><path d="M3 12h18"/><path d="M3 17h18"/>
-      </svg>`,
-      meta: storageCount(
-        (data.smb_profiles || []).length,
-        'storage.profileCountOne',
-        'storage.profileCountMany',
-      ),
-    },
-    {
-      key: 'storagebox',
-      cssClass: 'storagebox',
-      title: storageT('storage.storagebox'),
-      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-      </svg>`,
-      meta: data.storagebox_host
-        ? `ssh ${data.storagebox_host}:${data.storagebox_port}`
-        : storageT('storage.notConfigured'),
-    },
-  ];
+  const rows = repos.length
+    ? repos.map((repo) => renderStorageRepositoryRow(repo, data.smb_profiles || [])).join('')
+    : `<tr><td colspan="5"><div class="storage-empty">${storageT('storage.noMatchingRepositories')}</div></td></tr>`;
 
-  el.innerHTML = `<div class="storage-grid">
-    ${sections.map(s => renderStorageCard(s, groups[s.key] || [])).join('')}
-  </div>`;
+  const showSmbProfiles = ['all', 'smb'].includes(storageState.selectedLocation || 'all');
+  el.innerHTML = `
+    <section class="storage-repository-panel ui-panel">
+      <div class="storage-repository-tools">
+        <strong>${storageT('storage.repositories')}</strong>
+        <input id="storage-repo-search" class="form-input" type="search"
+          value="${escHtml(storageState.search || '')}"
+          placeholder="${storageT('storage.searchPlaceholder')}"
+          aria-label="${storageT('storage.searchPlaceholder')}">
+      </div>
+      <div class="storage-table-wrap ui-table-wrap">
+        <table class="storage-repository-table ui-table">
+          <thead><tr>
+            <th>${storageT('storage.repository')}</th>
+            <th>${storageT('storage.location')}</th>
+            <th>${storageT('storage.path')}</th>
+            <th>${storageT('storage.status')}</th>
+            <th>${storageT('storage.actions')}</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </section>
+    ${showSmbProfiles ? renderStorageSmbProfiles(data.smb_profiles || [], data.groups?.smb || []) : ''}`;
 }
 
-function renderRepoListItem(repo) {
+function storageLocationMeta(key, data) {
+  if (key === 'local') {
+    return data.groups?.local?.[0]?.path_display?.replace(/\/borg-backup-.*/, '') || storageT('storage.local');
+  }
+  if (key === 'usb') return data.usb_mount || storageT('storage.notConfigured');
+  if (key === 'smb') {
+    const profiles = data.smb_profiles || [];
+    const mounted = profiles.filter((profile) => profile.is_mounted).length;
+    return storageT('storage.smbProfileMeta', { profiles: profiles.length, mounted });
+  }
+  if (key === 'storagebox') {
+    return data.storagebox_host
+      ? `ssh ${data.storagebox_host}:${data.storagebox_port}`
+      : storageT('storage.notConfigured');
+  }
+  return storageT('storage.locationsHint');
+}
+
+function renderStorageLocationSidebar(data) {
+  const nav = document.getElementById('storage-location-list');
+  if (!nav) return;
+  const groups = data.groups || {};
+  const total = STORAGE_LOCATION_ORDER.reduce((sum, key) => sum + (groups[key] || []).length, 0);
+  nav.innerHTML = ['all', ...STORAGE_LOCATION_ORDER].map((key) => {
+    const count = key === 'all' ? total : (groups[key] || []).length;
+    const active = (storageState.selectedLocation || 'all') === key;
+    return `<button class="ui-context-nav__item storage-location-entry ${active ? 'is-active' : ''}"
+      type="button" data-storage-location="${key}" ${active ? 'aria-current="page"' : ''}>
+      <span class="location-nav-glyph ${key}">${storageLocationIcon(key)}</span>
+      <span class="location-nav-copy">
+        <strong>${escHtml(storageLocationLabel(key))}</strong>
+        <small title="${escHtml(storageLocationMeta(key, data))}">${escHtml(storageLocationMeta(key, data))}</small>
+      </span>
+      <span class="badge neutral location-nav-count">${count}</span>
+    </button>`;
+  }).join('');
+}
+
+function onStorageLocationClick(event) {
+  const button = event.target.closest('[data-storage-location]');
+  if (!button || !storageState.data) return;
+  storageState.selectedLocation = button.dataset.storageLocation || 'all';
+  storageState.search = '';
+  renderStorage(storageState.data);
+}
+
+function onStorageSearchInput(event) {
+  if (event.target.id !== 'storage-repo-search' || !storageState.data) return;
+  storageState.search = event.target.value || '';
+  renderStorage(storageState.data);
+  const input = document.getElementById('storage-repo-search');
+  input?.focus();
+  input?.setSelectionRange(storageState.search.length, storageState.search.length);
+}
+
+function renderStorageRepositoryRow(repo, profiles) {
   const resultId = `repo-test-${repo.conf_key}`;
   const detailsBtnId = `repo-test-details-${repo.conf_key}`;
+  const profile = repo.location === 'smb' ? _findSmbProfileForRepo(repo, profiles) : null;
+  const unavailable = repo.location === 'smb' && profile && !profile.is_mounted;
+  const statusText = unavailable ? storageT('storage.notMounted') : storageT('storage.configured');
+  const statusClass = unavailable ? 'warning' : 'success';
 
-  const typeLabel = {
-    flash: 'FLASH', appdata: 'APPDATA', photos: 'PHOTOS',
-    VMs: 'VMs', sonstiges: storageT('storage.typeOther'),
-  }[repo.backup_type] || repo.backup_type.toUpperCase();
-
-  const displayPath = repo.path_display.length > 55
-    ? '…' + repo.path_display.slice(-52)
-    : repo.path_display;
-
-  return `
-    <li class="repo-list-item">
-      <span class="type-mini-badge">${typeLabel}</span>
-
-      <div class="repo-path-display">
-        <span class="repo-path-text"
-          title="${escHtml(repo.path_display)}">${escHtml(displayPath)}</span>
+  return `<tr>
+    <td>
+      <div class="storage-repository-main">
+        <span class="location-nav-glyph ${repo.location}">${storageLocationIcon(repo.location)}</span>
+        <span>
+          <strong>${escHtml(storageTypeLabel(repo))}</strong>
+          <small>${escHtml(repo.conf_key || '')}</small>
+        </span>
       </div>
-
-      <div class="repo-item-actions">
+    </td>
+    <td><span class="badge info">${escHtml(storageLocationLabel(repo.location))}</span></td>
+    <td><span class="storage-repository-path" title="${escHtml(repo.path_display)}">${escHtml(repo.path_display)}</span></td>
+    <td><span class="badge ${statusClass}">${escHtml(statusText)}</span></td>
+    <td>
+      <div class="storage-row-actions">
         <button class="btn btn-secondary btn-sm"
           data-storage-action="test-repo"
           data-repo-path="${escHtml(repo.path_display)}"
           data-repo-conf-key="${escHtml(repo.conf_key || '')}"
-          data-result-id="${resultId}">${storageT('storage.test')}</button>
+          data-result-id="${resultId}"
+          ${unavailable ? `disabled title="${storageT('storage.mountFirst')}"` : ''}>${storageT('storage.test')}</button>
         <button class="btn btn-secondary btn-sm hidden"
           id="${detailsBtnId}"
           data-storage-action="show-test-details"
           data-result-id="${resultId}">${storageT('storage.details')}</button>
         <span class="test-result" id="${resultId}"></span>
       </div>
-    </li>`;
+    </td>
+  </tr>`;
 }
 
 function onStorageContentClick(event) {
@@ -144,34 +261,6 @@ function onStorageContentClick(event) {
   }
 }
 
-function renderStorageCard(section, repos) {
-  if (section.key === 'smb') {
-    return renderSmbCard(section, repos);
-  }
-  const repoCountBadge = repos.length > 0
-    ? `<span class="storage-count-badge">${storageCount(repos.length, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</span>`
-    : `<span class="storage-count-badge">–</span>`;
-
-  const body = repos.length === 0
-    ? `<div class="storage-empty">${storageT('storage.noRepositories')}</div>`
-    : `<ul class="repo-list">${repos.map(r => renderRepoListItem(r)).join('')}</ul>`;
-
-  return `
-    <div class="storage-card ${section.cssClass}">
-      <div class="storage-card-header">
-        <div class="storage-card-title">
-          <div class="storage-loc-icon">${section.icon}</div>
-          <div>
-            <div class="storage-card-name">${section.title}</div>
-            ${section.meta ? `<div class="storage-card-meta" title="${escHtml(section.meta)}">${escHtml(section.meta)}</div>` : ''}
-          </div>
-        </div>
-        ${repoCountBadge}
-      </div>
-      ${body}
-    </div>`;
-}
-
 function _normPath(v) {
   return String(v || '').trim().replace(/\/+$/, '');
 }
@@ -188,31 +277,19 @@ function _findSmbProfileForRepo(repo, profiles) {
   return null;
 }
 
-function renderSmbCard(section, smbRepos) {
-  const profiles = Array.isArray(storageState.data?.smb_profiles) ? storageState.data.smb_profiles : [];
-  const repoRows = Array.isArray(smbRepos) ? smbRepos : [];
-  const grouped = new Map();
-  profiles.forEach((p) => grouped.set(String(p.key || ''), { profile: p, repos: [] }));
-  const unassigned = [];
-  repoRows.forEach((r) => {
-    const hit = _findSmbProfileForRepo(r, profiles);
-    if (!hit) {
-      unassigned.push(r);
-      return;
-    }
-    const k = String(hit.key || '');
-    if (!grouped.has(k)) grouped.set(k, { profile: hit, repos: [] });
-    grouped.get(k).repos.push(r);
-  });
-
-  const body = !profiles.length
-    ? `<div class="storage-empty">${storageT('storage.noSmbProfiles')}</div>`
-    : `<div class="smb-profile-list">${profiles.map((p, idx) => {
+function renderStorageSmbProfiles(profiles, smbRepos) {
+  const rows = Array.isArray(profiles) ? profiles : [];
+  if (!rows.length) return '';
+  return `<section class="storage-smb-panel ui-panel">
+    <div class="ui-panel__header">
+      <strong>${storageT('storage.smbProfiles')}</strong>
+      <span>${storageT('storage.smbProfilesHint')}</span>
+    </div>
+    <div class="storage-smb-profile-list">${rows.map((profile, idx) => {
       const rid = `smb-profile-result-${idx}`;
-      const entry = grouped.get(String(p.key || '')) || { profile: p, repos: [] };
-      const repos = entry.repos || [];
-      const mountState = p.is_mounted ? storageT('storage.mounted') : storageT('storage.notMounted');
-      const cached = storageState.smbActionResults[String(p.key || '')] || null;
+      const repos = (smbRepos || []).filter((repo) => _findSmbProfileForRepo(repo, [profile]));
+      const mountState = profile.is_mounted ? storageT('storage.mounted') : storageT('storage.notMounted');
+      const cached = storageState.smbActionResults[String(profile.key || '')] || null;
       const actionClass = cached ? (cached.ok ? 'ok' : 'fail') : '';
       const cachedMessage = cached?.payload
         ? apiMessage(cached.payload, cached.ok ? 'OK' : storageT('storage.error'))
@@ -220,73 +297,22 @@ function renderSmbCard(section, smbRepos) {
       const actionText = cached
         ? (cached.ok ? '✓ OK' : `✗ ${cachedMessage}`)
         : '';
-      const reposHtml = repos.length
-        ? `<ul class="repo-list smb-repo-sublist">${repos.map((repo) => {
-            const resultId = `repo-test-${repo.conf_key}`;
-            const detailsBtnId = `repo-test-details-${repo.conf_key}`;
-            const typeLabel = {
-              flash: 'FLASH', appdata: 'APPDATA', photos: 'PHOTOS',
-              VMs: 'VMs', sonstiges: storageT('storage.typeOther'),
-            }[repo.backup_type] || String(repo.backup_type || '').toUpperCase();
-            const displayPath = String(repo.path_display || '').length > 55
-              ? '…' + String(repo.path_display || '').slice(-52)
-              : String(repo.path_display || '');
-            return `<li class="repo-list-item">
-              <span class="type-mini-badge">${typeLabel}</span>
-              <div class="repo-path-display">
-                <span class="repo-path-text" title="${escHtml(repo.path_display)}">${escHtml(displayPath)}</span>
-              </div>
-              <div class="repo-item-actions">
-                <button class="btn btn-secondary btn-sm"
-                  data-storage-action="test-repo"
-                  data-repo-path="${escHtml(repo.path_display)}"
-                  data-repo-conf-key="${escHtml(repo.conf_key || '')}"
-                  data-result-id="${resultId}"
-                  ${p.is_mounted ? '' : `disabled title="${storageT('storage.mountFirst')}"`}>${storageT('storage.test')}</button>
-                <button class="btn btn-secondary btn-sm hidden"
-                  id="${detailsBtnId}"
-                  data-storage-action="show-test-details"
-                  data-result-id="${resultId}">${storageT('storage.details')}</button>
-                <span class="test-result" id="${resultId}"></span>
-              </div>
-            </li>`;
-          }).join('')}</ul>`
-        : `<div class="storage-empty smb-empty-sublist">${storageT('storage.noRepositoriesForProfile')}</div>`;
-
-      return `<section class="smb-profile-item">
-        <div class="smb-profile-head">
-          <span class="type-mini-badge">${escHtml(p.name || p.key || 'SMB')}</span>
-          <div class="repo-path-display smb-profile-path">
-            <span class="repo-path-text" title="${escHtml(`${p.server}/${p.share} -> ${p.mount_path}`)}">${escHtml(`${p.server}/${p.share}`)}</span>
-            <span class="smb-mount-badge ${p.is_mounted ? 'ok' : 'off'}">${mountState}</span>
-          </div>
-          <div class="repo-item-actions">
-            <button class="btn btn-secondary btn-sm" data-storage-action="smb-action" data-smb-action="mount" data-profile-key="${escHtml(p.key || '')}" data-result-id="${rid}">${storageT('storage.mount')}</button>
-            <button class="btn btn-secondary btn-sm" data-storage-action="smb-action" data-smb-action="unmount" data-profile-key="${escHtml(p.key || '')}" data-result-id="${rid}">${storageT('storage.unmount')}</button>
+      const endpoint = [profile.server, profile.share].filter(Boolean).join('/');
+      return `<article class="storage-smb-profile">
+        <div>
+          <strong>${escHtml(profile.name || profile.key || 'SMB')}</strong>
+          <small title="${escHtml(`${endpoint} -> ${profile.mount_path || ''}`)}">${escHtml(endpoint || profile.mount_path || '')}</small>
+        </div>
+        <span class="badge ${profile.is_mounted ? 'success' : 'warning'}">${mountState}</span>
+        <span class="storage-smb-repo-count">${storageCount(repos.length, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</span>
+        <div class="storage-row-actions">
+            <button class="btn btn-secondary btn-sm" data-storage-action="smb-action" data-smb-action="mount" data-profile-key="${escHtml(profile.key || '')}" data-result-id="${rid}">${storageT('storage.mount')}</button>
+            <button class="btn btn-secondary btn-sm" data-storage-action="smb-action" data-smb-action="unmount" data-profile-key="${escHtml(profile.key || '')}" data-result-id="${rid}">${storageT('storage.unmount')}</button>
             <span class="test-result ${actionClass}" id="${rid}">${escHtml(actionText)}</span>
-          </div>
         </div>
-        ${reposHtml}
-      </section>`;
-    }).join('')}
-    ${unassigned.length ? `<div class="repo-list-item"><span class="type-mini-badge">${storageT('storage.withoutProfile')}</span><div class="repo-path-display"><span class="repo-path-text">${storageT('storage.unassignedRepositories')}</span></div></div>` : ''}
-    </div>`;
-
-  const repoCount = repoRows.length;
-  return `
-    <div class="storage-card ${section.cssClass}">
-      <div class="storage-card-header">
-        <div class="storage-card-title">
-          <div class="storage-loc-icon">${section.icon}</div>
-          <div>
-            <div class="storage-card-name">${section.title}</div>
-            ${section.meta ? `<div class="storage-card-meta">${escHtml(section.meta)}</div>` : ''}
-          </div>
-        </div>
-        <span class="storage-count-badge">${storageCount(repoCount, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</span>
-      </div>
-      ${body}
-    </div>`;
+      </article>`;
+    }).join('')}</div>
+  </section>`;
 }
 
 async function runSmbAction(profileKey, action, resultId) {

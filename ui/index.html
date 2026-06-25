@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/ui/history-reports.css">
   <link rel="stylesheet" href="/ui/restore-tests-redesign.css">
   <link rel="stylesheet" href="/ui/browse-restore-redesign.css">
+  <link rel="stylesheet" href="/ui/remaining-ui-redesign.css">
 </head>
 <body>
 
@@ -168,10 +169,10 @@
       <div id="dashboard-system-warning" class="status-message hidden"></div>
       <div id="status-message" class="status-message hidden"></div>
       <div class="dashboard-location-layout ui-context-layout">
-        <aside class="dashboard-location-sidebar ui-context-sidebar" aria-label="Lokationen" data-i18n-aria-label="dashboard.locations">
+        <aside class="dashboard-location-sidebar ui-context-sidebar" aria-label="Standorte" data-i18n-aria-label="dashboard.locations">
           <div class="ui-context-sidebar__header">
             <small data-i18n="dashboard.grouping">Gruppierung</small>
-            <strong data-i18n="dashboard.locations">Lokationen</strong>
+            <strong data-i18n="dashboard.locations">Standorte</strong>
           </div>
           <nav id="dashboard-location-list" class="ui-context-nav"></nav>
         </aside>
@@ -179,7 +180,7 @@
           <header class="ui-workspace-header">
             <div class="ui-workspace-header__title">
               <small data-i18n="dashboard.selection">Auswahl</small>
-              <h2 id="dashboard-selection-title" data-i18n="dashboard.allLocations">Alle Lokationen</h2>
+              <h2 id="dashboard-selection-title" data-i18n="dashboard.allLocations">Alle Standorte</h2>
               <span class="ui-workspace-header__subtitle" data-i18n="dashboard.inventorySubtitle">Lauf-, Restore- und Speicherdaten</span>
             </div>
             <span class="ui-badge" id="dashboard-selection-count"></span>
@@ -222,10 +223,10 @@
       <div id="jobs-message" class="status-message hidden"></div>
       <div id="jobs-data-dir-warning" class="status-message hidden"></div>
       <div class="jobs-location-layout ui-context-layout">
-        <aside class="jobs-location-sidebar ui-context-sidebar" aria-label="Lokationen" data-i18n-aria-label="jobs.locations">
+        <aside class="jobs-location-sidebar ui-context-sidebar" aria-label="Standorte" data-i18n-aria-label="jobs.locations">
           <div class="ui-context-sidebar__header">
             <small data-i18n="jobs.grouping">Gruppierung</small>
-            <strong data-i18n="jobs.locations">Lokationen</strong>
+            <strong data-i18n="jobs.locations">Standorte</strong>
           </div>
           <nav id="jobs-location-list" class="ui-context-nav"></nav>
         </aside>
@@ -233,7 +234,7 @@
           <header class="ui-workspace-header">
             <div class="ui-workspace-header__title">
               <small data-i18n="jobs.selection">Auswahl</small>
-              <h2 id="jobs-selection-title" data-i18n="jobs.allLocations">Alle Lokationen</h2>
+              <h2 id="jobs-selection-title" data-i18n="jobs.allLocations">Alle Standorte</h2>
               <span class="ui-workspace-header__subtitle" data-i18n="jobs.workspaceSubtitle">Zugeordnete Backup-Jobs und Betriebszustand</span>
             </div>
             <span class="ui-badge" id="jobs-selection-count"></span>
@@ -282,56 +283,83 @@
           <h1 data-i18n="storage.title">Storage</h1>
           <p class="page-subtitle" data-i18n="storage.subtitle">Borg Repositories verwalten</p>
         </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" id="storage-refresh-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            <span data-i18n="storage.refresh">Aktualisieren</span>
+          </button>
+        </div>
       </div>
       <div id="storage-message" class="status-message hidden"></div>
-      <div id="storage-content">
-        <div class="loading-spinner"><div class="spinner"></div><span data-i18n="storage.loading">Lade Repositories...</span></div>
-      </div>
-
-      <!-- Borg Check Card -->
-      <div class="check-card" id="storage-check-card">
-        <div class="check-card-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-          <span data-i18n="storage.check.title">Manueller Borg Check</span>
-        </div>
-        <div class="check-card-body">
-          <div class="check-row">
-            <select id="check-job-select" class="form-input check-select">
-              <option value="" data-i18n="storage.check.selectJob">— Job wählen —</option>
-            </select>
-            <select id="check-level-select" class="form-input check-level-select">
-              <option value="quick" data-i18n="storage.check.modeQuick">Schnell</option>
-              <option value="verbose" data-i18n="storage.check.modeVerbose">Verbose</option>
-              <option value="verify_data" data-i18n="storage.check.modeVerifyData">Verify Data</option>
-            </select>
-            <span id="check-mode-badge" class="check-mode-badge hidden" aria-live="polite" data-i18n="storage.check.highLoad">Hohe Last</span>
-            <button class="btn btn-primary" id="check-run-btn">
-              <span data-i18n="storage.check.run">Check starten</span>
-            </button>
+      <div class="storage-redesign-layout ui-context-layout">
+        <aside class="storage-location-sidebar ui-context-sidebar">
+          <div class="ui-context-sidebar__header">
+            <small data-i18n="storage.grouping">Gruppierung</small>
+            <strong data-i18n="storage.locations">Standorte</strong>
+            <small data-i18n="storage.locationsHint">Repositories und Profile</small>
           </div>
-          <div id="check-mode-hint" class="check-mode-hint" data-i18n="storage.check.quickHint">Standardprüfung mit Fortschrittsanzeige. Schnellster Modus für Routinechecks.</div>
-          <div id="check-message" class="status-message hidden"></div>
-          <div id="check-log-panel" class="check-log-panel hidden">
-            <div class="check-log-toolbar">
-              <span id="check-log-status" class="check-log-status"></span>
-              <div class="check-log-actions">
-                <button class="btn btn-secondary btn-sm" id="check-clear-log-btn" data-i18n="storage.check.clear">Leeren</button>
-                <button class="check-close-btn" id="check-close-log-btn" title="Schließen" aria-label="Schließen" data-i18n-title="storage.check.close" data-i18n-aria-label="storage.check.close">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
+          <nav id="storage-location-list" class="ui-context-nav" data-i18n-aria-label="storage.locations" aria-label="Standorte"></nav>
+        </aside>
+        <section class="storage-workspace ui-workspace">
+          <header id="storage-workspace-header" class="ui-workspace-header">
+            <div class="ui-workspace-header__title">
+              <small data-i18n="storage.overview">Repository-Übersicht</small>
+              <h2 data-i18n="storage.allLocations">Alle Standorte</h2>
+              <span class="ui-workspace-header__subtitle" data-i18n="storage.overviewHint">Repository-Pfade, Verfügbarkeit und Einzeltests</span>
+            </div>
+          </header>
+          <div id="storage-content">
+            <div class="loading-spinner"><div class="spinner"></div><span data-i18n="storage.loading">Lade Repositories...</span></div>
+          </div>
+
+          <!-- Borg Check Card -->
+          <div class="check-card" id="storage-check-card">
+            <div class="check-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <span data-i18n="storage.check.title">Manueller Borg Check</span>
+            </div>
+            <div class="check-card-body">
+              <div class="check-row">
+                <select id="check-job-select" class="form-input check-select">
+                  <option value="" data-i18n="storage.check.selectJob">— Job wählen —</option>
+                </select>
+                <select id="check-level-select" class="form-input check-level-select">
+                  <option value="quick" data-i18n="storage.check.modeQuick">Schnell</option>
+                  <option value="verbose" data-i18n="storage.check.modeVerbose">Verbose</option>
+                  <option value="verify_data" data-i18n="storage.check.modeVerifyData">Verify Data</option>
+                </select>
+                <span id="check-mode-badge" class="check-mode-badge hidden" aria-live="polite" data-i18n="storage.check.highLoad">Hohe Last</span>
+                <button class="btn btn-primary" id="check-run-btn">
+                  <span data-i18n="storage.check.run">Check starten</span>
                 </button>
               </div>
+              <div id="check-mode-hint" class="check-mode-hint" data-i18n="storage.check.quickHint">Standardprüfung mit Fortschrittsanzeige. Schnellster Modus für Routinechecks.</div>
+              <div id="check-message" class="status-message hidden"></div>
+              <div id="check-log-panel" class="check-log-panel hidden">
+                <div class="check-log-toolbar">
+                  <span id="check-log-status" class="check-log-status"></span>
+                  <div class="check-log-actions">
+                    <button class="btn btn-secondary btn-sm" id="check-clear-log-btn" data-i18n="storage.check.clear">Leeren</button>
+                    <button class="check-close-btn" id="check-close-log-btn" title="Schließen" aria-label="Schließen" data-i18n-title="storage.check.close" data-i18n-aria-label="storage.check.close">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <pre id="check-log-output" class="log-output check-log-output"></pre>
+              </div>
             </div>
-            <pre id="check-log-output" class="log-output check-log-output"></pre>
           </div>
-        </div>
+        </section>
       </div>
-
     </div>
 
     <!-- History Page -->
@@ -353,12 +381,12 @@
       </div>
 
       <div class="history-layout ui-context-layout">
-        <aside class="history-sidebar ui-context-sidebar" data-i18n-aria-label="history.locations" aria-label="Locations">
-          <div class="ui-context-sidebar__header"><small data-i18n="history.grouping">Grouping</small><strong data-i18n="history.locations">Locations</strong></div>
+        <aside class="history-sidebar ui-context-sidebar" data-i18n-aria-label="history.locations" aria-label="Standorte">
+          <div class="ui-context-sidebar__header"><small data-i18n="history.grouping">Gruppierung</small><strong data-i18n="history.locations">Standorte</strong></div>
           <nav id="history-location-list" class="ui-context-nav"></nav>
         </aside>
         <section class="history-workspace ui-workspace">
-          <header class="ui-workspace-header"><div class="ui-workspace-header__title"><small data-i18n="history.selection">Selection</small><h2 id="history-selection-title" data-i18n="history.allLocations">All locations</h2><span class="ui-workspace-header__subtitle" data-i18n="history.workspaceSubtitle">Backup runs and restore-test reports</span></div><span id="history-selection-count" class="ui-badge"></span></header>
+          <header class="ui-workspace-header"><div class="ui-workspace-header__title"><small data-i18n="history.selection">Auswahl</small><h2 id="history-selection-title" data-i18n="history.allLocations">Alle Standorte</h2><span class="ui-workspace-header__subtitle" data-i18n="history.workspaceSubtitle">Backup-Läufe und Restore-Testberichte</span></div><span id="history-selection-count" class="ui-badge"></span></header>
       <div class="history-filters ui-filter-bar">
         <select class="history-filter-select" id="history-filter-type">
           <option value="" data-i18n="history.allTypes">Alle Typen</option>
@@ -370,7 +398,7 @@
           <option value="custom">Custom</option>
         </select>
         <select class="history-filter-select history-location-contract" id="history-filter-location" aria-hidden="true" tabindex="-1">
-          <option value="" data-i18n="history.allLocations">Alle Locations</option>
+          <option value="" data-i18n="history.allLocations">Alle Standorte</option>
           <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
           <option value="usb">USB</option>
           <option value="smb">SMB</option>
@@ -833,7 +861,7 @@
 
     <!-- Hilfe / Doku Page -->
     <div id="page-hilfe" class="page">
-      <div class="page-header">
+      <div class="page-header ui-page-header">
         <div>
           <h1 data-i18n="help.title">Hilfe &amp; Dokumentation</h1>
           <p class="page-subtitle" data-i18n="help.subtitle">Bedienung, Troubleshooting und visuelle Anleitungen</p>
@@ -849,10 +877,20 @@
         </div>
       </div>
       <div id="help-message" class="status-message hidden"></div>
-      <div id="help-content" class="help-doc">
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-          <span data-i18n="help.loading">Lade Dokumentation...</span>
+      <div class="help-redesign-layout ui-context-layout">
+        <aside class="help-toc-sidebar ui-context-sidebar">
+          <div class="ui-context-sidebar__header">
+            <small data-i18n="help.navigation">Navigation</small>
+            <strong data-i18n="help.contents">Inhalt</strong>
+            <small data-i18n="help.contentsHint">Abschnitte dieser Hilfe</small>
+          </div>
+          <nav id="help-toc" class="ui-context-nav" data-i18n-aria-label="help.contents" aria-label="Inhalt"></nav>
+        </aside>
+        <div id="help-content" class="help-doc">
+          <div class="loading-spinner">
+            <div class="spinner"></div>
+            <span data-i18n="help.loading">Lade Dokumentation...</span>
+          </div>
         </div>
       </div>
     </div>

@@ -39,6 +39,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Archivwahl, Dateibrowser, Einzelauswahl, Zieloptionen, Sicherheitsprüfung und technische Precheck-Ausgabe sind in einem gemeinsamen responsiven Workspace zusammengeführt.
   - Downloadgrößenprüfung, Zielbeschränkung unter `/mnt/user`, Konflikt- und Owner-Verhalten sowie Restore-Polling bleiben unverändert.
 
+### Issue #34
+- UI (#34):
+  - Storage folgt der freigegebenen Variante A mit Standort-Sidebar, Repository-Tabelle und den bisherigen Standort-Icons.
+  - Repository-Tests, SMB-Mount-Aktionen und der manuelle Borg Check bleiben im neuen responsiven Workspace erhalten.
+  - Hilfe verwendet das gemeinsame Grunddesign mit einem automatisch aus den Dokumentüberschriften erzeugten Inhaltsverzeichnis.
+  - Dialoge, Wizard, Zeitplan und technische Ausgaben verwenden einheitliche begrenzte und auf kleinen Bildschirmen scrollbar bleibende Oberflächen.
+  - Standortbasierte Seiten verwenden in der deutschen Oberfläche einheitlich die Begriffe `Standorte` und `Alle Standorte`.
+
 ### Issue #70
 - UI (#70):
   - Standort-Sidebars verwenden einheitlich die feste Reihenfolge Lokal, USB, SMB und Storagebox.
