@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.0135">
+<!ENTITY version   "2026.06.26.0145">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.0135###
-- Dashboard layout follow-up (#33):
-  - Balance run, restore, and storage columns and keep detail rows aligned.
-  - Use the Storagebox product name consistently in English.
+###2026.06.26.0145###
+- Dashboard detail follow-up (#33):
+  - Align restore and storage labels with their values.
+  - Label the latest-run deduplicated size explicitly.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>ab62518bcaedb828f1fc78d14e31b314</MD5>
+<MD5>ea83cdbdc2d76a56ba0a6132c5b0144c</MD5>
 </FILE>
 
 <!--
