@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.0032">
+<!ENTITY version   "2026.06.26.0042">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.0032###
+###2026.06.26.0042###
 - Settings redesign follow-up (#33):
-  - Refine menu icons and remove the duplicate sidebar health status.
-  - Keep UI_SESSION_TIMEOUT_MINUTES in the active backup.conf schema.
+  - Reuse Storage location icons in profile lists.
+  - Remove the duplicate backup.conf path from the Settings header.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>4bedcb967e43c12356865d1a64b42ca0</MD5>
+<MD5>f67ea526259a088244b595671f40d077</MD5>
 </FILE>
 
 <!--
