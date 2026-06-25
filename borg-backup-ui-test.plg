@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.25.1831">
+<!ENTITY version   "2026.06.25.2229">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.25.1831###
-- UI redesign (#34):
-  - Storage now uses the approved location sidebar and repository table.
-  - Help includes a responsive table of contents and shared dialogs use consistent responsive surfaces.
+###2026.06.25.2229###
+- UI test follow-up (#72-#78):
+  - Improved Storage grouping, visible test details, Restore Tests states, and technical evidence.
+  - Refined Dashboard, Jobs, History, and Reports layouts and added accessible language symbols.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>6c69121b54de5c042ea0defec0cc65c8</MD5>
+<MD5>d745cca42466325723862e4cbcae1175</MD5>
 </FILE>
 
 <!--
