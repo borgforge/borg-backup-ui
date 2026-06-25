@@ -101,6 +101,31 @@ function _renderHelpMarkdown(md) {
   return out.join('');
 }
 
+function _renderHelpToc(content) {
+  const toc = document.getElementById('help-toc');
+  if (!toc || !content) return;
+  const usedIds = new Set();
+  const headings = [...content.querySelectorAll('h2, h3')];
+  headings.forEach((heading, index) => {
+    const base = String(heading.textContent || `section-${index + 1}`)
+      .toLocaleLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || `section-${index + 1}`;
+    let id = `help-${base}`;
+    let suffix = 2;
+    while (usedIds.has(id)) id = `help-${base}-${suffix++}`;
+    usedIds.add(id);
+    heading.id = id;
+  });
+  toc.innerHTML = headings.map((heading, index) => `
+    <a class="ui-context-nav__item help-toc-entry ${heading.tagName === 'H3' ? 'is-subsection' : ''}"
+      href="#${heading.id}" ${index === 0 ? 'aria-current="page"' : ''}>
+      <span>${escHtml(heading.textContent || '')}</span>
+    </a>`).join('');
+}
+
 async function helpInit(force = false) {
   const language = helpLanguage();
   if (_helpLoadedLanguage === language && !force) return;
@@ -108,11 +133,14 @@ async function helpInit(force = false) {
   if (!box) return;
   const requestId = ++_helpRequestId;
   hideEl('help-message');
+  const toc = document.getElementById('help-toc');
+  if (toc) toc.innerHTML = '';
   box.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>${escHtml(helpT('loading'))}</span></div>`;
   try {
     const md = await fetchHelpDocument(language);
     if (requestId !== _helpRequestId) return;
     box.innerHTML = _renderHelpMarkdown(md);
+    _renderHelpToc(box);
     _helpLoadedLanguage = language;
   } catch (err) {
     if (requestId !== _helpRequestId) return;
