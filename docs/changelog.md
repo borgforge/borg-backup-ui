@@ -47,6 +47,29 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Dialoge, Wizard, Zeitplan und technische Ausgaben verwenden einheitliche begrenzte und auf kleinen Bildschirmen scrollbar bleibende Oberflächen.
   - Standortbasierte Seiten verwenden in der deutschen Oberfläche einheitlich die Begriffe `Standorte` und `Alle Standorte`.
 
+## Test-channel follow-up for 2026.06.25.1831
+
+- Storage (#72):
+  - Repositorys werden in der Gesamtansicht nach Standort gruppiert; SMB-Profile erscheinen nur noch im SMB-Kontext.
+  - Ergebnisse von Repository-Tests bieten nach Erfolg und Fehler einen sichtbaren Detailzugang.
+  - Repositorys verwenden die in den zugehörigen Job-Dateien konfigurierten Icons; leere Ergebnisplätze werden vor einem Test nicht angezeigt.
+- Restore Tests (#76):
+  - Überfälligkeit wird in der Planübersicht nur noch über den Zahlenwert hervorgehoben.
+  - Sidebar-Zustände und technische Nachweise verwenden konsistente Farben und füllen keine leeren Rasterzellen.
+- Dashboard (#77):
+  - Spaltenbreiten sowie Backup-, Speicher- und Check-Daten wurden in klar getrennte, lesbare Zeilen gegliedert.
+  - Archivnamen bleiben in der Backup-Spalte einzeilig und zeigen den vollständigen Wert weiterhin im Tooltip.
+- Jobs (#78):
+  - Vollständige Job-Beschreibungen bleiben sichtbar; Richtlinie und Restore-Test-Zeitpunkte sind übersichtlich angeordnet.
+- History (#73):
+  - Erfolgsstatus, Fehlerhinweise sowie Archiv- und Check-Details wurden sprachlich und visuell überarbeitet.
+  - Der Check-Status belegt die vollständige letzte Detailzeile, sodass keine unbelegte Restfläche entsteht.
+  - Das Archivfeld bleibt auch bei Fehlerläufen als Platzhalter erhalten, damit die Detailstruktur stabil bleibt.
+- Berichte (#74):
+  - Borg-Repository-Informationen verteilen nur vorhandene Kennzahlen ohne leere Füllspalte.
+- Sprachauswahl (#75):
+  - Deutsch und Englisch werden zusätzlich mit sichtbaren Flaggensymbolen gekennzeichnet; die Sprachnamen und barrierearmen Beschriftungen bleiben erhalten.
+
 ### Issue #70
 - UI (#70):
   - Standort-Sidebars verwenden einheitlich die feste Reihenfolge Lokal, USB, SMB und Storagebox.

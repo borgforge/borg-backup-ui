@@ -451,11 +451,12 @@ function renderJobRestoreVerification(job) {
   };
   const item = map[status];
   if (!item) return '';
-  const detail = [
+  const details = [
     job.restore_verification_last_test_date ? jobsT('jobs.lastTest', { date: job.restore_verification_last_test_date }) : '',
     job.restore_verification_valid_until ? jobsT('jobs.validUntil', { date: job.restore_verification_valid_until }) : '',
-  ].filter(Boolean).join(' · ');
-  return `<div class="job-restore-proof"><span class="restore-v-badge ${item.cls}" title="${escHtml(detail || item.text)}">${item.text}</span>${detail ? `<span class="jobs-redesign-detail">${escHtml(detail)}</span>` : ''}</div>`;
+  ].filter(Boolean);
+  const detailText = details.join(' · ');
+  return `<div class="job-restore-proof"><span class="restore-v-badge ${item.cls}" title="${escHtml(detailText || item.text)}">${item.text}</span>${details.length ? `<span class="jobs-restore-dates">${details.map((detail) => `<span>${escHtml(detail)}</span>`).join('')}</span>` : ''}</div>`;
 }
 
 function resolveJobIcon(job) {

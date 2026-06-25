@@ -6,6 +6,7 @@ window.BBUI = window.BBUI || {};
 window.BBUI.storageState = window.BBUI.storageState || {
   loaded: false,
   data: null,
+  jobs: [],
   smbActionResults: {},
   selectedLocation: 'all',
   search: '',
@@ -91,9 +92,13 @@ function storageVisibleRepositories(data) {
 async function refreshStorage() {
   hideEl('storage-message');
   try {
-    const res = await fetch('/api/storage');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    storageState.data = await res.json();
+    const [storageRes, jobsRes] = await Promise.all([
+      fetch('/api/storage'),
+      fetch('/api/jobs'),
+    ]);
+    if (!storageRes.ok) throw new Error(`HTTP ${storageRes.status}`);
+    storageState.data = await storageRes.json();
+    storageState.jobs = jobsRes.ok ? (await jobsRes.json()).jobs || [] : [];
     storageState.loaded = true;
     renderStorage(storageState.data);
   } catch (err) {
@@ -121,10 +126,10 @@ function renderStorage(data) {
   }
 
   const rows = repos.length
-    ? repos.map((repo) => renderStorageRepositoryRow(repo, data.smb_profiles || [])).join('')
+    ? renderStorageRepositoryRows(repos, data.smb_profiles || [])
     : `<tr><td colspan="5"><div class="storage-empty">${storageT('storage.noMatchingRepositories')}</div></td></tr>`;
 
-  const showSmbProfiles = ['all', 'smb'].includes(storageState.selectedLocation || 'all');
+  const showSmbProfiles = (storageState.selectedLocation || 'all') === 'smb';
   el.innerHTML = `
     <section class="storage-repository-panel ui-panel">
       <div class="storage-repository-tools">
@@ -165,7 +170,7 @@ function storageLocationMeta(key, data) {
       ? `ssh ${data.storagebox_host}:${data.storagebox_port}`
       : storageT('storage.notConfigured');
   }
-  return storageT('storage.locationsHint');
+  return storageT('storage.overview');
 }
 
 function renderStorageLocationSidebar(data) {
@@ -212,11 +217,15 @@ function renderStorageRepositoryRow(repo, profiles) {
   const unavailable = repo.location === 'smb' && profile && !profile.is_mounted;
   const statusText = unavailable ? storageT('storage.notMounted') : storageT('storage.configured');
   const statusClass = unavailable ? 'warning' : 'success';
+  const job = storageJobForRepository(repo);
+  const icon = typeof resolveJobIcon === 'function' ? resolveJobIcon(job || repo) : repo.backup_type;
+  const color = typeof resolveJobIconColor === 'function' ? resolveJobIconColor(job || repo) : '';
+  const iconColorClass = color ? ` type-icon-color-${color}` : '';
 
   return `<tr>
     <td>
       <div class="storage-repository-main">
-        <span class="location-nav-glyph ${repo.location}">${storageLocationIcon(repo.location)}</span>
+        <span class="type-icon type-icon-${escHtml(String(repo.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(icon)}</span>
         <span>
           <strong>${escHtml(storageTypeLabel(repo))}</strong>
           <small>${escHtml(repo.conf_key || '')}</small>
@@ -238,10 +247,43 @@ function renderStorageRepositoryRow(repo, profiles) {
           id="${detailsBtnId}"
           data-storage-action="show-test-details"
           data-result-id="${resultId}">${storageT('storage.details')}</button>
-        <span class="test-result" id="${resultId}"></span>
+        <span class="test-result hidden" id="${resultId}"></span>
       </div>
     </td>
   </tr>`;
+}
+
+function storageJobForRepository(repo) {
+  const jobs = Array.isArray(storageState.jobs) ? storageState.jobs : [];
+  const confKey = String(repo?.conf_key || '');
+  const jobKey = confKey.startsWith('JOB:') ? confKey.slice(4) : '';
+  return jobs.find((job) => jobKey && String(job.key || '') === jobKey)
+    || jobs.find((job) =>
+      String(job.backup_type || '').toLowerCase() === String(repo?.backup_type || '').toLowerCase()
+      && String(job.location || '').toLowerCase() === String(repo?.location || '').toLowerCase()
+    )
+    || null;
+}
+
+function renderStorageRepositoryRows(repos, profiles) {
+  if ((storageState.selectedLocation || 'all') !== 'all') {
+    return repos.map((repo) => renderStorageRepositoryRow(repo, profiles)).join('');
+  }
+  return STORAGE_LOCATION_ORDER.map((location) => {
+    const locationRepos = repos.filter((repo) => repo.location === location);
+    if (!locationRepos.length) return '';
+    return `<tr class="storage-location-group-row">
+      <td colspan="5">
+        <div class="storage-location-group">
+          <span class="location-nav-glyph ${location}">${storageLocationIcon(location)}</span>
+          <span>
+            <strong>${escHtml(storageLocationLabel(location))}</strong>
+            <small>${storageCount(locationRepos.length, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</small>
+          </span>
+        </div>
+      </td>
+    </tr>${locationRepos.map((repo) => renderStorageRepositoryRow(repo, profiles)).join('')}`;
+  }).join('');
 }
 
 function onStorageContentClick(event) {
@@ -376,9 +418,9 @@ async function testRepo(repoPath, resultId, repoConfKey = '') {
         el.textContent = `✗ ${first}`;
         el.dataset.fullOutput = out || `Exit ${data.exit_code}`;
         el.title = out || `Exit ${data.exit_code}`;
-        if (detailsBtn) detailsBtn.classList.remove('hidden');
       }
     }
+    if (detailsBtn) detailsBtn.classList.remove('hidden');
   } catch (err) {
     if (el) { el.className = 'test-result fail'; el.textContent = `✗ ${storageT('storage.error')}`; el.title = String(err?.message || storageT('storage.unknownError')); }
     if (el) el.dataset.fullOutput = String(err?.message || storageT('storage.unknownError'));

@@ -32,15 +32,14 @@
 
 .history-detail-row > td { padding: 0; }
 .history-detail-panel {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
   border: 0;
   border-top: 1px solid var(--ui-color-border);
-  background: var(--ui-color-surface);
+  background: var(--ui-color-surface-subtle);
 }
 .history-detail-group {
-  flex: 1 1 9rem;
   min-width: 0;
   min-height: 3.3rem;
   padding: var(--ui-space-2) var(--ui-space-3);
@@ -48,8 +47,33 @@
   border-bottom: 1px solid var(--ui-color-border);
   background: var(--ui-color-surface-subtle);
 }
-.history-detail-value { overflow-wrap: anywhere; }
-.history-error-msg { margin: var(--ui-space-3); }
+.history-detail-group--log { grid-column: 1 / -1; }
+.history-detail-group--archive { grid-column: span 2; }
+.history-detail-group--wide { grid-column: 1 / -1; }
+.history-detail-value {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.history-detail-value--datetime { white-space: nowrap; }
+.history-detail-value--archive { font-family: var(--ui-font-mono); }
+.history-error-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ui-space-2);
+  margin: var(--ui-space-3);
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-state-error-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-state-error-bg);
+  color: var(--ui-state-error-fg);
+}
+.history-error-msg strong { flex: 0 0 auto; }
+.history-error-msg span { color: var(--ui-color-text); }
+.history-error-msg.is-notice {
+  border-color: var(--ui-state-warning-border);
+  background: var(--ui-state-warning-bg);
+  color: var(--ui-state-warning-fg);
+}
 .history-pagination { padding-bottom: var(--ui-space-1); }
 
 .report-sidebar { overflow: hidden; }
@@ -135,8 +159,8 @@
 .report-value-warning { color: var(--ui-state-warning-fg); }
 .report-value-error { color: var(--ui-state-error-fg); }
 #bericht-body .repo-stats-cards {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 1px;
   margin-bottom: var(--ui-space-3) !important;
   overflow: hidden;
@@ -144,16 +168,16 @@
   border-radius: var(--ui-radius-md);
   background: var(--ui-color-border);
 }
-#bericht-body .repo-stat-card { min-width: 0; padding: var(--ui-space-3); border: 0; border-radius: 0; box-shadow: none; }
+#bericht-body .repo-stat-card { flex: 1 1 12rem; min-width: 0; padding: var(--ui-space-3); border: 0; border-radius: 0; box-shadow: none; }
 #bericht-body .repo-stat-value { font-size: var(--ui-font-size-lg); overflow-wrap: anywhere; }
 .bericht-borginfo-section { margin-bottom: var(--ui-space-3); }
 #bericht-body { min-width: 0; }
 @media (max-width: 1279px) {
-  #bericht-body .repo-stats-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .report-ledger-columns { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 1023px) {
+  .history-detail-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .history-sidebar .ui-context-nav__item { min-width: 12.5rem; }
   .report-job-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; }
   .report-job-group { display: flex; min-width: max-content; }
@@ -163,10 +187,10 @@
 }
 
 @media (max-width: 767px) {
+  .history-detail-panel { grid-template-columns: minmax(0, 1fr); }
   .history-filters { align-items: stretch; flex-direction: column; }
   .history-count-label { margin-left: 0; }
-  .history-detail-group { flex-basis: 100%; }
-  #bericht-body .repo-stats-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .history-detail-group--archive { grid-column: auto; }
   .report-ledger-columns dl,
   .report-ledger-runs { grid-template-columns: minmax(0, 1fr) !important; }
   .report-analysis-panel > header { align-items: flex-start; flex-direction: column; }

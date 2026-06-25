@@ -338,9 +338,11 @@ function renderDashboardInventoryRow(backup) {
   const runDetail = [backup.time_ago || '', backup.duration_formatted || ''].filter(Boolean).join(' · ') || '—';
   const hasSizes = Number(backup.original_size || 0) > 0;
   const sizePrimary = hasSizes ? (backup.deduplicated_size_formatted || '—') : dashboardT('dashboard.noSizeData');
-  const sizeDetail = hasSizes
-    ? `${dashboardT('dashboard.source')}: ${backup.original_size_formatted || '—'} · ${dashboardT('dashboard.compressed')}: ${backup.compressed_size_formatted || '—'} · ${dashboardT('dashboard.repository')}: ${backup.repository_size_formatted || '—'}`
-    : '';
+  const sizeFacts = hasSizes ? [
+    [dashboardT('dashboard.source'), backup.original_size_formatted || '—'],
+    [dashboardT('dashboard.compressed'), backup.compressed_size_formatted || '—'],
+    [dashboardT('dashboard.repository'), backup.repository_size_formatted || '—'],
+  ] : [];
   const growth = backup.growth_formatted || '—';
 
   return `<tr class="dashboard-inventory-row ${run.cls}">
@@ -354,9 +356,19 @@ function renderDashboardInventoryRow(backup) {
       <span class="badge ${run.cls}"><span class="badge-dot"></span>${escHtml(run.label)}</span>
     </div><span class="dashboard-cell-detail">${escHtml(runDetail)}</span>${message.text ? `<div class="dashboard-table-message ${message.cls}">${escHtml(message.text)}</div>` : ''}</td>
     <td>${renderDashboardRestoreVerificationBadge(backup) || `<span class="dashboard-cell-detail">${dashboardT('dashboard.unknown')}</span>`}</td>
-    <td><strong class="dashboard-cell-primary">${escHtml(sizePrimary)}</strong>${sizeDetail ? `<span class="dashboard-cell-detail">${escHtml(sizeDetail)}</span>` : ''}</td>
-    <td><strong class="dashboard-cell-primary dashboard-growth ${growthClass}">${escHtml(growth)}</strong><span class="dashboard-cell-detail repo-check ${escHtml(checkStatus || 'unknown')}">${repoCheckIcon(checkStatus)} ${escHtml(checkLabel)}</span></td>
+    <td><strong class="dashboard-cell-primary">${escHtml(sizePrimary)}</strong>${sizeFacts.length ? `<span class="dashboard-storage-facts">${sizeFacts.map(([label, value]) => `<span><b>${escHtml(label)}:</b> ${escHtml(value)}</span>`).join('')}</span>` : ''}</td>
+    <td><strong class="dashboard-cell-primary dashboard-growth ${growthClass}">${escHtml(growth)}</strong>${renderDashboardRepositoryCheck(checkStatus, checkLabel, backup.repository_next_check)}</td>
   </tr>`;
+}
+
+function renderDashboardRepositoryCheck(status, label, nextCheck) {
+  if (status === 'overdue') {
+    return `<span class="dashboard-cell-detail repo-check overdue">
+      <span class="dashboard-check-line">${repoCheckIcon(status)} ${escHtml(dashboardT('dashboard.checkOverdueShort'))}</span>
+      <span class="dashboard-check-date">${escHtml(dashboardT('dashboard.nextCheck', { date: nextCheck || '—' }))}</span>
+    </span>`;
+  }
+  return `<span class="dashboard-cell-detail repo-check ${escHtml(status || 'unknown')}"><span class="dashboard-check-line">${repoCheckIcon(status)} ${escHtml(label)}</span></span>`;
 }
 
 function typeIcon(type) {

@@ -67,7 +67,8 @@ function renderRestoreTestsSidebar() {
     if (!locationJobs.length) return '';
     return `<section class="rt-sidebar-group"><header>${escHtml(restoreTestsLocationLabel(location))}<span>${locationJobs.length}</span></header>${locationJobs.map((job) => {
       const planJob = planByKey.get(String(job.key));
-      const stateClass = planJob?.is_overdue ? 'warning' : planJob?.enabled === false ? 'disabled' : 'success';
+      const configured = !!planJob && planJob.enabled !== false && String(planJob.policy?.mode || 'off') !== 'off';
+      const stateClass = planJob?.is_overdue ? 'warning' : configured ? 'success' : 'disabled';
       const active = restoreTestsState.selectedJob === String(job.key);
       return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.key)}</strong><small>${escHtml(job.key)}</small></span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
     }).join('')}</section>`;
@@ -393,7 +394,7 @@ function renderRestorePlan(plan) {
     off: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'off').length,
     overdue: sortedJobs.filter((job) => job.is_overdue).length,
   };
-  summaryEl.innerHTML = `<section class="rt-plan-summary"><header><div><strong>${escHtml(restoreTestsT('summaryTitle'))}</strong><small>${escHtml(restoreTestsT('summarySubtitle'))}</small></div></header><div><span><small>${escHtml(restoreTestsT('summaryTotal'))}</small><b>${planSummary.total}</b></span><span class="planned"><small>${escHtml(restoreTestsT('summaryScheduled'))}</small><b>${planSummary.scheduled}</b></span><span><small>${escHtml(restoreTestsT('summaryManual'))}</small><b>${planSummary.manual}</b></span><span><small>${escHtml(restoreTestsT('summaryOff'))}</small><b>${planSummary.off}</b></span><span class="attention"><small>${escHtml(restoreTestsT('summaryOverdue'))}</small><b>${planSummary.overdue}</b></span></div></section>`;
+  summaryEl.innerHTML = `<section class="rt-plan-summary"><header><div><strong>${escHtml(restoreTestsT('summaryTitle'))}</strong><small>${escHtml(restoreTestsT('summarySubtitle'))}</small></div></header><div><span><small>${escHtml(restoreTestsT('summaryTotal'))}</small><b>${planSummary.total}</b></span><span class="planned"><small>${escHtml(restoreTestsT('summaryScheduled'))}</small><b>${planSummary.scheduled}</b></span><span><small>${escHtml(restoreTestsT('summaryManual'))}</small><b>${planSummary.manual}</b></span><span><small>${escHtml(restoreTestsT('summaryOff'))}</small><b>${planSummary.off}</b></span><span class="attention ${planSummary.overdue > 0 ? 'has-value' : ''}"><small>${escHtml(restoreTestsT('summaryOverdue'))}</small><b>${planSummary.overdue}</b></span></div></section>`;
   const rows = sortedJobs.map((j) => {
     const p = j.policy || {};
     const mode = String(p.mode || 'off');
