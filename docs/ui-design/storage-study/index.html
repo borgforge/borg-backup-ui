@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Storage Design Study</title>
+  <link rel="stylesheet" href="../jobs-design-study/study.css">
+  <link rel="stylesheet" href="storage.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand"><span class="brand-mark">B</span><span>Borg Backup<small>UI</small></span></div>
+      <nav class="nav"><div>Dashboard</div><div>Jobs</div><div class="active">Storage</div><div>History</div><div>Berichte</div><div>Browse &amp; Restore</div><div>Restore Tests</div><div>Einstellungen</div><div>Hilfe</div></nav>
+      <div class="rail-foot"><b>● Systemstatus: alles OK</b>admin · 22.06.2026, 09:15<br>Version 2026.06</div>
+    </aside>
+    <main>
+      <div class="study-bar">
+        <span>Storage · drei Konzepte auf Basis des einheitlichen UI-Designs</span>
+        <div class="study-controls"><div class="segmented"><button data-variant-choice="a">A</button><button data-variant-choice="b">B</button><button data-variant-choice="c">C</button></div><button class="theme" id="theme-toggle" title="Hell/Dunkel">☀</button></div>
+      </div>
+      <header class="page-head"><div><h1>Storage</h1><span class="subtitle">Borg Repositories verwalten und prüfen</span></div><div class="actions"><span class="badge ok"><span class="dot"></span>12 Repositories bereit</span><button class="btn">↻ Aktualisieren</button></div></header>
+      <section class="variant" data-variant="a"><div id="variant-a"></div></section>
+      <section class="variant" data-variant="b"><div id="variant-b"></div></section>
+      <section class="variant" data-variant="c"><div id="variant-c"></div></section>
+    </main>
+  </div>
+  <script src="storage.js"></script>
+</body>
+</html>

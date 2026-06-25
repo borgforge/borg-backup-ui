@@ -27,10 +27,19 @@ an additional Jobs layout decision.
 | Restore Tests | `restore-tests-sidebar-study` | Single variant | [#31](https://github.com/borgforge/borg-backup-ui/issues/31) | [Dark](screenshots/restore-tests-dark.png) / [Light](screenshots/restore-tests-light.png) |
 | Browse and Restore | `browse-restore-sidebar-study` | Single variant | [#32](https://github.com/borgforge/borg-backup-ui/issues/32) | [Dark](screenshots/browse-restore-dark.png) / [Light](screenshots/browse-restore-light.png) |
 | Settings | `settings-sidemenu-study` | Single variant | [#33](https://github.com/borgforge/borg-backup-ui/issues/33) | [Dark](screenshots/settings-dark.png) / [Light](screenshots/settings-light.png) |
+| Storage | `storage-study` | Variant A without summary ledger | [#34](https://github.com/borgforge/borg-backup-ui/issues/34) | [Dark](screenshots/storage-variant-a-dark.png) / [Light](screenshots/storage-variant-a-light.png) |
 
-There is no separate approved Storage study. Storage must derive its surfaces,
-context sidebar, workspace, tables, and status presentation from this shared
-foundation in [#34](https://github.com/borgforge/borg-backup-ui/issues/34).
+### Storage alternatives
+
+Variant A is approved without the repository summary ledger. Variants B and C
+remain archived alternatives. All three retain repository tests, SMB mount
+controls, manual Borg check levels, load warnings, and log actions.
+
+| Candidate | Focus | Screenshot |
+| --- | --- | --- |
+| A (approved) | Location sidebar with repository workspace, without summary ledger | [Dark](screenshots/storage-variant-a-dark.png) / [Light](screenshots/storage-variant-a-light.png) |
+| B | Dense location board with persistent check controls | [Dark](screenshots/storage-variant-b-dark.png) / [Light](screenshots/storage-variant-b-light.png) |
+| C | Repository inspector with detail and check context | [Dark](screenshots/storage-variant-c-dark.png) / [Light](screenshots/storage-variant-c-light.png) |
 
 Help keeps its existing content in the new visual foundation. A contextual
 table-of-contents sidebar may be added where it improves navigation. Rewriting
@@ -38,6 +47,11 @@ the standalone handbook is outside this redesign and remains tracked
 separately.
 
 ## Shared layout rules
+
+German UI terminology uses `Standorte` and `Alle Standorte` for location
+navigation and filters. Compact table headers use `Ort`. English uses
+`Locations`, `All locations`, and `Location`. Internal API fields and code may
+keep the existing `location` identifiers.
 
 - Preserve the existing primary navigation and route structure.
 - Use a consistent page header for title, context, and primary actions.
