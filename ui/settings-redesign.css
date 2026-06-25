@@ -147,6 +147,12 @@
   display: grid;
   gap: var(--ui-space-3);
   min-width: 0;
+  max-width: 70rem;
+}
+
+#settings-content.is-refreshing {
+  opacity: 0.72;
+  pointer-events: none;
 }
 
 .settings-workspace-header {
@@ -194,17 +200,24 @@
   background: var(--ui-color-surface-subtle);
 }
 
+.settings-tab-panel .settings-section-header strong {
+  display: block;
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-sm);
+}
+
 .settings-tab-panel .settings-body {
   padding: var(--ui-space-2) var(--ui-space-4) var(--ui-space-4);
 }
 
 /* Calm horizontal form rows for regular settings. */
-.settings-tab-panel:not([data-settings-panel="usb"]):not([data-settings-panel="smb"]):not([data-settings-panel="storagebox"]) .settings-body.two-col {
+.settings-tab-panel:not([data-settings-panel="usb"]):not([data-settings-panel="smb"]):not([data-settings-panel="storagebox"]) .two-col {
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
 }
 
-.settings-tab-panel:not([data-settings-panel="usb"]):not([data-settings-panel="smb"]):not([data-settings-panel="storagebox"]) .settings-body.two-col > .form-group {
+.settings-tab-panel:not([data-settings-panel="usb"]):not([data-settings-panel="smb"]):not([data-settings-panel="storagebox"]) .two-col > .form-group,
+.settings-tab-panel[data-settings-panel="users"] .settings-body > .form-group {
   display: grid;
   grid-template-columns: minmax(12rem, 0.8fr) minmax(16rem, 1.2fr);
   align-items: center;
@@ -215,8 +228,95 @@
   border-bottom: 1px solid var(--ui-color-border);
 }
 
-.settings-tab-panel .settings-body.two-col > .form-group[style*="grid-column"] {
+.settings-tab-panel .two-col > .form-group[style*="grid-column"] {
   grid-column: auto !important;
+}
+
+.settings-tab-panel .settings-subtitle {
+  margin: var(--ui-space-4) 0 0;
+  padding-bottom: var(--ui-space-2);
+  border-bottom: 1px solid var(--ui-color-border);
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-sm);
+}
+
+.system-health-overview {
+  border: 0;
+  border-bottom: 1px solid var(--ui-color-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.system-health-overview.ok,
+.system-health-overview.bad {
+  background: transparent;
+}
+
+.system-health-overview-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--ui-state-success-fg);
+  color: var(--ui-color-surface);
+  font-weight: var(--ui-font-weight-bold);
+}
+
+.system-health-overview.bad .system-health-overview-mark {
+  background: var(--ui-state-danger-fg);
+}
+
+.settings-health-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--ui-color-border);
+}
+
+.settings-health-summary-grid > div {
+  min-width: 0;
+  padding: var(--ui-space-3);
+  border-right: 1px solid var(--ui-color-border);
+}
+
+.settings-health-summary-grid > div:last-child {
+  border-right: 0;
+}
+
+.settings-health-summary-grid span,
+.settings-health-summary-grid strong,
+.settings-health-summary-grid small {
+  display: block;
+}
+
+.settings-health-summary-grid span,
+.settings-health-summary-grid small {
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+}
+
+.settings-health-summary-grid strong {
+  margin-top: var(--ui-space-1);
+  overflow: hidden;
+  color: var(--ui-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-health-summary-grid strong.ok {
+  color: var(--ui-state-success-fg);
+}
+
+.settings-health-summary-grid strong.bad {
+  color: var(--ui-state-danger-fg);
+}
+
+.settings-health-summary-grid small {
+  margin-top: var(--ui-space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-profile-manager {
@@ -462,7 +562,8 @@
     min-width: 15rem;
   }
 
-  .settings-tab-panel:not([data-settings-panel="usb"]):not([data-settings-panel="smb"]):not([data-settings-panel="storagebox"]) .settings-body.two-col > .form-group {
+  .settings-tab-panel:not([data-settings-panel="usb"]):not([data-settings-panel="smb"]):not([data-settings-panel="storagebox"]) .two-col > .form-group,
+  .settings-tab-panel[data-settings-panel="users"] .settings-body > .form-group {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--ui-space-1);
   }
@@ -471,5 +572,17 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--ui-space-1);
     padding-block: var(--ui-space-2);
+  }
+
+  .settings-health-summary-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .settings-health-summary-grid > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .settings-health-summary-grid > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--ui-color-border);
   }
 }

@@ -82,17 +82,11 @@ async function refreshSettings() {
     settingsState.authStatus = authRes.ok ? await authRes.json() : null;
     const auth = settingsState.authStatus || {};
     const isAdminUsersMode = String(auth.current_role || '').toLowerCase() === 'admin' && String(auth.auth_mode || '') === 'users';
-    if (isAdminUsersMode) {
-      try {
-        const uRes = await fetch('/api/auth/users');
-        const uData = uRes.ok ? await uRes.json() : { users: [] };
-        settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
-      } catch (_) {
-        settingsState.authUsers = [];
-      }
-    } else {
-      settingsState.authUsers = [];
-    }
+    const usersRequest = isAdminUsersMode
+      ? fetch('/api/auth/users')
+          .then((uRes) => uRes.ok ? uRes.json() : { users: [] })
+          .catch(() => ({ users: [] }))
+      : Promise.resolve({ users: [] });
     if (settingsState.storageboxConnOk === null && data?.storagebox_setup) {
       settingsState.storageboxConnOk = !!data.storagebox_setup.auth_ok;
       settingsState.storageboxConnMsg = data.storagebox_setup.auth_ok
@@ -113,14 +107,26 @@ async function refreshSettings() {
       const ver = await verRes.json();
       _applyVersionInfo(ver.version, ver.author, ver.borg_version);
     }
+    usersRequest.then((uData) => {
+      settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
+      if (settingsState.activeTab === 'users' && settingsState.data) {
+        renderSettings(settingsState.data, settingsState.systemHealth);
+      }
+    });
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
+  } finally {
+    document.getElementById('settings-content')?.classList.remove('is-refreshing');
   }
 }
 
 function _renderSettingsLoading() {
   const el = document.getElementById('settings-content');
   if (!el) return;
+  if (settingsState.loaded && settingsState.data) {
+    el.classList.add('is-refreshing');
+    return;
+  }
   el.innerHTML = `
     <div class="settings-section">
       <div class="settings-section-header">
@@ -341,7 +347,11 @@ function syncSettingsProfileManager(type, selectLast = false) {
       }
       syncSettingsProfileManager(type);
     });
-    editor.querySelector('[data-profile-cancel]').addEventListener('click', () => refreshSettings());
+    editor.querySelector('[data-profile-cancel]').addEventListener('click', () => {
+      settingsState.profileEditing = '';
+      settingsState.dirty = false;
+      renderSettings(settingsState.data, settingsState.systemHealth);
+    });
     editor.querySelector('[data-profile-save]').addEventListener('click', async () => {
       const saved = await saveSettings();
       if (!saved) return;
@@ -374,7 +384,7 @@ function syncSettingsProfileManager(type, selectLast = false) {
     const key = row.dataset.profileUiKey || '';
     const name = row.querySelector(config.nameSelector)?.value || key || settingsT('menu.newProfile');
     const endpoint = row.querySelector(config.endpointSelector)?.value || settingsT('common.notChecked');
-    const jobsCount = Number(row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
+    const jobsCount = Number(row.dataset.usbJobsCount || row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
     return `<button type="button" class="settings-profile-list-item ${key === selectedKey ? 'active' : ''}" data-profile-ui-key="${escHtml(key)}">
       <span class="settings-profile-symbol">${config.symbol}</span>
       <span><strong>${escHtml(name)}</strong><small>${escHtml(endpoint)}</small><em>${settingsT('common.jobsCount', { count: jobsCount })}</em></span>
@@ -432,7 +442,9 @@ function normalizeUsbProfileRows(rows) {
     if (!key) key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `usb-${idx + 1}`;
     while (seen.has(key)) key = `${key}-${idx + 1}`;
     seen.add(key);
-    out.push({ key, name, mount_path });
+    const jobs_count = Number(r?.jobs_count || 0);
+    const job_refs = Array.isArray(r?.job_refs) ? r.job_refs.map((v) => String(v || '')).filter(Boolean) : [];
+    out.push({ key, name, mount_path, jobs_count, job_refs });
   });
   return out;
 }
@@ -481,7 +493,7 @@ function addUsbProfileRow(row = {}) {
 function renderSettingsUsbProfiles(rows) {
   const normalized = normalizeUsbProfileRows(rows);
   const content = normalized.map((r) => `
-    <div class="usb-profile-row" data-profile-key="${escHtml(r.key || '')}">
+    <div class="usb-profile-row" data-profile-key="${escHtml(r.key || '')}" data-usb-jobs-count="${Number(r.jobs_count || 0)}" data-usb-job-refs="${escHtml((r.job_refs || []).join(', '))}">
       <input class="form-input" type="text" data-usb-profile-name placeholder="USB-Drive-A" value="${escHtml(r.name || '')}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
       <input class="form-input mono" type="text" data-usb-profile-path placeholder="/mnt/disks/DEIN_DRIVE" value="${escHtml(r.mount_path || '')}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
       <span class="usb-profile-state text-muted" data-usb-profile-state>${settingsT('profiles.unchecked')}</span>
@@ -849,6 +861,11 @@ function renderSettingsSystemHealth(data) {
   const failedChecks = checks.filter(([, ok]) => !ok).length;
   const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.deprecated_key_candidates || 0);
   const overallOk = failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0;
+  const jobTotal = Number(jobSummary.total || jobItems.length || 0);
+  const jobsDetail = jobFailed
+    ? settingsT('health.jobChecksFailed', { count: jobFailed })
+    : `${jobTotal} ${settingsT('health.jobs')}`;
+  const migrationOk = migrationSummary.status !== 'failed';
   const technicalRows = [
     [settingsT('health.migrationState'), data?.paths?.migration_state_file || '—'],
     [settingsT('health.migrationLog'), data?.paths?.migration_log_file || '—'],
@@ -859,6 +876,7 @@ function renderSettingsSystemHealth(data) {
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
     `<div class="settings-body">
       <div class="system-health-overview ${overallOk ? 'ok' : 'bad'}">
+        <span class="system-health-overview-mark">${overallOk ? '✓' : '!'}</span>
         <div>
           <div class="system-health-overview-title">${overallOk ? settingsT('health.okTitle') : settingsT('health.attentionTitle')}</div>
           <div class="system-health-overview-subtitle">${overallOk ? settingsT('health.okSubtitle') : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed)}</div>
@@ -866,46 +884,43 @@ function renderSettingsSystemHealth(data) {
         <span class="system-health-badge ${overallOk ? 'ok' : 'bad'}">${overallOk ? settingsT('common.ok') : settingsT('health.check')}</span>
       </div>
 
-      <div class="system-health-block">
-        <div class="system-health-block-title">${settingsT('health.system')}</div>
-        <div class="system-health-grid">${_renderSystemHealthRows(checks)}</div>
-      </div>
-
-      <div class="system-health-block">
-        <div class="system-health-block-title">${settingsT('health.jobs')}</div>
-        ${_renderJobHealthOverview(jobSummary, jobItems)}
-      </div>
-
-      <div class="system-health-block">
-        <div class="system-health-block-title">${settingsT('health.lastMigration')}</div>
-        <div class="migration-status-grid">
-          <div>
-            <span class="system-health-name">${settingsT('health.lastRun')}</span>
-            <strong>${escHtml(migrationSummary.lastRun)}</strong>
-          </div>
-          <div>
-            <span class="system-health-name">${settingsT('health.lastEffectiveRun')}</span>
-            <strong>${escHtml(lastEffectiveTs)}</strong>
-          </div>
-          <div>
-            <span class="system-health-name">${settingsT('health.status')}</span>
-            <span class="system-health-badge ${migrationSummary.status === 'failed' ? 'bad' : 'ok'}">${escHtml(migrationSummary.state)}</span>
-          </div>
-        </div>
-        <div class="migration-summary">
-          <div><strong>${settingsT('health.reason')}</strong> ${escHtml(migrationSummary.reason)}</div>
-          <div><strong>${settingsT('health.actions')}</strong> ${migrationSummary.actions.length ? migrationSummary.actions.map((a) => escHtml(a)).join(' · ') : settingsT('common.none')}</div>
-          ${migrationSummary.errors ? `<div class="system-health-error"><strong>${settingsT('health.errors')}</strong> ${escHtml(migrationSummary.errors)}</div>` : ''}
-        </div>
-      </div>
-
-      <div class="system-health-block">
-        <div class="system-health-block-title">${settingsT('health.setupConfigMaintenance')}</div>
-        ${_renderMigrationRegistryOverview(registrySummary, registryActionItems)}
+      <div class="settings-health-summary-grid">
+        <div><span>${settingsT('health.dataRoot')}</span><strong class="${data?.checks?.data_root_ok ? 'ok' : 'bad'}">${data?.checks?.data_root_ok ? settingsT('common.ok') : settingsT('health.check')}</strong><small>${escHtml(data?.paths?.data_root || '—')}</small></div>
+        <div><span>${settingsT('health.jobsPath')}</span><strong class="${jobFailed ? 'bad' : 'ok'}">${jobFailed ? settingsT('health.check') : settingsT('common.ok')}</strong><small>${escHtml(jobsDetail)}</small></div>
+        <div><span>${settingsT('health.secretsPath')}</span><strong class="${data?.checks?.secrets_path_ok ? 'ok' : 'bad'}">${data?.checks?.secrets_path_ok ? settingsT('common.ok') : settingsT('health.check')}</strong><small>${escHtml(String(perms.checked_files_count ?? 0))} ${settingsT('health.checkedSecretFiles')}</small></div>
+        <div><span>${settingsT('health.lastMigration')}</span><strong class="${migrationOk ? 'ok' : 'bad'}">${escHtml(migrationSummary.state)}</strong><small>${escHtml(migrationSummary.reason)}</small></div>
       </div>
 
       <details class="system-health-technical">
         <summary>${settingsT('health.technicalDetails')}</summary>
+        <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.system')}</div>
+          <div class="system-health-grid">${_renderSystemHealthRows(checks)}</div>
+        </div>
+
+        <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.jobs')}</div>
+          ${_renderJobHealthOverview(jobSummary, jobItems)}
+        </div>
+
+        <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.lastMigration')}</div>
+          <div class="migration-status-grid">
+            <div><span class="system-health-name">${settingsT('health.lastRun')}</span><strong>${escHtml(migrationSummary.lastRun)}</strong></div>
+            <div><span class="system-health-name">${settingsT('health.lastEffectiveRun')}</span><strong>${escHtml(lastEffectiveTs)}</strong></div>
+            <div><span class="system-health-name">${settingsT('health.status')}</span><span class="system-health-badge ${migrationOk ? 'ok' : 'bad'}">${escHtml(migrationSummary.state)}</span></div>
+          </div>
+          <div class="migration-summary">
+            <div><strong>${settingsT('health.reason')}</strong> ${escHtml(migrationSummary.reason)}</div>
+            <div><strong>${settingsT('health.actions')}</strong> ${migrationSummary.actions.length ? migrationSummary.actions.map((a) => escHtml(a)).join(' · ') : settingsT('common.none')}</div>
+            ${migrationSummary.errors ? `<div class="system-health-error"><strong>${settingsT('health.errors')}</strong> ${escHtml(migrationSummary.errors)}</div>` : ''}
+          </div>
+        </div>
+
+        <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.setupConfigMaintenance')}</div>
+          ${_renderMigrationRegistryOverview(registrySummary, registryActionItems)}
+        </div>
         <div class="system-health-grid">
           ${technicalRows.map(([name, detail]) => `
             <div class="system-health-row neutral">
@@ -3259,11 +3274,7 @@ function onStorageboxProfileSelectChanged() {
 }
 
 function _storageboxShow(msg, ok = true) {
-  if (ok) {
-    hideEl('storagebox-setup-msg');
-    return;
-  }
-  showMsg('storagebox-setup-msg', 'error', msg);
+  showMsg('storagebox-setup-msg', ok ? 'success' : 'error', msg);
 }
 
 function _storageboxSetFlash(msg, ok) {
@@ -3279,9 +3290,14 @@ function _storageboxApplyFlash() {
 
 async function _storageboxRefreshWithFlash(msg, ok = true) {
   settingsState.storageboxPubVisible = false;
-  _storageboxSetFlash(msg, ok);
-  await refreshSettings();
-  _storageboxApplyFlash();
+  _storageboxShow(msg, ok);
+}
+
+function _storageboxRenderChecks() {
+  const checks = document.querySelector('[data-storagebox-checks]');
+  if (!checks) return;
+  checks.innerHTML = settingsState.storageboxChecks ? _renderStorageboxChecksHtml(settingsState.storageboxChecks) : '';
+  checks.classList.toggle('hidden', !settingsState.storageboxChecks);
 }
 
 async function storageboxKeyStatus() {
@@ -3296,7 +3312,8 @@ async function storageboxKeyStatus() {
       details: key.key_path ? settingsT('storagebox.keyPath', { path: key.key_path }) : '',
     };
     settingsState.storageboxLastCheckAt = new Date().toISOString();
-    await refreshSettings();
+    _storageboxRenderChecks();
+    _storageboxShow(settingsT('storagebox.statusUpdated'), true);
   } catch (e) {
     _storageboxShow(settingsT('error', { message: e.message }), false);
   }
@@ -3442,7 +3459,8 @@ async function storageboxTest() {
       details: details || apiMessage(d, ''),
     };
     settingsState.storageboxLastCheckAt = new Date().toISOString();
-    await refreshSettings();
+    _storageboxRenderChecks();
+    _storageboxShow(settingsState.storageboxConnMsg, !!d.success);
   } catch (e) { _storageboxShow(settingsT('error', { message: e.message }), false); }
 }
 
@@ -3496,7 +3514,7 @@ function renderSettingsAbout() {
 
 function settingsCard(title, icon, body) {
   return `<div class="settings-section">
-    <div class="settings-section-header">${icon} ${title}</div>
+    <div class="settings-section-header">${icon}<div><strong>${title}</strong></div></div>
     ${body}
   </div>`;
 }

@@ -3,6 +3,7 @@ api/usb_profiles_api.py - USB-Profilverwaltung und Statuschecks.
 """
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -27,6 +28,32 @@ def normalize_usb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str
         seen.add(key)
         out.append({"key": key, "name": name, "mount_path": mount_path})
     return out
+
+
+def get_usb_profile_job_refs(ui_config: dict) -> Dict[str, List[str]]:
+    from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
+
+    refs: Dict[str, List[str]] = {}
+    scripts_dir = resolve_scripts_dir(ui_config)
+    data_root = resolve_data_root(ui_config)
+    for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
+        if not meta_dir.is_dir():
+            continue
+        for meta_file in sorted(meta_dir.glob("*.json")):
+            try:
+                raw = json.loads(meta_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if str(raw.get("location") or "").strip().lower() != "usb":
+                continue
+            key = str(raw.get("usb_profile_key") or "").strip().lower()
+            if not key:
+                continue
+            job_key = str(raw.get("job_key") or meta_file.stem).strip()
+            name = str(raw.get("name") or "").strip()
+            label = f"{job_key} ({name})" if name else job_key
+            refs.setdefault(key, []).append(label)
+    return refs
 
 
 def test_usb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:

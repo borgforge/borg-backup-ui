@@ -82,3 +82,27 @@ def test_settings_layout_is_sticky_and_responsive() -> None:
     assert "@media (max-width: 767px)" in css
     assert ".settings-profile-field" in css
     assert ".settings-workspace-header" in css
+
+
+def test_settings_menu_translations_live_in_settings_namespace() -> None:
+    import json
+
+    for language in ("de", "en"):
+        payload = json.loads(_read(f"ui/i18n/{language}.json"))
+        menu = payload["settings"]["menu"]
+        assert menu["areas"]
+        assert menu["saved"]
+
+
+def test_settings_status_checks_do_not_reload_the_page() -> None:
+    script = _read("ui/js/pages/settings.js")
+    key_status = script.split("async function storageboxKeyStatus()", 1)[1].split(
+        "async function storageboxKeyGenerate()", 1
+    )[0]
+    connection_test = script.split("async function storageboxTest()", 1)[1].split(
+        "async function sendWeeklyReport()", 1
+    )[0]
+    assert "refreshSettings()" not in key_status
+    assert "refreshSettings()" not in connection_test
+    assert "_storageboxRenderChecks()" in key_status
+    assert "_storageboxRenderChecks()" in connection_test

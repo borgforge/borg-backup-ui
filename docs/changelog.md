@@ -54,6 +54,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - USB-, SMB- und SSH-Profile verwenden eine Master-Detail-Ansicht mit schreibgeschützten Feldern und explizitem Bearbeitungsmodus.
   - Profilprüfungen, SSH-Schlüsselaktionen, Löschschutz und bestehende Speicherverträge bleiben erhalten.
   - Reguläre Einstellungsbereiche verwenden ruhige horizontale Feldzeilen und responsive Tablet-/Mobilregeln.
+  - Menü- und Speicherstatus-Texte werden korrekt aus dem Settings-Namensraum übersetzt.
+  - Systemzustand und Migration folgen der kompakten Übersicht der Designstudie; technische Prüfungen bleiben aufklappbar verfügbar.
+  - USB-Profile zeigen die tatsächlich zugeordneten Jobs aus den Job-Metadaten.
+  - SSH-Status- und Verbindungstests aktualisieren nur den Ergebnisbereich und laden die Settings-Seite nicht mehr neu.
+  - Bereits geladene Einstellungen bleiben bei Aktualisierungen sichtbar; Benutzerkonten werden nachgelagert geladen.
 
 ## Test-channel follow-up for 2026.06.25.1831
 
