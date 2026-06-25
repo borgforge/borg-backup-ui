@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.25.2339">
+<!ENTITY version   "2026.06.26.0008">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.25.2339###
-- Settings redesign (#33):
-  - Added grouped settings navigation and contextual workspaces.
-  - USB, SMB, and SSH profiles now use explicit read-only and edit modes.
+###2026.06.26.0008###
+- Settings redesign follow-up (#33):
+  - Align settings panels and system health with the approved design.
+  - Fix USB job counts, translations, and SSH status refresh behavior.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>1368b55285dbdc9de67a2ebea3180448</MD5>
+<MD5>59d469ef2085dd958a49b94c6417a827</MD5>
 </FILE>
 
 <!--
