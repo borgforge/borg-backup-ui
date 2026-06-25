@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.25.2309">
+<!ENTITY version   "2026.06.25.2320">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,9 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.25.2309###
-- UI test review (#73, #77):
-  - History check status now fills the final detail row without an empty remainder.
-  - Dashboard archive names remain on one line with the full value available as a tooltip.
+###2026.06.25.2320###
+- History test review (#73):
+  - Failed backup runs keep the archive detail field and display a placeholder when no archive name exists.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +42,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>d49378e46a9c1cd8f1fee0a51179981b</MD5>
+<MD5>6131e3c66b95498aeab72def202ce22a</MD5>
 </FILE>
 
 <!--
