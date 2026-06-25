@@ -7,6 +7,8 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   loaded: false,
   dirty: false,
   activeTab: 'general',
+  profileSelection: { usb: '', smb: '', storagebox: '' },
+  profileEditing: '',
   storageboxFlash: null,
   storageboxPubVisible: false,
   storageboxConnOk: null,
@@ -47,15 +49,15 @@ function settingsLocale() {
 
 function getSettingsTabs() {
   const tabs = [
-  { key: 'general', label: settingsT('tabs.general') },
-  { key: 'users', label: settingsT('tabs.users') },
-  { key: 'backup', label: settingsT('tabs.backup') },
-  { key: 'restore', label: settingsT('tabs.restore') },
-  { key: 'usb', label: settingsT('tabs.usbProfiles') },
-  { key: 'smb', label: settingsT('tabs.smbProfiles') },
-  { key: 'storagebox', label: settingsT('tabs.sshProfiles') },
-  { key: 'transfer', label: settingsT('tabs.transfer') },
-  { key: 'advanced', label: settingsT('tabs.advanced') },
+  { key: 'general', label: settingsT('tabs.general'), group: 'system', description: settingsT('menu.generalDescription'), icon: '⚙' },
+  { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: '♙' },
+  { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: '▣' },
+  { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: '✓' },
+  { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: '▯' },
+  { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: '⌁' },
+  { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: '↗' },
+  { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: '⇄' },
+  { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: '⌘' },
   ];
   const auth = settingsState.authStatus || {};
   const isAdmin = String(auth.current_role || '').toLowerCase() === 'admin';
@@ -155,10 +157,27 @@ function renderSettings(data, systemHealth) {
   if (!el) return;
 
   const tabs = getSettingsTabs();
+  const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
+  if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
+  const profileTab = ['usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
+  const healthAttention = settingsHealthNeedsAttention(systemHealth);
+  const saveBtn = document.getElementById('settings-save-btn');
+  if (saveBtn) saveBtn.classList.toggle('hidden', profileTab);
   el.innerHTML = `
-    <div class="settings-tabs">
-      ${tabs.map((t) => `<button class="settings-tab-btn ${settingsState.activeTab === t.key ? 'active' : ''}" data-settings-tab="${t.key}">${t.label}</button>`).join('')}
-    </div>
+    <div class="settings-redesign-layout">
+      <aside class="settings-side-menu">
+        <header><small>${settingsT('menu.configuration')}</small><strong>${settingsT('menu.areas')}</strong></header>
+        <nav>${renderSettingsMenu(tabs)}</nav>
+        <footer class="${healthAttention ? 'attention' : ''}">
+          <span class="settings-menu-status-dot"></span>
+          <span><strong>${settingsT(healthAttention ? 'menu.healthAttention' : 'menu.healthOk')}</strong><small>${settingsT('menu.healthHint')}</small></span>
+        </footer>
+      </aside>
+      <section class="settings-workspace">
+        <header class="settings-workspace-header">
+          <div><small>${settingsT('title')}</small><h2>${escHtml(active.label)}</h2><span>${escHtml(active.description)}</span></div>
+          <span class="badge ${settingsState.dirty ? 'warning' : 'success'}" id="settings-workspace-save-state">${settingsT(settingsState.dirty ? 'menu.unsaved' : 'menu.saved')}</span>
+        </header>
     <div class="settings-tab-panel ${settingsState.activeTab === 'general' ? '' : 'hidden'}" data-settings-panel="general">
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
@@ -192,6 +211,8 @@ function renderSettings(data, systemHealth) {
     <div class="settings-tab-panel ${settingsState.activeTab === 'users' ? '' : 'hidden'}" data-settings-panel="users">
       ${renderSettingsUsers()}
     </div>
+      </section>
+    </div>
   `;
   const themeSel = document.getElementById('ui-theme-select');
   const getThemePref = window.BBUI?.components?.theme?.getStoredThemePreference;
@@ -199,7 +220,205 @@ function renderSettings(data, systemHealth) {
     themeSel.value = getThemePref();
   }
   refreshSettingsConfigBackups();
+  initializeSettingsProfileManagers();
   _updateUnsavedChangesUi();
+}
+
+function renderSettingsMenu(tabs) {
+  const groupLabels = {
+    system: settingsT('menu.system'),
+    operations: settingsT('menu.operations'),
+    storage: settingsT('menu.storageTargets'),
+    maintenance: settingsT('menu.maintenance'),
+  };
+  let previous = '';
+  return tabs.map((tab) => {
+    const heading = tab.group !== previous
+      ? `<div class="settings-menu-group">${escHtml(groupLabels[tab.group] || '')}</div>`
+      : '';
+    previous = tab.group;
+    return `${heading}<button class="settings-menu-item ${settingsState.activeTab === tab.key ? 'active' : ''}" data-settings-tab="${tab.key}" type="button">
+      <span class="settings-menu-icon">${tab.icon}</span>
+      <span><strong>${escHtml(tab.label)}</strong><small>${escHtml(tab.description)}</small></span>
+      <b>›</b>
+    </button>`;
+  }).join('');
+}
+
+function settingsHealthNeedsAttention(health) {
+  const checks = health?.checks && typeof health.checks === 'object' ? Object.values(health.checks) : [];
+  const checkFailed = checks.some((value) => value === false);
+  const migrationFailed = String(health?.migration_summary?.status || '').toLowerCase() === 'failed';
+  const jobFailed = Number(health?.job_health?.summary?.failed || 0) > 0;
+  return checkFailed || migrationFailed || jobFailed;
+}
+
+const SETTINGS_PROFILE_CONFIG = {
+  usb: {
+    rowsId: 'usb-profiles-rows',
+    rowSelector: '.usb-profile-row',
+    nameSelector: '[data-usb-profile-name]',
+    endpointSelector: '[data-usb-profile-path]',
+    symbol: '▯',
+    fields: [
+      ['[data-usb-profile-name]', 'profiles.name'],
+      ['[data-usb-profile-path]', 'profiles.mountPath'],
+    ],
+  },
+  smb: {
+    rowsId: 'smb-profiles-rows',
+    rowSelector: '.smb-profile-row',
+    nameSelector: '[data-smb-profile-name]',
+    endpointSelector: '[data-smb-profile-server]',
+    symbol: '⌁',
+    fields: [
+      ['[data-smb-profile-name]', 'profiles.name'],
+      ['[data-smb-profile-server]', 'profiles.host'],
+      ['[data-smb-profile-share]', 'profiles.share'],
+      ['[data-smb-profile-path]', 'profiles.mountPath'],
+      ['[data-smb-profile-username]', 'profiles.username'],
+      ['[data-smb-profile-password]', 'profiles.password'],
+      ['[data-smb-profile-vers]', 'profiles.smbVersion'],
+      ['[data-smb-profile-sec]', 'profiles.security'],
+    ],
+  },
+  storagebox: {
+    rowsId: 'storage-profiles-rows',
+    rowSelector: '.storage-profile-row',
+    nameSelector: '[data-storage-profile-name]',
+    endpointSelector: '[data-storage-profile-host]',
+    symbol: '↗',
+    fields: [
+      ['[data-storage-profile-name]', 'profiles.name'],
+      ['[data-storage-profile-host]', 'profiles.host'],
+      ['[data-storage-profile-port]', 'profiles.port'],
+      ['[data-storage-profile-user]', 'profiles.username'],
+      ['[data-storage-profile-base-path]', 'profiles.basePath'],
+      ['[data-storage-profile-ssh-key]', 'profiles.sshKey'],
+      ['[data-storage-profile-target-type]', 'profiles.targetType'],
+    ],
+  },
+};
+
+function initializeSettingsProfileManagers() {
+  Object.keys(SETTINGS_PROFILE_CONFIG).forEach((type) => syncSettingsProfileManager(type));
+}
+
+function syncSettingsProfileManager(type, selectLast = false) {
+  const config = SETTINGS_PROFILE_CONFIG[type];
+  const rowsBox = document.getElementById(config?.rowsId || '');
+  if (!config || !rowsBox) return;
+  const body = rowsBox.closest('.settings-body');
+  if (!body) return;
+  let manager = body.querySelector(`[data-profile-manager="${type}"]`);
+  if (!manager) {
+    manager = document.createElement('div');
+    manager.className = 'settings-profile-manager';
+    manager.dataset.profileManager = type;
+    const list = document.createElement('aside');
+    list.className = 'settings-profile-list';
+    list.innerHTML = `<header><strong>${settingsT('menu.savedProfiles')}</strong><small data-profile-count></small></header><nav data-profile-list></nav></aside>`;
+    const editor = document.createElement('section');
+    editor.className = 'settings-profile-editor readonly';
+    editor.innerHTML = `
+      <header data-profile-editor-header></header>
+      <div class="settings-profile-editor-body"></div>
+      <footer>
+        <button type="button" class="btn btn-secondary btn-sm" data-profile-cancel>${settingsT('dialog.cancel')}</button>
+        <button type="button" class="btn btn-primary btn-sm" data-profile-save>${settingsT('menu.saveProfile')}</button>
+      </footer>`;
+    rowsBox.parentNode.insertBefore(manager, rowsBox);
+    manager.append(list, editor);
+    editor.querySelector('.settings-profile-editor-body').appendChild(rowsBox);
+    list.querySelector('[data-profile-list]').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-profile-ui-key]');
+      if (!button || settingsState.profileEditing === type) return;
+      settingsState.profileSelection[type] = button.dataset.profileUiKey || '';
+      if (type === 'storagebox') {
+        settingsState.storageboxProfileKey = settingsState.profileSelection[type];
+        const select = document.getElementById('storagebox-profile-select');
+        if (select) select.value = settingsState.storageboxProfileKey;
+      }
+      syncSettingsProfileManager(type);
+    });
+    editor.querySelector('[data-profile-cancel]').addEventListener('click', () => refreshSettings());
+    editor.querySelector('[data-profile-save]').addEventListener('click', async () => {
+      const saved = await saveSettings();
+      if (!saved) return;
+      settingsState.profileEditing = '';
+      syncSettingsProfileManager(type);
+    });
+  }
+
+  const rows = [...rowsBox.querySelectorAll(config.rowSelector)];
+  rows.forEach((row, index) => {
+    if (!row.dataset.profileUiKey) row.dataset.profileUiKey = row.dataset.profileKey || `new-${type}-${index + 1}`;
+  });
+  if (selectLast && rows.length) settingsState.profileSelection[type] = rows.at(-1).dataset.profileUiKey;
+  const selectedKey = settingsState.profileSelection[type] || rows[0]?.dataset.profileUiKey || '';
+  settingsState.profileSelection[type] = selectedKey;
+  const selectedRow = rows.find((row) => row.dataset.profileUiKey === selectedKey) || rows[0] || null;
+  if (type === 'storagebox' && selectedKey) {
+    settingsState.storageboxProfileKey = selectedKey;
+    const select = document.getElementById('storagebox-profile-select');
+    if (select) select.value = selectedKey;
+  }
+  const editing = settingsState.profileEditing === type;
+
+  rows.forEach((row) => decorateSettingsProfileFields(row, config.fields || []));
+
+  const list = manager.querySelector('[data-profile-list]');
+  const count = manager.querySelector('[data-profile-count]');
+  if (count) count.textContent = settingsT('menu.profileCount', { count: rows.length });
+  if (list) list.innerHTML = rows.map((row) => {
+    const key = row.dataset.profileUiKey || '';
+    const name = row.querySelector(config.nameSelector)?.value || key || settingsT('menu.newProfile');
+    const endpoint = row.querySelector(config.endpointSelector)?.value || settingsT('common.notChecked');
+    const jobsCount = Number(row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
+    return `<button type="button" class="settings-profile-list-item ${key === selectedKey ? 'active' : ''}" data-profile-ui-key="${escHtml(key)}">
+      <span class="settings-profile-symbol">${config.symbol}</span>
+      <span><strong>${escHtml(name)}</strong><small>${escHtml(endpoint)}</small><em>${settingsT('common.jobsCount', { count: jobsCount })}</em></span>
+      <b>›</b>
+    </button>`;
+  }).join('');
+
+  rows.forEach((row) => {
+    const selected = row === selectedRow;
+    row.classList.toggle('hidden', !selected);
+    row.querySelectorAll('input:not([type="hidden"]), select').forEach((control) => {
+      control.disabled = !editing || !selected;
+    });
+    row.querySelectorAll('[data-settings-action$="-remove"], [data-settings-action="smb-profile-toggle-options"]').forEach((button) => {
+      button.classList.toggle('hidden', !editing || !selected);
+    });
+  });
+
+  const editor = manager.querySelector('.settings-profile-editor');
+  editor?.classList.toggle('readonly', !editing);
+  const name = selectedRow?.querySelector(config.nameSelector)?.value || settingsT('menu.noProfileSelected');
+  const endpoint = selectedRow?.querySelector(config.endpointSelector)?.value || '';
+  const header = manager.querySelector('[data-profile-editor-header]');
+  if (header) header.innerHTML = `
+    <div><small>${settingsT('menu.selectedProfile')}</small><h3>${escHtml(name)}</h3><span>${escHtml(endpoint)}</span></div>
+    ${selectedRow ? `<button type="button" class="btn btn-secondary btn-sm" data-profile-edit ${editing ? 'hidden' : ''}>${settingsT('menu.edit')}</button>` : ''}`;
+  header?.querySelector('[data-profile-edit]')?.addEventListener('click', () => {
+    settingsState.profileEditing = type;
+    syncSettingsProfileManager(type);
+  });
+  const footer = manager.querySelector('.settings-profile-editor > footer');
+  if (footer) footer.classList.toggle('hidden', !editing || !selectedRow);
+}
+
+function decorateSettingsProfileFields(row, fields) {
+  fields.forEach(([selector, labelKey]) => {
+    const control = row.querySelector(selector);
+    if (!control || control.closest('.settings-profile-field')) return;
+    const wrapper = document.createElement('label');
+    wrapper.className = 'settings-profile-field';
+    wrapper.innerHTML = `<span>${escHtml(settingsT(labelKey))}</span>`;
+    control.parentNode.insertBefore(wrapper, control);
+    wrapper.appendChild(control);
+  });
 }
 
 function normalizeUsbProfileRows(rows) {
@@ -2567,8 +2786,8 @@ async function onSettingsContentClick(event) {
     }
     const tab = tabBtn.dataset.settingsTab || 'general';
     settingsState.activeTab = tab;
-    document.querySelectorAll('#settings-content [data-settings-tab]').forEach((b) => b.classList.toggle('active', b === tabBtn));
-    document.querySelectorAll('#settings-content [data-settings-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.settingsPanel !== tab));
+    settingsState.profileEditing = '';
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
     return;
   }
   const el = event.target.closest('[data-settings-action]');
@@ -2604,6 +2823,8 @@ async function onSettingsContentClick(event) {
   if (action === 'usb-profile-add') {
     addUsbProfileRow();
     onUsbProfileInputChanged();
+    settingsState.profileEditing = 'usb';
+    syncSettingsProfileManager('usb', true);
     return;
   }
   if (action === 'usb-profile-check') return checkUsbProfilesStatus();
@@ -2611,11 +2832,14 @@ async function onSettingsContentClick(event) {
     const row = event.target.closest('.usb-profile-row');
     if (row) row.remove();
     onUsbProfileInputChanged();
+    syncSettingsProfileManager('usb');
     return;
   }
   if (action === 'smb-profile-add') {
     addSmbProfileRow({ username: '', password_set: false });
     onSmbProfileInputChanged();
+    settingsState.profileEditing = 'smb';
+    syncSettingsProfileManager('smb', true);
     return;
   }
   if (action === 'smb-profile-check') return checkSmbProfilesStatus();
@@ -2683,12 +2907,15 @@ async function onSettingsContentClick(event) {
 
     if (row) row.remove();
     onSmbProfileInputChanged();
+    syncSettingsProfileManager('smb');
     await saveSettings();
     return;
   }
   if (action === 'storage-profile-add') {
     addStorageProfileRow({ target_type: 'storagebox', port: '23', base_path: './backup' });
     onStorageProfileInputChanged();
+    settingsState.profileEditing = 'storagebox';
+    syncSettingsProfileManager('storagebox', true);
     return;
   }
   if (action === 'storage-profile-remove') {
@@ -2706,6 +2933,7 @@ async function onSettingsContentClick(event) {
     }
     if (row) row.remove();
     onStorageProfileInputChanged();
+    syncSettingsProfileManager('storagebox');
     return;
   }
   if (action === 'user-create') return createUserFromSettings();
@@ -3319,8 +3547,12 @@ function markSettingsDirty() {
 
 function _updateUnsavedChangesUi() {
   const btn = document.getElementById('settings-save-btn');
-  if (!btn) return;
-  btn.classList.toggle('btn-save-dirty', !!settingsState.dirty);
+  btn?.classList.toggle('btn-save-dirty', !!settingsState.dirty);
+  const state = document.getElementById('settings-workspace-save-state');
+  if (state) {
+    state.className = `badge ${settingsState.dirty ? 'warning' : 'success'}`;
+    state.textContent = settingsT(settingsState.dirty ? 'menu.unsaved' : 'menu.saved');
+  }
 }
 
 async function canLeaveSettingsPage() {
@@ -3362,7 +3594,7 @@ async function saveSettings() {
   });
   if (!String(updates.GLOBAL_DATA_DIR || '').trim()) {
     showMsg('settings-message', 'error', settingsT('forms.dataDirRequired'));
-    return;
+    return false;
   }
   updates.GLOBAL_DATA_DIR = String(updates.GLOBAL_DATA_DIR).trim();
   if (updates.UI_SESSION_TIMEOUT_MINUTES !== undefined) {
@@ -3413,8 +3645,10 @@ async function saveSettings() {
     }
     await refreshSettingsConfigBackups();
     await window.BBUI.core.updateDataDirWarning();
+    return true;
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
+    return false;
   } finally {
     if (btn) btn.classList.remove('loading');
   }

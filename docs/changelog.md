@@ -47,6 +47,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Dialoge, Wizard, Zeitplan und technische Ausgaben verwenden einheitliche begrenzte und auf kleinen Bildschirmen scrollbar bleibende Oberflächen.
   - Standortbasierte Seiten verwenden in der deutschen Oberfläche einheitlich die Begriffe `Standorte` und `Alle Standorte`.
 
+### Issue #33
+- UI (#33):
+  - Einstellungen verwenden ein gruppiertes Seitenmenü für System, Betrieb, Speicherziele und Wartung.
+  - Konfigurationspfad, Speicheraktion und Bereichsstatus bleiben beim Scrollen sichtbar.
+  - USB-, SMB- und SSH-Profile verwenden eine Master-Detail-Ansicht mit schreibgeschützten Feldern und explizitem Bearbeitungsmodus.
+  - Profilprüfungen, SSH-Schlüsselaktionen, Löschschutz und bestehende Speicherverträge bleiben erhalten.
+  - Reguläre Einstellungsbereiche verwenden ruhige horizontale Feldzeilen und responsive Tablet-/Mobilregeln.
+
 ## Test-channel follow-up for 2026.06.25.1831
 
 - Storage (#72):
