@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.21.1915">
+<!ENTITY version   "2026.06.25.1714">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,9 +18,9 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.21.1915###
-- Restore Tests redesign (#31):
-  - Aligns verification summaries, evidence sections, and test steps with the approved report design.
+###2026.06.25.1714###
+- Browse & Restore redesign (#32):
+  - Adds the guided five-step workspace, job sidebar, and structured safety precheck.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -42,7 +42,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>9aa2ac4eb4c3de688b2b12b027a7b738</MD5>
+<MD5>b2ce4672407c02a6ec16e91483377a34</MD5>
 </FILE>
 
 <!--
