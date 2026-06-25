@@ -155,7 +155,7 @@ function renderHistoryRow(e, idx) {
           ${detailGroup(historyT('exitCode'), e.exit_code != null ? String(e.exit_code) : null)}
           ${detailGroup(historyT('lastCheck'), e.repository_check_date, 'datetime')}
           ${detailGroup(historyT('nextCheck'), e.repository_next_check, 'datetime')}
-          ${detailGroup(historyT('checkStatus'), e.repository_check_status)}
+          ${detailGroup(historyT('checkStatus'), e.repository_check_status, 'wide')}
           ${e.log_file ? `
           <div class="history-detail-group history-detail-group--log">
             <div class="history-detail-label">${escHtml(historyT('logFile'))}</div>

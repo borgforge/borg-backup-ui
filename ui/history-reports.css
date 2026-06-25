@@ -49,6 +49,7 @@
 }
 .history-detail-group--log { grid-column: 1 / -1; }
 .history-detail-group--archive { grid-column: span 2; }
+.history-detail-group--wide { grid-column: 1 / -1; }
 .history-detail-value {
   overflow-wrap: break-word;
   word-break: normal;

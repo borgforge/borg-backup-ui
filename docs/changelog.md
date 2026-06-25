@@ -58,11 +58,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Sidebar-Zustände und technische Nachweise verwenden konsistente Farben und füllen keine leeren Rasterzellen.
 - Dashboard (#77):
   - Spaltenbreiten sowie Backup-, Speicher- und Check-Daten wurden in klar getrennte, lesbare Zeilen gegliedert.
+  - Archivnamen bleiben in der Backup-Spalte einzeilig und zeigen den vollständigen Wert weiterhin im Tooltip.
 - Jobs (#78):
   - Vollständige Job-Beschreibungen bleiben sichtbar; Richtlinie und Restore-Test-Zeitpunkte sind übersichtlich angeordnet.
 - History (#73):
   - Erfolgsstatus, Fehlerhinweise sowie Archiv- und Check-Details wurden sprachlich und visuell überarbeitet.
-  - Unbelegte Bereiche der Detailzeile verwenden dieselbe Hintergrundfarbe wie die vorhandenen Detailfelder.
+  - Der Check-Status belegt die vollständige letzte Detailzeile, sodass keine unbelegte Restfläche entsteht.
 - Berichte (#74):
   - Borg-Repository-Informationen verteilen nur vorhandene Kennzahlen ohne leere Füllspalte.
 - Sprachauswahl (#75):

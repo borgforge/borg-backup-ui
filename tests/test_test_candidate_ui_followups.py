@@ -64,6 +64,9 @@ def test_dashboard_and_jobs_preserve_readable_content() -> None:
     assert "dashboard-storage-facts" in dashboard
     assert "function renderDashboardRepositoryCheck" in dashboard
     assert "dashboard-check-date" in css
+    assert ".dashboard-backup-identity > span:last-child" in css
+    assert "text-overflow: ellipsis" in css
+    assert "white-space: nowrap" in css
     assert ".jobs-redesign-main .job-description" in css
     assert "-webkit-line-clamp: unset" in css
     assert "jobs-restore-dates" in css
@@ -82,6 +85,8 @@ def test_history_formats_status_errors_and_detail_values() -> None:
     assert "detailGroup(historyT('lastCheck'), e.repository_check_date, 'datetime')" in script
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
     assert ".history-detail-group--archive { grid-column: span 2; }" in css
+    assert ".history-detail-group--wide { grid-column: 1 / -1; }" in css
+    assert "detailGroup(historyT('checkStatus'), e.repository_check_status, 'wide')" in script
     detail_panel = css.split(".history-detail-panel", 1)[1].split(
         ".history-detail-group", 1
     )[0]

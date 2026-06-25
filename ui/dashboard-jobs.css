@@ -121,6 +121,10 @@
   height: 2rem;
 }
 
+.dashboard-backup-identity > span:last-child {
+  min-width: 0;
+}
+
 .dashboard-cell-primary,
 .dashboard-cell-detail {
   display: block;
@@ -140,8 +144,12 @@
 }
 
 .dashboard-cell-detail.mono {
+  max-width: 100%;
+  overflow: hidden;
   font-family: var(--ui-font-mono);
   overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   word-break: normal;
 }
 
