@@ -46,3 +46,13 @@ def test_browse_restore_layout_is_responsive_and_contained() -> None:
     assert ".restore-browser-layout" in css
     assert ".restore-review-grid" in css
     assert "overflow-x: auto" in css
+    assert ".restore-precheck-output { width: 100%; max-width: 100%; min-width: 0;" in css
+
+
+def test_browse_restore_keeps_review_and_completion_status_in_sync() -> None:
+    script = _read("ui/js/pages/restore.js")
+    assert "function setRestoreHeaderStatus(state)" in script
+    assert "setRestoreHeaderStatus('success')" in script
+    assert "function restorePrecheckInputsChanged()" in script
+    precheck_change = script.split("function restorePrecheckInputsChanged()", 1)[1]
+    assert "_restoreRenderSelectionSummary();" in precheck_change

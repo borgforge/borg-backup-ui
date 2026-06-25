@@ -16,7 +16,8 @@
 .restore-sidebar-job-icon { width: 2rem; height: 2rem; }
 .restore-sidebar-empty { padding: var(--ui-space-4); color: var(--ui-color-text-subtle); }
 
-.restore-redesign-workspace { min-width: 0; }
+.restore-redesign-workspace { width: 100%; max-width: 100%; min-width: 0; overflow: hidden; }
+.restore-redesign-workspace > .settings-body, #restore-step-panel-5 { width: 100%; max-width: 100%; min-width: 0; }
 .restore-stepper { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: var(--ui-space-3); overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
 .restore-stepper button { display: flex; align-items: center; gap: var(--ui-space-2); min-height: 3rem; padding: var(--ui-space-2); border: 0; border-right: 1px solid var(--ui-color-border); background: transparent; color: var(--ui-color-text-subtle); text-align: left; }
 .restore-stepper button:last-child { border-right: 0; }
@@ -76,9 +77,9 @@
 .restore-precheck-verdict strong, .restore-precheck-verdict small { display: block; }
 .restore-precheck-verdict small { margin-top: 3px; color: var(--ui-color-text-subtle); }
 .restore-legacy-summary { display: none; }
-.restore-precheck-output { margin-top: var(--ui-space-3); overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
+.restore-precheck-output { width: 100%; max-width: 100%; min-width: 0; margin-top: var(--ui-space-3); overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
 .restore-precheck-output summary { padding: var(--ui-space-3); color: var(--ui-color-text-subtle); cursor: pointer; }
-.restore-precheck-output pre { border-radius: 0; }
+.restore-precheck-output pre { box-sizing: border-box; display: block; width: 100%; max-width: 100%; min-width: 0; overflow: auto; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .restore-wizard-actions { display: flex; align-items: center; justify-content: space-between; margin-top: var(--ui-space-3); }
 .restore-wizard-actions span { color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
 

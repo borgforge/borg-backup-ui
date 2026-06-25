@@ -284,6 +284,7 @@ async function _pollRestoreState(restoreId) {
       restoreUpdateConfirmState();
       restoreSetStep(5);
       if (data.skipped) {
+        setRestoreHeaderStatus('skipped');
         const reasonKey = {
           target_exists: 'targetExists',
           target_not_empty: 'targetNotEmpty',
@@ -291,6 +292,7 @@ async function _pollRestoreState(restoreId) {
         }[data.skip_reason_code] || 'targetExists';
         showMsg('restore-assist-msg', 'warning', restoreT('skipped', { reason: restoreT(reasonKey) }));
       } else {
+        setRestoreHeaderStatus('success');
         showMsg('restore-assist-msg', 'success', restoreT('success', { path: data.destination_path || '' }));
       }
       return;
@@ -299,6 +301,7 @@ async function _pollRestoreState(restoreId) {
       _stopRestorePolling();
       _setRestoreAssistBusy(false);
       restoreUpdateConfirmState();
+      setRestoreHeaderStatus('failed');
       showMsg('restore-assist-msg', 'error', restoreT('failed', { message: restoreT('unknownError') }));
       return;
     }
@@ -781,7 +784,10 @@ function renderRestorePrecheck(data) {
   if (!data) {
     verdict.classList.add('hidden');
     facts.innerHTML = '';
-    if (badge) badge.textContent = restoreT('precheckPending');
+    if (badge) {
+      badge.textContent = restoreT('precheckPending');
+      badge.classList.remove('success', 'warning', 'error');
+    }
     return;
   }
   const ok = !!data.ok;
@@ -794,7 +800,26 @@ function renderRestorePrecheck(data) {
     [restoreT('destinationExistsLabel'), data.destination_exists ? restoreT('yes') : restoreT('no')],
     [restoreT('dryRunExitLabel'), data.dry_run_exit_code ?? '—'],
   ].map(([label, value]) => `<div><small>${escHtml(label)}</small><strong>${escHtml(String(value))}</strong></div>`).join('');
-  if (badge) badge.textContent = restoreT(ok ? 'precheckSuccessful' : 'precheckFailedShort');
+  if (badge) {
+    badge.textContent = restoreT(ok ? 'precheckSuccessful' : 'precheckFailedShort');
+    badge.classList.remove('success', 'warning', 'error');
+    badge.classList.add(ok ? 'success' : 'error');
+  }
+}
+
+function setRestoreHeaderStatus(state) {
+  const badge = document.getElementById('restore-precheck-badge');
+  if (!badge) return;
+  const key = {
+    success: 'restoreSuccessfulShort',
+    skipped: 'restoreSkippedShort',
+    failed: 'restoreFailedShort',
+  }[state] || 'precheckSuccessful';
+  badge.textContent = restoreT(key);
+  badge.classList.remove('success', 'warning', 'error');
+  if (state === 'success') badge.classList.add('success');
+  if (state === 'skipped') badge.classList.add('warning');
+  if (state === 'failed') badge.classList.add('error');
 }
 
 function _currentPrecheckKey() {
@@ -982,6 +1007,7 @@ function restorePrecheckInputsChanged() {
   restoreState.precheck = null;
   restoreState.autoPrecheckKey = '';
   restoreState.completed = false;
+  _restoreRenderSelectionSummary();
   restoreUpdateConfirmState();
   if (restoreState.step === 5) {
     restoreEnsureAutoPrecheck();
