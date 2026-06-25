@@ -40,3 +40,14 @@ def test_control_page_service_actions_remain_available():
 
     for action in ("start", "stop", "restart", "apply", "default"):
         assert f"'{action}'" in source or f'\"{action}\"' in source
+
+
+def test_control_page_reads_test_and_stable_manifest_versions():
+    source = CONTROL_PAGE.read_text(encoding="utf-8")
+
+    test_manifest = '"/boot/config/plugins/borg-backup-ui-test.plg"'
+    stable_manifest = '"/boot/config/plugins/borg-backup-ui.plg"'
+    assert test_manifest in source
+    assert stable_manifest in source
+    assert source.index(test_manifest) < source.index(stable_manifest)
+    assert "foreach ($plugin_manifests as $plg)" in source

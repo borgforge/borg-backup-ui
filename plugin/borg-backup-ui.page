@@ -81,10 +81,17 @@ function bbui_python_runtime_status() {
 
 // Version from .plg file
 $version = '';
-$plg = "/boot/config/plugins/borg-backup-ui.plg";
-if (file_exists($plg)) {
+$plugin_manifests = [
+  "/boot/config/plugins/borg-backup-ui-test.plg",
+  "/boot/config/plugins/borg-backup-ui.plg",
+];
+foreach ($plugin_manifests as $plg) {
+  if (!file_exists($plg)) continue;
   $plg_content = file_get_contents($plg);
-  if (preg_match('/<!ENTITY version\s+"([^"]+)"/', $plg_content, $m)) $version = $m[1];
+  if (preg_match('/<!ENTITY version\s+"([^"]+)"/', $plg_content, $m)) {
+    $version = $m[1];
+    break;
+  }
 }
 
 // Actions use a GET parameter because Unraid intercepts form POSTs and opens a new window.
