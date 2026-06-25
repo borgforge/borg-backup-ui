@@ -81,7 +81,7 @@ def test_history_formats_status_errors_and_detail_values() -> None:
     assert '"statusSuccess": "Erfolgreich"' in german
     assert "function renderHistoryError(message, isNotice = false)" in script
     assert "history-detail-group--log" in script
-    assert "detailGroup(historyT('archive'), e.archive_name, 'archive')" in script
+    assert "detailGroup(historyT('archive'), e.archive_name || '-', 'archive')" in script
     assert "detailGroup(historyT('lastCheck'), e.repository_check_date, 'datetime')" in script
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
     assert ".history-detail-group--archive { grid-column: span 2; }" in css

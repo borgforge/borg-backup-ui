@@ -148,7 +148,7 @@ function renderHistoryRow(e, idx) {
       <td colspan="8">
         ${detailError ? renderHistoryError(detailError, e.status === 'skipped') : ''}
         <div class="history-detail-panel">
-          ${detailGroup(historyT('archive'), e.archive_name, 'archive')}
+          ${detailGroup(historyT('archive'), e.archive_name || '-', 'archive')}
           ${detailGroup(historyT('compressed'), e.compressed_size_fmt)}
           ${detailGroup(historyT('repositorySize'), e.repository_size_fmt)}
           ${detailGroup(historyT('files'), e.files_count != null ? e.files_count.toLocaleString(historyLocale()) : null)}

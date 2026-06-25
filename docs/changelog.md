@@ -64,6 +64,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - History (#73):
   - Erfolgsstatus, Fehlerhinweise sowie Archiv- und Check-Details wurden sprachlich und visuell überarbeitet.
   - Der Check-Status belegt die vollständige letzte Detailzeile, sodass keine unbelegte Restfläche entsteht.
+  - Das Archivfeld bleibt auch bei Fehlerläufen als Platzhalter erhalten, damit die Detailstruktur stabil bleibt.
 - Berichte (#74):
   - Borg-Repository-Informationen verteilen nur vorhandene Kennzahlen ohne leere Füllspalte.
 - Sprachauswahl (#75):
