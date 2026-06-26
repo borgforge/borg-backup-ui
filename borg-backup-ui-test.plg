@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.0145">
+<!ENTITY version   "2026.06.26.0937">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.0145###
-- Dashboard detail follow-up (#33):
-  - Align restore and storage labels with their values.
-  - Label the latest-run deduplicated size explicitly.
+###2026.06.26.0937###
+- Settings follow-up (#33):
+  - Keep profile save actions available after deleting the last editable profile.
+  - Block deletion of USB, SMB and SSH profiles while jobs still reference them.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>ea83cdbdc2d76a56ba0a6132c5b0144c</MD5>
+<MD5>3a5e13d3af3b26a0109cefae20a6fd16</MD5>
 </FILE>
 
 <!--
