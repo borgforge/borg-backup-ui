@@ -17,6 +17,15 @@ def test_plugin_manifest_is_valid_xml() -> None:
     ET.parse(ROOT / "borg-backup-ui.plg")
 
 
+def test_plugin_manifest_uses_github_stable_channel_urls() -> None:
+    manifest = (ROOT / "borg-backup-ui.plg").read_text(encoding="utf-8")
+
+    assert 'https://raw.githubusercontent.com/borgforge/borg-backup-ui' in manifest
+    assert '&github;/main/&name;.plg' in manifest
+    assert '&github;/main/releases/&name;-&version;.txz' in manifest
+    assert 'gitlab.thetwist.de' not in manifest
+
+
 def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     script = (ROOT / "plugin" / "deploy-test.sh").read_text(encoding="utf-8")
 
