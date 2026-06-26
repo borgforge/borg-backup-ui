@@ -2,11 +2,11 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.15.1213">
-<!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
-<!ENTITY pluginURL "&gitlab;/-/raw/main/&name;.plg">
+<!ENTITY version   "2026.06.26.1347">
+<!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
+<!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
-<!ENTITY pkgurl    "&gitlab;/-/raw/main/releases/&name;-&version;.txz">
+<!ENTITY pkgurl    "&github;/main/releases/&name;-&version;.txz">
 ]>
 
 <PLUGIN name="&name;"
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.26.1347###
+- Release (#35):
+  - Einheitliches Redesign fuer Dashboard, Jobs, History, Berichte, Restore Tests, Browse & Restore, Storage, Einstellungen und Hilfe.
+  - Profilbasierte Speicherziele, SMTP/Wochenbericht, Import/Export und Plugin-Installationspruefungen enthalten die getesteten Korrekturen.
+
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
   - Wochenbericht zeigt die Erfolgsquote der letzten 7 Tage statt der historischen Gesamtquote.
@@ -38,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>9cfb56b151253a24c9578f427b7dfedb</MD5>
+<MD5>fe1a3d793b8f36a66d140fe3b55c3350</MD5>
 </FILE>
 
 <!--
