@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.1000">
+<!ENTITY version   "2026.06.26.1020">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,9 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.1000###
+###2026.06.26.1020###
 - Test-channel install fix (#33):
-  - Verify that the plugin payload is present after upgradepkg.
-  - Extract the package as a fallback when Unraid leaves only the downloaded txz.
+  - Keep the fallback install script XML-safe for Unraid plugin parsing.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +42,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>8e40f6ec7512face6eb7e84d4a5688b0</MD5>
+<MD5>4661e30ff8f2b24bd174bd53aabaf0a9</MD5>
 </FILE>
 
 <!--
@@ -60,15 +59,17 @@ GO_FILE="/boot/config/go"
 
 # Defensive fallback: some Unraid/plugin-manager upgradepkg runs may finish
 # without leaving the package payload in /boot/config/plugins/borg-backup-ui.
-if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ] && [ -f "${PACKAGE_FILE}" ]; then
-  echo "Plugin payload missing after upgradepkg; extracting package fallback."
-  tar -xf "${PACKAGE_FILE}" -C / 2>/tmp/borg-backup-ui-install-extract.err || true
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
+  if [ -f "${PACKAGE_FILE}" ]; then
+    echo "Plugin payload missing after upgradepkg; extracting package fallback."
+    tar -xf "${PACKAGE_FILE}" -C / 2>/tmp/borg-backup-ui-install-extract.err || true
+  fi
 fi
 
 if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
-  echo "ERROR: borg-backup-ui payload was not installed from ${PACKAGE_FILE}." >&2
+  echo "ERROR: borg-backup-ui payload was not installed from ${PACKAGE_FILE}."
   if [ -s /tmp/borg-backup-ui-install-extract.err ]; then
-    cat /tmp/borg-backup-ui-install-extract.err >&2
+    cat /tmp/borg-backup-ui-install-extract.err
   fi
   exit 1
 fi
