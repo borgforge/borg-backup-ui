@@ -1623,8 +1623,9 @@ function renderProfileSecretsImportPreview(d) {
         const candidates = Array.isArray(options[pType]) ? options[pType] : [];
         const selectedTarget = candidates.includes(r.profile_key) ? r.profile_key : (candidates[0] || '');
         const selectHtml = `<select class="form-select" data-profile-secret-target="${idx}" style="width:150px">${candidates.map((k) => `<option value="${escHtml(k)}" ${k === selectedTarget ? 'selected' : ''}>${escHtml(k)}</option>`).join('')}</select>`;
+        const canImportMissingProfile = String(r.status) !== 'profile_missing' || !!(sp && sp.present);
         return `<tr>
-        <td><input type="checkbox" data-profile-secret-preview-select="${idx}" ${String(r.status) === 'profile_missing' ? 'disabled' : 'checked'}></td>
+        <td><input type="checkbox" data-profile-secret-preview-select="${idx}" ${canImportMissingProfile ? 'checked' : 'disabled'}></td>
         <td>${escHtml(String(r.profile_type || '').toUpperCase())}</td>
         <td><code style="font-size:12px">${escHtml(r.profile_key || '')}</code></td>
         <td>${candidates.length ? selectHtml : '—'}</td>
@@ -3606,7 +3607,9 @@ async function saveSettings() {
   syncSmbProfilesHiddenInput();
   syncStorageProfilesHiddenInput();
   const updates = {};
-  document.querySelectorAll('#settings-content [data-key]').forEach(el => {
+  const activePanel = document.querySelector('#settings-content .settings-tab-panel:not(.hidden)');
+  const activeTab = activePanel?.dataset?.settingsPanel || settingsState.activeTab || 'general';
+  activePanel?.querySelectorAll('[data-key]').forEach(el => {
     const key = el.dataset.key;
     if (el.type === 'checkbox') {
       updates[key] = el.checked ? 'true' : 'false';
@@ -3614,14 +3617,16 @@ async function saveSettings() {
       updates[key] = el.value;
     }
   });
-  updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());
-  updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());
-  updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());
-  if (!String(updates.GLOBAL_DATA_DIR || '').trim()) {
+  if (activeTab === 'usb') updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());
+  if (activeTab === 'smb') updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());
+  if (activeTab === 'storagebox') updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());
+  if (Object.prototype.hasOwnProperty.call(updates, 'GLOBAL_DATA_DIR') && !String(updates.GLOBAL_DATA_DIR || '').trim()) {
     showMsg('settings-message', 'error', settingsT('forms.dataDirRequired'));
     return false;
   }
-  updates.GLOBAL_DATA_DIR = String(updates.GLOBAL_DATA_DIR).trim();
+  if (Object.prototype.hasOwnProperty.call(updates, 'GLOBAL_DATA_DIR')) {
+    updates.GLOBAL_DATA_DIR = String(updates.GLOBAL_DATA_DIR).trim();
+  }
   if (updates.UI_SESSION_TIMEOUT_MINUTES !== undefined) {
     const t = Number(updates.UI_SESSION_TIMEOUT_MINUTES);
     updates.UI_SESSION_TIMEOUT_MINUTES = String(Number.isFinite(t) ? Math.max(5, Math.floor(t)) : 30);
@@ -3670,6 +3675,9 @@ async function saveSettings() {
     }
     await refreshSettingsConfigBackups();
     await window.BBUI.core.updateDataDirWarning();
+    if (!['usb', 'smb', 'storagebox'].includes(activeTab)) {
+      await reloadSettingsDataAfterSave();
+    }
     return true;
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
