@@ -71,6 +71,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Profilseiten zeigen den lokalen Speichern-Dialog auch nach dem Entfernen des letzten Profils im Bearbeitungsmodus.
   - USB-, SMB- und SSH-Profile können nicht entfernt werden, solange Jobs sie noch verwenden; die Prüfung erfolgt in UI und API.
   - Das Plugin-Installationsskript prüft nach `upgradepkg`, ob die App-Dateien wirklich entpackt wurden, und entpackt das Paket andernfalls defensiv selbst.
+  - Test-Channel-Deploys brechen vor dem Push ab, wenn das generierte Manifest kein gültiges XML ist oder das Paket zentrale App-Dateien nicht enthält.
 
 ## Test-channel follow-up for 2026.06.25.1831
 

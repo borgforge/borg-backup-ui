@@ -33,6 +33,21 @@ if [ ! -f "$PKG_FILE" ]; then
   exit 1
 fi
 
+require_pkg_entry() {
+  local entry="$1"
+  if ! tar -tf "$PKG_FILE" | sed 's|^\./||' | grep -qx "$entry"; then
+    echo "ERROR: Paket ${PKG_FILE} enthaelt erwarteten Eintrag nicht: ${entry}" >&2
+    exit 1
+  fi
+}
+
+echo "==> Pruefe Paketinhalt"
+require_pkg_entry "boot/config/plugins/${NAME}/borg_backup_ui.py"
+require_pkg_entry "boot/config/plugins/${NAME}/api/config_api.py"
+require_pkg_entry "boot/config/plugins/${NAME}/ui/index.html"
+require_pkg_entry "boot/config/plugins/${NAME}/runtime/config/backup.conf.example"
+require_pkg_entry "etc/rc.d/rc.borg_backup_ui"
+
 if command -v md5sum >/dev/null 2>&1; then
   MD5="$(md5sum "$PKG_FILE" | cut -d' ' -f1)"
 else
@@ -51,6 +66,9 @@ sed -i.bak \
   -e "s|<MD5>[^<]*</MD5>|<MD5>${MD5}</MD5>|" \
   "$TMP_PLG"
 rm -f "${TMP_PLG}.bak"
+
+echo "==> Pruefe Test-Manifest XML"
+python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$TMP_PLG"
 
 WORKTREE="$(mktemp -d "${TMP_ROOT}/${TEST_BRANCH}.XXXXXX")"
 cleanup() {
