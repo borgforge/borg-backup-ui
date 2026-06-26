@@ -1929,6 +1929,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 due_rows.append(row)
             clean_job_keys = [str(r.get("job_key") or "").strip() for r in due_rows if str(r.get("job_key") or "").strip()]
             auto_selected = True
+            location = "all"
             if not clean_job_keys:
                 return {
                     "started": False,

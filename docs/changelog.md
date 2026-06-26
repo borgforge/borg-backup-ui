@@ -73,6 +73,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Profilseiten serialisieren beim Speichern direkt die aktuellen DOM-Zeilen, laden nach Profil-Saves den Backend-Zustand nach und aktualisieren Leerhinweise dynamisch.
   - Das Plugin-Installationsskript prüft nach `upgradepkg`, ob die App-Dateien wirklich entpackt wurden, und entpackt das Paket andernfalls defensiv selbst.
   - Test-Channel-Deploys brechen vor dem Push ab, wenn das generierte Manifest kein gültiges XML ist oder das Paket zentrale App-Dateien nicht enthält.
+  - Fällige Restore-Tests laufen für automatisch ausgewählte USB-, SMB- und Storagebox-Jobs nicht mehr gegen den alten globalen Location-Default.
+  - Restore-Test-Discovery erkennt Profil-basierte USB- und SMB-Repositorys auch dann, wenn sie nicht mehr als `REPO_*`-Wert in `backup.conf` stehen.
 
 ## Test-channel follow-up for 2026.06.25.1831
 
