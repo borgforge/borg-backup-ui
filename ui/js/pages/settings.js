@@ -381,9 +381,10 @@ function syncSettingsProfileManager(type, selectLast = false) {
     const name = row.querySelector(config.nameSelector)?.value || key || settingsT('menu.newProfile');
     const endpoint = row.querySelector(config.endpointSelector)?.value || settingsT('common.notChecked');
     const jobsCount = Number(row.dataset.usbJobsCount || row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
+    const inUse = jobsCount > 0 ? `<em class="settings-profile-usage">${settingsT('profiles.inUseShort', { count: jobsCount })}</em>` : '';
     return `<button type="button" class="settings-profile-list-item ${key === selectedKey ? 'active' : ''}" data-profile-ui-key="${escHtml(key)}">
       <span class="settings-profile-symbol ${type}">${config.icon}</span>
-      <span><strong>${escHtml(name)}</strong><small>${escHtml(endpoint)}</small><em>${settingsT('common.jobsCount', { count: jobsCount })}</em></span>
+      <span><strong>${escHtml(name)}</strong><small>${escHtml(endpoint)}</small><em>${settingsT('common.jobsCount', { count: jobsCount })}</em>${inUse}</span>
       <b>›</b>
     </button>`;
   }).join('');
@@ -412,7 +413,26 @@ function syncSettingsProfileManager(type, selectLast = false) {
     syncSettingsProfileManager(type);
   });
   const footer = manager.querySelector('.settings-profile-editor > footer');
-  if (footer) footer.classList.toggle('hidden', !editing || !selectedRow);
+  if (footer) footer.classList.toggle('hidden', !editing);
+}
+
+async function blockProfileRemovalIfInUse(row, type) {
+  const jobsCount = Number(row?.dataset?.[`${type}JobsCount`] || 0);
+  if (jobsCount <= 0) return false;
+  const refs = String(row?.dataset?.[`${type}JobRefs`] || '').trim();
+  const titleKey = type === 'usb'
+    ? 'profiles.cannotRemoveUsb'
+    : (type === 'smb' ? 'profiles.cannotRemoveSmb' : 'profiles.cannotRemoveStorage');
+  const msgId = type === 'usb'
+    ? 'usb-profiles-msg'
+    : (type === 'smb' ? 'smb-profiles-msg' : 'storage-profiles-msg');
+  await _openSettingsDialog({
+    title: settingsT(titleKey),
+    message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
+    confirmText: 'OK',
+  });
+  showMsg(msgId, 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
+  return true;
 }
 
 function decorateSettingsProfileFields(row, fields) {
@@ -2841,6 +2861,7 @@ async function onSettingsContentClick(event) {
   if (action === 'usb-profile-check') return checkUsbProfilesStatus();
   if (action === 'usb-profile-remove') {
     const row = event.target.closest('.usb-profile-row');
+    if (await blockProfileRemovalIfInUse(row, 'usb')) return;
     if (row) row.remove();
     onUsbProfileInputChanged();
     syncSettingsProfileManager('usb');
@@ -2862,17 +2883,7 @@ async function onSettingsContentClick(event) {
   }
   if (action === 'smb-profile-remove') {
     const row = event.target.closest('.smb-profile-row');
-    const jobsCount = Number(row?.dataset?.smbJobsCount || 0);
-    if (jobsCount > 0) {
-      const refs = String(row?.dataset?.smbJobRefs || '').trim();
-      await _openSettingsDialog({
-        title: settingsT('profiles.cannotRemoveSmb'),
-        message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
-        confirmText: 'OK',
-      });
-      showMsg('smb-profiles-msg', 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
-      return;
-    }
+    if (await blockProfileRemovalIfInUse(row, 'smb')) return;
     const profileKey = String(row?.dataset?.profileKey || '').trim().toLowerCase();
     if (!profileKey) return;
     const confirmedRemove = await _openSettingsDialog({
@@ -2931,17 +2942,7 @@ async function onSettingsContentClick(event) {
   }
   if (action === 'storage-profile-remove') {
     const row = event.target.closest('.storage-profile-row');
-    const jobsCount = Number(row?.dataset?.storageJobsCount || 0);
-    if (jobsCount > 0) {
-      const refs = String(row?.dataset?.storageJobRefs || '').trim();
-      await _openSettingsDialog({
-        title: settingsT('profiles.cannotRemoveStorage'),
-        message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
-        confirmText: 'OK',
-      });
-      showMsg('storage-profiles-msg', 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
-      return;
-    }
+    if (await blockProfileRemovalIfInUse(row, 'storage')) return;
     if (row) row.remove();
     onStorageProfileInputChanged();
     syncSettingsProfileManager('storagebox');

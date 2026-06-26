@@ -2117,6 +2117,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             write_settings_payload,
             _normalize_usb_profile_rows,
             _normalize_storage_profile_rows,
+            validate_usb_profile_usage_before_save,
             validate_storage_profiles_complete_before_save,
             validate_storage_profile_usage_before_save,
             prepare_smb_profiles_for_save,
@@ -2187,7 +2188,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 raise ValueError("USB_PROFILES_JSON is not valid JSON.")
             if not isinstance(parsed_usb, list):
                 raise ValueError("USB_PROFILES_JSON must be a list.")
-            settings_payload["usb_profiles"] = _normalize_usb_profile_rows(parsed_usb)
+            normalized_usb = _normalize_usb_profile_rows(parsed_usb)
+            validate_usb_profile_usage_before_save(self.config, normalized_usb)
+            settings_payload["usb_profiles"] = normalized_usb
             updates.pop("USB_PROFILES_JSON", None)
             settings_changed = True
         if "STORAGE_PROFILES_JSON" in updates:

@@ -367,6 +367,10 @@
   font-style: normal;
 }
 
+.settings-profile-list-item .settings-profile-usage {
+  color: var(--ui-color-warning);
+}
+
 .settings-profile-symbol {
   display: grid;
   place-items: center;

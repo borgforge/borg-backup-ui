@@ -56,6 +56,35 @@ def get_usb_profile_job_refs(ui_config: dict) -> Dict[str, List[str]]:
     return refs
 
 
+def validate_usb_profile_usage_before_save(ui_config: dict, next_rows: List[Dict[str, str]]) -> None:
+    refs = get_usb_profile_job_refs(ui_config)
+    next_by_key = {
+        str(r.get("key") or "").strip().lower(): r
+        for r in next_rows
+        if str(r.get("key") or "").strip()
+    }
+    for key, jobs in refs.items():
+        if not jobs:
+            continue
+        row = next_by_key.get(key)
+        if row is None:
+            raise ValueError(
+                f"USB profile '{key}' cannot be removed because it is still used by {len(jobs)} job(s)."
+            )
+        missing = [
+            label for field, label in (
+                ("name", "Name"),
+                ("mount_path", "mount path"),
+            )
+            if not str(row.get(field) or "").strip()
+        ]
+        if missing:
+            raise ValueError(
+                f"USB profile '{key}' is still used by {len(jobs)} job(s) and cannot be saved incomplete. "
+                f"Missing: {', '.join(missing)}."
+            )
+
+
 def test_usb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Prueft USB-Profilpfade auf Existenz, Verzeichnis und Mount-Zustand."""
     results: List[Dict[str, Any]] = []

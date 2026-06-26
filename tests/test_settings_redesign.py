@@ -130,6 +130,17 @@ def test_profile_lists_reuse_storage_icons_and_hide_duplicate_config_path() -> N
     assert "`Config: ${data.conf_file}`" not in script
 
 
+def test_profile_pages_keep_local_save_and_block_in_use_deletes() -> None:
+    script = _read("ui/js/pages/settings.js")
+
+    assert "footer.classList.toggle('hidden', !editing)" in script
+    assert "async function blockProfileRemovalIfInUse(row, type)" in script
+    assert "profiles.cannotRemoveUsb" in script
+    assert "if (await blockProfileRemovalIfInUse(row, 'usb')) return;" in script
+    assert "if (await blockProfileRemovalIfInUse(row, 'smb')) return;" in script
+    assert "if (await blockProfileRemovalIfInUse(row, 'storage')) return;" in script
+
+
 def test_editable_backup_conf_keys_are_part_of_runtime_schema() -> None:
     script = _read("ui/js/pages/settings.js")
     example = _read("runtime/config/backup.conf.example")

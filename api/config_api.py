@@ -47,6 +47,7 @@ from usb_profiles_api import (
     get_usb_profile_job_refs,
     normalize_usb_profile_rows as _normalize_usb_profile_rows,
     test_usb_profiles_status,
+    validate_usb_profile_usage_before_save,
 )
 
 BACKUP_TYPES = ["flash", "appdata", "photos", "VMs", "sonstiges"]

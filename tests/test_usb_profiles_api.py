@@ -58,3 +58,23 @@ def test_get_usb_profile_job_refs_reads_usb_profile_key(tmp_path: Path, monkeypa
     assert usb_profiles_api.get_usb_profile_job_refs({}) == {
         "usb-a": ["photos-usb (Photos USB)"]
     }
+
+
+def test_validate_usb_profile_usage_blocks_removal(tmp_path: Path, monkeypatch):
+    jobs_dir = tmp_path / "config" / "jobs"
+    jobs_dir.mkdir(parents=True)
+    (jobs_dir / "photos-usb.json").write_text(
+        '{"job_key":"photos-usb","name":"Photos USB","location":"usb","usb_profile_key":"usb-a"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("jobs_api.resolve_scripts_dir", lambda _config: tmp_path / "scripts")
+    monkeypatch.setattr("jobs_api.resolve_data_root", lambda _config: tmp_path)
+    monkeypatch.setattr("jobs_api.get_jobs_meta_dirs", lambda _scripts, _root: [jobs_dir])
+
+    try:
+        usb_profiles_api.validate_usb_profile_usage_before_save({}, [])
+    except ValueError as exc:
+        assert "usb-a" in str(exc)
+        assert "still used" in str(exc)
+    else:
+        raise AssertionError("Expected in-use USB profile removal to be blocked")
