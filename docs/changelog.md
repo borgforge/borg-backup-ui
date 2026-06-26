@@ -77,6 +77,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Restore-Test-Discovery erkennt Profil-basierte USB- und SMB-Repositorys auch dann, wenn sie nicht mehr als `REPO_*`-Wert in `backup.conf` stehen.
   - Settings-Saves schreiben nur noch die Werte des aktiven Bereichs, damit SMTP- und Wochenbericht-Konfigurationen nicht durch versteckte leere Felder überschrieben werden.
   - Profil-Secret-Import erlaubt fehlende Zielprofile, wenn diese aus der im Paket enthaltenen Settings-Payload angelegt werden können.
+  - In-App-Hilfe beschreibt nun SMTP, Wochenbericht sowie profilbasierte Import-/Secret-Import-Abläufe.
 
 ## Test-channel follow-up for 2026.06.25.1831
 

@@ -149,6 +149,8 @@ def test_in_app_help_has_bilingual_parity_and_no_public_urls():
     assert len(help_de.splitlines()) == len(help_en.splitlines())
     assert "http://" not in help_de and "https://" not in help_de
     assert "http://" not in help_en and "https://" not in help_en
+    assert "SMTP" in help_de and "Wochenbericht" in help_de and "Profil-Secret-Import" in help_de
+    assert "SMTP" in help_en and "weekly report" in help_en and "Profile-secret imports" in help_en
 
 
 def test_in_app_help_follows_language_with_german_fallback_and_live_reload():
