@@ -135,10 +135,23 @@ def test_profile_pages_keep_local_save_and_block_in_use_deletes() -> None:
 
     assert "footer.classList.toggle('hidden', !editing)" in script
     assert "async function blockProfileRemovalIfInUse(row, type)" in script
+    assert "await reloadSettingsDataAfterSave(type);" in script
     assert "profiles.cannotRemoveUsb" in script
     assert "if (await blockProfileRemovalIfInUse(row, 'usb')) return;" in script
     assert "if (await blockProfileRemovalIfInUse(row, 'smb')) return;" in script
     assert "if (await blockProfileRemovalIfInUse(row, 'storage')) return;" in script
+
+
+def test_profile_save_uses_live_dom_payload_and_dynamic_empty_state() -> None:
+    script = _read("ui/js/pages/settings.js")
+
+    assert "updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());" in script
+    assert "updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());" in script
+    assert "updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());" in script
+    assert "function updateUsbProfilesEmptyState()" in script
+    assert 'id="usb-profiles-empty-state"' in script
+    assert "empty.classList.toggle('hidden', getUsbProfilesFromDom().length > 0);" in script
+    assert "fetch('/api/settings/basic')" in script
 
 
 def test_editable_backup_conf_keys_are_part_of_runtime_schema() -> None:

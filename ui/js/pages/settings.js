@@ -352,7 +352,7 @@ function syncSettingsProfileManager(type, selectLast = false) {
       const saved = await saveSettings();
       if (!saved) return;
       settingsState.profileEditing = '';
-      syncSettingsProfileManager(type);
+      await reloadSettingsDataAfterSave(type);
     });
   }
 
@@ -481,6 +481,13 @@ function syncUsbProfilesHiddenInput() {
   const hidden = document.getElementById('usb-profiles-json');
   if (!hidden) return;
   hidden.value = JSON.stringify(getUsbProfilesFromDom());
+  updateUsbProfilesEmptyState();
+}
+
+function updateUsbProfilesEmptyState() {
+  const empty = document.getElementById('usb-profiles-empty-state');
+  if (!empty) return;
+  empty.classList.toggle('hidden', getUsbProfilesFromDom().length > 0);
 }
 
 function onUsbProfileInputChanged() {
@@ -531,7 +538,7 @@ function renderSettingsUsbProfiles(rows) {
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-add">${settingsT('profiles.addUsb')}</button>
       </div>
       <div id="usb-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
-      ${normalized.length === 0 ? `<div class="status-message warning" style="margin-top:10px">${settingsT('profiles.noUsb')}</div>` : ''}
+      <div id="usb-profiles-empty-state" class="status-message warning ${normalized.length === 0 ? '' : 'hidden'}" style="margin-top:10px">${settingsT('profiles.noUsb')}</div>
     </div>`);
 }
 
@@ -3607,6 +3614,9 @@ async function saveSettings() {
       updates[key] = el.value;
     }
   });
+  updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());
+  updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());
+  updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());
   if (!String(updates.GLOBAL_DATA_DIR || '').trim()) {
     showMsg('settings-message', 'error', settingsT('forms.dataDirRequired'));
     return false;
@@ -3666,5 +3676,27 @@ async function saveSettings() {
     return false;
   } finally {
     if (btn) btn.classList.remove('loading');
+  }
+}
+
+async function reloadSettingsDataAfterSave(profileType = '') {
+  try {
+    const res = await fetch('/api/settings/basic');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    settingsState.data = data;
+    settingsState.dirty = false;
+    if (profileType) {
+      const rows = Array.isArray(data?.[`${profileType === 'storagebox' ? 'storage' : profileType}_profiles`])
+        ? data[`${profileType === 'storagebox' ? 'storage' : profileType}_profiles`]
+        : [];
+      const selected = settingsState.profileSelection[profileType] || '';
+      if (!rows.some((row) => String(row?.key || '').trim() === selected)) {
+        settingsState.profileSelection[profileType] = rows[0]?.key || '';
+      }
+    }
+    renderSettings(settingsState.data, settingsState.systemHealth);
+  } catch (_) {
+    if (profileType) syncSettingsProfileManager(profileType);
   }
 }
