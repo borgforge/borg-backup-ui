@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.1045">
+<!ENTITY version   "2026.06.26.1127">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,11 +18,9 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.1045###
-- Settings profile follow-up (#33):
-  - Persist profile edits from the live profile rows.
-  - Reload saved profile data after local profile saves.
-  - Update USB empty-state hints dynamically.
+###2026.06.26.1127###
+- Restore Tests (#33):
+  - Faellige Restore-Test-Laeufe beruecksichtigen automatisch ausgewaehlte profilbasierte USB-, SMB- und Storagebox-Jobs korrekt.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -44,7 +42,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>92364909e2c57cb63e0c6bf9301de380</MD5>
+<MD5>5cabd2862cdfbe1cc83a3e8ee7c3f342</MD5>
 </FILE>
 
 <!--
