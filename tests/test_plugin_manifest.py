@@ -1,4 +1,5 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,3 +11,7 @@ def test_plugin_manifest_extracts_payload_when_upgradepkg_left_it_missing() -> N
     assert 'PACKAGE_FILE="${PLUGIN_DIR}/borg-backup-ui-&version;.txz"' in manifest
     assert 'tar -xf "${PACKAGE_FILE}" -C /' in manifest
     assert 'ERROR: borg-backup-ui payload was not installed' in manifest
+
+
+def test_plugin_manifest_is_valid_xml() -> None:
+    ET.parse(ROOT / "borg-backup-ui.plg")
