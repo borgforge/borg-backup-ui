@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.0937">
+<!ENTITY version   "2026.06.26.1000">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,10 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.0937###
-- Settings follow-up (#33):
-  - Keep profile save actions available after deleting the last editable profile.
-  - Block deletion of USB, SMB and SSH profiles while jobs still reference them.
+###2026.06.26.1000###
+- Test-channel install fix (#33):
+  - Verify that the plugin payload is present after upgradepkg.
+  - Extract the package as a fallback when Unraid leaves only the downloaded txz.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -43,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>3a5e13d3af3b26a0109cefae20a6fd16</MD5>
+<MD5>8e40f6ec7512face6eb7e84d4a5688b0</MD5>
 </FILE>
 
 <!--
@@ -55,7 +55,23 @@
 <INLINE>
 #!/bin/bash
 PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
+PACKAGE_FILE="${PLUGIN_DIR}/borg-backup-ui-&version;.txz"
 GO_FILE="/boot/config/go"
+
+# Defensive fallback: some Unraid/plugin-manager upgradepkg runs may finish
+# without leaving the package payload in /boot/config/plugins/borg-backup-ui.
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ] && [ -f "${PACKAGE_FILE}" ]; then
+  echo "Plugin payload missing after upgradepkg; extracting package fallback."
+  tar -xf "${PACKAGE_FILE}" -C / 2>/tmp/borg-backup-ui-install-extract.err || true
+fi
+
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
+  echo "ERROR: borg-backup-ui payload was not installed from ${PACKAGE_FILE}." >&2
+  if [ -s /tmp/borg-backup-ui-install-extract.err ]; then
+    cat /tmp/borg-backup-ui-install-extract.err >&2
+  fi
+  exit 1
+fi
 
 # Create default config if none exists yet
 if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.conf" ]; then
@@ -110,6 +126,7 @@ if [ -d "${RELEASE_DIR}" ]; then
 fi
 
 rm -f /tmp/borg-backup-ui-install.sh
+rm -f /tmp/borg-backup-ui-install-extract.err
 </INLINE>
 </FILE>
 
