@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.1127">
+<!ENTITY version   "2026.06.26.1322">
 <!ENTITY gitlab    "https://gitlab.thetwist.de/tsteinbe/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,9 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.06.26.1127###
-- Restore Tests (#33):
-  - Faellige Restore-Test-Laeufe beruecksichtigen automatisch ausgewaehlte profilbasierte USB-, SMB- und Storagebox-Jobs korrekt.
+###2026.06.26.1322###
+- Settings (#33):
+  - SMTP- und Wochenbericht-Einstellungen bleiben beim Speichern anderer Settings-Bereiche erhalten.
+  - Profil-Secret-Import kann fehlende Profile aus dem Importpaket anlegen und direkt auswaehlen.
 
 ###2026.06.15.1213###
 - Aktueller Stand (#60):
@@ -42,7 +43,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>5cabd2862cdfbe1cc83a3e8ee7c3f342</MD5>
+<MD5>d9fc67a6610d31cfe536e3fc2a3a069d</MD5>
 </FILE>
 
 <!--
