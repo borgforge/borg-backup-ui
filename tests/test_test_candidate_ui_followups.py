@@ -60,7 +60,7 @@ def test_dashboard_and_jobs_preserve_readable_content() -> None:
     jobs = _read("ui/js/pages/jobs.js")
     german = _read("ui/i18n/de.json")
     assert "min-width: 1280px" in css
-    assert ".dashboard-inventory-table th:nth-child(1) { width: 23%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(1) { width: 22%; }" in css
     assert "dashboard-storage-facts" in dashboard
     assert "function renderDashboardRepositoryCheck" in dashboard
     assert "dashboard-check-date" in css

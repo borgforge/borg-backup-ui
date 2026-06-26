@@ -44,6 +44,13 @@ Tipp: Repository-URIs für SSH-Ziele sollten aus dem Profil entstehen. Nicht man
 
 Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerhaft per Zeitplan verwenden.
 
+### 6) E-Mail optional einrichten
+
+- SMTP wird unter **Einstellungen > Allgemein** gepflegt.
+- Nach dem Speichern eine Test-E-Mail senden.
+- Der Wochenbericht wird unter **Einstellungen > Backup** aktiviert und terminiert.
+- Der Wochenbericht nutzt entweder seinen eigenen Empfänger oder, wenn leer, den globalen E-Mail-Empfänger.
+
 ## Systemstatus verstehen
 
 ### Sidebar
@@ -95,11 +102,21 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - **Restore Tests** prüfen regelmäßig, ob Wiederherstellungen technisch funktionieren.
 - Restore-Tests sind keine vollständige Datenkontrolle, aber ein wichtiger Nachweis, dass Repository, Archiv und Restore-Pfad zusammen funktionieren.
 
+## E-Mail und Berichte
+
+- SMTP-Konfiguration und Testmail liegen unter **Einstellungen > Allgemein**.
+- Das SMTP-Passwort wird nach dem Speichern nicht im Klartext angezeigt. Ein gesetztes Passwort wird nur als Status angezeigt.
+- Backup-Fehler können E-Mails auslösen; reguläre Zusammenfassungen laufen über den Wochenbericht.
+- Der Wochenbericht wird unter **Einstellungen > Backup** aktiviert. Er verwendet die gespeicherte SMTP-Konfiguration.
+- Testmails, Wochenberichte und technische Ausgaben werden immer auf Englisch versendet.
+
 ## Import, Export und Backups
 
 - **Einstellungen > Import / Export** bietet verschlüsselte Exporte für Jobs, Passphrases, Profile und Secrets.
 - Vor Importen wird eine Vorschau angezeigt.
 - Import-Modi wie `skip`, `overwrite` oder `rename` steuern den Umgang mit bestehenden Daten.
+- Jobs-Importe können passende USB-/SMB-Profile aus dem Paket mitbringen.
+- Profil-Secret-Importe können fehlende SMB-/SSH-Profile aus dem Paket anlegen, wenn der Settings-Import nicht auf `ignore` steht.
 - Config-Backups dienen als Rückfallpunkt vor Wartungs- oder Cleanup-Aktionen.
 - Support-Pakete sollten keine Secrets im Klartext enthalten.
 
@@ -142,3 +159,9 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - Job bearbeiten und Passphrase-Datei prüfen.
 - Import/Export nur mit verschlüsselten Secret-Paketen für Passphrases und Profil-Secrets verwenden.
 - Secret-Dateien sollten restriktive Dateirechte haben.
+
+### SMTP- oder Wochenberichtswerte fehlen nach Reload
+
+- Die Werte zuerst im passenden Bereich speichern: SMTP unter **Allgemein**, Wochenbericht unter **Backup**.
+- Nach dem Speichern wird der Zustand aus `backup.conf` neu geladen.
+- Das SMTP-Passwort bleibt absichtlich leer sichtbar, wenn es bereits gespeichert ist.

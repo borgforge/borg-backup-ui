@@ -16,7 +16,7 @@ Verwendung:
 
 Voraussetzungen:
     - borg muss im PATH sein
-    - backup.conf mit REPO_*-Variablen
+    - Job-Metadaten mit Repository- oder Profilbezug
     - Passphrase-Dateien aus backup.conf
 """
 
@@ -73,6 +73,44 @@ def load_conf() -> dict:
     return {}
 
 
+def _load_settings_payload(config_dir: Path) -> dict:
+    settings_file = config_dir / "settings.json"
+    if not settings_file.is_file():
+        return {}
+    try:
+        payload = json.loads(settings_file.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _profile_mount_path(payload: dict, group: str, profile_key: str) -> str:
+    key_wanted = str(profile_key or "").strip().lower()
+    if not key_wanted:
+        return ""
+    rows = payload.get(group) if isinstance(payload.get(group), list) else []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("key") or "").strip().lower()
+        if key != key_wanted:
+            continue
+        return str(row.get("mount_path") or "").strip()
+    return ""
+
+
+def _profile_repo_path(raw: dict, btype: str, location: str, settings_payload: dict) -> str:
+    if location == "usb":
+        mount_path = _profile_mount_path(settings_payload, "usb_profiles", raw.get("usb_profile_key"))
+    elif location == "smb":
+        mount_path = _profile_mount_path(settings_payload, "smb_profiles", raw.get("smb_profile_key"))
+    else:
+        mount_path = ""
+    if not mount_path:
+        return ""
+    return str(Path(mount_path.rstrip("/")) / f"borg-backup-{btype.strip().lower()}")
+
+
 def discover_repos(conf: dict) -> list:
     """Baut Repo-Liste ausschließlich aus Job-Metadaten."""
     jobs_dir_candidates = [
@@ -86,6 +124,7 @@ def discover_repos(conf: dict) -> list:
     for jobs_dir in jobs_dir_candidates:
         if not jobs_dir.is_dir():
             continue
+        settings_payload = _load_settings_payload(jobs_dir.parent)
         for jf in sorted(jobs_dir.glob("*.json")):
             try:
                 raw = json.loads(jf.read_text(encoding="utf-8"))
@@ -108,6 +147,8 @@ def discover_repos(conf: dict) -> list:
             repo_default = str(repo_cfg.get("default") or "").strip()
             repo_path = conf.get(repo_key, repo_default) if repo_key else repo_default
             if not repo_path:
+                repo_path = _profile_repo_path(raw, btype, location, settings_payload)
+            if not repo_path:
                 continue
 
             pass_key = str(pass_cfg.get("conf_key") or "").strip()
@@ -124,6 +165,7 @@ def discover_repos(conf: dict) -> list:
                 "location":        location,
                 "path":            repo_path,
                 "passphrase_file": pass_file,
+                "usb_profile_key": str(raw.get("usb_profile_key") or "").strip().lower(),
                 "smb_profile_key": str(raw.get("smb_profile_key") or "").strip().lower(),
                 "mount_before_run": bool(raw.get("mount_before_run", True)),
                 "unmount_after_run": bool(raw.get("unmount_after_run", True)),
@@ -898,14 +940,14 @@ def main() -> None:
     tester.log(f"{'='*60}")
 
     repos = discover_repos(conf)
-    if args.location != "all":
-        repos = [r for r in repos if r["location"] == args.location]
     if args.job_keys:
         wanted = {str(k).strip() for k in args.job_keys if str(k).strip()}
         repos = [r for r in repos if str(r.get("job_key", "")).strip() in wanted]
+    elif args.location != "all":
+        repos = [r for r in repos if r["location"] == args.location]
 
     if not repos:
-        tester.log("No repositories configured; check backup.conf")
+        tester.log("No repositories configured; check job metadata, profile settings and backup.conf")
         tester.close()
         sys.exit(0)
 

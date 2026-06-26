@@ -87,6 +87,41 @@ def test_dashboard_jobs_locale_contract_matches() -> None:
         '"operatingState"',
         '"noLocationBackups"',
         '"noLocationJobs"',
+        '"lastRunTime"',
+        '"runDuration"',
+        '"lastTestLabel"',
+        '"validUntilLabel"',
+        '"durationSecondsShort"',
     ):
         assert key in english
         assert key in german
+    assert '"locationStoragebox": "Storagebox"' in english
+
+
+def test_dashboard_labels_relative_time_and_duration_separately() -> None:
+    script = _read("ui/js/pages/dashboard.js")
+    css = _read("ui/dashboard-jobs.css")
+
+    assert "function dashboardRelativeRunTime(timestamp)" in script
+    assert "new Intl.RelativeTimeFormat" in script
+    assert "function dashboardRunDuration(seconds)" in script
+    assert "dashboard.lastRunTime" in script
+    assert "dashboard.runDuration" in script
+    assert "backup.time_ago" not in script
+    assert ".dashboard-run-facts" in css
+
+
+def test_dashboard_keeps_run_restore_and_storage_facts_aligned() -> None:
+    script = _read("ui/js/pages/dashboard.js")
+    css = _read("ui/dashboard-jobs.css")
+
+    assert "dashboard-restore-facts" in script
+    assert "details.map(([label, value])" in script
+    assert "dashboard.deduplicated" in script
+    assert "dashboard-fact-row" in script
+    assert "grid-template-columns: 6.5rem minmax(0, 1fr)" in css
+    assert ".dashboard-inventory-table th:nth-child(3) { width: 16%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(4) { width: 19%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(5) { width: 17%; }" in css
+    assert ".dashboard-inventory-table .loc-badge" in css
+    assert "white-space: nowrap" in css

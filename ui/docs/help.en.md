@@ -44,6 +44,13 @@ Tip: Repository URIs for SSH targets should be generated from the profile. Do no
 
 Recommendation: Enable a permanent schedule for a new job only after a successful manual run.
 
+### 6) Optionally configure email
+
+- SMTP is configured under **Settings > General**.
+- After saving, send a test email.
+- The weekly report is enabled and scheduled under **Settings > Backup**.
+- The weekly report uses its own recipient or, when empty, the global email recipient.
+
 ## Understanding system status
 
 ### Sidebar
@@ -95,11 +102,21 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - **Restore Tests** regularly check whether a restore works technically.
 - Restore tests are not a complete content audit, but they provide important evidence that repository, archive, and restore path work together.
 
+## Email and reports
+
+- SMTP configuration and the test email are under **Settings > General**.
+- The SMTP password is not shown in clear text after saving. A saved password is shown only as a status.
+- Backup failures can trigger emails; regular summaries are handled by the weekly report.
+- The weekly report is enabled under **Settings > Backup**. It uses the saved SMTP configuration.
+- Test emails, weekly reports, and technical output emails are always sent in English.
+
 ## Import, export, and backups
 
 - **Settings > Import / Export** provides encrypted exports for jobs, passphrases, profiles, and secrets.
 - A preview is displayed before an import.
 - Import modes such as `skip`, `overwrite`, or `rename` control how existing data is handled.
+- Job imports can include matching USB/SMB profiles from the package.
+- Profile-secret imports can create missing SMB/SSH profiles from the package when the settings import is not set to `ignore`.
 - Configuration backups provide a rollback point before maintenance or cleanup actions.
 - Support bundles should not contain secrets in plain text.
 
@@ -142,3 +159,9 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - Edit the job and check its passphrase file.
 - Use encrypted secret packages when importing or exporting passphrases and profile secrets.
 - Secret files should have restrictive permissions.
+
+### SMTP or weekly-report values are missing after reload
+
+- Save values in the matching area first: SMTP under **General**, weekly report under **Backup**.
+- After saving, the state is reloaded from `backup.conf`.
+- The SMTP password intentionally remains visually empty when it has already been saved.

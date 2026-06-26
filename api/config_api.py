@@ -44,8 +44,10 @@ from storage_profiles_api import (
     validate_storage_profile_usage_before_save,
 )
 from usb_profiles_api import (
+    get_usb_profile_job_refs,
     normalize_usb_profile_rows as _normalize_usb_profile_rows,
     test_usb_profiles_status,
+    validate_usb_profile_usage_before_save,
 )
 
 BACKUP_TYPES = ["flash", "appdata", "photos", "VMs", "sonstiges"]
@@ -91,6 +93,7 @@ _DEFAULTS: Dict[str, str] = {
     "DOCKER_STOP_WAIT": "5",
     "DOCKER_START_WAIT": "5",
     "ABORT_ON_PARITY_CHECK": "true",
+    "UI_SESSION_TIMEOUT_MINUTES": "30",
     "RESTORE_TEST_LEVEL": "2",
     "RESTORE_TEST_INTERVAL_DAYS": "30",
     "RESTORE_TEST_LOCATION": "local",
@@ -1233,6 +1236,15 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
     data["usb_profiles"] = _normalize_usb_profile_rows(
         settings_payload.get("usb_profiles") if isinstance(settings_payload.get("usb_profiles"), list) else []
     )
+    usb_refs = get_usb_profile_job_refs(ui_config)
+    data["usb_profiles"] = [
+        {
+            **row,
+            "jobs_count": len(usb_refs.get(str(row.get("key") or "").strip().lower(), [])),
+            "job_refs": usb_refs.get(str(row.get("key") or "").strip().lower(), [])[:10],
+        }
+        for row in data["usb_profiles"]
+    ]
     data["storage_profiles"] = _normalize_storage_profile_rows(
         settings_payload.get("storage_profiles") if isinstance(settings_payload.get("storage_profiles"), list) else []
     )

@@ -66,6 +66,9 @@ VM_STARTUP_WAIT="60"
 
 ABORT_ON_PARITY_CHECK="true"
 
+# UI session timeout in minutes (users authentication).
+UI_SESSION_TIMEOUT_MINUTES="30"
+
 # =============================================================================
 # RESTORE TESTS / WEEKLY REPORT
 # =============================================================================

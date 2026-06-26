@@ -3,6 +3,7 @@ api/usb_profiles_api.py - USB-Profilverwaltung und Statuschecks.
 """
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -27,6 +28,61 @@ def normalize_usb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str
         seen.add(key)
         out.append({"key": key, "name": name, "mount_path": mount_path})
     return out
+
+
+def get_usb_profile_job_refs(ui_config: dict) -> Dict[str, List[str]]:
+    from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
+
+    refs: Dict[str, List[str]] = {}
+    scripts_dir = resolve_scripts_dir(ui_config)
+    data_root = resolve_data_root(ui_config)
+    for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
+        if not meta_dir.is_dir():
+            continue
+        for meta_file in sorted(meta_dir.glob("*.json")):
+            try:
+                raw = json.loads(meta_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if str(raw.get("location") or "").strip().lower() != "usb":
+                continue
+            key = str(raw.get("usb_profile_key") or "").strip().lower()
+            if not key:
+                continue
+            job_key = str(raw.get("job_key") or meta_file.stem).strip()
+            name = str(raw.get("name") or "").strip()
+            label = f"{job_key} ({name})" if name else job_key
+            refs.setdefault(key, []).append(label)
+    return refs
+
+
+def validate_usb_profile_usage_before_save(ui_config: dict, next_rows: List[Dict[str, str]]) -> None:
+    refs = get_usb_profile_job_refs(ui_config)
+    next_by_key = {
+        str(r.get("key") or "").strip().lower(): r
+        for r in next_rows
+        if str(r.get("key") or "").strip()
+    }
+    for key, jobs in refs.items():
+        if not jobs:
+            continue
+        row = next_by_key.get(key)
+        if row is None:
+            raise ValueError(
+                f"USB profile '{key}' cannot be removed because it is still used by {len(jobs)} job(s)."
+            )
+        missing = [
+            label for field, label in (
+                ("name", "Name"),
+                ("mount_path", "mount path"),
+            )
+            if not str(row.get(field) or "").strip()
+        ]
+        if missing:
+            raise ValueError(
+                f"USB profile '{key}' is still used by {len(jobs)} job(s) and cannot be saved incomplete. "
+                f"Missing: {', '.join(missing)}."
+            )
 
 
 def test_usb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:

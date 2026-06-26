@@ -7,6 +7,8 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   loaded: false,
   dirty: false,
   activeTab: 'general',
+  profileSelection: { usb: '', smb: '', storagebox: '' },
+  profileEditing: '',
   storageboxFlash: null,
   storageboxPubVisible: false,
   storageboxConnOk: null,
@@ -47,15 +49,15 @@ function settingsLocale() {
 
 function getSettingsTabs() {
   const tabs = [
-  { key: 'general', label: settingsT('tabs.general') },
-  { key: 'users', label: settingsT('tabs.users') },
-  { key: 'backup', label: settingsT('tabs.backup') },
-  { key: 'restore', label: settingsT('tabs.restore') },
-  { key: 'usb', label: settingsT('tabs.usbProfiles') },
-  { key: 'smb', label: settingsT('tabs.smbProfiles') },
-  { key: 'storagebox', label: settingsT('tabs.sshProfiles') },
-  { key: 'transfer', label: settingsT('tabs.transfer') },
-  { key: 'advanced', label: settingsT('tabs.advanced') },
+  { key: 'general', label: settingsT('tabs.general'), group: 'system', description: settingsT('menu.generalDescription'), icon: settingsMenuIcon('general') },
+  { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: settingsMenuIcon('users') },
+  { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: settingsMenuIcon('backup') },
+  { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: settingsMenuIcon('restore') },
+  { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: locationIcon('usb') },
+  { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: locationIcon('smb') },
+  { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: locationIcon('storagebox') },
+  { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: settingsMenuIcon('transfer') },
+  { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: settingsMenuIcon('advanced') },
   ];
   const auth = settingsState.authStatus || {};
   const isAdmin = String(auth.current_role || '').toLowerCase() === 'admin';
@@ -63,6 +65,18 @@ function getSettingsTabs() {
     return tabs.filter((t) => t.key !== 'users');
   }
   return tabs;
+}
+
+function settingsMenuIcon(key) {
+  const icons = {
+    general: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3v-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1 2.8-2.8.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3h4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.2v4h-.2a1.7 1.7 0 0 0-1.4 1z"/></svg>',
+    users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M3 21v-2a6 6 0 0 1 12 0v2"/><path d="M16 4.5a4 4 0 0 1 0 7"/><path d="M18 15a5 5 0 0 1 3 4.6V21"/></svg>',
+    backup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v13H4z"/><path d="M7 3h10v4H7z"/><path d="M8 12h8M8 16h5"/></svg>',
+    restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
+    transfer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h13l-3-3M17 17H4l3 3"/><path d="M20 7l-3 3M4 17l3-3"/></svg>',
+    advanced: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h7M15 18h5"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="13" cy="18" r="2"/></svg>',
+  };
+  return icons[key] || icons.general;
 }
 
 async function refreshSettings() {
@@ -80,17 +94,11 @@ async function refreshSettings() {
     settingsState.authStatus = authRes.ok ? await authRes.json() : null;
     const auth = settingsState.authStatus || {};
     const isAdminUsersMode = String(auth.current_role || '').toLowerCase() === 'admin' && String(auth.auth_mode || '') === 'users';
-    if (isAdminUsersMode) {
-      try {
-        const uRes = await fetch('/api/auth/users');
-        const uData = uRes.ok ? await uRes.json() : { users: [] };
-        settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
-      } catch (_) {
-        settingsState.authUsers = [];
-      }
-    } else {
-      settingsState.authUsers = [];
-    }
+    const usersRequest = isAdminUsersMode
+      ? fetch('/api/auth/users')
+          .then((uRes) => uRes.ok ? uRes.json() : { users: [] })
+          .catch(() => ({ users: [] }))
+      : Promise.resolve({ users: [] });
     if (settingsState.storageboxConnOk === null && data?.storagebox_setup) {
       settingsState.storageboxConnOk = !!data.storagebox_setup.auth_ok;
       settingsState.storageboxConnMsg = data.storagebox_setup.auth_ok
@@ -111,14 +119,26 @@ async function refreshSettings() {
       const ver = await verRes.json();
       _applyVersionInfo(ver.version, ver.author, ver.borg_version);
     }
+    usersRequest.then((uData) => {
+      settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
+      if (settingsState.activeTab === 'users' && settingsState.data) {
+        renderSettings(settingsState.data, settingsState.systemHealth);
+      }
+    });
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
+  } finally {
+    document.getElementById('settings-content')?.classList.remove('is-refreshing');
   }
 }
 
 function _renderSettingsLoading() {
   const el = document.getElementById('settings-content');
   if (!el) return;
+  if (settingsState.loaded && settingsState.data) {
+    el.classList.add('is-refreshing');
+    return;
+  }
   el.innerHTML = `
     <div class="settings-section">
       <div class="settings-section-header">
@@ -148,17 +168,26 @@ function _applyVersionInfo(version, author, borgVersion) {
 }
 
 function renderSettings(data, systemHealth) {
-  const pathEl = document.getElementById('settings-conf-path');
-  if (pathEl) pathEl.textContent = data.conf_file ? `Config: ${data.conf_file}` : '';
-
   const el = document.getElementById('settings-content');
   if (!el) return;
 
   const tabs = getSettingsTabs();
+  const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
+  if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
+  const profileTab = ['usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
+  const saveBtn = document.getElementById('settings-save-btn');
+  if (saveBtn) saveBtn.classList.toggle('hidden', profileTab);
   el.innerHTML = `
-    <div class="settings-tabs">
-      ${tabs.map((t) => `<button class="settings-tab-btn ${settingsState.activeTab === t.key ? 'active' : ''}" data-settings-tab="${t.key}">${t.label}</button>`).join('')}
-    </div>
+    <div class="settings-redesign-layout">
+      <aside class="settings-side-menu">
+        <header><small>${settingsT('menu.configuration')}</small><strong>${settingsT('menu.areas')}</strong></header>
+        <nav>${renderSettingsMenu(tabs)}</nav>
+      </aside>
+      <section class="settings-workspace">
+        <header class="settings-workspace-header">
+          <div><small>${settingsT('title')}</small><h2>${escHtml(active.label)}</h2><span>${escHtml(active.description)}</span></div>
+          <span class="badge ${settingsState.dirty ? 'warning' : 'success'}" id="settings-workspace-save-state">${settingsT(settingsState.dirty ? 'menu.unsaved' : 'menu.saved')}</span>
+        </header>
     <div class="settings-tab-panel ${settingsState.activeTab === 'general' ? '' : 'hidden'}" data-settings-panel="general">
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
@@ -192,6 +221,8 @@ function renderSettings(data, systemHealth) {
     <div class="settings-tab-panel ${settingsState.activeTab === 'users' ? '' : 'hidden'}" data-settings-panel="users">
       ${renderSettingsUsers()}
     </div>
+      </section>
+    </div>
   `;
   const themeSel = document.getElementById('ui-theme-select');
   const getThemePref = window.BBUI?.components?.theme?.getStoredThemePreference;
@@ -199,7 +230,221 @@ function renderSettings(data, systemHealth) {
     themeSel.value = getThemePref();
   }
   refreshSettingsConfigBackups();
+  initializeSettingsProfileManagers();
   _updateUnsavedChangesUi();
+}
+
+function renderSettingsMenu(tabs) {
+  const groupLabels = {
+    system: settingsT('menu.system'),
+    operations: settingsT('menu.operations'),
+    storage: settingsT('menu.storageTargets'),
+    maintenance: settingsT('menu.maintenance'),
+  };
+  let previous = '';
+  return tabs.map((tab) => {
+    const heading = tab.group !== previous
+      ? `<div class="settings-menu-group">${escHtml(groupLabels[tab.group] || '')}</div>`
+      : '';
+    previous = tab.group;
+    return `${heading}<button class="settings-menu-item ${settingsState.activeTab === tab.key ? 'active' : ''}" data-settings-tab="${tab.key}" type="button">
+      <span class="settings-menu-icon">${tab.icon}</span>
+      <span><strong>${escHtml(tab.label)}</strong><small>${escHtml(tab.description)}</small></span>
+      <b>›</b>
+    </button>`;
+  }).join('');
+}
+
+const SETTINGS_PROFILE_CONFIG = {
+  usb: {
+    rowsId: 'usb-profiles-rows',
+    rowSelector: '.usb-profile-row',
+    nameSelector: '[data-usb-profile-name]',
+    endpointSelector: '[data-usb-profile-path]',
+    icon: locationIcon('usb'),
+    fields: [
+      ['[data-usb-profile-name]', 'profiles.name'],
+      ['[data-usb-profile-path]', 'profiles.mountPath'],
+    ],
+  },
+  smb: {
+    rowsId: 'smb-profiles-rows',
+    rowSelector: '.smb-profile-row',
+    nameSelector: '[data-smb-profile-name]',
+    endpointSelector: '[data-smb-profile-server]',
+    icon: locationIcon('smb'),
+    fields: [
+      ['[data-smb-profile-name]', 'profiles.name'],
+      ['[data-smb-profile-server]', 'profiles.host'],
+      ['[data-smb-profile-share]', 'profiles.share'],
+      ['[data-smb-profile-path]', 'profiles.mountPath'],
+      ['[data-smb-profile-username]', 'profiles.username'],
+      ['[data-smb-profile-password]', 'profiles.password'],
+      ['[data-smb-profile-vers]', 'profiles.smbVersion'],
+      ['[data-smb-profile-sec]', 'profiles.security'],
+    ],
+  },
+  storagebox: {
+    rowsId: 'storage-profiles-rows',
+    rowSelector: '.storage-profile-row',
+    nameSelector: '[data-storage-profile-name]',
+    endpointSelector: '[data-storage-profile-host]',
+    icon: locationIcon('storagebox'),
+    fields: [
+      ['[data-storage-profile-name]', 'profiles.name'],
+      ['[data-storage-profile-host]', 'profiles.host'],
+      ['[data-storage-profile-port]', 'profiles.port'],
+      ['[data-storage-profile-user]', 'profiles.username'],
+      ['[data-storage-profile-base-path]', 'profiles.basePath'],
+      ['[data-storage-profile-ssh-key]', 'profiles.sshKey'],
+      ['[data-storage-profile-target-type]', 'profiles.targetType'],
+    ],
+  },
+};
+
+function initializeSettingsProfileManagers() {
+  Object.keys(SETTINGS_PROFILE_CONFIG).forEach((type) => syncSettingsProfileManager(type));
+}
+
+function syncSettingsProfileManager(type, selectLast = false) {
+  const config = SETTINGS_PROFILE_CONFIG[type];
+  const rowsBox = document.getElementById(config?.rowsId || '');
+  if (!config || !rowsBox) return;
+  const body = rowsBox.closest('.settings-body');
+  if (!body) return;
+  let manager = body.querySelector(`[data-profile-manager="${type}"]`);
+  if (!manager) {
+    manager = document.createElement('div');
+    manager.className = 'settings-profile-manager';
+    manager.dataset.profileManager = type;
+    const list = document.createElement('aside');
+    list.className = 'settings-profile-list';
+    list.innerHTML = `<header><strong>${settingsT('menu.savedProfiles')}</strong><small data-profile-count></small></header><nav data-profile-list></nav></aside>`;
+    const editor = document.createElement('section');
+    editor.className = 'settings-profile-editor readonly';
+    editor.innerHTML = `
+      <header data-profile-editor-header></header>
+      <div class="settings-profile-editor-body"></div>
+      <footer>
+        <button type="button" class="btn btn-secondary btn-sm" data-profile-cancel>${settingsT('dialog.cancel')}</button>
+        <button type="button" class="btn btn-primary btn-sm" data-profile-save>${settingsT('menu.saveProfile')}</button>
+      </footer>`;
+    rowsBox.parentNode.insertBefore(manager, rowsBox);
+    manager.append(list, editor);
+    editor.querySelector('.settings-profile-editor-body').appendChild(rowsBox);
+    list.querySelector('[data-profile-list]').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-profile-ui-key]');
+      if (!button || settingsState.profileEditing === type) return;
+      settingsState.profileSelection[type] = button.dataset.profileUiKey || '';
+      if (type === 'storagebox') {
+        settingsState.storageboxProfileKey = settingsState.profileSelection[type];
+        const select = document.getElementById('storagebox-profile-select');
+        if (select) select.value = settingsState.storageboxProfileKey;
+      }
+      syncSettingsProfileManager(type);
+    });
+    editor.querySelector('[data-profile-cancel]').addEventListener('click', () => {
+      settingsState.profileEditing = '';
+      settingsState.dirty = false;
+      renderSettings(settingsState.data, settingsState.systemHealth);
+    });
+    editor.querySelector('[data-profile-save]').addEventListener('click', async () => {
+      const saved = await saveSettings();
+      if (!saved) return;
+      settingsState.profileEditing = '';
+      await reloadSettingsDataAfterSave(type);
+    });
+  }
+
+  const rows = [...rowsBox.querySelectorAll(config.rowSelector)];
+  rows.forEach((row, index) => {
+    if (!row.dataset.profileUiKey) row.dataset.profileUiKey = row.dataset.profileKey || `new-${type}-${index + 1}`;
+  });
+  if (selectLast && rows.length) settingsState.profileSelection[type] = rows.at(-1).dataset.profileUiKey;
+  const selectedKey = settingsState.profileSelection[type] || rows[0]?.dataset.profileUiKey || '';
+  settingsState.profileSelection[type] = selectedKey;
+  const selectedRow = rows.find((row) => row.dataset.profileUiKey === selectedKey) || rows[0] || null;
+  if (type === 'storagebox' && selectedKey) {
+    settingsState.storageboxProfileKey = selectedKey;
+    const select = document.getElementById('storagebox-profile-select');
+    if (select) select.value = selectedKey;
+  }
+  const editing = settingsState.profileEditing === type;
+
+  rows.forEach((row) => decorateSettingsProfileFields(row, config.fields || []));
+
+  const list = manager.querySelector('[data-profile-list]');
+  const count = manager.querySelector('[data-profile-count]');
+  if (count) count.textContent = settingsT('menu.profileCount', { count: rows.length });
+  if (list) list.innerHTML = rows.map((row) => {
+    const key = row.dataset.profileUiKey || '';
+    const name = row.querySelector(config.nameSelector)?.value || key || settingsT('menu.newProfile');
+    const endpoint = row.querySelector(config.endpointSelector)?.value || settingsT('common.notChecked');
+    const jobsCount = Number(row.dataset.usbJobsCount || row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
+    const inUse = jobsCount > 0 ? `<em class="settings-profile-usage">${settingsT('profiles.inUseShort', { count: jobsCount })}</em>` : '';
+    return `<button type="button" class="settings-profile-list-item ${key === selectedKey ? 'active' : ''}" data-profile-ui-key="${escHtml(key)}">
+      <span class="settings-profile-symbol ${type}">${config.icon}</span>
+      <span><strong>${escHtml(name)}</strong><small>${escHtml(endpoint)}</small><em>${settingsT('common.jobsCount', { count: jobsCount })}</em>${inUse}</span>
+      <b>›</b>
+    </button>`;
+  }).join('');
+
+  rows.forEach((row) => {
+    const selected = row === selectedRow;
+    row.classList.toggle('hidden', !selected);
+    row.querySelectorAll('input:not([type="hidden"]), select').forEach((control) => {
+      control.disabled = !editing || !selected;
+    });
+    row.querySelectorAll('[data-settings-action$="-remove"], [data-settings-action="smb-profile-toggle-options"]').forEach((button) => {
+      button.classList.toggle('hidden', !editing || !selected);
+    });
+  });
+
+  const editor = manager.querySelector('.settings-profile-editor');
+  editor?.classList.toggle('readonly', !editing);
+  const name = selectedRow?.querySelector(config.nameSelector)?.value || settingsT('menu.noProfileSelected');
+  const endpoint = selectedRow?.querySelector(config.endpointSelector)?.value || '';
+  const header = manager.querySelector('[data-profile-editor-header]');
+  if (header) header.innerHTML = `
+    <div><small>${settingsT('menu.selectedProfile')}</small><h3>${escHtml(name)}</h3><span>${escHtml(endpoint)}</span></div>
+    ${selectedRow ? `<button type="button" class="btn btn-secondary btn-sm" data-profile-edit ${editing ? 'hidden' : ''}>${settingsT('menu.edit')}</button>` : ''}`;
+  header?.querySelector('[data-profile-edit]')?.addEventListener('click', () => {
+    settingsState.profileEditing = type;
+    syncSettingsProfileManager(type);
+  });
+  const footer = manager.querySelector('.settings-profile-editor > footer');
+  if (footer) footer.classList.toggle('hidden', !editing);
+}
+
+async function blockProfileRemovalIfInUse(row, type) {
+  const jobsCount = Number(row?.dataset?.[`${type}JobsCount`] || 0);
+  if (jobsCount <= 0) return false;
+  const refs = String(row?.dataset?.[`${type}JobRefs`] || '').trim();
+  const titleKey = type === 'usb'
+    ? 'profiles.cannotRemoveUsb'
+    : (type === 'smb' ? 'profiles.cannotRemoveSmb' : 'profiles.cannotRemoveStorage');
+  const msgId = type === 'usb'
+    ? 'usb-profiles-msg'
+    : (type === 'smb' ? 'smb-profiles-msg' : 'storage-profiles-msg');
+  await _openSettingsDialog({
+    title: settingsT(titleKey),
+    message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
+    confirmText: 'OK',
+  });
+  showMsg(msgId, 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
+  return true;
+}
+
+function decorateSettingsProfileFields(row, fields) {
+  fields.forEach(([selector, labelKey]) => {
+    const control = row.querySelector(selector);
+    if (!control || control.closest('.settings-profile-field')) return;
+    const wrapper = document.createElement('label');
+    wrapper.className = 'settings-profile-field';
+    wrapper.innerHTML = `<span>${escHtml(settingsT(labelKey))}</span>`;
+    control.parentNode.insertBefore(wrapper, control);
+    wrapper.appendChild(control);
+  });
 }
 
 function normalizeUsbProfileRows(rows) {
@@ -213,7 +458,9 @@ function normalizeUsbProfileRows(rows) {
     if (!key) key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `usb-${idx + 1}`;
     while (seen.has(key)) key = `${key}-${idx + 1}`;
     seen.add(key);
-    out.push({ key, name, mount_path });
+    const jobs_count = Number(r?.jobs_count || 0);
+    const job_refs = Array.isArray(r?.job_refs) ? r.job_refs.map((v) => String(v || '')).filter(Boolean) : [];
+    out.push({ key, name, mount_path, jobs_count, job_refs });
   });
   return out;
 }
@@ -234,6 +481,13 @@ function syncUsbProfilesHiddenInput() {
   const hidden = document.getElementById('usb-profiles-json');
   if (!hidden) return;
   hidden.value = JSON.stringify(getUsbProfilesFromDom());
+  updateUsbProfilesEmptyState();
+}
+
+function updateUsbProfilesEmptyState() {
+  const empty = document.getElementById('usb-profiles-empty-state');
+  if (!empty) return;
+  empty.classList.toggle('hidden', getUsbProfilesFromDom().length > 0);
 }
 
 function onUsbProfileInputChanged() {
@@ -262,7 +516,7 @@ function addUsbProfileRow(row = {}) {
 function renderSettingsUsbProfiles(rows) {
   const normalized = normalizeUsbProfileRows(rows);
   const content = normalized.map((r) => `
-    <div class="usb-profile-row" data-profile-key="${escHtml(r.key || '')}">
+    <div class="usb-profile-row" data-profile-key="${escHtml(r.key || '')}" data-usb-jobs-count="${Number(r.jobs_count || 0)}" data-usb-job-refs="${escHtml((r.job_refs || []).join(', '))}">
       <input class="form-input" type="text" data-usb-profile-name placeholder="USB-Drive-A" value="${escHtml(r.name || '')}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
       <input class="form-input mono" type="text" data-usb-profile-path placeholder="/mnt/disks/DEIN_DRIVE" value="${escHtml(r.mount_path || '')}" onchange="onUsbProfileInputChanged()" oninput="onUsbProfileInputChanged()">
       <span class="usb-profile-state text-muted" data-usb-profile-state>${settingsT('profiles.unchecked')}</span>
@@ -284,7 +538,7 @@ function renderSettingsUsbProfiles(rows) {
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-add">${settingsT('profiles.addUsb')}</button>
       </div>
       <div id="usb-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
-      ${normalized.length === 0 ? `<div class="status-message warning" style="margin-top:10px">${settingsT('profiles.noUsb')}</div>` : ''}
+      <div id="usb-profiles-empty-state" class="status-message warning ${normalized.length === 0 ? '' : 'hidden'}" style="margin-top:10px">${settingsT('profiles.noUsb')}</div>
     </div>`);
 }
 
@@ -630,6 +884,11 @@ function renderSettingsSystemHealth(data) {
   const failedChecks = checks.filter(([, ok]) => !ok).length;
   const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.deprecated_key_candidates || 0);
   const overallOk = failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0;
+  const jobTotal = Number(jobSummary.total || jobItems.length || 0);
+  const jobsDetail = jobFailed
+    ? settingsT('health.jobChecksFailed', { count: jobFailed })
+    : `${jobTotal} ${settingsT('health.jobs')}`;
+  const migrationOk = migrationSummary.status !== 'failed';
   const technicalRows = [
     [settingsT('health.migrationState'), data?.paths?.migration_state_file || '—'],
     [settingsT('health.migrationLog'), data?.paths?.migration_log_file || '—'],
@@ -640,6 +899,7 @@ function renderSettingsSystemHealth(data) {
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
     `<div class="settings-body">
       <div class="system-health-overview ${overallOk ? 'ok' : 'bad'}">
+        <span class="system-health-overview-mark">${overallOk ? '✓' : '!'}</span>
         <div>
           <div class="system-health-overview-title">${overallOk ? settingsT('health.okTitle') : settingsT('health.attentionTitle')}</div>
           <div class="system-health-overview-subtitle">${overallOk ? settingsT('health.okSubtitle') : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed)}</div>
@@ -647,46 +907,43 @@ function renderSettingsSystemHealth(data) {
         <span class="system-health-badge ${overallOk ? 'ok' : 'bad'}">${overallOk ? settingsT('common.ok') : settingsT('health.check')}</span>
       </div>
 
-      <div class="system-health-block">
-        <div class="system-health-block-title">${settingsT('health.system')}</div>
-        <div class="system-health-grid">${_renderSystemHealthRows(checks)}</div>
-      </div>
-
-      <div class="system-health-block">
-        <div class="system-health-block-title">${settingsT('health.jobs')}</div>
-        ${_renderJobHealthOverview(jobSummary, jobItems)}
-      </div>
-
-      <div class="system-health-block">
-        <div class="system-health-block-title">${settingsT('health.lastMigration')}</div>
-        <div class="migration-status-grid">
-          <div>
-            <span class="system-health-name">${settingsT('health.lastRun')}</span>
-            <strong>${escHtml(migrationSummary.lastRun)}</strong>
-          </div>
-          <div>
-            <span class="system-health-name">${settingsT('health.lastEffectiveRun')}</span>
-            <strong>${escHtml(lastEffectiveTs)}</strong>
-          </div>
-          <div>
-            <span class="system-health-name">${settingsT('health.status')}</span>
-            <span class="system-health-badge ${migrationSummary.status === 'failed' ? 'bad' : 'ok'}">${escHtml(migrationSummary.state)}</span>
-          </div>
-        </div>
-        <div class="migration-summary">
-          <div><strong>${settingsT('health.reason')}</strong> ${escHtml(migrationSummary.reason)}</div>
-          <div><strong>${settingsT('health.actions')}</strong> ${migrationSummary.actions.length ? migrationSummary.actions.map((a) => escHtml(a)).join(' · ') : settingsT('common.none')}</div>
-          ${migrationSummary.errors ? `<div class="system-health-error"><strong>${settingsT('health.errors')}</strong> ${escHtml(migrationSummary.errors)}</div>` : ''}
-        </div>
-      </div>
-
-      <div class="system-health-block">
-        <div class="system-health-block-title">${settingsT('health.setupConfigMaintenance')}</div>
-        ${_renderMigrationRegistryOverview(registrySummary, registryActionItems)}
+      <div class="settings-health-summary-grid">
+        <div><span>${settingsT('health.dataRoot')}</span><strong class="${data?.checks?.data_root_ok ? 'ok' : 'bad'}">${data?.checks?.data_root_ok ? settingsT('common.ok') : settingsT('health.check')}</strong><small>${escHtml(data?.paths?.data_root || '—')}</small></div>
+        <div><span>${settingsT('health.jobsPath')}</span><strong class="${jobFailed ? 'bad' : 'ok'}">${jobFailed ? settingsT('health.check') : settingsT('common.ok')}</strong><small>${escHtml(jobsDetail)}</small></div>
+        <div><span>${settingsT('health.secretsPath')}</span><strong class="${data?.checks?.secrets_path_ok ? 'ok' : 'bad'}">${data?.checks?.secrets_path_ok ? settingsT('common.ok') : settingsT('health.check')}</strong><small>${escHtml(String(perms.checked_files_count ?? 0))} ${settingsT('health.checkedSecretFiles')}</small></div>
+        <div><span>${settingsT('health.lastMigration')}</span><strong class="${migrationOk ? 'ok' : 'bad'}">${escHtml(migrationSummary.state)}</strong><small>${escHtml(migrationSummary.reason)}</small></div>
       </div>
 
       <details class="system-health-technical">
         <summary>${settingsT('health.technicalDetails')}</summary>
+        <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.system')}</div>
+          <div class="system-health-grid">${_renderSystemHealthRows(checks)}</div>
+        </div>
+
+        <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.jobs')}</div>
+          ${_renderJobHealthOverview(jobSummary, jobItems)}
+        </div>
+
+        <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.lastMigration')}</div>
+          <div class="migration-status-grid">
+            <div><span class="system-health-name">${settingsT('health.lastRun')}</span><strong>${escHtml(migrationSummary.lastRun)}</strong></div>
+            <div><span class="system-health-name">${settingsT('health.lastEffectiveRun')}</span><strong>${escHtml(lastEffectiveTs)}</strong></div>
+            <div><span class="system-health-name">${settingsT('health.status')}</span><span class="system-health-badge ${migrationOk ? 'ok' : 'bad'}">${escHtml(migrationSummary.state)}</span></div>
+          </div>
+          <div class="migration-summary">
+            <div><strong>${settingsT('health.reason')}</strong> ${escHtml(migrationSummary.reason)}</div>
+            <div><strong>${settingsT('health.actions')}</strong> ${migrationSummary.actions.length ? migrationSummary.actions.map((a) => escHtml(a)).join(' · ') : settingsT('common.none')}</div>
+            ${migrationSummary.errors ? `<div class="system-health-error"><strong>${settingsT('health.errors')}</strong> ${escHtml(migrationSummary.errors)}</div>` : ''}
+          </div>
+        </div>
+
+        <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.setupConfigMaintenance')}</div>
+          ${_renderMigrationRegistryOverview(registrySummary, registryActionItems)}
+        </div>
         <div class="system-health-grid">
           ${technicalRows.map(([name, detail]) => `
             <div class="system-health-row neutral">
@@ -1366,8 +1623,9 @@ function renderProfileSecretsImportPreview(d) {
         const candidates = Array.isArray(options[pType]) ? options[pType] : [];
         const selectedTarget = candidates.includes(r.profile_key) ? r.profile_key : (candidates[0] || '');
         const selectHtml = `<select class="form-select" data-profile-secret-target="${idx}" style="width:150px">${candidates.map((k) => `<option value="${escHtml(k)}" ${k === selectedTarget ? 'selected' : ''}>${escHtml(k)}</option>`).join('')}</select>`;
+        const canImportMissingProfile = String(r.status) !== 'profile_missing' || !!(sp && sp.present);
         return `<tr>
-        <td><input type="checkbox" data-profile-secret-preview-select="${idx}" ${String(r.status) === 'profile_missing' ? 'disabled' : 'checked'}></td>
+        <td><input type="checkbox" data-profile-secret-preview-select="${idx}" ${canImportMissingProfile ? 'checked' : 'disabled'}></td>
         <td>${escHtml(String(r.profile_type || '').toUpperCase())}</td>
         <td><code style="font-size:12px">${escHtml(r.profile_key || '')}</code></td>
         <td>${candidates.length ? selectHtml : '—'}</td>
@@ -2567,8 +2825,8 @@ async function onSettingsContentClick(event) {
     }
     const tab = tabBtn.dataset.settingsTab || 'general';
     settingsState.activeTab = tab;
-    document.querySelectorAll('#settings-content [data-settings-tab]').forEach((b) => b.classList.toggle('active', b === tabBtn));
-    document.querySelectorAll('#settings-content [data-settings-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.settingsPanel !== tab));
+    settingsState.profileEditing = '';
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
     return;
   }
   const el = event.target.closest('[data-settings-action]');
@@ -2604,18 +2862,24 @@ async function onSettingsContentClick(event) {
   if (action === 'usb-profile-add') {
     addUsbProfileRow();
     onUsbProfileInputChanged();
+    settingsState.profileEditing = 'usb';
+    syncSettingsProfileManager('usb', true);
     return;
   }
   if (action === 'usb-profile-check') return checkUsbProfilesStatus();
   if (action === 'usb-profile-remove') {
     const row = event.target.closest('.usb-profile-row');
+    if (await blockProfileRemovalIfInUse(row, 'usb')) return;
     if (row) row.remove();
     onUsbProfileInputChanged();
+    syncSettingsProfileManager('usb');
     return;
   }
   if (action === 'smb-profile-add') {
     addSmbProfileRow({ username: '', password_set: false });
     onSmbProfileInputChanged();
+    settingsState.profileEditing = 'smb';
+    syncSettingsProfileManager('smb', true);
     return;
   }
   if (action === 'smb-profile-check') return checkSmbProfilesStatus();
@@ -2627,17 +2891,7 @@ async function onSettingsContentClick(event) {
   }
   if (action === 'smb-profile-remove') {
     const row = event.target.closest('.smb-profile-row');
-    const jobsCount = Number(row?.dataset?.smbJobsCount || 0);
-    if (jobsCount > 0) {
-      const refs = String(row?.dataset?.smbJobRefs || '').trim();
-      await _openSettingsDialog({
-        title: settingsT('profiles.cannotRemoveSmb'),
-        message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
-        confirmText: 'OK',
-      });
-      showMsg('smb-profiles-msg', 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
-      return;
-    }
+    if (await blockProfileRemovalIfInUse(row, 'smb')) return;
     const profileKey = String(row?.dataset?.profileKey || '').trim().toLowerCase();
     if (!profileKey) return;
     const confirmedRemove = await _openSettingsDialog({
@@ -2683,29 +2937,23 @@ async function onSettingsContentClick(event) {
 
     if (row) row.remove();
     onSmbProfileInputChanged();
+    syncSettingsProfileManager('smb');
     await saveSettings();
     return;
   }
   if (action === 'storage-profile-add') {
     addStorageProfileRow({ target_type: 'storagebox', port: '23', base_path: './backup' });
     onStorageProfileInputChanged();
+    settingsState.profileEditing = 'storagebox';
+    syncSettingsProfileManager('storagebox', true);
     return;
   }
   if (action === 'storage-profile-remove') {
     const row = event.target.closest('.storage-profile-row');
-    const jobsCount = Number(row?.dataset?.storageJobsCount || 0);
-    if (jobsCount > 0) {
-      const refs = String(row?.dataset?.storageJobRefs || '').trim();
-      await _openSettingsDialog({
-        title: settingsT('profiles.cannotRemoveStorage'),
-        message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
-        confirmText: 'OK',
-      });
-      showMsg('storage-profiles-msg', 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
-      return;
-    }
+    if (await blockProfileRemovalIfInUse(row, 'storage')) return;
     if (row) row.remove();
     onStorageProfileInputChanged();
+    syncSettingsProfileManager('storagebox');
     return;
   }
   if (action === 'user-create') return createUserFromSettings();
@@ -3031,11 +3279,7 @@ function onStorageboxProfileSelectChanged() {
 }
 
 function _storageboxShow(msg, ok = true) {
-  if (ok) {
-    hideEl('storagebox-setup-msg');
-    return;
-  }
-  showMsg('storagebox-setup-msg', 'error', msg);
+  showMsg('storagebox-setup-msg', ok ? 'success' : 'error', msg);
 }
 
 function _storageboxSetFlash(msg, ok) {
@@ -3051,9 +3295,14 @@ function _storageboxApplyFlash() {
 
 async function _storageboxRefreshWithFlash(msg, ok = true) {
   settingsState.storageboxPubVisible = false;
-  _storageboxSetFlash(msg, ok);
-  await refreshSettings();
-  _storageboxApplyFlash();
+  _storageboxShow(msg, ok);
+}
+
+function _storageboxRenderChecks() {
+  const checks = document.querySelector('[data-storagebox-checks]');
+  if (!checks) return;
+  checks.innerHTML = settingsState.storageboxChecks ? _renderStorageboxChecksHtml(settingsState.storageboxChecks) : '';
+  checks.classList.toggle('hidden', !settingsState.storageboxChecks);
 }
 
 async function storageboxKeyStatus() {
@@ -3068,7 +3317,8 @@ async function storageboxKeyStatus() {
       details: key.key_path ? settingsT('storagebox.keyPath', { path: key.key_path }) : '',
     };
     settingsState.storageboxLastCheckAt = new Date().toISOString();
-    await refreshSettings();
+    _storageboxRenderChecks();
+    _storageboxShow(settingsT('storagebox.statusUpdated'), true);
   } catch (e) {
     _storageboxShow(settingsT('error', { message: e.message }), false);
   }
@@ -3214,7 +3464,8 @@ async function storageboxTest() {
       details: details || apiMessage(d, ''),
     };
     settingsState.storageboxLastCheckAt = new Date().toISOString();
-    await refreshSettings();
+    _storageboxRenderChecks();
+    _storageboxShow(settingsState.storageboxConnMsg, !!d.success);
   } catch (e) { _storageboxShow(settingsT('error', { message: e.message }), false); }
 }
 
@@ -3268,7 +3519,7 @@ function renderSettingsAbout() {
 
 function settingsCard(title, icon, body) {
   return `<div class="settings-section">
-    <div class="settings-section-header">${icon} ${title}</div>
+    <div class="settings-section-header">${icon}<div><strong>${title}</strong></div></div>
     ${body}
   </div>`;
 }
@@ -3319,8 +3570,12 @@ function markSettingsDirty() {
 
 function _updateUnsavedChangesUi() {
   const btn = document.getElementById('settings-save-btn');
-  if (!btn) return;
-  btn.classList.toggle('btn-save-dirty', !!settingsState.dirty);
+  btn?.classList.toggle('btn-save-dirty', !!settingsState.dirty);
+  const state = document.getElementById('settings-workspace-save-state');
+  if (state) {
+    state.className = `badge ${settingsState.dirty ? 'warning' : 'success'}`;
+    state.textContent = settingsT(settingsState.dirty ? 'menu.unsaved' : 'menu.saved');
+  }
 }
 
 async function canLeaveSettingsPage() {
@@ -3352,7 +3607,9 @@ async function saveSettings() {
   syncSmbProfilesHiddenInput();
   syncStorageProfilesHiddenInput();
   const updates = {};
-  document.querySelectorAll('#settings-content [data-key]').forEach(el => {
+  const activePanel = document.querySelector('#settings-content .settings-tab-panel:not(.hidden)');
+  const activeTab = activePanel?.dataset?.settingsPanel || settingsState.activeTab || 'general';
+  activePanel?.querySelectorAll('[data-key]').forEach(el => {
     const key = el.dataset.key;
     if (el.type === 'checkbox') {
       updates[key] = el.checked ? 'true' : 'false';
@@ -3360,11 +3617,16 @@ async function saveSettings() {
       updates[key] = el.value;
     }
   });
-  if (!String(updates.GLOBAL_DATA_DIR || '').trim()) {
+  if (activeTab === 'usb') updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());
+  if (activeTab === 'smb') updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());
+  if (activeTab === 'storagebox') updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());
+  if (Object.prototype.hasOwnProperty.call(updates, 'GLOBAL_DATA_DIR') && !String(updates.GLOBAL_DATA_DIR || '').trim()) {
     showMsg('settings-message', 'error', settingsT('forms.dataDirRequired'));
-    return;
+    return false;
   }
-  updates.GLOBAL_DATA_DIR = String(updates.GLOBAL_DATA_DIR).trim();
+  if (Object.prototype.hasOwnProperty.call(updates, 'GLOBAL_DATA_DIR')) {
+    updates.GLOBAL_DATA_DIR = String(updates.GLOBAL_DATA_DIR).trim();
+  }
   if (updates.UI_SESSION_TIMEOUT_MINUTES !== undefined) {
     const t = Number(updates.UI_SESSION_TIMEOUT_MINUTES);
     updates.UI_SESSION_TIMEOUT_MINUTES = String(Number.isFinite(t) ? Math.max(5, Math.floor(t)) : 30);
@@ -3413,9 +3675,36 @@ async function saveSettings() {
     }
     await refreshSettingsConfigBackups();
     await window.BBUI.core.updateDataDirWarning();
+    if (!['usb', 'smb', 'storagebox'].includes(activeTab)) {
+      await reloadSettingsDataAfterSave();
+    }
+    return true;
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
+    return false;
   } finally {
     if (btn) btn.classList.remove('loading');
+  }
+}
+
+async function reloadSettingsDataAfterSave(profileType = '') {
+  try {
+    const res = await fetch('/api/settings/basic');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    settingsState.data = data;
+    settingsState.dirty = false;
+    if (profileType) {
+      const rows = Array.isArray(data?.[`${profileType === 'storagebox' ? 'storage' : profileType}_profiles`])
+        ? data[`${profileType === 'storagebox' ? 'storage' : profileType}_profiles`]
+        : [];
+      const selected = settingsState.profileSelection[profileType] || '';
+      if (!rows.some((row) => String(row?.key || '').trim() === selected)) {
+        settingsState.profileSelection[profileType] = rows[0]?.key || '';
+      }
+    }
+    renderSettings(settingsState.data, settingsState.systemHealth);
+  } catch (_) {
+    if (profileType) syncSettingsProfileManager(profileType);
   }
 }
