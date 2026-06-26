@@ -35,7 +35,7 @@ fi
 
 require_pkg_entry() {
   local entry="$1"
-  if ! tar -tf "$PKG_FILE" | sed 's|^\./||' | grep -qx "$entry"; then
+  if ! tar -tf "$PKG_FILE" | sed 's|^\./||' | grep -Fx "$entry" >/dev/null; then
     echo "ERROR: Paket ${PKG_FILE} enthaelt erwarteten Eintrag nicht: ${entry}" >&2
     exit 1
   fi
