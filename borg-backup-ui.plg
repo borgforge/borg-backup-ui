@@ -50,7 +50,23 @@
 <INLINE>
 #!/bin/bash
 PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
+PACKAGE_FILE="${PLUGIN_DIR}/borg-backup-ui-&version;.txz"
 GO_FILE="/boot/config/go"
+
+# Defensive fallback: some Unraid/plugin-manager upgradepkg runs may finish
+# without leaving the package payload in /boot/config/plugins/borg-backup-ui.
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ] && [ -f "${PACKAGE_FILE}" ]; then
+  echo "Plugin payload missing after upgradepkg; extracting package fallback."
+  tar -xf "${PACKAGE_FILE}" -C / 2>/tmp/borg-backup-ui-install-extract.err || true
+fi
+
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
+  echo "ERROR: borg-backup-ui payload was not installed from ${PACKAGE_FILE}." >&2
+  if [ -s /tmp/borg-backup-ui-install-extract.err ]; then
+    cat /tmp/borg-backup-ui-install-extract.err >&2
+  fi
+  exit 1
+fi
 
 # Create default config if none exists yet
 if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.conf" ]; then
@@ -105,6 +121,7 @@ if [ -d "${RELEASE_DIR}" ]; then
 fi
 
 rm -f /tmp/borg-backup-ui-install.sh
+rm -f /tmp/borg-backup-ui-install-extract.err
 </INLINE>
 </FILE>
 

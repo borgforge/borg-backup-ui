@@ -70,6 +70,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Restore- und Speicherwerte verwenden ausgerichtete Label-Wert-Zeilen; die deduplizierte Größe des letzten Laufs ist eindeutig beschriftet.
   - Profilseiten zeigen den lokalen Speichern-Dialog auch nach dem Entfernen des letzten Profils im Bearbeitungsmodus.
   - USB-, SMB- und SSH-Profile können nicht entfernt werden, solange Jobs sie noch verwenden; die Prüfung erfolgt in UI und API.
+  - Das Plugin-Installationsskript prüft nach `upgradepkg`, ob die App-Dateien wirklich entpackt wurden, und entpackt das Paket andernfalls defensiv selbst.
 
 ## Test-channel follow-up for 2026.06.25.1831
 
