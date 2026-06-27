@@ -134,11 +134,12 @@ function _wizardRenderRuntimeSelection(kind) {
     const name = String(row?.name || '').trim();
     if (!name) return '';
     const state = String(row?.state || row?.status || '').trim();
+    const stateClass = _wizardRuntimeStateClass(state);
     const checked = selected.has(name) ? ' checked' : '';
     return `<label class="wizard-runtime-row">
       <input type="checkbox" data-runtime-kind="${kind}" value="${escHtml(name)}"${checked}>
       <span class="wizard-runtime-name">${escHtml(name)}</span>
-      <span class="wizard-runtime-state">${escHtml(state || '—')}</span>
+      <span class="wizard-runtime-state ${stateClass}">${escHtml(state || '—')}</span>
     </label>`;
   }).join('');
   target.querySelectorAll('input[type="checkbox"]').forEach((input) => {
@@ -154,6 +155,14 @@ function _wizardRenderRuntimeSelection(kind) {
   });
 }
 
+function _wizardRuntimeStateClass(state) {
+  const normalized = String(state || '').trim().toLowerCase();
+  if (['running', 'active'].includes(normalized)) return 'is-running';
+  if (['paused', 'pmsuspended', 'blocked'].includes(normalized)) return 'is-warning';
+  if (['exited', 'created', 'shut off', 'shutoff', 'inactive'].includes(normalized)) return 'is-stopped';
+  return 'is-unknown';
+}
+
 function _wizardHasExactSourcePath(path) {
   const normalized = String(path || '').replace(/\/+$/, '');
   return (wizardState.sourcePaths || []).some((raw) => String(raw || '').replace(/\/+$/, '') === normalized);
@@ -164,14 +173,19 @@ function wizardUpdateRuntimeRiskWarnings() {
   const domainsRisk = _wizardHasExactSourcePath('/mnt/user/domains') && _wizardRuntimeMode('vm') !== 'all';
   document.getElementById('wiz-appdata-risk')?.classList.toggle('hidden', !appdataRisk);
   document.getElementById('wiz-domains-risk')?.classList.toggle('hidden', !domainsRisk);
+  if (!appdataRisk) document.getElementById('wiz-appdata-risk')?.classList.remove('wizard-runtime-attention');
+  if (!domainsRisk) document.getElementById('wiz-domains-risk')?.classList.remove('wizard-runtime-attention');
 }
 
 function wizardBindRuntimeControls() {
-  ['wiz-use-docker', 'wiz-use-vm', 'wiz-docker-mode', 'wiz-vm-mode'].forEach((id) => {
+  ['wiz-use-docker', 'wiz-use-vm', 'wiz-docker-mode', 'wiz-vm-mode', 'wiz-ack-appdata-risk', 'wiz-ack-domains-risk'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el || el.dataset.runtimeBound === '1') return;
     el.dataset.runtimeBound = '1';
-    el.addEventListener('change', wizardRenderRuntimeControls);
+    el.addEventListener('change', () => {
+      el.closest('.status-message')?.classList.remove('wizard-runtime-attention');
+      wizardRenderRuntimeControls();
+    });
   });
 }
 
@@ -730,6 +744,13 @@ function _wizardShowError(step, msg) {
   el.classList.remove('hidden');
 }
 
+function _wizardFocusRuntimeRisk(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('wizard-runtime-attention');
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
 function _wizardCollectParams() {
   const rawPaths = (wizardState.sourcePaths || []).map((s) => String(s || '').trim()).filter(Boolean).join(' ');
   const storageProfileKey = (document.getElementById('wiz-storage-profile')?.value || wizardState.selectedStorageProfileKey || '').trim();
@@ -911,6 +932,7 @@ function wizardSourcePathsClick(event) {
 }
 
 function _wizardValidate(step) {
+  wizardClearError(step);
   const p = _wizardCollectParams();
   if (step === 1) {
     if (!p.job_name) { _wizardShowError(1, wizardT('wizard.validationJobName')); return false; }
@@ -963,11 +985,11 @@ function _wizardValidate(step) {
       return false;
     }
     if (_wizardHasExactSourcePath('/mnt/user/appdata') && p.docker_control.mode !== 'all' && !p.docker_control.ack_appdata_risk) {
-      _wizardShowError(3, wizardT('wizard.validationAppdataRisk'));
+      _wizardFocusRuntimeRisk('wiz-appdata-risk');
       return false;
     }
     if (_wizardHasExactSourcePath('/mnt/user/domains') && p.vm_control.mode !== 'all' && !p.vm_control.ack_domains_risk) {
-      _wizardShowError(3, wizardT('wizard.validationDomainsRisk'));
+      _wizardFocusRuntimeRisk('wiz-domains-risk');
       return false;
     }
   }
@@ -1110,6 +1132,8 @@ async function _wizardPreview() {
       docker: wizardT(summary.docker ? 'wizard.yes' : 'wizard.no'),
       vm: wizardT(summary.vm ? 'wizard.yes' : 'wizard.no'),
     }));
+    lines.push(wizardT('wizard.previewDockerControl', { value: _wizardRuntimePreviewText('docker', summary) }));
+    lines.push(wizardT('wizard.previewVmControl', { value: _wizardRuntimePreviewText('vm', summary) }));
     lines.push('');
     lines.push(wizardT('wizard.previewFlow'));
     steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
@@ -1137,6 +1161,19 @@ async function _wizardPreview() {
   } finally {
     loading.classList.add('hidden');
   }
+}
+
+function _wizardRuntimePreviewText(kind, summary) {
+  const mode = String(summary?.[`${kind}_mode`] || 'none');
+  if (mode === 'all') {
+    return wizardT(kind === 'docker' ? 'wizard.runtimeAllDocker' : 'wizard.runtimeAllVms');
+  }
+  if (mode === 'selected') {
+    const selected = Array.isArray(summary?.[`${kind}_selected`]) ? summary[`${kind}_selected`] : [];
+    const label = wizardT(kind === 'docker' ? 'wizard.runtimeSelectedDocker' : 'wizard.runtimeSelectedVms');
+    return `${label}: ${selected.length ? selected.join(', ') : '-'}`;
+  }
+  return wizardT('wizard.runtimeNone');
 }
 
 async function saveWizardJob() {

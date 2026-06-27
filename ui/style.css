@@ -4088,7 +4088,7 @@ body {
 
 /* ── Job Wizard ──────────────────────────────────────────────────────────────── */
 
-.modal-wizard { max-width: 720px; width: 95vw; }
+.modal-wizard { max-width: 960px; width: 95vw; }
 
 .wizard-stepper {
   display: flex;
@@ -4214,7 +4214,7 @@ body {
 
 .wizard-runtime-card-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -4222,7 +4222,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 196px;
+  min-height: 180px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -4236,7 +4236,7 @@ body {
 }
 
 .wizard-runtime-selection {
-  max-height: 190px;
+  max-height: 260px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -4248,7 +4248,7 @@ body {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding: 7px 8px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
 }
@@ -4266,9 +4266,39 @@ body {
 }
 
 .wizard-runtime-state {
-  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  padding: 2px 8px;
+  border-radius: 999px;
   font-size: 11px;
+  font-weight: 700;
   white-space: nowrap;
+}
+
+.wizard-runtime-state.is-running {
+  background: var(--success-dim);
+  border: 1px solid var(--state-success-border);
+  color: var(--success);
+}
+
+.wizard-runtime-state.is-warning {
+  background: var(--warning-dim);
+  border: 1px solid var(--state-warning-border);
+  color: var(--warning);
+}
+
+.wizard-runtime-state.is-stopped,
+.wizard-runtime-state.is-unknown {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.wizard-runtime-attention {
+  border-color: var(--state-warning-border) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 20%, transparent);
 }
 
 .wizard-runtime-empty {

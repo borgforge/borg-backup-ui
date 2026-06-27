@@ -13,9 +13,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Bei Appdata- und VM-Domain-Quellpfaden wird eine explizite Risiko-Bestaetigung verlangt, wenn nicht alle zugehoerigen Dienste gestoppt werden.
   - Die Runtime-Auswahl wurde in einen eigenen Wizard-Schritt verschoben, damit Grunddaten und Docker-/VM-Auswahl nicht in einer gedrängten Ansicht vermischt werden.
   - Risiko-Bestaetigungen fuer Appdata und VM-Domains werden nur beim vollstaendigen Standardpfad verlangt, nicht bei einzelnen Unterordnern.
+  - Die Runtime-Auswahl nutzt mehr Wizard-Breite, zeigt Statuswerte als kontrastreiche Badges und fuehrt selektierte Docker-/VM-Ziele in der Flow-Vorschau auf.
 - Runtime:
   - Docker- und VM-Manager koennen selektiv stoppen und starten nur Eintraege neu, die der jeweilige Backup-Lauf selbst gestoppt hat.
   - Docker-Container werden fuer die Wizard-Auswahl kompatibler ueber ein einfaches `docker ps -a`-Format ermittelt.
+  - Selektive Docker-Laeufe protokollieren in der Containerliste nur noch die tatsaechlich ausgewaehlten Container.
   - Bestehende Jobs ohne neue Runtime-Metadaten bleiben kompatibel und werden wie bisher als vollstaendige Docker-/VM-Steuerung behandelt.
 
 ## Unreleased unified UI redesign

@@ -376,6 +376,7 @@
     "runtimeSelectedDocker": "Nur ausgewählte Container",
     "runtimeAllVms": "Alle laufenden VMs",
     "runtimeSelectedVms": "Nur ausgewählte VMs",
+    "runtimeNone": "Keine Laufzeitsteuerung",
     "noDockerContainers": "Keine Docker-Container gefunden.",
     "noVms": "Keine VMs gefunden.",
     "sourcePaths": "Quellpfade",
@@ -479,6 +480,8 @@
     "previewEncryption": "Verschlüsselung: {value}",
     "previewSources": "Quellen: {value}",
     "previewFeatures": "Docker: {docker} | VM: {vm}",
+    "previewDockerControl": "Docker-Auswahl: {value}",
+    "previewVmControl": "VM-Auswahl: {value}",
     "previewFlow": "Ablauf:",
     "flowSteps": {
       "prechecks": "Vorprüfungen (Voraussetzungen, Parität, Pfade)",

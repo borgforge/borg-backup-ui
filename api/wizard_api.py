@@ -95,7 +95,7 @@ def _source_matches(raw_sources: list[str], prefix: str) -> bool:
     prefix_norm = prefix.rstrip("/")
     for src in raw_sources:
         src_norm = str(src or "").rstrip("/")
-        if src_norm == prefix_norm or src_norm.startswith(prefix_norm + "/"):
+        if src_norm == prefix_norm:
             return True
     return False
 
@@ -760,6 +760,8 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "vm": use_vm,
             "docker_mode": docker_control["mode"],
             "vm_mode": vm_control["mode"],
+            "docker_selected": docker_control["selected"],
+            "vm_selected": vm_control["selected"],
         },
         "steps": steps,
         "step_codes": step_codes,

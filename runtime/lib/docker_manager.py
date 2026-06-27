@@ -404,6 +404,7 @@ class DockerManager:
     @staticmethod
     def _log_running_containers(container_ids: List[str]) -> None:
         """Gibt formatierte Container-Liste aus (Name + ID)."""
+        selected_ids = {str(cid or "").strip() for cid in container_ids if str(cid or "").strip()}
         logger.info("Container list:")
         try:
             result = subprocess.run(
@@ -417,6 +418,8 @@ class DockerManager:
                 parts = line.split("|", 1)
                 name = parts[0] if parts else line
                 cid = parts[1] if len(parts) > 1 else ""
+                if selected_ids and cid not in selected_ids:
+                    continue
                 logger.info("  - %-30s (%s)", name, cid)
         except (subprocess.TimeoutExpired, OSError) as exc:
             logger.warning("Container list could not be retrieved: %s", exc)
