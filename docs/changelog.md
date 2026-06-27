@@ -14,6 +14,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Die Runtime-Auswahl wurde in einen eigenen Wizard-Schritt verschoben, damit Grunddaten und Docker-/VM-Auswahl nicht in einer gedrängten Ansicht vermischt werden.
   - Risiko-Bestaetigungen fuer Appdata und VM-Domains werden nur beim vollstaendigen Standardpfad verlangt, nicht bei einzelnen Unterordnern.
   - Die Runtime-Auswahl nutzt mehr Wizard-Breite, zeigt Statuswerte als kontrastreiche Badges und fuehrt selektierte Docker-/VM-Ziele in der Flow-Vorschau auf.
+  - Docker- und VM-Auswahl sind eigene optionale Wizard-Schritte, damit lange Container- und VM-Listen nicht auf derselben Seite stehen.
 - Runtime:
   - Docker- und VM-Manager koennen selektiv stoppen und starten nur Eintraege neu, die der jeweilige Backup-Lauf selbst gestoppt hat.
   - Docker-Container werden fuer die Wizard-Auswahl kompatibler ueber ein einfaches `docker ps -a`-Format ermittelt.

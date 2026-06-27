@@ -109,11 +109,12 @@ function _wizardSetRuntimeControl(kind, control = {}) {
 function wizardRenderRuntimeControls() {
   const dockerEnabled = !!document.getElementById('wiz-use-docker')?.checked;
   const vmEnabled = !!document.getElementById('wiz-use-vm')?.checked;
-  document.getElementById('wiz-docker-control-panel')?.classList.toggle('hidden', !dockerEnabled);
-  document.getElementById('wiz-vm-control-panel')?.classList.toggle('hidden', !vmEnabled);
-  document.getElementById('wiz-runtime-empty')?.classList.toggle('hidden', dockerEnabled || vmEnabled);
+  document.getElementById('wstep-dot-3')?.classList.toggle('wizard-step-skipped', !dockerEnabled);
+  document.getElementById('wstep-dot-4')?.classList.toggle('wizard-step-skipped', !vmEnabled);
   _wizardRenderRuntimeSelection('docker');
   _wizardRenderRuntimeSelection('vm');
+  _wizardUpdateRuntimeCount('docker');
+  _wizardUpdateRuntimeCount('vm');
   wizardUpdateRuntimeRiskWarnings();
 }
 
@@ -136,7 +137,8 @@ function _wizardRenderRuntimeSelection(kind) {
     const state = String(row?.state || row?.status || '').trim();
     const stateClass = _wizardRuntimeStateClass(state);
     const checked = selected.has(name) ? ' checked' : '';
-    return `<label class="wizard-runtime-row">
+    const selectedClass = selected.has(name) ? ' is-selected' : '';
+    return `<label class="wizard-runtime-row${selectedClass}">
       <input type="checkbox" data-runtime-kind="${kind}" value="${escHtml(name)}"${checked}>
       <span class="wizard-runtime-name">${escHtml(name)}</span>
       <span class="wizard-runtime-state ${stateClass}">${escHtml(state || '—')}</span>
@@ -151,8 +153,26 @@ function _wizardRenderRuntimeSelection(kind) {
       else next.delete(name);
       if (kind === 'docker') wizardState.selectedDockerContainers = Array.from(next);
       else wizardState.selectedVms = Array.from(next);
+      input.closest('.wizard-runtime-row')?.classList.toggle('is-selected', input.checked);
+      _wizardUpdateRuntimeCount(kind);
     });
   });
+}
+
+function _wizardUpdateRuntimeCount(kind) {
+  const target = document.getElementById(kind === 'docker' ? 'wiz-docker-count' : 'wiz-vm-count');
+  if (!target) return;
+  const mode = _wizardRuntimeMode(kind);
+  const rows = kind === 'docker' ? wizardState.dockerContainers : wizardState.vms;
+  const selected = kind === 'docker' ? wizardState.selectedDockerContainers : wizardState.selectedVms;
+  const total = Array.isArray(rows) ? rows.length : 0;
+  if (mode === 'selected') {
+    target.textContent = wizardT('wizard.runtimeSelectionCount', { selected: selected.length, total });
+  } else if (mode === 'all') {
+    target.textContent = wizardT('wizard.runtimeAllCount', { total });
+  } else {
+    target.textContent = '';
+  }
 }
 
 function _wizardRuntimeStateClass(state) {
@@ -409,7 +429,7 @@ function openWizard() {
   wizardSchedulePreview();
   wizardUpdateIconPreview();
   Promise.all([wizardLoadStorageboxProfile(), wizardLoadUsbProfiles(), wizardLoadSmbProfiles(), wizardLoadRuntimeInventory()]).finally(() => wizardAutoFill());
-  [1,2,3,4,5,6,7,8].forEach(n => wizardClearError(n));
+  [1,2,3,4,5,6,7,8,9].forEach(n => wizardClearError(n));
   wizardRenderRuntimeControls();
   _renderWizardStep(1);
   document.getElementById('wizard-modal').classList.remove('hidden');
@@ -541,7 +561,7 @@ function closeWizard() {
 }
 
 function _renderWizardStep(n) {
-  [1,2,3,4,5,6,7,8].forEach(i => {
+  [1,2,3,4,5,6,7,8,9].forEach(i => {
     document.getElementById(`wizard-step-${i}`).classList.toggle('hidden', i !== n);
     const dot = document.getElementById(`wstep-dot-${i}`);
     if (dot) dot.classList.toggle('active', i <= n);
@@ -550,10 +570,30 @@ function _renderWizardStep(n) {
   const nextBtn = document.getElementById('wizard-next-btn');
   const saveBtn = document.getElementById('wizard-save-btn');
   backBtn.style.display = n > 1 ? '' : 'none';
-  nextBtn.classList.toggle('hidden', n === 8);
-  saveBtn.classList.toggle('hidden', n !== 8);
+  nextBtn.classList.toggle('hidden', n === 9);
+  saveBtn.classList.toggle('hidden', n !== 9);
   wizardState.step = n;
   requestAnimationFrame(wizardUpdateStep2ScrollHint);
+}
+
+function _wizardStepEnabled(step) {
+  if (step === 3) return _wizardRuntimeMode('docker') !== 'none';
+  if (step === 4) return _wizardRuntimeMode('vm') !== 'none';
+  return true;
+}
+
+function _wizardNextStepFrom(step) {
+  for (let next = step + 1; next <= 9; next += 1) {
+    if (_wizardStepEnabled(next)) return next;
+  }
+  return 9;
+}
+
+function _wizardPreviousStepFrom(step) {
+  for (let prev = step - 1; prev >= 1; prev -= 1) {
+    if (_wizardStepEnabled(prev)) return prev;
+  }
+  return 1;
 }
 
 function wizardAutoFill() {
@@ -980,12 +1020,14 @@ function _wizardValidate(step) {
       _wizardShowError(3, wizardT('wizard.validationDockerSelection'));
       return false;
     }
-    if (p.vm_control.mode === 'selected' && !p.vm_control.selected.length) {
-      _wizardShowError(3, wizardT('wizard.validationVmSelection'));
-      return false;
-    }
     if (_wizardHasExactSourcePath('/mnt/user/appdata') && p.docker_control.mode !== 'all' && !p.docker_control.ack_appdata_risk) {
       _wizardFocusRuntimeRisk('wiz-appdata-risk');
+      return false;
+    }
+  }
+  if (step === 4) {
+    if (p.vm_control.mode === 'selected' && !p.vm_control.selected.length) {
+      _wizardShowError(4, wizardT('wizard.validationVmSelection'));
       return false;
     }
     if (_wizardHasExactSourcePath('/mnt/user/domains') && p.vm_control.mode !== 'all' && !p.vm_control.ack_domains_risk) {
@@ -993,9 +1035,9 @@ function _wizardValidate(step) {
       return false;
     }
   }
-  if (step === 5) {
+  if (step === 6) {
     if (p.encryption !== 'none' && !wizardState.keepPassphrase && !p.passphrase) {
-      _wizardShowError(5, wizardT('wizard.validationPassphrase'));
+      _wizardShowError(6, wizardT('wizard.validationPassphrase'));
       return false;
     }
   }
@@ -1012,22 +1054,22 @@ async function wizardNext() {
     wizardState.mode !== 'adopt' &&
     !wizardNeedsScriptRegeneration(params);
   // skip passphrase step when no encryption
-  if (cur === 4 && (enc === 'none' || isEditLikeNoRegeneration)) {
+  if (cur === 5 && (enc === 'none' || isEditLikeNoRegeneration)) {
+    _renderWizardStep(7);
+    return;
+  }
+  // step 5 -> 6: check if passphrase file already exists
+  if (cur === 5 && enc !== 'none') {
+    await _wizardCheckPassphrase();
     _renderWizardStep(6);
     return;
   }
-  // step 4 -> 5: check if passphrase file already exists
-  if (cur === 4 && enc !== 'none') {
-    await _wizardCheckPassphrase();
-    _renderWizardStep(5);
+  if (cur < 8) {
+    _renderWizardStep(_wizardNextStepFrom(cur));
     return;
   }
-  if (cur < 7) {
-    _renderWizardStep(cur + 1);
-    return;
-  }
-  // Step 7 -> 8: load preview
-  _renderWizardStep(8);
+  // Step 8 -> 9: load preview
+  _renderWizardStep(9);
   await _wizardPreview();
 }
 
@@ -1064,17 +1106,17 @@ function wizardBack() {
     wizardState.mode !== 'adopt' &&
     !wizardNeedsScriptRegeneration(params);
   // skip passphrase step going back from Beschreibung when no encryption
-  if (cur === 6 && (enc === 'none' || isEditLikeNoRegeneration)) {
-    _renderWizardStep(4);
+  if (cur === 7 && (enc === 'none' || isEditLikeNoRegeneration)) {
+    _renderWizardStep(5);
     return;
   }
-  _renderWizardStep(cur - 1);
+  _renderWizardStep(_wizardPreviousStepFrom(cur));
 }
 
 async function _wizardPreview() {
   const loading = document.getElementById('wizard-preview-loading');
   const wrap    = document.getElementById('wizard-preview-wrap');
-  const errEl   = document.getElementById('wizard-error-8');
+  const errEl   = document.getElementById('wizard-error-9');
   const repoStatusEl = document.getElementById('wizard-remote-repo-status');
   loading.classList.remove('hidden');
   wrap.classList.add('hidden');
@@ -1178,7 +1220,7 @@ function _wizardRuntimePreviewText(kind, summary) {
 
 async function saveWizardJob() {
   const btn   = document.getElementById('wizard-save-btn');
-  const errEl = document.getElementById('wizard-error-8');
+  const errEl = document.getElementById('wizard-error-9');
   btn.classList.add('loading');
   errEl.classList.add('hidden');
 

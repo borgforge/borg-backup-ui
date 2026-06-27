@@ -4123,6 +4123,9 @@ body {
   border-color: var(--accent);
   color: #fff;
 }
+.wizard-step.wizard-step-skipped {
+  opacity: .38;
+}
 .wizard-step-label {
   font-size: 9px;
   color: var(--text-muted);
@@ -4221,7 +4224,7 @@ body {
 .wizard-runtime-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 180px;
   padding: 12px;
   border: 1px solid var(--border);
@@ -4229,10 +4232,28 @@ body {
   background: var(--bg-elev-1);
 }
 
+.wizard-runtime-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .wizard-runtime-card-title {
   color: var(--text-primary);
   font-weight: 700;
   font-size: 13px;
+}
+
+.wizard-runtime-card-meta {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.wizard-runtime-mode {
+  width: min(280px, 48%);
+  min-width: 220px;
 }
 
 .wizard-runtime-selection {
@@ -4251,10 +4272,21 @@ body {
   padding: 9px 10px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
 }
 
 .wizard-runtime-row:last-child {
   border-bottom: 0;
+}
+
+.wizard-runtime-row:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.wizard-runtime-row.is-selected {
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-surface));
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .wizard-runtime-name {
@@ -4342,6 +4374,13 @@ body {
   }
   .wizard-runtime-card-grid {
     grid-template-columns: 1fr;
+  }
+  .wizard-runtime-card-head {
+    flex-direction: column;
+  }
+  .wizard-runtime-mode {
+    width: 100%;
+    min-width: 0;
   }
 }
 
