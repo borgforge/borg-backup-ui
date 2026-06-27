@@ -245,12 +245,18 @@ class BackupJob:
         self._borg_stats = borg_stats
         self._final_msg = final_msg
 
-    def stop_docker(self) -> None:
+    def stop_docker(self, selected_names: Optional[List[str]] = None) -> None:
         """Stoppt Docker-Container für das Backup."""
         if self.docker_manager is not None:
-            self._docker_stop_result = self.docker_manager.stop_all(
-                str(self.config.log_file)
-            )
+            if selected_names is None:
+                self._docker_stop_result = self.docker_manager.stop_all(
+                    str(self.config.log_file)
+                )
+            else:
+                self._docker_stop_result = self.docker_manager.stop_selected(
+                    selected_names,
+                    str(self.config.log_file),
+                )
 
     def start_docker(self) -> None:
         """Startet Docker-Container neu. Wird automatisch in __exit__ aufgerufen."""
@@ -262,10 +268,13 @@ class BackupJob:
             self._docker_restarted = True
             self.docker_manager.start_all(self._docker_stop_result)
 
-    def shutdown_vms(self) -> None:
+    def shutdown_vms(self, selected_names: Optional[List[str]] = None) -> None:
         """Fährt VMs herunter (mit Vorwarnung). Tracking für Neustart in __exit__."""
         if self.vm_manager is not None:
-            self._vm_shutdown_result = self.vm_manager.shutdown_all()
+            if selected_names is None:
+                self._vm_shutdown_result = self.vm_manager.shutdown_all()
+            else:
+                self._vm_shutdown_result = self.vm_manager.shutdown_selected(selected_names)
 
     def start_vms(self) -> None:
         """Startet VMs neu. Wird automatisch in __exit__ aufgerufen."""

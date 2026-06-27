@@ -4,6 +4,23 @@ Historische Release- und Entwicklungsnotizen fuer borg-backup-ui.
 
 Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrelevante Zusammenfassung des aktuellen Stands.
 
+## Unreleased
+
+### Issue #82
+- Wizard:
+  - Docker- und VM-Steuerung kann pro Job auf alle laufenden Eintraege oder eine gespeicherte Auswahl eingeschraenkt werden.
+  - Wizard listet lokale Docker-Container und VMs ueber interne API-Endpunkte.
+  - Bei Appdata- und VM-Domain-Quellpfaden wird eine explizite Risiko-Bestaetigung verlangt, wenn nicht alle zugehoerigen Dienste gestoppt werden.
+  - Die Runtime-Auswahl wurde in einen eigenen Wizard-Schritt verschoben, damit Grunddaten und Docker-/VM-Auswahl nicht in einer gedrängten Ansicht vermischt werden.
+  - Risiko-Bestaetigungen fuer Appdata und VM-Domains werden nur beim vollstaendigen Standardpfad verlangt, nicht bei einzelnen Unterordnern.
+  - Die Runtime-Auswahl nutzt mehr Wizard-Breite, zeigt Statuswerte als kontrastreiche Badges und fuehrt selektierte Docker-/VM-Ziele in der Flow-Vorschau auf.
+  - Docker- und VM-Auswahl sind eigene optionale Wizard-Schritte, damit lange Container- und VM-Listen nicht auf derselben Seite stehen.
+- Runtime:
+  - Docker- und VM-Manager koennen selektiv stoppen und starten nur Eintraege neu, die der jeweilige Backup-Lauf selbst gestoppt hat.
+  - Docker-Container werden fuer die Wizard-Auswahl kompatibler ueber ein einfaches `docker ps -a`-Format ermittelt.
+  - Selektive Docker-Laeufe protokollieren in der Containerliste nur noch die tatsaechlich ausgewaehlten Container.
+  - Bestehende Jobs ohne neue Runtime-Metadaten bleiben kompatibel und werden wie bisher als vollstaendige Docker-/VM-Steuerung behandelt.
+
 ## Unreleased unified UI redesign
 
 ### Issue #28

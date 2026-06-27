@@ -134,6 +134,10 @@ class VmManager:
     def __init__(self, config: Optional[VmConfig] = None) -> None:
         self.config = config or VmConfig()
 
+    def list_vms(self) -> List[Dict[str, str]]:
+        """Returns VM domains for UI selection."""
+        return list_vms()
+
     # ------------------------------------------------------------------
     # Öffentliche Methoden
     # ------------------------------------------------------------------
@@ -215,6 +219,78 @@ class VmManager:
             raise SystemExit(1)
 
         logger.info("All VMs shut down successfully")
+        return VmShutdownResult(stopped_vms=list(running))
+
+    def shutdown_selected(self, vm_names: List[str]) -> VmShutdownResult:
+        """Shuts down only selected running VMs."""
+        selected = _normalize_vm_names(vm_names)
+        if not selected:
+            logger.info("No VMs selected; skipping VM shutdown")
+            return VmShutdownResult()
+
+        if not virsh_available():
+            logger.info("virsh is unavailable; skipping selected VM shutdown")
+            return VmShutdownResult()
+
+        running_all = self._get_running_vms()
+        running = [name for name in selected if name in running_all]
+        missing = [name for name in selected if name not in running_all]
+        if missing:
+            logger.info("Selected VMs are not running or missing: %s", ", ".join(missing))
+        if not running:
+            logger.info("No selected VMs are currently running")
+            return VmShutdownResult()
+
+        logger.info("Found %d selected running VM(s)", len(running))
+        for vm in running:
+            vm_id = self._get_vm_id(vm)
+            logger.info("  - %-30s (ID: %s)", vm, vm_id)
+
+        warning_msg = (
+            "WARNING: The VM is about to be backed up. "
+            f"It will shut down in {self.config.warning_minutes} minutes."
+        )
+        logger.info(
+            "Sending warning to %d selected VM(s) (wait time: %d minutes)",
+            len(running), self.config.warning_minutes,
+        )
+        self._warn_vms_parallel(running, warning_msg)
+
+        for remaining in range(self.config.warning_minutes, 0, -1):
+            if remaining == 1:
+                logger.info("Final minute before shutdown; sending final warning to selected VMs...")
+                self._warn_vms_parallel(running, "WARNING: The system is shutting down NOW!")
+            else:
+                logger.info("Waiting %d more minute(s) before selected VM shutdown...", remaining)
+            time.sleep(60)
+
+        logger.info("Shutting down %d selected VM(s) gracefully...", len(running))
+        for vm in running:
+            logger.info("  Shutdown: %s", vm)
+            try:
+                subprocess.run(
+                    ["virsh", "shutdown", vm],
+                    capture_output=True, timeout=30,
+                )
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                logger.warning("virsh shutdown %s failed: %s", vm, exc)
+
+        if not self._wait_for_selected_shutdown(running, timeout=self.config.shutdown_timeout):
+            still_running = [vm for vm in running if vm in self._get_running_vms()]
+            logger.error(
+                "ERROR: %d selected VM(s) could not be shut down: %s",
+                len(still_running), still_running,
+            )
+            from lib.notifications import notify
+            notify(
+                level="alert",
+                subject="VM backup aborted",
+                description=f"{len(still_running)} selected VM(s) could not be shut down.",
+                job_name="Borg Backup (VMs)",
+            )
+            raise SystemExit(1)
+
+        logger.info("Selected VMs shut down successfully")
         return VmShutdownResult(stopped_vms=list(running))
 
     def start_all(self, result: VmShutdownResult) -> None:
@@ -406,6 +482,24 @@ class VmManager:
                     still_running, elapsed,
                 )
         return len(self._get_running_vms()) == 0
+
+    def _wait_for_selected_shutdown(self, vm_names: List[str], timeout: int) -> bool:
+        """Waits until selected VMs are stopped."""
+        selected = set(_normalize_vm_names(vm_names))
+        elapsed = 0
+        check_interval = 10
+        while elapsed < timeout:
+            still_running = selected.intersection(self._get_running_vms())
+            if not still_running:
+                return True
+            time.sleep(check_interval)
+            elapsed += check_interval
+            if elapsed % 30 == 0:
+                logger.info(
+                    "  %d selected VM(s) still running (%ds elapsed)...",
+                    len(still_running), elapsed,
+                )
+        return not selected.intersection(self._get_running_vms())
 
     def _warn_vms_parallel(self, vm_names: List[str], message: str) -> None:
         """Sendet Warnungen an alle VMs parallel (ThreadPoolExecutor)."""
@@ -667,6 +761,52 @@ class VmManager:
         # 'who' gibt Zeilen wie "user pts/0 2026-05-01 10:00" aus
         users = list({line.split()[0] for line in decoded.splitlines() if line.strip()})
         return sorted(users)
+
+
+def _normalize_vm_names(vm_names: List[str]) -> List[str]:
+    """Normalizes VM names while preserving order."""
+    out: List[str] = []
+    seen = set()
+    for raw in vm_names or []:
+        name = str(raw or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+    return out
+
+
+def list_vms() -> List[Dict[str, str]]:
+    """Lists all VM domains with basic state for the wizard."""
+    if not virsh_available():
+        return []
+    try:
+        result = subprocess.run(
+            ["virsh", "list", "--all", "--name"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return []
+
+    rows: List[Dict[str, str]] = []
+    for raw_name in result.stdout.splitlines():
+        name = raw_name.strip()
+        if not name:
+            continue
+        try:
+            state_result = subprocess.run(
+                ["virsh", "domstate", name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            state = state_result.stdout.strip().lower() if state_result.returncode == 0 else "unknown"
+        except (subprocess.TimeoutExpired, OSError):
+            state = "unknown"
+        rows.append({"name": name, "state": state})
+    return sorted(rows, key=lambda row: row.get("name", "").lower())
 
 
 # ---------------------------------------------------------------------------

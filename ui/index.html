@@ -1083,26 +1083,36 @@
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-3">
         <div class="wizard-step-dot">3</div>
-        <div class="wizard-step-label" data-i18n="wizard.stepRetention">Retention</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepDocker">Docker</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-4">
         <div class="wizard-step-dot">4</div>
-        <div class="wizard-step-label" data-i18n="wizard.stepPassphrase">Passphrase</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepVms">VMs</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-5">
         <div class="wizard-step-dot">5</div>
-        <div class="wizard-step-label" data-i18n="wizard.stepDescription">Beschreibung</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepRetention">Retention</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-6">
         <div class="wizard-step-dot">6</div>
-        <div class="wizard-step-label" data-i18n="wizard.stepSchedule">Zeitplan</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepPassphrase">Passphrase</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-7">
         <div class="wizard-step-dot">7</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepDescription">Beschreibung</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step" id="wstep-dot-8">
+        <div class="wizard-step-dot">8</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepSchedule">Zeitplan</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step" id="wstep-dot-9">
+        <div class="wizard-step-dot">9</div>
         <div class="wizard-step-label" data-i18n="wizard.stepPreview">Flow-Vorschau</div>
       </div>
     </div>
@@ -1277,9 +1287,87 @@
         </div>
       </div>
 
-      <!-- Step 3: Retention -->
+      <!-- Step 3: Docker -->
       <div id="wizard-step-3" class="wizard-step-body hidden">
         <div id="wizard-error-3" class="status-message error hidden"></div>
+        <div class="wizard-runtime-workspace">
+          <div class="wizard-runtime-head">
+            <div>
+              <div class="wizard-runtime-title" data-i18n="wizard.runtimeDockerTitle">Docker-Container</div>
+              <div class="wizard-runtime-subtitle" data-i18n="wizard.runtimeDockerSubtitle">Auswählen, welche Docker-Container vor dem Backup gestoppt werden.</div>
+            </div>
+          </div>
+          <div id="wiz-appdata-risk" class="status-message warning hidden">
+            <strong data-i18n="wizard.appdataRiskTitle">Appdata-Hinweis</strong>
+            <div data-i18n="wizard.appdataRiskText">Bei /mnt/user/appdata sollten alle Docker-Container gestoppt werden, sonst können Backup-Warnungen durch geänderte Dateien entstehen.</div>
+            <label class="form-checkbox-row">
+              <input type="checkbox" id="wiz-ack-appdata-risk">
+              <span data-i18n="wizard.ackRisk">Ich habe den Hinweis verstanden.</span>
+            </label>
+          </div>
+          <div class="wizard-runtime-card-grid">
+            <div id="wiz-docker-control-panel" class="wizard-runtime-card">
+              <div class="wizard-runtime-card-head">
+                <div>
+                  <div class="wizard-runtime-card-title" data-i18n="wizard.runtimeDockerTitle">Docker-Container</div>
+                  <div id="wiz-docker-count" class="wizard-runtime-card-meta"></div>
+                </div>
+                <div class="wizard-runtime-mode">
+                  <label class="form-label" for="wiz-docker-mode" data-i18n="wizard.runtimeMode">Umfang</label>
+                  <select class="form-select" id="wiz-docker-mode">
+                    <option value="all" data-i18n="wizard.runtimeAllDocker">Alle laufenden Container</option>
+                    <option value="selected" data-i18n="wizard.runtimeSelectedDocker">Nur ausgewählte Container</option>
+                  </select>
+                </div>
+              </div>
+              <div id="wiz-docker-selection" class="wizard-runtime-selection hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: VMs -->
+      <div id="wizard-step-4" class="wizard-step-body hidden">
+        <div id="wizard-error-4" class="status-message error hidden"></div>
+        <div class="wizard-runtime-workspace">
+          <div class="wizard-runtime-head">
+            <div>
+              <div class="wizard-runtime-title" data-i18n="wizard.runtimeVmTitle">Virtuelle Maschinen</div>
+              <div class="wizard-runtime-subtitle" data-i18n="wizard.runtimeVmSubtitle">Auswählen, welche VMs vor dem Backup heruntergefahren werden.</div>
+            </div>
+          </div>
+          <div id="wiz-domains-risk" class="status-message warning hidden">
+            <strong data-i18n="wizard.domainsRiskTitle">VM-Domains-Hinweis</strong>
+            <div data-i18n="wizard.domainsRiskText">Bei /mnt/user/domains sollten alle VMs heruntergefahren werden, sonst können inkonsistente VM-Images gesichert werden.</div>
+            <label class="form-checkbox-row">
+              <input type="checkbox" id="wiz-ack-domains-risk">
+              <span data-i18n="wizard.ackRisk">Ich habe den Hinweis verstanden.</span>
+            </label>
+          </div>
+          <div class="wizard-runtime-card-grid">
+            <div id="wiz-vm-control-panel" class="wizard-runtime-card">
+              <div class="wizard-runtime-card-head">
+                <div>
+                  <div class="wizard-runtime-card-title" data-i18n="wizard.runtimeVmTitle">Virtuelle Maschinen</div>
+                  <div id="wiz-vm-count" class="wizard-runtime-card-meta"></div>
+                </div>
+                <div class="wizard-runtime-mode">
+                  <label class="form-label" for="wiz-vm-mode" data-i18n="wizard.runtimeMode">Umfang</label>
+                  <select class="form-select" id="wiz-vm-mode">
+                    <option value="all" data-i18n="wizard.runtimeAllVms">Alle laufenden VMs</option>
+                    <option value="selected" data-i18n="wizard.runtimeSelectedVms">Nur ausgewählte VMs</option>
+                  </select>
+                </div>
+              </div>
+              <div id="wiz-vm-selection" class="wizard-runtime-selection hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 5: Retention -->
+      <div id="wizard-step-5" class="wizard-step-body hidden">
+        <div id="wizard-error-5" class="status-message error hidden"></div>
         <div class="settings-body two-col">
           <div class="form-group">
             <label class="form-label" data-i18n="wizard.keepDaily">Täglich behalten</label>
@@ -1300,9 +1388,9 @@
         </div>
       </div>
 
-      <!-- Step 4: Passphrase -->
-      <div id="wizard-step-4" class="wizard-step-body hidden">
-        <div id="wizard-error-4" class="status-message error hidden"></div>
+      <!-- Step 6: Passphrase -->
+      <div id="wizard-step-6" class="wizard-step-body hidden">
+        <div id="wizard-error-6" class="status-message error hidden"></div>
 
         <!-- shown when passphrase file already exists -->
         <div id="wizard-passphrase-conflict" class="hidden">
@@ -1351,9 +1439,9 @@
         </div><!-- /#wizard-passphrase-form -->
       </div>
 
-      <!-- Step 5: Beschreibung -->
-      <div id="wizard-step-5" class="wizard-step-body hidden">
-        <div id="wizard-error-5" class="status-message error hidden"></div>
+      <!-- Step 7: Beschreibung -->
+      <div id="wizard-step-7" class="wizard-step-body hidden">
+        <div id="wizard-error-7" class="status-message error hidden"></div>
         <div class="settings-body">
           <div class="form-group">
             <label class="form-label wizard-label-inline">
@@ -1373,9 +1461,9 @@
         </div>
       </div>
 
-      <!-- Step 6: Zeitplan (optional) -->
-      <div id="wizard-step-6" class="wizard-step-body hidden">
-        <div id="wizard-error-6" class="status-message error hidden"></div>
+      <!-- Step 8: Zeitplan (optional) -->
+      <div id="wizard-step-8" class="wizard-step-body hidden">
+        <div id="wizard-error-8" class="status-message error hidden"></div>
         <div class="settings-body">
           <div class="schedule-toggle-row">
             <span class="schedule-field-label" data-i18n="schedule.enable">Zeitplan aktivieren</span>
@@ -1438,9 +1526,9 @@
         </div>
       </div>
 
-      <!-- Step 7: Flow-Vorschau & Speichern -->
-      <div id="wizard-step-7" class="wizard-step-body hidden">
-        <div id="wizard-error-7" class="status-message error hidden"></div>
+      <!-- Step 9: Flow-Vorschau & Speichern -->
+      <div id="wizard-step-9" class="wizard-step-body hidden">
+        <div id="wizard-error-9" class="status-message error hidden"></div>
         <div id="wizard-preview-loading" class="loading-spinner hidden">
           <div class="spinner"></div><span data-i18n="wizard.loadingPreview">Lade Flow-Vorschau...</span>
         </div>
@@ -1467,7 +1555,7 @@
       <div style="flex:1"></div>
       <button class="btn btn-secondary" id="wizard-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
       <button class="btn btn-primary" id="wizard-next-btn" data-i18n="wizard.next">Weiter</button>
-      <button class="btn btn-primary hidden" id="wizard-save-btn" data-step="7">
+      <button class="btn btn-primary hidden" id="wizard-save-btn" data-step="9">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
           <polyline points="20 6 9 17 4 12"/>
         </svg>

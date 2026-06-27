@@ -4088,13 +4088,14 @@ body {
 
 /* ── Job Wizard ──────────────────────────────────────────────────────────────── */
 
-.modal-wizard { max-width: 720px; width: 95vw; }
+.modal-wizard { max-width: 960px; width: 95vw; }
 
 .wizard-stepper {
   display: flex;
   align-items: center;
   padding: 16px 24px 0;
   gap: 0;
+  overflow-x: auto;
 }
 .wizard-step {
   display: flex;
@@ -4122,14 +4123,18 @@ body {
   border-color: var(--accent);
   color: #fff;
 }
+.wizard-step.wizard-step-skipped {
+  opacity: .38;
+}
 .wizard-step-label {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
   white-space: nowrap;
 }
 .wizard-step.active .wizard-step-label { color: var(--text-primary); }
 .wizard-step-line {
   flex: 1;
+  min-width: 20px;
   height: 2px;
   background: var(--border);
   margin: 0 4px;
@@ -4180,6 +4185,163 @@ body {
   font-size: 12px;
 }
 
+.wizard-runtime-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wizard-runtime-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-1);
+}
+
+.wizard-runtime-title {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.wizard-runtime-subtitle {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.wizard-runtime-card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.wizard-runtime-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 180px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-1);
+}
+
+.wizard-runtime-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wizard-runtime-card-title {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.wizard-runtime-card-meta {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.wizard-runtime-mode {
+  width: min(280px, 48%);
+  min-width: 220px;
+}
+
+.wizard-runtime-selection {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.wizard-runtime-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.wizard-runtime-row:last-child {
+  border-bottom: 0;
+}
+
+.wizard-runtime-row:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.wizard-runtime-row.is-selected {
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-surface));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.wizard-runtime-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.wizard-runtime-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wizard-runtime-state.is-running {
+  background: var(--success-dim);
+  border: 1px solid var(--state-success-border);
+  color: var(--success);
+}
+
+.wizard-runtime-state.is-warning {
+  background: var(--warning-dim);
+  border: 1px solid var(--state-warning-border);
+  color: var(--warning);
+}
+
+.wizard-runtime-state.is-stopped,
+.wizard-runtime-state.is-unknown {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.wizard-runtime-attention {
+  border-color: var(--state-warning-border) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 20%, transparent);
+}
+
+.wizard-runtime-empty {
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-1);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .wizard-step-scroll-hint {
   position: sticky;
   bottom: 0;
@@ -4209,6 +4371,16 @@ body {
 @media (max-width: 980px) {
   #wizard-step-1 .wizard-feature-grid {
     grid-template-columns: 1fr;
+  }
+  .wizard-runtime-card-grid {
+    grid-template-columns: 1fr;
+  }
+  .wizard-runtime-card-head {
+    flex-direction: column;
+  }
+  .wizard-runtime-mode {
+    width: 100%;
+    min-width: 0;
   }
 }
 
