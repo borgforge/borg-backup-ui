@@ -4180,6 +4180,55 @@ body {
   font-size: 12px;
 }
 
+.wizard-runtime-panel {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.wizard-runtime-selection {
+  margin-top: 8px;
+  max-height: 132px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.wizard-runtime-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.wizard-runtime-row:last-child {
+  border-bottom: 0;
+}
+
+.wizard-runtime-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.wizard-runtime-state {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.wizard-runtime-empty {
+  padding: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .wizard-step-scroll-hint {
   position: sticky;
   bottom: 0;

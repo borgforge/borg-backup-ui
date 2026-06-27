@@ -15,6 +15,7 @@ Nur Python Standard-Library: subprocess, logging, time, dataclasses
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import time
@@ -150,6 +151,10 @@ class DockerManager:
     def __init__(self, config: Optional[DockerConfig] = None) -> None:
         self.config = config or DockerConfig()
 
+    def list_containers(self) -> List[Dict[str, str]]:
+        """Returns Docker containers for UI selection."""
+        return list_containers()
+
     def stop_all(self, log_file: str = "") -> DockerStopResult:
         """
         Stoppt alle laufenden Docker Container.
@@ -214,6 +219,67 @@ class DockerManager:
             raise RuntimeError(msg)
 
         logger.info("All Docker containers stopped successfully")
+        result.success = True
+        return result
+
+    def stop_selected(self, names: List[str], log_file: str = "") -> DockerStopResult:
+        """Stops only selected running containers by name."""
+        selected = _normalize_names(names)
+        result = DockerStopResult()
+
+        if not selected:
+            logger.info("No Docker containers selected; skipping container stop")
+            result.success = True
+            return result
+
+        if not docker_available():
+            logger.info("Docker is disabled or unavailable; skipping selected container stop")
+            return result
+
+        result.available = True
+        running = _get_running_name_id_map()
+        missing = [name for name in selected if name not in running]
+        if missing:
+            logger.info("Selected Docker containers are not running or missing: %s", ", ".join(missing))
+
+        container_ids = [running[name] for name in selected if name in running]
+        if not container_ids:
+            logger.info("No selected Docker containers are currently running")
+            result.success = True
+            return result
+
+        result.container_ids = container_ids
+        result.count_before = len(container_ids)
+        logger.info(
+            "Stopping %d selected Docker container(s) (timeout: %ds)",
+            result.count_before,
+            self.config.stop_timeout,
+        )
+        self._log_running_containers(container_ids)
+
+        try:
+            subprocess.run(
+                ["docker", "stop", "-t", str(self.config.stop_timeout)] + container_ids,
+                capture_output=True,
+                timeout=self.config.stop_timeout * len(container_ids) + 30,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("docker stop timed out")
+        except OSError as exc:
+            logger.warning("docker stop failed: %s", exc)
+
+        time.sleep(self.config.stop_wait)
+
+        still_running = [cid for cid in container_ids if _is_running(cid)]
+        if still_running:
+            msg = (
+                "Not all selected containers could be stopped "
+                f"({len(still_running)} still running). See log: {log_file}"
+            )
+            logger.error("ERROR: %s", msg)
+            raise RuntimeError(msg)
+
+        logger.info("Selected Docker containers stopped successfully")
         result.success = True
         return result
 
@@ -373,6 +439,74 @@ def _get_running_ids() -> List[str]:
         return [line for line in result.stdout.strip().splitlines() if line]
     except (subprocess.TimeoutExpired, OSError):
         return []
+
+
+def _normalize_names(names: List[str]) -> List[str]:
+    """Normalizes Docker names while preserving order."""
+    out: List[str] = []
+    seen = set()
+    for raw in names or []:
+        name = str(raw or "").strip().lstrip("/")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+    return out
+
+
+def _get_running_name_id_map() -> Dict[str, str]:
+    """Returns primary container name -> ID for running containers."""
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}|{{.ID}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return {}
+    out: Dict[str, str] = {}
+    for line in result.stdout.strip().splitlines():
+        name, _, cid = line.partition("|")
+        name = name.strip().lstrip("/")
+        cid = cid.strip()
+        if name and cid:
+            out[name] = cid
+    return out
+
+
+def list_containers() -> List[Dict[str, str]]:
+    """Lists all Docker containers with basic state for the wizard."""
+    if not docker_available():
+        return []
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-a", "--format", "{{json .}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return []
+
+    rows: List[Dict[str, str]] = []
+    for line in result.stdout.strip().splitlines():
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        name = str(raw.get("Names") or "").strip().lstrip("/")
+        if not name:
+            continue
+        state = str(raw.get("State") or "").strip().lower()
+        rows.append({
+            "name": name,
+            "id": str(raw.get("ID") or "").strip(),
+            "image": str(raw.get("Image") or "").strip(),
+            "state": state or "unknown",
+            "status": str(raw.get("Status") or "").strip(),
+        })
+    return sorted(rows, key=lambda row: row.get("name", "").lower())
 
 
 def _is_running(container_id: str) -> bool:

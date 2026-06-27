@@ -31,6 +31,73 @@ def _script_filename(type_id: str, location: str) -> str:
 
 
 _SECRETS_DIR = Path("/boot/config/borg-backup/secrets")
+_RUNTIME_MODES = {"all", "selected", "none"}
+
+
+def _split_selected(raw) -> list[str]:
+    if isinstance(raw, list):
+        vals = raw
+    elif isinstance(raw, str):
+        vals = raw.splitlines() if "\n" in raw else raw.split(",")
+    else:
+        vals = []
+    out: list[str] = []
+    seen = set()
+    for val in vals:
+        name = str(val or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+    return out
+
+
+def _runtime_control_from_params(params: dict, kind: str, existing: Optional[dict] = None) -> dict:
+    existing = existing if isinstance(existing, dict) else {}
+    legacy_key = "use_docker" if kind == "docker" else "use_vm"
+    raw = params.get(f"{kind}_control")
+    source = raw if isinstance(raw, dict) else {}
+    if not source and isinstance(existing.get(f"{kind}_control"), dict):
+        source = existing.get(f"{kind}_control") or {}
+
+    mode = str(source.get("mode") or "").strip().lower()
+    if mode not in _RUNTIME_MODES:
+        mode = "all" if bool(params.get(legacy_key, False)) else "none"
+
+    selected = _split_selected(
+        params.get(f"{kind}_selected", source.get("selected", []))
+    )
+    ack_key = "ack_appdata_risk" if kind == "docker" else "ack_domains_risk"
+    ack = bool(params.get(ack_key, source.get(ack_key, False)))
+    return {
+        "mode": mode,
+        "selected": selected if mode == "selected" else [],
+        ack_key: ack,
+    }
+
+
+def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
+    raw = meta.get(f"{kind}_control") if isinstance(meta.get(f"{kind}_control"), dict) else {}
+    features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
+    legacy_enabled = bool(features.get(kind, False))
+    mode = str(raw.get("mode") or "").strip().lower()
+    if mode not in _RUNTIME_MODES:
+        mode = "all" if legacy_enabled else "none"
+    ack_key = "ack_appdata_risk" if kind == "docker" else "ack_domains_risk"
+    return {
+        "mode": mode,
+        "selected": _split_selected(raw.get("selected", [])) if mode == "selected" else [],
+        ack_key: bool(raw.get(ack_key, False)),
+    }
+
+
+def _source_matches(raw_sources: list[str], prefix: str) -> bool:
+    prefix_norm = prefix.rstrip("/")
+    for src in raw_sources:
+        src_norm = str(src or "").rstrip("/")
+        if src_norm == prefix_norm or src_norm.startswith(prefix_norm + "/"):
+            return True
+    return False
 
 
 def _inject_storage_profile_user_into_repo(repo_uri: str, storage_profile_key: str, scripts_dir: Path) -> str:
@@ -114,6 +181,19 @@ def validate_params(
             raise ValueError(f"Source path does not exist: {src}")
         if not p.is_dir():
             raise ValueError(f"Source path is not a directory: {src}")
+
+    docker_control = _runtime_control_from_params(params, "docker")
+    vm_control = _runtime_control_from_params(params, "vm")
+    if docker_control["mode"] == "selected" and not docker_control["selected"]:
+        raise ValueError("At least one Docker container must be selected")
+    if vm_control["mode"] == "selected" and not vm_control["selected"]:
+        raise ValueError("At least one VM must be selected")
+    if _source_matches(raw_sources, "/mnt/user/appdata") and docker_control["mode"] != "all":
+        if not bool(docker_control.get("ack_appdata_risk", False)):
+            raise ValueError("Appdata backup risk must be acknowledged when not stopping all Docker containers")
+    if _source_matches(raw_sources, "/mnt/user/domains") and vm_control["mode"] != "all":
+        if not bool(vm_control.get("ack_domains_risk", False)):
+            raise ValueError("VM domain backup risk must be acknowledged when not shutting down all VMs")
 
     filename = _script_filename(type_id, location)
     target = scripts_dir / filename
@@ -323,6 +403,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     meta_storage_profile_key = ""
     meta_mount_before_run = True
     meta_unmount_after_run = True
+    meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False}
+    meta_vm_control = {"mode": "all" if bool(info.has_vm) else "none", "selected": [], "ack_domains_risk": False}
     for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
         meta_file = meta_dir / f"{job_key}.json"
         if not meta_file.exists():
@@ -344,6 +426,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
             meta_storage_profile_key = str(meta.get("storage_profile_key") or "").strip()
             meta_mount_before_run = bool(meta.get("mount_before_run", True))
             meta_unmount_after_run = bool(meta.get("unmount_after_run", True))
+            meta_docker_control = _runtime_control_from_meta(meta, "docker")
+            meta_vm_control = _runtime_control_from_meta(meta, "vm")
             break
         except (json.JSONDecodeError, OSError, UnicodeDecodeError, TypeError, ValueError):
             continue
@@ -397,8 +481,10 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "icon": str(getattr(info, "icon", "") or "").strip().lower(),
         "icon_color": str(getattr(info, "icon_color", "") or "").strip().lower(),
         "location": location,
-        "use_docker": bool(info.has_docker),
-        "use_vm": bool(info.has_vm),
+        "use_docker": meta_docker_control["mode"] != "none",
+        "use_vm": meta_vm_control["mode"] != "none",
+        "docker_control": meta_docker_control,
+        "vm_control": meta_vm_control,
         "source_paths": source_paths or "",
         "repo_path": repo_path or "",
         "usb_profile_key": meta_usb_profile_key,
@@ -628,8 +714,10 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     if location == "storagebox":
         repo_path = _storagebox_repo_from_profile(params, ui_config) or repo_path
     encryption = params.get("encryption", "repokey-blake2")
-    use_docker = bool(params.get("use_docker", False))
-    use_vm = bool(params.get("use_vm", False))
+    docker_control = _runtime_control_from_params(params, "docker")
+    vm_control = _runtime_control_from_params(params, "vm")
+    use_docker = docker_control["mode"] != "none"
+    use_vm = vm_control["mode"] != "none"
 
     steps = []
     step_codes = []
@@ -641,16 +729,22 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     add_step("prechecks", "Prechecks (prerequisites, parity, paths)")
     add_step("resourceLocksAcquire", "Acquire resource locks (repo, optional docker-control/vm-control)")
     if use_docker:
-        add_step("dockerStop", "Stop Docker containers")
+        if docker_control["mode"] == "selected":
+            add_step("dockerStop", f"Stop selected Docker containers ({len(docker_control['selected'])})")
+        else:
+            add_step("dockerStop", "Stop all Docker containers")
     if use_vm:
-        add_step("vmStop", "Shut down VMs")
+        if vm_control["mode"] == "selected":
+            add_step("vmStop", f"Shut down selected VMs ({len(vm_control['selected'])})")
+        else:
+            add_step("vmStop", "Shut down all VMs")
     add_step("borgCreate", f"Borg create ({len(source_paths)} source(s))", count=len(source_paths))
     add_step("borgMaintenance", "Borg maintenance (prune -> compact -> check)")
     add_step("statusNotification", "Write status and notification")
     if use_vm:
-        add_step("vmStart", "Start VMs")
+        add_step("vmStart", "Start VMs stopped by this job")
     if use_docker:
-        add_step("dockerStart", "Start Docker containers")
+        add_step("dockerStart", "Start Docker containers stopped by this job")
     add_step("resourceLocksRelease", "Release resource locks")
 
     remote_repo = _storagebox_repo_status({**params, "repo_path": repo_path}, ui_config, scripts_dir)
@@ -664,6 +758,8 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "sources_count": len(source_paths),
             "docker": use_docker,
             "vm": use_vm,
+            "docker_mode": docker_control["mode"],
+            "vm_mode": vm_control["mode"],
         },
         "steps": steps,
         "step_codes": step_codes,
@@ -725,6 +821,8 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
 
     mount_before_run = bool(params.get("mount_before_run", existing.get("mount_before_run", True)))
     unmount_after_run = bool(params.get("unmount_after_run", existing.get("unmount_after_run", True)))
+    docker_control = _runtime_control_from_params(params, "docker", existing)
+    vm_control = _runtime_control_from_params(params, "vm", existing)
 
     create_repo_default = True if location in {"local", "usb", "smb", "storagebox"} else False
     create_repo_if_missing = bool(existing.get("create_repo_if_missing", create_repo_default))
@@ -771,9 +869,11 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
             "default": params.get("source_paths", "").strip(),
         },
         "features": {
-            "docker": bool(params.get("use_docker", False)),
-            "vm": bool(params.get("use_vm", False)),
+            "docker": docker_control["mode"] != "none",
+            "vm": vm_control["mode"] != "none",
         },
+        "docker_control": docker_control,
+        "vm_control": vm_control,
         "compression": str(params.get("compression", "lz4")).strip() or "lz4",
         "retention": {
             "daily": str(params.get("keep_daily", "7")).strip() or "7",

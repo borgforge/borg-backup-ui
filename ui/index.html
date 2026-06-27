@@ -1191,6 +1191,14 @@
                 <input type="checkbox" id="wiz-use-docker">
                 <span data-i18n="wizard.stopDockerDescription">Docker vor dem Backup stoppen und danach starten</span>
               </label>
+              <div id="wiz-docker-control-panel" class="wizard-runtime-panel hidden">
+                <label class="form-label" for="wiz-docker-mode" data-i18n="wizard.runtimeMode">Umfang</label>
+                <select class="form-select" id="wiz-docker-mode">
+                  <option value="all" data-i18n="wizard.runtimeAllDocker">Alle laufenden Container</option>
+                  <option value="selected" data-i18n="wizard.runtimeSelectedDocker">Nur ausgewählte Container</option>
+                </select>
+                <div id="wiz-docker-selection" class="wizard-runtime-selection hidden"></div>
+              </div>
             </div>
             <div class="form-group wizard-feature-box">
               <label class="form-label"><span data-i18n="wizard.shutdownVms">VMs herunterfahren</span> <span class="form-hint" data-i18n="wizard.vmHint">(für VM-Backups)</span></label>
@@ -1198,6 +1206,14 @@
                 <input type="checkbox" id="wiz-use-vm">
                 <span data-i18n="wizard.shutdownVmsDescription">Laufende VMs vor dem Backup herunterfahren und danach starten</span>
               </label>
+              <div id="wiz-vm-control-panel" class="wizard-runtime-panel hidden">
+                <label class="form-label" for="wiz-vm-mode" data-i18n="wizard.runtimeMode">Umfang</label>
+                <select class="form-select" id="wiz-vm-mode">
+                  <option value="all" data-i18n="wizard.runtimeAllVms">Alle laufenden VMs</option>
+                  <option value="selected" data-i18n="wizard.runtimeSelectedVms">Nur ausgewählte VMs</option>
+                </select>
+                <div id="wiz-vm-selection" class="wizard-runtime-selection hidden"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1214,6 +1230,22 @@
             <div id="wiz-source-path-list" class="wizard-path-list"></div>
             <textarea class="form-input path-list-input hidden" id="wiz-source-paths" rows="4"
               placeholder="/mnt/user/data/&#10;/mnt/user/documents/"></textarea>
+          </div>
+          <div id="wiz-appdata-risk" class="status-message warning hidden">
+            <strong data-i18n="wizard.appdataRiskTitle">Appdata-Hinweis</strong>
+            <div data-i18n="wizard.appdataRiskText">Bei /mnt/user/appdata sollten alle Docker-Container gestoppt werden, sonst können Backup-Warnungen durch geänderte Dateien entstehen.</div>
+            <label class="form-checkbox-row">
+              <input type="checkbox" id="wiz-ack-appdata-risk">
+              <span data-i18n="wizard.ackRisk">Ich habe den Hinweis verstanden.</span>
+            </label>
+          </div>
+          <div id="wiz-domains-risk" class="status-message warning hidden">
+            <strong data-i18n="wizard.domainsRiskTitle">VM-Domains-Hinweis</strong>
+            <div data-i18n="wizard.domainsRiskText">Bei /mnt/user/domains sollten alle VMs heruntergefahren werden, sonst können inkonsistente VM-Images gesichert werden.</div>
+            <label class="form-checkbox-row">
+              <input type="checkbox" id="wiz-ack-domains-risk">
+              <span data-i18n="wizard.ackRisk">Ich habe den Hinweis verstanden.</span>
+            </label>
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="wizard.repositoryPath">Repository-Pfad</label>

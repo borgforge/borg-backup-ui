@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.26.1347"
+APP_VERSION = "2026.06.27.1751"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -766,6 +766,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/wizard/passphrase-check": lambda: self._get_wizard_passphrase_check(parsed.query),
                 "/api/wizard/job": lambda: self._get_wizard_job(parsed.query),
                 "/api/wizard/source-dirs": lambda: self._get_wizard_source_dirs(parsed.query),
+                "/api/wizard/runtime-inventory": self._get_wizard_runtime_inventory,
                 "/api/storage/check/jobs": self._get_check_jobs,
                 "/api/storage/check/state": self._get_check_state,
                 "/api/storagebox/deploy/state": lambda: self._get_storagebox_deploy_state(parsed.query),
@@ -1591,6 +1592,22 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         except Exception:
             limit = 25
         return {"dirs": list_target_dirs(prefix=prefix, limit=limit)}
+
+    def _get_wizard_runtime_inventory(self) -> dict:
+        try:
+            from lib.docker_manager import DockerManager
+            docker_containers = DockerManager().list_containers()
+        except Exception:
+            docker_containers = []
+        try:
+            from lib.vm_manager import VmManager
+            vms = VmManager().list_vms()
+        except Exception:
+            vms = []
+        return {
+            "docker_containers": docker_containers,
+            "vms": vms,
+        }
 
     def _get_restore_archives(self, qs_str: str) -> dict:
         self._require_data_dir_ready()

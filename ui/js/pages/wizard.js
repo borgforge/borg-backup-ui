@@ -20,6 +20,10 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   sourceSuggestIndex: -1,
   scrollHintBound: false,
   remoteRepoStatus: null,
+  dockerContainers: [],
+  vms: [],
+  selectedDockerContainers: [],
+  selectedVms: [],
 };
 const wizardState = window.BBUI.wizardState;
 
@@ -47,6 +51,130 @@ function wizardEnsureScrollHintBinding() {
   if (!body) return;
   body.addEventListener('scroll', wizardUpdateStep2ScrollHint);
   wizardState.scrollHintBound = true;
+}
+
+function _wizardUniqueList(values) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(values) ? values : []).forEach((raw) => {
+    const val = String(raw || '').trim();
+    if (!val || seen.has(val)) return;
+    seen.add(val);
+    out.push(val);
+  });
+  return out;
+}
+
+async function wizardLoadRuntimeInventory() {
+  try {
+    const res = await fetch('/api/wizard/runtime-inventory');
+    if (!res.ok) return;
+    const data = await res.json();
+    wizardState.dockerContainers = Array.isArray(data?.docker_containers) ? data.docker_containers : [];
+    wizardState.vms = Array.isArray(data?.vms) ? data.vms : [];
+  } catch (_) {
+    wizardState.dockerContainers = [];
+    wizardState.vms = [];
+  } finally {
+    wizardRenderRuntimeControls();
+  }
+}
+
+function _wizardRuntimeMode(kind) {
+  const enabled = document.getElementById(kind === 'docker' ? 'wiz-use-docker' : 'wiz-use-vm')?.checked;
+  if (!enabled) return 'none';
+  return document.getElementById(kind === 'docker' ? 'wiz-docker-mode' : 'wiz-vm-mode')?.value || 'all';
+}
+
+function _wizardSetRuntimeControl(kind, control = {}) {
+  const enabledEl = document.getElementById(kind === 'docker' ? 'wiz-use-docker' : 'wiz-use-vm');
+  const modeEl = document.getElementById(kind === 'docker' ? 'wiz-docker-mode' : 'wiz-vm-mode');
+  const mode = ['all', 'selected', 'none'].includes(String(control?.mode || '').toLowerCase())
+    ? String(control.mode).toLowerCase()
+    : 'none';
+  if (enabledEl) enabledEl.checked = mode !== 'none';
+  if (modeEl) modeEl.value = mode === 'selected' ? 'selected' : 'all';
+  if (kind === 'docker') {
+    wizardState.selectedDockerContainers = _wizardUniqueList(control?.selected || []);
+    const ack = document.getElementById('wiz-ack-appdata-risk');
+    if (ack) ack.checked = !!control?.ack_appdata_risk;
+  } else {
+    wizardState.selectedVms = _wizardUniqueList(control?.selected || []);
+    const ack = document.getElementById('wiz-ack-domains-risk');
+    if (ack) ack.checked = !!control?.ack_domains_risk;
+  }
+  wizardRenderRuntimeControls();
+}
+
+function wizardRenderRuntimeControls() {
+  const dockerEnabled = !!document.getElementById('wiz-use-docker')?.checked;
+  const vmEnabled = !!document.getElementById('wiz-use-vm')?.checked;
+  document.getElementById('wiz-docker-control-panel')?.classList.toggle('hidden', !dockerEnabled);
+  document.getElementById('wiz-vm-control-panel')?.classList.toggle('hidden', !vmEnabled);
+  _wizardRenderRuntimeSelection('docker');
+  _wizardRenderRuntimeSelection('vm');
+  wizardUpdateRuntimeRiskWarnings();
+}
+
+function _wizardRenderRuntimeSelection(kind) {
+  const mode = _wizardRuntimeMode(kind);
+  const target = document.getElementById(kind === 'docker' ? 'wiz-docker-selection' : 'wiz-vm-selection');
+  if (!target) return;
+  target.classList.toggle('hidden', mode !== 'selected');
+  if (mode !== 'selected') return;
+  const rows = kind === 'docker' ? wizardState.dockerContainers : wizardState.vms;
+  const selected = new Set(kind === 'docker' ? wizardState.selectedDockerContainers : wizardState.selectedVms);
+  const emptyText = wizardT(kind === 'docker' ? 'wizard.noDockerContainers' : 'wizard.noVms');
+  if (!Array.isArray(rows) || rows.length === 0) {
+    target.innerHTML = `<div class="wizard-runtime-empty">${escHtml(emptyText)}</div>`;
+    return;
+  }
+  target.innerHTML = rows.map((row) => {
+    const name = String(row?.name || '').trim();
+    if (!name) return '';
+    const state = String(row?.state || row?.status || '').trim();
+    const checked = selected.has(name) ? ' checked' : '';
+    return `<label class="wizard-runtime-row">
+      <input type="checkbox" data-runtime-kind="${kind}" value="${escHtml(name)}"${checked}>
+      <span class="wizard-runtime-name">${escHtml(name)}</span>
+      <span class="wizard-runtime-state">${escHtml(state || '—')}</span>
+    </label>`;
+  }).join('');
+  target.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const list = kind === 'docker' ? wizardState.selectedDockerContainers : wizardState.selectedVms;
+      const next = new Set(list);
+      const name = String(input.value || '').trim();
+      if (input.checked) next.add(name);
+      else next.delete(name);
+      if (kind === 'docker') wizardState.selectedDockerContainers = Array.from(next);
+      else wizardState.selectedVms = Array.from(next);
+    });
+  });
+}
+
+function _wizardHasSourcePrefix(prefix) {
+  const normalized = String(prefix || '').replace(/\/+$/, '');
+  return (wizardState.sourcePaths || []).some((raw) => {
+    const path = String(raw || '').replace(/\/+$/, '');
+    return path === normalized || path.startsWith(`${normalized}/`);
+  });
+}
+
+function wizardUpdateRuntimeRiskWarnings() {
+  const appdataRisk = _wizardHasSourcePrefix('/mnt/user/appdata') && _wizardRuntimeMode('docker') !== 'all';
+  const domainsRisk = _wizardHasSourcePrefix('/mnt/user/domains') && _wizardRuntimeMode('vm') !== 'all';
+  document.getElementById('wiz-appdata-risk')?.classList.toggle('hidden', !appdataRisk);
+  document.getElementById('wiz-domains-risk')?.classList.toggle('hidden', !domainsRisk);
+}
+
+function wizardBindRuntimeControls() {
+  ['wiz-use-docker', 'wiz-use-vm', 'wiz-docker-mode', 'wiz-vm-mode'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.runtimeBound === '1') return;
+    el.dataset.runtimeBound = '1';
+    el.addEventListener('change', wizardRenderRuntimeControls);
+  });
 }
 
 async function wizardLoadStorageboxProfile() {
@@ -195,6 +323,7 @@ function _setWizardFormDisabled(disabled) {
 
 function openWizard() {
   wizardEnsureScrollHintBinding();
+  wizardBindRuntimeControls();
   wizardState.mode = 'create';
   wizardState.existingJobKey = '';
   wizardState.original = null;
@@ -211,8 +340,14 @@ function openWizard() {
   wizardState.selectedSmbProfileKey = '';
   wizardState.selectedStorageProfileKey = '';
   wizardState.remoteRepoStatus = null;
+  wizardState.selectedDockerContainers = [];
+  wizardState.selectedVms = [];
   document.getElementById('wiz-use-docker').checked = false;
   document.getElementById('wiz-use-vm').checked = false;
+  document.getElementById('wiz-docker-mode').value = 'all';
+  document.getElementById('wiz-vm-mode').value = 'all';
+  document.getElementById('wiz-ack-appdata-risk').checked = false;
+  document.getElementById('wiz-ack-domains-risk').checked = false;
   // Ensure feature toggles are visible even if stale DOM/CSS state hid them before.
   const dockerGroup = document.getElementById('wiz-use-docker')?.closest('.form-group');
   const vmGroup = document.getElementById('wiz-use-vm')?.closest('.form-group');
@@ -261,8 +396,9 @@ function openWizard() {
   _wizardScheduleApplyUI('daily');
   wizardSchedulePreview();
   wizardUpdateIconPreview();
-  Promise.all([wizardLoadStorageboxProfile(), wizardLoadUsbProfiles(), wizardLoadSmbProfiles()]).finally(() => wizardAutoFill());
+  Promise.all([wizardLoadStorageboxProfile(), wizardLoadUsbProfiles(), wizardLoadSmbProfiles(), wizardLoadRuntimeInventory()]).finally(() => wizardAutoFill());
   [1,2,3,4,5,6,7].forEach(n => wizardClearError(n));
+  wizardRenderRuntimeControls();
   _renderWizardStep(1);
   document.getElementById('wizard-modal').classList.remove('hidden');
 }
@@ -275,8 +411,8 @@ function _wizardFillFromJob(job) {
   document.getElementById('wiz-icon-color').value = (job.icon_color || '').toLowerCase();
   document.getElementById('wiz-description').value = job.description || '';
   document.getElementById('wiz-location').value = job.location || 'local';
-  document.getElementById('wiz-use-docker').checked = !!job.use_docker;
-  document.getElementById('wiz-use-vm').checked = !!job.use_vm;
+  _wizardSetRuntimeControl('docker', job.docker_control || { mode: job.use_docker ? 'all' : 'none' });
+  _wizardSetRuntimeControl('vm', job.vm_control || { mode: job.use_vm ? 'all' : 'none' });
   const parsedPaths = (job.source_paths || '').split(' ').filter(Boolean);
   document.getElementById('wiz-source-paths').value = parsedPaths.join('\n');
   wizardState.sourcePaths = parsedPaths;
@@ -354,6 +490,8 @@ async function openWizardForJob(jobKey, mode = 'edit') {
       location: job.location || 'local',
       use_docker: !!job.use_docker,
       use_vm: !!job.use_vm,
+      docker_control: job.docker_control || { mode: job.use_docker ? 'all' : 'none', selected: [] },
+      vm_control: job.vm_control || { mode: job.use_vm ? 'all' : 'none', selected: [] },
     };
     // In edit/adopt default to existing passphrase handling.
     wizardState.keepPassphrase = true;
@@ -377,6 +515,8 @@ function wizardNeedsScriptRegeneration(params) {
   if (params.location !== orig.location) return true;
   if (!!params.use_docker !== !!orig.use_docker) return true;
   if (!!params.use_vm !== !!orig.use_vm) return true;
+  if (JSON.stringify(params.docker_control || {}) !== JSON.stringify(orig.docker_control || {})) return true;
+  if (JSON.stringify(params.vm_control || {}) !== JSON.stringify(orig.vm_control || {})) return true;
   return false;
 }
 
@@ -596,6 +736,8 @@ function _wizardCollectParams() {
   const rawPaths = (wizardState.sourcePaths || []).map((s) => String(s || '').trim()).filter(Boolean).join(' ');
   const storageProfileKey = (document.getElementById('wiz-storage-profile')?.value || wizardState.selectedStorageProfileKey || '').trim();
   wizardState.selectedStorageProfileKey = storageProfileKey;
+  const dockerMode = _wizardRuntimeMode('docker');
+  const vmMode = _wizardRuntimeMode('vm');
   return {
     type_id:      (document.getElementById('wiz-type-id').value || '').trim().toLowerCase(),
     icon:         (document.getElementById('wiz-icon').value || '').trim().toLowerCase(),
@@ -608,8 +750,18 @@ function _wizardCollectParams() {
     smb_profile_key: (document.getElementById('wiz-smb-profile')?.value || '').trim(),
     mount_before_run: !!document.getElementById('wiz-smb-mount-before-run')?.checked,
     unmount_after_run: !!document.getElementById('wiz-smb-unmount-after-run')?.checked,
-    use_docker:   document.getElementById('wiz-use-docker').checked,
-    use_vm:       document.getElementById('wiz-use-vm').checked,
+    use_docker:   dockerMode !== 'none',
+    use_vm:       vmMode !== 'none',
+    docker_control: {
+      mode: dockerMode,
+      selected: dockerMode === 'selected' ? _wizardUniqueList(wizardState.selectedDockerContainers) : [],
+      ack_appdata_risk: !!document.getElementById('wiz-ack-appdata-risk')?.checked,
+    },
+    vm_control: {
+      mode: vmMode,
+      selected: vmMode === 'selected' ? _wizardUniqueList(wizardState.selectedVms) : [],
+      ack_domains_risk: !!document.getElementById('wiz-ack-domains-risk')?.checked,
+    },
     source_paths: rawPaths,
     repo_path:    (document.getElementById('wiz-repo-path').value || '').trim(),
     compression:  document.getElementById('wiz-compression').value,
@@ -633,6 +785,7 @@ function wizardSyncSourcePathsTextarea() {
 
 function wizardRenderSourcePaths() {
   wizardSyncSourcePathsTextarea();
+  wizardUpdateRuntimeRiskWarnings();
   const list = document.getElementById('wiz-source-path-list');
   if (!list) return;
   const items = wizardState.sourcePaths || [];
@@ -768,10 +921,26 @@ function _wizardValidate(step) {
       _wizardShowError(1, wizardT('wizard.validationTypeFormat'));
       return false;
     }
+    if (p.docker_control.mode === 'selected' && !p.docker_control.selected.length) {
+      _wizardShowError(1, wizardT('wizard.validationDockerSelection'));
+      return false;
+    }
+    if (p.vm_control.mode === 'selected' && !p.vm_control.selected.length) {
+      _wizardShowError(1, wizardT('wizard.validationVmSelection'));
+      return false;
+    }
   }
   if (step === 2) {
     if (!p.source_paths) { _wizardShowError(2, wizardT('wizard.validationSource')); return false; }
     if (!p.repo_path)    { _wizardShowError(2, wizardT('wizard.validationRepository')); return false; }
+    if (_wizardHasSourcePrefix('/mnt/user/appdata') && p.docker_control.mode !== 'all' && !p.docker_control.ack_appdata_risk) {
+      _wizardShowError(2, wizardT('wizard.validationAppdataRisk'));
+      return false;
+    }
+    if (_wizardHasSourcePrefix('/mnt/user/domains') && p.vm_control.mode !== 'all' && !p.vm_control.ack_domains_risk) {
+      _wizardShowError(2, wizardT('wizard.validationDomainsRisk'));
+      return false;
+    }
     if (p.location === 'usb') {
       const rows = Array.isArray(wizardState.usbProfiles) ? wizardState.usbProfiles : [];
       if (!rows.length) {
@@ -1170,6 +1339,7 @@ window.addEventListener?.('bbui:language-changed', () => {
   wizardRenderSourcePaths();
   wizardUpdateIconPreview();
   wizardAutoFill();
+  wizardRenderRuntimeControls();
   wizardSchedulePreview();
 });
 

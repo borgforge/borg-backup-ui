@@ -4,6 +4,17 @@ Historische Release- und Entwicklungsnotizen fuer borg-backup-ui.
 
 Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrelevante Zusammenfassung des aktuellen Stands.
 
+## Unreleased
+
+### Issue #82
+- Wizard:
+  - Docker- und VM-Steuerung kann pro Job auf alle laufenden Eintraege oder eine gespeicherte Auswahl eingeschraenkt werden.
+  - Wizard listet lokale Docker-Container und VMs ueber interne API-Endpunkte.
+  - Bei Appdata- und VM-Domain-Quellpfaden wird eine explizite Risiko-Bestaetigung verlangt, wenn nicht alle zugehoerigen Dienste gestoppt werden.
+- Runtime:
+  - Docker- und VM-Manager koennen selektiv stoppen und starten nur Eintraege neu, die der jeweilige Backup-Lauf selbst gestoppt hat.
+  - Bestehende Jobs ohne neue Runtime-Metadaten bleiben kompatibel und werden wie bisher als vollstaendige Docker-/VM-Steuerung behandelt.
+
 ## Unreleased unified UI redesign
 
 ### Issue #28

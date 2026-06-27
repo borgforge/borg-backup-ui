@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.26.1347">
+<!ENTITY version   "2026.06.27.1751">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.27.1751###
+- Issue #82:
+  - Wizard can stop all or selected Docker containers and VMs before a backup.
+  - Appdata and VM domain source paths now show explicit risk acknowledgements when not all related runtime services are stopped.
+
 ###2026.06.26.1347###
 - Release (#35):
   - Einheitliches Redesign fuer Dashboard, Jobs, History, Berichte, Restore Tests, Browse & Restore, Storage, Einstellungen und Hilfe.
@@ -43,7 +48,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>fe1a3d793b8f36a66d140fe3b55c3350</MD5>
+<MD5>d2a657e79cb82a3266e05037847ffa8c</MD5>
 </FILE>
 
 <!--

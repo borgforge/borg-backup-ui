@@ -652,6 +652,24 @@ def _build_resources(env: dict, meta: dict) -> list[str]:
     return resources
 
 
+def _runtime_control(meta: dict, kind: str) -> dict:
+    raw = meta.get(f"{kind}_control") if isinstance(meta.get(f"{kind}_control"), dict) else {}
+    features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
+    mode = str(raw.get("mode") or "").strip().lower()
+    if mode not in {"all", "selected", "none"}:
+        mode = "all" if bool(features.get(kind, False)) else "none"
+    selected = []
+    if mode == "selected":
+        raw_selected = raw.get("selected") if isinstance(raw.get("selected"), list) else []
+        seen = set()
+        for item in raw_selected:
+            name = str(item or "").strip()
+            if name and name not in seen:
+                seen.add(name)
+                selected.append(name)
+    return {"mode": mode, "selected": selected}
+
+
 def _resolve_usb_mount_path(meta: dict, backup_scripts_dir: Path) -> str:
     location = str(meta.get("location") or "").strip().lower()
     if location != "usb":
@@ -745,10 +763,11 @@ def main() -> int:
 
         docker_mgr = None
         vm_mgr = None
-        features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
-        if bool(features.get("docker", False)):
+        docker_control = _runtime_control(meta, "docker")
+        vm_control = _runtime_control(meta, "vm")
+        if docker_control["mode"] != "none":
             docker_mgr = DockerManager(DockerConfig.from_config(env))
-        if bool(features.get("vm", False)):
+        if vm_control["mode"] != "none":
             vm_mgr = VmManager(VmConfig.from_config(env))
 
         archive_prefix = f"{env.get('BACKUP_TYPE', 'job')}-backup"
@@ -766,9 +785,11 @@ def main() -> int:
             job.check_prerequisites()
             job.cleanup_old_logs()
             if docker_mgr is not None:
-                job.stop_docker()
+                selected = docker_control["selected"] if docker_control["mode"] == "selected" else None
+                job.stop_docker(selected)
             if vm_mgr is not None:
-                job.shutdown_vms()
+                selected = vm_control["selected"] if vm_control["mode"] == "selected" else None
+                job.shutdown_vms(selected)
 
             runner = BorgRunner(borg_config)
             create_exit = runner.create(job_config.backup_paths, archive_prefix)
