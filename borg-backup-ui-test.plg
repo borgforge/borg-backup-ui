@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.27.1751">
+<!ENTITY version   "2026.06.27.1821">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.27.1821###
+- Issue #82:
+  - Wizard runtime selection now uses a dedicated step with clearer Docker and VM choices.
+  - Docker container discovery for the wizard is more compatible with Unraid systems.
+
 ###2026.06.27.1751###
 - Issue #82:
   - Wizard can stop all or selected Docker containers and VMs before a backup.
@@ -48,7 +53,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>d2a657e79cb82a3266e05037847ffa8c</MD5>
+<MD5>daaccac6b34250de3794d94abdfe1714</MD5>
 </FILE>
 
 <!--
