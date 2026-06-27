@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.27.1821">
+<!ENTITY version   "2026.06.27.1831">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.27.1831###
+- Issue #82:
+  - Appdata and VM domain risk confirmations are only required when the full standard directory is selected.
+
 ###2026.06.27.1821###
 - Issue #82:
   - Wizard runtime selection now uses a dedicated step with clearer Docker and VM choices.
@@ -53,7 +57,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>daaccac6b34250de3794d94abdfe1714</MD5>
+<MD5>f448d1e278089f4de543f88fa1ae4a6f</MD5>
 </FILE>
 
 <!--
