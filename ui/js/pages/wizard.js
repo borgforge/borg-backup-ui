@@ -111,6 +111,7 @@ function wizardRenderRuntimeControls() {
   const vmEnabled = !!document.getElementById('wiz-use-vm')?.checked;
   document.getElementById('wiz-docker-control-panel')?.classList.toggle('hidden', !dockerEnabled);
   document.getElementById('wiz-vm-control-panel')?.classList.toggle('hidden', !vmEnabled);
+  document.getElementById('wiz-runtime-empty')?.classList.toggle('hidden', dockerEnabled || vmEnabled);
   _wizardRenderRuntimeSelection('docker');
   _wizardRenderRuntimeSelection('vm');
   wizardUpdateRuntimeRiskWarnings();
@@ -397,7 +398,7 @@ function openWizard() {
   wizardSchedulePreview();
   wizardUpdateIconPreview();
   Promise.all([wizardLoadStorageboxProfile(), wizardLoadUsbProfiles(), wizardLoadSmbProfiles(), wizardLoadRuntimeInventory()]).finally(() => wizardAutoFill());
-  [1,2,3,4,5,6,7].forEach(n => wizardClearError(n));
+  [1,2,3,4,5,6,7,8].forEach(n => wizardClearError(n));
   wizardRenderRuntimeControls();
   _renderWizardStep(1);
   document.getElementById('wizard-modal').classList.remove('hidden');
@@ -529,7 +530,7 @@ function closeWizard() {
 }
 
 function _renderWizardStep(n) {
-  [1,2,3,4,5,6,7].forEach(i => {
+  [1,2,3,4,5,6,7,8].forEach(i => {
     document.getElementById(`wizard-step-${i}`).classList.toggle('hidden', i !== n);
     const dot = document.getElementById(`wstep-dot-${i}`);
     if (dot) dot.classList.toggle('active', i <= n);
@@ -538,8 +539,8 @@ function _renderWizardStep(n) {
   const nextBtn = document.getElementById('wizard-next-btn');
   const saveBtn = document.getElementById('wizard-save-btn');
   backBtn.style.display = n > 1 ? '' : 'none';
-  nextBtn.classList.toggle('hidden', n === 7);
-  saveBtn.classList.toggle('hidden', n !== 7);
+  nextBtn.classList.toggle('hidden', n === 8);
+  saveBtn.classList.toggle('hidden', n !== 8);
   wizardState.step = n;
   requestAnimationFrame(wizardUpdateStep2ScrollHint);
 }
@@ -921,26 +922,10 @@ function _wizardValidate(step) {
       _wizardShowError(1, wizardT('wizard.validationTypeFormat'));
       return false;
     }
-    if (p.docker_control.mode === 'selected' && !p.docker_control.selected.length) {
-      _wizardShowError(1, wizardT('wizard.validationDockerSelection'));
-      return false;
-    }
-    if (p.vm_control.mode === 'selected' && !p.vm_control.selected.length) {
-      _wizardShowError(1, wizardT('wizard.validationVmSelection'));
-      return false;
-    }
   }
   if (step === 2) {
     if (!p.source_paths) { _wizardShowError(2, wizardT('wizard.validationSource')); return false; }
     if (!p.repo_path)    { _wizardShowError(2, wizardT('wizard.validationRepository')); return false; }
-    if (_wizardHasSourcePrefix('/mnt/user/appdata') && p.docker_control.mode !== 'all' && !p.docker_control.ack_appdata_risk) {
-      _wizardShowError(2, wizardT('wizard.validationAppdataRisk'));
-      return false;
-    }
-    if (_wizardHasSourcePrefix('/mnt/user/domains') && p.vm_control.mode !== 'all' && !p.vm_control.ack_domains_risk) {
-      _wizardShowError(2, wizardT('wizard.validationDomainsRisk'));
-      return false;
-    }
     if (p.location === 'usb') {
       const rows = Array.isArray(wizardState.usbProfiles) ? wizardState.usbProfiles : [];
       if (!rows.length) {
@@ -971,9 +956,27 @@ function _wizardValidate(step) {
       }
     }
   }
-  if (step === 4) {
+  if (step === 3) {
+    if (p.docker_control.mode === 'selected' && !p.docker_control.selected.length) {
+      _wizardShowError(3, wizardT('wizard.validationDockerSelection'));
+      return false;
+    }
+    if (p.vm_control.mode === 'selected' && !p.vm_control.selected.length) {
+      _wizardShowError(3, wizardT('wizard.validationVmSelection'));
+      return false;
+    }
+    if (_wizardHasSourcePrefix('/mnt/user/appdata') && p.docker_control.mode !== 'all' && !p.docker_control.ack_appdata_risk) {
+      _wizardShowError(3, wizardT('wizard.validationAppdataRisk'));
+      return false;
+    }
+    if (_wizardHasSourcePrefix('/mnt/user/domains') && p.vm_control.mode !== 'all' && !p.vm_control.ack_domains_risk) {
+      _wizardShowError(3, wizardT('wizard.validationDomainsRisk'));
+      return false;
+    }
+  }
+  if (step === 5) {
     if (p.encryption !== 'none' && !wizardState.keepPassphrase && !p.passphrase) {
-      _wizardShowError(4, wizardT('wizard.validationPassphrase'));
+      _wizardShowError(5, wizardT('wizard.validationPassphrase'));
       return false;
     }
   }
@@ -990,22 +993,22 @@ async function wizardNext() {
     wizardState.mode !== 'adopt' &&
     !wizardNeedsScriptRegeneration(params);
   // skip passphrase step when no encryption
-  if (cur === 3 && (enc === 'none' || isEditLikeNoRegeneration)) {
+  if (cur === 4 && (enc === 'none' || isEditLikeNoRegeneration)) {
+    _renderWizardStep(6);
+    return;
+  }
+  // step 4 -> 5: check if passphrase file already exists
+  if (cur === 4 && enc !== 'none') {
+    await _wizardCheckPassphrase();
     _renderWizardStep(5);
     return;
   }
-  // step 3 → 4: check if passphrase file already exists
-  if (cur === 3 && enc !== 'none') {
-    await _wizardCheckPassphrase();
-    _renderWizardStep(4);
-    return;
-  }
-  if (cur < 6) {
+  if (cur < 7) {
     _renderWizardStep(cur + 1);
     return;
   }
-  // Step 6 → 7: load preview
-  _renderWizardStep(7);
+  // Step 7 -> 8: load preview
+  _renderWizardStep(8);
   await _wizardPreview();
 }
 
@@ -1042,8 +1045,8 @@ function wizardBack() {
     wizardState.mode !== 'adopt' &&
     !wizardNeedsScriptRegeneration(params);
   // skip passphrase step going back from Beschreibung when no encryption
-  if (cur === 5 && (enc === 'none' || isEditLikeNoRegeneration)) {
-    _renderWizardStep(3);
+  if (cur === 6 && (enc === 'none' || isEditLikeNoRegeneration)) {
+    _renderWizardStep(4);
     return;
   }
   _renderWizardStep(cur - 1);
@@ -1052,7 +1055,7 @@ function wizardBack() {
 async function _wizardPreview() {
   const loading = document.getElementById('wizard-preview-loading');
   const wrap    = document.getElementById('wizard-preview-wrap');
-  const errEl   = document.getElementById('wizard-error-7');
+  const errEl   = document.getElementById('wizard-error-8');
   const repoStatusEl = document.getElementById('wizard-remote-repo-status');
   loading.classList.remove('hidden');
   wrap.classList.add('hidden');
@@ -1141,7 +1144,7 @@ async function _wizardPreview() {
 
 async function saveWizardJob() {
   const btn   = document.getElementById('wizard-save-btn');
-  const errEl = document.getElementById('wizard-error-7');
+  const errEl = document.getElementById('wizard-error-8');
   btn.classList.add('loading');
   errEl.classList.add('hidden');
 

@@ -11,8 +11,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Docker- und VM-Steuerung kann pro Job auf alle laufenden Eintraege oder eine gespeicherte Auswahl eingeschraenkt werden.
   - Wizard listet lokale Docker-Container und VMs ueber interne API-Endpunkte.
   - Bei Appdata- und VM-Domain-Quellpfaden wird eine explizite Risiko-Bestaetigung verlangt, wenn nicht alle zugehoerigen Dienste gestoppt werden.
+  - Die Runtime-Auswahl wurde in einen eigenen Wizard-Schritt verschoben, damit Grunddaten und Docker-/VM-Auswahl nicht in einer gedrängten Ansicht vermischt werden.
 - Runtime:
   - Docker- und VM-Manager koennen selektiv stoppen und starten nur Eintraege neu, die der jeweilige Backup-Lauf selbst gestoppt hat.
+  - Docker-Container werden fuer die Wizard-Auswahl kompatibler ueber ein einfaches `docker ps -a`-Format ermittelt.
   - Bestehende Jobs ohne neue Runtime-Metadaten bleiben kompatibel und werden wie bisher als vollstaendige Docker-/VM-Steuerung behandelt.
 
 ## Unreleased unified UI redesign

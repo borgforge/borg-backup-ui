@@ -15,7 +15,6 @@ Nur Python Standard-Library: subprocess, logging, time, dataclasses
 
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
 import time
@@ -477,34 +476,32 @@ def _get_running_name_id_map() -> Dict[str, str]:
 
 def list_containers() -> List[Dict[str, str]]:
     """Lists all Docker containers with basic state for the wizard."""
-    if not docker_available():
-        return []
     try:
         result = subprocess.run(
-            ["docker", "ps", "-a", "--format", "{{json .}}"],
+            ["docker", "ps", "-a", "--format", "{{.Names}}|{{.ID}}|{{.Image}}|{{.State}}|{{.Status}}"],
             capture_output=True,
             text=True,
             timeout=10,
         )
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.debug("Docker container inventory could not be retrieved: %s", exc)
+        return []
+    if result.returncode != 0:
+        logger.debug("Docker container inventory returned exit code %s", result.returncode)
         return []
 
     rows: List[Dict[str, str]] = []
     for line in result.stdout.strip().splitlines():
-        try:
-            raw = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        name = str(raw.get("Names") or "").strip().lstrip("/")
+        name, cid, image, state, status = (line.split("|", 4) + ["", "", "", "", ""])[:5]
+        name = name.strip().lstrip("/")
         if not name:
             continue
-        state = str(raw.get("State") or "").strip().lower()
         rows.append({
             "name": name,
-            "id": str(raw.get("ID") or "").strip(),
-            "image": str(raw.get("Image") or "").strip(),
-            "state": state or "unknown",
-            "status": str(raw.get("Status") or "").strip(),
+            "id": cid.strip(),
+            "image": image.strip(),
+            "state": state.strip().lower() or "unknown",
+            "status": status.strip(),
         })
     return sorted(rows, key=lambda row: row.get("name", "").lower())
 
