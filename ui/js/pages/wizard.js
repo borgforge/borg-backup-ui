@@ -154,17 +154,14 @@ function _wizardRenderRuntimeSelection(kind) {
   });
 }
 
-function _wizardHasSourcePrefix(prefix) {
-  const normalized = String(prefix || '').replace(/\/+$/, '');
-  return (wizardState.sourcePaths || []).some((raw) => {
-    const path = String(raw || '').replace(/\/+$/, '');
-    return path === normalized || path.startsWith(`${normalized}/`);
-  });
+function _wizardHasExactSourcePath(path) {
+  const normalized = String(path || '').replace(/\/+$/, '');
+  return (wizardState.sourcePaths || []).some((raw) => String(raw || '').replace(/\/+$/, '') === normalized);
 }
 
 function wizardUpdateRuntimeRiskWarnings() {
-  const appdataRisk = _wizardHasSourcePrefix('/mnt/user/appdata') && _wizardRuntimeMode('docker') !== 'all';
-  const domainsRisk = _wizardHasSourcePrefix('/mnt/user/domains') && _wizardRuntimeMode('vm') !== 'all';
+  const appdataRisk = _wizardHasExactSourcePath('/mnt/user/appdata') && _wizardRuntimeMode('docker') !== 'all';
+  const domainsRisk = _wizardHasExactSourcePath('/mnt/user/domains') && _wizardRuntimeMode('vm') !== 'all';
   document.getElementById('wiz-appdata-risk')?.classList.toggle('hidden', !appdataRisk);
   document.getElementById('wiz-domains-risk')?.classList.toggle('hidden', !domainsRisk);
 }
@@ -965,11 +962,11 @@ function _wizardValidate(step) {
       _wizardShowError(3, wizardT('wizard.validationVmSelection'));
       return false;
     }
-    if (_wizardHasSourcePrefix('/mnt/user/appdata') && p.docker_control.mode !== 'all' && !p.docker_control.ack_appdata_risk) {
+    if (_wizardHasExactSourcePath('/mnt/user/appdata') && p.docker_control.mode !== 'all' && !p.docker_control.ack_appdata_risk) {
       _wizardShowError(3, wizardT('wizard.validationAppdataRisk'));
       return false;
     }
-    if (_wizardHasSourcePrefix('/mnt/user/domains') && p.vm_control.mode !== 'all' && !p.vm_control.ack_domains_risk) {
+    if (_wizardHasExactSourcePath('/mnt/user/domains') && p.vm_control.mode !== 'all' && !p.vm_control.ack_domains_risk) {
       _wizardShowError(3, wizardT('wizard.validationDomainsRisk'));
       return false;
     }
