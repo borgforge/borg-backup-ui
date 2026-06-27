@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.27.1831">
+<!ENTITY version   "2026.06.27.1847">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.27.1847###
+- Issue #82:
+  - Wizard runtime selection is wider, shows readable status badges and lists selected runtime targets in the preview.
+  - Selective Docker logs now show only the selected containers.
+
 ###2026.06.27.1831###
 - Issue #82:
   - Appdata and VM domain risk confirmations are only required when the full standard directory is selected.
@@ -57,7 +62,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>f448d1e278089f4de543f88fa1ae4a6f</MD5>
+<MD5>5c611575c1d51274d42c466d43099393</MD5>
 </FILE>
 
 <!--
