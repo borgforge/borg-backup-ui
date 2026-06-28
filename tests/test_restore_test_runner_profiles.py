@@ -19,6 +19,16 @@ def test_due_restore_run_uses_all_locations_after_selecting_jobs() -> None:
     source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
 
     assert 'auto_selected = True\n            location = "all"' in source
+    assert 'cmd.append("--scheduled")' in source
+
+
+def test_restore_runner_supports_scheduled_notifications() -> None:
+    source = (ROOT / "runtime" / "scripts" / "borg_restore_test.py").read_text(encoding="utf-8")
+
+    assert 'parser.add_argument("--scheduled"' in source
+    assert 'restore_test_success' in source
+    assert 'restore_test_failed' in source
+    assert 'restore_test_overdue' in source
 
 
 def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) -> None:

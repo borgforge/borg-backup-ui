@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.28.1624"
+APP_VERSION = "2026.06.28.1718"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -1967,6 +1967,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         cmd = ["python3", str(script_path), "--level", level, "--location", location]
         if smb_auto_mount:
             cmd.append("--smb-auto-mount")
+        if scheduled:
+            cmd.append("--scheduled")
         if not scheduled:
             cmd.append("--force")
         for job_key in clean_job_keys:

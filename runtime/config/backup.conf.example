@@ -55,7 +55,7 @@ NTFY_ACCESS_TOKEN_FILE="/boot/config/borg-backup/secrets/.ntfy-token"
 NTFY_PRIORITY="default"
 NTFY_TAGS=""
 NTFY_CLICK_URL=""
-NTFY_EVENTS="backup_success,backup_failed,backup_skipped"
+NTFY_EVENTS="backup_success,backup_failed,backup_skipped,restore_test_failed"
 NTFY_TIMEOUT_SECONDS="15"
 
 # =============================================================================

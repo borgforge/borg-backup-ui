@@ -88,7 +88,7 @@ _DEFAULTS: Dict[str, str] = {
     "NTFY_PRIORITY": "default",
     "NTFY_TAGS": "",
     "NTFY_CLICK_URL": "",
-    "NTFY_EVENTS": "backup_success,backup_failed,backup_skipped",
+    "NTFY_EVENTS": "backup_success,backup_failed,backup_skipped,restore_test_failed",
     "NTFY_TIMEOUT_SECONDS": "15",
     "BORG_SSH_KEY": "/root/.ssh/id_rsa",
     "USB_MOUNT_PATH": "/mnt/disks/USB",
@@ -1213,7 +1213,7 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "NTFY_PRIORITY":      conf.get("NTFY_PRIORITY", "default"),
             "NTFY_TAGS":          conf.get("NTFY_TAGS", ""),
             "NTFY_CLICK_URL":     conf.get("NTFY_CLICK_URL", ""),
-            "NTFY_EVENTS":        conf.get("NTFY_EVENTS", "backup_success,backup_failed,backup_skipped"),
+            "NTFY_EVENTS":        conf.get("NTFY_EVENTS", "backup_success,backup_failed,backup_skipped,restore_test_failed"),
             "NTFY_TIMEOUT_SECONDS": conf.get("NTFY_TIMEOUT_SECONDS", "15"),
         },
         "credentials": {

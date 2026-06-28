@@ -462,6 +462,35 @@ def build_backup_ntfy_message(
     return "\n".join(lines)
 
 
+def build_restore_test_ntfy_message(
+    *,
+    job_name: str,
+    status: str,
+    timestamp: str,
+    duration_seconds: int = 0,
+    repository: str = "",
+    level: int = 0,
+    coverage: str = "",
+    error_message: str = "",
+) -> str:
+    lines = [
+        f"Job: {job_name}",
+        f"Status: {status}",
+        f"Time: {timestamp}",
+    ]
+    if duration_seconds > 0:
+        lines.append(f"Duration: {_format_duration(duration_seconds)}")
+    if repository:
+        lines.append(f"Repository: {repository}")
+    if level > 0:
+        lines.append(f"Level: L{level}")
+    if coverage:
+        lines.append(f"Coverage: {coverage}")
+    if error_message:
+        lines.append(f"Error: {error_message}")
+    return "\n".join(lines)
+
+
 def _format_duration(seconds: int) -> str:
     h = seconds // 3600
     m = (seconds % 3600) // 60

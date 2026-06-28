@@ -116,3 +116,24 @@ def test_build_backup_ntfy_message_is_english():
     assert "Duration: 00:01:05" in msg
     assert "Repository: usb_backup_01" in msg
     assert "Error: Repository could not be opened" in msg
+
+
+def test_build_restore_test_ntfy_message_is_english():
+    msg = notifications.build_restore_test_ntfy_message(
+        job_name="appdata_local",
+        status="Failed",
+        timestamp="2026-06-28 11:00:00",
+        duration_seconds=125,
+        repository="/mnt/backup/borg-backup-appdata",
+        level=3,
+        coverage="partial",
+        error_message="Archive could not be read",
+    )
+
+    assert "Job: appdata_local" in msg
+    assert "Status: Failed" in msg
+    assert "Duration: 00:02:05" in msg
+    assert "Repository: /mnt/backup/borg-backup-appdata" in msg
+    assert "Level: L3" in msg
+    assert "Coverage: partial" in msg
+    assert "Error: Archive could not be read" in msg

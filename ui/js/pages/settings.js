@@ -2628,7 +2628,7 @@ function renderSettingsNtfy(n) {
   const enabled = String(n.NTFY_ENABLED || 'false') === 'true';
   const passwordSet = String(n.NTFY_PASSWORD_SET || 'false') === 'true';
   const tokenSet = String(n.NTFY_ACCESS_TOKEN_SET || 'false') === 'true';
-  const events = n.NTFY_EVENTS || 'backup_success,backup_failed,backup_skipped';
+  const events = n.NTFY_EVENTS || 'backup_success,backup_failed,backup_skipped,restore_test_failed';
   const priorityOptions = ['default', 'min', 'low', 'high', 'urgent']
     .map((value) => `<option value="${value}" ${(n.NTFY_PRIORITY || 'default') === value ? 'selected' : ''}>${settingsT(`forms.ntfyPriority${value.charAt(0).toUpperCase()}${value.slice(1)}`)}</option>`)
     .join('');
@@ -2636,6 +2636,9 @@ function renderSettingsNtfy(n) {
     ['backup_success', settingsT('forms.ntfyEventBackupSuccess')],
     ['backup_failed', settingsT('forms.ntfyEventBackupFailed')],
     ['backup_skipped', settingsT('forms.ntfyEventBackupSkipped')],
+    ['restore_test_success', settingsT('forms.ntfyEventRestoreTestSuccess')],
+    ['restore_test_failed', settingsT('forms.ntfyEventRestoreTestFailed')],
+    ['restore_test_overdue', settingsT('forms.ntfyEventRestoreTestOverdue')],
   ].map(([key, label]) => `
     <label class="form-checkbox-row">
       <input type="checkbox" data-ntfy-event="${key}" ${_ntfyEventEnabled(events, key) ? 'checked' : ''} onchange="_syncNtfyEvents()">
