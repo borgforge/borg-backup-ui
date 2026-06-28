@@ -383,6 +383,9 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
     for p in secrets_dir.glob(".borg-passphrase-*"):
         if p.is_file():
             secret_candidates.append(p)
+    for p in secrets_dir.glob(".ntfy-*"):
+        if p.is_file():
+            secret_candidates.append(p)
     if api_token_file.exists():
         secret_candidates.append(api_token_file)
     if ui_auth_file.exists():

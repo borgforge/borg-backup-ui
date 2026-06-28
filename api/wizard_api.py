@@ -462,11 +462,11 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
 
     job_name = _extract_script_string(info.script_path, r'env\.setdefault\(["\']JOB_NAME["\'],\s*["\']([^"\']+)["\']\)')
 
-    repo_path = conf.get(repo_key) or meta_repo_default or script_repo_default
+    repo_path = meta_repo_default or conf.get(repo_key) or script_repo_default
     source_paths = (
-        conf.get(paths_key)
+        meta_paths_default
+        or conf.get(paths_key)
         or (conf.get(script_paths_key) if script_paths_key else "")
-        or meta_paths_default
         or script_paths_default
     )
     compression = meta_compression or conf.get(f"COMPRESSION_{_type_upper(type_id)}", "lz4")
@@ -616,7 +616,7 @@ sys.path.insert(0, str(_LIB_BASE))
 from lib.status import load_config
 from lib.backup_job import BackupJob, BackupJobConfig
 from lib.borg_runner import BorgConfig, BorgRunner, parse_borg_stats
-{docker_import}from lib.notifications import MailConfig
+{docker_import}from lib.notifications import MailConfig, NtfyConfig
 
 _DEFAULT_PATHS = "{source_paths}"
 
@@ -675,8 +675,9 @@ def main() -> int:
     job_config = BackupJobConfig.from_config(env)
     borg_config = BorgConfig.from_config(env)
 {docker_cfg}    mail_config = MailConfig.from_config(env)
+    ntfy_config = NtfyConfig.from_config(env)
 
-    BackupJob(job_config).check_parity()
+    BackupJob(job_config, ntfy_config=ntfy_config).check_parity()
 
     _setup_logging(job_config.log_file)
 
@@ -685,7 +686,7 @@ def main() -> int:
         return init_exit
 
 
-{docker_mgr}    with BackupJob(job_config{docker_param}, mail_config=mail_config) as job:
+{docker_mgr}    with BackupJob(job_config{docker_param}, mail_config=mail_config, ntfy_config=ntfy_config) as job:
         job.check_prerequisites()
         job.cleanup_old_logs()
 {docker_stop}        runner = BorgRunner(borg_config)

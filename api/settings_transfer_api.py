@@ -624,7 +624,7 @@ def export_secrets_backup(password: str) -> dict:
     for p in sorted(_secrets_dir().glob(".*")):
         if not p.is_file():
             continue
-        if not (p.name.startswith(".borg-passphrase-") or p.name.startswith(".smb-")):
+        if not (p.name.startswith(".borg-passphrase-") or p.name.startswith(".smb-") or p.name.startswith(".ntfy-")):
             continue
         raw = p.read_bytes()
         files.append(
@@ -665,7 +665,7 @@ def preview_secrets_backup(password: str, payload_b64: str) -> dict:
         if not isinstance(item, dict):
             continue
         name = str(item.get("name") or "")
-        if not (name.startswith(".borg-passphrase-") or name.startswith(".smb-")):
+        if not (name.startswith(".borg-passphrase-") or name.startswith(".smb-") or name.startswith(".ntfy-")):
             continue
         target = td / name
         local_hash = None
@@ -710,7 +710,7 @@ def import_secrets_backup(
         if selected and name not in selected:
             report.append({"name": name, "status": "skipped_unselected"})
             continue
-        if not (name.startswith(".borg-passphrase-") or name.startswith(".smb-")):
+        if not (name.startswith(".borg-passphrase-") or name.startswith(".smb-") or name.startswith(".ntfy-")):
             report.append({"name": name, "status": "invalid_name"})
             continue
         target = target_dir / name

@@ -212,6 +212,7 @@ class RestoreTest:
         date_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.log_path = self.log_dir / f"Borg-Restore-Test--{date_tag}.log"
         self._fh = open(self.log_path, "w", buffering=1, encoding="utf-8")
+        self.ntfy_config = self._load_ntfy_config()
 
     def log(self, msg: str = "") -> None:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -223,6 +224,38 @@ class RestoreTest:
         self._fh.close()
 
     # ── Hilfsmethoden ──────────────────────────────────────────────────────────
+
+    def _load_ntfy_config(self):
+        try:
+            from lib.notifications import NtfyConfig
+            return NtfyConfig.from_config(self.conf)
+        except Exception as exc:
+            self.log(f"  ntfy setup skipped: {exc}")
+            return None
+
+    def _notify_ntfy(self, event_type: str, repo: dict, result: str, duration: int = 0,
+                     coverage: str = "", error_message: str = "") -> None:
+        if not bool(getattr(self.args, "scheduled", False)):
+            return
+        if self.ntfy_config is None:
+            return
+        try:
+            from lib.notifications import build_restore_test_ntfy_message, send_ntfy
+            job_name = str(repo.get("job_key") or repo.get("type") or "restore_test")
+            title = f"Borg Backup UI: Restore test {result}"
+            message = build_restore_test_ntfy_message(
+                job_name=job_name,
+                status=result,
+                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                duration_seconds=duration,
+                repository=str(repo.get("path") or ""),
+                level=int(self.test_level),
+                coverage=coverage,
+                error_message=error_message,
+            )
+            send_ntfy(self.ntfy_config, event_type, title, message)
+        except Exception as exc:
+            self.log(f"  ntfy notification failed: {exc}")
 
     def _env(self, passphrase: str) -> dict:
         env = dict(os.environ)
@@ -485,6 +518,7 @@ class RestoreTest:
 
         if not self._should_test(key):
             return 2
+        self._notify_ntfy("restore_test_overdue", repo, "Overdue")
 
         smb_mounted_by_me = False
         steps: list = []
@@ -909,6 +943,11 @@ class RestoreTest:
 
         test_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         self.log(f"  → Ergebnis: {test_file}")
+        if result_str == "success":
+            self._notify_ntfy("restore_test_success", repo, "Successful", duration, coverage)
+        elif result_str in {"failed", "unavailable"}:
+            detail = failure_hint or error_details or reason or "Restore test failed"
+            self._notify_ntfy("restore_test_failed", repo, "Failed", duration, coverage, detail)
 
 
 # ── Hauptprogramm ─────────────────────────────────────────────────────────────
@@ -926,6 +965,8 @@ def main() -> None:
                         help="Locations to test (default: local)")
     parser.add_argument("--smb-auto-mount", action="store_true",
                         help="Mount SMB repositories before testing and unmount them afterward")
+    parser.add_argument("--scheduled", action="store_true",
+                        help="Run was started by the scheduler; enables background notifications")
     parser.add_argument("--job-key",  dest="job_keys", action="append", default=[],
                         help="Optionally test only selected jobs (for example flash_local); may be repeated")
     args = parser.parse_args()

@@ -192,6 +192,7 @@ function renderSettings(data, systemHealth) {
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
       ${renderSettingsSMTP(data.smtp || {})}
+      ${renderSettingsNtfy(data.ntfy || {})}
       ${renderSettingsAbout()}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'usb' ? '' : 'hidden'}" data-settings-panel="usb">
@@ -2608,6 +2609,125 @@ async function sendTestEmail() {
   }
 }
 
+function _ntfyEventEnabled(events, key) {
+  return String(events || '').split(',').map((item) => item.trim()).includes(key);
+}
+
+function _syncNtfyEvents() {
+  const hidden = document.querySelector('[data-key="NTFY_EVENTS"]');
+  if (!hidden) return;
+  const values = Array.from(document.querySelectorAll('[data-ntfy-event]'))
+    .filter((el) => el.checked)
+    .map((el) => el.dataset.ntfyEvent)
+    .filter(Boolean);
+  hidden.value = values.join(',');
+  markSettingsDirty();
+}
+
+function renderSettingsNtfy(n) {
+  const enabled = String(n.NTFY_ENABLED || 'false') === 'true';
+  const passwordSet = String(n.NTFY_PASSWORD_SET || 'false') === 'true';
+  const tokenSet = String(n.NTFY_ACCESS_TOKEN_SET || 'false') === 'true';
+  const events = n.NTFY_EVENTS || 'backup_success,backup_failed,backup_skipped,restore_test_failed';
+  const priorityOptions = ['default', 'min', 'low', 'high', 'urgent']
+    .map((value) => `<option value="${value}" ${(n.NTFY_PRIORITY || 'default') === value ? 'selected' : ''}>${settingsT(`forms.ntfyPriority${value.charAt(0).toUpperCase()}${value.slice(1)}`)}</option>`)
+    .join('');
+  const eventRows = [
+    ['backup_success', settingsT('forms.ntfyEventBackupSuccess')],
+    ['backup_failed', settingsT('forms.ntfyEventBackupFailed')],
+    ['backup_skipped', settingsT('forms.ntfyEventBackupSkipped')],
+    ['restore_test_success', settingsT('forms.ntfyEventRestoreTestSuccess')],
+    ['restore_test_failed', settingsT('forms.ntfyEventRestoreTestFailed')],
+    ['restore_test_overdue', settingsT('forms.ntfyEventRestoreTestOverdue')],
+  ].map(([key, label]) => `
+    <label class="form-checkbox-row">
+      <input type="checkbox" data-ntfy-event="${key}" ${_ntfyEventEnabled(events, key) ? 'checked' : ''} onchange="_syncNtfyEvents()">
+      ${label}
+    </label>`).join('');
+
+  return settingsCard(settingsT('forms.ntfyTitle'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+    `<div class="settings-body two-col">
+      <label class="form-checkbox-row" style="grid-column:1/-1">
+        <input type="checkbox" data-key="NTFY_ENABLED" ${enabled ? 'checked' : ''} onchange="markSettingsDirty()">
+        ${settingsT('forms.ntfyEnable')}
+      </label>
+      <div class="status-message info" style="grid-column:1/-1">${settingsT('forms.ntfyHint')}</div>
+      ${ftext('NTFY_PROFILE_NAME', settingsT('forms.ntfyProfileName'), n.NTFY_PROFILE_NAME || 'ntfy')}
+      ${ftext('NTFY_SERVER_URL', settingsT('forms.ntfyServerUrl'), n.NTFY_SERVER_URL || '')}
+      ${ftext('NTFY_TOPIC', settingsT('forms.ntfyTopic'), n.NTFY_TOPIC || '')}
+      ${ftext('NTFY_USERNAME', settingsT('forms.ntfyUsername'), n.NTFY_USERNAME || '')}
+      <div class="form-group">
+        <label class="form-label">${passwordSet ? settingsT('forms.ntfyPasswordSet') : settingsT('forms.ntfyPassword')}</label>
+        <input class="form-input" type="password" data-ntfy-secret-key="NTFY_PASSWORD" value="" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">${tokenSet ? settingsT('forms.ntfyTokenSet') : settingsT('forms.ntfyToken')}</label>
+        <input class="form-input" type="password" data-ntfy-secret-key="NTFY_ACCESS_TOKEN" value="" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">${settingsT('forms.ntfyPriority')}</label>
+        <select class="form-select" data-key="NTFY_PRIORITY" onchange="markSettingsDirty()">${priorityOptions}</select>
+      </div>
+      ${ftext('NTFY_TAGS', settingsT('forms.ntfyTags'), n.NTFY_TAGS || '')}
+      ${ftext('NTFY_CLICK_URL', settingsT('forms.ntfyClickUrl'), n.NTFY_CLICK_URL || '')}
+      ${fnum('NTFY_TIMEOUT_SECONDS', settingsT('forms.ntfyTimeout'), n.NTFY_TIMEOUT_SECONDS || '15')}
+      <input type="hidden" data-key="NTFY_EVENTS" value="${escHtml(events)}">
+      <fieldset class="settings-fieldset" style="grid-column:1/-1">
+        <legend>${settingsT('forms.ntfyEvents')}</legend>
+        <div class="settings-body two-col">${eventRows}</div>
+      </fieldset>
+      <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;margin-top:4px">
+        <button class="btn btn-secondary btn-sm" id="ntfy-test-btn" data-settings-action="send-test-ntfy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+          ${settingsT('forms.ntfySendTest')}
+        </button>
+        <span id="ntfy-test-result" style="font-size:13px"></span>
+      </div>
+    </div>`);
+}
+
+async function sendTestNtfy() {
+  const btn = document.getElementById('ntfy-test-btn');
+  const result = document.getElementById('ntfy-test-result');
+  if (!btn || !result) return;
+  btn.classList.add('loading');
+  result.textContent = '';
+  result.style.color = '';
+
+  const payload = {
+    enabled: 'true',
+    profile_name: document.querySelector('[data-key="NTFY_PROFILE_NAME"]')?.value?.trim() || 'ntfy',
+    server_url: document.querySelector('[data-key="NTFY_SERVER_URL"]')?.value?.trim() || '',
+    topic: document.querySelector('[data-key="NTFY_TOPIC"]')?.value?.trim() || '',
+    username: document.querySelector('[data-key="NTFY_USERNAME"]')?.value?.trim() || '',
+    password: document.querySelector('[data-ntfy-secret-key="NTFY_PASSWORD"]')?.value || '',
+    access_token: document.querySelector('[data-ntfy-secret-key="NTFY_ACCESS_TOKEN"]')?.value || '',
+    priority: document.querySelector('[data-key="NTFY_PRIORITY"]')?.value || 'default',
+    tags: document.querySelector('[data-key="NTFY_TAGS"]')?.value?.trim() || '',
+    click_url: document.querySelector('[data-key="NTFY_CLICK_URL"]')?.value?.trim() || '',
+    events: document.querySelector('[data-key="NTFY_EVENTS"]')?.value || '',
+  };
+
+  try {
+    const res = await fetch('/api/settings/test-ntfy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    result.textContent = apiMessage(data, data.success ? settingsT('forms.sent') : settingsT('forms.error'));
+    result.style.color = data.success ? 'var(--success)' : 'var(--error)';
+  } catch (err) {
+    result.textContent = settingsT('error', { message: err.message });
+    result.style.color = 'var(--error)';
+  } finally {
+    btn.classList.remove('loading');
+  }
+}
+
 function renderSettingsPerRepoPassphrases(list) {
   const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M12 15h8M16 12v6"/></svg>`;
   if (!list.length) {
@@ -2853,6 +2973,7 @@ async function onSettingsContentClick(event) {
   if (action === 'restore-config-backup') return restoreSettingsConfigBackup(el.dataset.backupName || '');
   if (action === 'delete-config-backup') return deleteSettingsConfigBackup(el.dataset.backupName || '');
   if (action === 'send-test-email') return sendTestEmail();
+  if (action === 'send-test-ntfy') return sendTestNtfy();
   if (action === 'send-weekly-report') return sendWeeklyReport();
   if (action === 'storagebox-key-status') return storageboxKeyStatus();
   if (action === 'storagebox-key-generate') return storageboxKeyGenerate();
@@ -3616,6 +3737,10 @@ async function saveSettings() {
     } else {
       updates[key] = el.value;
     }
+  });
+  activePanel?.querySelectorAll('[data-ntfy-secret-key]').forEach(el => {
+    const key = el.dataset.ntfySecretKey;
+    if (key && String(el.value || '').trim()) updates[key] = el.value;
   });
   if (activeTab === 'usb') updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());
   if (activeTab === 'smb') updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());

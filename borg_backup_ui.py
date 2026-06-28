@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.28.0956"
+APP_VERSION = "2026.06.28.1750"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -790,6 +790,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
             "/api/settings/test-smtp": self._post_test_smtp,
+            "/api/settings/test-ntfy": self._post_test_ntfy,
             "/api/settings/weekly-report/send": self._post_send_weekly_report,
             "/api/settings/backup-restore": self._post_settings_backup_restore,
             "/api/settings/backup-delete": self._post_settings_backup_delete,
@@ -1966,6 +1967,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         cmd = ["python3", str(script_path), "--level", level, "--location", location]
         if smb_auto_mount:
             cmd.append("--smb-auto-mount")
+        if scheduled:
+            cmd.append("--scheduled")
         if not scheduled:
             cmd.append("--force")
         for job_key in clean_job_keys:
@@ -2144,6 +2147,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cleanup_removed_smb_mountpoints,
             cleanup_removed_smb_secrets,
         )
+        from ntfy_api import prepare_ntfy_updates_for_save
         body = self._read_json_body()
         updates = body.get("updates", {})
         smb_cleanup_keys = body.get("smb_cleanup_keys", [])
@@ -2175,6 +2179,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             existing_pw = str(prev_conf.get("GLOBAL_SMTP_PASSWORD", ""))
             if not incoming_pw.strip() and existing_pw.strip():
                 updates.pop("GLOBAL_SMTP_PASSWORD", None)
+        if {"NTFY_PASSWORD", "NTFY_ACCESS_TOKEN"} & set(updates.keys()):
+            updates = prepare_ntfy_updates_for_save(updates, prev_conf)
         updates.pop("UI_LOGIN_PASSWORD", None)
         updates.pop("UI_LOGIN_PASSWORD_CLEAR", None)
         data_dir = updates.get("GLOBAL_DATA_DIR")
@@ -2292,6 +2298,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         recipient = body.get("recipient", "")
         return send_test_email(self.config, recipient)
+
+    def _post_test_ntfy(self) -> dict:
+        from config_api import send_test_ntfy
+        body = self._read_json_body()
+        return send_test_ntfy(self.config, body)
 
     def _post_settings_support_bundle(self) -> dict:
         from support_bundle_api import create_support_bundle

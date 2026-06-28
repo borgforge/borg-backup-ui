@@ -721,7 +721,7 @@ def main() -> int:
     sys.path.insert(0, str(backup_scripts_dir))
     from lib.backup_job import BackupJob, BackupJobConfig  # type: ignore
     from lib.borg_runner import BorgConfig, BorgRunner, parse_borg_stats  # type: ignore
-    from lib.notifications import MailConfig  # type: ignore
+    from lib.notifications import MailConfig, NtfyConfig  # type: ignore
     from lib.docker_manager import DockerConfig, DockerManager  # type: ignore
     from lib.vm_manager import VmConfig, VmManager  # type: ignore
 
@@ -729,6 +729,7 @@ def main() -> int:
     _setup_full_logging(job_config.log_file)
     borg_config = BorgConfig.from_config(env)
     mail_config = MailConfig.from_config(env)
+    ntfy_config = NtfyConfig.from_config(env)
 
     lock_dir = Path(env.get("BORG_RESOURCE_LOCK_DIR", "/boot/config/borg-backup/locks"))
     ttl_seconds = int(env.get("BORG_RESOURCE_LOCK_TTL_SECONDS", "7200") or "7200")
@@ -772,7 +773,13 @@ def main() -> int:
 
         archive_prefix = f"{env.get('BACKUP_TYPE', 'job')}-backup"
         abort_on_parity = _env_flag(env.get("ABORT_ON_PARITY_CHECK"), default=True)
-        with BackupJob(job_config, docker_manager=docker_mgr, vm_manager=vm_mgr, mail_config=mail_config) as job:
+        with BackupJob(
+            job_config,
+            docker_manager=docker_mgr,
+            vm_manager=vm_mgr,
+            mail_config=mail_config,
+            ntfy_config=ntfy_config,
+        ) as job:
             if abort_on_parity:
                 logging.info("Parity check enabled (ABORT_ON_PARITY_CHECK=true)")
                 job.check_parity()

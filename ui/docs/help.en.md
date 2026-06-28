@@ -44,10 +44,13 @@ Tip: Repository URIs for SSH targets should be generated from the profile. Do no
 
 Recommendation: Enable a permanent schedule for a new job only after a successful manual run.
 
-### 6) Optionally configure email
+### 6) Optionally configure notifications
 
 - SMTP is configured under **Settings > General**.
 - After saving, send a test email.
+- ntfy is also configured under **Settings > General**.
+- ntfy requires a server URL, a topic, and optional authentication. Password and token are stored as secret files.
+- After entering the values, send a test ntfy notification.
 - The weekly report is enabled and scheduled under **Settings > Backup**.
 - The weekly report uses its own recipient or, when empty, the global email recipient.
 
@@ -102,11 +105,14 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - **Restore Tests** regularly check whether a restore works technically.
 - Restore tests are not a complete content audit, but they provide important evidence that repository, archive, and restore path work together.
 
-## Email and reports
+## Notifications, email, and reports
 
 - SMTP configuration and the test email are under **Settings > General**.
 - The SMTP password is not shown in clear text after saving. A saved password is shown only as a status.
 - Backup failures can trigger emails; regular summaries are handled by the weekly report.
+- ntfy configuration and the test notification are also under **Settings > General**.
+- ntfy can send push notifications for successful backups, failed or warning backups, and skipped backups.
+- The ntfy password and access token are not shown in clear text after saving.
 - The weekly report is enabled under **Settings > Backup**. It uses the saved SMTP configuration.
 - Test emails, weekly reports, and technical output emails are always sent in English.
 
@@ -160,8 +166,8 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - Use encrypted secret packages when importing or exporting passphrases and profile secrets.
 - Secret files should have restrictive permissions.
 
-### SMTP or weekly-report values are missing after reload
+### SMTP, ntfy, or weekly-report values are missing after reload
 
-- Save values in the matching area first: SMTP under **General**, weekly report under **Backup**.
+- Save values in the matching area first: SMTP and ntfy under **General**, weekly report under **Backup**.
 - After saving, the state is reloaded from `backup.conf`.
-- The SMTP password intentionally remains visually empty when it has already been saved.
+- SMTP password, ntfy password, and ntfy token intentionally remain visually empty when they have already been saved.

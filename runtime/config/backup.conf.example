@@ -43,6 +43,22 @@ GLOBAL_SMTP_PASSWORD=""
 GLOBAL_SMTP_USE_TLS="true"
 
 # =============================================================================
+# NTFY PUSH NOTIFICATIONS (optional)
+# =============================================================================
+NTFY_ENABLED="false"
+NTFY_PROFILE_NAME="ntfy"
+NTFY_SERVER_URL=""
+NTFY_TOPIC=""
+NTFY_USERNAME=""
+NTFY_PASSWORD_FILE="/boot/config/borg-backup/secrets/.ntfy-password"
+NTFY_ACCESS_TOKEN_FILE="/boot/config/borg-backup/secrets/.ntfy-token"
+NTFY_PRIORITY="default"
+NTFY_TAGS=""
+NTFY_CLICK_URL=""
+NTFY_EVENTS="backup_success,backup_failed,backup_skipped,restore_test_failed"
+NTFY_TIMEOUT_SECONDS="15"
+
+# =============================================================================
 # CREDENTIALS / ACCESS
 # =============================================================================
 BORG_SSH_KEY="/root/.ssh/id_rsa"
