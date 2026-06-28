@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.28.1624">
+<!ENTITY version   "2026.06.28.1718">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.28.1718###
+- Issue #87:
+  - Added ntfy events for scheduled restore test success, failure and overdue detection.
+
 ###2026.06.28.1624###
 - Issue #87:
   - Added ntfy push notifications with test delivery and selectable backup success, failure and skipped events.
@@ -75,7 +79,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>a80b1a9b03da243a53ceaf5123dcb809</MD5>
+<MD5>b000ad48d7d8aa46b56ad07887b79afc</MD5>
 </FILE>
 
 <!--
