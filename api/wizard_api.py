@@ -462,11 +462,11 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
 
     job_name = _extract_script_string(info.script_path, r'env\.setdefault\(["\']JOB_NAME["\'],\s*["\']([^"\']+)["\']\)')
 
-    repo_path = conf.get(repo_key) or meta_repo_default or script_repo_default
+    repo_path = meta_repo_default or conf.get(repo_key) or script_repo_default
     source_paths = (
-        conf.get(paths_key)
+        meta_paths_default
+        or conf.get(paths_key)
         or (conf.get(script_paths_key) if script_paths_key else "")
-        or meta_paths_default
         or script_paths_default
     )
     compression = meta_compression or conf.get(f"COMPRESSION_{_type_upper(type_id)}", "lz4")

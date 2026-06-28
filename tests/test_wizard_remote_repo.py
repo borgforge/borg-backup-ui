@@ -13,7 +13,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from wizard_api import generate_flow_preview, save_job
+from wizard_api import generate_flow_preview, load_job_for_wizard, save_job
 
 
 def _storagebox_params(repo: str = "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash") -> dict:
@@ -101,3 +101,47 @@ def test_save_storagebox_job_missing_repo_requires_confirm(tmp_path: Path, monke
 
     with pytest.raises(ValueError, match="Remote repository creation is not confirmed"):
         save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})
+
+
+def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypatch):
+    data_root = tmp_path / "borg-backup"
+    scripts_dir = data_root / "scripts"
+    jobs_dir = data_root / "config" / "jobs"
+    scripts_dir.mkdir(parents=True)
+    jobs_dir.mkdir(parents=True)
+    (jobs_dir / "vms_local.json").write_text(
+        json.dumps({
+            "job_key": "vms_local",
+            "backup_type": "vms",
+            "location": "local",
+            "name": "VMs",
+            "enabled": True,
+            "runner": "scriptless-wizard-runner",
+            "repo": {
+                "conf_key": "REPO_VMS_LOCAL",
+                "default": "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms",
+            },
+            "paths": {
+                "conf_key": "BACKUP_PATHS_VMS",
+                "default": "/mnt/user/domains",
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "config_api.read_expanded_conf",
+        lambda _cfg: {
+            "REPO_VMS_LOCAL": "/mnt/backup/borg-backup-vms",
+            "BACKUP_PATHS_VMS": "/mnt/legacy/domains",
+        },
+    )
+
+    loaded = load_job_for_wizard(
+        "vms_local",
+        scripts_dir,
+        {"BACKUP_SCRIPTS_DIR": str(data_root)},
+    )
+
+    assert loaded["repo_path"] == "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms"
+    assert loaded["source_paths"] == "/mnt/user/domains"
