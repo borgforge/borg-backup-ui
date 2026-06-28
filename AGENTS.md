@@ -220,6 +220,27 @@ Wenn Plugin-Code geaendert wurde:
 3. Release-Artefakt aktualisieren
 4. Release-Ergebnis pruefen
 
+Nach Abschluss eines testbaren, nutzerrelevanten Tasks muss immer zuerst eine
+Test-Channel-Version erstellt und verifiziert werden:
+
+```bash
+./plugin/deploy-test.sh <version>
+```
+
+Diese Test-Channel-Version ist die Testfreigabe fuer den Repository-Maintainer.
+Sie ist keine Stable- oder Release-Freigabe.
+
+Eine Stable-Release-Version fuer `main` darf erst vorbereitet oder promoted
+werden, nachdem der Nutzer den Test ausdruecklich freigegeben hat, zum Beispiel
+mit einer Formulierung wie:
+
+```text
+Test erfolgreich, Release erstellen
+```
+
+Ohne diese ausdrueckliche Freigabe bleibt der PR im Status "wartet auf
+Nutzertest"; es wird keine neue Stable-Release-Freigabe erstellt.
+
 Ausnahme fuer ausdruecklich freigegebene Umbrella-Features:
 
 * Schrittweise Teil-PRs duerfen Plugin-Code ohne Release-Artefakt aendern,

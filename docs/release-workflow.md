@@ -13,6 +13,10 @@ Danach gilt:
 - Codeaenderung fertigstellen und fokussiert testen.
 - Changelog-Eintrag unter `###NEXT###` in `borg-backup-ui.plg` ergaenzen.
 - `./plugin/build.sh` ausfuehren.
+- Fuer testbare nutzerrelevante Aenderungen eine Test-Channel-Version mit
+  `./plugin/deploy-test.sh <version>` erstellen und verifizieren.
+- Keine Stable-Release-Freigabe vorbereiten, bevor der Repository-Maintainer
+  den Test ausdruecklich als erfolgreich freigegeben hat.
 - Geaenderte Plugin-Dateien und neues `releases/borg-backup-ui-<version>.txz` im Abschluss nennen.
 - Pull Request vorbereiten oder erstellen, sofern nicht explizit anders vereinbart.
 
@@ -45,6 +49,33 @@ Der Test-Channel ist nur fuer eigene Testsysteme gedacht. Er darf unfertige
 Builds enthalten und ist nicht die Freigabe fuer andere Nutzer.
 Der Branch enthaelt absichtlich nur Testmanifest und Release-Paket, nicht den
 kompletten Quellcode oder die komplette Git-Historie.
+
+### Verbindlicher Test-Gate
+
+Nach jedem abgeschlossenen testbaren Task mit nutzerrelevanter Wirkung wird
+zuerst eine Test-Channel-Version erstellt. Das gilt fuer Bugfixes, Features,
+UI-Aenderungen und Maintenance-Aenderungen mit Plugin-Auswirkung.
+
+Der Ablauf ist verbindlich:
+
+1. Implementierung abschliessen.
+2. Fokussierte Tests und Preflight ausfuehren.
+3. Test-Channel-Version mit `./plugin/deploy-test.sh <version>` erstellen.
+4. Test-Channel-Manifest und Paket verifizieren.
+5. PR vorbereiten oder aktualisieren und im Abschluss als "wartet auf
+   Nutzertest" kennzeichnen.
+6. Stable-Release oder Promotion nach `main` erst nach ausdruecklicher
+   Nutzerfreigabe vorbereiten.
+
+Eine gueltige Freigabe muss eindeutig sein, zum Beispiel:
+
+```text
+Test erfolgreich, Release erstellen
+```
+
+Vor dieser Freigabe ist der Test-Channel die einzige bereitgestellte Version.
+Ein Merge nach `main` oder eine Stable-Release-Promotion darf nicht als
+automatischer Folgeschritt erfolgen.
 
 ### Testversion bereitstellen
 
