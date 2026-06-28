@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.28.0956">
+<!ENTITY version   "2026.06.28.1624">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.28.1624###
+- Issue #87:
+  - Added ntfy push notifications with test delivery and selectable backup success, failure and skipped events.
+  - ntfy passwords and access tokens are stored as secret files and are not written to backup.conf.
+
 ###2026.06.28.0956###
 - Issue #82:
   - Job start confirmation now shows whether all or only selected Docker containers and VMs will be stopped.
@@ -70,7 +75,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>93baa464353f7c8942f454673a874faa</MD5>
+<MD5>a80b1a9b03da243a53ceaf5123dcb809</MD5>
 </FILE>
 
 <!--
