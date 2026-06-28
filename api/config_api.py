@@ -78,6 +78,18 @@ _DEFAULTS: Dict[str, str] = {
     "GLOBAL_SMTP_USER": "",
     "GLOBAL_SMTP_PASSWORD": "",
     "GLOBAL_SMTP_USE_TLS": "true",
+    "NTFY_ENABLED": "false",
+    "NTFY_PROFILE_NAME": "ntfy",
+    "NTFY_SERVER_URL": "",
+    "NTFY_TOPIC": "",
+    "NTFY_USERNAME": "",
+    "NTFY_PASSWORD_FILE": "/boot/config/borg-backup/secrets/.ntfy-password",
+    "NTFY_ACCESS_TOKEN_FILE": "/boot/config/borg-backup/secrets/.ntfy-token",
+    "NTFY_PRIORITY": "default",
+    "NTFY_TAGS": "",
+    "NTFY_CLICK_URL": "",
+    "NTFY_EVENTS": "backup_success,backup_failed,backup_skipped",
+    "NTFY_TIMEOUT_SECONDS": "15",
     "BORG_SSH_KEY": "/root/.ssh/id_rsa",
     "USB_MOUNT_PATH": "/mnt/disks/USB",
     "USB_PROFILES_JSON": "[]",
@@ -1153,6 +1165,11 @@ def send_test_email(ui_config: dict, recipient: str = "") -> dict:
     return _send_test_email(ui_config, recipient)
 
 
+def send_test_ntfy(ui_config: dict, payload: dict | None = None) -> dict:
+    from ntfy_api import send_test_ntfy as _send_test_ntfy
+    return _send_test_ntfy(ui_config, payload)
+
+
 def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) -> dict:
     """Gibt strukturierte Settings-Daten für die UI zurück."""
     conf = read_expanded_conf(ui_config)
@@ -1182,6 +1199,22 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "GLOBAL_SMTP_PASSWORD":   "",
             "GLOBAL_SMTP_PASSWORD_SET": "true" if str(conf.get("GLOBAL_SMTP_PASSWORD", "")).strip() else "false",
             "GLOBAL_SMTP_USE_TLS":    conf.get("GLOBAL_SMTP_USE_TLS", "true"),
+        },
+        "ntfy": {
+            "NTFY_ENABLED":       conf.get("NTFY_ENABLED", "false"),
+            "NTFY_PROFILE_NAME":  conf.get("NTFY_PROFILE_NAME", "ntfy"),
+            "NTFY_SERVER_URL":    conf.get("NTFY_SERVER_URL", ""),
+            "NTFY_TOPIC":         conf.get("NTFY_TOPIC", ""),
+            "NTFY_USERNAME":      conf.get("NTFY_USERNAME", ""),
+            "NTFY_PASSWORD":      "",
+            "NTFY_PASSWORD_SET":  "true" if Path(str(conf.get("NTFY_PASSWORD_FILE", ""))).is_file() else "false",
+            "NTFY_ACCESS_TOKEN":  "",
+            "NTFY_ACCESS_TOKEN_SET": "true" if Path(str(conf.get("NTFY_ACCESS_TOKEN_FILE", ""))).is_file() else "false",
+            "NTFY_PRIORITY":      conf.get("NTFY_PRIORITY", "default"),
+            "NTFY_TAGS":          conf.get("NTFY_TAGS", ""),
+            "NTFY_CLICK_URL":     conf.get("NTFY_CLICK_URL", ""),
+            "NTFY_EVENTS":        conf.get("NTFY_EVENTS", "backup_success,backup_failed,backup_skipped"),
+            "NTFY_TIMEOUT_SECONDS": conf.get("NTFY_TIMEOUT_SECONDS", "15"),
         },
         "credentials": {
             "BORG_SSH_KEY":                    conf.get("BORG_SSH_KEY", ""),

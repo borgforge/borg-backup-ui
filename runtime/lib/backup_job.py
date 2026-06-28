@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from lib.docker_manager import DockerManager, DockerStopResult
     from lib.vm_manager import VmManager, VmShutdownResult
     from lib.borg_runner import BorgStats
-    from lib.notifications import MailConfig
+    from lib.notifications import NtfyConfig, MailConfig
 
 logger = logging.getLogger(__name__)
 
@@ -153,11 +153,13 @@ class BackupJob:
         docker_manager: Optional["DockerManager"] = None,
         vm_manager: Optional["VmManager"] = None,
         mail_config: Optional["MailConfig"] = None,
+        ntfy_config: Optional["NtfyConfig"] = None,
     ) -> None:
         self.config = config
         self.docker_manager = docker_manager
         self.vm_manager = vm_manager
         self.mail_config = mail_config
+        self.ntfy_config = ntfy_config
 
         self._start_time: float = 0.0
         self._borg_exit: int = 99
@@ -202,6 +204,8 @@ class BackupJob:
         logger.info("  Cache:       %s", cfg.borg_cache_dir)
         if self.mail_config and self.mail_config.recipient:
             logger.info("  Mail:        %s (on error)", self.mail_config.recipient)
+        if self.ntfy_config and self.ntfy_config.enabled:
+            logger.info("  ntfy:        %s/%s", self.ntfy_config.server_url, self.ntfy_config.topic)
         if self.vm_manager is not None:
             logger.info("  VM Timeout:  %ds", self.vm_manager.config.shutdown_timeout)
         logger.info("")
@@ -534,7 +538,7 @@ class BackupJob:
             return
         self._final_sent = True
 
-        from lib.notifications import notify, send_backup_log_mail
+        from lib.notifications import build_backup_ntfy_message, notify, send_backup_log_mail, send_ntfy
 
         exit_code = self._borg_exit
         duration = max(0, int(time.time() - self._start_time))
@@ -550,6 +554,19 @@ class BackupJob:
                 f"Backup completed. Log: {self.config.log_file}",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
+            if self.ntfy_config is not None:
+                send_ntfy(
+                    self.ntfy_config,
+                    "backup_success",
+                    "Borg Backup UI: Backup successful",
+                    build_backup_ntfy_message(
+                        job_name=self.config.job_name,
+                        status="Successful",
+                        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        duration_seconds=duration,
+                        repository=self.config.borg_repo or os.environ.get("BORG_REPO", ""),
+                    ),
+                )
         elif exit_code == 1:
             logger.info("Borg backup completed with warnings (exit 1)")
             notify(
@@ -558,6 +575,20 @@ class BackupJob:
                 f"Exit 1. Check log: {self.config.log_file}",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
+            if self.ntfy_config is not None:
+                send_ntfy(
+                    self.ntfy_config,
+                    "backup_failed",
+                    "Borg Backup UI: Backup completed with warnings",
+                    build_backup_ntfy_message(
+                        job_name=self.config.job_name,
+                        status="Warning",
+                        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        duration_seconds=duration,
+                        repository=self.config.borg_repo or os.environ.get("BORG_REPO", ""),
+                        error_message="Borg exited with warning status 1.",
+                    ),
+                )
         else:
             logger.info("Borg backup failed (exit %d)", exit_code)
             notify(
@@ -566,6 +597,20 @@ class BackupJob:
                 f"Borg exit {exit_code}. See log: {self.config.log_file}",
                 job_name=f"Borg Backup ({self.config.backup_type})",
             )
+            if self.ntfy_config is not None:
+                send_ntfy(
+                    self.ntfy_config,
+                    "backup_failed",
+                    "Borg Backup UI: Backup failed",
+                    build_backup_ntfy_message(
+                        job_name=self.config.job_name,
+                        status="Error",
+                        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        duration_seconds=duration,
+                        repository=self.config.borg_repo or os.environ.get("BORG_REPO", ""),
+                        error_message=self._final_msg or f"Borg exit {exit_code}",
+                    ),
+                )
 
         self._save_status(duration)
 
@@ -635,6 +680,24 @@ class BackupJob:
         if self._skip_status_written:
             return
         self._save_skip_status()
+        if self.ntfy_config is not None:
+            from lib.notifications import build_backup_ntfy_message, send_ntfy
+
+            duration = max(0, int(time.time() - self._start_time))
+            reason = self._skip_reason or "Backup was skipped"
+            send_ntfy(
+                self.ntfy_config,
+                "backup_skipped",
+                "Borg Backup UI: Backup skipped",
+                build_backup_ntfy_message(
+                    job_name=self.config.job_name,
+                    status="Skipped",
+                    timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    duration_seconds=duration,
+                    repository=self.config.borg_repo or os.environ.get("BORG_REPO", ""),
+                    error_message=reason,
+                ),
+            )
 
     def _save_status(self, duration: int) -> None:
         """Erstellt und speichert BackupStatus-JSON-Datei."""

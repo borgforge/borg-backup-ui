@@ -616,7 +616,7 @@ sys.path.insert(0, str(_LIB_BASE))
 from lib.status import load_config
 from lib.backup_job import BackupJob, BackupJobConfig
 from lib.borg_runner import BorgConfig, BorgRunner, parse_borg_stats
-{docker_import}from lib.notifications import MailConfig
+{docker_import}from lib.notifications import MailConfig, NtfyConfig
 
 _DEFAULT_PATHS = "{source_paths}"
 
@@ -675,8 +675,9 @@ def main() -> int:
     job_config = BackupJobConfig.from_config(env)
     borg_config = BorgConfig.from_config(env)
 {docker_cfg}    mail_config = MailConfig.from_config(env)
+    ntfy_config = NtfyConfig.from_config(env)
 
-    BackupJob(job_config).check_parity()
+    BackupJob(job_config, ntfy_config=ntfy_config).check_parity()
 
     _setup_logging(job_config.log_file)
 
@@ -685,7 +686,7 @@ def main() -> int:
         return init_exit
 
 
-{docker_mgr}    with BackupJob(job_config{docker_param}, mail_config=mail_config) as job:
+{docker_mgr}    with BackupJob(job_config{docker_param}, mail_config=mail_config, ntfy_config=ntfy_config) as job:
         job.check_prerequisites()
         job.cleanup_old_logs()
 {docker_stop}        runner = BorgRunner(borg_config)
