@@ -20,6 +20,7 @@ from typing import Dict, Generator, List, Optional
 DEFAULT_DATA_ROOT = Path("/boot/config/borg-backup")
 DEFAULT_SECRETS_DIR = DEFAULT_DATA_ROOT / "secrets"
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
+_RUNTIME_MODES = {"all", "selected", "none"}
 
 
 def _validate_job_key(job_key: str) -> str:
@@ -34,6 +35,40 @@ def _safe_int(value, default: int) -> int:
         return int(str(value).strip())
     except (TypeError, ValueError, AttributeError):
         return default
+
+
+def _split_runtime_selected(raw) -> List[str]:
+    if isinstance(raw, list):
+        values = raw
+    elif isinstance(raw, str):
+        values = raw.splitlines() if "\n" in raw else raw.split(",")
+    else:
+        values = []
+
+    selected: List[str] = []
+    seen = set()
+    for value in values:
+        name = str(value or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        selected.append(name)
+    return selected
+
+
+def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
+    raw = meta.get(f"{kind}_control") if isinstance(meta.get(f"{kind}_control"), dict) else {}
+    features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
+    legacy_enabled = bool(features.get(kind, False))
+    mode = str(raw.get("mode") or "").strip().lower()
+    if mode not in _RUNTIME_MODES:
+        mode = "all" if legacy_enabled else "none"
+    ack_key = "ack_appdata_risk" if kind == "docker" else "ack_domains_risk"
+    return {
+        "mode": mode,
+        "selected": _split_runtime_selected(raw.get("selected", [])) if mode == "selected" else [],
+        ack_key: bool(raw.get(ack_key, False)),
+    }
 
 
 def resolve_data_root(config: dict) -> Path:
@@ -211,6 +246,8 @@ class JobInfo:
     retention_weekly: str = ""
     retention_monthly: str = ""
     retention_yearly: str = ""
+    docker_control: dict = None
+    vm_control: dict = None
     restore_test_policy_mode: str = ""
     restore_test_interval_days: int = 30
     restore_test_validity_days: int = 30
@@ -426,6 +463,8 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
         restore_test_validity_days: int = 30,
         restore_test_level: int = 2,
         restore_test_max_runtime_minutes: int = 0,
+        docker_control: Optional[dict] = None,
+        vm_control: Optional[dict] = None,
     ) -> JobInfo:
         desc_file = py_file.with_suffix(".description") if py_file is not None else None
         desc_text = (
@@ -438,6 +477,16 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
             )
         )
         bt_lc = backup_type.lower()
+        default_docker_control = {
+            "mode": "all" if ((bt_lc == "appdata") if has_docker is None else bool(has_docker)) else "none",
+            "selected": [],
+            "ack_appdata_risk": False,
+        }
+        default_vm_control = {
+            "mode": "all" if ((bt_lc == "vms") if has_vm is None else bool(has_vm)) else "none",
+            "selected": [],
+            "ack_domains_risk": False,
+        }
         return JobInfo(
             key=key or f"{bt_lc}_{location}",
             backup_type=backup_type,
@@ -459,6 +508,8 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
             retention_weekly=str(retention_weekly or "").strip(),
             retention_monthly=str(retention_monthly or "").strip(),
             retention_yearly=str(retention_yearly or "").strip(),
+            docker_control=docker_control or default_docker_control,
+            vm_control=vm_control or default_vm_control,
             restore_test_policy_mode=str(restore_test_policy_mode or "").strip().lower(),
             restore_test_interval_days=_safe_int(restore_test_interval_days, 30),
             restore_test_validity_days=_safe_int(restore_test_validity_days, 30),
@@ -508,6 +559,8 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
             features = raw.get("features") if isinstance(raw.get("features"), dict) else {}
             retention = raw.get("retention") if isinstance(raw.get("retention"), dict) else {}
             rt_policy = raw.get("restore_test_policy") if isinstance(raw.get("restore_test_policy"), dict) else {}
+            docker_control = _runtime_control_from_meta(raw, "docker")
+            vm_control = _runtime_control_from_meta(raw, "vm")
             has_docker = bool(features.get("docker", False))
             has_vm = bool(features.get("vm", False))
             description = raw.get("description")
@@ -533,6 +586,8 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
                 retention_weekly=str(retention.get("weekly") or "").strip(),
                 retention_monthly=str(retention.get("monthly") or "").strip(),
                 retention_yearly=str(retention.get("yearly") or "").strip(),
+                docker_control=docker_control,
+                vm_control=vm_control,
                 restore_test_policy_mode=str(rt_policy.get("mode") or "").strip().lower(),
                 restore_test_interval_days=_safe_int(rt_policy.get("interval_days"), 30),
                 restore_test_validity_days=_safe_int(rt_policy.get("validity_days") or rt_policy.get("interval_days"), 30),
@@ -582,6 +637,8 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "name": info.name or info.display_name,
                 "has_docker": info.has_docker,
                 "has_vm": info.has_vm,
+                "docker_control": info.docker_control or {"mode": "all" if info.has_docker else "none", "selected": []},
+                "vm_control": info.vm_control or {"mode": "all" if info.has_vm else "none", "selected": []},
                 "description": info.description,
                 "icon": info.icon,
                 "icon_color": info.icon_color,

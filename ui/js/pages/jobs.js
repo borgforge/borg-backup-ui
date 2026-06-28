@@ -56,6 +56,32 @@ function _isDataDirReady() {
   return window.BBUI.core.isGlobalDataDirReady();
 }
 
+function jobRuntimeControl(job, kind) {
+  const legacyEnabled = kind === 'docker' ? !!job?.has_docker : !!job?.has_vm;
+  const raw = job?.[`${kind}_control`] && typeof job[`${kind}_control`] === 'object'
+    ? job[`${kind}_control`]
+    : {};
+  const mode = ['all', 'selected', 'none'].includes(raw.mode)
+    ? raw.mode
+    : (legacyEnabled ? 'all' : 'none');
+  const selected = Array.isArray(raw.selected)
+    ? raw.selected.map(item => String(item || '').trim()).filter(Boolean)
+    : [];
+  return { mode, selected };
+}
+
+function jobRuntimeWarningText(job, kind) {
+  const control = jobRuntimeControl(job, kind);
+  if (control.mode === 'none') return '';
+  if (control.mode === 'selected') {
+    const names = control.selected.length
+      ? control.selected.map(name => escHtml(name)).join(', ')
+      : escHtml(jobsT('jobs.runtimeSelectionStored'));
+    return jobsT(kind === 'docker' ? 'jobs.dockerSelectedWarning' : 'jobs.vmSelectedWarning', { names });
+  }
+  return jobsT(kind === 'docker' ? 'jobs.dockerWarning' : 'jobs.vmWarning');
+}
+
 // ── Jobs laden ────────────────────────────────────────────────────────────────
 
 async function refreshJobs() {
@@ -589,23 +615,25 @@ function showStartModal(jobKey) {
   const infoEl = document.getElementById('modal-info');
   const items = [];
 
-  if (job.has_docker) {
+  const dockerWarning = jobRuntimeWarningText(job, 'docker');
+  if (dockerWarning) {
     items.push(`<div class="modal-info-item warning">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" color="var(--warning)">
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
         <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <span class="modal-info-text">${jobsT('jobs.dockerWarning')}</span>
+      <span class="modal-info-text">${dockerWarning}</span>
     </div>`);
   }
 
-  if (job.has_vm) {
+  const vmWarning = jobRuntimeWarningText(job, 'vm');
+  if (vmWarning) {
     items.push(`<div class="modal-info-item warning">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" color="var(--warning)">
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
         <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <span class="modal-info-text">${jobsT('jobs.vmWarning')}</span>
+      <span class="modal-info-text">${vmWarning}</span>
     </div>`);
   }
 
