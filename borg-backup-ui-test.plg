@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.27.1921">
+<!ENTITY version   "2026.06.28.0956">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.28.0956###
+- Issue #82:
+  - Job start confirmation now shows whether all or only selected Docker containers and VMs will be stopped.
+
 ###2026.06.27.1921###
 - Issue #82:
   - Wizard now separates Docker and VM runtime selection into dedicated optional steps.
@@ -66,7 +70,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>b06fe3a75b47692650c3542522fdd568</MD5>
+<MD5>93baa464353f7c8942f454673a874faa</MD5>
 </FILE>
 
 <!--
