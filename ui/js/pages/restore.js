@@ -315,10 +315,10 @@ function restoreRunStateLabel(state) {
 
 function restoreRunStateClass(state) {
   const key = String(state || '').toLowerCase();
-  if (key === 'running') return 'warning';
-  if (key === 'done') return 'success';
-  if (key === 'error' || key === 'aborted') return 'error';
-  return 'neutral';
+  if (key === 'running') return 'ui-badge--running';
+  if (key === 'done') return 'ui-badge--success';
+  if (key === 'error' || key === 'aborted') return 'ui-badge--error';
+  return 'ui-badge--disabled';
 }
 
 function restoreFmtDuration(seconds) {
@@ -329,6 +329,21 @@ function restoreFmtDuration(seconds) {
   if (hours) return restoreT('durationHoursMinutesSeconds', { hours, minutes, seconds: secs });
   if (minutes) return restoreT('durationMinutesSeconds', { minutes, seconds: secs });
   return restoreT('durationSeconds', { seconds: secs });
+}
+
+function restoreConflictModeLabel(mode) {
+  const key = String(mode || '').trim().toLowerCase();
+  return ({
+    skip: restoreT('conflictSkip'),
+    overwrite: restoreT('conflictOverwrite'),
+    rename: restoreT('conflictRename'),
+  })[key || 'skip'] || (mode || '—');
+}
+
+function restoreFailureMessage(detail) {
+  const error = String(detail?.error || '').trim();
+  if (error === 'Server restarted during restore run') return restoreT('serverRestartedDuringRestore');
+  return error;
 }
 
 function renderRestoreRuns(runs) {
@@ -414,17 +429,22 @@ function renderRestoreHistory(payload) {
     const state = String(run.state || '');
     return `<article class="restore-history-card ${selected ? 'is-selected' : ''}" data-restore-history-id="${escHtml(id)}">
       <div class="restore-run-main">
-        <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
         <strong>${escHtml(run.job_key || '—')}</strong>
         <small>${escHtml(run.archive || '—')}</small>
       </div>
       <div class="restore-run-meta">
-        <span>${escHtml(restoreT('targetDirectory'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
-        <span>${escHtml(restoreT('runStarted'))}: <b>${escHtml(run.started_at || '—')}</b></span>
-        <span>${escHtml(restoreT('historyFinished'))}: <b>${escHtml(run.finished_at || '—')}</b></span>
-        <span>${escHtml(restoreT('historyDuration'))}: <b>${escHtml(restoreFmtDuration(run.duration_seconds))}</b></span>
+        <dl>
+          <dt>${escHtml(restoreT('historyRestoreId'))}</dt><dd>${escHtml(id || '—')}</dd>
+          <dt>${escHtml(restoreT('targetDirectory'))}</dt><dd>${escHtml(run.destination_path || run.target_dir || '—')}</dd>
+          <dt>${escHtml(restoreT('runStarted'))}</dt><dd>${escHtml(run.started_at || '—')}</dd>
+          <dt>${escHtml(restoreT('historyFinished'))}</dt><dd>${escHtml(run.finished_at || '—')}</dd>
+          <dt>${escHtml(restoreT('historyDuration'))}</dt><dd>${escHtml(restoreFmtDuration(run.duration_seconds))}</dd>
+        </dl>
       </div>
-      <button type="button" class="btn btn-secondary btn-sm" data-restore-history-action="detail" data-restore-id="${escHtml(id)}">${escHtml(restoreT('showRunDetails'))}</button>
+      <div class="restore-history-card-actions">
+        <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-restore-history-action="detail" data-restore-id="${escHtml(id)}" aria-expanded="${selected ? 'true' : 'false'}">${escHtml(selected ? restoreT('hideRunDetails') : restoreT('showRunDetails'))}</button>
+      </div>
       <div class="restore-history-detail" id="restore-history-detail-${escHtml(id)}"></div>
     </article>`;
   }).join('');
@@ -450,32 +470,40 @@ function renderRestoreHistoryDetail(detail) {
   const target = document.getElementById(`restore-history-detail-${id}`);
   if (!target) return;
   const lines = Array.isArray(detail.lines) ? detail.lines : [];
+  const error = restoreFailureMessage(detail);
   target.innerHTML = `<div class="restore-history-detail-grid">
-    <div><small>${escHtml(restoreT('runStatus'))}</small><strong>${escHtml(restoreRunStateLabel(detail.state))}</strong></div>
+    <div><small>${escHtml(restoreT('historyRestoreId'))}</small><strong>${escHtml(id)}</strong></div>
+    <div><small>${escHtml(restoreT('runStatus'))}</small><strong><span class="ui-badge ${restoreRunStateClass(detail.state)}">${escHtml(restoreRunStateLabel(detail.state))}</span></strong></div>
     <div><small>${escHtml(restoreT('sourcePath'))}</small><strong>${escHtml(detail.source_path || '—')}</strong></div>
     <div><small>${escHtml(restoreT('targetDirectory'))}</small><strong>${escHtml(detail.target_dir || '—')}</strong></div>
     <div><small>${escHtml(restoreT('destinationLabel'))}</small><strong>${escHtml(detail.destination_path || '—')}</strong></div>
-    <div><small>${escHtml(restoreT('conflictStrategy'))}</small><strong>${escHtml(detail.conflict_mode || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('conflictStrategy'))}</small><strong>${escHtml(restoreConflictModeLabel(detail.conflict_mode))}</strong></div>
     <div><small>${escHtml(restoreT('preserveOwnerShort'))}</small><strong>${escHtml(detail.preserve_owner ? restoreT('yes') : restoreT('no'))}</strong></div>
   </div>
-  ${detail.error ? `<div class="restore-history-error">${escHtml(detail.error)}</div>` : ''}
+  ${error ? `<div class="restore-history-error">${escHtml(error)}</div>` : ''}
   <details class="restore-history-log"><summary>${escHtml(restoreT('historyLog'))}</summary><pre>${escHtml(lines.join('\n') || restoreT('empty'))}</pre></details>`;
 }
 
 async function restoreLoadHistoryDetail(restoreId) {
   const id = String(restoreId || '').trim();
   if (!id) return;
+  if (restoreState.historyDetailId === id) {
+    restoreState.historyDetailId = '';
+    renderRestoreHistory({ runs: restoreState.history, total: restoreState.historyTotal || restoreState.history.length });
+    return;
+  }
   restoreState.historyDetailId = id;
   try {
     const res = await fetch(`/api/restore/history/detail?restore_id=${encodeURIComponent(id)}`, { credentials: 'include' });
     const data = await res.json();
-    if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status, data.error || ''));
     renderRestoreHistory({ runs: restoreState.history, total: restoreState.historyTotal || restoreState.history.length });
     restoreState.historyDetailId = id;
     renderRestoreHistoryDetail(data);
   } catch (err) {
     const target = document.getElementById(`restore-history-detail-${id}`);
-    if (target) target.innerHTML = `<div class="restore-history-error">${escHtml(err.message)}</div>`;
+    const message = restoreFailureMessage({ error: err.message }) || err.message;
+    if (target) target.innerHTML = `<div class="restore-history-error">${escHtml(message)}</div>`;
   }
 }
 

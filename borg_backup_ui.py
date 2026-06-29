@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.1402"
+APP_VERSION = "2026.06.29.1442"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""

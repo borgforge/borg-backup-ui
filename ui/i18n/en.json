@@ -785,7 +785,7 @@
     "steps": "Restore steps",
     "viewTabs": "Restore view",
     "viewWizard": "Restore",
-    "viewHistory": "Restore history",
+    "viewHistory": "Restore History",
     "stepStatus": "Step {step} of {total}",
     "search": "Search",
     "searchPlaceholder": "Search jobs",
@@ -959,8 +959,9 @@
     "runPhase": "Phase",
     "resumeLiveLog": "Resume live log",
     "showRunDetails": "Show details",
+    "hideRunDetails": "Hide details",
     "historyEyebrow": "History",
-    "historyTitle": "Restore history",
+    "historyTitle": "Restore History",
     "historySubtitle": "Completed restore runs with structured details.",
     "refreshHistory": "Refresh",
     "historyCount": "{count} runs",
@@ -973,7 +974,12 @@
     "historyLog": "Show restore log",
     "historyMigrationFailed": "Migration of old restore runs is incomplete: {count} imported, {errors} errors.",
     "destinationLabel": "Destination path",
-    "preserveOwnerShort": "Preserve owner/group"
+    "preserveOwnerShort": "Preserve owner/group",
+    "historyRestoreId": "Restore ID",
+    "conflictSkip": "Do not overwrite",
+    "conflictOverwrite": "Overwrite",
+    "conflictRename": "Rename",
+    "serverRestartedDuringRestore": "The restore was aborted because the server restarted during the restore run."
   },
   "restoreTests": {
     "title": "Restore tests",
