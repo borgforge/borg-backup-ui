@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1010">
+<!ENTITY version   "2026.06.29.1048">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.1048###
+- Issue #90:
+  - Resuming an active restore now opens a dedicated live-log mode instead of rerunning the wizard precheck.
+
 ###2026.06.29.1010###
 - Issue #90:
   - Restore page now only shows active restore runs in the wizard; completed restore history is tracked separately.
@@ -95,7 +99,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>96a5a183c2b980178276ad7353f7e401</MD5>
+<MD5>43f5d45f76de68f757f807e2216185f7</MD5>
 </FILE>
 
 <!--
