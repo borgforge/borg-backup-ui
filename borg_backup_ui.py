@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.1442"
+APP_VERSION = "2026.06.29.1502"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -200,6 +200,7 @@ def _write_migration_state(
     ts = datetime.now().isoformat(timespec="seconds")
     run_details = details or {}
     previous = _read_migration_state(config)
+    effective_run = _migration_log_is_effective(bool(success), reason_code, run_details)
     previous_migrations = previous.get("migrations") if isinstance(previous.get("migrations"), dict) else {}
     storage_state = _storage_paths_state(run_details)
     restore_history_state = _restore_history_state(run_details)
@@ -211,29 +212,46 @@ def _write_migration_state(
         restore_history_state = str(previous_restore_history.get("state"))
 
     jobs_details = run_details.get("jobs_layout") if isinstance(run_details.get("jobs_layout"), dict) else {}
+    last_run = {
+        "timestamp": ts,
+        "success": bool(success),
+        "message": str(message or ""),
+        "reason_code": str(reason_code or ""),
+        "reason_text": str(reason_text or ""),
+        "details": run_details,
+    }
+    if not effective_run and isinstance(previous.get("last_run"), dict):
+        last_run = previous["last_run"]
+
+    storage_checked_at = ts
+    if not effective_run and _migration_state_is_final(str(previous_storage.get("state", "") or "")):
+        storage_checked_at = str(previous_storage.get("checked_at") or ts)
+    storage_details = run_details.get("storage_paths", {})
+    if not effective_run and _migration_state_is_final(str(previous_storage.get("state", "") or "")) and isinstance(previous_storage.get("details"), dict):
+        storage_details = previous_storage["details"]
+    restore_history_checked_at = ts
+    if not effective_run and _migration_state_is_final(str(previous_restore_history.get("state", "") or "")):
+        restore_history_checked_at = str(previous_restore_history.get("checked_at") or ts)
+    restore_history_details = run_details.get("restore_history", {})
+    if not effective_run and _migration_state_is_final(str(previous_restore_history.get("state", "") or "")) and isinstance(previous_restore_history.get("details"), dict):
+        restore_history_details = previous_restore_history["details"]
+
     payload: dict = {
         "schema_version": 2,
-        "last_run": {
-            "timestamp": ts,
-            "success": bool(success),
-            "message": str(message or ""),
-            "reason_code": str(reason_code or ""),
-            "reason_text": str(reason_text or ""),
-            "details": run_details,
-        },
+        "last_run": last_run,
         "migrations": {
             **previous_migrations,
             "storage_paths_v1": {
                 "state": storage_state,
-                "checked_at": ts,
+                "checked_at": storage_checked_at,
                 "source": "startup_check",
-                "details": run_details.get("storage_paths", {}),
+                "details": storage_details,
             },
             "restore_history_v1": {
                 "state": restore_history_state,
-                "checked_at": ts,
+                "checked_at": restore_history_checked_at,
                 "source": "startup_check",
-                "details": run_details.get("restore_history", {}),
+                "details": restore_history_details,
             },
         },
         "checks": {
@@ -248,7 +266,7 @@ def _write_migration_state(
     target = _migration_state_file(config)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    if _migration_log_is_effective(bool(success), reason_code, run_details):
+    if effective_run:
         entry = dict(payload)
         entry.update(payload["last_run"])
         entry["event"] = "startup_migration"
