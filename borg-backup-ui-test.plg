@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1933">
+<!ENTITY version   "2026.06.29.2151">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,12 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.2151###
+- Issue #92:
+  - Notification delivery now uses a central event dispatcher for Unraid notifications, email and ntfy.
+  - Settings now allow channel-specific event selection and a reminder interval for overdue restore-test notifications.
+  - Scheduled restore-test overdue reminders are rate-limited and survive UI restarts.
+
 ###2026.06.29.1933###
 - Issue #98:
   - Dashboard job icons now use the configured job metadata, matching the Jobs page.
@@ -143,7 +149,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>62b9068f11eefd8d61cf4aa6fea58694</MD5>
+<MD5>1262fcf3072bbe54e036b647edefe250</MD5>
 </FILE>
 
 <!--
