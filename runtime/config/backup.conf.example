@@ -41,6 +41,9 @@ GLOBAL_SMTP_PORT="587"
 GLOBAL_SMTP_USER=""
 GLOBAL_SMTP_PASSWORD=""
 GLOBAL_SMTP_USE_TLS="true"
+NOTIFY_EMAIL_EVENTS="backup_failed"
+NOTIFY_UNRAID_EVENTS="backup_success,backup_warning,backup_failed,backup_skipped"
+NOTIFY_REMINDER_INTERVAL_HOURS="24"
 
 # =============================================================================
 # NTFY PUSH NOTIFICATIONS (optional)
