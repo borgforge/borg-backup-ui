@@ -26,7 +26,6 @@ _RESTORE_LOCK = threading.Lock()
 _RESTORE_KEEP = 20
 _RESTORE_RUNS_LOADED = False
 _RESTORE_HISTORY_KEEP = 100
-_RESTORE_HISTORY_MIGRATION_ID = "restore_history_v1_from_restore_runs"
 
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _ARCHIVE_RX = re.compile(r"^[a-zA-Z0-9_.:-]+$")
@@ -111,14 +110,6 @@ def _restore_history_index_file(config: dict) -> Path:
 
 def _restore_history_runs_dir(config: dict) -> Path:
     return _restore_history_dir(config) / "runs"
-
-
-def _restore_history_migration_state_file(config: dict) -> Path:
-    return _restore_history_dir(config) / "migration-state.json"
-
-
-def _restore_history_migration_log_file(config: dict) -> Path:
-    return _restore_history_dir(config) / "migrations.log.jsonl"
 
 
 def _write_json_atomic(path: Path, payload: dict) -> None:
@@ -225,37 +216,15 @@ def _write_history_index(config: dict, rows: list[dict]) -> None:
                 pass
 
 
-def _append_history_migration_log(config: dict, entry: dict) -> None:
-    fp = _restore_history_migration_log_file(config)
-    fp.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
-        **entry,
-    }
-    with fp.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-
-def _read_history_migration_state(config: dict) -> dict:
-    fp = _restore_history_migration_state_file(config)
-    if not fp.exists():
-        return {}
+def _central_restore_history_migration_state(config: dict) -> dict:
     try:
-        raw = json.loads(fp.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
+        from migrations.registry import read_central_migration_state
+        state = read_central_migration_state(config)
+        migrations = state.get("migrations") if isinstance(state.get("migrations"), dict) else {}
+        entry = migrations.get("restore_history_v1") if isinstance(migrations.get("restore_history_v1"), dict) else {}
+        return entry
     except Exception:
         return {}
-
-
-def _write_history_migration_state(config: dict, state: str, details: dict) -> None:
-    payload = {
-        "schema_version": 1,
-        "migration_id": _RESTORE_HISTORY_MIGRATION_ID,
-        "status": state,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "details": details,
-    }
-    _write_json_atomic(_restore_history_migration_state_file(config), payload)
 
 
 def _record_restore_history(config: dict, run: dict, source: str) -> None:
@@ -268,88 +237,6 @@ def _record_restore_history(config: dict, run: dict, source: str) -> None:
     rows = [row for row in _read_history_index(config) if str(row.get("restore_id") or "") != restore_id]
     rows.append(_history_summary_from_run(run))
     _write_history_index(config, rows)
-
-
-def _migrate_restore_runs_v1_to_history(config: dict, loaded: dict) -> tuple[dict, bool]:
-    state = _read_history_migration_state(config)
-
-    terminal = {
-        rid: run for rid, run in loaded.items()
-        if isinstance(run, dict) and _is_restore_terminal(run.get("state"))
-    }
-    active = {
-        rid: run for rid, run in loaded.items()
-        if isinstance(run, dict) and not _is_restore_terminal(run.get("state"))
-    }
-    known_history_ids = {
-        str(row.get("restore_id") or "").strip()
-        for row in _read_history_index(config)
-        if str(row.get("restore_id") or "").strip()
-    }
-    new_terminal = {
-        rid: run for rid, run in terminal.items()
-        if str(run.get("restore_id") or rid).strip() not in known_history_ids
-    }
-    if (
-        not terminal
-        and state.get("migration_id") == _RESTORE_HISTORY_MIGRATION_ID
-        and state.get("status") in {"applied", "not_applicable"}
-    ):
-        return loaded, False
-    if terminal and not new_terminal:
-        return active, True
-
-    details = {
-        "source_file": str(_restore_runs_file(config)),
-        "imported": 0,
-        "active_kept": len(active),
-        "already_imported": len(terminal) - len(new_terminal),
-        "errors": [],
-    }
-    status = "not_applicable"
-    if new_terminal:
-        status = "applied"
-        for rid, run in new_terminal.items():
-            try:
-                _record_restore_history(config, run, "restore-runs-v1-migration")
-                details["imported"] += 1
-            except Exception as exc:
-                details["errors"].append({"restore_id": rid, "error": str(exc)})
-        if details["errors"]:
-            status = "failed"
-
-    _write_history_migration_state(config, status, details)
-    _append_history_migration_log(config, {
-        "migration_id": _RESTORE_HISTORY_MIGRATION_ID,
-        "status": status,
-        "details": details,
-    })
-    return active if status != "failed" else loaded, bool(terminal) and status != "failed"
-
-
-def migrate_restore_history_from_legacy(config: dict) -> dict:
-    """
-    Startup migration entry point.
-
-    The migration itself is intentionally implemented in the restore-run loader so
-    stale running restores can be marked aborted before terminal entries are
-    moved to history. Startup calls this once; later API calls only observe the
-    already written migration state.
-    """
-    _ensure_restore_runs_loaded(config)
-    state = _read_history_migration_state(config)
-    if not state:
-        state = {
-            "migration_id": _RESTORE_HISTORY_MIGRATION_ID,
-            "status": "not_applicable",
-            "details": {
-                "source_file": str(_restore_runs_file(config)),
-                "imported": 0,
-                "active_kept": len(_RESTORE_RUNS),
-                "errors": [],
-            },
-        }
-    return state
 
 
 def _ensure_restore_runs_loaded(config: dict) -> None:
@@ -383,17 +270,17 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
                     lines = []
                 lines.append("Restore was marked as aborted after the server restarted.")
                 run["lines"] = lines[-200:]
+                try:
+                    _record_restore_history(config, run, "restore-run-restart-recovery")
+                except Exception:
+                    pass
                 changed = True
-
-        loaded, migrated = _migrate_restore_runs_v1_to_history(config, loaded)
-        if migrated:
-            changed = True
 
         _RESTORE_RUNS.clear()
         _RESTORE_RUNS.update(loaded)
         _RESTORE_RUNS_LOADED = True
 
-        if changed or (fp.exists() and not loaded):
+        if changed:
             try:
                 _persist_restore_runs(config)
             except Exception:
@@ -1402,7 +1289,7 @@ def list_restore_history(config: dict, limit: int = 20, offset: int = 0) -> dict
         "total": len(rows),
         "limit": limit,
         "offset": offset,
-        "migration": _read_history_migration_state(config),
+        "migration": _central_restore_history_migration_state(config),
     }
 
 
@@ -1427,21 +1314,7 @@ def get_restore_history_detail(config: dict, restore_id: str) -> dict:
 
 def get_restore_history_migration(config: dict) -> dict:
     _ensure_restore_runs_loaded(config)
-    state = _read_history_migration_state(config)
-    lines: list[dict] = []
-    fp = _restore_history_migration_log_file(config)
-    if fp.exists():
-        try:
-            for line in fp.read_text(encoding="utf-8").splitlines()[-50:]:
-                try:
-                    item = json.loads(line)
-                    if isinstance(item, dict):
-                        lines.append(item)
-                except json.JSONDecodeError:
-                    continue
-        except OSError:
-            lines = []
-    return {"state": state, "log": lines}
+    return {"state": _central_restore_history_migration_state(config), "log": []}
 
 
 def get_restore_state(config: dict, restore_id: str) -> dict:

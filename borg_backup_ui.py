@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.1544"
+APP_VERSION = "2026.06.29.1626"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -129,7 +129,7 @@ def _read_migration_state(config: dict) -> dict:
 
 
 def _migration_state_is_final(state: str) -> bool:
-    return state in {"applied", "baseline_detected", "imported_from_legacy_marker", "not_applicable"}
+    return state in {"applied", "baseline_detected", "imported_from_legacy_marker", "not_applicable", "not_required", "skipped"}
 
 
 def _storage_paths_state(details: dict) -> str:
@@ -151,6 +151,8 @@ def _restore_history_state(details: dict) -> str:
         return "failed"
     if status == "applied" or imported > 0:
         return "applied"
+    if status in {"not_required", "skipped"}:
+        return status
     if status == "not_applicable":
         return "not_applicable"
     return "not_applicable"
@@ -3140,10 +3142,17 @@ def main():
             "forced_conf_write": False,
         },
         "restore_history": {
-            "status": "not_applicable",
+            "status": "not_required",
             "imported": 0,
             "active_kept": 0,
             "errors": 0,
+        },
+        "startup_migrations": {
+            "status": "ok",
+            "applied": [],
+            "skipped": [],
+            "failed": [],
+            "results": {},
         },
     }
     try:
@@ -3189,29 +3198,36 @@ def main():
         migration_details["storage_paths"] = {"status": "error", "error": str(exc)}
         _log(f"WARNING: Storage path migration skipped: {exc}")
     try:
-        from restore_api import migrate_restore_history_from_legacy
-        restore_mig = migrate_restore_history_from_legacy(config)
+        from migrations.registry import run_startup_migrations
+        startup_mig = run_startup_migrations(config)
+        migration_details["startup_migrations"] = startup_mig
+        restore_mig = (startup_mig.get("results") or {}).get("restore_history_v1", {}) if isinstance(startup_mig.get("results"), dict) else {}
         restore_details = restore_mig.get("details") if isinstance(restore_mig.get("details"), dict) else {}
         imported = int(restore_details.get("imported") or 0)
         active_kept = int(restore_details.get("active_kept") or 0)
         errors = len(restore_details.get("errors") or [])
-        status = str(restore_mig.get("status") or "not_applicable")
+        status = str(restore_mig.get("status") or "not_required")
         migration_details["restore_history"] = {
             "status": status,
+            "migration_id": str(restore_mig.get("migration_id") or "restore_history_v1"),
+            "introduced_in": str(restore_mig.get("introduced_in") or ""),
+            "runner": str(restore_mig.get("runner") or restore_details.get("runner") or ""),
             "imported": imported,
             "active_kept": active_kept,
             "errors": errors,
+            "already_imported": int(restore_details.get("already_imported") or 0),
             "source_file": str(restore_details.get("source_file") or ""),
         }
-        if errors:
+        if errors or startup_mig.get("failed"):
             migration_ok = False
-        migration_messages.append(f"restore_history={status}(imported={imported},active_kept={active_kept},errors={errors})")
-        _log(f"Restore-History-Migration: status={status}, imported={imported}, active_kept={active_kept}, errors={errors}")
+        migration_messages.extend([str(msg) for msg in (startup_mig.get("messages") or [])])
+        _log(f"Startup-Migrationen: status={startup_mig.get('status')}, applied={startup_mig.get('applied')}, skipped={startup_mig.get('skipped')}, failed={startup_mig.get('failed')}")
     except Exception as exc:
         migration_ok = False
         migration_messages.append(f"restore_history=error:{exc}")
         migration_details["restore_history"] = {"status": "failed", "error": str(exc), "errors": 1}
-        _log(f"WARNING: Restore history migration skipped: {exc}")
+        migration_details["startup_migrations"] = {"status": "failed", "failed": ["startup_registry"], "error": str(exc)}
+        _log(f"WARNING: Startup migrations skipped: {exc}")
     reason_code = "no_changes"
     reason_text = "No changes required"
     storage_info = migration_details.get("storage_paths", {})

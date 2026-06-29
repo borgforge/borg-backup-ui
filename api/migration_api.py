@@ -347,7 +347,9 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
         conf_lines = []
     migrations = migration_state.get("migrations") if isinstance(migration_state.get("migrations"), dict) else {}
     storage_state = migrations.get("storage_paths_v1") if isinstance(migrations.get("storage_paths_v1"), dict) else {}
+    restore_history_state = migrations.get("restore_history_v1") if isinstance(migrations.get("restore_history_v1"), dict) else {}
     storage_state_name = str(storage_state.get("state", "") or "").strip()
+    restore_history_state_name = str(restore_history_state.get("state", "") or "").strip()
     storage_marker = str(raw_conf.get("MIGRATION_STORAGE_PATHS_VERSION", "")).strip()
     if not storage_marker:
         storage_marker = _disabled_assignment_value(conf_lines, "MIGRATION_STORAGE_PATHS_VERSION")
@@ -394,6 +396,21 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
                 "marker": storage_marker or "",
                 "legacy_config_key": "MIGRATION_STORAGE_PATHS_VERSION",
             },
+        ),
+        _status_item(
+            "restore_history_v1",
+            "Restore History migration",
+            "applied" if restore_history_state_name in {"applied", "not_required", "skipped", "not_applicable"} else ("failed" if restore_history_state_name == "failed" else "pending"),
+            (
+                "Restore History migration is complete in migration state."
+                if restore_history_state_name in {"applied", "not_required", "skipped", "not_applicable"}
+                else (
+                    "Restore History migration is marked as failed in migration state."
+                    if restore_history_state_name == "failed" else "Restore History migration has not been recorded yet."
+                )
+            ),
+            category="migration",
+            details=restore_history_state,
         ),
         _status_item(
             "config_backup_conf_schema",

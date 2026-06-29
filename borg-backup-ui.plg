@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1544">
+<!ENTITY version   "2026.06.29.1626">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.1626###
+- Issue #93:
+  - Restore History migration now runs through the central migration registry instead of restore_api.
+  - Obsolete restore-history-internal migration tracking files are cleaned up; central migration-state.json remains authoritative.
+
 ###2026.06.29.1544###
 - Issue #93:
   - Restore History migration now skips legacy restore-run entries that were already imported by restore ID.
@@ -122,7 +127,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>ebdcbb8a79a28bb4184959292432653c</MD5>
+<MD5>ad8482aa835ebe46cdece05ce7d5c3a8</MD5>
 </FILE>
 
 <!--
