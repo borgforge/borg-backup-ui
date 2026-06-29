@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.1704"
+APP_VERSION = "2026.06.29.1738"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -926,6 +926,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/schedules": self._delete_schedule,
             "/api/jobs": self._delete_job,
             "/api/restore-tests": self._delete_restore_test,
+            "/api/restore/history": self._delete_restore_history,
             "/api/auth/users": self._delete_auth_user,
         }
         fn = routes.get(path)
@@ -2160,6 +2161,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_restore_history_migration(self) -> dict:
         from restore_api import get_restore_history_migration
         return get_restore_history_migration(self.config)
+
+    def _delete_restore_history(self) -> dict:
+        from restore_api import delete_restore_history_entry
+        body = self._read_json_body()
+        return delete_restore_history_entry(self.config, body.get("restore_id", ""))
 
     def _post_client_log(self) -> dict:
         body = self._read_json_body() if self.headers.get("Content-Type", "").lower().startswith("application/json") else {}

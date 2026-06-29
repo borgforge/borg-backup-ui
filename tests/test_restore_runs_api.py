@@ -315,7 +315,7 @@ def test_restore_history_registry_rechecks_old_completion_without_runner(tmp_pat
     assert result["details"]["already_imported"] == 0
 
 
-def test_restore_history_retention_keeps_latest_details(tmp_path: Path):
+def test_restore_history_keeps_all_details(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     for idx in range(105):
         restore_api._record_restore_history(config, {
@@ -331,7 +331,29 @@ def test_restore_history_retention_keeps_latest_details(tmp_path: Path):
     history = restore_api.list_restore_history(config, limit=200)
     runs_dir = tmp_path / "config" / "restore-history" / "runs"
 
-    assert history["total"] == 100
+    assert history["total"] == 105
     assert history["runs"][0]["restore_id"] == "run-104"
-    assert not (runs_dir / "run-0.json").exists()
+    assert (runs_dir / "run-0.json").exists()
     assert (runs_dir / "run-104.json").exists()
+
+
+def test_restore_history_delete_removes_index_and_detail(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    restore_api._record_restore_history(config, {
+        "restore_id": "delete-me",
+        "state": "done",
+        "started_at": "2026-06-29T08:00:00",
+        "finished_at": "2026-06-29T08:00:01",
+        "job_key": "appdata_local",
+        "archive": "appdata-archive",
+        "lines": ["restore done"],
+    }, "test")
+    runs_dir = tmp_path / "config" / "restore-history" / "runs"
+
+    result = restore_api.delete_restore_history_entry(config, "delete-me")
+    history = restore_api.list_restore_history(config, limit=0)
+
+    assert result["deleted"] is True
+    assert result["detail_deleted"] is True
+    assert history["total"] == 0
+    assert not (runs_dir / "delete-me.json").exists()

@@ -25,7 +25,6 @@ _RESTORE_RUNS: dict = {}
 _RESTORE_LOCK = threading.Lock()
 _RESTORE_KEEP = 20
 _RESTORE_RUNS_LOADED = False
-_RESTORE_HISTORY_KEEP = 100
 
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _ARCHIVE_RX = re.compile(r"^[a-zA-Z0-9_.:-]+$")
@@ -203,17 +202,10 @@ def _write_history_index(config: dict, rows: list[dict]) -> None:
     payload = {
         "schema_version": 1,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "retention_keep": _RESTORE_HISTORY_KEEP,
-        "runs": rows[:_RESTORE_HISTORY_KEEP],
+        "retention_keep": None,
+        "runs": rows,
     }
     _write_json_atomic(_restore_history_index_file(config), payload)
-    keep_ids = {str(row.get("restore_id") or "") for row in payload["runs"]}
-    for detail in _restore_history_runs_dir(config).glob("*.json"):
-        if detail.stem not in keep_ids:
-            try:
-                detail.unlink()
-            except OSError:
-                pass
 
 
 def _central_restore_history_migration_state(config: dict) -> dict:
@@ -1275,17 +1267,20 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
 def list_restore_history(config: dict, limit: int = 20, offset: int = 0) -> dict:
     _ensure_restore_runs_loaded(config)
     try:
-        limit = max(1, min(100, int(limit)))
+        limit = int(limit)
     except (TypeError, ValueError):
         limit = 20
+    if limit > 0:
+        limit = min(1000, limit)
     try:
         offset = max(0, int(offset))
     except (TypeError, ValueError):
         offset = 0
     rows = _read_history_index(config)
     rows.sort(key=lambda item: str(item.get("started_at") or ""), reverse=True)
+    selected = rows[offset:] if limit <= 0 else rows[offset:offset + limit]
     return {
-        "runs": rows[offset:offset + limit],
+        "runs": selected,
         "total": len(rows),
         "limit": limit,
         "offset": offset,
@@ -1310,6 +1305,34 @@ def get_restore_history_detail(config: dict, restore_id: str) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("Invalid restore history detail")
     return raw
+
+
+def delete_restore_history_entry(config: dict, restore_id: str) -> dict:
+    _ensure_restore_runs_loaded(config)
+    rid = str(restore_id or "").strip()
+    if not rid:
+        raise ValueError("restore_id is required")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", rid):
+        raise ValueError("Invalid restore_id")
+    rows = _read_history_index(config)
+    remaining = [row for row in rows if str(row.get("restore_id") or "") != rid]
+    if len(remaining) == len(rows):
+        raise ValueError("Unknown restore_id")
+    detail_deleted = False
+    detail = _restore_history_runs_dir(config) / f"{rid}.json"
+    try:
+        if detail.exists():
+            detail.unlink()
+            detail_deleted = True
+    except OSError as exc:
+        raise ValueError(f"Could not delete restore history detail: {exc}") from exc
+    _write_history_index(config, remaining)
+    return {
+        "deleted": True,
+        "restore_id": rid,
+        "detail_deleted": detail_deleted,
+        "remaining": len(remaining),
+    }
 
 
 def get_restore_history_migration(config: dict) -> dict:

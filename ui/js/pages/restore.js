@@ -444,6 +444,7 @@ function renderRestoreHistory(payload) {
       <div class="restore-history-card-actions">
         <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
         <button type="button" class="btn btn-secondary btn-sm" data-restore-history-action="detail" data-restore-id="${escHtml(id)}" aria-expanded="${selected ? 'true' : 'false'}">${escHtml(selected ? restoreT('hideRunDetails') : restoreT('showRunDetails'))}</button>
+        <button type="button" class="btn btn-danger btn-sm" data-restore-history-action="delete" data-restore-id="${escHtml(id)}">${escHtml(restoreT('deleteHistoryRun'))}</button>
       </div>
       <div class="restore-history-detail" id="restore-history-detail-${escHtml(id)}"></div>
     </article>`;
@@ -452,7 +453,7 @@ function renderRestoreHistory(payload) {
 
 async function restoreLoadHistory() {
   try {
-    const res = await fetch('/api/restore/history?limit=10', { credentials: 'include' });
+    const res = await fetch('/api/restore/history?limit=0', { credentials: 'include' });
     const data = await res.json();
     if (!res.ok || data.error) return;
     renderRestoreHistory(data);
@@ -461,6 +462,29 @@ async function restoreLoadHistory() {
     }
   } catch (_) {
     // Restore history is supporting context; do not block the wizard on failures.
+  }
+}
+
+async function restoreDeleteHistoryEntry(restoreId) {
+  const id = String(restoreId || '').trim();
+  if (!id) return;
+  const run = (restoreState.history || []).find((item) => String(item.restore_id || '') === id) || {};
+  const label = run.job_key || id;
+  const ok = window.confirm(restoreT('deleteHistoryRunConfirm', { name: label, id }));
+  if (!ok) return;
+  try {
+    const res = await fetch('/api/restore/history', {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restore_id: id }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status, data.error || ''));
+    if (restoreState.historyDetailId === id) restoreState.historyDetailId = '';
+    await restoreLoadHistory();
+  } catch (err) {
+    showMsg('restore-assist-msg', 'error', restoreT('deleteHistoryRunFailed', { message: err.message }));
   }
 }
 
@@ -515,10 +539,16 @@ function onRestoreRunsClick(event) {
 }
 
 function onRestoreHistoryClick(event) {
-  const btn = event.target.closest('[data-restore-history-action="detail"]');
+  const btn = event.target.closest('[data-restore-history-action]');
   if (!btn) return;
   const restoreId = String(btn.dataset.restoreId || '').trim();
-  if (restoreId) restoreLoadHistoryDetail(restoreId);
+  if (!restoreId) return;
+  const action = String(btn.dataset.restoreHistoryAction || '');
+  if (action === 'delete') {
+    restoreDeleteHistoryEntry(restoreId);
+    return;
+  }
+  if (action === 'detail') restoreLoadHistoryDetail(restoreId);
 }
 
 async function restoreOpenRun(restoreId) {

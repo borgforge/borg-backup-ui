@@ -16,7 +16,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - The migration writes `config/restore-history/migration-state.json` and `config/restore-history/migrations.log.jsonl` with migration id, status, timestamp, affected counts and errors.
   - The same migration is also reported through the central startup migration state so it is visible under Settings > System health & migration.
   - `restore-runs.json` is kept as active-run state only; stale running entries found after restart are marked aborted and moved to history.
-  - Restore History retention keeps the latest 100 completed runs and removes unreferenced per-run detail files.
+  - Restore History keeps completed runs as individual detail files and allows users to delete history entries manually.
 
 ### Issue #82
 - Wizard:
