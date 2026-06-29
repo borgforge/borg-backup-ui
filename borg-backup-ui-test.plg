@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1626">
+<!ENTITY version   "2026.06.29.1704">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.1704###
+- Issue #93:
+  - Restore History migration state now records central registry no-op results correctly after earlier migration attempts.
+
 ###2026.06.29.1626###
 - Issue #93:
   - Restore History migration now runs through the central migration registry instead of restore_api.
@@ -127,7 +131,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>aa3a56f75bb966a38c1b3a3451502701</MD5>
+<MD5>94af7a4a6cc23f90730e7172fd6cbdfd</MD5>
 </FILE>
 
 <!--
