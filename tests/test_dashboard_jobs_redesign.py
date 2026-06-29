@@ -98,6 +98,16 @@ def test_dashboard_jobs_locale_contract_matches() -> None:
     assert '"locationStoragebox": "Storagebox"' in english
 
 
+def test_dashboard_uses_configured_job_icons() -> None:
+    script = _read("ui/js/pages/dashboard.js")
+
+    assert "b.icon = job.icon || b.icon || '';" in script
+    assert "b.icon_color = job.icon_color || b.icon_color || '';" in script
+    assert "const iconKey = typeof resolveJobIcon === 'function' ? resolveJobIcon(backup)" in script
+    assert "typeIcon(iconKey)" in script
+    assert "iconColorClass" in script
+
+
 def test_dashboard_labels_relative_time_and_duration_separately() -> None:
     script = _read("ui/js/pages/dashboard.js")
     css = _read("ui/dashboard-jobs.css")

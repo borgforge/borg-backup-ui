@@ -68,6 +68,10 @@ async function refreshStatus() {
           key:         job.key,
           backup_type: job.backup_type,
           location:    job.location,
+          display_name: job.display_name || job.name || '',
+          name:        job.name || job.display_name || '',
+          icon:        job.icon || '',
+          icon_color:  job.icon_color || '',
           enabled:     job.enabled !== false,
           never_run:   true,
         });
@@ -78,6 +82,10 @@ async function refreshStatus() {
       const job = jobMap[String(b.key || '').toLowerCase()];
       if (!job) continue;
       b.enabled = job.enabled !== false;
+      b.display_name = job.display_name || job.name || b.display_name || '';
+      b.name = job.name || job.display_name || b.name || '';
+      b.icon = job.icon || b.icon || '';
+      b.icon_color = job.icon_color || b.icon_color || '';
     }
 
     const coreState = window.BBUI.core.state;
@@ -377,6 +385,9 @@ function renderDashboardInventoryRow(backup) {
   if (checkStatus === 'ok' && isStaleDate(backup.repository_check_date)) checkStatus = 'overdue';
   const checkLabel = checkStatus ? repoCheckLabel({ ...backup, repository_check_status: checkStatus }) : dashboardT('dashboard.checkUnknown');
   const type = capitalize(backup.backup_type || '—');
+  const iconKey = typeof resolveJobIcon === 'function' ? resolveJobIcon(backup) : (backup.icon || backup.backup_type);
+  const iconColorKey = typeof resolveJobIconColor === 'function' ? resolveJobIconColor(backup) : '';
+  const iconColorClass = iconColorKey ? ` type-icon-color-${iconColorKey}` : '';
   const identityDetail = backup.archive_name || backup.key || dashboardT('dashboard.neverExecuted');
   const runTime = dashboardRelativeRunTime(backup.timestamp);
   const runDuration = dashboardRunDuration(backup.duration_seconds);
@@ -395,7 +406,7 @@ function renderDashboardInventoryRow(backup) {
 
   return `<tr class="dashboard-inventory-row ${run.cls}">
     <td><div class="dashboard-backup-identity">
-      <span class="type-icon type-icon-${escHtml(String(backup.backup_type || 'sonstiges').toLowerCase())}">${typeIcon(backup.backup_type)}</span>
+      <span class="type-icon type-icon-${escHtml(String(backup.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</span>
       <span><strong class="dashboard-cell-primary">${escHtml(type)}</strong><span class="dashboard-cell-detail mono" title="${escHtml(identityDetail)}">${escHtml(identityDetail)}</span></span>
     </div></td>
     <td><span class="loc-badge ${location}">${escHtml(dashboardLocationLabel(location))}</span></td>
