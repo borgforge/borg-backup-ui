@@ -51,6 +51,7 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - ntfy wird ebenfalls unter **Einstellungen > Allgemein** gepflegt.
 - Für ntfy werden Server-URL, Topic und optional Authentifizierung benötigt. Passwort und Token werden als Secret-Dateien gespeichert.
 - Nach dem Eintragen eine ntfy-Testnachricht senden.
+- E-Mail, Unraid-Systemmeldungen und ntfy besitzen eigene Ereignis-Auswahlen. Reminder werden zentral begrenzt, damit überfällige Prüfungen nicht bei jedem Poll erneut melden.
 - Der Wochenbericht wird unter **Einstellungen > Backup** aktiviert und terminiert.
 - Der Wochenbericht nutzt entweder seinen eigenen Empfänger oder, wenn leer, den globalen E-Mail-Empfänger.
 
@@ -112,6 +113,7 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - Backup-Fehler können E-Mails auslösen; reguläre Zusammenfassungen laufen über den Wochenbericht.
 - ntfy-Konfiguration und Testnachricht liegen ebenfalls unter **Einstellungen > Allgemein**.
 - ntfy kann Backup-Erfolg, Backup-Fehler/Warnungen und übersprungene Backups als Push-Benachrichtigung senden.
+- Überfällige geplante Restore-Tests können als Reminder gemeldet werden, wenn das jeweilige Ereignis im Kanal aktiviert ist.
 - ntfy-Passwort und Access Token werden nach dem Speichern nicht im Klartext angezeigt.
 - Der Wochenbericht wird unter **Einstellungen > Backup** aktiviert. Er verwendet die gespeicherte SMTP-Konfiguration.
 - Testmails, Wochenberichte und technische Ausgaben werden immer auf Englisch versendet.

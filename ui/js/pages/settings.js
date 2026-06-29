@@ -192,6 +192,7 @@ function renderSettings(data, systemHealth) {
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
       ${renderSettingsSMTP(data.smtp || {})}
+      ${renderSettingsUnraidNotifications(data.unraid_notifications || {})}
       ${renderSettingsNtfy(data.ntfy || {})}
       ${renderSettingsAbout()}
     </div>
@@ -2562,6 +2563,8 @@ async function deleteConfigBackupsKeepLatest() {
 
 function renderSettingsSMTP(s) {
   const passwordSet = String(s.GLOBAL_SMTP_PASSWORD_SET || 'false') === 'true';
+  const emailEvents = s.NOTIFY_EMAIL_EVENTS || 'backup_failed';
+  const eventRows = notificationEventRows(emailEvents, notificationEventOptions(), 'data-email-event', '_syncEmailEvents');
   return settingsCard(settingsT('forms.smtpTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
     `<div class="settings-body two-col">
@@ -2577,6 +2580,11 @@ function renderSettingsSMTP(s) {
           onchange="markSettingsDirty()">
         ${settingsT('forms.useTls')}
       </label>
+      <input type="hidden" data-key="NOTIFY_EMAIL_EVENTS" value="${escHtml(emailEvents)}">
+      <fieldset class="settings-fieldset" style="grid-column:1/-1">
+        <legend>${settingsT('forms.notifyEvents')}</legend>
+        <div class="settings-body two-col">${eventRows}</div>
+      </fieldset>
       <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;margin-top:4px">
         <button class="btn btn-secondary btn-sm" id="smtp-test-btn" data-settings-action="send-test-email">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -2616,19 +2624,69 @@ async function sendTestEmail() {
   }
 }
 
-function _ntfyEventEnabled(events, key) {
+function _notificationEventEnabled(events, key) {
   return String(events || '').split(',').map((item) => item.trim()).includes(key);
 }
 
-function _syncNtfyEvents() {
-  const hidden = document.querySelector('[data-key="NTFY_EVENTS"]');
+function _syncNotificationEvents(targetKey, attrName) {
+  const hidden = document.querySelector(`[data-key="${targetKey}"]`);
   if (!hidden) return;
-  const values = Array.from(document.querySelectorAll('[data-ntfy-event]'))
+  const values = Array.from(document.querySelectorAll(`[${attrName}]`))
     .filter((el) => el.checked)
-    .map((el) => el.dataset.ntfyEvent)
+    .map((el) => el.getAttribute(attrName))
     .filter(Boolean);
   hidden.value = values.join(',');
   markSettingsDirty();
+}
+
+function _syncNtfyEvents() {
+  _syncNotificationEvents('NTFY_EVENTS', 'data-ntfy-event');
+}
+
+function _syncEmailEvents() {
+  _syncNotificationEvents('NOTIFY_EMAIL_EVENTS', 'data-email-event');
+}
+
+function _syncUnraidEvents() {
+  _syncNotificationEvents('NOTIFY_UNRAID_EVENTS', 'data-unraid-event');
+}
+
+function notificationEventRows(events, rows, attrName, syncFn) {
+  return rows.map(([key, label]) => `
+    <label class="form-checkbox-row">
+      <input type="checkbox" ${attrName}="${key}" ${_notificationEventEnabled(events, key) ? 'checked' : ''} onchange="${syncFn}()">
+      ${label}
+    </label>`).join('');
+}
+
+function notificationEventOptions() {
+  return [
+    ['backup_success', settingsT('forms.notifyEventBackupSuccess')],
+    ['backup_warning', settingsT('forms.notifyEventBackupWarning')],
+    ['backup_failed', settingsT('forms.notifyEventBackupFailed')],
+    ['backup_skipped', settingsT('forms.notifyEventBackupSkipped')],
+    ['backup_overdue', settingsT('forms.notifyEventBackupOverdue')],
+    ['restore_test_success', settingsT('forms.notifyEventRestoreTestSuccess')],
+    ['restore_test_failed', settingsT('forms.notifyEventRestoreTestFailed')],
+    ['restore_test_overdue', settingsT('forms.notifyEventRestoreTestOverdue')],
+  ];
+}
+
+function renderSettingsUnraidNotifications(s) {
+  const events = s.NOTIFY_UNRAID_EVENTS || 'backup_success,backup_warning,backup_failed,backup_skipped';
+  const interval = s.NOTIFY_REMINDER_INTERVAL_HOURS || '24';
+  const eventRows = notificationEventRows(events, notificationEventOptions(), 'data-unraid-event', '_syncUnraidEvents');
+  return settingsCard(settingsT('forms.unraidNotifyTitle'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+    `<div class="settings-body two-col">
+      <div class="status-message info" style="grid-column:1/-1">${settingsT('forms.unraidNotifyHint')}</div>
+      ${fnum('NOTIFY_REMINDER_INTERVAL_HOURS', settingsT('forms.notifyReminderInterval'), interval)}
+      <input type="hidden" data-key="NOTIFY_UNRAID_EVENTS" value="${escHtml(events)}">
+      <fieldset class="settings-fieldset" style="grid-column:1/-1">
+        <legend>${settingsT('forms.notifyEvents')}</legend>
+        <div class="settings-body two-col">${eventRows}</div>
+      </fieldset>
+    </div>`);
 }
 
 function renderSettingsNtfy(n) {
@@ -2639,18 +2697,7 @@ function renderSettingsNtfy(n) {
   const priorityOptions = ['default', 'min', 'low', 'high', 'urgent']
     .map((value) => `<option value="${value}" ${(n.NTFY_PRIORITY || 'default') === value ? 'selected' : ''}>${settingsT(`forms.ntfyPriority${value.charAt(0).toUpperCase()}${value.slice(1)}`)}</option>`)
     .join('');
-  const eventRows = [
-    ['backup_success', settingsT('forms.ntfyEventBackupSuccess')],
-    ['backup_failed', settingsT('forms.ntfyEventBackupFailed')],
-    ['backup_skipped', settingsT('forms.ntfyEventBackupSkipped')],
-    ['restore_test_success', settingsT('forms.ntfyEventRestoreTestSuccess')],
-    ['restore_test_failed', settingsT('forms.ntfyEventRestoreTestFailed')],
-    ['restore_test_overdue', settingsT('forms.ntfyEventRestoreTestOverdue')],
-  ].map(([key, label]) => `
-    <label class="form-checkbox-row">
-      <input type="checkbox" data-ntfy-event="${key}" ${_ntfyEventEnabled(events, key) ? 'checked' : ''} onchange="_syncNtfyEvents()">
-      ${label}
-    </label>`).join('');
+  const eventRows = notificationEventRows(events, notificationEventOptions(), 'data-ntfy-event', '_syncNtfyEvents');
 
   return settingsCard(settingsT('forms.ntfyTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,

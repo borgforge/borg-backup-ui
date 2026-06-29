@@ -6,10 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from . import restore_history_v1
+from . import notification_events_v1, restore_history_v1
 
 MIGRATIONS = [
     restore_history_v1,
+    notification_events_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "skipped"}

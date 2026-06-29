@@ -209,13 +209,6 @@ class VmManager:
                 "ERROR: %d VM(s) could not be shut down: %s",
                 len(still_running), still_running,
             )
-            from lib.notifications import notify
-            notify(
-                level="alert",
-                subject="VM backup aborted",
-                description=f"{len(still_running)} VM(s) could not be shut down.",
-                job_name="Borg Backup (VMs)",
-            )
             raise SystemExit(1)
 
         logger.info("All VMs shut down successfully")
@@ -280,13 +273,6 @@ class VmManager:
             logger.error(
                 "ERROR: %d selected VM(s) could not be shut down: %s",
                 len(still_running), still_running,
-            )
-            from lib.notifications import notify
-            notify(
-                level="alert",
-                subject="VM backup aborted",
-                description=f"{len(still_running)} selected VM(s) could not be shut down.",
-                job_name="Borg Backup (VMs)",
             )
             raise SystemExit(1)
 

@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.1933"
+APP_VERSION = "2026.06.29.2151"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -248,11 +248,42 @@ def _write_migration_state(
     ):
         restore_history_details = previous_restore_history["details"]
 
+    generic_migrations = dict(previous_migrations)
+    startup = run_details.get("startup_migrations") if isinstance(run_details.get("startup_migrations"), dict) else {}
+    startup_results = startup.get("results") if isinstance(startup.get("results"), dict) else {}
+    for migration_id, result in startup_results.items():
+        if migration_id in {"restore_history_v1"}:
+            continue
+        if not isinstance(result, dict):
+            continue
+        status = str(result.get("status") or result.get("previous_state") or "not_required")
+        if status == "skipped" and str(result.get("previous_state") or "").strip():
+            status = str(result.get("previous_state"))
+        details = result.get("details") if isinstance(result.get("details"), dict) else {}
+        previous_entry = previous_migrations.get(migration_id) if isinstance(previous_migrations.get(migration_id), dict) else {}
+        if (
+            not effective_run
+            and _migration_state_is_final(str(previous_entry.get("state", "") or ""))
+            and status in {"not_required", "skipped"}
+        ):
+            generic_migrations[migration_id] = previous_entry
+            continue
+        generic_migrations[migration_id] = {
+            "state": status,
+            "checked_at": ts,
+            "source": "startup_check",
+            "details": {
+                **details,
+                "runner": str(result.get("runner") or details.get("runner") or "central_migration_registry"),
+                "introduced_in": str(result.get("introduced_in") or details.get("introduced_in") or ""),
+            },
+        }
+
     payload: dict = {
         "schema_version": 2,
         "last_run": last_run,
         "migrations": {
-            **previous_migrations,
+            **generic_migrations,
             "storage_paths_v1": {
                 "state": storage_state,
                 "checked_at": storage_checked_at,
@@ -3106,6 +3137,40 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     allow_reuse_address = True
 
 
+def _start_notification_reminder_loop(config: dict) -> threading.Thread | None:
+    def _interval_seconds() -> int:
+        try:
+            from config_api import read_expanded_conf
+            conf = read_expanded_conf(config)
+            raw = str(conf.get("NOTIFY_REMINDER_CHECK_INTERVAL_SECONDS", "3600") or "3600")
+            return max(300, int(raw.strip()))
+        except Exception:
+            return 3600
+
+    def _run() -> None:
+        time.sleep(20)
+        while True:
+            try:
+                from notification_reminder_api import run_due_notification_reminders
+                result = run_due_notification_reminders(config)
+                if int(result.get("checked") or 0) or int(result.get("sent") or 0):
+                    _log(
+                        "Notification reminders checked: "
+                        f"checked={result.get('checked')} sent={result.get('sent')} skipped={result.get('skipped')}"
+                    )
+            except Exception as exc:
+                _log(f"WARNING: Notification reminder check failed: {exc}")
+            time.sleep(_interval_seconds())
+
+    try:
+        thread = threading.Thread(target=_run, name="notification-reminders", daemon=True)
+        thread.start()
+        return thread
+    except Exception as exc:
+        _log(f"WARNING: Notification reminder loop could not be started: {exc}")
+        return None
+
+
 def _apply_runtime_dirs_from_conf(config: dict) -> None:
     """Synchronisiert runtime-pfade aus backup.conf in die laufende UI-Konfiguration."""
     try:
@@ -3292,6 +3357,8 @@ def main():
         _log("Cron-Schedules angewendet.")
     except Exception as exc:
         _log(f"WARNING: Cron schedules could not be applied: {exc}")
+
+    _start_notification_reminder_loop(config)
 
     port = int(config["PORT"])
     bind = config["BIND"]
