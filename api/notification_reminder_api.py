@@ -200,10 +200,68 @@ def _schedule_period_seconds(cron: str) -> int:
     if dom == "*" and dow == "*":
         return int(36 * 3600)
     if dom == "*" and dow != "*":
-        return int(8 * 86400)
+        dow_values = _parse_cron_dow_values(dow)
+        if not dow_values:
+            return 0
+        max_gap_days = _max_cron_dow_gap_days(dow_values)
+        if max_gap_days <= 1:
+            return int(36 * 3600)
+        return int((max_gap_days * 86400) + (12 * 3600))
     if dom != "*" and dow == "*":
         return int(32 * 86400)
     return 0
+
+
+def _parse_cron_dow_values(raw: str) -> set[int]:
+    values: set[int] = set()
+    text = str(raw or "").strip()
+    if not text or text == "*":
+        return set(range(7))
+    for part in text.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        if "/" in item:
+            return set()
+        if "-" in item:
+            start_raw, end_raw = item.split("-", 1)
+            try:
+                start = int(start_raw)
+                end = int(end_raw)
+            except ValueError:
+                return set()
+            if start > end:
+                return set()
+            for value in range(start, end + 1):
+                normalized = 0 if value == 7 else value
+                if normalized < 0 or normalized > 6:
+                    return set()
+                values.add(normalized)
+            continue
+        try:
+            value = int(item)
+        except ValueError:
+            return set()
+        normalized = 0 if value == 7 else value
+        if normalized < 0 or normalized > 6:
+            return set()
+        values.add(normalized)
+    return values
+
+
+def _max_cron_dow_gap_days(values: set[int]) -> int:
+    days = sorted(values)
+    if not days:
+        return 0
+    if len(days) == 1:
+        return 7
+    gaps = []
+    for idx, day in enumerate(days):
+        next_day = days[(idx + 1) % len(days)]
+        if idx == len(days) - 1:
+            next_day += 7
+        gaps.append(next_day - day)
+    return max(gaps)
 
 
 def _parse_status_time(raw: str) -> datetime | None:

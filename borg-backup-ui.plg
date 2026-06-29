@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.2248">
+<!ENTITY version   "2026.06.29.2324">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.2324###
+- Issue #92:
+  - Backup overdue reminders now support weekday cron ranges and lists such as 0 9 * * 1-5.
+
 ###2026.06.29.2248###
 - Issue #92:
   - Applied startup migrations are now written to migrations.log.jsonl so the latest migration summary shows the correct run time and actions.
@@ -157,7 +161,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>0cd740955aaf7006e9228aad4fcc86d2</MD5>
+<MD5>332453a55f1062b4869804d36a88df1d</MD5>
 </FILE>
 
 <!--

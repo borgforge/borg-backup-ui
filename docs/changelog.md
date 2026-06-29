@@ -11,6 +11,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - System health now lists recorded startup migrations such as `notification_events_v1` in an executed migrations section.
   - Migration entries show status, changed keys, execution timestamp and introduced version so central notification migrations are auditable from the UI.
   - Applied startup migrations now write to `migrations.log.jsonl`, so the latest migration summary uses the actual latest migration run.
+  - Backup overdue reminders now support weekday cron ranges and lists such as `0 9 * * 1-5` instead of treating every day-of-week restriction as a weekly schedule.
 
 ### Issue #93
 - Browse & Restore:

@@ -93,6 +93,13 @@ def test_backup_overdue_reminder_uses_supported_schedules(monkeypatch, tmp_path)
     assert calls == ["Borg Backup UI: Backup overdue"]
 
 
+def test_backup_overdue_schedule_period_supports_weekday_ranges():
+    assert notification_reminder_api._schedule_period_seconds("0 9 * * 1-5") == int((3 * 86400) + (12 * 3600))
+    assert notification_reminder_api._schedule_period_seconds("0 9 * * 1,3,5") == int((3 * 86400) + (12 * 3600))
+    assert notification_reminder_api._schedule_period_seconds("0 9 * * 1") == int((7 * 86400) + (12 * 3600))
+    assert notification_reminder_api._schedule_period_seconds("0 9 * * */2") == 0
+
+
 class _FixedDateTime(datetime):
     @classmethod
     def now(cls, tz=None):
