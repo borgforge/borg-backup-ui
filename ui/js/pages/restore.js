@@ -444,7 +444,7 @@ function renderRestoreHistory(payload) {
       <div class="restore-history-card-actions">
         <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
         <button type="button" class="btn btn-secondary btn-sm" data-restore-history-action="detail" data-restore-id="${escHtml(id)}" aria-expanded="${selected ? 'true' : 'false'}">${escHtml(selected ? restoreT('hideRunDetails') : restoreT('showRunDetails'))}</button>
-        <button type="button" class="btn btn-danger btn-sm" data-restore-history-action="delete" data-restore-id="${escHtml(id)}">${escHtml(restoreT('deleteHistoryRun'))}</button>
+        <button type="button" class="btn btn-secondary btn-sm restore-history-delete-btn" data-restore-history-action="delete" data-restore-id="${escHtml(id)}">${escHtml(restoreT('deleteHistoryRun'))}</button>
       </div>
       <div class="restore-history-detail" id="restore-history-detail-${escHtml(id)}"></div>
     </article>`;

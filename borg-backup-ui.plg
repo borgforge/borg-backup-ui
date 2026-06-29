@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1738">
+<!ENTITY version   "2026.06.29.1813">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.1813###
+- Issue #93:
+  - Restore History delete buttons now use a less prominent outline style.
+
 ###2026.06.29.1738###
 - Issue #93:
   - Restore History now keeps completed restore runs as individual records and allows deleting history entries from the UI.
@@ -135,7 +139,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>e21ffe4e93c41d31c71ab22e07d6d159</MD5>
+<MD5>83014f01b28d7677f6153c82f5a4de96</MD5>
 </FILE>
 
 <!--

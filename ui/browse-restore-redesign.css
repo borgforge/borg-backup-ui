@@ -45,6 +45,8 @@
 .restore-run-meta dt::after { content: ":"; }
 .restore-run-meta dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ui-color-text); text-overflow: ellipsis; white-space: nowrap; }
 .restore-history-card-actions { display: grid; justify-items: start; gap: var(--ui-space-2); }
+.restore-history-delete-btn { color: var(--ui-state-error-fg); border-color: var(--ui-state-error-border); background: transparent; }
+.restore-history-delete-btn:hover { background: var(--ui-state-error-bg); color: var(--ui-state-error-fg); }
 .restore-history-empty, .restore-history-migration { padding: var(--ui-space-3); color: var(--ui-color-text-subtle); }
 .restore-history-migration { border-bottom: 1px solid var(--ui-color-border); color: var(--ui-state-error-fg); }
 .restore-history-detail { grid-column: 1 / -1; }
