@@ -281,6 +281,40 @@ def test_restore_history_registry_skips_central_registry_completion(tmp_path: Pa
     assert result["previous_state"] == "applied"
 
 
+def test_restore_history_registry_rechecks_old_completion_without_runner(tmp_path: Path):
+    restore_api._RESTORE_RUNS_LOADED = False
+    restore_api._RESTORE_RUNS.clear()
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "migration-state.json").write_text(json.dumps({
+        "schema_version": 2,
+        "migrations": {
+            "restore_history_v1": {
+                "state": "applied",
+                "checked_at": "2026-06-29T15:54:20",
+                "source": "startup_check",
+                "details": {
+                    "status": "applied",
+                    "imported": 5,
+                    "active_kept": 0,
+                    "errors": 0,
+                    "source_file": str(config_dir / "restore-runs.json"),
+                },
+            },
+        },
+    }), encoding="utf-8")
+    fp = config_dir / "restore-runs.json"
+    fp.write_text(json.dumps({"schema_version": 1, "runs": {}}), encoding="utf-8")
+
+    result = run_startup_migrations(config)["results"]["restore_history_v1"]
+
+    assert result["status"] == "not_required"
+    assert result["runner"] == "central_migration_registry"
+    assert result["details"]["pending_count"] == 0
+    assert result["details"]["already_imported"] == 0
+
+
 def test_restore_history_retention_keeps_latest_details(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     for idx in range(105):

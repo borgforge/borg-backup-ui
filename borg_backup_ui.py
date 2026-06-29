@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.1626"
+APP_VERSION = "2026.06.29.1704"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -210,6 +210,7 @@ def _write_migration_state(
     if _migration_state_is_final(str(previous_storage.get("state", "") or "")) and storage_state == "baseline_detected":
         storage_state = str(previous_storage.get("state"))
     previous_restore_history = previous_migrations.get("restore_history_v1") if isinstance(previous_migrations.get("restore_history_v1"), dict) else {}
+    incoming_restore_history_state = restore_history_state
     if _migration_state_is_final(str(previous_restore_history.get("state", "") or "")) and restore_history_state == "not_applicable":
         restore_history_state = str(previous_restore_history.get("state"))
 
@@ -232,10 +233,19 @@ def _write_migration_state(
     if not effective_run and _migration_state_is_final(str(previous_storage.get("state", "") or "")) and isinstance(previous_storage.get("details"), dict):
         storage_details = previous_storage["details"]
     restore_history_checked_at = ts
-    if not effective_run and _migration_state_is_final(str(previous_restore_history.get("state", "") or "")):
+    if (
+        not effective_run
+        and incoming_restore_history_state == "not_applicable"
+        and _migration_state_is_final(str(previous_restore_history.get("state", "") or ""))
+    ):
         restore_history_checked_at = str(previous_restore_history.get("checked_at") or ts)
     restore_history_details = run_details.get("restore_history", {})
-    if not effective_run and _migration_state_is_final(str(previous_restore_history.get("state", "") or "")) and isinstance(previous_restore_history.get("details"), dict):
+    if (
+        not effective_run
+        and incoming_restore_history_state == "not_applicable"
+        and _migration_state_is_final(str(previous_restore_history.get("state", "") or ""))
+        and isinstance(previous_restore_history.get("details"), dict)
+    ):
         restore_history_details = previous_restore_history["details"]
 
     payload: dict = {

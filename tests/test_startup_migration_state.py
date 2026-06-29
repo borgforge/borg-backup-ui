@@ -145,6 +145,71 @@ def test_no_change_startup_preserves_last_effective_migration(tmp_path: Path):
     assert len(log_lines) == 1
 
 
+def test_write_migration_state_records_central_restore_history_noop(tmp_path: Path):
+    scripts = tmp_path / "scripts"
+    config_dir = scripts / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "backup.conf").write_text('GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n', encoding="utf-8")
+    cfg = {"BACKUP_SCRIPTS_DIR": str(scripts)}
+
+    _write_migration_state(
+        cfg,
+        True,
+        "restore_history=applied(imported=5,active_kept=0,errors=0)",
+        reason_code="restore_history_migrated",
+        reason_text="Restore-History aus restore-runs.json migriert",
+        details={
+            "jobs_layout": {"status": "ok"},
+            "storage_paths": {"status": "ok", "changed": False, "moved": 0, "move_errors": 0},
+            "restore_history": {
+                "status": "applied",
+                "imported": 5,
+                "active_kept": 0,
+                "errors": 0,
+            },
+        },
+    )
+
+    _write_migration_state(
+        cfg,
+        True,
+        "restore_history=not_required(imported=0,active_kept=0,errors=0)",
+        reason_code="no_changes",
+        reason_text="No changes required",
+        details={
+            "jobs_layout": {"status": "ok"},
+            "storage_paths": {
+                "status": "ok",
+                "changed": False,
+                "moved": 0,
+                "move_errors": 0,
+                "settings_changed": False,
+                "forced_conf_write": False,
+            },
+            "restore_history": {
+                "status": "not_required",
+                "migration_id": "restore_history_v1",
+                "introduced_in": "2026.06.29.1544",
+                "runner": "central_migration_registry",
+                "imported": 0,
+                "active_kept": 0,
+                "errors": 0,
+                "already_imported": 0,
+                "source_file": str(config_dir / "restore-runs.json"),
+            },
+        },
+    )
+
+    state = json.loads((config_dir / "migration-state.json").read_text(encoding="utf-8"))
+    log_lines = (config_dir / "migrations.log.jsonl").read_text(encoding="utf-8").splitlines()
+
+    assert state["last_run"]["reason_code"] == "restore_history_migrated"
+    assert state["migrations"]["restore_history_v1"]["state"] == "not_required"
+    assert state["migrations"]["restore_history_v1"]["details"]["runner"] == "central_migration_registry"
+    assert state["migrations"]["restore_history_v1"]["details"]["imported"] == 0
+    assert len(log_lines) == 1
+
+
 def test_storage_path_migration_does_not_write_legacy_marker_when_unchanged(tmp_path: Path):
     scripts = tmp_path / "scripts"
     config_dir = scripts / "config"
