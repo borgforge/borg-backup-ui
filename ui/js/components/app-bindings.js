@@ -137,6 +137,10 @@
     document.getElementById('restore-start-btn')?.addEventListener('click', restoreStart);
     document.getElementById('restore-runs-refresh-btn')?.addEventListener('click', restoreLoadRuns);
     document.getElementById('restore-runs-content')?.addEventListener('click', onRestoreRunsClick);
+    document.getElementById('restore-history-refresh-btn')?.addEventListener('click', restoreLoadHistory);
+    document.getElementById('restore-history-content')?.addEventListener('click', onRestoreHistoryClick);
+    document.getElementById('restore-view-wizard-btn')?.addEventListener('click', () => restoreSwitchView('wizard'));
+    document.getElementById('restore-view-history-btn')?.addEventListener('click', () => restoreSwitchView('history'));
     document.getElementById('restore-step-next-btn')?.addEventListener('click', restoreStepNext);
     document.getElementById('restore-step-back-btn')?.addEventListener('click', restoreStepBack);
     document.getElementById('restore-clear-selection-btn')?.addEventListener('click', restoreClearSelection);

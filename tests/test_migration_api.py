@@ -69,7 +69,7 @@ def test_registry_reports_deprecated_cleanup_candidates(tmp_path: Path):
     assert cleanup["details"]["dry_run_plan"]["dry_run"] is True
     assert cleanup["details"]["dry_run_plan"]["mode"] == "comment_out"
     assert cleanup["details"]["dry_run_plan"]["candidate_count"] == 4
-    assert registry["summary"]["pending"] == 0
+    assert registry["summary"]["pending"] == 1
     assert registry["summary"]["deprecated_key_candidates"] == 4
 
 

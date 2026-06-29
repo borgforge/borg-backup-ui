@@ -557,6 +557,11 @@
         </div>
       </div>
 
+      <div class="restore-view-tabs" role="tablist" data-i18n-aria-label="restore.viewTabs" aria-label="Restore Ansicht">
+        <button type="button" id="restore-view-wizard-btn" class="is-active" data-restore-view="wizard" role="tab" aria-selected="true" data-i18n="restore.viewWizard">Restore</button>
+        <button type="button" id="restore-view-history-btn" data-restore-view="history" role="tab" aria-selected="false" data-i18n="restore.viewHistory">Restore History</button>
+      </div>
+
       <section id="restore-runs-panel" class="restore-runs-panel hidden">
         <header class="restore-runs-header">
           <div>
@@ -566,6 +571,22 @@
           <button type="button" class="btn btn-secondary btn-sm" id="restore-runs-refresh-btn" data-i18n="restore.refreshRuns">Aktualisieren</button>
         </header>
         <div id="restore-runs-content"></div>
+      </section>
+
+      <section id="restore-history-panel" class="restore-history-panel hidden">
+        <header class="restore-history-header">
+          <div>
+            <small data-i18n="restore.historyEyebrow">Verlauf</small>
+            <h2 data-i18n="restore.historyTitle">Restore History</h2>
+            <p data-i18n="restore.historySubtitle">Abgeschlossene Restore-Läufe mit strukturierten Details.</p>
+          </div>
+          <div class="restore-history-actions">
+            <span id="restore-history-count" class="ui-badge"></span>
+            <button type="button" class="btn btn-secondary btn-sm" id="restore-history-refresh-btn" data-i18n="restore.refreshHistory">Aktualisieren</button>
+          </div>
+        </header>
+        <div id="restore-history-migration" class="restore-history-migration hidden"></div>
+        <div id="restore-history-content"></div>
       </section>
 
       <div id="restore-msg" class="restore-msg hidden"></div>

@@ -18,22 +18,48 @@
 
 .restore-redesign-workspace { width: 100%; max-width: 100%; min-width: 0; overflow: hidden; }
 .restore-redesign-workspace > .settings-body, #restore-step-panel-5 { width: 100%; max-width: 100%; min-width: 0; }
-.restore-runs-panel { margin-bottom: var(--ui-space-3); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
-.restore-runs-header { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); padding: var(--ui-space-2) var(--ui-space-3); border-bottom: 1px solid var(--ui-color-border); }
-.restore-runs-header h2, .restore-runs-header small { display: block; margin: 0; }
-.restore-runs-header h2 { font-size: var(--ui-font-size-md); }
-.restore-runs-header small { color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
-#restore-runs-content { display: grid; gap: var(--ui-space-2); padding: var(--ui-space-2) var(--ui-space-3); }
+.restore-view-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: var(--ui-context-width); max-width: 100%; margin-bottom: var(--ui-space-3); overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); background: var(--ui-color-surface); }
+.restore-view-tabs button { min-height: 2.25rem; padding: 0 var(--ui-space-3); border: 0; border-right: 1px solid var(--ui-color-border); background: transparent; color: var(--ui-color-text-subtle); font-weight: var(--ui-font-weight-semibold); }
+.restore-view-tabs button:last-child { border-right: 0; }
+.restore-view-tabs button.is-active { background: var(--ui-color-surface-raised); color: var(--ui-color-accent); box-shadow: inset 0 -2px var(--ui-color-accent); }
+.restore-runs-panel, .restore-history-panel { margin-bottom: var(--ui-space-3); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
+.restore-runs-header, .restore-history-header { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); padding: var(--ui-space-2) var(--ui-space-3); border-bottom: 1px solid var(--ui-color-border); }
+.restore-runs-header h2, .restore-runs-header small, .restore-history-header h2, .restore-history-header small, .restore-history-header p { display: block; margin: 0; }
+.restore-runs-header h2, .restore-history-header h2 { font-size: var(--ui-font-size-md); }
+.restore-runs-header small, .restore-history-header small { color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-history-header p { margin-top: 2px; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-history-actions { display: flex; align-items: center; gap: var(--ui-space-2); }
+#restore-runs-content, #restore-history-content { display: grid; gap: var(--ui-space-2); padding: var(--ui-space-2) var(--ui-space-3); }
 .restore-active-runs { display: grid; gap: var(--ui-space-2); }
 .restore-active-runs > strong { font-size: var(--ui-font-size-sm); }
 .restore-run-card { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr) auto; align-items: center; gap: var(--ui-space-3); padding: var(--ui-space-2); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); background: var(--ui-color-surface-subtle); }
 .restore-run-card.is-active { border-color: var(--ui-color-accent); background: var(--ui-color-surface-raised); box-shadow: inset 3px 0 var(--ui-color-accent); }
+.restore-history-card { display: grid; grid-template-columns: minmax(12rem, 0.75fr) minmax(0, 1.5fr) minmax(8rem, auto); align-items: start; gap: var(--ui-space-3); padding: var(--ui-space-3); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); background: var(--ui-color-surface-subtle); }
+.restore-history-card.is-selected { border-color: var(--ui-color-accent); background: var(--ui-color-surface-raised); box-shadow: inset 3px 0 var(--ui-color-accent); }
 .restore-run-main { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--ui-space-2); min-width: 0; }
 .restore-run-main strong, .restore-run-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .restore-run-main small { grid-column: 1 / -1; color: var(--ui-color-text-subtle); font-family: var(--ui-font-mono); font-size: var(--ui-font-size-xs); }
-.restore-run-meta { display: grid; gap: 2px; min-width: 0; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
-.restore-run-meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.restore-run-meta b { color: var(--ui-color-text); font-weight: var(--ui-font-weight-medium); }
+.restore-run-meta { min-width: 0; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-run-meta dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: var(--ui-space-2); row-gap: 2px; margin: 0; }
+.restore-run-meta dt { color: var(--ui-color-text-subtle); }
+.restore-run-meta dt::after { content: ":"; }
+.restore-run-meta dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ui-color-text); text-overflow: ellipsis; white-space: nowrap; }
+.restore-history-card-actions { display: grid; justify-items: start; gap: var(--ui-space-2); }
+.restore-history-delete-btn { color: var(--ui-state-error-fg); border-color: var(--ui-state-error-border); background: transparent; }
+.restore-history-delete-btn:hover { background: var(--ui-state-error-bg); color: var(--ui-state-error-fg); }
+.restore-history-empty, .restore-history-migration { padding: var(--ui-space-3); color: var(--ui-color-text-subtle); }
+.restore-history-migration { border-bottom: 1px solid var(--ui-color-border); color: var(--ui-state-error-fg); }
+.restore-history-detail { grid-column: 1 / -1; }
+.restore-history-detail:empty { display: none; }
+.restore-history-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); overflow: hidden; }
+.restore-history-detail-grid div { padding: var(--ui-space-2); border-right: 1px solid var(--ui-color-border); border-bottom: 1px solid var(--ui-color-border); background: var(--ui-color-surface); }
+.restore-history-detail-grid small, .restore-history-detail-grid strong { display: block; }
+.restore-history-detail-grid small { color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-history-detail-grid strong { margin-top: 2px; overflow-wrap: anywhere; }
+.restore-history-error { margin-top: var(--ui-space-2); padding: var(--ui-space-2); border: 1px solid var(--ui-state-error-border); border-radius: var(--ui-radius-sm); background: var(--ui-state-error-bg); color: var(--ui-state-error-fg); }
+.restore-history-log { margin-top: var(--ui-space-2); overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); background: var(--ui-color-surface); }
+.restore-history-log summary { padding: var(--ui-space-2); color: var(--ui-color-text-subtle); cursor: pointer; }
+.restore-history-log pre { max-height: 220px; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .restore-stepper { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: var(--ui-space-3); overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
 .restore-stepper button { display: flex; align-items: center; gap: var(--ui-space-2); min-height: 3rem; padding: var(--ui-space-2); border: 0; border-right: 1px solid var(--ui-color-border); background: transparent; color: var(--ui-color-text-subtle); text-align: left; }
 .restore-stepper button:last-child { border-right: 0; }
@@ -112,7 +138,8 @@
   .restore-sidebar-group { display: contents; }
   .restore-sidebar-group > header { display: none; }
   .restore-sidebar-job { min-width: 13rem; }
-  .restore-browser-layout, .restore-target-grid, .restore-review-grid, .restore-run-card { grid-template-columns: minmax(0, 1fr); }
+  .restore-browser-layout, .restore-target-grid, .restore-review-grid, .restore-run-card, .restore-history-card, .restore-history-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .restore-view-tabs { width: 100%; }
   .restore-stepper button b { display: none; }
 }
 @media (max-width: 767px) {

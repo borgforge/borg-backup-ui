@@ -98,17 +98,137 @@ def _restore_runs_file(config: dict) -> Path:
     return base / "config" / "restore-runs.json"
 
 
+def _restore_history_dir(config: dict) -> Path:
+    base = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
+    return base / "config" / "restore-history"
+
+
+def _restore_history_index_file(config: dict) -> Path:
+    return _restore_history_dir(config) / "index.json"
+
+
+def _restore_history_runs_dir(config: dict) -> Path:
+    return _restore_history_dir(config) / "runs"
+
+
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def _persist_restore_runs(config: dict) -> None:
     fp = _restore_runs_file(config)
-    fp.parent.mkdir(parents=True, exist_ok=True)
+    active_runs = {
+        rid: run for rid, run in _RESTORE_RUNS.items()
+        if isinstance(run, dict) and not _is_restore_terminal(run.get("state"))
+    }
     payload = {
         "schema_version": 1,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "runs": _RESTORE_RUNS,
+        "runs": active_runs,
     }
-    tmp = fp.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, fp)
+    _write_json_atomic(fp, payload)
+
+
+def _is_restore_terminal(state: object) -> bool:
+    return str(state or "").strip().lower() in {"done", "error", "aborted"}
+
+
+def _restore_run_duration_seconds(run: dict) -> int:
+    try:
+        started_raw = str(run.get("started_at") or "").strip()
+        finished_raw = str(run.get("finished_at") or "").strip()
+        if not started_raw or not finished_raw:
+            return 0
+        started = datetime.fromisoformat(started_raw)
+        finished = datetime.fromisoformat(finished_raw)
+        return max(0, int((finished - started).total_seconds()))
+    except Exception:
+        return 0
+
+
+def _history_summary_from_run(run: dict) -> dict:
+    state = str(run.get("state") or "").strip() or "unknown"
+    restore_id = str(run.get("restore_id") or "").strip()
+    return {
+        "restore_id": restore_id,
+        "state": state,
+        "phase": run.get("phase") or state,
+        "started_at": run.get("started_at") or "",
+        "finished_at": run.get("finished_at") or "",
+        "duration_seconds": _restore_run_duration_seconds(run),
+        "job_key": run.get("job_key") or "",
+        "archive": run.get("archive") or "",
+        "source_path": run.get("source_path") or "",
+        "target_dir": run.get("target_dir") or "",
+        "destination_path": run.get("destination_path") or "",
+        "conflict_mode": run.get("conflict_mode") or "",
+        "preserve_owner": bool(run.get("preserve_owner", False)),
+        "error": run.get("error") or "",
+        "skipped": bool(run.get("skipped", False)),
+        "skip_reason_code": run.get("skip_reason_code") or "",
+    }
+
+
+def _history_detail_from_run(run: dict, source: str) -> dict:
+    summary = _history_summary_from_run(run)
+    return {
+        "schema_version": 1,
+        "source": source,
+        "recorded_at": datetime.now().isoformat(timespec="seconds"),
+        **summary,
+        "lines": [str(line) for line in (run.get("lines") or [])][-200:],
+    }
+
+
+def _read_history_index(config: dict) -> list[dict]:
+    fp = _restore_history_index_file(config)
+    if not fp.exists():
+        return []
+    try:
+        raw = json.loads(fp.read_text(encoding="utf-8"))
+        rows = raw.get("runs") if isinstance(raw, dict) else []
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    except Exception:
+        return []
+    return []
+
+
+def _write_history_index(config: dict, rows: list[dict]) -> None:
+    rows = sorted(rows, key=lambda row: str(row.get("started_at") or ""), reverse=True)
+    payload = {
+        "schema_version": 1,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "retention_keep": None,
+        "runs": rows,
+    }
+    _write_json_atomic(_restore_history_index_file(config), payload)
+
+
+def _central_restore_history_migration_state(config: dict) -> dict:
+    try:
+        from migrations.registry import read_central_migration_state
+        state = read_central_migration_state(config)
+        migrations = state.get("migrations") if isinstance(state.get("migrations"), dict) else {}
+        entry = migrations.get("restore_history_v1") if isinstance(migrations.get("restore_history_v1"), dict) else {}
+        return entry
+    except Exception:
+        return {}
+
+
+def _record_restore_history(config: dict, run: dict, source: str) -> None:
+    restore_id = str(run.get("restore_id") or "").strip()
+    if not restore_id:
+        return
+    detail = _history_detail_from_run(run, source)
+    detail_path = _restore_history_runs_dir(config) / f"{restore_id}.json"
+    _write_json_atomic(detail_path, detail)
+    rows = [row for row in _read_history_index(config) if str(row.get("restore_id") or "") != restore_id]
+    rows.append(_history_summary_from_run(run))
+    _write_history_index(config, rows)
 
 
 def _ensure_restore_runs_loaded(config: dict) -> None:
@@ -142,13 +262,17 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
                     lines = []
                 lines.append("Restore was marked as aborted after the server restarted.")
                 run["lines"] = lines[-200:]
+                try:
+                    _record_restore_history(config, run, "restore-run-restart-recovery")
+                except Exception:
+                    pass
                 changed = True
 
         _RESTORE_RUNS.clear()
         _RESTORE_RUNS.update(loaded)
         _RESTORE_RUNS_LOADED = True
 
-        if changed or (fp.exists() and not loaded):
+        if changed:
             try:
                 _persist_restore_runs(config)
             except Exception:
@@ -995,6 +1119,8 @@ def start_restore_async(
         "source_path": source_path,
         "target_dir": target_dir,
         "destination_path": "",
+        "conflict_mode": conflict_mode,
+        "preserve_owner": bool(preserve_owner),
         "error": "",
         "skipped": False,
         "skip_reason_code": "",
@@ -1044,6 +1170,11 @@ def start_restore_async(
             s["skipped"] = bool(result.get("skipped", False))
             s["skip_reason_code"] = str(result.get("skip_reason_code", "") or "")
             try:
+                _record_restore_history(config, s, "restore-run-finished")
+            except Exception as exc:
+                lines = s.setdefault("lines", [])
+                lines.append(f"Restore history write failed: {exc}")
+            try:
                 _persist_restore_runs(config)
             except Exception:
                 pass
@@ -1057,6 +1188,11 @@ def start_restore_async(
             s["phase"] = "error"
             s["finished_at"] = datetime.now().isoformat(timespec="seconds")
             s["error"] = msg
+            try:
+                _record_restore_history(config, s, "restore-run-finished")
+            except Exception as exc:
+                lines = s.setdefault("lines", [])
+                lines.append(f"Restore history write failed: {exc}")
             try:
                 _persist_restore_runs(config)
             except Exception:
@@ -1102,6 +1238,8 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
         for run in _RESTORE_RUNS.values():
             if not isinstance(run, dict):
                 continue
+            if _is_restore_terminal(run.get("state")):
+                continue
             rows.append({
                 "restore_id": run.get("restore_id"),
                 "state": run.get("state"),
@@ -1124,6 +1262,82 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
             "runs": rows[:limit],
             "active": active,
         }
+
+
+def list_restore_history(config: dict, limit: int = 20, offset: int = 0) -> dict:
+    _ensure_restore_runs_loaded(config)
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 20
+    if limit > 0:
+        limit = min(1000, limit)
+    try:
+        offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        offset = 0
+    rows = _read_history_index(config)
+    rows.sort(key=lambda item: str(item.get("started_at") or ""), reverse=True)
+    selected = rows[offset:] if limit <= 0 else rows[offset:offset + limit]
+    return {
+        "runs": selected,
+        "total": len(rows),
+        "limit": limit,
+        "offset": offset,
+        "migration": _central_restore_history_migration_state(config),
+    }
+
+
+def get_restore_history_detail(config: dict, restore_id: str) -> dict:
+    _ensure_restore_runs_loaded(config)
+    rid = str(restore_id or "").strip()
+    if not rid:
+        raise ValueError("restore_id is required")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", rid):
+        raise ValueError("Invalid restore_id")
+    fp = _restore_history_runs_dir(config) / f"{rid}.json"
+    if not fp.exists():
+        raise ValueError("Unknown restore_id")
+    try:
+        raw = json.loads(fp.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"Could not read restore history detail: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("Invalid restore history detail")
+    return raw
+
+
+def delete_restore_history_entry(config: dict, restore_id: str) -> dict:
+    _ensure_restore_runs_loaded(config)
+    rid = str(restore_id or "").strip()
+    if not rid:
+        raise ValueError("restore_id is required")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", rid):
+        raise ValueError("Invalid restore_id")
+    rows = _read_history_index(config)
+    remaining = [row for row in rows if str(row.get("restore_id") or "") != rid]
+    if len(remaining) == len(rows):
+        raise ValueError("Unknown restore_id")
+    detail_deleted = False
+    detail = _restore_history_runs_dir(config) / f"{rid}.json"
+    try:
+        if detail.exists():
+            detail.unlink()
+            detail_deleted = True
+    except OSError as exc:
+        raise ValueError(f"Could not delete restore history detail: {exc}") from exc
+    _write_history_index(config, remaining)
+    return {
+        "deleted": True,
+        "restore_id": rid,
+        "detail_deleted": detail_deleted,
+        "remaining": len(remaining),
+    }
+
+
+def get_restore_history_migration(config: dict) -> dict:
+    _ensure_restore_runs_loaded(config)
+    return {"state": _central_restore_history_migration_state(config), "log": []}
 
 
 def get_restore_state(config: dict, restore_id: str) -> dict:
