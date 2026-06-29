@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,7 @@ from lib.notification_events import (  # noqa: E402
     send_event,
 )
 from lib.notifications import MailConfig, NtfyConfig  # noqa: E402
+import notification_reminder_api  # noqa: E402
 
 
 def test_send_event_routes_to_configured_channels(monkeypatch):
@@ -69,3 +71,29 @@ def test_reminder_state_rate_limits_by_interval(tmp_path):
 
     state = read_notification_state(cfg)
     assert state["last_sent"][key] == 1000
+
+
+def test_backup_overdue_reminder_uses_supported_schedules(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["subject"]) or True)
+    monkeypatch.setattr(notification_reminder_api, "datetime", _FixedDateTime)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_local": {"enabled": True, "cron": "0 2 * * *"}})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_local", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{"key": "appdata_local", "timestamp": "2026-06-27 02:00:00"}]})
+
+    result = notification_reminder_api.run_due_notification_reminders({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NTFY_ENABLED": "false",
+    })
+
+    assert result["checked"] == 1
+    assert result["sent"] == 1
+    assert calls == ["Borg Backup UI: Backup overdue"]
+
+
+class _FixedDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 6, 29, 12, 0, 0)
