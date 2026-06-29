@@ -26,9 +26,6 @@
 #restore-runs-content { display: grid; gap: var(--ui-space-2); padding: var(--ui-space-2) var(--ui-space-3); }
 .restore-active-runs { display: grid; gap: var(--ui-space-2); }
 .restore-active-runs > strong { font-size: var(--ui-font-size-sm); }
-.restore-recent-runs { color: var(--ui-color-text); }
-.restore-recent-runs summary { cursor: pointer; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-sm); }
-.restore-run-list { display: grid; gap: var(--ui-space-2); margin-top: var(--ui-space-2); }
 .restore-run-card { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr) auto; align-items: center; gap: var(--ui-space-3); padding: var(--ui-space-2); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); background: var(--ui-color-surface-subtle); }
 .restore-run-card.is-active { border-color: var(--ui-color-accent); background: var(--ui-color-surface-raised); box-shadow: inset 3px 0 var(--ui-color-accent); }
 .restore-run-main { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--ui-space-2); min-width: 0; }

@@ -279,20 +279,17 @@ function renderRestoreRuns(runs) {
   const content = document.getElementById('restore-runs-content');
   if (!panel || !content) return;
   const rows = Array.isArray(runs) ? runs : [];
-  if (!rows.length) {
+  const activeRuns = rows.filter((run) => String(run.state || '').toLowerCase() === 'running');
+  if (!activeRuns.length) {
     panel.classList.add('hidden');
     content.innerHTML = '';
     return;
   }
   panel.classList.remove('hidden');
-  const activeRuns = rows.filter((run) => String(run.state || '').toLowerCase() === 'running');
-  const recentRuns = rows.filter((run) => String(run.state || '').toLowerCase() !== 'running').slice(0, 5);
-  const runCard = (run, isActive = false) => {
+  const runCard = (run) => {
     const id = String(run.restore_id || '');
     const state = String(run.state || '');
-    const actionLabel = isActive ? restoreT('resumeLiveLog') : restoreT('showRunDetails');
-    const actionClass = isActive ? 'btn-primary' : 'btn-secondary';
-    return `<article class="restore-run-card ${isActive ? 'is-active' : ''}">
+    return `<article class="restore-run-card is-active">
       <div class="restore-run-main">
         <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
         <strong>${escHtml(run.job_key || '—')}</strong>
@@ -303,18 +300,13 @@ function renderRestoreRuns(runs) {
         <span>${escHtml(restoreT('runStarted'))}: <b>${escHtml(run.started_at || '—')}</b></span>
         ${run.phase ? `<span>${escHtml(restoreT('runPhase'))}: <b>${escHtml(run.phase)}</b></span>` : ''}
       </div>
-      <button type="button" class="btn ${actionClass} btn-sm" data-restore-run-action="open" data-restore-id="${escHtml(id)}">${escHtml(actionLabel)}</button>
+      <button type="button" class="btn btn-primary btn-sm" data-restore-run-action="open" data-restore-id="${escHtml(id)}">${escHtml(restoreT('resumeLiveLog'))}</button>
     </article>`;
   };
-  const activeHtml = activeRuns.length ? `<div class="restore-active-runs">
+  content.innerHTML = `<div class="restore-active-runs">
     <strong>${escHtml(restoreT('activeRestoreTitle'))}</strong>
-    ${activeRuns.map((run) => runCard(run, true)).join('')}
-  </div>` : '';
-  const recentHtml = recentRuns.length ? `<details class="restore-recent-runs">
-    <summary>${escHtml(restoreT('recentRunsSummary', { count: recentRuns.length }))}</summary>
-    <div class="restore-run-list">${recentRuns.map((run) => runCard(run, false)).join('')}</div>
-  </details>` : '';
-  content.innerHTML = `${activeHtml}${recentHtml}`;
+    ${activeRuns.map((run) => runCard(run)).join('')}
+  </div>`;
 }
 
 async function restoreLoadRuns() {
