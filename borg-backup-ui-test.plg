@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1336">
+<!ENTITY version   "2026.06.29.1402">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.1402###
+- Issue #93:
+  - Restore History is now opened as a separate Browse & Restore view instead of being shown above the wizard.
+  - Restore History migration is reported through the central startup migration state shown under Settings.
+
 ###2026.06.29.1336###
 - Issue #93:
   - Browse & Restore now includes a dedicated Restore History with structured details for completed restore runs.
@@ -104,7 +109,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>1b574e198270d69756b7d2141764df39</MD5>
+<MD5>39134924ee6bd586dd6e8797b7f21ae8</MD5>
 </FILE>
 
 <!--
