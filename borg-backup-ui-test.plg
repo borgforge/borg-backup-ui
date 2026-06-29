@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.28.1750">
+<!ENTITY version   "2026.06.29.0853">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.0853###
+- Issue #90:
+  - Active UI sessions are refreshed during restore activity so long-running restores do not sign out active users.
+  - Restore page now shows recent restore runs and can resume a running restore live log after reload or re-login.
+
 ###2026.06.28.1750###
 - Fixed the edit wizard so existing job metadata repository and source paths are shown instead of legacy backup.conf defaults.
 
@@ -82,7 +87,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>7e9dfbd8aba1a1fc2fe00880c8da7fb8</MD5>
+<MD5>f744ecf7167a4318a43c806b156a1e89</MD5>
 </FILE>
 
 <!--
