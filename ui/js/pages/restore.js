@@ -285,30 +285,36 @@ function renderRestoreRuns(runs) {
     return;
   }
   panel.classList.remove('hidden');
-  content.innerHTML = `<div class="ui-table-wrap"><table class="ui-table">
-    <thead><tr>
-      <th>${escHtml(restoreT('runStatus'))}</th>
-      <th>${escHtml(restoreT('job'))}</th>
-      <th>${escHtml(restoreT('archive'))}</th>
-      <th>${escHtml(restoreT('target'))}</th>
-      <th>${escHtml(restoreT('runStarted'))}</th>
-      <th></th>
-    </tr></thead>
-    <tbody>${rows.map((run) => {
-      const id = String(run.restore_id || '');
-      const state = String(run.state || '');
-      const actionLabel = state === 'running' ? restoreT('resumeLiveLog') : restoreT('showRunDetails');
-      const actionClass = state === 'running' ? 'btn-primary' : 'btn-secondary';
-      return `<tr>
-        <td><span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span><small style="display:block">${escHtml(run.phase || '')}</small></td>
-        <td>${escHtml(run.job_key || '—')}</td>
-        <td><span class="mono">${escHtml(run.archive || '—')}</span></td>
-        <td>${escHtml(run.destination_path || run.target_dir || '—')}</td>
-        <td>${escHtml(run.started_at || '—')}</td>
-        <td><button type="button" class="btn ${actionClass} btn-sm" data-restore-run-action="open" data-restore-id="${escHtml(id)}">${escHtml(actionLabel)}</button></td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table></div>`;
+  const activeRuns = rows.filter((run) => String(run.state || '').toLowerCase() === 'running');
+  const recentRuns = rows.filter((run) => String(run.state || '').toLowerCase() !== 'running').slice(0, 5);
+  const runCard = (run, isActive = false) => {
+    const id = String(run.restore_id || '');
+    const state = String(run.state || '');
+    const actionLabel = isActive ? restoreT('resumeLiveLog') : restoreT('showRunDetails');
+    const actionClass = isActive ? 'btn-primary' : 'btn-secondary';
+    return `<article class="restore-run-card ${isActive ? 'is-active' : ''}">
+      <div class="restore-run-main">
+        <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
+        <strong>${escHtml(run.job_key || '—')}</strong>
+        <small>${escHtml(run.archive || '—')}</small>
+      </div>
+      <div class="restore-run-meta">
+        <span>${escHtml(restoreT('target'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
+        <span>${escHtml(restoreT('runStarted'))}: <b>${escHtml(run.started_at || '—')}</b></span>
+        ${run.phase ? `<span>${escHtml(restoreT('runPhase'))}: <b>${escHtml(run.phase)}</b></span>` : ''}
+      </div>
+      <button type="button" class="btn ${actionClass} btn-sm" data-restore-run-action="open" data-restore-id="${escHtml(id)}">${escHtml(actionLabel)}</button>
+    </article>`;
+  };
+  const activeHtml = activeRuns.length ? `<div class="restore-active-runs">
+    <strong>${escHtml(restoreT('activeRestoreTitle'))}</strong>
+    ${activeRuns.map((run) => runCard(run, true)).join('')}
+  </div>` : '';
+  const recentHtml = recentRuns.length ? `<details class="restore-recent-runs">
+    <summary>${escHtml(restoreT('recentRunsSummary', { count: recentRuns.length }))}</summary>
+    <div class="restore-run-list">${recentRuns.map((run) => runCard(run, false)).join('')}</div>
+  </details>` : '';
+  content.innerHTML = `${activeHtml}${recentHtml}`;
 }
 
 async function restoreLoadRuns() {

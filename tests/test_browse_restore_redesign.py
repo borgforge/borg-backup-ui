@@ -61,8 +61,11 @@ def test_browse_restore_keeps_review_and_completion_status_in_sync() -> None:
 
 def test_browse_restore_can_resume_restore_runs() -> None:
     html = _read("ui/index.html")
+    css = _read("ui/browse-restore-redesign.css")
     script = _read("ui/js/pages/restore.js")
     assert 'id="restore-runs-panel"' in html
+    assert "restore-run-card" in css
+    assert "restore-recent-runs" in css
     assert "function restoreLoadRuns()" in script
     assert "function restoreOpenRun(restoreId)" in script
     assert "resumeLiveLog" in script

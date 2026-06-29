@@ -951,6 +951,9 @@
     "runStateDone": "Successful",
     "runStateError": "Error",
     "runStateAborted": "Aborted",
+    "activeRestoreTitle": "Active restore",
+    "recentRunsSummary": "Recent restore runs ({count})",
+    "runPhase": "Phase",
     "resumeLiveLog": "Resume live log",
     "showRunDetails": "Show details"
   },
