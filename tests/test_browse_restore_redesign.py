@@ -66,7 +66,10 @@ def test_browse_restore_can_resume_restore_runs() -> None:
     assert 'id="restore-runs-panel"' in html
     assert "restore-run-card" in css
     assert "restore-recent-runs" not in css
+    assert "restore-live-mode" in css
     assert "function restoreLoadRuns()" in script
     assert "function restoreOpenRun(restoreId)" in script
+    assert "function restoreSetLiveMode(enabled)" in script
+    assert "next === 5 && !restoreState.liveMode" in script
     assert "resumeLiveLog" in script
     assert "data-restore-run-action=\"open\"" in script

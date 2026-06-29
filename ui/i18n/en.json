@@ -809,6 +809,7 @@
     "systemCheck": "System check",
     "selectionReady": "The selection is ready for the precheck.",
     "showTechnicalPrecheck": "Show technical precheck output",
+    "liveLog": "Show live log",
     "precheckPending": "Precheck pending",
     "precheckVerdictOk": "The restore can be started safely",
     "precheckVerdictOkDetail": "The target and dry run completed successfully.",

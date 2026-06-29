@@ -809,6 +809,7 @@
     "systemCheck": "Systemprüfung",
     "selectionReady": "Auswahl ist für die Vorprüfung vorbereitet.",
     "showTechnicalPrecheck": "Technische Precheck-Ausgabe anzeigen",
+    "liveLog": "Live-Log anzeigen",
     "precheckPending": "Precheck ausstehend",
     "precheckVerdictOk": "Wiederherstellung kann sicher gestartet werden",
     "precheckVerdictOkDetail": "Ziel und Dry-Run wurden erfolgreich geprüft.",

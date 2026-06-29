@@ -27,6 +27,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   jobs: [],
   archives: [],
   runs: [],
+  liveMode: false,
 };
 const restoreState = window.BBUI.restoreState;
 
@@ -60,11 +61,31 @@ function restoreSetStep(step) {
     nextBtn.style.display = next >= 5 ? 'none' : '';
     nextBtn.textContent = next === 4 ? restoreT('toCheck') : restoreT('next');
   }
-  if (next === 5) {
+  if (next !== 5 && restoreState.liveMode) {
+    restoreSetLiveMode(false);
+  }
+  if (next === 5 && !restoreState.liveMode) {
     restoreEnsureAutoPrecheck();
   }
   const status = document.getElementById('restore-step-status');
   if (status) status.textContent = restoreT('stepStatus', { step: next, total: 5 });
+}
+
+function restoreSetLiveMode(enabled) {
+  restoreState.liveMode = !!enabled;
+  const panel = document.getElementById('restore-step-panel-5');
+  if (panel) panel.classList.toggle('restore-live-mode', restoreState.liveMode);
+  const out = document.getElementById('restore-precheck-output');
+  const details = out?.closest('details');
+  if (details) {
+    details.open = restoreState.liveMode || details.open;
+    const summary = details.querySelector('summary');
+    if (summary) summary.textContent = restoreT(restoreState.liveMode ? 'liveLog' : 'showTechnicalPrecheck');
+  }
+  if (restoreState.liveMode) {
+    renderRestorePrecheck(null);
+    setRestoreHeaderStatus('running');
+  }
 }
 
 function restoreJobIcon(job) {
@@ -332,6 +353,7 @@ async function restoreOpenRun(restoreId) {
   _stopRestorePolling();
   restoreState.activeRestoreId = restoreId;
   restoreState.completed = false;
+  restoreSetLiveMode(true);
   hideEl('restore-assist-msg');
   restoreSetStep(5);
   _setRestoreAssistBusy(true);
@@ -457,6 +479,7 @@ function _restoreBindTargetAutocomplete() {
 
 async function restoreInit() {
   restoreState.completed = false;
+  restoreSetLiveMode(false);
   const sel = document.getElementById('restore-job-sel');
   sel.innerHTML = `<option value="">${restoreT('chooseJob')}</option>`;
   const wizard = document.getElementById('restore-wizard');
@@ -791,6 +814,7 @@ function _setRestoreAssistBusy(busy) {
 }
 
 async function restoreRunPrecheck() {
+  restoreSetLiveMode(false);
   hideEl('restore-assist-msg');
   const source = restoreState.selectedPath || document.getElementById('restore-source-path')?.value || '';
   const target = document.getElementById('restore-target-path')?.value?.trim() || '';
@@ -900,12 +924,14 @@ function setRestoreHeaderStatus(state) {
     success: 'restoreSuccessfulShort',
     skipped: 'restoreSkippedShort',
     failed: 'restoreFailedShort',
+    running: 'restoreRunningShort',
   }[state] || 'precheckSuccessful';
   badge.textContent = restoreT(key);
   badge.classList.remove('success', 'warning', 'error');
   if (state === 'success') badge.classList.add('success');
   if (state === 'skipped') badge.classList.add('warning');
   if (state === 'failed') badge.classList.add('error');
+  if (state === 'running') badge.classList.add('warning');
 }
 
 function _currentPrecheckKey() {
@@ -954,6 +980,7 @@ async function restoreStart() {
   ].join('\n');
   const confirmed = await openRestoreConfirmModal(summary);
   if (!confirmed) return;
+  restoreSetLiveMode(true);
   const out = document.getElementById('restore-precheck-output');
   if (out) {
     out.textContent = [
