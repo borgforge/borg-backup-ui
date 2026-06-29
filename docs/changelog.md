@@ -10,10 +10,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Browse & Restore:
   - Active restore runs remain in the wizard status banner and can still resume the live log.
   - Completed restore runs are stored in a dedicated Restore History with index and per-run detail files.
-  - The Restore History UI shows status, timing, target, conflict mode, owner handling and the retained restore log.
+  - The Restore History UI shows status, timing, target, conflict mode, owner handling and the retained restore log in a separate view instead of above the wizard.
 - Migration:
   - Legacy terminal entries from `config/restore-runs.json` are imported into `config/restore-history/index.json` and `config/restore-history/runs/<restore-id>.json`.
   - The migration writes `config/restore-history/migration-state.json` and `config/restore-history/migrations.log.jsonl` with migration id, status, timestamp, affected counts and errors.
+  - The same migration is also reported through the central startup migration state so it is visible under Settings > System health & migration.
   - `restore-runs.json` is kept as active-run state only; stale running entries found after restart are marked aborted and moved to history.
   - Restore History retention keeps the latest 100 completed runs and removes unreferenced per-run detail files.
 

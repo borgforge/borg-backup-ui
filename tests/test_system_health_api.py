@@ -98,6 +98,31 @@ def test_migration_summary_extracts_actions_and_errors():
     assert "Job-Layout: jobs unreadable" in summary["errors"]
 
 
+def test_migration_summary_extracts_restore_history_migration():
+    event = {
+        "success": True,
+        "timestamp": "2026-06-29T13:45:00",
+        "reason_code": "restore_history_migrated",
+        "reason_text": "Restore-History aus restore-runs.json migriert",
+        "message": "restore_history=applied(imported=5,active_kept=0,errors=0)",
+        "details": {
+            "restore_history": {
+                "status": "applied",
+                "imported": 5,
+                "active_kept": 0,
+                "errors": 0,
+            },
+        },
+    }
+
+    summary = _build_migration_summary(event, {"last_event": event, "last_effective_event": event})
+
+    assert summary["status"] == "success"
+    assert summary["reason_code"] == "restore_history_migrated"
+    assert "5 restore run(s) migrated" in summary["actions"]
+    assert summary["errors"] == []
+
+
 def test_migration_summary_no_changes_has_no_actions():
     event = {
         "success": True,

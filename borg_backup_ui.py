@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.1336"
+APP_VERSION = "2026.06.29.1402"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -142,18 +142,35 @@ def _storage_paths_state(details: dict) -> str:
     return "baseline_detected"
 
 
+def _restore_history_state(details: dict) -> str:
+    restore_history = details.get("restore_history") if isinstance(details.get("restore_history"), dict) else {}
+    status = str(restore_history.get("status", "") or "").strip().lower()
+    imported = int(restore_history.get("imported") or 0)
+    errors = int(restore_history.get("errors") or 0)
+    if status == "failed" or errors > 0:
+        return "failed"
+    if status == "applied" or imported > 0:
+        return "applied"
+    if status == "not_applicable":
+        return "not_applicable"
+    return "not_applicable"
+
+
 def _migration_log_is_effective(success: bool, reason_code: str, details: dict) -> bool:
     if not success:
         return True
     if str(reason_code or "").strip() != "no_changes":
         return True
     storage = details.get("storage_paths") if isinstance(details.get("storage_paths"), dict) else {}
+    restore_history = details.get("restore_history") if isinstance(details.get("restore_history"), dict) else {}
     return bool(
         storage.get("changed")
         or storage.get("moved")
         or storage.get("move_errors")
         or storage.get("settings_changed")
         or storage.get("forced_conf_write")
+        or restore_history.get("imported")
+        or restore_history.get("errors")
     )
 
 
@@ -185,9 +202,13 @@ def _write_migration_state(
     previous = _read_migration_state(config)
     previous_migrations = previous.get("migrations") if isinstance(previous.get("migrations"), dict) else {}
     storage_state = _storage_paths_state(run_details)
+    restore_history_state = _restore_history_state(run_details)
     previous_storage = previous_migrations.get("storage_paths_v1") if isinstance(previous_migrations.get("storage_paths_v1"), dict) else {}
     if _migration_state_is_final(str(previous_storage.get("state", "") or "")) and storage_state == "baseline_detected":
         storage_state = str(previous_storage.get("state"))
+    previous_restore_history = previous_migrations.get("restore_history_v1") if isinstance(previous_migrations.get("restore_history_v1"), dict) else {}
+    if _migration_state_is_final(str(previous_restore_history.get("state", "") or "")) and restore_history_state == "not_applicable":
+        restore_history_state = str(previous_restore_history.get("state"))
 
     jobs_details = run_details.get("jobs_layout") if isinstance(run_details.get("jobs_layout"), dict) else {}
     payload: dict = {
@@ -207,6 +228,12 @@ def _write_migration_state(
                 "checked_at": ts,
                 "source": "startup_check",
                 "details": run_details.get("storage_paths", {}),
+            },
+            "restore_history_v1": {
+                "state": restore_history_state,
+                "checked_at": ts,
+                "source": "startup_check",
+                "details": run_details.get("restore_history", {}),
             },
         },
         "checks": {
@@ -3094,6 +3121,12 @@ def main():
             "settings_changed": False,
             "forced_conf_write": False,
         },
+        "restore_history": {
+            "status": "not_applicable",
+            "imported": 0,
+            "active_kept": 0,
+            "errors": 0,
+        },
     }
     try:
         from jobs_api import migrate_data_layout
@@ -3137,15 +3170,43 @@ def main():
         migration_messages.append(f"storage_paths=error:{exc}")
         migration_details["storage_paths"] = {"status": "error", "error": str(exc)}
         _log(f"WARNING: Storage path migration skipped: {exc}")
+    try:
+        from restore_api import migrate_restore_history_from_legacy
+        restore_mig = migrate_restore_history_from_legacy(config)
+        restore_details = restore_mig.get("details") if isinstance(restore_mig.get("details"), dict) else {}
+        imported = int(restore_details.get("imported") or 0)
+        active_kept = int(restore_details.get("active_kept") or 0)
+        errors = len(restore_details.get("errors") or [])
+        status = str(restore_mig.get("status") or "not_applicable")
+        migration_details["restore_history"] = {
+            "status": status,
+            "imported": imported,
+            "active_kept": active_kept,
+            "errors": errors,
+            "source_file": str(restore_details.get("source_file") or ""),
+        }
+        if errors:
+            migration_ok = False
+        migration_messages.append(f"restore_history={status}(imported={imported},active_kept={active_kept},errors={errors})")
+        _log(f"Restore-History-Migration: status={status}, imported={imported}, active_kept={active_kept}, errors={errors}")
+    except Exception as exc:
+        migration_ok = False
+        migration_messages.append(f"restore_history=error:{exc}")
+        migration_details["restore_history"] = {"status": "failed", "error": str(exc), "errors": 1}
+        _log(f"WARNING: Restore history migration skipped: {exc}")
     reason_code = "no_changes"
     reason_text = "No changes required"
     storage_info = migration_details.get("storage_paths", {})
+    restore_history_info = migration_details.get("restore_history", {})
     if not migration_ok:
         reason_code = "error"
         reason_text = "Migration completed with errors"
     elif bool(storage_info.get("changed")):
         reason_code = "storage_paths_changed"
         reason_text = "Cache/Remotes/backup.conf an GLOBAL_DATA_DIR angepasst"
+    elif int(restore_history_info.get("imported") or 0) > 0:
+        reason_code = "restore_history_migrated"
+        reason_text = "Restore-History aus restore-runs.json migriert"
 
     _write_migration_state(
         config,

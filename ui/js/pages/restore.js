@@ -30,6 +30,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   history: [],
   historyTotal: 0,
   historyDetailId: '',
+  view: 'wizard',
   liveMode: false,
 };
 const restoreState = window.BBUI.restoreState;
@@ -89,6 +90,28 @@ function restoreSetLiveMode(enabled) {
     renderRestorePrecheck(null);
     setRestoreHeaderStatus('running');
   }
+}
+
+function restoreSwitchView(view) {
+  const next = view === 'history' ? 'history' : 'wizard';
+  restoreState.view = next;
+  const wizardBtn = document.getElementById('restore-view-wizard-btn');
+  const historyBtn = document.getElementById('restore-view-history-btn');
+  const historyPanel = document.getElementById('restore-history-panel');
+  const wizard = document.getElementById('restore-wizard');
+  const empty = document.getElementById('restore-empty');
+  if (wizardBtn) {
+    wizardBtn.classList.toggle('is-active', next === 'wizard');
+    wizardBtn.setAttribute('aria-selected', next === 'wizard' ? 'true' : 'false');
+  }
+  if (historyBtn) {
+    historyBtn.classList.toggle('is-active', next === 'history');
+    historyBtn.setAttribute('aria-selected', next === 'history' ? 'true' : 'false');
+  }
+  if (historyPanel) historyPanel.classList.toggle('hidden', next !== 'history');
+  if (wizard) wizard.style.display = next === 'wizard' ? '' : 'none';
+  if (empty) empty.style.display = 'none';
+  if (next === 'history') restoreLoadHistory();
 }
 
 function restoreJobIcon(job) {
@@ -606,9 +629,10 @@ async function restoreInit() {
   const sel = document.getElementById('restore-job-sel');
   sel.innerHTML = `<option value="">${restoreT('chooseJob')}</option>`;
   const wizard = document.getElementById('restore-wizard');
-  if (wizard) wizard.style.display = '';
+  if (wizard) wizard.style.display = restoreState.view === 'history' ? 'none' : '';
   const empty = document.getElementById('restore-empty');
   if (empty) empty.style.display = 'none';
+  restoreSwitchView(restoreState.view || 'wizard');
   restoreSetStep(1);
   _restoreMsg('');
   _restoreBindTargetAutocomplete();

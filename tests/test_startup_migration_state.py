@@ -44,11 +44,46 @@ def test_write_migration_state_v2_skips_no_changes_log(tmp_path: Path):
     assert state["schema_version"] == 2
     assert state["last_run"]["reason_code"] == "no_changes"
     assert state["migrations"]["storage_paths_v1"]["state"] == "baseline_detected"
+    assert state["migrations"]["restore_history_v1"]["state"] == "not_applicable"
     assert state["checks"]["jobs_layout"]["state"] == "ok"
     assert state["config"]["backup_conf_schema"]["state"] == "ok"
     assert state["config"]["backup_conf_schema"]["missing_count"] == 0
     assert state["config"]["backup_conf_schema"]["deprecated_active_count"] == 0
     assert not (config_dir / "migrations.log.jsonl").exists()
+
+
+def test_write_migration_state_records_restore_history_import(tmp_path: Path):
+    scripts = tmp_path / "scripts"
+    config_dir = scripts / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "backup.conf").write_text('GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n', encoding="utf-8")
+    cfg = {"BACKUP_SCRIPTS_DIR": str(scripts)}
+
+    _write_migration_state(
+        cfg,
+        True,
+        "restore_history=applied(imported=3,active_kept=0,errors=0)",
+        reason_code="restore_history_migrated",
+        reason_text="Restore-History aus restore-runs.json migriert",
+        details={
+            "jobs_layout": {"status": "ok"},
+            "storage_paths": {"status": "ok", "changed": False, "moved": 0, "move_errors": 0},
+            "restore_history": {
+                "status": "applied",
+                "imported": 3,
+                "active_kept": 0,
+                "errors": 0,
+            },
+        },
+    )
+
+    state = json.loads((config_dir / "migration-state.json").read_text(encoding="utf-8"))
+    log_lines = (config_dir / "migrations.log.jsonl").read_text(encoding="utf-8").splitlines()
+
+    assert state["last_run"]["reason_code"] == "restore_history_migrated"
+    assert state["migrations"]["restore_history_v1"]["state"] == "applied"
+    assert state["migrations"]["restore_history_v1"]["details"]["imported"] == 3
+    assert len(log_lines) == 1
 
 
 def test_storage_path_migration_does_not_write_legacy_marker_when_unchanged(tmp_path: Path):

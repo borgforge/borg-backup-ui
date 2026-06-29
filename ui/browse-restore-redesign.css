@@ -18,6 +18,10 @@
 
 .restore-redesign-workspace { width: 100%; max-width: 100%; min-width: 0; overflow: hidden; }
 .restore-redesign-workspace > .settings-body, #restore-step-panel-5 { width: 100%; max-width: 100%; min-width: 0; }
+.restore-view-tabs { display: inline-flex; gap: 0; margin-bottom: var(--ui-space-3); overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); background: var(--ui-color-surface); }
+.restore-view-tabs button { min-height: 2.25rem; padding: 0 var(--ui-space-3); border: 0; border-right: 1px solid var(--ui-color-border); background: transparent; color: var(--ui-color-text-subtle); font-weight: var(--ui-font-weight-semibold); }
+.restore-view-tabs button:last-child { border-right: 0; }
+.restore-view-tabs button.is-active { background: var(--ui-color-surface-raised); color: var(--ui-color-accent); box-shadow: inset 0 -2px var(--ui-color-accent); }
 .restore-runs-panel, .restore-history-panel { margin-bottom: var(--ui-space-3); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
 .restore-runs-header, .restore-history-header { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); padding: var(--ui-space-2) var(--ui-space-3); border-bottom: 1px solid var(--ui-color-border); }
 .restore-runs-header h2, .restore-runs-header small, .restore-history-header h2, .restore-history-header small, .restore-history-header p { display: block; margin: 0; }

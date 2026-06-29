@@ -315,6 +315,31 @@ def _migrate_restore_runs_v1_to_history(config: dict, loaded: dict) -> tuple[dic
     return active if status != "failed" else loaded, bool(terminal) and status != "failed"
 
 
+def migrate_restore_history_from_legacy(config: dict) -> dict:
+    """
+    Startup migration entry point.
+
+    The migration itself is intentionally implemented in the restore-run loader so
+    stale running restores can be marked aborted before terminal entries are
+    moved to history. Startup calls this once; later API calls only observe the
+    already written migration state.
+    """
+    _ensure_restore_runs_loaded(config)
+    state = _read_history_migration_state(config)
+    if not state:
+        state = {
+            "migration_id": _RESTORE_HISTORY_MIGRATION_ID,
+            "status": "not_applicable",
+            "details": {
+                "source_file": str(_restore_runs_file(config)),
+                "imported": 0,
+                "active_kept": len(_RESTORE_RUNS),
+                "errors": [],
+            },
+        }
+    return state
+
+
 def _ensure_restore_runs_loaded(config: dict) -> None:
     global _RESTORE_RUNS_LOADED
     with _RESTORE_LOCK:

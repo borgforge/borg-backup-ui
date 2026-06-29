@@ -557,6 +557,11 @@
         </div>
       </div>
 
+      <div class="restore-view-tabs" role="tablist" data-i18n-aria-label="restore.viewTabs" aria-label="Restore Ansicht">
+        <button type="button" id="restore-view-wizard-btn" class="is-active" data-restore-view="wizard" role="tab" aria-selected="true" data-i18n="restore.viewWizard">Wiederherstellung</button>
+        <button type="button" id="restore-view-history-btn" data-restore-view="history" role="tab" aria-selected="false" data-i18n="restore.viewHistory">Restore-History</button>
+      </div>
+
       <section id="restore-runs-panel" class="restore-runs-panel hidden">
         <header class="restore-runs-header">
           <div>
@@ -568,7 +573,7 @@
         <div id="restore-runs-content"></div>
       </section>
 
-      <section id="restore-history-panel" class="restore-history-panel">
+      <section id="restore-history-panel" class="restore-history-panel hidden">
         <header class="restore-history-header">
           <div>
             <small data-i18n="restore.historyEyebrow">Verlauf</small>

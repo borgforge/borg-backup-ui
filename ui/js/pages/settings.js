@@ -1232,6 +1232,7 @@ function _localizeMigrationReason(code, fallback, status) {
     none: 'reasonNone',
     storage_paths_changed: 'reasonStorageChanged',
     no_changes: 'reasonNoChanges',
+    restore_history_migrated: 'reasonRestoreHistoryMigrated',
     error: 'reasonFailed',
   };
   if (keys[code]) return settingsT(`health.${keys[code]}`);
@@ -1292,9 +1293,15 @@ function _buildMigrationSummary(data) {
   if (storage?.changed === true) actions.push(settingsT('health.storagePathsUpdated'));
   if (storage?.settings_changed === true) actions.push(settingsT('health.profileSettingsUpdated'));
   if (storage?.forced_conf_write === true) actions.push(settingsT('health.configCorrected'));
+  const restoreHistory = (details?.restore_history && typeof details.restore_history === 'object') ? details.restore_history : {};
+  const restoreImported = Number(restoreHistory?.imported || 0);
+  const restoreErrors = Number(restoreHistory?.errors || 0);
+  if (restoreImported > 0) actions.push(settingsT('health.restoreHistoryImported', { count: restoreImported }));
   const jobs = (details?.jobs_layout && typeof details.jobs_layout === 'object') ? details.jobs_layout : {};
   if (String(jobs?.status || '').toLowerCase() === 'ok') actions.push(settingsT('health.jobLayoutChecked'));
-  const errors = moveErrors > 0 ? settingsT('health.moveErrors', { count: moveErrors }) : (!ok ? settingsT('health.migrationFailed') : '');
+  const errors = moveErrors > 0
+    ? settingsT('health.moveErrors', { count: moveErrors })
+    : (restoreErrors > 0 ? settingsT('health.restoreHistoryErrors', { count: restoreErrors }) : (!ok ? settingsT('health.migrationFailed') : ''));
   const status = ok ? 'success' : 'failed';
   const reason = _localizeMigrationReason(reasonCode, reasonText, status);
   return {

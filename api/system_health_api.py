@@ -50,6 +50,7 @@ def _is_effective_migration(entry: Dict[str, Any]) -> bool:
         return True
     details = entry.get("details") if isinstance(entry.get("details"), dict) else {}
     storage = details.get("storage_paths") if isinstance(details.get("storage_paths"), dict) else {}
+    restore_history = details.get("restore_history") if isinstance(details.get("restore_history"), dict) else {}
     jobs = details.get("jobs_layout") if isinstance(details.get("jobs_layout"), dict) else {}
     if bool(storage.get("changed")) or bool(storage.get("settings_changed")) or bool(storage.get("forced_conf_write")):
         return True
@@ -136,6 +137,7 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
     message = str(last_event.get("message", "") or "").strip()
     details = last_event.get("details") if isinstance(last_event.get("details"), dict) else {}
     storage = details.get("storage_paths") if isinstance(details.get("storage_paths"), dict) else {}
+    restore_history = details.get("restore_history") if isinstance(details.get("restore_history"), dict) else {}
     jobs = details.get("jobs_layout") if isinstance(details.get("jobs_layout"), dict) else {}
 
     actions = []
@@ -150,10 +152,16 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
         actions.append("Profile settings updated")
     if bool(storage.get("forced_conf_write")):
         actions.append("backup.conf corrected")
+    restore_imported = _as_int(restore_history.get("imported"))
+    restore_errors = _as_int(restore_history.get("errors"))
+    if restore_imported > 0:
+        actions.append(f"{restore_imported} restore run(s) migrated")
     if str(jobs.get("status", "")).strip().lower() not in {"", "ok"}:
         errors.append(f"Job-Layout: {jobs.get('error') or jobs.get('status')}")
     if move_errors > 0:
         errors.append(f"{move_errors} move errors")
+    if restore_errors > 0:
+        errors.append(f"{restore_errors} restore history error(s)")
     if not ok and not errors:
         errors.append("Migration failed")
 
