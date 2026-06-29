@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1402">
+<!ENTITY version   "2026.06.29.1442">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.1442###
+- Issue #93:
+  - Restore History view now uses clearer tabs, colored status badges, restore IDs and collapsible details.
+  - Legacy restore history entries with empty conflict mode now show the effective default conflict strategy.
+
 ###2026.06.29.1402###
 - Issue #93:
   - Restore History is now opened as a separate Browse & Restore view instead of being shown above the wizard.
@@ -109,7 +114,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>39134924ee6bd586dd6e8797b7f21ae8</MD5>
+<MD5>260577b2f4e49bf215543084dbae067c</MD5>
 </FILE>
 
 <!--
