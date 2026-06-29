@@ -26,6 +26,8 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   files: [],
   jobs: [],
   archives: [],
+  runs: [],
+  liveMode: false,
 };
 const restoreState = window.BBUI.restoreState;
 
@@ -59,11 +61,31 @@ function restoreSetStep(step) {
     nextBtn.style.display = next >= 5 ? 'none' : '';
     nextBtn.textContent = next === 4 ? restoreT('toCheck') : restoreT('next');
   }
-  if (next === 5) {
+  if (next !== 5 && restoreState.liveMode) {
+    restoreSetLiveMode(false);
+  }
+  if (next === 5 && !restoreState.liveMode) {
     restoreEnsureAutoPrecheck();
   }
   const status = document.getElementById('restore-step-status');
   if (status) status.textContent = restoreT('stepStatus', { step: next, total: 5 });
+}
+
+function restoreSetLiveMode(enabled) {
+  restoreState.liveMode = !!enabled;
+  const panel = document.getElementById('restore-step-panel-5');
+  if (panel) panel.classList.toggle('restore-live-mode', restoreState.liveMode);
+  const out = document.getElementById('restore-precheck-output');
+  const details = out?.closest('details');
+  if (details) {
+    details.open = restoreState.liveMode || details.open;
+    const summary = details.querySelector('summary');
+    if (summary) summary.textContent = restoreT(restoreState.liveMode ? 'liveLog' : 'showTechnicalPrecheck');
+  }
+  if (restoreState.liveMode) {
+    renderRestorePrecheck(null);
+    setRestoreHeaderStatus('running');
+  }
 }
 
 function restoreJobIcon(job) {
@@ -255,6 +277,89 @@ function _stopRestorePolling() {
   }
 }
 
+function restoreRunStateLabel(state) {
+  const key = String(state || '').toLowerCase();
+  return ({
+    running: restoreT('runStateRunning'),
+    done: restoreT('runStateDone'),
+    error: restoreT('runStateError'),
+    aborted: restoreT('runStateAborted'),
+  })[key] || key || '—';
+}
+
+function restoreRunStateClass(state) {
+  const key = String(state || '').toLowerCase();
+  if (key === 'running') return 'warning';
+  if (key === 'done') return 'success';
+  if (key === 'error' || key === 'aborted') return 'error';
+  return 'neutral';
+}
+
+function renderRestoreRuns(runs) {
+  const panel = document.getElementById('restore-runs-panel');
+  const content = document.getElementById('restore-runs-content');
+  if (!panel || !content) return;
+  const rows = Array.isArray(runs) ? runs : [];
+  const activeRuns = rows.filter((run) => String(run.state || '').toLowerCase() === 'running');
+  if (!activeRuns.length) {
+    panel.classList.add('hidden');
+    content.innerHTML = '';
+    return;
+  }
+  panel.classList.remove('hidden');
+  const runCard = (run) => {
+    const id = String(run.restore_id || '');
+    const state = String(run.state || '');
+    return `<article class="restore-run-card is-active">
+      <div class="restore-run-main">
+        <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
+        <strong>${escHtml(run.job_key || '—')}</strong>
+        <small>${escHtml(run.archive || '—')}</small>
+      </div>
+      <div class="restore-run-meta">
+        <span>${escHtml(restoreT('target'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
+        <span>${escHtml(restoreT('runStarted'))}: <b>${escHtml(run.started_at || '—')}</b></span>
+        ${run.phase ? `<span>${escHtml(restoreT('runPhase'))}: <b>${escHtml(run.phase)}</b></span>` : ''}
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" data-restore-run-action="open" data-restore-id="${escHtml(id)}">${escHtml(restoreT('resumeLiveLog'))}</button>
+    </article>`;
+  };
+  content.innerHTML = `<div class="restore-active-runs">
+    <strong>${escHtml(restoreT('activeRestoreTitle'))}</strong>
+    ${activeRuns.map((run) => runCard(run)).join('')}
+  </div>`;
+}
+
+async function restoreLoadRuns() {
+  try {
+    const res = await fetch('/api/restore/runs?limit=10', { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || data.error) return;
+    restoreState.runs = Array.isArray(data.runs) ? data.runs : [];
+    renderRestoreRuns(restoreState.runs);
+  } catch (_) {
+    // Restore runs are optional context; keep the wizard usable if loading fails.
+  }
+}
+
+function onRestoreRunsClick(event) {
+  const btn = event.target.closest('[data-restore-run-action="open"]');
+  if (!btn) return;
+  const restoreId = String(btn.dataset.restoreId || '').trim();
+  if (restoreId) restoreOpenRun(restoreId);
+}
+
+async function restoreOpenRun(restoreId) {
+  _stopRestorePolling();
+  restoreState.activeRestoreId = restoreId;
+  restoreState.completed = false;
+  restoreSetLiveMode(true);
+  hideEl('restore-assist-msg');
+  restoreSetStep(5);
+  _setRestoreAssistBusy(true);
+  await _pollRestoreState(restoreId);
+}
+
 async function _pollRestoreState(restoreId) {
   const out = document.getElementById('restore-precheck-output');
   if (!restoreId) return;
@@ -283,6 +388,7 @@ async function _pollRestoreState(restoreId) {
       restoreState.completed = true;
       restoreUpdateConfirmState();
       restoreSetStep(5);
+      restoreLoadRuns();
       if (data.skipped) {
         setRestoreHeaderStatus('skipped');
         const reasonKey = {
@@ -297,12 +403,13 @@ async function _pollRestoreState(restoreId) {
       }
       return;
     }
-    if (data.state === 'error') {
+    if (data.state === 'error' || data.state === 'aborted') {
       _stopRestorePolling();
       _setRestoreAssistBusy(false);
       restoreUpdateConfirmState();
       setRestoreHeaderStatus('failed');
-      showMsg('restore-assist-msg', 'error', restoreT('failed', { message: restoreT('unknownError') }));
+      restoreLoadRuns();
+      showMsg('restore-assist-msg', 'error', restoreT('failed', { message: data.error || restoreT('unknownError') }));
       return;
     }
 
@@ -372,6 +479,7 @@ function _restoreBindTargetAutocomplete() {
 
 async function restoreInit() {
   restoreState.completed = false;
+  restoreSetLiveMode(false);
   const sel = document.getElementById('restore-job-sel');
   sel.innerHTML = `<option value="">${restoreT('chooseJob')}</option>`;
   const wizard = document.getElementById('restore-wizard');
@@ -385,6 +493,7 @@ async function restoreInit() {
   if (targetInput && !targetInput.value.trim()) targetInput.value = '/mnt/user/';
   _restoreRenderSelectionSummary();
   _restoreRenderSelectedBox();
+  restoreLoadRuns();
 
   try {
     const jobsRes = await fetch('/api/jobs', { credentials: 'include' });
@@ -705,6 +814,7 @@ function _setRestoreAssistBusy(busy) {
 }
 
 async function restoreRunPrecheck() {
+  restoreSetLiveMode(false);
   hideEl('restore-assist-msg');
   const source = restoreState.selectedPath || document.getElementById('restore-source-path')?.value || '';
   const target = document.getElementById('restore-target-path')?.value?.trim() || '';
@@ -814,12 +924,14 @@ function setRestoreHeaderStatus(state) {
     success: 'restoreSuccessfulShort',
     skipped: 'restoreSkippedShort',
     failed: 'restoreFailedShort',
+    running: 'restoreRunningShort',
   }[state] || 'precheckSuccessful';
   badge.textContent = restoreT(key);
   badge.classList.remove('success', 'warning', 'error');
   if (state === 'success') badge.classList.add('success');
   if (state === 'skipped') badge.classList.add('warning');
   if (state === 'failed') badge.classList.add('error');
+  if (state === 'running') badge.classList.add('warning');
 }
 
 function _currentPrecheckKey() {
@@ -868,6 +980,7 @@ async function restoreStart() {
   ].join('\n');
   const confirmed = await openRestoreConfirmModal(summary);
   if (!confirmed) return;
+  restoreSetLiveMode(true);
   const out = document.getElementById('restore-precheck-output');
   if (out) {
     out.textContent = [

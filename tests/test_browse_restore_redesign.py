@@ -26,6 +26,7 @@ def test_browse_restore_keeps_five_step_workflow_and_api_contracts() -> None:
     for contract in (
         "/api/restore/archives", "/api/restore/files", "/api/restore/download-check",
         "/api/restore/precheck", "/api/restore/start", "/api/restore/state",
+        "/api/restore/runs",
     ):
         assert contract in script
 
@@ -56,3 +57,19 @@ def test_browse_restore_keeps_review_and_completion_status_in_sync() -> None:
     assert "function restorePrecheckInputsChanged()" in script
     precheck_change = script.split("function restorePrecheckInputsChanged()", 1)[1]
     assert "_restoreRenderSelectionSummary();" in precheck_change
+
+
+def test_browse_restore_can_resume_restore_runs() -> None:
+    html = _read("ui/index.html")
+    css = _read("ui/browse-restore-redesign.css")
+    script = _read("ui/js/pages/restore.js")
+    assert 'id="restore-runs-panel"' in html
+    assert "restore-run-card" in css
+    assert "restore-recent-runs" not in css
+    assert "restore-live-mode" in css
+    assert "function restoreLoadRuns()" in script
+    assert "function restoreOpenRun(restoreId)" in script
+    assert "function restoreSetLiveMode(enabled)" in script
+    assert "next === 5 && !restoreState.liveMode" in script
+    assert "resumeLiveLog" in script
+    assert "data-restore-run-action=\"open\"" in script

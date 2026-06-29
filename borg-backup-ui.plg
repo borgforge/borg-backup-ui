@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.28.1750">
+<!ENTITY version   "2026.06.29.1048">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,23 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.1048###
+- Issue #90:
+  - Resuming an active restore now opens a dedicated live-log mode instead of rerunning the wizard precheck.
+
+###2026.06.29.1010###
+- Issue #90:
+  - Restore page now only shows active restore runs in the wizard; completed restore history is tracked separately.
+
+###2026.06.29.0908###
+- Issue #90:
+  - Restore page keeps running restores visible but shows completed restore runs only as a compact limited history.
+
+###2026.06.29.0853###
+- Issue #90:
+  - Active UI sessions are refreshed during restore activity so long-running restores do not sign out active users.
+  - Restore page now shows recent restore runs and can resume a running restore live log after reload or re-login.
+
 ###2026.06.28.1750###
 - Fixed the edit wizard so existing job metadata repository and source paths are shown instead of legacy backup.conf defaults.
 
@@ -82,7 +99,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>7e9dfbd8aba1a1fc2fe00880c8da7fb8</MD5>
+<MD5>43f5d45f76de68f757f807e2216185f7</MD5>
 </FILE>
 
 <!--

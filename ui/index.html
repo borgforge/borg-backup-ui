@@ -557,6 +557,17 @@
         </div>
       </div>
 
+      <section id="restore-runs-panel" class="restore-runs-panel hidden">
+        <header class="restore-runs-header">
+          <div>
+            <small data-i18n="restore.runsEyebrow">Status</small>
+            <h2 data-i18n="restore.runsTitle">Restore-Läufe</h2>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="restore-runs-refresh-btn" data-i18n="restore.refreshRuns">Aktualisieren</button>
+        </header>
+        <div id="restore-runs-content"></div>
+      </section>
+
       <div id="restore-msg" class="restore-msg hidden"></div>
 
       <div id="restore-empty" class="page-empty-state">
@@ -682,11 +693,11 @@
               <strong data-i18n="restore.currentSelection">Aktuelle Auswahl</strong><br>
               <span data-i18n="restore.selectionReady">Auswahl ist für die Vorprüfung vorbereitet.</span>
             </div>
-            <label class="form-checkbox-row" style="margin-top:10px">
+            <label class="form-checkbox-row restore-confirm-row" style="margin-top:10px">
               <input id="restore-confirm-check" type="checkbox">
               <span data-i18n="restore.confirmSummary">Zusammenfassung geprüft – Wiederherstellung ausführen</span>
             </label>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
+            <div class="restore-start-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
               <button class="btn btn-primary" id="restore-start-btn" disabled data-i18n="restore.start">Wiederherstellen starten</button>
             </div>
             <div id="restore-assist-msg" class="status-message hidden"></div>

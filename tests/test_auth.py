@@ -131,6 +131,28 @@ def test_ui_session_expired_is_invalid_and_removed():
     assert "sid-expired" not in BackupUIHandler._UI_SESSIONS
 
 
+def test_valid_ui_session_refreshes_browser_cookie():
+    h = _make_handler()
+    h.headers = {"Cookie": "bbui_session=sid-active"}
+    h._ui_auth_enabled = lambda: True
+    h._persist_sessions = lambda: None
+    h._session_idle_timeout_seconds = lambda: 900
+    h._session_absolute_timeout_seconds = lambda: 43200
+    now = time.time()
+    BackupUIHandler._UI_SESSIONS = {
+        "sid-active": {
+            "created_at": now - 60,
+            "expires_at": now + 60,
+            "last_seen_at": now - 30,
+        }
+    }
+
+    assert h._is_ui_session_valid() is True
+    assert "bbui_session=sid-active" in h._refreshed_session_cookie
+    assert "Max-Age=900" in h._refreshed_session_cookie
+    assert BackupUIHandler._UI_SESSIONS["sid-active"]["expires_at"] > now + 800
+
+
 def test_validate_target_dir_rejects_path_outside_allowed_roots(tmp_path: Path, monkeypatch):
     import config_api
 

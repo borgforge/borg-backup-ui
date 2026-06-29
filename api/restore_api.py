@@ -1091,6 +1091,41 @@ def start_restore_async(
     return {"started": True, "restore_id": restore_id}
 
 
+def list_restore_runs(config: dict, limit: int = 20) -> dict:
+    _ensure_restore_runs_loaded(config)
+    try:
+        limit = max(1, min(50, int(limit)))
+    except (TypeError, ValueError):
+        limit = 20
+    with _RESTORE_LOCK:
+        rows = []
+        for run in _RESTORE_RUNS.values():
+            if not isinstance(run, dict):
+                continue
+            rows.append({
+                "restore_id": run.get("restore_id"),
+                "state": run.get("state"),
+                "phase": run.get("phase"),
+                "started_at": run.get("started_at"),
+                "finished_at": run.get("finished_at"),
+                "job_key": run.get("job_key"),
+                "archive": run.get("archive"),
+                "source_path": run.get("source_path"),
+                "target_dir": run.get("target_dir"),
+                "destination_path": run.get("destination_path"),
+                "error": run.get("error"),
+                "skipped": bool(run.get("skipped", False)),
+                "skip_reason_code": run.get("skip_reason_code", ""),
+                "lines": list(run.get("lines", []))[-20:],
+            })
+        rows.sort(key=lambda item: str(item.get("started_at") or ""), reverse=True)
+        active = [r for r in rows if str(r.get("state") or "").lower() == "running"]
+        return {
+            "runs": rows[:limit],
+            "active": active,
+        }
+
+
 def get_restore_state(config: dict, restore_id: str) -> dict:
     _ensure_restore_runs_loaded(config)
     with _RESTORE_LOCK:
