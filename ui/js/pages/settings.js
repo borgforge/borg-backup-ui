@@ -1224,8 +1224,12 @@ function _localizeMigrationAction(value) {
   const raw = String(value || '').trim();
   const moved = raw.match(/^(\d+) (?:Elemente verschoben|items moved)$/);
   const moveErrors = raw.match(/^(\d+) (?:Verschiebe-Fehler|move errors)$/);
+  const migrationApplied = raw.match(/^(.+) applied$/);
+  const updatedKeys = raw.match(/^Updated keys: (.+)$/);
   if (moved) return settingsT('health.itemsMoved', { count: moved[1] });
   if (moveErrors) return settingsT('health.moveErrors', { count: moveErrors[1] });
+  if (migrationApplied) return settingsT('health.migrationApplied', { id: migrationApplied[1] });
+  if (updatedKeys) return settingsT('health.updatedKeysSummary', { keys: updatedKeys[1] });
   const known = {
     'Storage-Pfade aktualisiert': 'storagePathsUpdated',
     'Storage paths updated': 'storagePathsUpdated',
@@ -1245,6 +1249,7 @@ function _localizeMigrationReason(code, fallback, status) {
     storage_paths_changed: 'reasonStorageChanged',
     no_changes: 'reasonNoChanges',
     restore_history_migrated: 'reasonRestoreHistoryMigrated',
+    startup_migrations_applied: 'reasonStartupMigrationsApplied',
     error: 'reasonFailed',
   };
   if (keys[code]) return settingsT(`health.${keys[code]}`);

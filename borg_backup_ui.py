@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.2235"
+APP_VERSION = "2026.06.29.2248"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -165,6 +165,9 @@ def _migration_log_is_effective(success: bool, reason_code: str, details: dict) 
         return True
     storage = details.get("storage_paths") if isinstance(details.get("storage_paths"), dict) else {}
     restore_history = details.get("restore_history") if isinstance(details.get("restore_history"), dict) else {}
+    startup = details.get("startup_migrations") if isinstance(details.get("startup_migrations"), dict) else {}
+    startup_applied = startup.get("applied") if isinstance(startup.get("applied"), list) else []
+    startup_failed = startup.get("failed") if isinstance(startup.get("failed"), list) else []
     return bool(
         storage.get("changed")
         or storage.get("moved")
@@ -173,6 +176,8 @@ def _migration_log_is_effective(success: bool, reason_code: str, details: dict) 
         or storage.get("forced_conf_write")
         or restore_history.get("imported")
         or restore_history.get("errors")
+        or startup_applied
+        or startup_failed
     )
 
 
@@ -3313,6 +3318,12 @@ def main():
     reason_text = "No changes required"
     storage_info = migration_details.get("storage_paths", {})
     restore_history_info = migration_details.get("restore_history", {})
+    startup_info = migration_details.get("startup_migrations", {})
+    startup_applied = [
+        str(item)
+        for item in (startup_info.get("applied") if isinstance(startup_info.get("applied"), list) else [])
+        if str(item) != "restore_history_v1"
+    ] if isinstance(startup_info, dict) else []
     if not migration_ok:
         reason_code = "error"
         reason_text = "Migration completed with errors"
@@ -3322,6 +3333,9 @@ def main():
     elif int(restore_history_info.get("imported") or 0) > 0:
         reason_code = "restore_history_migrated"
         reason_text = "Restore-History aus restore-runs.json migriert"
+    elif startup_applied:
+        reason_code = "startup_migrations_applied"
+        reason_text = "Startup-Migrationen angewendet"
 
     _write_migration_state(
         config,

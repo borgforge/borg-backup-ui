@@ -145,6 +145,65 @@ def test_no_change_startup_preserves_last_effective_migration(tmp_path: Path):
     assert len(log_lines) == 1
 
 
+def test_write_migration_state_logs_applied_startup_migration(tmp_path: Path):
+    scripts = tmp_path / "scripts"
+    config_dir = scripts / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "backup.conf").write_text('GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n', encoding="utf-8")
+    (config_dir / "backup.conf.example").write_text('GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n', encoding="utf-8")
+    cfg = {"BACKUP_SCRIPTS_DIR": str(scripts)}
+
+    _write_migration_state(
+        cfg,
+        True,
+        "notification_events_v1=applied",
+        reason_code="startup_migrations_applied",
+        reason_text="Startup-Migrationen angewendet",
+        details={
+            "jobs_layout": {"status": "ok"},
+            "storage_paths": {
+                "status": "ok",
+                "changed": False,
+                "moved": 0,
+                "move_errors": 0,
+                "settings_changed": False,
+                "forced_conf_write": False,
+            },
+            "startup_migrations": {
+                "status": "ok",
+                "applied": ["notification_events_v1"],
+                "skipped": [],
+                "failed": [],
+                "results": {
+                    "notification_events_v1": {
+                        "migration_id": "notification_events_v1",
+                        "introduced_in": "2026.06.29.2000",
+                        "runner": "central_migration_registry",
+                        "status": "applied",
+                        "details": {
+                            "migration_id": "notification_events_v1",
+                            "introduced_in": "2026.06.29.2000",
+                            "runner": "central_migration_registry",
+                            "updated_keys": ["NTFY_EVENTS"],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    state = json.loads((config_dir / "migration-state.json").read_text(encoding="utf-8"))
+    log_lines = (config_dir / "migrations.log.jsonl").read_text(encoding="utf-8").splitlines()
+    logged = json.loads(log_lines[0])
+
+    assert state["last_run"]["reason_code"] == "startup_migrations_applied"
+    assert state["migrations"]["notification_events_v1"]["state"] == "applied"
+    assert state["migrations"]["notification_events_v1"]["details"]["updated_keys"] == ["NTFY_EVENTS"]
+    assert len(log_lines) == 1
+    assert logged["reason_code"] == "startup_migrations_applied"
+    assert logged["details"]["startup_migrations"]["applied"] == ["notification_events_v1"]
+
+
 def test_write_migration_state_records_central_restore_history_noop(tmp_path: Path):
     scripts = tmp_path / "scripts"
     config_dir = scripts / "config"
