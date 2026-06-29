@@ -1761,7 +1761,11 @@
       "commentKeys": "auskommentieren",
       "initialSetup": "Initiales Setup",
       "configuration": "Konfiguration",
+      "executedMigrations": "Ausgeführte Migrationen",
       "plannedMigrations": "Geplante Migrationen",
+      "updatedKeys": "Geändert",
+      "checkedAt": "Ausgeführt",
+      "introducedIn": "Eingeführt in",
       "stateNone": "Noch kein Lauf",
       "stateSuccess": "Erfolgreich",
       "stateFailed": "Fehlgeschlagen",
@@ -1810,7 +1814,11 @@
       "registrySchemaMissing": "backup.conf fehlen Schema-Keys.",
       "registryCleanupTitle": "Deprecated backup.conf Cleanup-Kandidaten",
       "registryCleanupPresent": "Legacy-/Deprecated-Keys sind vorhanden und können bereinigt werden.",
-      "registryCleanupEmpty": "Keine Legacy-/Deprecated-Keys gefunden."
+      "registryCleanupEmpty": "Keine Legacy-/Deprecated-Keys gefunden.",
+      "registryNotificationEventsTitle": "Benachrichtigungsereignisse",
+      "registryNotificationEventsApplied": "Zentrale Benachrichtigungsereignisse wurden migriert.",
+      "registryNotificationEventsCurrent": "Zentrale Benachrichtigungsereignisse sind aktuell.",
+      "registryNotificationEventsPending": "Zentrale Benachrichtigungsereignisse sind noch nicht final protokolliert."
     },
     "tabs": {
       "general": "Allgemein",

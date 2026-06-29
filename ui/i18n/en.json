@@ -1761,7 +1761,11 @@
       "commentKeys": "commented out",
       "initialSetup": "Initial setup",
       "configuration": "Configuration",
+      "executedMigrations": "Executed migrations",
       "plannedMigrations": "Planned migrations",
+      "updatedKeys": "Changed",
+      "checkedAt": "Executed",
+      "introducedIn": "Introduced in",
       "stateNone": "No run yet",
       "stateSuccess": "Successful",
       "stateFailed": "Failed",
@@ -1810,7 +1814,11 @@
       "registrySchemaMissing": "backup.conf is missing schema keys.",
       "registryCleanupTitle": "Deprecated backup.conf cleanup candidates",
       "registryCleanupPresent": "Legacy/deprecated keys exist and can be cleaned up.",
-      "registryCleanupEmpty": "No legacy/deprecated keys found."
+      "registryCleanupEmpty": "No legacy/deprecated keys found.",
+      "registryNotificationEventsTitle": "Notification events",
+      "registryNotificationEventsApplied": "Central notification events were migrated.",
+      "registryNotificationEventsCurrent": "Central notification events are current.",
+      "registryNotificationEventsPending": "Central notification events have not reached a final recorded state yet."
     },
     "tabs": {
       "general": "General",

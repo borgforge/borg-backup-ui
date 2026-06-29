@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #92
+- Settings:
+  - System health now lists recorded startup migrations such as `notification_events_v1` in an executed migrations section.
+  - Migration entries show status, changed keys, execution timestamp and introduced version so central notification migrations are auditable from the UI.
+
 ### Issue #93
 - Browse & Restore:
   - Active restore runs remain in the wizard status banner and can still resume the live log.

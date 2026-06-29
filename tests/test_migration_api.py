@@ -198,6 +198,56 @@ def test_registry_does_not_count_not_needed_cleanup_as_planned(tmp_path: Path):
     assert registry["summary"]["planned"] == 0
 
 
+def test_registry_reports_recorded_notification_events_migration(tmp_path: Path):
+    cfg = _write_conf_tree(
+        tmp_path,
+        "\n".join([
+            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
+            'NOTIFY_EMAIL_EVENTS="backup_failed"',
+            'NOTIFY_UNRAID_EVENTS="backup_success,backup_warning,backup_failed,backup_skipped"',
+            'NOTIFY_REMINDER_INTERVAL_HOURS="24"',
+            "",
+        ]),
+        "\n".join([
+            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
+            'NOTIFY_EMAIL_EVENTS="backup_failed"',
+            'NOTIFY_UNRAID_EVENTS="backup_success,backup_warning,backup_failed,backup_skipped"',
+            'NOTIFY_REMINDER_INTERVAL_HOURS="24"',
+            "",
+        ]),
+    )
+    state_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
+    state_file.write_text(
+        """{
+  "schema_version": 2,
+  "migrations": {
+    "notification_events_v1": {
+      "state": "applied",
+      "checked_at": "2026-06-29T22:23:59",
+      "source": "startup_check",
+      "details": {
+        "migration_id": "notification_events_v1",
+        "introduced_in": "2026.06.29.2000",
+        "runner": "central_migration_registry",
+        "updated_keys": ["NTFY_EVENTS"]
+      }
+    }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+
+    registry = get_migration_registry_status(cfg)
+    item = _items_by_id(registry)["notification_events_v1"]
+
+    assert item["category"] == "migration"
+    assert item["status"] == "applied"
+    assert item["details"]["updated_keys"] == ["NTFY_EVENTS"]
+    assert item["details"]["checked_at"] == "2026-06-29T22:23:59"
+    assert item["details"]["introduced_in"] == "2026.06.29.2000"
+
+
 def test_legacy_cleanup_plan_is_dry_run(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,

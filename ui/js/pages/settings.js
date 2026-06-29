@@ -1153,6 +1153,10 @@ function _migrationRegistryText(item, field) {
       title: 'registryCleanupTitle',
       reason: status === 'pending' ? 'registryCleanupPresent' : 'registryCleanupEmpty',
     },
+    notification_events_v1: {
+      title: 'registryNotificationEventsTitle',
+      reason: status === 'applied' ? 'registryNotificationEventsApplied' : (status === 'not_needed' ? 'registryNotificationEventsCurrent' : 'registryNotificationEventsPending'),
+    },
   };
   const key = keys[id]?.[field];
   if (key) return settingsT(`health.${key}`);
@@ -1169,6 +1173,9 @@ function _renderMigrationRegistryItem(item) {
   const reason = _migrationRegistryText(item, 'reason');
   const details = item?.details && typeof item.details === 'object' ? item.details : {};
   const candidates = Array.isArray(details.candidate_keys) ? details.candidate_keys : [];
+  const updatedKeys = Array.isArray(details.updated_keys) ? details.updated_keys.map((key) => String(key || '').trim()).filter(Boolean) : [];
+  const checkedAt = String(details.checked_at || '').trim();
+  const introducedIn = String(details.introduced_in || '').trim();
   const plan = details?.dry_run_plan && typeof details.dry_run_plan === 'object' ? details.dry_run_plan : null;
   const planCandidateCount = Number(plan?.candidate_count || 0);
   const planText = plan && planCandidateCount > 0
@@ -1187,6 +1194,9 @@ function _renderMigrationRegistryItem(item) {
       ${reason ? `<div>${escHtml(reason)}</div>` : ''}
       ${planText ? `<div class="migration-registry-plan">${escHtml(planText)}</div>` : ''}
       ${candidates.length ? `<div class="migration-registry-id">Deprecated: ${candidates.map((row) => escHtml(String(row?.key || ''))).filter(Boolean).join(', ')}</div>` : ''}
+      ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map(escHtml).join(', ')}</div>` : ''}
+      ${checkedAt ? `<div class="migration-registry-id">${escHtml(settingsT('health.checkedAt'))}: ${escHtml(_formatHealthTimestamp(checkedAt) || checkedAt)}</div>` : ''}
+      ${introducedIn ? `<div class="migration-registry-id">${escHtml(settingsT('health.introducedIn'))}: ${escHtml(introducedIn)}</div>` : ''}
     </div>
   `;
 }
@@ -1195,6 +1205,7 @@ function _renderMigrationRegistryGroups(items) {
   const groups = [
     ['setup', settingsT('health.initialSetup')],
     ['config', settingsT('health.configuration')],
+    ['migration', settingsT('health.executedMigrations')],
     ['planned_migration', settingsT('health.plannedMigrations')],
   ];
   return groups.map(([category, title]) => {

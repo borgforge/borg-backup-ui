@@ -315,6 +315,63 @@ def _status_item(
     }
 
 
+def _migration_status_from_state(state: str) -> str:
+    state_norm = str(state or "").strip()
+    if state_norm == "failed":
+        return "failed"
+    if state_norm in {"applied", "baseline_detected", "imported_from_legacy_marker"}:
+        return "applied"
+    if state_norm in {"not_required", "not_applicable", "skipped"}:
+        return "not_needed"
+    return "pending"
+
+
+def _migration_reason_from_state(migration_id: str, state: str, details: Dict[str, Any]) -> str:
+    state_norm = str(state or "").strip()
+    if state_norm == "applied":
+        updated = details.get("updated_keys") if isinstance(details.get("updated_keys"), list) else []
+        if updated:
+            return f"Migration applied; updated keys: {', '.join(str(item) for item in updated)}."
+        return "Migration applied."
+    if state_norm in {"not_required", "not_applicable"}:
+        return "Migration checked; no changes were required."
+    if state_norm == "skipped":
+        return "Migration skipped because a final state was already recorded."
+    if state_norm == "failed":
+        return "Migration failed."
+    return f"Migration state for {migration_id} has not reached a final state."
+
+
+def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    skip_ids = {"storage_paths_v1", "restore_history_v1"}
+    for migration_id in sorted(str(key) for key in migrations.keys()):
+        if migration_id in skip_ids:
+            continue
+        row = migrations.get(migration_id)
+        if not isinstance(row, dict):
+            continue
+        state = str(row.get("state") or "").strip()
+        details = row.get("details") if isinstance(row.get("details"), dict) else {}
+        checked_at = str(row.get("checked_at") or "").strip()
+        items.append(_status_item(
+            migration_id,
+            migration_id,
+            _migration_status_from_state(state),
+            _migration_reason_from_state(migration_id, state, details),
+            category="migration",
+            details={
+                **row,
+                "state": state,
+                "checked_at": checked_at,
+                "updated_keys": details.get("updated_keys") if isinstance(details.get("updated_keys"), list) else [],
+                "runner": str(details.get("runner") or ""),
+                "introduced_in": str(details.get("introduced_in") or ""),
+            },
+        ))
+    return items
+
+
 def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
     from config_api import read_raw_conf, read_settings_payload
 
@@ -446,6 +503,7 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
             },
         ),
     ]
+    items.extend(_recorded_startup_migration_items(migrations))
 
     return {
         "schema_version": 1,
