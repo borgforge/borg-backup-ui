@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.2235">
+<!ENTITY version   "2026.06.29.2248">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.2248###
+- Issue #92:
+  - Applied startup migrations are now written to migrations.log.jsonl so the latest migration summary shows the correct run time and actions.
+
 ###2026.06.29.2235###
 - Issue #92:
   - System health now shows recorded startup migrations such as notification event migration with status, changed keys and execution time.
@@ -153,7 +157,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>17ac27e5725aecd626ba0e508da13e11</MD5>
+<MD5>0cd740955aaf7006e9228aad4fcc86d2</MD5>
 </FILE>
 
 <!--
