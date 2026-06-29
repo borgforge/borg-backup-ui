@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.28.1750"
+APP_VERSION = "2026.06.29.0853"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -374,6 +374,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     config: dict = {}
     _last_json_body: dict = {}
     _extra_response_headers: list[tuple[str, str]] = []
+    _refreshed_session_cookie: str = ""
     _ROLE_ORDER = {"viewer": 10, "operator": 20, "admin": 30}
 
     def _security_audit(self, event: str, result: str, *, target: str = "", detail: str = "") -> None:
@@ -423,6 +424,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _session_absolute_timeout_seconds(self) -> int:
         # hard limit to avoid endlessly prolonged sessions by activity
         return 12 * 60 * 60
+
+    def _session_cookie_header(self, sid: str, max_age_seconds: int) -> str:
+        return f"bbui_session={sid}; Path=/; Max-Age={int(max_age_seconds)}; HttpOnly; SameSite=Strict"
 
     def _load_sessions(self) -> None:
         cls = type(self)
@@ -501,9 +505,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self._persist_sessions()
             return False
         meta["last_seen_at"] = now
-        meta["expires_at"] = now + self._session_idle_timeout_seconds()
+        idle_sec = self._session_idle_timeout_seconds()
+        meta["expires_at"] = now + idle_sec
         with cls._UI_SESSIONS_LOCK:
             cls._UI_SESSIONS[sid] = meta
+        self._refreshed_session_cookie = self._session_cookie_header(sid, idle_sec)
         return True
 
     def _require_ui_session(self) -> bool:
@@ -759,6 +765,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/restore/download-check": lambda: self._get_restore_download_check(parsed.query),
                 "/api/restore/repo-stats": lambda: self._get_repo_stats(parsed.query),
                 "/api/restore/target-dirs": lambda: self._get_restore_target_dirs(parsed.query),
+                "/api/restore/runs": lambda: self._get_restore_runs(parsed.query),
                 "/api/restore/state": lambda: self._get_restore_state(parsed.query),
                 "/api/reports/jobs": self._get_report_jobs,
                 "/api/reports/data": lambda: self._get_report_data(parsed.query),
@@ -973,7 +980,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             }
         self._persist_sessions()
         self._extra_response_headers.append(
-            ("Set-Cookie", f"bbui_session={sid}; Path=/; Max-Age={idle_sec}; HttpOnly; SameSite=Strict")
+            ("Set-Cookie", self._session_cookie_header(sid, idle_sec))
         )
         self._extra_response_headers.append(
             ("Set-Cookie", f"bbui_api_token={self._get_api_token()}; Path=/; HttpOnly; SameSite=Strict")
@@ -2069,6 +2076,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             bool(body.get("preserve_owner", False)),
         )
 
+    def _get_restore_runs(self, query: str) -> dict:
+        from restore_api import list_restore_runs
+        qs = parse_qs(query)
+        limit = (qs.get("limit") or ["20"])[0]
+        return list_restore_runs(self.config, int(limit))
+
     def _post_client_log(self) -> dict:
         body = self._read_json_body() if self.headers.get("Content-Type", "").lower().startswith("application/json") else {}
         if not isinstance(body, dict):
@@ -2866,6 +2879,7 @@ btn.addEventListener('click',doSetup);
         started = perf_counter()
         try:
             self._current_request_id = request_id
+            self._refreshed_session_cookie = ""
             path = urlparse(self.path).path
             auth_free_paths = {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin"}
             if self.command in {"POST", "PUT", "DELETE"}:
@@ -2882,8 +2896,12 @@ btn.addEventListener('click',doSetup);
                 if not self._role_at_least(role, required_role):
                     self._send_api_error(403, "forbidden", f"Role '{required_role}' is required", request_id=request_id)
                     return
+            refreshed_session_cookie = self._refreshed_session_cookie
             self._extra_response_headers = []
             data = fn()
+            refreshed_session_cookie = self._refreshed_session_cookie or refreshed_session_cookie
+            if refreshed_session_cookie:
+                self._extra_response_headers.append(("Set-Cookie", refreshed_session_cookie))
             content = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")

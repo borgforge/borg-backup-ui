@@ -26,6 +26,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   files: [],
   jobs: [],
   archives: [],
+  runs: [],
 };
 const restoreState = window.BBUI.restoreState;
 
@@ -255,6 +256,90 @@ function _stopRestorePolling() {
   }
 }
 
+function restoreRunStateLabel(state) {
+  const key = String(state || '').toLowerCase();
+  return ({
+    running: restoreT('runStateRunning'),
+    done: restoreT('runStateDone'),
+    error: restoreT('runStateError'),
+    aborted: restoreT('runStateAborted'),
+  })[key] || key || '—';
+}
+
+function restoreRunStateClass(state) {
+  const key = String(state || '').toLowerCase();
+  if (key === 'running') return 'warning';
+  if (key === 'done') return 'success';
+  if (key === 'error' || key === 'aborted') return 'error';
+  return 'neutral';
+}
+
+function renderRestoreRuns(runs) {
+  const panel = document.getElementById('restore-runs-panel');
+  const content = document.getElementById('restore-runs-content');
+  if (!panel || !content) return;
+  const rows = Array.isArray(runs) ? runs : [];
+  if (!rows.length) {
+    panel.classList.add('hidden');
+    content.innerHTML = '';
+    return;
+  }
+  panel.classList.remove('hidden');
+  content.innerHTML = `<div class="ui-table-wrap"><table class="ui-table">
+    <thead><tr>
+      <th>${escHtml(restoreT('runStatus'))}</th>
+      <th>${escHtml(restoreT('job'))}</th>
+      <th>${escHtml(restoreT('archive'))}</th>
+      <th>${escHtml(restoreT('target'))}</th>
+      <th>${escHtml(restoreT('runStarted'))}</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows.map((run) => {
+      const id = String(run.restore_id || '');
+      const state = String(run.state || '');
+      const actionLabel = state === 'running' ? restoreT('resumeLiveLog') : restoreT('showRunDetails');
+      const actionClass = state === 'running' ? 'btn-primary' : 'btn-secondary';
+      return `<tr>
+        <td><span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span><small style="display:block">${escHtml(run.phase || '')}</small></td>
+        <td>${escHtml(run.job_key || '—')}</td>
+        <td><span class="mono">${escHtml(run.archive || '—')}</span></td>
+        <td>${escHtml(run.destination_path || run.target_dir || '—')}</td>
+        <td>${escHtml(run.started_at || '—')}</td>
+        <td><button type="button" class="btn ${actionClass} btn-sm" data-restore-run-action="open" data-restore-id="${escHtml(id)}">${escHtml(actionLabel)}</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+async function restoreLoadRuns() {
+  try {
+    const res = await fetch('/api/restore/runs?limit=10', { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || data.error) return;
+    restoreState.runs = Array.isArray(data.runs) ? data.runs : [];
+    renderRestoreRuns(restoreState.runs);
+  } catch (_) {
+    // Restore runs are optional context; keep the wizard usable if loading fails.
+  }
+}
+
+function onRestoreRunsClick(event) {
+  const btn = event.target.closest('[data-restore-run-action="open"]');
+  if (!btn) return;
+  const restoreId = String(btn.dataset.restoreId || '').trim();
+  if (restoreId) restoreOpenRun(restoreId);
+}
+
+async function restoreOpenRun(restoreId) {
+  _stopRestorePolling();
+  restoreState.activeRestoreId = restoreId;
+  restoreState.completed = false;
+  hideEl('restore-assist-msg');
+  restoreSetStep(5);
+  _setRestoreAssistBusy(true);
+  await _pollRestoreState(restoreId);
+}
+
 async function _pollRestoreState(restoreId) {
   const out = document.getElementById('restore-precheck-output');
   if (!restoreId) return;
@@ -283,6 +368,7 @@ async function _pollRestoreState(restoreId) {
       restoreState.completed = true;
       restoreUpdateConfirmState();
       restoreSetStep(5);
+      restoreLoadRuns();
       if (data.skipped) {
         setRestoreHeaderStatus('skipped');
         const reasonKey = {
@@ -297,12 +383,13 @@ async function _pollRestoreState(restoreId) {
       }
       return;
     }
-    if (data.state === 'error') {
+    if (data.state === 'error' || data.state === 'aborted') {
       _stopRestorePolling();
       _setRestoreAssistBusy(false);
       restoreUpdateConfirmState();
       setRestoreHeaderStatus('failed');
-      showMsg('restore-assist-msg', 'error', restoreT('failed', { message: restoreT('unknownError') }));
+      restoreLoadRuns();
+      showMsg('restore-assist-msg', 'error', restoreT('failed', { message: data.error || restoreT('unknownError') }));
       return;
     }
 
@@ -385,6 +472,7 @@ async function restoreInit() {
   if (targetInput && !targetInput.value.trim()) targetInput.value = '/mnt/user/';
   _restoreRenderSelectionSummary();
   _restoreRenderSelectedBox();
+  restoreLoadRuns();
 
   try {
     const jobsRes = await fetch('/api/jobs', { credentials: 'include' });

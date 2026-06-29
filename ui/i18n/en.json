@@ -941,7 +941,18 @@
     "downloadModalTitle": "Confirm large download",
     "downloadWarning": "Note: the browser may remain busy during large downloads.",
     "continue": "Continue",
-    "downloadStart": "Start download"
+    "downloadStart": "Start download",
+    "runsEyebrow": "Status",
+    "runsTitle": "Restore runs",
+    "refreshRuns": "Refresh",
+    "runStatus": "Status",
+    "runStarted": "Started",
+    "runStateRunning": "Running",
+    "runStateDone": "Successful",
+    "runStateError": "Error",
+    "runStateAborted": "Aborted",
+    "resumeLiveLog": "Resume live log",
+    "showRunDetails": "Show details"
   },
   "restoreTests": {
     "title": "Restore tests",

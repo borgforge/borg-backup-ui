@@ -941,7 +941,18 @@
     "downloadModalTitle": "Großen Download bestätigen",
     "downloadWarning": "Hinweis: Bei großen Downloads kann der Browser länger blockieren.",
     "continue": "Fortfahren",
-    "downloadStart": "Download starten"
+    "downloadStart": "Download starten",
+    "runsEyebrow": "Status",
+    "runsTitle": "Restore-Läufe",
+    "refreshRuns": "Aktualisieren",
+    "runStatus": "Status",
+    "runStarted": "Gestartet",
+    "runStateRunning": "Läuft",
+    "runStateDone": "Erfolgreich",
+    "runStateError": "Fehler",
+    "runStateAborted": "Abgebrochen",
+    "resumeLiveLog": "Live-Log fortsetzen",
+    "showRunDetails": "Details anzeigen"
   },
   "restoreTests": {
     "title": "Restore Tests",
