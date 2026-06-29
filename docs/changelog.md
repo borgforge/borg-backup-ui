@@ -10,6 +10,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Notifications:
   - Backup overdue reminders now use the latest expected cron run plus configurable tolerance instead of only a broad schedule interval.
   - Settings expose `NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS` for the backup overdue tolerance.
+  - Reminder interval and backup overdue tolerance are shown in a central reminder settings card because they apply to all notification channels.
   - Reminder keys now use the expected run timestamp so each missed scheduled window is notified at most once.
 
 ### Issue #92
