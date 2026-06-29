@@ -73,6 +73,40 @@ Wenn eine Architekturentscheidung unklar ist:
 * Rueckwaertskompatibilitaet bevorzugen (ggf. Nachfragen weil nicht jede Funktion Rueckwaertskompatibel sein muss)
 * Nachfragen statt spekulieren
 
+## Migrations- und Architekturwechsel-Regeln
+
+Solange das Plugin noch nicht ueber Unraid Community Apps oeffentlich
+veroeffentlicht ist, muessen freigegebene Architekturwechsel nicht dauerhaft
+alte interne Implementierungen parallel mitschleppen.
+
+Wenn der Repository-Maintainer einen Architekturwechsel ausdruecklich freigibt:
+
+* Eine saubere neue Implementierung ist gegenueber dauerhaften Legacy- und
+  Fallback-Pfaden zu bevorzugen.
+* Bestehende Nutzerdaten, Jobs, Profile, Reports, Secrets und Statusdateien
+  duerfen nicht stillschweigend verworfen werden.
+* Statt permanenter Legacy-Kompatibilitaet ist eine einmalige, idempotente
+  Migration vom aktuellen internen Stand auf das neue Modell vorzusehen.
+* Jede Migration muss nachvollziehbar sein:
+  * eindeutige Migrations-ID
+  * Status `pending`, `applied`, `skipped`, `failed` oder `not_applicable`
+  * Zeitstempel
+  * betroffene Dateien/Objekte
+  * konkrete Aktionen
+  * Fehlerdetails ohne Secrets
+* Migrationen sollen einen strukturierten Audit-Log schreiben, bevorzugt als
+  JSONL oder als bestehendes Migrationslog-Format.
+* Migrationen muessen getestet werden:
+  * Ausgangszustand vor der Migration
+  * erfolgreiche Anwendung
+  * erneuter Lauf ohne doppelte Aenderungen
+  * Fehlerfall, soweit sinnvoll simulierbar
+* Wenn praktikabel, sollen Migrationsstatus und Logdetails in der UI sichtbar
+  sein, bevorzugt unter `Einstellungen > Systemzustand & Migration`.
+* Dauerhafte Fallbacks sind nur einzubauen, wenn sie fuer Datenerhalt,
+  sichere Wiederherstellung oder eine explizit gewuenschte
+  Rueckwaertskompatibilitaet notwendig sind.
+
 ---
 
 ## Sicherheitsregeln
