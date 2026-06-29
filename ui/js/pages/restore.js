@@ -27,6 +27,9 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   jobs: [],
   archives: [],
   runs: [],
+  history: [],
+  historyTotal: 0,
+  historyDetailId: '',
   liveMode: false,
 };
 const restoreState = window.BBUI.restoreState;
@@ -295,6 +298,16 @@ function restoreRunStateClass(state) {
   return 'neutral';
 }
 
+function restoreFmtDuration(seconds) {
+  const total = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours) return restoreT('durationHoursMinutesSeconds', { hours, minutes, seconds: secs });
+  if (minutes) return restoreT('durationMinutesSeconds', { minutes, seconds: secs });
+  return restoreT('durationSeconds', { seconds: secs });
+}
+
 function renderRestoreRuns(runs) {
   const panel = document.getElementById('restore-runs-panel');
   const content = document.getElementById('restore-runs-content');
@@ -317,7 +330,7 @@ function renderRestoreRuns(runs) {
         <small>${escHtml(run.archive || '—')}</small>
       </div>
       <div class="restore-run-meta">
-        <span>${escHtml(restoreT('target'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
+        <span>${escHtml(restoreT('targetDirectory'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
         <span>${escHtml(restoreT('runStarted'))}: <b>${escHtml(run.started_at || '—')}</b></span>
         ${run.phase ? `<span>${escHtml(restoreT('runPhase'))}: <b>${escHtml(run.phase)}</b></span>` : ''}
       </div>
@@ -342,11 +355,119 @@ async function restoreLoadRuns() {
   }
 }
 
+function renderRestoreHistory(payload) {
+  const panel = document.getElementById('restore-history-panel');
+  const content = document.getElementById('restore-history-content');
+  const count = document.getElementById('restore-history-count');
+  const migration = document.getElementById('restore-history-migration');
+  if (!panel || !content) return;
+  const rows = Array.isArray(payload?.runs) ? payload.runs : [];
+  const total = Number(payload?.total || rows.length || 0);
+  restoreState.history = rows;
+  restoreState.historyTotal = total;
+  if (count) count.textContent = total ? restoreT('historyCount', { count: total }) : '';
+
+  const migrationState = payload?.migration || {};
+  const migrationDetails = migrationState.details || {};
+  if (migration && migrationState.status === 'failed') {
+    migration.classList.remove('hidden');
+    migration.textContent = restoreT('historyMigrationFailed', {
+      count: migrationDetails.imported || 0,
+      errors: (migrationDetails.errors || []).length,
+    });
+  } else if (migration) {
+    migration.classList.add('hidden');
+    migration.textContent = '';
+  }
+
+  if (!rows.length) {
+    content.innerHTML = `<div class="restore-history-empty">${escHtml(restoreT('historyEmpty'))}</div>`;
+    return;
+  }
+
+  content.innerHTML = rows.map((run) => {
+    const id = String(run.restore_id || '');
+    const selected = id && id === restoreState.historyDetailId;
+    const state = String(run.state || '');
+    return `<article class="restore-history-card ${selected ? 'is-selected' : ''}" data-restore-history-id="${escHtml(id)}">
+      <div class="restore-run-main">
+        <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
+        <strong>${escHtml(run.job_key || '—')}</strong>
+        <small>${escHtml(run.archive || '—')}</small>
+      </div>
+      <div class="restore-run-meta">
+        <span>${escHtml(restoreT('targetDirectory'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
+        <span>${escHtml(restoreT('runStarted'))}: <b>${escHtml(run.started_at || '—')}</b></span>
+        <span>${escHtml(restoreT('historyFinished'))}: <b>${escHtml(run.finished_at || '—')}</b></span>
+        <span>${escHtml(restoreT('historyDuration'))}: <b>${escHtml(restoreFmtDuration(run.duration_seconds))}</b></span>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" data-restore-history-action="detail" data-restore-id="${escHtml(id)}">${escHtml(restoreT('showRunDetails'))}</button>
+      <div class="restore-history-detail" id="restore-history-detail-${escHtml(id)}"></div>
+    </article>`;
+  }).join('');
+}
+
+async function restoreLoadHistory() {
+  try {
+    const res = await fetch('/api/restore/history?limit=10', { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || data.error) return;
+    renderRestoreHistory(data);
+    if (restoreState.historyDetailId) {
+      await restoreLoadHistoryDetail(restoreState.historyDetailId);
+    }
+  } catch (_) {
+    // Restore history is supporting context; do not block the wizard on failures.
+  }
+}
+
+function renderRestoreHistoryDetail(detail) {
+  const id = String(detail?.restore_id || '');
+  if (!id) return;
+  const target = document.getElementById(`restore-history-detail-${id}`);
+  if (!target) return;
+  const lines = Array.isArray(detail.lines) ? detail.lines : [];
+  target.innerHTML = `<div class="restore-history-detail-grid">
+    <div><small>${escHtml(restoreT('runStatus'))}</small><strong>${escHtml(restoreRunStateLabel(detail.state))}</strong></div>
+    <div><small>${escHtml(restoreT('sourcePath'))}</small><strong>${escHtml(detail.source_path || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('targetDirectory'))}</small><strong>${escHtml(detail.target_dir || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('destinationLabel'))}</small><strong>${escHtml(detail.destination_path || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('conflictStrategy'))}</small><strong>${escHtml(detail.conflict_mode || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('preserveOwnerShort'))}</small><strong>${escHtml(detail.preserve_owner ? restoreT('yes') : restoreT('no'))}</strong></div>
+  </div>
+  ${detail.error ? `<div class="restore-history-error">${escHtml(detail.error)}</div>` : ''}
+  <details class="restore-history-log"><summary>${escHtml(restoreT('historyLog'))}</summary><pre>${escHtml(lines.join('\n') || restoreT('empty'))}</pre></details>`;
+}
+
+async function restoreLoadHistoryDetail(restoreId) {
+  const id = String(restoreId || '').trim();
+  if (!id) return;
+  restoreState.historyDetailId = id;
+  try {
+    const res = await fetch(`/api/restore/history/detail?restore_id=${encodeURIComponent(id)}`, { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status));
+    renderRestoreHistory({ runs: restoreState.history, total: restoreState.historyTotal || restoreState.history.length });
+    restoreState.historyDetailId = id;
+    renderRestoreHistoryDetail(data);
+  } catch (err) {
+    const target = document.getElementById(`restore-history-detail-${id}`);
+    if (target) target.innerHTML = `<div class="restore-history-error">${escHtml(err.message)}</div>`;
+  }
+}
+
 function onRestoreRunsClick(event) {
   const btn = event.target.closest('[data-restore-run-action="open"]');
   if (!btn) return;
   const restoreId = String(btn.dataset.restoreId || '').trim();
   if (restoreId) restoreOpenRun(restoreId);
+}
+
+function onRestoreHistoryClick(event) {
+  const btn = event.target.closest('[data-restore-history-action="detail"]');
+  if (!btn) return;
+  const restoreId = String(btn.dataset.restoreId || '').trim();
+  if (restoreId) restoreLoadHistoryDetail(restoreId);
 }
 
 async function restoreOpenRun(restoreId) {
@@ -389,6 +510,7 @@ async function _pollRestoreState(restoreId) {
       restoreUpdateConfirmState();
       restoreSetStep(5);
       restoreLoadRuns();
+      restoreLoadHistory();
       if (data.skipped) {
         setRestoreHeaderStatus('skipped');
         const reasonKey = {
@@ -409,6 +531,7 @@ async function _pollRestoreState(restoreId) {
       restoreUpdateConfirmState();
       setRestoreHeaderStatus('failed');
       restoreLoadRuns();
+      restoreLoadHistory();
       showMsg('restore-assist-msg', 'error', restoreT('failed', { message: data.error || restoreT('unknownError') }));
       return;
     }
@@ -494,6 +617,7 @@ async function restoreInit() {
   _restoreRenderSelectionSummary();
   _restoreRenderSelectedBox();
   restoreLoadRuns();
+  restoreLoadHistory();
 
   try {
     const jobsRes = await fetch('/api/jobs', { credentials: 'include' });
@@ -1137,6 +1261,7 @@ window.addEventListener?.('bbui:language-changed', () => {
   renderRestoreSelectedJob();
   renderRestoreArchiveList();
   renderRestorePrecheck(restoreState.precheck);
+  renderRestoreHistory({ runs: restoreState.history, total: restoreState.historyTotal || restoreState.history.length });
   const backBtn = document.getElementById('restore-step-back-btn');
   const nextBtn = document.getElementById('restore-step-next-btn');
   if (backBtn) {

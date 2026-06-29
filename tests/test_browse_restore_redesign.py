@@ -26,7 +26,7 @@ def test_browse_restore_keeps_five_step_workflow_and_api_contracts() -> None:
     for contract in (
         "/api/restore/archives", "/api/restore/files", "/api/restore/download-check",
         "/api/restore/precheck", "/api/restore/start", "/api/restore/state",
-        "/api/restore/runs",
+        "/api/restore/runs", "/api/restore/history", "/api/restore/history/detail",
     ):
         assert contract in script
 
@@ -73,3 +73,16 @@ def test_browse_restore_can_resume_restore_runs() -> None:
     assert "next === 5 && !restoreState.liveMode" in script
     assert "resumeLiveLog" in script
     assert "data-restore-run-action=\"open\"" in script
+
+
+def test_browse_restore_has_dedicated_restore_history() -> None:
+    html = _read("ui/index.html")
+    css = _read("ui/browse-restore-redesign.css")
+    script = _read("ui/js/pages/restore.js")
+    assert 'id="restore-history-panel"' in html
+    assert 'id="restore-history-content"' in html
+    assert ".restore-history-card" in css
+    assert ".restore-history-detail-grid" in css
+    assert "function restoreLoadHistory()" in script
+    assert "function restoreLoadHistoryDetail(restoreId)" in script
+    assert "function onRestoreHistoryClick(event)" in script

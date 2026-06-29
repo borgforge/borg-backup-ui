@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.29.1048"
+APP_VERSION = "2026.06.29.1336"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -767,6 +767,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/restore/target-dirs": lambda: self._get_restore_target_dirs(parsed.query),
                 "/api/restore/runs": lambda: self._get_restore_runs(parsed.query),
                 "/api/restore/state": lambda: self._get_restore_state(parsed.query),
+                "/api/restore/history": lambda: self._get_restore_history(parsed.query),
+                "/api/restore/history/detail": lambda: self._get_restore_history_detail(parsed.query),
+                "/api/restore/history/migration": self._get_restore_history_migration,
                 "/api/reports/jobs": self._get_report_jobs,
                 "/api/reports/data": lambda: self._get_report_data(parsed.query),
                 "/api/history/log": lambda: self._get_log_file(parsed.query),
@@ -2081,6 +2084,25 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(query)
         limit = (qs.get("limit") or ["20"])[0]
         return list_restore_runs(self.config, int(limit))
+
+    def _get_restore_history(self, query: str) -> dict:
+        from restore_api import list_restore_history
+        qs = parse_qs(query)
+        limit = (qs.get("limit") or ["20"])[0]
+        offset = (qs.get("offset") or ["0"])[0]
+        return list_restore_history(self.config, int(limit), int(offset))
+
+    def _get_restore_history_detail(self, query: str) -> dict:
+        from restore_api import get_restore_history_detail
+        qs = parse_qs(query)
+        restore_id = str((qs.get("restore_id") or [""])[0]).strip()
+        if not restore_id:
+            raise ValueError("restore_id is required")
+        return get_restore_history_detail(self.config, restore_id)
+
+    def _get_restore_history_migration(self) -> dict:
+        from restore_api import get_restore_history_migration
+        return get_restore_history_migration(self.config)
 
     def _post_client_log(self) -> dict:
         body = self._read_json_body() if self.headers.get("Content-Type", "").lower().startswith("application/json") else {}

@@ -955,7 +955,22 @@
     "activeRestoreTitle": "Active restore",
     "runPhase": "Phase",
     "resumeLiveLog": "Resume live log",
-    "showRunDetails": "Show details"
+    "showRunDetails": "Show details",
+    "historyEyebrow": "History",
+    "historyTitle": "Restore history",
+    "historySubtitle": "Completed restore runs with structured details.",
+    "refreshHistory": "Refresh",
+    "historyCount": "{count} runs",
+    "historyEmpty": "No completed restore runs yet.",
+    "historyFinished": "Finished",
+    "historyDuration": "Duration",
+    "durationHoursMinutesSeconds": "{hours}h {minutes}m {seconds}s",
+    "durationMinutesSeconds": "{minutes}m {seconds}s",
+    "durationSeconds": "{seconds}s",
+    "historyLog": "Show restore log",
+    "historyMigrationFailed": "Migration of old restore runs is incomplete: {count} imported, {errors} errors.",
+    "destinationLabel": "Destination path",
+    "preserveOwnerShort": "Preserve owner/group"
   },
   "restoreTests": {
     "title": "Restore tests",

@@ -955,7 +955,22 @@
     "activeRestoreTitle": "Aktiver Restore",
     "runPhase": "Phase",
     "resumeLiveLog": "Live-Log fortsetzen",
-    "showRunDetails": "Details anzeigen"
+    "showRunDetails": "Details anzeigen",
+    "historyEyebrow": "Verlauf",
+    "historyTitle": "Restore-History",
+    "historySubtitle": "Abgeschlossene Restore-Läufe mit strukturierten Details.",
+    "refreshHistory": "Aktualisieren",
+    "historyCount": "{count} Läufe",
+    "historyEmpty": "Noch keine abgeschlossenen Restore-Läufe vorhanden.",
+    "historyFinished": "Beendet",
+    "historyDuration": "Dauer",
+    "durationHoursMinutesSeconds": "{hours} Std. {minutes} Min. {seconds} Sek.",
+    "durationMinutesSeconds": "{minutes} Min. {seconds} Sek.",
+    "durationSeconds": "{seconds} Sek.",
+    "historyLog": "Restore-Log anzeigen",
+    "historyMigrationFailed": "Migration der alten Restore-Läufe unvollständig: {count} importiert, {errors} Fehler.",
+    "destinationLabel": "Zielpfad",
+    "preserveOwnerShort": "Owner/Group beibehalten"
   },
   "restoreTests": {
     "title": "Restore Tests",

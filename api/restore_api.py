@@ -25,6 +25,8 @@ _RESTORE_RUNS: dict = {}
 _RESTORE_LOCK = threading.Lock()
 _RESTORE_KEEP = 20
 _RESTORE_RUNS_LOADED = False
+_RESTORE_HISTORY_KEEP = 100
+_RESTORE_HISTORY_MIGRATION_ID = "restore_history_v1_from_restore_runs"
 
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _ARCHIVE_RX = re.compile(r"^[a-zA-Z0-9_.:-]+$")
@@ -98,17 +100,219 @@ def _restore_runs_file(config: dict) -> Path:
     return base / "config" / "restore-runs.json"
 
 
+def _restore_history_dir(config: dict) -> Path:
+    base = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
+    return base / "config" / "restore-history"
+
+
+def _restore_history_index_file(config: dict) -> Path:
+    return _restore_history_dir(config) / "index.json"
+
+
+def _restore_history_runs_dir(config: dict) -> Path:
+    return _restore_history_dir(config) / "runs"
+
+
+def _restore_history_migration_state_file(config: dict) -> Path:
+    return _restore_history_dir(config) / "migration-state.json"
+
+
+def _restore_history_migration_log_file(config: dict) -> Path:
+    return _restore_history_dir(config) / "migrations.log.jsonl"
+
+
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def _persist_restore_runs(config: dict) -> None:
     fp = _restore_runs_file(config)
-    fp.parent.mkdir(parents=True, exist_ok=True)
+    active_runs = {
+        rid: run for rid, run in _RESTORE_RUNS.items()
+        if isinstance(run, dict) and not _is_restore_terminal(run.get("state"))
+    }
     payload = {
         "schema_version": 1,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "runs": _RESTORE_RUNS,
+        "runs": active_runs,
     }
-    tmp = fp.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, fp)
+    _write_json_atomic(fp, payload)
+
+
+def _is_restore_terminal(state: object) -> bool:
+    return str(state or "").strip().lower() in {"done", "error", "aborted"}
+
+
+def _restore_run_duration_seconds(run: dict) -> int:
+    try:
+        started_raw = str(run.get("started_at") or "").strip()
+        finished_raw = str(run.get("finished_at") or "").strip()
+        if not started_raw or not finished_raw:
+            return 0
+        started = datetime.fromisoformat(started_raw)
+        finished = datetime.fromisoformat(finished_raw)
+        return max(0, int((finished - started).total_seconds()))
+    except Exception:
+        return 0
+
+
+def _history_summary_from_run(run: dict) -> dict:
+    state = str(run.get("state") or "").strip() or "unknown"
+    restore_id = str(run.get("restore_id") or "").strip()
+    return {
+        "restore_id": restore_id,
+        "state": state,
+        "phase": run.get("phase") or state,
+        "started_at": run.get("started_at") or "",
+        "finished_at": run.get("finished_at") or "",
+        "duration_seconds": _restore_run_duration_seconds(run),
+        "job_key": run.get("job_key") or "",
+        "archive": run.get("archive") or "",
+        "source_path": run.get("source_path") or "",
+        "target_dir": run.get("target_dir") or "",
+        "destination_path": run.get("destination_path") or "",
+        "conflict_mode": run.get("conflict_mode") or "",
+        "preserve_owner": bool(run.get("preserve_owner", False)),
+        "error": run.get("error") or "",
+        "skipped": bool(run.get("skipped", False)),
+        "skip_reason_code": run.get("skip_reason_code") or "",
+    }
+
+
+def _history_detail_from_run(run: dict, source: str) -> dict:
+    summary = _history_summary_from_run(run)
+    return {
+        "schema_version": 1,
+        "source": source,
+        "recorded_at": datetime.now().isoformat(timespec="seconds"),
+        **summary,
+        "lines": [str(line) for line in (run.get("lines") or [])][-200:],
+    }
+
+
+def _read_history_index(config: dict) -> list[dict]:
+    fp = _restore_history_index_file(config)
+    if not fp.exists():
+        return []
+    try:
+        raw = json.loads(fp.read_text(encoding="utf-8"))
+        rows = raw.get("runs") if isinstance(raw, dict) else []
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    except Exception:
+        return []
+    return []
+
+
+def _write_history_index(config: dict, rows: list[dict]) -> None:
+    rows = sorted(rows, key=lambda row: str(row.get("started_at") or ""), reverse=True)
+    payload = {
+        "schema_version": 1,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "retention_keep": _RESTORE_HISTORY_KEEP,
+        "runs": rows[:_RESTORE_HISTORY_KEEP],
+    }
+    _write_json_atomic(_restore_history_index_file(config), payload)
+    keep_ids = {str(row.get("restore_id") or "") for row in payload["runs"]}
+    for detail in _restore_history_runs_dir(config).glob("*.json"):
+        if detail.stem not in keep_ids:
+            try:
+                detail.unlink()
+            except OSError:
+                pass
+
+
+def _append_history_migration_log(config: dict, entry: dict) -> None:
+    fp = _restore_history_migration_log_file(config)
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        **entry,
+    }
+    with fp.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _read_history_migration_state(config: dict) -> dict:
+    fp = _restore_history_migration_state_file(config)
+    if not fp.exists():
+        return {}
+    try:
+        raw = json.loads(fp.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_history_migration_state(config: dict, state: str, details: dict) -> None:
+    payload = {
+        "schema_version": 1,
+        "migration_id": _RESTORE_HISTORY_MIGRATION_ID,
+        "status": state,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "details": details,
+    }
+    _write_json_atomic(_restore_history_migration_state_file(config), payload)
+
+
+def _record_restore_history(config: dict, run: dict, source: str) -> None:
+    restore_id = str(run.get("restore_id") or "").strip()
+    if not restore_id:
+        return
+    detail = _history_detail_from_run(run, source)
+    detail_path = _restore_history_runs_dir(config) / f"{restore_id}.json"
+    _write_json_atomic(detail_path, detail)
+    rows = [row for row in _read_history_index(config) if str(row.get("restore_id") or "") != restore_id]
+    rows.append(_history_summary_from_run(run))
+    _write_history_index(config, rows)
+
+
+def _migrate_restore_runs_v1_to_history(config: dict, loaded: dict) -> tuple[dict, bool]:
+    state = _read_history_migration_state(config)
+
+    terminal = {
+        rid: run for rid, run in loaded.items()
+        if isinstance(run, dict) and _is_restore_terminal(run.get("state"))
+    }
+    active = {
+        rid: run for rid, run in loaded.items()
+        if isinstance(run, dict) and not _is_restore_terminal(run.get("state"))
+    }
+    if (
+        not terminal
+        and state.get("migration_id") == _RESTORE_HISTORY_MIGRATION_ID
+        and state.get("status") in {"applied", "not_applicable"}
+    ):
+        return loaded, False
+
+    details = {
+        "source_file": str(_restore_runs_file(config)),
+        "imported": 0,
+        "active_kept": len(active),
+        "errors": [],
+    }
+    status = "not_applicable"
+    if terminal:
+        status = "applied"
+        for rid, run in terminal.items():
+            try:
+                _record_restore_history(config, run, "restore-runs-v1-migration")
+                details["imported"] += 1
+            except Exception as exc:
+                details["errors"].append({"restore_id": rid, "error": str(exc)})
+        if details["errors"]:
+            status = "failed"
+
+    _write_history_migration_state(config, status, details)
+    _append_history_migration_log(config, {
+        "migration_id": _RESTORE_HISTORY_MIGRATION_ID,
+        "status": status,
+        "details": details,
+    })
+    return active if status != "failed" else loaded, bool(terminal) and status != "failed"
 
 
 def _ensure_restore_runs_loaded(config: dict) -> None:
@@ -143,6 +347,10 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
                 lines.append("Restore was marked as aborted after the server restarted.")
                 run["lines"] = lines[-200:]
                 changed = True
+
+        loaded, migrated = _migrate_restore_runs_v1_to_history(config, loaded)
+        if migrated:
+            changed = True
 
         _RESTORE_RUNS.clear()
         _RESTORE_RUNS.update(loaded)
@@ -995,6 +1203,8 @@ def start_restore_async(
         "source_path": source_path,
         "target_dir": target_dir,
         "destination_path": "",
+        "conflict_mode": conflict_mode,
+        "preserve_owner": bool(preserve_owner),
         "error": "",
         "skipped": False,
         "skip_reason_code": "",
@@ -1044,6 +1254,11 @@ def start_restore_async(
             s["skipped"] = bool(result.get("skipped", False))
             s["skip_reason_code"] = str(result.get("skip_reason_code", "") or "")
             try:
+                _record_restore_history(config, s, "restore-run-finished")
+            except Exception as exc:
+                lines = s.setdefault("lines", [])
+                lines.append(f"Restore history write failed: {exc}")
+            try:
                 _persist_restore_runs(config)
             except Exception:
                 pass
@@ -1057,6 +1272,11 @@ def start_restore_async(
             s["phase"] = "error"
             s["finished_at"] = datetime.now().isoformat(timespec="seconds")
             s["error"] = msg
+            try:
+                _record_restore_history(config, s, "restore-run-finished")
+            except Exception as exc:
+                lines = s.setdefault("lines", [])
+                lines.append(f"Restore history write failed: {exc}")
             try:
                 _persist_restore_runs(config)
             except Exception:
@@ -1102,6 +1322,8 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
         for run in _RESTORE_RUNS.values():
             if not isinstance(run, dict):
                 continue
+            if _is_restore_terminal(run.get("state")):
+                continue
             rows.append({
                 "restore_id": run.get("restore_id"),
                 "state": run.get("state"),
@@ -1124,6 +1346,65 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
             "runs": rows[:limit],
             "active": active,
         }
+
+
+def list_restore_history(config: dict, limit: int = 20, offset: int = 0) -> dict:
+    _ensure_restore_runs_loaded(config)
+    try:
+        limit = max(1, min(100, int(limit)))
+    except (TypeError, ValueError):
+        limit = 20
+    try:
+        offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        offset = 0
+    rows = _read_history_index(config)
+    rows.sort(key=lambda item: str(item.get("started_at") or ""), reverse=True)
+    return {
+        "runs": rows[offset:offset + limit],
+        "total": len(rows),
+        "limit": limit,
+        "offset": offset,
+        "migration": _read_history_migration_state(config),
+    }
+
+
+def get_restore_history_detail(config: dict, restore_id: str) -> dict:
+    _ensure_restore_runs_loaded(config)
+    rid = str(restore_id or "").strip()
+    if not rid:
+        raise ValueError("restore_id is required")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", rid):
+        raise ValueError("Invalid restore_id")
+    fp = _restore_history_runs_dir(config) / f"{rid}.json"
+    if not fp.exists():
+        raise ValueError("Unknown restore_id")
+    try:
+        raw = json.loads(fp.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"Could not read restore history detail: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("Invalid restore history detail")
+    return raw
+
+
+def get_restore_history_migration(config: dict) -> dict:
+    _ensure_restore_runs_loaded(config)
+    state = _read_history_migration_state(config)
+    lines: list[dict] = []
+    fp = _restore_history_migration_log_file(config)
+    if fp.exists():
+        try:
+            for line in fp.read_text(encoding="utf-8").splitlines()[-50:]:
+                try:
+                    item = json.loads(line)
+                    if isinstance(item, dict):
+                        lines.append(item)
+                except json.JSONDecodeError:
+                    continue
+        except OSError:
+            lines = []
+    return {"state": state, "log": lines}
 
 
 def get_restore_state(config: dict, restore_id: str) -> dict:

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1048">
+<!ENTITY version   "2026.06.29.1336">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.29.1336###
+- Issue #93:
+  - Browse & Restore now includes a dedicated Restore History with structured details for completed restore runs.
+  - Existing completed entries from restore-runs.json are migrated once into the new restore-history storage with an audit log.
+
 ###2026.06.29.1048###
 - Issue #90:
   - Resuming an active restore now opens a dedicated live-log mode instead of rerunning the wizard precheck.
@@ -99,7 +104,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>43f5d45f76de68f757f807e2216185f7</MD5>
+<MD5>1b574e198270d69756b7d2141764df39</MD5>
 </FILE>
 
 <!--
