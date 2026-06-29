@@ -281,23 +281,35 @@ def _migrate_restore_runs_v1_to_history(config: dict, loaded: dict) -> tuple[dic
         rid: run for rid, run in loaded.items()
         if isinstance(run, dict) and not _is_restore_terminal(run.get("state"))
     }
+    known_history_ids = {
+        str(row.get("restore_id") or "").strip()
+        for row in _read_history_index(config)
+        if str(row.get("restore_id") or "").strip()
+    }
+    new_terminal = {
+        rid: run for rid, run in terminal.items()
+        if str(run.get("restore_id") or rid).strip() not in known_history_ids
+    }
     if (
         not terminal
         and state.get("migration_id") == _RESTORE_HISTORY_MIGRATION_ID
         and state.get("status") in {"applied", "not_applicable"}
     ):
         return loaded, False
+    if terminal and not new_terminal:
+        return active, True
 
     details = {
         "source_file": str(_restore_runs_file(config)),
         "imported": 0,
         "active_kept": len(active),
+        "already_imported": len(terminal) - len(new_terminal),
         "errors": [],
     }
     status = "not_applicable"
-    if terminal:
+    if new_terminal:
         status = "applied"
-        for rid, run in terminal.items():
+        for rid, run in new_terminal.items():
             try:
                 _record_restore_history(config, run, "restore-runs-v1-migration")
                 details["imported"] += 1

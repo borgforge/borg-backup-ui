@@ -178,6 +178,41 @@ def test_restore_history_migration_is_idempotent(tmp_path: Path):
     assert len(log_file.read_text(encoding="utf-8").splitlines()) == 1
 
 
+def test_restore_history_migration_skips_already_imported_legacy_entries(tmp_path: Path):
+    restore_api._RESTORE_RUNS_LOADED = False
+    restore_api._RESTORE_RUNS.clear()
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    fp = tmp_path / "config" / "restore-runs.json"
+    fp.parent.mkdir(parents=True)
+    legacy_payload = {
+        "schema_version": 1,
+        "runs": {
+            "done-1": {
+                "restore_id": "done-1",
+                "state": "done",
+                "started_at": "2026-06-29T08:00:00",
+                "finished_at": "2026-06-29T08:00:10",
+                "job_key": "appdata_local",
+                "archive": "appdata-archive",
+                "lines": ["done"],
+            }
+        },
+    }
+    fp.write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+    first = restore_api.list_restore_history(config, limit=10)
+    fp.write_text(json.dumps(legacy_payload), encoding="utf-8")
+    restore_api._RESTORE_RUNS_LOADED = False
+    second = restore_api.list_restore_history(config, limit=10)
+    log_file = tmp_path / "config" / "restore-history" / "migrations.log.jsonl"
+    persisted = json.loads(fp.read_text(encoding="utf-8"))
+
+    assert [row["restore_id"] for row in first["runs"]] == ["done-1"]
+    assert [row["restore_id"] for row in second["runs"]] == ["done-1"]
+    assert len(log_file.read_text(encoding="utf-8").splitlines()) == 1
+    assert persisted["runs"] == {}
+
+
 def test_restore_history_retention_keeps_latest_details(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     for idx in range(105):
