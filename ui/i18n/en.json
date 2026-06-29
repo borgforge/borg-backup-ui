@@ -1563,6 +1563,8 @@
       "unraidNotifyHint": "Unraid system notifications are shown in the local Unraid web interface. Reminders are centrally rate-limited so overdue checks do not notify on every poll.",
       "notifyEvents": "Events",
       "notifyReminderInterval": "Reminder interval (hours)",
+      "backupOverdueTolerance": "Backup overdue tolerance (hours)",
+      "backupOverdueToleranceHint": "Reports scheduled backup runs that did not complete successfully within this tolerance.",
       "notifyEventBackupSuccess": "Backup successful",
       "notifyEventBackupWarning": "Backup completed with warnings",
       "notifyEventBackupFailed": "Backup failed",

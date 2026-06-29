@@ -25,4 +25,5 @@ def test_notification_events_migration_adds_missing_keys_and_warning_alias(tmp_p
     assert "NOTIFY_EMAIL_EVENTS=backup_failed" in out
     assert "NOTIFY_UNRAID_EVENTS=backup_success,backup_warning,backup_failed,backup_skipped" in out
     assert "NOTIFY_REMINDER_INTERVAL_HOURS=24" in out
+    assert "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS=6" in out
     assert "NTFY_EVENTS=backup_success,backup_failed,backup_skipped,backup_warning" in out

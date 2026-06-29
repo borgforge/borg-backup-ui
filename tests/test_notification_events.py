@@ -93,14 +93,66 @@ def test_backup_overdue_reminder_uses_supported_schedules(monkeypatch, tmp_path)
     assert calls == ["Borg Backup UI: Backup overdue"]
 
 
-def test_backup_overdue_schedule_period_supports_weekday_ranges():
-    assert notification_reminder_api._schedule_period_seconds("0 9 * * 1-5") == int((3 * 86400) + (12 * 3600))
-    assert notification_reminder_api._schedule_period_seconds("0 9 * * 1,3,5") == int((3 * 86400) + (12 * 3600))
-    assert notification_reminder_api._schedule_period_seconds("0 9 * * 1") == int((7 * 86400) + (12 * 3600))
-    assert notification_reminder_api._schedule_period_seconds("0 9 * * */2") == 0
+def test_backup_overdue_uses_expected_run_and_configured_tolerance(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["subject"]) or True)
+    monkeypatch.setattr(notification_reminder_api, "datetime", _WednesdayNoon)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"photos_local": {"enabled": True, "cron": "0 9 * * 1-5"}})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "photos_local", "display_name": "Photos", "enabled": True, "repo_path": "/repo"}])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{"key": "photos_local", "timestamp": "2026-06-29 09:00:00"}]})
+
+    result = notification_reminder_api.run_due_notification_reminders({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "2",
+        "NTFY_ENABLED": "false",
+    })
+
+    state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert result["checked"] == 1
+    assert result["sent"] == 1
+    assert calls == ["Borg Backup UI: Backup overdue"]
+    assert "backup_overdue:photos_local:2026-07-01 09:00:00" in state["last_sent"]
+
+
+def test_backup_overdue_waits_for_tolerance_window(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["subject"]) or True)
+    monkeypatch.setattr(notification_reminder_api, "datetime", _WednesdayNoon)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"photos_local": {"enabled": True, "cron": "0 9 * * 1-5"}})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "photos_local", "display_name": "Photos", "enabled": True, "repo_path": "/repo"}])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{"key": "photos_local", "timestamp": "2026-06-29 09:00:00"}]})
+
+    result = notification_reminder_api.run_due_notification_reminders({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    })
+
+    assert result["checked"] == 1
+    assert result["sent"] == 0
+    assert calls == []
+
+
+def test_backup_overdue_expected_run_supports_simple_crons():
+    now = datetime(2026, 7, 1, 12, 0, 0)
+    assert notification_reminder_api._latest_expected_run("0 9 * * 1-5", now) == datetime(2026, 7, 1, 9, 0, 0)
+    assert notification_reminder_api._latest_expected_run("0 9 * * 1,3,5", now) == datetime(2026, 7, 1, 9, 0, 0)
+    assert notification_reminder_api._latest_expected_run("0 9 * * 1", now) == datetime(2026, 6, 29, 9, 0, 0)
+    assert notification_reminder_api._latest_expected_run("0 9 1 * *", now) == datetime(2026, 7, 1, 9, 0, 0)
+    assert notification_reminder_api._latest_expected_run("0 9 * * */2", now) is None
 
 
 class _FixedDateTime(datetime):
     @classmethod
     def now(cls, tz=None):
         return cls(2026, 6, 29, 12, 0, 0)
+
+
+class _WednesdayNoon(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 1, 12, 0, 0)

@@ -1563,6 +1563,8 @@
       "unraidNotifyHint": "Unraid-Systembenachrichtigungen werden lokal im Unraid-Webinterface angezeigt. Reminder werden zentral begrenzt, damit überfällige Prüfungen nicht bei jedem Poll erneut melden.",
       "notifyEvents": "Ereignisse",
       "notifyReminderInterval": "Reminder-Intervall (Stunden)",
+      "backupOverdueTolerance": "Backup-Überfälligkeits-Toleranz (Stunden)",
+      "backupOverdueToleranceHint": "Meldet geplante Backup-Läufe, die nicht innerhalb dieser Toleranz erfolgreich abgeschlossen wurden.",
       "notifyEventBackupSuccess": "Backup erfolgreich",
       "notifyEventBackupWarning": "Backup mit Warnungen",
       "notifyEventBackupFailed": "Backup fehlgeschlagen",

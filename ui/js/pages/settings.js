@@ -2691,12 +2691,15 @@ function notificationEventOptions() {
 function renderSettingsUnraidNotifications(s) {
   const events = s.NOTIFY_UNRAID_EVENTS || 'backup_success,backup_warning,backup_failed,backup_skipped';
   const interval = s.NOTIFY_REMINDER_INTERVAL_HOURS || '24';
+  const backupTolerance = s.NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS || '6';
   const eventRows = notificationEventRows(events, notificationEventOptions(), 'data-unraid-event', '_syncUnraidEvents');
   return settingsCard(settingsT('forms.unraidNotifyTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
     `<div class="settings-body two-col">
       <div class="status-message info" style="grid-column:1/-1">${settingsT('forms.unraidNotifyHint')}</div>
       ${fnum('NOTIFY_REMINDER_INTERVAL_HOURS', settingsT('forms.notifyReminderInterval'), interval)}
+      ${fnum('NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS', settingsT('forms.backupOverdueTolerance'), backupTolerance)}
+      <div class="form-help" style="grid-column:1/-1">${settingsT('forms.backupOverdueToleranceHint')}</div>
       <input type="hidden" data-key="NOTIFY_UNRAID_EVENTS" value="${escHtml(events)}">
       <fieldset class="settings-fieldset" style="grid-column:1/-1">
         <legend>${settingsT('forms.notifyEvents')}</legend>

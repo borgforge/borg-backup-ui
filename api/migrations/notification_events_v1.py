@@ -11,6 +11,7 @@ DESCRIPTION = "Add central notification event configuration and reminder interva
 DEFAULT_EMAIL_EVENTS = "backup_failed"
 DEFAULT_UNRAID_EVENTS = "backup_success,backup_warning,backup_failed,backup_skipped"
 DEFAULT_REMINDER_INTERVAL_HOURS = "24"
+DEFAULT_BACKUP_OVERDUE_TOLERANCE_HOURS = "6"
 
 
 def _events(raw: str) -> list[str]:
@@ -34,6 +35,7 @@ def detect(config: dict) -> dict[str, Any]:
             "NOTIFY_EMAIL_EVENTS",
             "NOTIFY_UNRAID_EVENTS",
             "NOTIFY_REMINDER_INTERVAL_HOURS",
+            "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS",
         )
         if key not in conf
     ]
@@ -63,6 +65,8 @@ def apply(config: dict) -> dict[str, Any]:
         updates["NOTIFY_UNRAID_EVENTS"] = DEFAULT_UNRAID_EVENTS
     if "NOTIFY_REMINDER_INTERVAL_HOURS" not in conf:
         updates["NOTIFY_REMINDER_INTERVAL_HOURS"] = DEFAULT_REMINDER_INTERVAL_HOURS
+    if "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS" not in conf:
+        updates["NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS"] = DEFAULT_BACKUP_OVERDUE_TOLERANCE_HOURS
 
     ntfy_events = _events(str(conf.get("NTFY_EVENTS", "")))
     if "backup_failed" in ntfy_events and "backup_warning" not in ntfy_events:

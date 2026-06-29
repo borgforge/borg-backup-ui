@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #101
+- Notifications:
+  - Backup overdue reminders now use the latest expected cron run plus configurable tolerance instead of only a broad schedule interval.
+  - Settings expose `NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS` for the backup overdue tolerance.
+  - Reminder keys now use the expected run timestamp so each missed scheduled window is notified at most once.
+
 ### Issue #92
 - Settings:
   - System health now lists recorded startup migrations such as `notification_events_v1` in an executed migrations section.

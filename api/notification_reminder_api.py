@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 
@@ -135,8 +135,8 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
         if not job or job.get("enabled") is False:
             continue
         cron = str(sched.get("cron") or "").strip()
-        period = _schedule_period_seconds(cron)
-        if period <= 0:
+        expected_run = _latest_expected_run(cron, now)
+        if expected_run is None:
             skipped += 1
             rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "unsupported_cron"})
             continue
@@ -144,11 +144,12 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
         checked += 1
         last = latest.get(str(job_key))
         last_ts = _parse_status_time(str((last or {}).get("timestamp") or ""))
-        overdue = last_ts is None or (now - last_ts).total_seconds() > period
+        tolerance = timedelta(hours=_backup_overdue_tolerance_hours(effective))
+        overdue = now > expected_run + tolerance and (last_ts is None or last_ts < expected_run)
         if not overdue:
             continue
 
-        due_marker = str((last or {}).get("timestamp") or "never")
+        due_marker = expected_run.strftime("%Y-%m-%d %H:%M:%S")
         key = reminder_key("backup_overdue", str(job_key), due_marker)
         if not reminder_allowed(effective, key):
             skipped += 1
@@ -162,7 +163,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
             timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
             duration_seconds=0,
             repository=str(job.get("repo_path") or ""),
-            error_message="Scheduled backup has not reported a recent run.",
+            error_message=f"Scheduled backup missed the expected run at {due_marker}.",
         )
         event = NotificationEvent(
             event_type="backup_overdue",
@@ -174,7 +175,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
             status="overdue",
             repository=str(job.get("repo_path") or ""),
             source="scheduled_reminder",
-            extra={"cron": cron, "last_timestamp": due_marker},
+            extra={"cron": cron, "expected_run": due_marker, "last_timestamp": str((last or {}).get("timestamp") or "")},
         )
         results = send_event(effective, event, mail_config=mail_config, ntfy_config=ntfy_config)
         if any(results.values()):
@@ -188,28 +189,59 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
     return {"checked": checked, "sent": sent, "skipped": skipped, "rows": rows}
 
 
-def _schedule_period_seconds(cron: str) -> int:
+def _backup_overdue_tolerance_hours(config: dict) -> int:
+    raw = str(config.get("NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS", "6") or "6")
+    try:
+        return max(1, int(raw.strip()))
+    except ValueError:
+        return 6
+
+
+def _latest_expected_run(cron: str, now: datetime) -> datetime | None:
     parts = cron.split()
     if len(parts) != 5:
-        return 0
+        return None
     minute, hour, dom, month, dow = parts
     if month != "*":
-        return 0
-    if minute == "*" or hour == "*":
-        return 0
-    if dom == "*" and dow == "*":
-        return int(36 * 3600)
-    if dom == "*" and dow != "*":
-        dow_values = _parse_cron_dow_values(dow)
-        if not dow_values:
-            return 0
-        max_gap_days = _max_cron_dow_gap_days(dow_values)
-        if max_gap_days <= 1:
-            return int(36 * 3600)
-        return int((max_gap_days * 86400) + (12 * 3600))
-    if dom != "*" and dow == "*":
-        return int(32 * 86400)
-    return 0
+        return None
+    try:
+        minute_value = int(minute)
+        hour_value = int(hour)
+    except ValueError:
+        return None
+    if minute_value < 0 or minute_value > 59 or hour_value < 0 or hour_value > 23:
+        return None
+    if dom != "*" and dow != "*":
+        return None
+
+    dow_values = _parse_cron_dow_values(dow) if dow != "*" else set(range(7))
+    if not dow_values:
+        return None
+    dom_value: int | None = None
+    if dom != "*":
+        try:
+            dom_value = int(dom)
+        except ValueError:
+            return None
+        if dom_value < 1 or dom_value > 31:
+            return None
+
+    base = now.replace(second=0, microsecond=0)
+    for offset in range(0, 370):
+        day = base.date() - timedelta(days=offset)
+        if dom_value is not None and day.day != dom_value:
+            continue
+        if dom_value is None and _cron_dow_for_datetime(datetime(day.year, day.month, day.day)) not in dow_values:
+            continue
+        candidate = datetime(day.year, day.month, day.day, hour_value, minute_value)
+        if candidate <= now:
+            return candidate
+    return None
+
+
+def _cron_dow_for_datetime(value: datetime) -> int:
+    # Python: Monday=0..Sunday=6. Cron: Sunday=0/7, Monday=1..Saturday=6.
+    return (value.weekday() + 1) % 7
 
 
 def _parse_cron_dow_values(raw: str) -> set[int]:
@@ -247,21 +279,6 @@ def _parse_cron_dow_values(raw: str) -> set[int]:
             return set()
         values.add(normalized)
     return values
-
-
-def _max_cron_dow_gap_days(values: set[int]) -> int:
-    days = sorted(values)
-    if not days:
-        return 0
-    if len(days) == 1:
-        return 7
-    gaps = []
-    for idx, day in enumerate(days):
-        next_day = days[(idx + 1) % len(days)]
-        if idx == len(days) - 1:
-            next_day += 7
-        gaps.append(next_day - day)
-    return max(gaps)
 
 
 def _parse_status_time(raw: str) -> datetime | None:
