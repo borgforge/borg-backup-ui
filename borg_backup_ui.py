@@ -74,7 +74,7 @@ def _mask_secrets(text: str) -> str:
         out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
     return out
 
-APP_VERSION = "2026.06.30.0143"
+APP_VERSION = "2026.06.30.1729"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -1761,7 +1761,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_restore_target_dirs(self, qs_str: str) -> dict:
         self._require_data_dir_ready()
-        from restore_api import list_target_dirs_with_config
+        from restore_api import list_allowed_target_roots, list_target_dirs_with_config
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(qs_str)
         prefix = unquote((qs.get("prefix") or [""])[0])
@@ -1770,7 +1770,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             limit = int(limit_raw)
         except Exception:
             limit = 40
-        return {"dirs": list_target_dirs_with_config(self.config, prefix, limit)}
+        return {
+            "dirs": list_target_dirs_with_config(self.config, prefix, limit),
+            "allowed_roots": list_allowed_target_roots(self.config),
+        }
 
     def _get_restore_state(self, qs_str: str) -> dict:
         self._require_data_dir_ready()

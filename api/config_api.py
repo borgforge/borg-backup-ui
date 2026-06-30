@@ -1191,7 +1191,6 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "GLOBAL_BORG_CACHE_BASE":     conf.get("GLOBAL_BORG_CACHE_BASE", "/mnt/cache/borg-cache"),
             "GLOBAL_BORG_CHECK_INTERVAL_DAYS": conf.get("GLOBAL_BORG_CHECK_INTERVAL_DAYS", "30"),
             "BORG_MAX_RUNTIME_HOURS":     conf.get("BORG_MAX_RUNTIME_HOURS", "0"),
-            "RESTORE_ALLOWED_ROOTS":      conf.get("RESTORE_ALLOWED_ROOTS", "/mnt/user"),
             "ABORT_ON_PARITY_CHECK":      conf.get("ABORT_ON_PARITY_CHECK", "true"),
         },
         "smtp": {
@@ -1260,6 +1259,9 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "RESTORE_TEST_DRY_RUN_CHUNK_SIZE": conf.get("RESTORE_TEST_DRY_RUN_CHUNK_SIZE", "100"),
             "RESTORE_TEST_DRY_RUN_MAX_FILES": conf.get("RESTORE_TEST_DRY_RUN_MAX_FILES", "1000"),
             "RESTORE_TEST_LEVEL3_LEGACY_SAMPLING": conf.get("RESTORE_TEST_LEVEL3_LEGACY_SAMPLING", "false"),
+        },
+        "restore_browse": {
+            "RESTORE_ALLOWED_ROOTS": conf.get("RESTORE_ALLOWED_ROOTS", "/mnt/user"),
         },
         "weekly_report": {
             "WEEKLY_REPORT_ENABLED":   conf.get("WEEKLY_REPORT_ENABLED", "false"),
@@ -1520,6 +1522,23 @@ def _as_int(v: str, default: int = 0) -> int:
         return default
 
 
+def _is_safe_restore_root_value(raw: str) -> bool:
+    path = str(raw or "").strip().rstrip("/") or "/"
+    if path in {"/", "/mnt", "/mnt/disks", "/mnt/remotes", "/boot", "/etc", "/usr", "/var"}:
+        return False
+    if path == "/mnt/user" or path.startswith("/mnt/user/"):
+        return True
+    if path == "/mnt/data" or path.startswith("/mnt/data/"):
+        return True
+    if re.fullmatch(r"/mnt/disk[0-9]+(?:/.*)?", path):
+        return True
+    if re.fullmatch(r"/mnt/disks/[^/]+(?:/.*)?", path):
+        return True
+    if re.fullmatch(r"/mnt/remotes/[^/]+(?:/.*)?", path):
+        return True
+    return False
+
+
 def validate_runtime_config(ui_config: dict) -> dict:
     """
     Validiert zentrale Runtime-Konfiguration ohne harte Abbrüche.
@@ -1592,12 +1611,25 @@ def validate_runtime_config(ui_config: dict) -> dict:
             "message_code": "config_restore_test_level",
         })
 
+    restore_roots = [
+        str(item or "").strip()
+        for item in str(conf.get("RESTORE_ALLOWED_ROOTS", "/mnt/user") or "/mnt/user").split(",")
+        if str(item or "").strip()
+    ]
+    invalid_restore_roots = [root for root in restore_roots if not _is_safe_restore_root_value(root)]
+    if invalid_restore_roots:
+        warnings.append({
+            "key": "RESTORE_ALLOWED_ROOTS",
+            "message": "RESTORE_ALLOWED_ROOTS contains unsafe or too broad restore target roots.",
+            "message_code": "config_restore_allowed_roots",
+            "message_params": {"paths": ", ".join(invalid_restore_roots)},
+        })
+
     for key in (
         "GLOBAL_LOG_RETENTION_DAYS",
         "GLOBAL_BORG_CHECKPOINT_INTERVAL",
         "GLOBAL_BORG_CHECK_INTERVAL_DAYS",
         "BORG_MAX_RUNTIME_HOURS",
-        "RESTORE_ALLOWED_ROOTS",
         "RESTORE_TEST_INTERVAL_DAYS",
         "RESTORE_TEST_BORG_TIMEOUT",
         "RESTORE_TEST_DRY_RUN_TIMEOUT",

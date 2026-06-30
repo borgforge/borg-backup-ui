@@ -32,6 +32,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   historyDetailId: '',
   view: 'wizard',
   liveMode: false,
+  allowedTargetRoots: ['/mnt/user'],
 };
 const restoreState = window.BBUI.restoreState;
 
@@ -212,7 +213,10 @@ function restoreCanAdvance(step) {
   if (step === 1) return !!restoreState.job;
   if (step === 2) return !!restoreState.archive;
   if (step === 3) return !!restoreState.selectedPath;
-  if (step === 4) return !!document.getElementById('restore-target-path')?.value?.trim();
+  if (step === 4) {
+    const target = document.getElementById('restore-target-path')?.value?.trim() || '';
+    return !!target && _isAllowedRestoreTarget(target);
+  }
   return true;
 }
 
@@ -221,7 +225,10 @@ function restoreStepNext() {
     if (restoreState.step === 1) return _restoreMsg(restoreT('selectJobFirst'), true);
     if (restoreState.step === 2) return _restoreMsg(restoreT('selectArchiveFirst'), true);
     if (restoreState.step === 3) return _restoreMsg(restoreT('selectElementFirst'), true);
-    if (restoreState.step === 4) return _restoreMsg(restoreT('enterTargetFirst'), true);
+    if (restoreState.step === 4) {
+      const target = document.getElementById('restore-target-path')?.value?.trim() || '';
+      return _restoreMsg(target ? restoreT('targetRestriction', { roots: _restoreAllowedRootsText() }) : restoreT('enterTargetFirst'), true);
+    }
   }
   restoreSetStep(restoreState.step + 1);
 }
@@ -635,8 +642,9 @@ function _restoreBindTargetAutocomplete() {
 
   const loadSuggestions = async (rawValue) => {
     const value = String(rawValue ?? input.value ?? '').trim();
-    const prefix = value || '/mnt/user/';
-    if (!prefix.startsWith('/mnt/user')) {
+    const fallbackRoot = _restorePrimaryAllowedRoot();
+    const prefix = value || `${fallbackRoot}/`;
+    if (!_isAllowedRestoreTarget(prefix)) {
       applyOptions([]);
       return;
     }
@@ -650,6 +658,7 @@ function _restoreBindTargetAutocomplete() {
       const data = await res.json();
       if (!res.ok || data.error) return;
       if (reqId !== restoreState.targetSuggestReq) return;
+      _restoreSetAllowedTargetRoots(data.allowed_roots || restoreState.allowedTargetRoots);
       const dirs = (data.dirs || []).map(d => d.path).filter(Boolean);
       restoreState.targetSuggestCache.set(prefix, dirs);
       applyOptions(dirs);
@@ -659,7 +668,7 @@ function _restoreBindTargetAutocomplete() {
   };
 
   input.addEventListener('focus', () => {
-    if (!input.value.trim()) input.value = '/mnt/user/';
+    if (!input.value.trim()) input.value = `${_restorePrimaryAllowedRoot()}/`;
     loadSuggestions(input.value);
   });
   input.addEventListener('input', () => {
@@ -670,7 +679,7 @@ function _restoreBindTargetAutocomplete() {
   input.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter') return;
     const v = String(input.value || '').trim();
-    if (!v.startsWith('/mnt/user')) return;
+    if (!_isAllowedRestoreTarget(v)) return;
     const options = Array.from(datalist.options || []);
     const exact = options.find(o => o.value.replace(/\/+$/, '') === v.replace(/\/+$/, ''));
     if (exact && !v.endsWith('/')) {
@@ -695,7 +704,8 @@ async function restoreInit() {
   _restoreMsg('');
   _restoreBindTargetAutocomplete();
   const targetInput = document.getElementById('restore-target-path');
-  if (targetInput && !targetInput.value.trim()) targetInput.value = '/mnt/user/';
+  await restoreLoadAllowedTargetRoots();
+  if (targetInput && !targetInput.value.trim()) targetInput.value = `${_restorePrimaryAllowedRoot()}/`;
   _restoreRenderSelectionSummary();
   _restoreRenderSelectedBox();
   restoreLoadRuns();
@@ -1001,7 +1011,54 @@ function restoreUpdateConfirmState() {
 
 function _isAllowedRestoreTarget(target) {
   const t = String(target || '').trim();
-  return t === '/mnt/user' || t.startsWith('/mnt/user/');
+  if (!t.startsWith('/')) return false;
+  return _restoreAllowedTargetRoots().some((root) => t === root || t.startsWith(`${root}/`));
+}
+
+function _restoreNormalizePath(value) {
+  const path = String(value || '').trim().replace(/\/+$/, '') || '/';
+  return path;
+}
+
+function _restoreAllowedTargetRoots() {
+  const roots = Array.isArray(restoreState.allowedTargetRoots) ? restoreState.allowedTargetRoots : [];
+  const seen = new Set();
+  const out = [];
+  roots.forEach((root) => {
+    const clean = _restoreNormalizePath(root);
+    if (!clean || !clean.startsWith('/') || seen.has(clean)) return;
+    seen.add(clean);
+    out.push(clean);
+  });
+  return out.length ? out : ['/mnt/user'];
+}
+
+function _restorePrimaryAllowedRoot() {
+  return _restoreAllowedTargetRoots()[0] || '/mnt/user';
+}
+
+function _restoreAllowedRootsText() {
+  return _restoreAllowedTargetRoots().join(', ');
+}
+
+function _restoreSetAllowedTargetRoots(roots) {
+  restoreState.allowedTargetRoots = (Array.isArray(roots) && roots.length ? roots : ['/mnt/user'])
+    .map(_restoreNormalizePath)
+    .filter((root) => root && root.startsWith('/'));
+  const hint = document.querySelector('[data-i18n="restore.targetRestrictionHint"]');
+  if (hint) hint.textContent = restoreT('targetRestrictionHint', { roots: _restoreAllowedRootsText() });
+  const suggestion = document.querySelector('[data-i18n="restore.targetSuggestion"]');
+  if (suggestion) suggestion.textContent = restoreT('targetSuggestion', { root: _restorePrimaryAllowedRoot() });
+}
+
+async function restoreLoadAllowedTargetRoots() {
+  try {
+    const res = await fetch('/api/restore/target-dirs?prefix=&limit=1', { credentials: 'include' });
+    const data = await res.json();
+    if (res.ok && !data.error) _restoreSetAllowedTargetRoots(data.allowed_roots || []);
+  } catch (_) {
+    _restoreSetAllowedTargetRoots(restoreState.allowedTargetRoots || ['/mnt/user']);
+  }
 }
 
 function _setRestoreAssistBusy(busy) {
@@ -1038,7 +1095,7 @@ async function restoreRunPrecheck() {
     return;
   }
   if (!_isAllowedRestoreTarget(target)) {
-    showMsg('restore-assist-msg', 'error', restoreT('targetRestriction'));
+    showMsg('restore-assist-msg', 'error', restoreT('targetRestriction', { roots: _restoreAllowedRootsText() }));
     if (out) out.textContent = '';
     _setRestoreAssistBusy(false);
     return;
@@ -1174,7 +1231,7 @@ async function restoreStart() {
     return;
   }
   if (!_isAllowedRestoreTarget(target)) {
-    showMsg('restore-assist-msg', 'error', restoreT('targetRestriction'));
+    showMsg('restore-assist-msg', 'error', restoreT('targetRestriction', { roots: _restoreAllowedRootsText() }));
     return;
   }
   const summary = [
