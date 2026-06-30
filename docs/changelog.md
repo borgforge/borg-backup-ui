@@ -12,6 +12,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - `/mnt/user` remains the only default target root; additional roots such as `/mnt/data`, `/mnt/disk1`, `/mnt/disks/<name>` and `/mnt/remotes/<name>` must be added deliberately.
   - Broad or system-level roots such as `/`, `/mnt`, `/mnt/disks`, `/mnt/remotes`, `/boot`, `/etc`, `/usr` and `/var` are rejected by both UI validation and backend filtering.
   - Step 4 validates the target path against the configured roots before the precheck/start flow and displays the allowed roots dynamically.
+  - Restore target root inputs validate while typing but normalize only on blur/save, so users can enter paths such as `/mnt/data` normally.
 
 ### Issue #101
 - Notifications:

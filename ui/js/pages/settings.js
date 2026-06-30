@@ -2993,6 +2993,10 @@ function normalizeRestoreRootInput(raw) {
   return value;
 }
 
+function readRestoreRootInput(raw) {
+  return String(raw || '').trim();
+}
+
 function isSafeRestoreRoot(value) {
   const path = normalizeRestoreRootInput(value);
   if (!path || !path.startsWith('/')) return false;
@@ -3005,15 +3009,16 @@ function isSafeRestoreRoot(value) {
   return false;
 }
 
-function syncRestoreAllowedRootsHiddenInput() {
+function syncRestoreAllowedRootsHiddenInput({ normalizeInputs = false } = {}) {
   const box = document.getElementById('restore-allowed-roots-list');
   const hidden = document.getElementById('restore-allowed-roots-hidden');
   if (!box || !hidden) return;
   const roots = [];
   const seen = new Set();
   box.querySelectorAll('[data-restore-root-input]').forEach((input) => {
-    const clean = normalizeRestoreRootInput(input.value);
-    input.value = clean;
+    const raw = readRestoreRootInput(input.value);
+    const clean = normalizeRestoreRootInput(raw);
+    if (normalizeInputs) input.value = clean;
     input.classList.toggle('input-error', !!clean && !isSafeRestoreRoot(clean));
     if (!clean || seen.has(clean)) return;
     seen.add(clean);
@@ -3063,13 +3068,13 @@ function renderSettingsBrowseRestore(browse) {
 function renderRestoreRootRow(root = '') {
   const safe = isSafeRestoreRoot(root);
   return `<div class="settings-inline-row restore-root-row">
-    <input class="form-input mono ${safe ? '' : 'input-error'}" type="text" data-restore-root-input value="${escHtml(root)}" placeholder="/mnt/user" oninput="onRestoreAllowedRootsChanged()" onchange="onRestoreAllowedRootsChanged()">
+    <input class="form-input mono ${safe ? '' : 'input-error'}" type="text" data-restore-root-input value="${escHtml(root)}" placeholder="/mnt/user" oninput="onRestoreAllowedRootsChanged(false)" onchange="onRestoreAllowedRootsChanged(true)">
     <button type="button" class="btn btn-secondary btn-sm" data-settings-action="restore-root-remove">${settingsT('common.remove')}</button>
   </div>`;
 }
 
-function onRestoreAllowedRootsChanged() {
-  syncRestoreAllowedRootsHiddenInput();
+function onRestoreAllowedRootsChanged(normalizeInputs = false) {
+  syncRestoreAllowedRootsHiddenInput({ normalizeInputs });
   const msg = document.getElementById('restore-allowed-roots-msg');
   const invalid = Array.from(document.querySelectorAll('[data-restore-root-input]'))
     .map((input) => normalizeRestoreRootInput(input.value))
@@ -3955,7 +3960,7 @@ async function saveSettings() {
   syncUsbProfilesHiddenInput();
   syncSmbProfilesHiddenInput();
   syncStorageProfilesHiddenInput();
-  syncRestoreAllowedRootsHiddenInput();
+  syncRestoreAllowedRootsHiddenInput({ normalizeInputs: true });
   const updates = {};
   const activePanel = document.querySelector('#settings-content .settings-tab-panel:not(.hidden)');
   const activeTab = activePanel?.dataset?.settingsPanel || settingsState.activeTab || 'general';

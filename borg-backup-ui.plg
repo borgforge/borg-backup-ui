@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.30.1654">
+<!ENTITY version   "2026.06.30.1729">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.30.1729###
+- Issue #102:
+  - Restore target root inputs no longer normalize paths while typing, so paths such as /mnt/data can be entered normally.
+
 ###2026.06.30.1654###
 - Issue #102:
   - Browse & Restore target roots can be configured under Settings > Restore while unsafe broad system paths remain blocked.
@@ -173,7 +177,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>fb465636bf17321467960d463f3289dc</MD5>
+<MD5>c5812b2e9186e7897ee36c50b728795e</MD5>
 </FILE>
 
 <!--
