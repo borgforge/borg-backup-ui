@@ -156,6 +156,19 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
     restore_errors = _as_int(restore_history.get("errors"))
     if restore_imported > 0:
         actions.append(f"{restore_imported} restore run(s) migrated")
+    startup = details.get("startup_migrations") if isinstance(details.get("startup_migrations"), dict) else {}
+    startup_applied = startup.get("applied") if isinstance(startup.get("applied"), list) else []
+    startup_results = startup.get("results") if isinstance(startup.get("results"), dict) else {}
+    for migration_id in startup_applied:
+        migration_id_text = str(migration_id or "").strip()
+        if not migration_id_text or migration_id_text == "restore_history_v1":
+            continue
+        actions.append(f"{migration_id_text} applied")
+        result = startup_results.get(migration_id_text) if isinstance(startup_results.get(migration_id_text), dict) else {}
+        result_details = result.get("details") if isinstance(result.get("details"), dict) else {}
+        updated_keys = result_details.get("updated_keys") if isinstance(result_details.get("updated_keys"), list) else []
+        if updated_keys:
+            actions.append(f"Updated keys: {', '.join(str(key) for key in updated_keys)}")
     if str(jobs.get("status", "")).strip().lower() not in {"", "ok"}:
         errors.append(f"Job-Layout: {jobs.get('error') or jobs.get('status')}")
     if move_errors > 0:
@@ -168,7 +181,11 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
     reason = reason_text or (
         "Cache/remotes changed, including backup.conf update"
         if reason_code == "storage_paths_changed"
-        else ("No changes required" if reason_code == "no_changes" else ("Migration completed" if ok else "Migration completed with errors"))
+        else (
+            "Startup migrations applied"
+            if reason_code == "startup_migrations_applied"
+            else ("No changes required" if reason_code == "no_changes" else ("Migration completed" if ok else "Migration completed with errors"))
+        )
     )
     return {
         "status": "success" if ok else "failed",

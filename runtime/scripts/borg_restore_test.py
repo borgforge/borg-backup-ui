@@ -212,7 +212,7 @@ class RestoreTest:
         date_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.log_path = self.log_dir / f"Borg-Restore-Test--{date_tag}.log"
         self._fh = open(self.log_path, "w", buffering=1, encoding="utf-8")
-        self.ntfy_config = self._load_ntfy_config()
+        self.mail_config, self.ntfy_config = self._load_notification_config()
 
     def log(self, msg: str = "") -> None:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -225,22 +225,21 @@ class RestoreTest:
 
     # ── Hilfsmethoden ──────────────────────────────────────────────────────────
 
-    def _load_ntfy_config(self):
+    def _load_notification_config(self):
         try:
-            from lib.notifications import NtfyConfig
-            return NtfyConfig.from_config(self.conf)
+            from lib.notifications import MailConfig, NtfyConfig
+            return MailConfig.from_config(self.conf), NtfyConfig.from_config(self.conf)
         except Exception as exc:
-            self.log(f"  ntfy setup skipped: {exc}")
-            return None
+            self.log(f"  notification setup skipped: {exc}")
+            return None, None
 
-    def _notify_ntfy(self, event_type: str, repo: dict, result: str, duration: int = 0,
+    def _notify_event(self, event_type: str, repo: dict, result: str, duration: int = 0,
                      coverage: str = "", error_message: str = "") -> None:
         if not bool(getattr(self.args, "scheduled", False)):
             return
-        if self.ntfy_config is None:
-            return
         try:
-            from lib.notifications import build_restore_test_ntfy_message, send_ntfy
+            from lib.notification_events import NotificationEvent, clear_reminder_prefix, send_event
+            from lib.notifications import build_restore_test_ntfy_message
             job_name = str(repo.get("job_key") or repo.get("type") or "restore_test")
             title = f"Borg Backup UI: Restore test {result}"
             message = build_restore_test_ntfy_message(
@@ -253,9 +252,27 @@ class RestoreTest:
                 coverage=coverage,
                 error_message=error_message,
             )
-            send_ntfy(self.ntfy_config, event_type, title, message)
+            send_event(
+                self.conf,
+                NotificationEvent(
+                    event_type=event_type,
+                    title=title,
+                    message=message,
+                    severity="warning" if event_type in {"restore_test_failed", "restore_test_overdue"} else "info",
+                    job_name=f"Borg Backup UI ({job_name})",
+                    job_key=job_name,
+                    status=result,
+                    duration_seconds=duration,
+                    repository=str(repo.get("path") or ""),
+                    source="restore_test",
+                ),
+                mail_config=self.mail_config,
+                ntfy_config=self.ntfy_config,
+            )
+            if event_type == "restore_test_success":
+                clear_reminder_prefix(self.conf, f"restore_test_overdue:{job_name}:")
         except Exception as exc:
-            self.log(f"  ntfy notification failed: {exc}")
+            self.log(f"  notification event failed: {exc}")
 
     def _env(self, passphrase: str) -> dict:
         env = dict(os.environ)
@@ -518,7 +535,7 @@ class RestoreTest:
 
         if not self._should_test(key):
             return 2
-        self._notify_ntfy("restore_test_overdue", repo, "Overdue")
+        self._notify_event("restore_test_overdue", repo, "Overdue")
 
         smb_mounted_by_me = False
         steps: list = []
@@ -944,10 +961,10 @@ class RestoreTest:
         test_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         self.log(f"  → Ergebnis: {test_file}")
         if result_str == "success":
-            self._notify_ntfy("restore_test_success", repo, "Successful", duration, coverage)
+            self._notify_event("restore_test_success", repo, "Successful", duration, coverage)
         elif result_str in {"failed", "unavailable"}:
             detail = failure_hint or error_details or reason or "Restore test failed"
-            self._notify_ntfy("restore_test_failed", repo, "Failed", duration, coverage, detail)
+            self._notify_event("restore_test_failed", repo, "Failed", duration, coverage, detail)
 
 
 # ── Hauptprogramm ─────────────────────────────────────────────────────────────

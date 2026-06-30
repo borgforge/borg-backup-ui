@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.29.1933">
+<!ENTITY version   "2026.06.30.0143">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,32 @@
 
 <CHANGES>
 <![CDATA[
+###2026.06.30.0143###
+- Issue #101:
+  - Reminder interval and backup overdue tolerance now appear in a central reminder settings card because they apply to all notification channels.
+
+###2026.06.30.0012###
+- Issue #101:
+  - Backup overdue reminders now use the latest expected schedule run plus a configurable tolerance in hours.
+
+###2026.06.29.2324###
+- Issue #92:
+  - Backup overdue reminders now support weekday cron ranges and lists such as 0 9 * * 1-5.
+
+###2026.06.29.2248###
+- Issue #92:
+  - Applied startup migrations are now written to migrations.log.jsonl so the latest migration summary shows the correct run time and actions.
+
+###2026.06.29.2235###
+- Issue #92:
+  - System health now shows recorded startup migrations such as notification event migration with status, changed keys and execution time.
+
+###2026.06.29.2151###
+- Issue #92:
+  - Notification delivery now uses a central event dispatcher for Unraid notifications, email and ntfy.
+  - Settings now allow channel-specific event selection and a reminder interval for overdue restore-test notifications.
+  - Scheduled restore-test overdue reminders are rate-limited and survive UI restarts.
+
 ###2026.06.29.1933###
 - Issue #98:
   - Dashboard job icons now use the configured job metadata, matching the Jobs page.
@@ -143,7 +169,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>62b9068f11eefd8d61cf4aa6fea58694</MD5>
+<MD5>7952f70ec87dfc17ee714155b5436ae1</MD5>
 </FILE>
 
 <!--

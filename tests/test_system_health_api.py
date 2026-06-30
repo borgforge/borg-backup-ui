@@ -123,6 +123,42 @@ def test_migration_summary_extracts_restore_history_migration():
     assert summary["errors"] == []
 
 
+def test_migration_summary_extracts_startup_migration_actions():
+    event = {
+        "success": True,
+        "timestamp": "2026-06-29T22:41:34",
+        "reason_code": "startup_migrations_applied",
+        "reason_text": "Startup-Migrationen angewendet",
+        "message": "notification_events_v1=applied",
+        "details": {
+            "startup_migrations": {
+                "status": "ok",
+                "applied": ["notification_events_v1"],
+                "skipped": [],
+                "failed": [],
+                "results": {
+                    "notification_events_v1": {
+                        "status": "applied",
+                        "details": {
+                            "updated_keys": ["NTFY_EVENTS"],
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    summary = _build_migration_summary(event, {"last_event": event, "last_effective_event": event})
+
+    assert summary["status"] == "success"
+    assert summary["reason_code"] == "startup_migrations_applied"
+    assert summary["last_run"] == "2026-06-29T22:41:34"
+    assert summary["last_effective_run"] == "2026-06-29T22:41:34"
+    assert "notification_events_v1 applied" in summary["actions"]
+    assert "Updated keys: NTFY_EVENTS" in summary["actions"]
+    assert summary["errors"] == []
+
+
 def test_migration_summary_no_changes_has_no_actions():
     event = {
         "success": True,

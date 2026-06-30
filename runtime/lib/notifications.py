@@ -54,6 +54,11 @@ _IMPORTANCE_MAP: dict[str, str] = {
     "alert": "alert",
 }
 
+_EVENT_ALIASES: dict[str, set[str]] = {
+    # Older ntfy configuration used backup_failed for both failures and warnings.
+    "backup_warning": {"backup_warning", "backup_failed"},
+}
+
 
 # ---------------------------------------------------------------------------
 # Dataclass für Mail-Konfiguration
@@ -315,7 +320,8 @@ def send_ntfy(
     """
     if not config.enabled:
         return False
-    if event_type and config.events and event_type not in config.events:
+    allowed_names = _EVENT_ALIASES.get(event_type, {event_type})
+    if event_type and config.events and not (config.events & allowed_names):
         logger.info("ntfy event skipped by configuration: %s", event_type)
         return False
     if not config.server_url or not config.topic:

@@ -78,6 +78,10 @@ _DEFAULTS: Dict[str, str] = {
     "GLOBAL_SMTP_USER": "",
     "GLOBAL_SMTP_PASSWORD": "",
     "GLOBAL_SMTP_USE_TLS": "true",
+    "NOTIFY_EMAIL_EVENTS": "backup_failed",
+    "NOTIFY_UNRAID_EVENTS": "backup_success,backup_warning,backup_failed,backup_skipped",
+    "NOTIFY_REMINDER_INTERVAL_HOURS": "24",
+    "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
     "NTFY_ENABLED": "false",
     "NTFY_PROFILE_NAME": "ntfy",
     "NTFY_SERVER_URL": "",
@@ -1199,6 +1203,12 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "GLOBAL_SMTP_PASSWORD":   "",
             "GLOBAL_SMTP_PASSWORD_SET": "true" if str(conf.get("GLOBAL_SMTP_PASSWORD", "")).strip() else "false",
             "GLOBAL_SMTP_USE_TLS":    conf.get("GLOBAL_SMTP_USE_TLS", "true"),
+            "NOTIFY_EMAIL_EVENTS":    conf.get("NOTIFY_EMAIL_EVENTS", "backup_failed"),
+        },
+        "unraid_notifications": {
+            "NOTIFY_UNRAID_EVENTS": conf.get("NOTIFY_UNRAID_EVENTS", "backup_success,backup_warning,backup_failed,backup_skipped"),
+            "NOTIFY_REMINDER_INTERVAL_HOURS": conf.get("NOTIFY_REMINDER_INTERVAL_HOURS", "24"),
+            "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": conf.get("NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS", "6"),
         },
         "ntfy": {
             "NTFY_ENABLED":       conf.get("NTFY_ENABLED", "false"),

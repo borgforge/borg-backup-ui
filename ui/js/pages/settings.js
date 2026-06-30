@@ -191,7 +191,9 @@ function renderSettings(data, systemHealth) {
     <div class="settings-tab-panel ${settingsState.activeTab === 'general' ? '' : 'hidden'}" data-settings-panel="general">
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
+      ${renderSettingsNotificationReminders(data.unraid_notifications || {})}
       ${renderSettingsSMTP(data.smtp || {})}
+      ${renderSettingsUnraidNotifications(data.unraid_notifications || {})}
       ${renderSettingsNtfy(data.ntfy || {})}
       ${renderSettingsAbout()}
     </div>
@@ -1152,6 +1154,10 @@ function _migrationRegistryText(item, field) {
       title: 'registryCleanupTitle',
       reason: status === 'pending' ? 'registryCleanupPresent' : 'registryCleanupEmpty',
     },
+    notification_events_v1: {
+      title: 'registryNotificationEventsTitle',
+      reason: status === 'applied' ? 'registryNotificationEventsApplied' : (status === 'not_needed' ? 'registryNotificationEventsCurrent' : 'registryNotificationEventsPending'),
+    },
   };
   const key = keys[id]?.[field];
   if (key) return settingsT(`health.${key}`);
@@ -1168,6 +1174,9 @@ function _renderMigrationRegistryItem(item) {
   const reason = _migrationRegistryText(item, 'reason');
   const details = item?.details && typeof item.details === 'object' ? item.details : {};
   const candidates = Array.isArray(details.candidate_keys) ? details.candidate_keys : [];
+  const updatedKeys = Array.isArray(details.updated_keys) ? details.updated_keys.map((key) => String(key || '').trim()).filter(Boolean) : [];
+  const checkedAt = String(details.checked_at || '').trim();
+  const introducedIn = String(details.introduced_in || '').trim();
   const plan = details?.dry_run_plan && typeof details.dry_run_plan === 'object' ? details.dry_run_plan : null;
   const planCandidateCount = Number(plan?.candidate_count || 0);
   const planText = plan && planCandidateCount > 0
@@ -1186,6 +1195,9 @@ function _renderMigrationRegistryItem(item) {
       ${reason ? `<div>${escHtml(reason)}</div>` : ''}
       ${planText ? `<div class="migration-registry-plan">${escHtml(planText)}</div>` : ''}
       ${candidates.length ? `<div class="migration-registry-id">Deprecated: ${candidates.map((row) => escHtml(String(row?.key || ''))).filter(Boolean).join(', ')}</div>` : ''}
+      ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map(escHtml).join(', ')}</div>` : ''}
+      ${checkedAt ? `<div class="migration-registry-id">${escHtml(settingsT('health.checkedAt'))}: ${escHtml(_formatHealthTimestamp(checkedAt) || checkedAt)}</div>` : ''}
+      ${introducedIn ? `<div class="migration-registry-id">${escHtml(settingsT('health.introducedIn'))}: ${escHtml(introducedIn)}</div>` : ''}
     </div>
   `;
 }
@@ -1194,6 +1206,7 @@ function _renderMigrationRegistryGroups(items) {
   const groups = [
     ['setup', settingsT('health.initialSetup')],
     ['config', settingsT('health.configuration')],
+    ['migration', settingsT('health.executedMigrations')],
     ['planned_migration', settingsT('health.plannedMigrations')],
   ];
   return groups.map(([category, title]) => {
@@ -1212,8 +1225,12 @@ function _localizeMigrationAction(value) {
   const raw = String(value || '').trim();
   const moved = raw.match(/^(\d+) (?:Elemente verschoben|items moved)$/);
   const moveErrors = raw.match(/^(\d+) (?:Verschiebe-Fehler|move errors)$/);
+  const migrationApplied = raw.match(/^(.+) applied$/);
+  const updatedKeys = raw.match(/^Updated keys: (.+)$/);
   if (moved) return settingsT('health.itemsMoved', { count: moved[1] });
   if (moveErrors) return settingsT('health.moveErrors', { count: moveErrors[1] });
+  if (migrationApplied) return settingsT('health.migrationApplied', { id: migrationApplied[1] });
+  if (updatedKeys) return settingsT('health.updatedKeysSummary', { keys: updatedKeys[1] });
   const known = {
     'Storage-Pfade aktualisiert': 'storagePathsUpdated',
     'Storage paths updated': 'storagePathsUpdated',
@@ -1233,6 +1250,7 @@ function _localizeMigrationReason(code, fallback, status) {
     storage_paths_changed: 'reasonStorageChanged',
     no_changes: 'reasonNoChanges',
     restore_history_migrated: 'reasonRestoreHistoryMigrated',
+    startup_migrations_applied: 'reasonStartupMigrationsApplied',
     error: 'reasonFailed',
   };
   if (keys[code]) return settingsT(`health.${keys[code]}`);
@@ -2562,6 +2580,8 @@ async function deleteConfigBackupsKeepLatest() {
 
 function renderSettingsSMTP(s) {
   const passwordSet = String(s.GLOBAL_SMTP_PASSWORD_SET || 'false') === 'true';
+  const emailEvents = s.NOTIFY_EMAIL_EVENTS || 'backup_failed';
+  const eventRows = notificationEventRows(emailEvents, notificationEventOptions(), 'data-email-event', '_syncEmailEvents');
   return settingsCard(settingsT('forms.smtpTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
     `<div class="settings-body two-col">
@@ -2577,6 +2597,11 @@ function renderSettingsSMTP(s) {
           onchange="markSettingsDirty()">
         ${settingsT('forms.useTls')}
       </label>
+      <input type="hidden" data-key="NOTIFY_EMAIL_EVENTS" value="${escHtml(emailEvents)}">
+      <fieldset class="settings-fieldset" style="grid-column:1/-1">
+        <legend>${settingsT('forms.notifyEvents')}</legend>
+        <div class="settings-body two-col">${eventRows}</div>
+      </fieldset>
       <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;margin-top:4px">
         <button class="btn btn-secondary btn-sm" id="smtp-test-btn" data-settings-action="send-test-email">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -2616,19 +2641,80 @@ async function sendTestEmail() {
   }
 }
 
-function _ntfyEventEnabled(events, key) {
+function _notificationEventEnabled(events, key) {
   return String(events || '').split(',').map((item) => item.trim()).includes(key);
 }
 
-function _syncNtfyEvents() {
-  const hidden = document.querySelector('[data-key="NTFY_EVENTS"]');
+function _syncNotificationEvents(targetKey, attrName) {
+  const hidden = document.querySelector(`[data-key="${targetKey}"]`);
   if (!hidden) return;
-  const values = Array.from(document.querySelectorAll('[data-ntfy-event]'))
+  const values = Array.from(document.querySelectorAll(`[${attrName}]`))
     .filter((el) => el.checked)
-    .map((el) => el.dataset.ntfyEvent)
+    .map((el) => el.getAttribute(attrName))
     .filter(Boolean);
   hidden.value = values.join(',');
   markSettingsDirty();
+}
+
+function _syncNtfyEvents() {
+  _syncNotificationEvents('NTFY_EVENTS', 'data-ntfy-event');
+}
+
+function _syncEmailEvents() {
+  _syncNotificationEvents('NOTIFY_EMAIL_EVENTS', 'data-email-event');
+}
+
+function _syncUnraidEvents() {
+  _syncNotificationEvents('NOTIFY_UNRAID_EVENTS', 'data-unraid-event');
+}
+
+function notificationEventRows(events, rows, attrName, syncFn) {
+  return rows.map(([key, label]) => `
+    <label class="form-checkbox-row">
+      <input type="checkbox" ${attrName}="${key}" ${_notificationEventEnabled(events, key) ? 'checked' : ''} onchange="${syncFn}()">
+      ${label}
+    </label>`).join('');
+}
+
+function notificationEventOptions() {
+  return [
+    ['backup_success', settingsT('forms.notifyEventBackupSuccess')],
+    ['backup_warning', settingsT('forms.notifyEventBackupWarning')],
+    ['backup_failed', settingsT('forms.notifyEventBackupFailed')],
+    ['backup_skipped', settingsT('forms.notifyEventBackupSkipped')],
+    ['backup_overdue', settingsT('forms.notifyEventBackupOverdue')],
+    ['restore_test_success', settingsT('forms.notifyEventRestoreTestSuccess')],
+    ['restore_test_failed', settingsT('forms.notifyEventRestoreTestFailed')],
+    ['restore_test_overdue', settingsT('forms.notifyEventRestoreTestOverdue')],
+  ];
+}
+
+function renderSettingsNotificationReminders(s) {
+  const interval = s.NOTIFY_REMINDER_INTERVAL_HOURS || '24';
+  const backupTolerance = s.NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS || '6';
+  return settingsCard(settingsT('forms.notificationReminderTitle'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    `<div class="settings-body two-col">
+      <div class="status-message info" style="grid-column:1/-1">${settingsT('forms.notificationReminderHint')}</div>
+      ${fnum('NOTIFY_REMINDER_INTERVAL_HOURS', settingsT('forms.notifyReminderInterval'), interval)}
+      ${fnum('NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS', settingsT('forms.backupOverdueTolerance'), backupTolerance)}
+      <div class="form-help" style="grid-column:1/-1">${settingsT('forms.backupOverdueToleranceHint')}</div>
+    </div>`);
+}
+
+function renderSettingsUnraidNotifications(s) {
+  const events = s.NOTIFY_UNRAID_EVENTS || 'backup_success,backup_warning,backup_failed,backup_skipped';
+  const eventRows = notificationEventRows(events, notificationEventOptions(), 'data-unraid-event', '_syncUnraidEvents');
+  return settingsCard(settingsT('forms.unraidNotifyTitle'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+    `<div class="settings-body two-col">
+      <div class="status-message info" style="grid-column:1/-1">${settingsT('forms.unraidNotifyHint')}</div>
+      <input type="hidden" data-key="NOTIFY_UNRAID_EVENTS" value="${escHtml(events)}">
+      <fieldset class="settings-fieldset" style="grid-column:1/-1">
+        <legend>${settingsT('forms.notifyEvents')}</legend>
+        <div class="settings-body two-col">${eventRows}</div>
+      </fieldset>
+    </div>`);
 }
 
 function renderSettingsNtfy(n) {
@@ -2639,18 +2725,7 @@ function renderSettingsNtfy(n) {
   const priorityOptions = ['default', 'min', 'low', 'high', 'urgent']
     .map((value) => `<option value="${value}" ${(n.NTFY_PRIORITY || 'default') === value ? 'selected' : ''}>${settingsT(`forms.ntfyPriority${value.charAt(0).toUpperCase()}${value.slice(1)}`)}</option>`)
     .join('');
-  const eventRows = [
-    ['backup_success', settingsT('forms.ntfyEventBackupSuccess')],
-    ['backup_failed', settingsT('forms.ntfyEventBackupFailed')],
-    ['backup_skipped', settingsT('forms.ntfyEventBackupSkipped')],
-    ['restore_test_success', settingsT('forms.ntfyEventRestoreTestSuccess')],
-    ['restore_test_failed', settingsT('forms.ntfyEventRestoreTestFailed')],
-    ['restore_test_overdue', settingsT('forms.ntfyEventRestoreTestOverdue')],
-  ].map(([key, label]) => `
-    <label class="form-checkbox-row">
-      <input type="checkbox" data-ntfy-event="${key}" ${_ntfyEventEnabled(events, key) ? 'checked' : ''} onchange="_syncNtfyEvents()">
-      ${label}
-    </label>`).join('');
+  const eventRows = notificationEventRows(events, notificationEventOptions(), 'data-ntfy-event', '_syncNtfyEvents');
 
   return settingsCard(settingsT('forms.ntfyTitle'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,

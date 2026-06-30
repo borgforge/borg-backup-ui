@@ -51,6 +51,8 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - ntfy is also configured under **Settings > General**.
 - ntfy requires a server URL, a topic, and optional authentication. Password and token are stored as secret files.
 - After entering the values, send a test ntfy notification.
+- Email, Unraid system notifications, and ntfy have separate event selections. Reminders are centrally rate-limited so overdue checks do not notify on every poll.
+- Scheduled backups can use an overdue tolerance in hours. A notification is sent when an expected run did not complete successfully within that tolerance.
 - The weekly report is enabled and scheduled under **Settings > Backup**.
 - The weekly report uses its own recipient or, when empty, the global email recipient.
 
@@ -111,7 +113,8 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - The SMTP password is not shown in clear text after saving. A saved password is shown only as a status.
 - Backup failures can trigger emails; regular summaries are handled by the weekly report.
 - ntfy configuration and the test notification are also under **Settings > General**.
-- ntfy can send push notifications for successful backups, failed or warning backups, and skipped backups.
+- ntfy can send push notifications for successful backups, failed or warning backups, skipped backups, and overdue scheduled checks.
+- Overdue scheduled restore tests can send reminders when the event is enabled for the channel.
 - The ntfy password and access token are not shown in clear text after saving.
 - The weekly report is enabled under **Settings > Backup**. It uses the saved SMTP configuration.
 - Test emails, weekly reports, and technical output emails are always sent in English.
