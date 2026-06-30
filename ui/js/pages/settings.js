@@ -15,6 +15,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   storageboxConnMsg: '',
   storageboxLastCheckAt: '',
   storageboxChecks: null,
+  restoreSubtab: 'tests',
   transferJobsPreview: null,
   transferJobsBundleText: '',
   transferJobsSecurePayloadB64: '',
@@ -208,7 +209,7 @@ function renderSettings(data, systemHealth) {
       ${renderSettingsWeeklyReport(data.weekly_report || {})}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'restore' ? '' : 'hidden'}" data-settings-panel="restore">
-      ${renderSettingsRestoreTests(data.restore_tests || {})}
+      ${renderSettingsRestore(data.restore_tests || {}, data.restore_browse || {})}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'storagebox' ? '' : 'hidden'}" data-settings-panel="storagebox">
       ${renderSettingsStorageProfiles(data.storage_profiles || [])}
@@ -2961,6 +2962,126 @@ function renderSettingsRestoreTests(rt) {
     </div>`);
 }
 
+function renderSettingsRestore(rt, browse) {
+  const active = settingsState.restoreSubtab === 'browse' ? 'browse' : 'tests';
+  return `
+    <div class="segmented-control" style="margin-bottom:12px">
+      <button type="button" class="segmented-btn ${active === 'tests' ? 'active' : ''}" data-settings-action="restore-subtab" data-restore-subtab="tests">${settingsT('forms.restoreTestsTab')}</button>
+      <button type="button" class="segmented-btn ${active === 'browse' ? 'active' : ''}" data-settings-action="restore-subtab" data-restore-subtab="browse">${settingsT('forms.browseRestoreTab')}</button>
+    </div>
+    <div class="${active === 'tests' ? '' : 'hidden'}">${renderSettingsRestoreTests(rt)}</div>
+    <div class="${active === 'browse' ? '' : 'hidden'}">${renderSettingsBrowseRestore(browse)}</div>
+  `;
+}
+
+function parseRestoreAllowedRoots(raw) {
+  const seen = new Set();
+  const roots = [];
+  String(raw || '/mnt/user').split(',').forEach((part) => {
+    const clean = normalizeRestoreRootInput(part);
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    roots.push(clean);
+  });
+  return roots.length ? roots : ['/mnt/user'];
+}
+
+function normalizeRestoreRootInput(raw) {
+  let value = String(raw || '').trim();
+  if (!value) return '';
+  value = value.replace(/\/+$/, '') || '/';
+  return value;
+}
+
+function isSafeRestoreRoot(value) {
+  const path = normalizeRestoreRootInput(value);
+  if (!path || !path.startsWith('/')) return false;
+  if (['/', '/mnt', '/mnt/disks', '/mnt/remotes', '/boot', '/etc', '/usr', '/var'].includes(path)) return false;
+  if (path === '/mnt/user' || path.startsWith('/mnt/user/')) return true;
+  if (path === '/mnt/data' || path.startsWith('/mnt/data/')) return true;
+  if (/^\/mnt\/disk[0-9]+(?:\/.*)?$/.test(path)) return true;
+  if (/^\/mnt\/disks\/[^/]+(?:\/.*)?$/.test(path)) return true;
+  if (/^\/mnt\/remotes\/[^/]+(?:\/.*)?$/.test(path)) return true;
+  return false;
+}
+
+function syncRestoreAllowedRootsHiddenInput() {
+  const box = document.getElementById('restore-allowed-roots-list');
+  const hidden = document.getElementById('restore-allowed-roots-hidden');
+  if (!box || !hidden) return;
+  const roots = [];
+  const seen = new Set();
+  box.querySelectorAll('[data-restore-root-input]').forEach((input) => {
+    const clean = normalizeRestoreRootInput(input.value);
+    input.value = clean;
+    input.classList.toggle('input-error', !!clean && !isSafeRestoreRoot(clean));
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    roots.push(clean);
+  });
+  hidden.value = (roots.length ? roots : ['/mnt/user']).join(',');
+}
+
+function renderSettingsBrowseRestore(browse) {
+  const roots = parseRestoreAllowedRoots(browse.RESTORE_ALLOWED_ROOTS || '/mnt/user');
+  const rows = roots.map((root) => renderRestoreRootRow(root)).join('');
+  return settingsCard(settingsT('forms.browseRestore'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h7l2 3h7v11H4z"/><path d="M9 14l2 2 4-4"/></svg>`,
+    `<div class="settings-body">
+      <div class="settings-info-box">
+        <strong>${settingsT('forms.restoreAllowedRootsTitle')}</strong>
+        <p>${settingsT('forms.restoreAllowedRootsIntro')}</p>
+        <details>
+          <summary>${settingsT('forms.restoreAllowedRootsHelpTitle')}</summary>
+          <div class="settings-help-grid">
+            <div><strong>${settingsT('forms.restoreAllowedRootsAllowed')}</strong><ul>
+              <li>/mnt/user</li>
+              <li>/mnt/data</li>
+              <li>/mnt/disk1, /mnt/disk2, ...</li>
+              <li>/mnt/disks/&lt;name&gt;</li>
+              <li>/mnt/remotes/&lt;name&gt;</li>
+            </ul></div>
+            <div><strong>${settingsT('forms.restoreAllowedRootsBlocked')}</strong><ul>
+              <li>/</li>
+              <li>/mnt</li>
+              <li>/mnt/disks</li>
+              <li>/mnt/remotes</li>
+              <li>/boot, /etc, /usr, /var</li>
+            </ul></div>
+          </div>
+        </details>
+      </div>
+      <input type="hidden" id="restore-allowed-roots-hidden" data-key="RESTORE_ALLOWED_ROOTS" value="${escHtml(roots.join(','))}">
+      <div id="restore-allowed-roots-list" class="settings-list-stack">
+        ${rows}
+      </div>
+      <div id="restore-allowed-roots-msg" class="form-hint"></div>
+      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="restore-root-add">${settingsT('forms.restoreAllowedRootsAdd')}</button>
+    </div>`);
+}
+
+function renderRestoreRootRow(root = '') {
+  const safe = isSafeRestoreRoot(root);
+  return `<div class="settings-inline-row restore-root-row">
+    <input class="form-input mono ${safe ? '' : 'input-error'}" type="text" data-restore-root-input value="${escHtml(root)}" placeholder="/mnt/user" oninput="onRestoreAllowedRootsChanged()" onchange="onRestoreAllowedRootsChanged()">
+    <button type="button" class="btn btn-secondary btn-sm" data-settings-action="restore-root-remove">${settingsT('common.remove')}</button>
+  </div>`;
+}
+
+function onRestoreAllowedRootsChanged() {
+  syncRestoreAllowedRootsHiddenInput();
+  const msg = document.getElementById('restore-allowed-roots-msg');
+  const invalid = Array.from(document.querySelectorAll('[data-restore-root-input]'))
+    .map((input) => normalizeRestoreRootInput(input.value))
+    .filter((value) => value && !isSafeRestoreRoot(value));
+  if (msg) {
+    msg.textContent = invalid.length
+      ? settingsT('forms.restoreAllowedRootsInvalid', { paths: invalid.join(', ') })
+      : settingsT('forms.restoreAllowedRootsSavedAs', { roots: document.getElementById('restore-allowed-roots-hidden')?.value || '/mnt/user' });
+  }
+  markSettingsDirty();
+}
+
 function renderSettingsDockerVMs(docker, vms) {
   return settingsCard(settingsT('forms.dockerVms'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>`,
@@ -3057,6 +3178,31 @@ async function onSettingsContentClick(event) {
   if (action === 'send-test-email') return sendTestEmail();
   if (action === 'send-test-ntfy') return sendTestNtfy();
   if (action === 'send-weekly-report') return sendWeeklyReport();
+  if (action === 'restore-subtab') {
+    settingsState.restoreSubtab = el.dataset.restoreSubtab === 'browse' ? 'browse' : 'tests';
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    return;
+  }
+  if (action === 'restore-root-add') {
+    const box = document.getElementById('restore-allowed-roots-list');
+    if (box) {
+      box.insertAdjacentHTML('beforeend', renderRestoreRootRow(''));
+      const input = box.querySelector('.restore-root-row:last-child [data-restore-root-input]');
+      if (input) input.focus();
+    }
+    onRestoreAllowedRootsChanged();
+    return;
+  }
+  if (action === 'restore-root-remove') {
+    const row = el.closest('.restore-root-row');
+    if (row) row.remove();
+    const box = document.getElementById('restore-allowed-roots-list');
+    if (box && !box.querySelector('[data-restore-root-input]')) {
+      box.insertAdjacentHTML('beforeend', renderRestoreRootRow('/mnt/user'));
+    }
+    onRestoreAllowedRootsChanged();
+    return;
+  }
   if (action === 'storagebox-key-status') return storageboxKeyStatus();
   if (action === 'storagebox-key-generate') return storageboxKeyGenerate();
   if (action === 'storagebox-key-public') return storageboxKeyPublic();
@@ -3809,6 +3955,7 @@ async function saveSettings() {
   syncUsbProfilesHiddenInput();
   syncSmbProfilesHiddenInput();
   syncStorageProfilesHiddenInput();
+  syncRestoreAllowedRootsHiddenInput();
   const updates = {};
   const activePanel = document.querySelector('#settings-content .settings-tab-panel:not(.hidden)');
   const activeTab = activePanel?.dataset?.settingsPanel || settingsState.activeTab || 'general';
@@ -3837,6 +3984,16 @@ async function saveSettings() {
   if (updates.UI_SESSION_TIMEOUT_MINUTES !== undefined) {
     const t = Number(updates.UI_SESSION_TIMEOUT_MINUTES);
     updates.UI_SESSION_TIMEOUT_MINUTES = String(Number.isFinite(t) ? Math.max(5, Math.floor(t)) : 30);
+  }
+  if (updates.RESTORE_ALLOWED_ROOTS !== undefined) {
+    const invalid = String(updates.RESTORE_ALLOWED_ROOTS || '').split(',')
+      .map((value) => normalizeRestoreRootInput(value))
+      .filter((value) => value && !isSafeRestoreRoot(value));
+    if (invalid.length) {
+      showMsg('settings-message', 'error', settingsT('forms.restoreAllowedRootsInvalid', { paths: invalid.join(', ') }));
+      return false;
+    }
+    updates.RESTORE_ALLOWED_ROOTS = parseRestoreAllowedRoots(updates.RESTORE_ALLOWED_ROOTS).join(',');
   }
 
   const btn = document.getElementById('settings-save-btn');

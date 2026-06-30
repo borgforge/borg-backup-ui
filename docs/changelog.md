@@ -6,6 +6,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #102
+- Browse & Restore:
+  - Restore target roots are configurable under Settings > Restore > Browse & Restore.
+  - `/mnt/user` remains the only default target root; additional roots such as `/mnt/data`, `/mnt/disk1`, `/mnt/disks/<name>` and `/mnt/remotes/<name>` must be added deliberately.
+  - Broad or system-level roots such as `/`, `/mnt`, `/mnt/disks`, `/mnt/remotes`, `/boot`, `/etc`, `/usr` and `/var` are rejected by both UI validation and backend filtering.
+  - Step 4 validates the target path against the configured roots before the precheck/start flow and displays the allowed roots dynamically.
+
 ### Issue #101
 - Notifications:
   - Backup overdue reminders now use the latest expected cron run plus configurable tolerance instead of only a broad schedule interval.

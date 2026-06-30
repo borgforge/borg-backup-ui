@@ -155,12 +155,14 @@ def test_valid_ui_session_refreshes_browser_cookie():
 
 def test_validate_target_dir_rejects_path_outside_allowed_roots(tmp_path: Path, monkeypatch):
     import config_api
+    import api.restore_api as restore_api
 
     allowed = tmp_path / "allowed"
     other = tmp_path / "other"
     allowed.mkdir()
     other.mkdir()
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {"RESTORE_ALLOWED_ROOTS": str(allowed)})
+    monkeypatch.setattr(restore_api, "_is_safe_restore_root_text", lambda _raw: True)
     cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     with pytest.raises(ValueError, match="outside"):
         _validate_target_dir(str(other), cfg)
@@ -168,11 +170,33 @@ def test_validate_target_dir_rejects_path_outside_allowed_roots(tmp_path: Path, 
 
 def test_validate_target_dir_rejects_nonexistent_directory(tmp_path: Path, monkeypatch):
     import config_api
+    import api.restore_api as restore_api
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     missing = allowed / "missing-dir"
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {"RESTORE_ALLOWED_ROOTS": str(allowed)})
+    monkeypatch.setattr(restore_api, "_is_safe_restore_root_text", lambda _raw: True)
     cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     with pytest.raises(ValueError, match="does not exist"):
         _validate_target_dir(str(missing), cfg)
+
+
+def test_restore_allowed_roots_filter_broad_mount_collections(monkeypatch):
+    import config_api
+    from api.restore_api import list_allowed_target_roots
+
+    monkeypatch.setattr(
+        config_api,
+        "read_expanded_conf",
+        lambda _cfg: {
+            "RESTORE_ALLOWED_ROOTS": "/mnt/user,/mnt/data,/mnt,/mnt/disks,/mnt/disks/USB1,/mnt/remotes,/mnt/remotes/storagebox1,/boot"
+        },
+    )
+
+    assert list_allowed_target_roots({}) == [
+        "/mnt/user",
+        "/mnt/data",
+        "/mnt/disks/USB1",
+        "/mnt/remotes/storagebox1",
+    ]

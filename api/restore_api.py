@@ -68,6 +68,8 @@ def _get_restore_allowed_roots(config: dict) -> list[Path]:
         p = Path(val)
         if not p.is_absolute():
             continue
+        if not _is_safe_restore_root_text(p.as_posix()):
+            continue
         try:
             roots.append(p.resolve())
         except OSError:
@@ -78,6 +80,36 @@ def _get_restore_allowed_roots(config: dict) -> list[Path]:
         except OSError:
             roots = [Path("/mnt/user")]
     return roots
+
+
+def _is_safe_restore_root_text(raw: str) -> bool:
+    path = str(raw or "").strip().rstrip("/") or "/"
+    if path in {"/", "/mnt", "/mnt/disks", "/mnt/remotes", "/boot", "/etc", "/usr", "/var"}:
+        return False
+    if path == "/mnt/user" or path.startswith("/mnt/user/"):
+        return True
+    if path == "/mnt/data" or path.startswith("/mnt/data/"):
+        return True
+    if re.fullmatch(r"/mnt/disk[0-9]+(?:/.*)?", path):
+        return True
+    if re.fullmatch(r"/mnt/disks/[^/]+(?:/.*)?", path):
+        return True
+    if re.fullmatch(r"/mnt/remotes/[^/]+(?:/.*)?", path):
+        return True
+    return False
+
+
+def list_allowed_target_roots(config: dict) -> list[str]:
+    roots = _get_restore_allowed_roots(config)
+    out: list[str] = []
+    seen: set[str] = set()
+    for root in roots:
+        text = root.as_posix().rstrip("/") or "/"
+        if text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out or ["/mnt/user"]
 
 
 def _is_under_allowed_roots(path: Path, roots: list[Path]) -> bool:
