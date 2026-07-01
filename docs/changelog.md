@@ -12,6 +12,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Scheduled restore-test runs now use the same restore-status directory resolution as the UI/API and evaluate `test_date` instead of file modification time.
   - The scheduled restore-test runner no longer sends a restore-test overdue notification immediately before running a due test.
   - Backup overdue reminders can match latest status entries by `backup_type` and `location` when a status row does not expose a `key`.
+  - Notification reminder state is cleaned up during reminder checks; stale entries older than 90 days and legacy `restore_test_overdue:*:never` entries are removed.
 
 ### Issue #128
 - Wizard:

@@ -13,6 +13,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
     from lib.notifications import MailConfig, NtfyConfig, build_restore_test_ntfy_message
     from lib.notification_events import (
         NotificationEvent,
+        cleanup_reminder_state,
         mark_reminder_sent,
         reminder_allowed,
         reminder_key,
@@ -20,6 +21,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
     )
 
     effective = {**read_expanded_conf(config), **config}
+    cleanup_result = cleanup_reminder_state(effective)
     mail_config = MailConfig.from_config(effective)
     ntfy_config = NtfyConfig.from_config(effective)
     plan = list_restore_test_plan(effective)
@@ -95,6 +97,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
         "sent": sent,
         "skipped": skipped,
         "rows": rows,
+        "cleanup": cleanup_result,
     }
 
 

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_EMAIL_EVENTS = {"backup_failed"}
 DEFAULT_UNRAID_EVENTS = {"backup_success", "backup_warning", "backup_failed", "backup_skipped"}
 DEFAULT_REMINDER_INTERVAL_HOURS = 24
+DEFAULT_REMINDER_STATE_RETENTION_DAYS = 90
 
 NTFY_EVENT_ALIASES = {
     # Existing ntfy installs used backup_failed for Borg warnings.
@@ -208,3 +209,53 @@ def clear_reminder_prefix(config: dict, prefix: str) -> None:
     if changed:
         state["last_sent"] = sent
         write_notification_state(config, state)
+
+
+def cleanup_reminder_state(
+    config: dict,
+    *,
+    retention_days: int = DEFAULT_REMINDER_STATE_RETENTION_DAYS,
+    now: float | None = None,
+) -> dict[str, int]:
+    """Remove stale or invalid reminder state entries.
+
+    The reminder state is a rate-limit cache, not an audit log. Keeping old
+    entries forever makes the file grow without adding user value.
+    """
+    state = read_notification_state(config)
+    sent = state.get("last_sent") if isinstance(state.get("last_sent"), dict) else {}
+    current_ts = float(now if now is not None else time.time())
+    try:
+        retention_seconds = max(1, int(retention_days)) * 86400
+    except (TypeError, ValueError):
+        retention_seconds = DEFAULT_REMINDER_STATE_RETENTION_DAYS * 86400
+
+    removed_legacy = 0
+    removed_expired = 0
+    removed_invalid = 0
+    for key, value in list(sent.items()):
+        text_key = str(key)
+        if text_key.startswith("restore_test_overdue:") and text_key.endswith(":never"):
+            sent.pop(key, None)
+            removed_legacy += 1
+            continue
+        try:
+            sent_ts = float(value)
+        except (TypeError, ValueError):
+            sent.pop(key, None)
+            removed_invalid += 1
+            continue
+        if current_ts - sent_ts > retention_seconds:
+            sent.pop(key, None)
+            removed_expired += 1
+
+    removed = removed_legacy + removed_expired + removed_invalid
+    if removed:
+        state["last_sent"] = sent
+        write_notification_state(config, state)
+    return {
+        "removed": removed,
+        "removed_legacy": removed_legacy,
+        "removed_expired": removed_expired,
+        "removed_invalid": removed_invalid,
+    }

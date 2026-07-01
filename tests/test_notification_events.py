@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "api"))
 
 from lib.notification_events import (  # noqa: E402
     NotificationEvent,
+    cleanup_reminder_state,
     mark_reminder_sent,
     read_notification_state,
     reminder_allowed,
@@ -74,6 +75,33 @@ def test_reminder_state_rate_limits_by_interval(tmp_path):
 
     state = read_notification_state(cfg)
     assert state["last_sent"][key] == 1000
+
+
+def test_cleanup_reminder_state_removes_legacy_and_expired_entries(tmp_path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    state_path = tmp_path / "config" / "notification-state.json"
+    state_path.parent.mkdir(parents=True)
+    now = 2_000_000
+    state_path.write_text(json.dumps({
+        "schema_version": 1,
+        "last_sent": {
+            "restore_test_overdue:flash_local:never": now,
+            "backup_overdue:old_job:2026-01-01 09:00:00": now - 91 * 86400,
+            "backup_overdue:bad_job:2026-01-02 09:00:00": "not-a-number",
+            "backup_overdue:fresh_job:2026-07-01 09:00:00": now - 3600,
+        },
+    }), encoding="utf-8")
+
+    result = cleanup_reminder_state(cfg, retention_days=90, now=now)
+
+    state = read_notification_state(cfg)
+    assert result == {
+        "removed": 3,
+        "removed_legacy": 1,
+        "removed_expired": 1,
+        "removed_invalid": 1,
+    }
+    assert list(state["last_sent"].keys()) == ["backup_overdue:fresh_job:2026-07-01 09:00:00"]
 
 
 def test_backup_overdue_reminder_uses_supported_schedules(monkeypatch, tmp_path):
