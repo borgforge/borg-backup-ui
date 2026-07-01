@@ -31,6 +31,15 @@ function wizardT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
 }
 
+function wizardApiErrorMessage(payload, status = 0) {
+  const data = payload && typeof payload === 'object' ? payload : {};
+  for (const key of ['details', 'message', 'error']) {
+    const value = String(data[key] || '').trim();
+    if (value && value !== String(data.code || '').trim()) return value;
+  }
+  return apiErrorMessage(payload, status);
+}
+
 function wizardUpdateStep2ScrollHint() {
   const modal = document.getElementById('wizard-modal');
   const body = modal?.querySelector('.wizard-body');
@@ -514,7 +523,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
   try {
     const res = await fetch(`/api/wizard/job?job_key=${encodeURIComponent(jobKey)}`);
     const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
     const job = data.job || {};
     _wizardFillFromJob(job);
     wizardState.original = {
@@ -908,7 +917,7 @@ async function wizardSourcePathInputChanged() {
   try {
     const res = await fetch(`/api/wizard/source-dirs?prefix=${encodeURIComponent(prefix)}&limit=100`);
     const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
     wizardState.sourceSuggest = Array.isArray(data?.dirs) ? data.dirs : [];
     wizardState.sourceSuggestIndex = wizardState.sourceSuggest.length ? 0 : -1;
     wizardRenderSourceSuggest();
@@ -1139,7 +1148,7 @@ async function _wizardPreview() {
       body: JSON.stringify(params),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
 
     const flow = data.flow || {};
     const fallbackSteps = Array.isArray(flow.steps) ? flow.steps : [];
@@ -1237,7 +1246,7 @@ async function saveWizardJob() {
       body: JSON.stringify(params),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
 
     // Save schedule if enabled
     const schedEnabled = document.getElementById('wiz-sched-enabled').checked;

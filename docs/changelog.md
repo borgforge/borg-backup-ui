@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #128
+- Wizard:
+  - Job wizard API failures now prefer backend validation details for wizard error messages, so preview and save failures can show the affected field or path instead of only a generic bad-request text.
+
 ### Issue #122
 - Security:
   - Schedule writes now validate job keys before persisting schedules and before regenerating crontab entries.
