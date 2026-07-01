@@ -11,6 +11,7 @@ Option B: curl POST an /api/jobs/run, damit JobManager den Lauf trackt.
 
 import json
 import re
+import shlex
 import subprocess
 from pathlib import Path
 from typing import List
@@ -18,6 +19,7 @@ from typing import List
 
 _CRON_BEGIN = "# --- BORG-BACKUP-UI BEGIN ---"
 _CRON_END   = "# --- BORG-BACKUP-UI END ---"
+_JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 
 
 def _schedules_path(config: dict) -> Path:
@@ -36,17 +38,19 @@ def get_schedules(config: dict) -> dict:
 
 
 def save_schedule(config: dict, job_key: str, cron: str, enabled: bool) -> None:
+    job_key = validate_schedule_job_key(config, job_key)
     _validate_cron(cron)
     schedules = get_schedules(config)
     schedules[job_key] = {"cron": cron, "enabled": enabled}
-    _write_schedules(config, schedules)
+    write_schedules(config, schedules)
     apply_all_schedules(config)
 
 
 def delete_schedule(config: dict, job_key: str) -> None:
+    job_key = _validate_job_key_text(job_key)
     schedules = get_schedules(config)
     schedules.pop(job_key, None)
-    _write_schedules(config, schedules)
+    write_schedules(config, schedules)
     apply_all_schedules(config)
 
 
@@ -72,7 +76,7 @@ def prune_orphaned_schedules(config: dict, log_fn=None) -> dict:
 
     for key in removed_keys:
         schedules.pop(key, None)
-    _write_schedules(config, schedules)
+    write_schedules(config, schedules, validate_known_jobs=False)
     apply_all_schedules(config)
 
     removed_sorted = sorted(removed_keys)
@@ -91,35 +95,43 @@ def prune_orphaned_schedules(config: dict, log_fn=None) -> dict:
     return {"changed": True, "removed_keys": removed_sorted}
 
 
-def _write_schedules(config: dict, schedules: dict) -> None:
+def write_schedules(config: dict, schedules: dict, *, validate_known_jobs: bool = True) -> None:
+    normalized: dict = {}
+    for raw_key, raw_sched in (schedules or {}).items():
+        key = validate_schedule_job_key(config, raw_key) if validate_known_jobs else _validate_job_key_text(raw_key)
+        if not isinstance(raw_sched, dict):
+            continue
+        cron = str(raw_sched.get("cron") or "").strip()
+        if cron:
+            _validate_cron(cron)
+        normalized[key] = {"cron": cron, "enabled": bool(raw_sched.get("enabled", True))}
     path = _schedules_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(schedules, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(json.dumps(normalized, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def apply_all_schedules(config: dict) -> None:
     """Schreibt alle aktiven Schedules in den Crontab (idempotent, sicher bei Fehler)."""
     schedules = get_schedules(config)
-    port = config.get("PORT", "8765")
+    port = _validate_port(config.get("PORT", "8765"))
     token_file = str(Path(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")) / "config" / ".api-token")
 
     lines: List[str] = []
     for job_key, sched in schedules.items():
+        job_key = validate_schedule_job_key(config, job_key)
+        if not isinstance(sched, dict):
+            continue
         if not sched.get("enabled", True):
             continue
-        cron = sched["cron"]
+        cron = str(sched.get("cron") or "").strip()
+        _validate_cron(cron)
         if job_key == "restore_test":
             url  = f"http://127.0.0.1:{port}/api/restore-tests/run"
-            body = '{"scheduled":true}'
+            body = json.dumps({"scheduled": True}, separators=(",", ":"))
         else:
             url  = f"http://127.0.0.1:{port}/api/jobs/run"
-            body = f'{{\"job_key\":\"{job_key}\"}}'
-        line = (
-            f'{cron} curl -s -X POST {url} '
-            f'-H "X-API-Token: $(cat {token_file} 2>/dev/null)" '
-            f'-H "Content-Type: application/json" '
-            f"-d '{body}' >/dev/null 2>&1"
-        )
+            body = json.dumps({"job_key": job_key}, separators=(",", ":"))
+        line = f"{cron} {_build_schedule_command(url, body, token_file)} >/dev/null 2>&1"
         lines.append(line)
 
     _update_crontab(lines)
@@ -172,5 +184,53 @@ def _validate_cron(expr: str) -> None:
     if len(parts) != 5:
         raise ValueError(f"Cron requires exactly 5 fields (found: {len(parts)})")
     for p in parts:
-        if not re.match(r'^[\d\*/,\-]+$', p):
+        if not re.fullmatch(r'[\d\*/,\-]+', p):
             raise ValueError(f"Invalid cron field: {p!r}")
+
+
+def _validate_job_key_text(job_key: str) -> str:
+    key = str(job_key or "").strip()
+    if not key or not _JOB_KEY_RX.fullmatch(key):
+        raise ValueError("Invalid job key")
+    return key
+
+
+def validate_schedule_job_key(config: dict, job_key: str) -> str:
+    key = _validate_job_key_text(job_key)
+    if key == "restore_test":
+        return key
+    if key not in _known_job_keys(config):
+        raise ValueError(f"Unknown job key: {key}")
+    return key
+
+
+def _known_job_keys(config: dict) -> set[str]:
+    try:
+        from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
+        scripts_dir = resolve_scripts_dir(config)
+        data_root = resolve_data_root(config)
+        return {str(j.key).strip() for j in discover_jobs(scripts_dir, data_root) if str(j.key).strip()}
+    except Exception:
+        return set()
+
+
+def _validate_port(raw: str) -> int:
+    try:
+        port = int(str(raw).strip())
+    except (TypeError, ValueError):
+        raise ValueError("Invalid UI port")
+    if port < 1 or port > 65535:
+        raise ValueError("Invalid UI port")
+    return port
+
+
+def _build_schedule_command(url: str, body: str, token_file: str) -> str:
+    script = (
+        f"token_file={shlex.quote(token_file)}; "
+        f"token=$(cat \"$token_file\" 2>/dev/null); "
+        f"exec curl -s -X POST {shlex.quote(url)} "
+        f"-H \"X-API-Token: $token\" "
+        f"-H {shlex.quote('Content-Type: application/json')} "
+        f"--data-binary {shlex.quote(body)}"
+    )
+    return f"/bin/sh -c {shlex.quote(script)}"

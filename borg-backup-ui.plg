@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.01.1341">
+<!ENTITY version   "2026.07.01.1526">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,12 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.01.1526###
+- Issue #122:
+  - Hardened schedule saving and cron generation against invalid job keys.
+  - Browser UI sessions no longer receive the global API token as a cookie.
+  - Repository test output and API/client logs mask more secret formats before display.
+
 ###2026.07.01.1341###
 - Issue #112:
   - ntfy backup notifications now use the configured display name as title prefix and a cleaner success message format with target and archive details.
@@ -183,7 +189,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>fa0f64d27e67b25d8c4b80ba5e1b99fb</MD5>
+<MD5>466dc9043f65a3767bcc9ce6f130cafe</MD5>
 </FILE>
 
 <!--

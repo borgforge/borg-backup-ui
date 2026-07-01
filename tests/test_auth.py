@@ -104,10 +104,19 @@ def test_is_api_authorized_accepts_header_token_when_ui_session_not_required():
     assert h._is_api_authorized() is True
 
 
-def test_is_api_authorized_rejects_cookie_token_without_valid_ui_session():
+def test_is_api_authorized_rejects_api_token_cookie_without_valid_ui_session():
     h = _make_handler()
     h.headers = {"Cookie": "bbui_api_token=tok-1; bbui_session=sid-1"}
     h._ui_auth_enabled = lambda: True
+    h._is_ui_session_valid = lambda: False
+    h._get_api_token = lambda: "tok-1"
+    assert h._is_api_authorized() is False
+
+
+def test_is_api_authorized_ignores_api_token_cookie_for_automation_auth():
+    h = _make_handler()
+    h.headers = {"Cookie": "bbui_api_token=tok-1"}
+    h._ui_auth_enabled = lambda: False
     h._is_ui_session_valid = lambda: False
     h._get_api_token = lambda: "tok-1"
     assert h._is_api_authorized() is False
