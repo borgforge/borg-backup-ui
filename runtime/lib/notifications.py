@@ -25,6 +25,7 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Dict, Optional
 from urllib import error as urlerror
+from urllib.parse import urlsplit
 from urllib import request as urlrequest
 
 logger = logging.getLogger(__name__)
@@ -453,18 +454,37 @@ def build_backup_ntfy_message(
     timestamp: str,
     duration_seconds: int,
     repository: str,
+    backup_location: str = "",
+    archive_name: str = "",
     error_message: str = "",
 ) -> str:
+    target = _format_backup_target(repository, backup_location)
+    if str(status or "").strip().lower() == "successful":
+        lines = [
+            f"Job: {job_name}",
+            "Result: Successful",
+            f"Duration: {_format_duration_short(duration_seconds)}",
+            f"Finished: {_format_notification_timestamp(timestamp)}",
+        ]
+        if target:
+            lines.append(f"Target: {target}")
+        if archive_name and archive_name != "unknown":
+            lines.append(f"Archive: {archive_name}")
+        return "\n".join(lines)
+
     lines = [
         f"Job: {job_name}",
-        f"Status: {status}",
-        f"Time: {timestamp}",
+        f"Result: {status}",
+        f"Finished: {_format_notification_timestamp(timestamp)}",
         f"Duration: {_format_duration(duration_seconds)}",
     ]
+    if target:
+        lines.append(f"Target: {target}")
     if repository:
         lines.append(f"Repository: {repository}")
     if error_message:
         lines.append(f"Error: {error_message}")
+        lines.append("Action: Review the backup log and storage connection.")
     return "\n".join(lines)
 
 
@@ -502,3 +522,60 @@ def _format_duration(seconds: int) -> str:
     m = (seconds % 3600) // 60
     s = seconds % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def _format_duration_short(seconds: int) -> str:
+    seconds = max(0, int(seconds or 0))
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    parts: list[str] = []
+    if h:
+        parts.append(f"{h} h")
+    if m:
+        parts.append(f"{m} min")
+    if s or not parts:
+        parts.append(f"{s} sec")
+    return " ".join(parts)
+
+
+def _format_notification_timestamp(timestamp: str) -> str:
+    text = str(timestamp or "").strip()
+    if len(text) >= 16 and text[4:5] == "-" and text[13:14] == ":":
+        return text[:16]
+    return text
+
+
+def _format_backup_target(repository: str, backup_location: str = "") -> str:
+    repo_name = _repository_display_name(repository)
+    location = _location_display_name(backup_location)
+    if location and repo_name:
+        return f"{location} / {repo_name}"
+    return repo_name or location
+
+
+def _repository_display_name(repository: str) -> str:
+    text = str(repository or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = urlsplit(text)
+        path = parsed.path if parsed.scheme else text
+    except ValueError:
+        path = text
+    if "::" in path:
+        path = path.split("::", 1)[0]
+    clean = path.rstrip("/").split("/")[-1].strip()
+    return clean or text
+
+
+def _location_display_name(location: str) -> str:
+    normalized = str(location or "").strip().lower()
+    return {
+        "local": "Local",
+        "lokal": "Local",
+        "usb": "USB",
+        "smb": "SMB",
+        "ssh": "SSH",
+        "storagebox": "Storagebox",
+    }.get(normalized, str(location or "").strip())
