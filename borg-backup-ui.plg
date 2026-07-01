@@ -181,7 +181,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>dad61f40cda717cdc14911e4b5e98f1f</MD5>
+<MD5>4f302fb1afeda942bbcea595e1ba45ee</MD5>
 </FILE>
 
 <!--
