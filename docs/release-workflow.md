@@ -35,6 +35,45 @@ wird, richtet sich nach Nutzerwirkung und Issue-Labels.
 - `main` ist die Zielbranch fuer Pull Requests.
 - Vor einem Pull Request muss `./plugin/mr-preflight.sh` erfolgreich laufen.
 
+### Voraussetzungen vor `mr-preflight.sh`
+
+Vor dem finalen Lauf von `./plugin/mr-preflight.sh` muessen die lokalen
+Branch- und Diff-Voraussetzungen bereits passen. Andernfalls scheitert der
+Preflight nicht wegen eines fachlichen Problems, sondern wegen eines
+vorbereitenden Workflow-Schritts.
+
+Vorher pruefen:
+
+```bash
+git status --short --branch
+git diff --stat origin/main...HEAD
+```
+
+Erwarteter Zustand:
+
+- Arbeitsbranch ist nicht `main`.
+- Es gibt ein Delta gegen `origin/main`.
+- Alle gewuenschten Aenderungen sind committed.
+- Es gibt keine vergessenen untracked Dateien, insbesondere keine neuen
+  Screenshots, Release-Artefakte oder Doku-Dateien.
+- Der Branch ist zu `origin/<branch>` gepusht und synchron.
+- Bei Plugin-Code-Aenderungen sind Build-/Release-Artefakte gemaess diesem
+  Workflow bereits erstellt oder bewusst durch eine genehmigte Ausnahme
+  zurueckgestellt.
+
+Typische Reihenfolge:
+
+```bash
+git status --short --branch
+git add <geaenderte-dateien>
+git commit -m "<english commit message>"
+git push -u origin <branch>
+./plugin/mr-preflight.sh
+```
+
+Wenn nach dem Preflight noch Aenderungen noetig sind, diese erneut committen,
+pushen und `./plugin/mr-preflight.sh` erneut als finalen Check ausfuehren.
+
 ## Test-Channel und Go-Live
 
 Der stabile Installationskanal zeigt auf `main`. Damit eine Version zuerst auf
