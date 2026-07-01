@@ -23,6 +23,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    from api.security_utils import mask_secrets
+except ImportError:  # pragma: no cover - direct api module imports in tests
+    from security_utils import mask_secrets
+
 from smb_profiles_api import (
     cleanup_removed_smb_mountpoints,
     cleanup_removed_smb_secrets,
@@ -1071,7 +1076,7 @@ def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "") ->
             timeout=20,
             env=env,
         )
-        output = (result.stdout or "") + (result.stderr or "")
+        output = mask_secrets((result.stdout or "") + (result.stderr or ""))
         return {
             "success": result.returncode == 0,
             "output": output[:2000],  # Ausgabe begrenzen
@@ -1082,7 +1087,7 @@ def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "") ->
     except subprocess.TimeoutExpired:
         return {"success": False, "output": "Timeout (20s) - repository unreachable.", "exit_code": -1}
     except Exception as exc:
-        return {"success": False, "output": str(exc), "exit_code": -1}
+        return {"success": False, "output": mask_secrets(str(exc)), "exit_code": -1}
 
 
 def _resolve_storage_profile(ui_config: dict, profile_key: str = "") -> dict:

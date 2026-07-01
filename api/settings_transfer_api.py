@@ -18,7 +18,7 @@ from typing import Dict, List, Tuple
 
 from config_api import get_smb_profile_job_refs, read_settings_payload, write_settings_payload
 from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
-from schedule_api import get_schedules
+from schedule_api import get_schedules, write_schedules
 
 
 def _jobs_dir(config: dict) -> Path:
@@ -433,9 +433,7 @@ def import_jobs_bundle(
         # merge schedules
         merged = get_schedules(config)
         merged.update(schedule_updates)
-        sp = _schedules_path(config)
-        sp.parent.mkdir(parents=True, exist_ok=True)
-        sp.write_text(json.dumps(merged, indent=2, ensure_ascii=False), encoding="utf-8")
+        write_schedules(config, merged)
 
     return {
         "dry_run": bool(dry_run),

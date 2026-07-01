@@ -42,6 +42,7 @@ from api.auth_store import (
     write_sessions_store as _write_sessions_store,
     write_users_store as _write_users_store,
 )
+from api.security_utils import mask_secrets as _mask_secrets
 
 class RateLimitExceeded(Exception):
     pass
@@ -62,19 +63,7 @@ def _log_client(msg: str) -> None:
         _log(f"CLIENT-LOG-FALLBACK {msg}")
 
 
-_SECRET_PATTERNS = [
-    re.compile(r"(?i)(password|passphrase|token|secret)\s*[:=]\s*([^\s,;]+)"),
-    re.compile(r"(?i)(authorization:\s*bearer\s+)([^\s]+)"),
-]
-
-
-def _mask_secrets(text: str) -> str:
-    out = str(text or "")
-    for rx in _SECRET_PATTERNS:
-        out = rx.sub(lambda m: f"{m.group(1)}=***" if m.lastindex and m.lastindex >= 2 else "***", out)
-    return out
-
-APP_VERSION = "2026.07.01.1341"
+APP_VERSION = "2026.07.01.1526"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -652,13 +641,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             if bearer and secrets.compare_digest(bearer, expected):
                 return True
 
-        cookies = _parse_cookie_header(self.headers.get("Cookie") or "")
-        cookie_token = (cookies.get("bbui_api_token") or "").strip()
-        if cookie_token and secrets.compare_digest(cookie_token, expected):
-            if self._ui_auth_enabled() and not self._is_ui_session_valid():
-                return False
-            return True
-
         return False
 
     def _role_at_least(self, role: str, required: str) -> bool:
@@ -820,7 +802,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 return
-            self._serve_file(UI_DIR / "index.html", set_auth_cookie=True)
+            self._serve_file(UI_DIR / "index.html")
         elif path.startswith("/ui/"):
             # Static UI assets must stay directly reachable, otherwise browsers receive
             # HTML redirects for JS/CSS and fail with MIME/syntax errors on /login.
@@ -1078,9 +1060,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._persist_sessions()
         self._extra_response_headers.append(
             ("Set-Cookie", self._session_cookie_header(sid, idle_sec))
-        )
-        self._extra_response_headers.append(
-            ("Set-Cookie", f"bbui_api_token={self._get_api_token()}; Path=/; HttpOnly; SameSite=Strict")
         )
         self._security_audit("auth_login", "ok", target=session_user)
         return {"ok": True, "auth_enabled": True, "auth_mode": "users", "username": session_user, "role": session_role}
@@ -2805,7 +2784,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._last_json_body = {}
         return {}
 
-    def _serve_file(self, filepath: Path, set_auth_cookie: bool = False):
+    def _serve_file(self, filepath: Path):
         filepath = filepath.resolve()
         if not filepath.exists() or not filepath.is_file():
             self.send_error(404, "Not found")
@@ -2820,9 +2799,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-cache")
-        if set_auth_cookie:
-            token = self._get_api_token()
-            self.send_header("Set-Cookie", f"bbui_api_token={token}; Path=/; HttpOnly; SameSite=Strict")
         self.end_headers()
         self.wfile.write(content)
 

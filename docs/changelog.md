@@ -6,6 +6,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #122
+- Security:
+  - Schedule writes now validate job keys before persisting schedules and before regenerating crontab entries.
+  - Generated cron commands wrap untrusted values with shell-safe quoting and structured JSON payloads.
+  - The UI login flow no longer sets the global API token as a browser cookie; automation access remains available through explicit API token headers or bearer auth.
+  - Shared secret masking now covers common key/value secrets, bearer tokens, URL userinfo, secret query parameters, Borg passcommand paths and Borg Backup UI secret file paths.
+  - Repository test output is sanitized before it is returned to the UI.
+
 ### Issue #102
 - Browse & Restore:
   - Restore target roots are configurable under Settings > Restore > Browse & Restore.
