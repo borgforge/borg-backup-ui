@@ -190,6 +190,16 @@ body {
   letter-spacing: 0;
 }
 
+.logo-context {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 .nav-list {
   list-style: none;
   padding: 12px 8px;
@@ -2546,7 +2556,7 @@ body {
     min-width: 60px;
   }
 
-  .sidebar-logo span,
+  .sidebar-logo .logo-text,
   .nav-item span,
   .sidebar-footer {
     display: none;
@@ -2633,7 +2643,10 @@ body {
   }
 
   /* Text in Sidebar wieder anzeigen */
-  .sidebar-logo span,
+  .sidebar-logo .logo-text {
+    display: flex;
+  }
+
   .nav-item span,
   .sidebar-footer {
     display: unset;
