@@ -1,7 +1,6 @@
 {
   "app": {
-    "title": "Borg Backup Manager",
-    "logoContext": "for Unraid"
+    "title": "Borg Backup Manager"
   },
   "language": {
     "label": "Sprache",
