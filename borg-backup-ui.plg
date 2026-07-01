@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.06.30.1729">
+<!ENTITY version   "2026.07.01.0834">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.01.0834###
+- Issue #112:
+  - ntfy backup notifications now use the configured display name as title prefix and a cleaner success message format with target and archive details.
+
 ###2026.06.30.1729###
 - Issue #102:
   - Restore target root inputs no longer normalize paths while typing, so paths such as /mnt/data can be entered normally.
@@ -177,7 +181,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>c5812b2e9186e7897ee36c50b728795e</MD5>
+<MD5>689e69400fd7702767507697c210b60f</MD5>
 </FILE>
 
 <!--
