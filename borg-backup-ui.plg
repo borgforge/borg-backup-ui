@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.01.0834">
+<!ENTITY version   "2026.07.01.1042">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.01.1042###
+- Issue #110:
+  - The sidebar branding now clarifies that Borg Backup UI is for Unraid.
+
 ###2026.07.01.0834###
 - Issue #112:
   - ntfy backup notifications now use the configured display name as title prefix and a cleaner success message format with target and archive details.
@@ -181,7 +185,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>409a273fb32ebf6a21fa9968302f18b3</MD5>
+<MD5>3dc572c972a7d24450f6c8e15ac8861d</MD5>
 </FILE>
 
 <!--
