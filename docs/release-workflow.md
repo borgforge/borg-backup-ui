@@ -15,6 +15,9 @@ Danach gilt:
 - `./plugin/build.sh` ausfuehren.
 - Fuer testbare nutzerrelevante Aenderungen eine Test-Channel-Version mit
   `./plugin/deploy-test.sh <version>` erstellen und verifizieren.
+- Test-Channel-PRs duerfen nicht nach `main` gemergt werden, solange die
+  getestete Version nicht ausdruecklich vom Repository-Maintainer freigegeben
+  wurde.
 - Keine Stable-Release-Freigabe vorbereiten, bevor der Repository-Maintainer
   den Test ausdruecklich als erfolgreich freigegeben hat.
 - Geaenderte Plugin-Dateien und neues `releases/borg-backup-ui-<version>.txz` im Abschluss nennen.
@@ -116,6 +119,27 @@ Vor dieser Freigabe ist der Test-Channel die einzige bereitgestellte Version.
 Ein Merge nach `main` oder eine Stable-Release-Promotion darf nicht als
 automatischer Folgeschritt erfolgen.
 
+Wichtig: Ein offener PR, der eine Test-Channel-Version beschreibt, ist nur die
+technische Vorbereitung fuer die spaetere Stable-Freigabe. Er darf erst nach
+erfolgreichem Nutzertest gemergt werden. Konfliktloesungen, Rebase- oder
+Merge-Arbeiten an solchen PRs duerfen keine Test-Version stillschweigend nach
+`main` bringen.
+
+Vor jedem Merge eines PRs mit Plugin-Code pruefen:
+
+```bash
+git show origin/main:borg-backup-ui.plg | grep 'ENTITY version'
+git show origin/test-channel:borg-backup-ui-test.plg | grep 'ENTITY version'
+```
+
+Erwartung:
+
+- `origin/main` zeigt weiterhin auf die letzte ausdruecklich freigegebene
+  Stable-Version.
+- `origin/test-channel` zeigt auf die aktuelle Testversion.
+- Wenn beide Versionen gleich sind, muss klar dokumentiert sein, dass genau
+  diese Version bereits freigegeben wurde.
+
 ### Testversion bereitstellen
 
 Auf dem Arbeitsbranch:
@@ -134,6 +158,22 @@ Das Skript:
 
 Die Version kann explizit angegeben werden. Ohne Angabe wird ein Zeitstempel im
 Format `YYYY.MM.DD.HHMM` verwendet.
+
+GitHub-Fetch- oder Push-Schritte im Deploy koennen mehrere Minuten ohne neue
+Konsolenausgabe laufen. Den Deploy nicht vorschnell abbrechen. Wenn unklar ist,
+ob der Prozess noch laeuft, zuerst in einer zweiten Shell den Prozess- und
+Remote-Zustand pruefen, statt `Ctrl-C` zu senden.
+
+Paket-Builds sind aktuell nicht garantiert byte-identisch reproduzierbar. Ein
+erneuter Build derselben Version kann daher eine andere MD5 erzeugen. Relevant
+ist immer der vollstaendig abgeschlossene Deploy-Lauf:
+
+- Nach einem erfolgreichen `deploy-test.sh` die lokal veraenderten Dateien
+  `borg-backup-ui.plg` und `releases/borg-backup-ui-<version>.txz` erneut
+  committen, falls das Deploy-Skript sie geaendert hat.
+- Die MD5 in `borg-backup-ui.plg`, im Remote-Test-Manifest und vom Remote-Paket
+  muessen identisch sein.
+- Erst danach die Testversion als bereit melden.
 
 ### Go-Live vorbereiten
 
@@ -202,6 +242,25 @@ git status --short
 Wenn der Test-Deploy nur den Test-Channel aktualisieren sollte, lokale
 Stable-Build-Dateien wie `borg-backup-ui.plg`, `borg_backup_ui.py` und
 `releases/borg-backup-ui-<version>.txz` nicht ungeprueft in einen PR uebernehmen.
+
+Nach erfolgreichem Test-Channel-Deploy zusaetzlich pruefen:
+
+```bash
+git fetch origin main test-channel
+git show origin/main:borg-backup-ui.plg | grep 'ENTITY version'
+git show origin/test-channel:borg-backup-ui-test.plg | grep 'ENTITY version'
+git show origin/test-channel:borg-backup-ui-test.plg | grep '<MD5>'
+git show origin/test-channel:releases/borg-backup-ui-<version>.txz | md5sum
+```
+
+Die Test-Channel-Version und die MD5 muessen zusammenpassen. `origin/main` muss
+weiterhin auf der letzten freigegebenen Stable-Version bleiben, solange keine
+explizite Stable-Freigabe vorliegt.
+
+Wenn ein PR-Konflikt geloest wird, danach erneut diese Main/Test-Channel-Pruefung
+durchfuehren. Ein Konflikt-Fix darf weder die Stable-Version erhoehen noch
+Test-Code nach `main` bringen, ausser der Maintainer hat genau diese Version
+freigegeben.
 
 ## Wann ist ein Build erforderlich?
 
