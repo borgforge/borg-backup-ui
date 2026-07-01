@@ -1,11 +1,13 @@
-# Borg Backup UI
+# Borg Backup UI for Unraid
 
-Web UI for BorgBackup on Unraid. Borg Backup UI provides a guided interface for
-creating backup jobs, managing storage targets, running restore tests, browsing
-archives, and monitoring backup health from one place.
+Borg Backup UI is an Unraid-focused plugin and web interface for BorgBackup. It
+provides a guided interface for creating backup jobs, managing storage targets,
+running restore tests, browsing archives, and monitoring backup health from one
+place.
 
 > Project status: active development before public Community Apps publication.
 > Public installation URLs are intentionally not listed here yet.
+> This project is not affiliated with BorgBackup or other Borg UI projects.
 
 ![Borg Backup UI dashboard](docs/assets/readme-dashboard.png)
 
@@ -25,10 +27,10 @@ archives, and monitoring backup health from one place.
 
 ## What It Does
 
-Borg Backup UI is built for Unraid users who want BorgBackup without maintaining
-all operational glue by hand. It keeps the Borg repository model intact while
-adding an Unraid-focused UI around jobs, storage profiles, schedules, checks,
-reports, restore workflows, and notifications.
+Borg Backup UI is built specifically for Unraid users who want BorgBackup
+without maintaining all operational glue by hand. It keeps the Borg repository
+model intact while adding an Unraid-focused plugin UI around jobs, storage
+profiles, schedules, checks, reports, restore workflows, and notifications.
 
 The plugin stores configuration under the Unraid flash configuration area and
 keeps runtime data under the configured data directory. Secrets are handled via
