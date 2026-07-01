@@ -121,21 +121,7 @@ def _send_event_ntfy(config: NtfyConfig, event: NotificationEvent) -> bool:
     if allowed and not (allowed & aliases):
         logger.info("ntfy event skipped by configuration: %s", event.event_type)
         return False
-    return send_ntfy(config, event.event_type, _ntfy_title(config, event.title), event.message)
-
-
-def _ntfy_title(config: NtfyConfig, title: str) -> str:
-    prefix = str(config.name or "Borg Backup UI").strip() or "Borg Backup UI"
-    text = str(title or "").strip()
-    for marker in ("Borg Backup UI:", "Borg Backup UI -"):
-        if text.startswith(marker):
-            text = text[len(marker):].strip()
-            break
-    if not text:
-        text = "Notification"
-    if text.lower().startswith(prefix.lower()):
-        return text
-    return f"{prefix} - {text}"
+    return send_ntfy(config, event.event_type, event.title, event.message)
 
 
 def notification_state_path(config: dict) -> Path:
