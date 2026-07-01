@@ -6,6 +6,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #130
+- Notifications:
+  - Restore-test overdue reminders now require a concrete due timestamp and no longer create `restore_test_overdue:*:never` reminder entries.
+  - Scheduled restore-test runs now use the same restore-status directory resolution as the UI/API and evaluate `test_date` instead of file modification time.
+  - The scheduled restore-test runner no longer sends a restore-test overdue notification immediately before running a due test.
+  - Backup overdue reminders can match latest status entries by `backup_type` and `location` when a status row does not expose a `key`.
+
 ### Issue #128
 - Wizard:
   - Job wizard API failures now prefer backend validation details for wizard error messages, so preview and save failures can show the affected field or path instead of only a generic bad-request text.

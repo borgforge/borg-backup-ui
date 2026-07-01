@@ -1,5 +1,8 @@
 from pathlib import Path
 from datetime import datetime
+import importlib.util
+import json
+import os
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,6 +140,61 @@ def test_backup_overdue_waits_for_tolerance_window(monkeypatch, tmp_path):
     assert calls == []
 
 
+def test_backup_overdue_uses_type_location_status_when_key_is_missing(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["subject"]) or True)
+    monkeypatch.setattr(notification_reminder_api, "datetime", _WednesdayLate)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_usb": {"enabled": True, "cron": "0 10 * * *"}})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_usb", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "backup_type": "appdata",
+        "location": "usb",
+        "timestamp": "2026-07-01 10:04:45",
+        "status": "success",
+    }]})
+
+    result = notification_reminder_api.run_due_notification_reminders({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    })
+
+    assert result["checked"] == 1
+    assert result["sent"] == 0
+    assert calls == []
+
+
+def test_restore_overdue_reminder_skips_rows_without_due_marker(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["subject"]) or True)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {})
+    monkeypatch.setattr("restore_tests_api.list_restore_test_plan", lambda cfg: {"jobs": [{
+        "job_key": "flash_local",
+        "display_name": "Flash - Lokal",
+        "enabled": True,
+        "location": "local",
+        "policy": {"mode": "scheduled", "level": 2, "interval_days": 30},
+        "next_due_at": "",
+        "last_test_date": "",
+        "is_overdue": True,
+    }]})
+
+    result = notification_reminder_api.run_due_notification_reminders({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "restore_test_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NTFY_ENABLED": "false",
+    })
+
+    state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert result["sent"] == 0
+    assert result["rows"][0]["reason"] == "missing_due_marker"
+    assert calls == []
+    assert not any(key.endswith(":never") for key in state["last_sent"])
+
+
 def test_backup_overdue_expected_run_supports_simple_crons():
     now = datetime(2026, 7, 1, 12, 0, 0)
     assert notification_reminder_api._latest_expected_run("0 9 * * 1-5", now) == datetime(2026, 7, 1, 9, 0, 0)
@@ -156,3 +214,40 @@ class _WednesdayNoon(datetime):
     @classmethod
     def now(cls, tz=None):
         return cls(2026, 7, 1, 12, 0, 0)
+
+
+class _WednesdayLate(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 1, 23, 34, 54)
+
+
+def test_restore_runner_uses_restore_status_dir_and_test_date(tmp_path):
+    script_path = ROOT / "runtime" / "scripts" / "borg_restore_test.py"
+    spec = importlib.util.spec_from_file_location("borg_restore_test_for_test", script_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+
+    status_dir = tmp_path / "backup-status"
+    restore_status = tmp_path / "restore-status"
+    restore_status.mkdir(parents=True)
+    test_file = restore_status / "flash_local.test"
+    test_file.write_text(json.dumps({
+        "test_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "test_result": "success",
+    }), encoding="utf-8")
+    old = datetime(2020, 1, 1).timestamp()
+    os.utime(test_file, (old, old))
+
+    args = type("Args", (), {"level": 2, "force": False, "scheduled": True})()
+    tester = module.RestoreTest({
+        "STATUS_DIR": str(status_dir),
+        "GLOBAL_LOG_DIR": str(tmp_path / "logs"),
+        "RESTORE_TEST_INTERVAL_DAYS": "30",
+    }, args)
+    try:
+        assert tester.status_dir == restore_status
+        assert tester._should_test("flash_local") is False
+    finally:
+        tester.close()

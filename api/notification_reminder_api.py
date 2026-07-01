@@ -50,7 +50,11 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
         job_key = str(row.get("job_key") or "").strip()
         if not job_key:
             continue
-        due_marker = str(row.get("next_due_at") or row.get("last_test_date") or "never")
+        due_marker = str(row.get("next_due_at") or "").strip()
+        if not due_marker:
+            skipped += 1
+            rows.append({"job_key": job_key, "sent": False, "reason": "missing_due_marker"})
+            continue
         key = reminder_key("restore_test_overdue", job_key, due_marker)
         if not reminder_allowed(effective, key):
             skipped += 1
@@ -117,11 +121,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
         if isinstance(job, dict) and str(job.get("key") or "").strip()
     }
     status = get_status_data(effective)
-    latest = {
-        str(row.get("key") or "").strip(): row
-        for row in status.get("backups") or []
-        if isinstance(row, dict) and str(row.get("key") or "").strip()
-    }
+    latest = _latest_backup_status_by_key(status.get("backups") or [])
 
     checked = 0
     sent = 0
@@ -195,6 +195,36 @@ def _backup_overdue_tolerance_hours(config: dict) -> int:
         return max(1, int(raw.strip()))
     except ValueError:
         return 6
+
+
+def _latest_backup_status_by_key(rows: list) -> dict[str, dict]:
+    latest: dict[str, dict] = {}
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        keys = []
+        explicit_key = str(row.get("key") or "").strip()
+        if explicit_key:
+            keys.append(explicit_key)
+        backup_type = str(row.get("backup_type") or row.get("type") or "").strip().lower()
+        location = str(row.get("location") or "").strip().lower()
+        if backup_type and location:
+            keys.append(f"{backup_type}_{location}")
+        for key in keys:
+            current = latest.get(key)
+            if current is None or _status_is_newer(row, current):
+                latest[key] = row
+    return latest
+
+
+def _status_is_newer(candidate: dict, current: dict) -> bool:
+    cand_ts = _parse_status_time(str(candidate.get("timestamp") or ""))
+    cur_ts = _parse_status_time(str(current.get("timestamp") or ""))
+    if cand_ts is None:
+        return False
+    if cur_ts is None:
+        return True
+    return cand_ts > cur_ts
 
 
 def _latest_expected_run(cron: str, now: datetime) -> datetime | None:

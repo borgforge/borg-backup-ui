@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.01.1626">
+<!ENTITY version   "2026.07.02.0025">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.0025###
+- Issue #130:
+  - Fixed false overdue notifications for restore tests and backup schedules when current status files already show future or completed runs.
+
 ###2026.07.01.1626###
 - Issue #128:
   - Job wizard preview and save errors now show the concrete validation detail, such as the affected source path, instead of only a generic bad-request message.
@@ -193,7 +197,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>80501f638618d8b01c113d8f977a3280</MD5>
+<MD5>1ff1f7c9ac57c214c8787976ff02a05f</MD5>
 </FILE>
 
 <!--

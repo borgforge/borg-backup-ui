@@ -28,7 +28,8 @@ def test_restore_runner_supports_scheduled_notifications() -> None:
     assert 'parser.add_argument("--scheduled"' in source
     assert 'restore_test_success' in source
     assert 'restore_test_failed' in source
-    assert 'restore_test_overdue' in source
+    assert 'self._notify_event("restore_test_overdue"' not in source
+    assert 'clear_reminder_prefix(self.conf, f"restore_test_overdue:{job_name}:")' in source
 
 
 def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) -> None:
