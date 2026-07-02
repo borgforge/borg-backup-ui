@@ -1756,6 +1756,7 @@
       "jobChecksPlausible": "Repo-URI, Quellpfade, Passphrase- und Profilreferenzen sind lokal plausibel.",
       "notificationReminders": "Notification Reminder",
       "notificationRemindersInactive": "Keine Überfälligkeits-Reminder aktiv.",
+      "job": "Job",
       "backupOverdueDiagnostics": "Backup-Überfälligkeit",
       "restoreTestOverdueDiagnostics": "Restore-Test-Überfälligkeit",
       "reminderIntervalHours": "Reminder-Intervall",

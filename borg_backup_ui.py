@@ -63,7 +63,7 @@ def _log_client(msg: str) -> None:
         _log(f"CLIENT-LOG-FALLBACK {msg}")
 
 
-APP_VERSION = "2026.07.02.0725"
+APP_VERSION = "2026.07.02.0747"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""

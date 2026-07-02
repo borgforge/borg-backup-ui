@@ -220,6 +220,7 @@ function renderSettings(data, systemHealth) {
       ${renderSettingsConfigBackups()}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'advanced' ? '' : 'hidden'}" data-settings-panel="advanced">
+      ${renderSettingsNotificationReminderDiagnostics(systemHealth?.notification_reminders || {})}
       ${renderSettingsPerRepoPassphrases(data.per_repo_passphrases || [])}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'users' ? '' : 'hidden'}" data-settings-panel="users">
@@ -931,11 +932,6 @@ function renderSettingsSystemHealth(data) {
         </div>
 
         <div class="system-health-block">
-          <div class="system-health-block-title">${settingsT('health.notificationReminders')}</div>
-          ${_renderNotificationReminderDiagnostics(data?.notification_reminders || {})}
-        </div>
-
-        <div class="system-health-block">
           <div class="system-health-block-title">${settingsT('health.lastMigration')}</div>
           <div class="migration-status-grid">
             <div><span class="system-health-name">${settingsT('health.lastRun')}</span><strong>${escHtml(migrationSummary.lastRun)}</strong></div>
@@ -972,25 +968,25 @@ function renderSettingsSystemHealth(data) {
     </div>`);
 }
 
-function _renderNotificationReminderDiagnostics(data) {
+function renderSettingsNotificationReminderDiagnostics(data) {
+  const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
   if (!data || !data.enabled) {
     const error = String(data?.error || '').trim();
-    return `<div class="migration-action-empty">${escHtml(error || settingsT('health.notificationRemindersInactive'))}</div>`;
+    return settingsCard(settingsT('health.notificationReminders'), icon,
+      `<div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${escHtml(error || settingsT('health.notificationRemindersInactive'))}</p></div>`);
   }
   const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
   const generated = _formatHealthTimestamp(data.generated_at) || String(data.generated_at || '—');
-  const summary = `
-    <div class="migration-overview-grid">
-      ${_renderMigrationMetric(settingsT('health.reminderIntervalHours'), Number(settings.reminder_interval_hours || 0), 'neutral')}
-      ${_renderMigrationMetric(settingsT('health.backupToleranceHours'), Number(settings.backup_overdue_tolerance_hours || 0), 'neutral')}
-    </div>
-    <div class="migration-registry-id">${escHtml(settingsT('health.generatedAt'))}: ${escHtml(generated)}</div>
-  `;
-  return `
-    ${summary}
-    ${_renderReminderGroup(data.backup_overdue || {}, settingsT('health.backupOverdueDiagnostics'))}
-    ${_renderReminderGroup(data.restore_test_overdue || {}, settingsT('health.restoreTestOverdueDiagnostics'))}
-  `;
+  return settingsCard(settingsT('health.notificationReminders'), icon,
+    `<div class="settings-body">
+      <div class="migration-overview-grid">
+        ${_renderMigrationMetric(settingsT('health.reminderIntervalHours'), Number(settings.reminder_interval_hours || 0), 'neutral')}
+        ${_renderMigrationMetric(settingsT('health.backupToleranceHours'), Number(settings.backup_overdue_tolerance_hours || 0), 'neutral')}
+      </div>
+      <div class="migration-registry-id" style="margin:8px 0 12px">${escHtml(settingsT('health.generatedAt'))}: ${escHtml(generated)}</div>
+      ${_renderReminderGroup(data.backup_overdue || {}, settingsT('health.backupOverdueDiagnostics'))}
+      ${_renderReminderGroup(data.restore_test_overdue || {}, settingsT('health.restoreTestOverdueDiagnostics'))}
+    </div>`);
 }
 
 function _renderReminderGroup(group, title) {
@@ -1000,42 +996,52 @@ function _renderReminderGroup(group, title) {
   return `
     <div class="migration-registry-group">
       <div class="migration-registry-group-title">${escHtml(title)}${channels ? ` · ${escHtml(channels)}` : ''}</div>
-      ${items.length ? `<div class="migration-action-list">${items.map(_renderReminderItem).join('')}</div>` : `<div class="migration-action-empty">${settingsT('health.noReminderItems')}</div>`}
+      ${items.length ? _renderReminderTable(items) : `<div class="migration-action-empty">${settingsT('health.noReminderItems')}</div>`}
     </div>
   `;
 }
 
-function _renderReminderItem(item) {
-  const state = String(item?.state || 'unknown').trim();
-  const tone = state === 'overdue_ready' ? 'pending' : (state === 'overdue_waiting' ? 'warn' : (state === 'unsupported' || state === 'missing_due' ? 'failed' : 'applied'));
-  const sentText = item?.sent
-    ? `${settingsT('health.sentAt')}: ${_formatHealthTimestamp(item.sent_at) || item.sent_at || '—'}`
-    : settingsT('health.notSentYet');
-  const nextText = item?.next_allowed_at
-    ? `${settingsT('health.nextAllowedAt')}: ${_formatHealthTimestamp(item.next_allowed_at) || item.next_allowed_at}`
-    : '';
-  const type = String(item?.type || '');
-  const timingRows = type === 'backup_overdue'
-    ? [
-      [settingsT('health.expectedRun'), item.expected_run],
-      [settingsT('health.overdueAfter'), item.overdue_after],
-      [settingsT('health.latestStatus'), item.latest_status_at || item.latest_status],
-    ]
-    : [
-      [settingsT('health.nextDueAt'), item.next_due_at],
-      [settingsT('health.lastTest'), item.last_test_date],
-      [settingsT('health.level'), item.level ? `L${item.level}` : '—'],
-    ];
-  const detail = timingRows.map(([label, value]) => `${label}: ${_formatHealthTimestamp(value) || escHtml(String(value || '—'))}`).join(' · ');
+function _renderReminderTable(items) {
   return `
-    <div class="migration-action-row ${escHtml(tone)}">
-      <div>
+    <table class="settings-table" style="margin-top:8px">
+      <thead>
+        <tr>
+          <th>${settingsT('health.job')}</th>
+          <th>${settingsT('health.status')}</th>
+          <th>${settingsT('health.expectedRun')}</th>
+          <th>${settingsT('health.overdueAfter')}</th>
+          <th>${settingsT('health.latestStatus')}</th>
+          <th>${settingsT('health.sentAt')}</th>
+          <th>${settingsT('health.nextAllowedAt')}</th>
+        </tr>
+      </thead>
+      <tbody>${items.map(_renderReminderTableRow).join('')}</tbody>
+    </table>
+  `;
+}
+
+function _renderReminderTableRow(item) {
+  const state = String(item?.state || 'unknown').trim();
+  const tone = state === 'overdue_ready' ? 'warn' : (state === 'overdue_waiting' ? 'warning' : (state === 'unsupported' || state === 'missing_due' ? 'error' : 'success'));
+  const type = String(item?.type || '');
+  const expected = type === 'backup_overdue' ? item.expected_run : item.next_due_at;
+  const overdueAfter = type === 'backup_overdue' ? item.overdue_after : item.next_due_at;
+  const latest = type === 'backup_overdue'
+    ? (item.latest_status_at || item.latest_status)
+    : (item.last_test_date || (item.level ? `L${item.level}` : ''));
+  return `
+    <tr>
+      <td>
         <strong>${escHtml(String(item?.display_name || item?.job_key || 'Job'))}</strong>
-        <span>${escHtml(_reminderStateLabel(state))} · ${escHtml(detail)}</span>
-        <span>${escHtml(sentText)}${nextText ? ` · ${escHtml(nextText)}` : ''}</span>
-        ${item?.reminder_key ? `<span class="migration-registry-id">${escHtml(String(item.reminder_key))}</span>` : ''}
-      </div>
-    </div>
+        ${item?.reminder_key ? `<div class="migration-registry-id">${escHtml(String(item.reminder_key))}</div>` : ''}
+      </td>
+      <td><span class="badge ${escHtml(tone)}">${escHtml(_reminderStateLabel(state))}</span></td>
+      <td>${escHtml(_formatHealthTimestamp(expected) || String(expected || '—'))}</td>
+      <td>${escHtml(_formatHealthTimestamp(overdueAfter) || String(overdueAfter || '—'))}</td>
+      <td>${escHtml(_formatHealthTimestamp(latest) || String(latest || '—'))}</td>
+      <td>${escHtml(item?.sent ? (_formatHealthTimestamp(item.sent_at) || item.sent_at || '—') : settingsT('health.notSentYet'))}</td>
+      <td>${escHtml(item?.next_allowed_at ? (_formatHealthTimestamp(item.next_allowed_at) || item.next_allowed_at) : '—')}</td>
+    </tr>
   `;
 }
 

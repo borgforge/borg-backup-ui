@@ -1756,6 +1756,7 @@
       "jobChecksPlausible": "Repository URIs, source paths, passphrases, and profile references are locally plausible.",
       "notificationReminders": "Notification reminders",
       "notificationRemindersInactive": "No overdue reminders are active.",
+      "job": "Job",
       "backupOverdueDiagnostics": "Backup overdue",
       "restoreTestOverdueDiagnostics": "Restore test overdue",
       "reminderIntervalHours": "Reminder interval",

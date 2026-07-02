@@ -86,10 +86,13 @@ def test_settings_layout_is_sticky_and_responsive() -> None:
 
 def test_system_health_renders_notification_reminder_diagnostics() -> None:
     script = _read("ui/js/pages/settings.js")
-    assert "_renderNotificationReminderDiagnostics" in script
-    assert "data?.notification_reminders" in script
+    assert "renderSettingsNotificationReminderDiagnostics" in script
+    assert "systemHealth?.notification_reminders" in script
     assert "backupOverdueDiagnostics" in script
     assert "restoreTestOverdueDiagnostics" in script
+    advanced_start = script.index('data-settings-panel="advanced"')
+    reminder_start = script.index('renderSettingsNotificationReminderDiagnostics')
+    assert advanced_start < reminder_start
 
 
 def test_settings_menu_translations_live_in_settings_namespace() -> None:

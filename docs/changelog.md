@@ -10,6 +10,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Notifications:
   - System health now includes read-only diagnostics for active backup and restore-test overdue reminders.
   - Diagnostics show expected/due times, overdue thresholds, latest status/test data, reminder keys and next allowed reminder time without sending notifications or updating reminder state.
+  - Diagnostics ignore stale backup overdue reminder state when a later successful backup status already satisfies the expected scheduled run.
+  - Reminder diagnostics are shown under Settings > Advanced in a dedicated table layout instead of inside system health details.
 
 ### Issue #132
 - UI:
@@ -22,6 +24,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - The scheduled restore-test runner no longer sends a restore-test overdue notification immediately before running a due test.
   - Backup overdue reminders can match latest status entries by `backup_type` and `location` when a status row does not expose a `key`.
   - Notification reminder state is cleaned up during reminder checks; stale entries older than 90 days and legacy `restore_test_overdue:*:never` entries are removed.
+  - Backup overdue reminder state is cleared when a later successful backup status satisfies the missed scheduled run.
 
 ### Issue #128
 - Wizard:

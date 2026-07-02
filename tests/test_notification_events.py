@@ -194,8 +194,37 @@ def test_backup_overdue_uses_type_location_status_when_key_is_missing(monkeypatc
     assert calls == []
 
 
+def test_backup_overdue_clears_stale_sent_key_when_status_satisfies_expected_run(monkeypatch, tmp_path):
+    key = "backup_overdue:appdata_local:2026-07-01 09:00:00"
+    mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, key, now=datetime(2026, 7, 1, 23, 34, 52).timestamp())
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: True)
+    monkeypatch.setattr(notification_reminder_api, "datetime", _WednesdayLate)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_local": {"enabled": True, "cron": "0 9 * * *"}})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_local", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "key": "appdata_local",
+        "timestamp": "2026-07-01 09:05:17",
+        "status": "success",
+    }]})
+
+    result = notification_reminder_api.run_due_notification_reminders({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    })
+
+    state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert result["checked"] == 1
+    assert result["sent"] == 0
+    assert key not in state["last_sent"]
+
+
 def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeypatch, tmp_path):
     monkeypatch.setattr(notification_reminder_api, "datetime", _WednesdayLate)
+    key = "backup_overdue:appdata_usb:2026-07-01 10:00:00"
+    mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, key, now=datetime(2026, 7, 1, 23, 34, 52).timestamp())
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_usb": {"enabled": True, "cron": "0 10 * * *"}})
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_usb", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
@@ -222,7 +251,8 @@ def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeyp
     assert item["overdue_after"] == "2026-07-01T16:00:00"
     assert item["latest_status_at"] == "2026-07-01T10:04:45"
     assert item["state"] == "current"
-    assert not (tmp_path / "config" / "notification-state.json").exists()
+    assert item["sent"] is False
+    assert key in read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["last_sent"]
 
 
 def test_notification_reminder_diagnostics_reports_sent_restore_wait(monkeypatch, tmp_path):

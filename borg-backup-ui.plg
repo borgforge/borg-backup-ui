@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.0725">
+<!ENTITY version   "2026.07.02.0747">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,14 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.0747###
+- Issue #133:
+  - Notification reminder diagnostics moved to Settings > Advanced and now use a clearer table layout.
+
+###2026.07.02.0739###
+- Issue #130:
+  - Backup overdue reminder state is now cleared when a later successful backup status satisfies the missed scheduled run.
+
 ###2026.07.02.0725###
 - Issue #133:
   - System health now shows read-only notification reminder diagnostics for backup and restore-test overdue checks.
@@ -209,7 +217,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>26a4a2da8712f843f2f7e9b1eef96fce</MD5>
+<MD5>185ab29cdde3afac44440a9a30ddb8d1</MD5>
 </FILE>
 
 <!--

@@ -197,6 +197,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
     from lib.notifications import build_backup_ntfy_message
     from lib.notification_events import (
         NotificationEvent,
+        clear_reminder_prefix,
         mark_reminder_sent,
         reminder_allowed,
         reminder_key,
@@ -237,12 +238,15 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
         last = latest.get(str(job_key))
         last_ts = _parse_status_time(str((last or {}).get("timestamp") or ""))
         tolerance = timedelta(hours=_backup_overdue_tolerance_hours(effective))
+        due_marker = expected_run.strftime("%Y-%m-%d %H:%M:%S")
+        key = reminder_key("backup_overdue", str(job_key), due_marker)
+        if last_ts is not None and last_ts >= expected_run:
+            clear_reminder_prefix(effective, key)
+            continue
         overdue = now > expected_run + tolerance and (last_ts is None or last_ts < expected_run)
         if not overdue:
             continue
 
-        due_marker = expected_run.strftime("%Y-%m-%d %H:%M:%S")
-        key = reminder_key("backup_overdue", str(job_key), due_marker)
         if not reminder_allowed(effective, key):
             skipped += 1
             rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "interval_not_elapsed"})
@@ -320,7 +324,11 @@ def _backup_overdue_diagnostics(
         last_ts = _parse_status_time(str(last.get("timestamp") or ""))
         overdue = now > overdue_after and (last_ts is None or last_ts < expected_run)
         key = reminder_key("backup_overdue", str(job_key), expected_run.strftime("%Y-%m-%d %H:%M:%S"))
-        reminder = _reminder_state_for_key(sent, key, now, interval_hours)
+        reminder = (
+            {"sent": False, "sent_at": "", "next_allowed_at": "", "allowed": True}
+            if last_ts is not None and last_ts >= expected_run
+            else _reminder_state_for_key(sent, key, now, interval_hours)
+        )
         state = "overdue_ready" if overdue and reminder["allowed"] else ("overdue_waiting" if overdue else "current")
         reason = "ready_to_send" if state == "overdue_ready" else ("interval_not_elapsed" if state == "overdue_waiting" else "not_overdue")
         items.append({
