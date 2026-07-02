@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.0951">
+<!ENTITY version   "2026.07.02.1026">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.1026###
+- Issue #125:
+  - Restore overwrite handling now revalidates target paths before destructive file operations and blocks unsafe symlink targets.
+  - Restore downloads now drain Borg error output while streaming and stop stalled download processes with a watchdog timeout.
+
 ###2026.07.02.0951###
 - Issue #133:
   - Per-repository passphrase settings now use the same lighter table surface as notification reminder diagnostics.
@@ -234,7 +239,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>4b186fef8d81f52de7c3f58a6688367d</MD5>
+<MD5>917ae96b81343e041a38fb97f05326cf</MD5>
 </FILE>
 
 <!--
