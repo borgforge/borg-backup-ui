@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.0747">
+<!ENTITY version   "2026.07.02.0808">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.0808###
+- Issue #133:
+  - Advanced settings now separate notification reminder diagnostics and per-repository passphrases into subtabs.
+  - Notification reminder diagnostics now use two-digit day and month formatting for more stable table alignment.
+
 ###2026.07.02.0747###
 - Issue #133:
   - Notification reminder diagnostics moved to Settings > Advanced and now use a clearer table layout.
@@ -217,7 +222,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>185ab29cdde3afac44440a9a30ddb8d1</MD5>
+<MD5>eef41fa59dfdd12a61ff84aa3fcfa7ec</MD5>
 </FILE>
 
 <!--

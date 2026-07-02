@@ -12,6 +12,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Diagnostics show expected/due times, overdue thresholds, latest status/test data, reminder keys and next allowed reminder time without sending notifications or updating reminder state.
   - Diagnostics ignore stale backup overdue reminder state when a later successful backup status already satisfies the expected scheduled run.
   - Reminder diagnostics are shown under Settings > Advanced in a dedicated table layout instead of inside system health details.
+  - Advanced settings now separate notification reminder diagnostics and per-repository passphrases into subtabs.
+  - Reminder diagnostics use two-digit day and month formatting for more stable table alignment.
 
 ### Issue #132
 - UI:
