@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #132
+- UI:
+  - The main app now applies the stored UI theme before loading stylesheets, avoiding a visible dark-theme flash when light mode is selected.
+
 ### Issue #130
 - Notifications:
   - Restore-test overdue reminders now require a concrete due timestamp and no longer create `restore_test_overdue:*:never` reminder entries.

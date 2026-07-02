@@ -18,6 +18,13 @@ def test_foundation_is_loaded_after_legacy_styles() -> None:
     assert server.count('<link rel="stylesheet" href="/ui/design-system.css">') == 2
 
 
+def test_main_app_applies_stored_theme_before_stylesheets() -> None:
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+    assert "bbui_theme_preference" in html
+    assert "document.documentElement.setAttribute('data-theme', resolved)" in html
+    assert html.index("bbui_theme_preference") < html.index('<link rel="stylesheet" href="/ui/style.css">')
+
+
 def test_foundation_defines_shared_tokens_for_both_themes() -> None:
     css = _foundation()
     assert ':root[data-theme="light"]' in css
