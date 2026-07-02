@@ -84,6 +84,14 @@ def test_settings_layout_is_sticky_and_responsive() -> None:
     assert ".settings-workspace-header" in css
 
 
+def test_system_health_renders_notification_reminder_diagnostics() -> None:
+    script = _read("ui/js/pages/settings.js")
+    assert "_renderNotificationReminderDiagnostics" in script
+    assert "data?.notification_reminders" in script
+    assert "backupOverdueDiagnostics" in script
+    assert "restoreTestOverdueDiagnostics" in script
+
+
 def test_settings_menu_translations_live_in_settings_namespace() -> None:
     import json
 

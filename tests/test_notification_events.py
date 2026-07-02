@@ -194,6 +194,68 @@ def test_backup_overdue_uses_type_location_status_when_key_is_missing(monkeypatc
     assert calls == []
 
 
+def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeypatch, tmp_path):
+    monkeypatch.setattr(notification_reminder_api, "datetime", _WednesdayLate)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_usb": {"enabled": True, "cron": "0 10 * * *"}})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_usb", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "backup_type": "appdata",
+        "location": "usb",
+        "timestamp": "2026-07-01 10:04:45",
+        "status": "success",
+    }]})
+    monkeypatch.setattr("restore_tests_api.list_restore_test_plan", lambda cfg: {"jobs": []})
+
+    result = notification_reminder_api.get_notification_reminder_diagnostics({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    })
+
+    assert result["enabled"] is True
+    assert result["backup_overdue"]["channels"] == ["unraid"]
+    item = result["backup_overdue"]["items"][0]
+    assert item["job_key"] == "appdata_usb"
+    assert item["expected_run"] == "2026-07-01T10:00:00"
+    assert item["overdue_after"] == "2026-07-01T16:00:00"
+    assert item["latest_status_at"] == "2026-07-01T10:04:45"
+    assert item["state"] == "current"
+    assert not (tmp_path / "config" / "notification-state.json").exists()
+
+
+def test_notification_reminder_diagnostics_reports_sent_restore_wait(monkeypatch, tmp_path):
+    monkeypatch.setattr(notification_reminder_api, "datetime", _WednesdayLate)
+    key = "restore_test_overdue:flash_local:2026-07-01T09:00:00"
+    mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, key, now=datetime(2026, 7, 1, 20, 0, 0).timestamp())
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {})
+    monkeypatch.setattr("restore_tests_api.list_restore_test_plan", lambda cfg: {"jobs": [{
+        "job_key": "flash_local",
+        "display_name": "Flash - Lokal",
+        "enabled": True,
+        "location": "local",
+        "policy": {"mode": "scheduled", "level": 2, "interval_days": 30},
+        "next_due_at": "2026-07-01T09:00:00",
+        "last_test_date": "2026-06-01 09:00:00",
+        "is_overdue": True,
+    }]})
+
+    result = notification_reminder_api.get_notification_reminder_diagnostics({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "restore_test_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_REMINDER_INTERVAL_HOURS": "24",
+        "NTFY_ENABLED": "false",
+    })
+
+    item = result["restore_test_overdue"]["items"][0]
+    assert item["job_key"] == "flash_local"
+    assert item["state"] == "overdue_waiting"
+    assert item["sent"] is True
+    assert item["next_allowed_at"]
+
+
 def test_restore_overdue_reminder_skips_rows_without_due_marker(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["subject"]) or True)

@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #133
+- Notifications:
+  - System health now includes read-only diagnostics for active backup and restore-test overdue reminders.
+  - Diagnostics show expected/due times, overdue thresholds, latest status/test data, reminder keys and next allowed reminder time without sending notifications or updating reminder state.
+
 ### Issue #132
 - UI:
   - The main app now applies the stored UI theme before loading stylesheets, avoiding a visible dark-theme flash when light mode is selected.

@@ -931,6 +931,11 @@ function renderSettingsSystemHealth(data) {
         </div>
 
         <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.notificationReminders')}</div>
+          ${_renderNotificationReminderDiagnostics(data?.notification_reminders || {})}
+        </div>
+
+        <div class="system-health-block">
           <div class="system-health-block-title">${settingsT('health.lastMigration')}</div>
           <div class="migration-status-grid">
             <div><span class="system-health-name">${settingsT('health.lastRun')}</span><strong>${escHtml(migrationSummary.lastRun)}</strong></div>
@@ -965,6 +970,84 @@ function renderSettingsSystemHealth(data) {
         ${migrationSummary.techMsg ? `<pre class="system-health-tech-msg">${escHtml(migrationSummary.techMsg)}</pre>` : ''}
       </details>
     </div>`);
+}
+
+function _renderNotificationReminderDiagnostics(data) {
+  if (!data || !data.enabled) {
+    const error = String(data?.error || '').trim();
+    return `<div class="migration-action-empty">${escHtml(error || settingsT('health.notificationRemindersInactive'))}</div>`;
+  }
+  const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+  const generated = _formatHealthTimestamp(data.generated_at) || String(data.generated_at || '—');
+  const summary = `
+    <div class="migration-overview-grid">
+      ${_renderMigrationMetric(settingsT('health.reminderIntervalHours'), Number(settings.reminder_interval_hours || 0), 'neutral')}
+      ${_renderMigrationMetric(settingsT('health.backupToleranceHours'), Number(settings.backup_overdue_tolerance_hours || 0), 'neutral')}
+    </div>
+    <div class="migration-registry-id">${escHtml(settingsT('health.generatedAt'))}: ${escHtml(generated)}</div>
+  `;
+  return `
+    ${summary}
+    ${_renderReminderGroup(data.backup_overdue || {}, settingsT('health.backupOverdueDiagnostics'))}
+    ${_renderReminderGroup(data.restore_test_overdue || {}, settingsT('health.restoreTestOverdueDiagnostics'))}
+  `;
+}
+
+function _renderReminderGroup(group, title) {
+  if (!group || !group.enabled) return '';
+  const items = Array.isArray(group.items) ? group.items : [];
+  const channels = Array.isArray(group.channels) ? group.channels.join(', ') : '';
+  return `
+    <div class="migration-registry-group">
+      <div class="migration-registry-group-title">${escHtml(title)}${channels ? ` · ${escHtml(channels)}` : ''}</div>
+      ${items.length ? `<div class="migration-action-list">${items.map(_renderReminderItem).join('')}</div>` : `<div class="migration-action-empty">${settingsT('health.noReminderItems')}</div>`}
+    </div>
+  `;
+}
+
+function _renderReminderItem(item) {
+  const state = String(item?.state || 'unknown').trim();
+  const tone = state === 'overdue_ready' ? 'pending' : (state === 'overdue_waiting' ? 'warn' : (state === 'unsupported' || state === 'missing_due' ? 'failed' : 'applied'));
+  const sentText = item?.sent
+    ? `${settingsT('health.sentAt')}: ${_formatHealthTimestamp(item.sent_at) || item.sent_at || '—'}`
+    : settingsT('health.notSentYet');
+  const nextText = item?.next_allowed_at
+    ? `${settingsT('health.nextAllowedAt')}: ${_formatHealthTimestamp(item.next_allowed_at) || item.next_allowed_at}`
+    : '';
+  const type = String(item?.type || '');
+  const timingRows = type === 'backup_overdue'
+    ? [
+      [settingsT('health.expectedRun'), item.expected_run],
+      [settingsT('health.overdueAfter'), item.overdue_after],
+      [settingsT('health.latestStatus'), item.latest_status_at || item.latest_status],
+    ]
+    : [
+      [settingsT('health.nextDueAt'), item.next_due_at],
+      [settingsT('health.lastTest'), item.last_test_date],
+      [settingsT('health.level'), item.level ? `L${item.level}` : '—'],
+    ];
+  const detail = timingRows.map(([label, value]) => `${label}: ${_formatHealthTimestamp(value) || escHtml(String(value || '—'))}`).join(' · ');
+  return `
+    <div class="migration-action-row ${escHtml(tone)}">
+      <div>
+        <strong>${escHtml(String(item?.display_name || item?.job_key || 'Job'))}</strong>
+        <span>${escHtml(_reminderStateLabel(state))} · ${escHtml(detail)}</span>
+        <span>${escHtml(sentText)}${nextText ? ` · ${escHtml(nextText)}` : ''}</span>
+        ${item?.reminder_key ? `<span class="migration-registry-id">${escHtml(String(item.reminder_key))}</span>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function _reminderStateLabel(state) {
+  const labels = {
+    current: settingsT('health.reminderCurrent'),
+    overdue_ready: settingsT('health.reminderReady'),
+    overdue_waiting: settingsT('health.reminderWaiting'),
+    unsupported: settingsT('health.reminderUnsupported'),
+    missing_due: settingsT('health.reminderMissingDue'),
+  };
+  return labels[state] || state || settingsT('health.statusUnknown');
 }
 
 function _formatHealthTimestamp(value) {

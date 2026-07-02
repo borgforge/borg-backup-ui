@@ -6,6 +6,95 @@ from datetime import datetime, timedelta
 from typing import Any
 
 
+def get_notification_reminder_diagnostics(config: dict) -> dict[str, Any]:
+    """Return read-only reminder diagnostics for system health."""
+    from config_api import read_expanded_conf
+    from jobs_api import list_jobs
+    from restore_tests_api import list_restore_test_plan
+    from schedule_api import get_schedules
+    from status_api import get_status_data
+    from lib.notification_events import (
+        DEFAULT_EMAIL_EVENTS,
+        DEFAULT_UNRAID_EVENTS,
+        event_set,
+        read_notification_state,
+        reminder_interval_hours,
+        reminder_key,
+    )
+    from lib.notifications import MailConfig, NtfyConfig
+
+    effective = {**read_expanded_conf(config), **config}
+    interval_hours = reminder_interval_hours(effective)
+    backup_tolerance_hours = _backup_overdue_tolerance_hours(effective)
+    state = read_notification_state(effective)
+    sent = state.get("last_sent") if isinstance(state.get("last_sent"), dict) else {}
+
+    def _active_channels(event_type: str) -> list[str]:
+        channels: list[str] = []
+        if event_type in event_set(effective, "NOTIFY_UNRAID_EVENTS", DEFAULT_UNRAID_EVENTS):
+            channels.append("unraid")
+        mail_cfg = MailConfig.from_config(effective)
+        if mail_cfg.recipient and event_type in event_set(effective, "NOTIFY_EMAIL_EVENTS", DEFAULT_EMAIL_EVENTS):
+            channels.append("email")
+        ntfy_cfg = NtfyConfig.from_config(effective)
+        if ntfy_cfg.enabled and ntfy_cfg.server_url and ntfy_cfg.topic and event_type in set(ntfy_cfg.events or set()):
+            channels.append("ntfy")
+        return channels
+
+    now = datetime.now()
+    backup_channels = _active_channels("backup_overdue")
+    restore_channels = _active_channels("restore_test_overdue")
+    result: dict[str, Any] = {
+        "enabled": bool(backup_channels or restore_channels),
+        "generated_at": now.isoformat(timespec="seconds"),
+        "settings": {
+            "reminder_interval_hours": interval_hours,
+            "backup_overdue_tolerance_hours": backup_tolerance_hours,
+        },
+        "backup_overdue": {
+            "enabled": bool(backup_channels),
+            "channels": backup_channels,
+            "items": [],
+        },
+        "restore_test_overdue": {
+            "enabled": bool(restore_channels),
+            "channels": restore_channels,
+            "items": [],
+        },
+    }
+
+    if backup_channels:
+        schedules = get_schedules(effective)
+        jobs = {
+            str(job.get("key") or "").strip(): job
+            for job in list_jobs(effective, {})
+            if isinstance(job, dict) and str(job.get("key") or "").strip()
+        }
+        status = get_status_data(effective)
+        latest = _latest_backup_status_by_key(status.get("backups") or [])
+        result["backup_overdue"]["items"] = _backup_overdue_diagnostics(
+            effective,
+            schedules,
+            jobs,
+            latest,
+            sent,
+            now,
+            interval_hours,
+            backup_tolerance_hours,
+        )
+
+    if restore_channels:
+        plan = list_restore_test_plan(effective)
+        result["restore_test_overdue"]["items"] = _restore_test_overdue_diagnostics(
+            plan,
+            sent,
+            now,
+            interval_hours,
+        )
+
+    return result
+
+
 def run_due_notification_reminders(config: dict) -> dict[str, Any]:
     """Send configured overdue reminders without starting backup or restore jobs."""
     from config_api import read_expanded_conf
@@ -190,6 +279,130 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
             rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "no_channel_sent", "channels": results})
 
     return {"checked": checked, "sent": sent, "skipped": skipped, "rows": rows}
+
+
+def _backup_overdue_diagnostics(
+    effective: dict,
+    schedules: dict,
+    jobs: dict,
+    latest: dict,
+    sent: dict,
+    now: datetime,
+    interval_hours: int,
+    backup_tolerance_hours: int,
+) -> list[dict[str, Any]]:
+    from lib.notification_events import reminder_key
+
+    if not isinstance(schedules, dict):
+        return []
+    items: list[dict[str, Any]] = []
+    tolerance = timedelta(hours=backup_tolerance_hours)
+    for job_key, sched in sorted(schedules.items()):
+        if job_key == "restore_test" or not isinstance(sched, dict) or not bool(sched.get("enabled", True)):
+            continue
+        job = jobs.get(str(job_key))
+        if not job or job.get("enabled") is False:
+            continue
+        cron = str(sched.get("cron") or "").strip()
+        expected_run = _latest_expected_run(cron, now)
+        if expected_run is None:
+            items.append({
+                "type": "backup_overdue",
+                "job_key": str(job_key),
+                "display_name": str(job.get("display_name") or job.get("name") or job_key),
+                "cron": cron,
+                "state": "unsupported",
+                "reason": "unsupported_cron",
+            })
+            continue
+        overdue_after = expected_run + tolerance
+        last = latest.get(str(job_key)) or {}
+        last_ts = _parse_status_time(str(last.get("timestamp") or ""))
+        overdue = now > overdue_after and (last_ts is None or last_ts < expected_run)
+        key = reminder_key("backup_overdue", str(job_key), expected_run.strftime("%Y-%m-%d %H:%M:%S"))
+        reminder = _reminder_state_for_key(sent, key, now, interval_hours)
+        state = "overdue_ready" if overdue and reminder["allowed"] else ("overdue_waiting" if overdue else "current")
+        reason = "ready_to_send" if state == "overdue_ready" else ("interval_not_elapsed" if state == "overdue_waiting" else "not_overdue")
+        items.append({
+            "type": "backup_overdue",
+            "job_key": str(job_key),
+            "display_name": str(job.get("display_name") or job.get("name") or job_key),
+            "cron": cron,
+            "state": state,
+            "reason": reason,
+            "expected_run": expected_run.isoformat(timespec="seconds"),
+            "overdue_after": overdue_after.isoformat(timespec="seconds"),
+            "latest_status_at": last_ts.isoformat(timespec="seconds") if last_ts else "",
+            "latest_status": str(last.get("status") or ""),
+            "reminder_key": key,
+            **reminder,
+        })
+    return items
+
+
+def _restore_test_overdue_diagnostics(plan: dict, sent: dict, now: datetime, interval_hours: int) -> list[dict[str, Any]]:
+    from lib.notification_events import reminder_key
+
+    items: list[dict[str, Any]] = []
+    for row in plan.get("jobs") or []:
+        if not isinstance(row, dict):
+            continue
+        policy = row.get("policy") if isinstance(row.get("policy"), dict) else {}
+        if str(policy.get("mode") or "").strip().lower() != "scheduled":
+            continue
+        if row.get("enabled") is False:
+            continue
+        job_key = str(row.get("job_key") or "").strip()
+        if not job_key:
+            continue
+        due_marker = str(row.get("next_due_at") or "").strip()
+        key = reminder_key("restore_test_overdue", job_key, due_marker) if due_marker else ""
+        reminder = _reminder_state_for_key(sent, key, now, interval_hours) if key else {
+            "sent": False,
+            "sent_at": "",
+            "next_allowed_at": "",
+            "allowed": False,
+        }
+        overdue = bool(row.get("is_overdue", False))
+        state = "missing_due" if not due_marker else ("overdue_ready" if overdue and reminder["allowed"] else ("overdue_waiting" if overdue else "current"))
+        reason = {
+            "missing_due": "missing_due_marker",
+            "overdue_ready": "ready_to_send",
+            "overdue_waiting": "interval_not_elapsed",
+            "current": "not_overdue",
+        }.get(state, "unknown")
+        items.append({
+            "type": "restore_test_overdue",
+            "job_key": job_key,
+            "display_name": str(row.get("display_name") or job_key),
+            "state": state,
+            "reason": reason,
+            "next_due_at": due_marker,
+            "last_test_date": str(row.get("last_test_date") or ""),
+            "level": int(policy.get("level") or 0),
+            "interval_days": int(policy.get("interval_days") or 0),
+            "reminder_key": key,
+            **reminder,
+        })
+    return items
+
+
+def _reminder_state_for_key(sent: dict, key: str, now: datetime, interval_hours: int) -> dict[str, Any]:
+    previous = sent.get(key)
+    if previous is None:
+        return {"sent": False, "sent_at": "", "next_allowed_at": "", "allowed": True}
+    try:
+        previous_ts = float(previous)
+    except (TypeError, ValueError):
+        return {"sent": False, "sent_at": "", "next_allowed_at": "", "allowed": True}
+    sent_at = datetime.fromtimestamp(previous_ts)
+    next_allowed = sent_at + timedelta(hours=interval_hours)
+    return {
+        "sent": True,
+        "sent_at": sent_at.isoformat(timespec="seconds"),
+        "next_allowed_at": next_allowed.isoformat(timespec="seconds"),
+        "allowed": now >= next_allowed,
+    }
 
 
 def _backup_overdue_tolerance_hours(config: dict) -> int:
