@@ -308,8 +308,8 @@ def _backup_overdue_diagnostics(
         if not job or job.get("enabled") is False:
             continue
         cron = str(sched.get("cron") or "").strip()
-        expected_run = _latest_expected_run(cron, now)
-        if expected_run is None:
+        latest_expected_run = _latest_expected_run(cron, now)
+        if latest_expected_run is None:
             items.append({
                 "type": "backup_overdue",
                 "job_key": str(job_key),
@@ -319,9 +319,12 @@ def _backup_overdue_diagnostics(
                 "reason": "unsupported_cron",
             })
             continue
-        overdue_after = expected_run + tolerance
         last = latest.get(str(job_key)) or {}
         last_ts = _parse_status_time(str(last.get("timestamp") or ""))
+        expected_run = latest_expected_run
+        if last_ts is not None and last_ts >= latest_expected_run:
+            expected_run = _next_expected_run(cron, now) or latest_expected_run
+        overdue_after = expected_run + tolerance
         overdue = now > overdue_after and (last_ts is None or last_ts < expected_run)
         key = reminder_key("backup_overdue", str(job_key), expected_run.strftime("%Y-%m-%d %H:%M:%S"))
         reminder = (
@@ -489,6 +492,48 @@ def _latest_expected_run(cron: str, now: datetime) -> datetime | None:
             continue
         candidate = datetime(day.year, day.month, day.day, hour_value, minute_value)
         if candidate <= now:
+            return candidate
+    return None
+
+
+def _next_expected_run(cron: str, now: datetime) -> datetime | None:
+    parts = cron.split()
+    if len(parts) != 5:
+        return None
+    minute, hour, dom, month, dow = parts
+    if month != "*":
+        return None
+    try:
+        minute_value = int(minute)
+        hour_value = int(hour)
+    except ValueError:
+        return None
+    if minute_value < 0 or minute_value > 59 or hour_value < 0 or hour_value > 23:
+        return None
+    if dom != "*" and dow != "*":
+        return None
+
+    dow_values = _parse_cron_dow_values(dow) if dow != "*" else set(range(7))
+    if not dow_values:
+        return None
+    dom_value: int | None = None
+    if dom != "*":
+        try:
+            dom_value = int(dom)
+        except ValueError:
+            return None
+        if dom_value < 1 or dom_value > 31:
+            return None
+
+    base = now.replace(second=0, microsecond=0)
+    for offset in range(0, 370):
+        day = base.date() + timedelta(days=offset)
+        if dom_value is not None and day.day != dom_value:
+            continue
+        if dom_value is None and _cron_dow_for_datetime(datetime(day.year, day.month, day.day)) not in dow_values:
+            continue
+        candidate = datetime(day.year, day.month, day.day, hour_value, minute_value)
+        if candidate > now:
             return candidate
     return None
 

@@ -222,15 +222,15 @@ def test_backup_overdue_clears_stale_sent_key_when_status_satisfies_expected_run
 
 
 def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeypatch, tmp_path):
-    monkeypatch.setattr(notification_reminder_api, "datetime", _WednesdayLate)
-    key = "backup_overdue:appdata_usb:2026-07-01 10:00:00"
-    mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, key, now=datetime(2026, 7, 1, 23, 34, 52).timestamp())
+    monkeypatch.setattr(notification_reminder_api, "datetime", _ThursdayMorning)
+    old_key = "backup_overdue:appdata_usb:2026-07-02 10:00:00"
+    mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, old_key, now=datetime(2026, 7, 2, 8, 0, 0).timestamp())
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_usb": {"enabled": True, "cron": "0 10 * * *"}})
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_usb", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
         "backup_type": "appdata",
         "location": "usb",
-        "timestamp": "2026-07-01 10:04:45",
+        "timestamp": "2026-07-02 10:04:45",
         "status": "success",
     }]})
     monkeypatch.setattr("restore_tests_api.list_restore_test_plan", lambda cfg: {"jobs": []})
@@ -247,12 +247,12 @@ def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeyp
     assert result["backup_overdue"]["channels"] == ["unraid"]
     item = result["backup_overdue"]["items"][0]
     assert item["job_key"] == "appdata_usb"
-    assert item["expected_run"] == "2026-07-01T10:00:00"
-    assert item["overdue_after"] == "2026-07-01T16:00:00"
-    assert item["latest_status_at"] == "2026-07-01T10:04:45"
+    assert item["expected_run"] == "2026-07-03T10:00:00"
+    assert item["overdue_after"] == "2026-07-03T16:00:00"
+    assert item["latest_status_at"] == "2026-07-02T10:04:45"
     assert item["state"] == "current"
     assert item["sent"] is False
-    assert key in read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["last_sent"]
+    assert old_key in read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["last_sent"]
 
 
 def test_notification_reminder_diagnostics_reports_sent_restore_wait(monkeypatch, tmp_path):
@@ -322,6 +322,11 @@ def test_backup_overdue_expected_run_supports_simple_crons():
     assert notification_reminder_api._latest_expected_run("0 9 * * 1", now) == datetime(2026, 6, 29, 9, 0, 0)
     assert notification_reminder_api._latest_expected_run("0 9 1 * *", now) == datetime(2026, 7, 1, 9, 0, 0)
     assert notification_reminder_api._latest_expected_run("0 9 * * */2", now) is None
+    assert notification_reminder_api._next_expected_run("0 9 * * 1-5", now) == datetime(2026, 7, 2, 9, 0, 0)
+    assert notification_reminder_api._next_expected_run("0 9 * * 1,3,5", now) == datetime(2026, 7, 3, 9, 0, 0)
+    assert notification_reminder_api._next_expected_run("0 9 * * 1", now) == datetime(2026, 7, 6, 9, 0, 0)
+    assert notification_reminder_api._next_expected_run("0 9 1 * *", now) == datetime(2026, 8, 1, 9, 0, 0)
+    assert notification_reminder_api._next_expected_run("0 9 * * */2", now) is None
 
 
 class _FixedDateTime(datetime):
@@ -340,6 +345,12 @@ class _WednesdayLate(datetime):
     @classmethod
     def now(cls, tz=None):
         return cls(2026, 7, 1, 23, 34, 54)
+
+
+class _ThursdayMorning(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 2, 11, 34, 54)
 
 
 def test_restore_runner_uses_restore_status_dir_and_test_date(tmp_path):
