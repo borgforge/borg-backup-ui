@@ -14,6 +14,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Reminder diagnostics are shown under Settings > Advanced in a dedicated table layout instead of inside system health details.
   - Advanced settings now separate notification reminder diagnostics and per-repository passphrases into subtabs.
   - Reminder diagnostics use two-digit day and month formatting for more stable table alignment.
+  - Reminder diagnostics use a lighter table surface and avoid unnecessary line breaks in job, status and timestamp columns.
 
 ### Issue #132
 - UI:

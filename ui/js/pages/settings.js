@@ -991,13 +991,16 @@ function renderSettingsNotificationReminderDiagnostics(data) {
   const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
   if (!data || !data.enabled) {
     const error = String(data?.error || '').trim();
-    return settingsCard(settingsT('health.notificationReminders'), icon,
-      `<div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${escHtml(error || settingsT('health.notificationRemindersInactive'))}</p></div>`);
+    return `<div class="settings-section settings-reminder-diagnostics-card">
+      <div class="settings-section-header">${icon}<div><strong>${settingsT('health.notificationReminders')}</strong></div></div>
+      <div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${escHtml(error || settingsT('health.notificationRemindersInactive'))}</p></div>
+    </div>`;
   }
   const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
   const generated = _formatReminderTimestamp(data.generated_at) || String(data.generated_at || '—');
-  return settingsCard(settingsT('health.notificationReminders'), icon,
-    `<div class="settings-body">
+  return `<div class="settings-section settings-reminder-diagnostics-card">
+    <div class="settings-section-header">${icon}<div><strong>${settingsT('health.notificationReminders')}</strong></div></div>
+    <div class="settings-body">
       <div class="migration-overview-grid">
         ${_renderMigrationMetric(settingsT('health.reminderIntervalHours'), Number(settings.reminder_interval_hours || 0), 'neutral')}
         ${_renderMigrationMetric(settingsT('health.backupToleranceHours'), Number(settings.backup_overdue_tolerance_hours || 0), 'neutral')}
@@ -1005,7 +1008,8 @@ function renderSettingsNotificationReminderDiagnostics(data) {
       <div class="migration-registry-id" style="margin:8px 0 12px">${escHtml(settingsT('health.generatedAt'))}: ${escHtml(generated)}</div>
       ${_renderReminderGroup(data.backup_overdue || {}, settingsT('health.backupOverdueDiagnostics'))}
       ${_renderReminderGroup(data.restore_test_overdue || {}, settingsT('health.restoreTestOverdueDiagnostics'))}
-    </div>`);
+    </div>
+  </div>`;
 }
 
 function _renderReminderGroup(group, title) {
@@ -1022,20 +1026,22 @@ function _renderReminderGroup(group, title) {
 
 function _renderReminderTable(items) {
   return `
-    <table class="settings-table" style="margin-top:8px">
-      <thead>
-        <tr>
-          <th>${settingsT('health.job')}</th>
-          <th>${settingsT('health.status')}</th>
-          <th>${settingsT('health.expectedRun')}</th>
-          <th>${settingsT('health.overdueAfter')}</th>
-          <th>${settingsT('health.latestStatus')}</th>
-          <th>${settingsT('health.sentAt')}</th>
-          <th>${settingsT('health.nextAllowedAt')}</th>
-        </tr>
-      </thead>
-      <tbody>${items.map(_renderReminderTableRow).join('')}</tbody>
-    </table>
+    <div class="reminder-diagnostics-table-wrap">
+      <table class="settings-table reminder-diagnostics-table">
+        <thead>
+          <tr>
+            <th>${settingsT('health.job')}</th>
+            <th>${settingsT('health.status')}</th>
+            <th>${settingsT('health.expectedRun')}</th>
+            <th>${settingsT('health.overdueAfter')}</th>
+            <th>${settingsT('health.latestStatus')}</th>
+            <th>${settingsT('health.sentAt')}</th>
+            <th>${settingsT('health.nextAllowedAt')}</th>
+          </tr>
+        </thead>
+        <tbody>${items.map(_renderReminderTableRow).join('')}</tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -1048,18 +1054,18 @@ function _renderReminderTableRow(item) {
   const latest = type === 'backup_overdue'
     ? (item.latest_status_at || item.latest_status)
     : (item.last_test_date || (item.level ? `L${item.level}` : ''));
+  const reminderKey = String(item?.reminder_key || '').trim();
   return `
     <tr>
       <td>
-        <strong>${escHtml(String(item?.display_name || item?.job_key || 'Job'))}</strong>
-        ${item?.reminder_key ? `<div class="migration-registry-id">${escHtml(String(item.reminder_key))}</div>` : ''}
+        <strong class="reminder-job-name" ${reminderKey ? `title="${escHtml(reminderKey)}"` : ''}>${escHtml(String(item?.display_name || item?.job_key || 'Job'))}</strong>
       </td>
-      <td><span class="badge ${escHtml(tone)}">${escHtml(_reminderStateLabel(state))}</span></td>
-      <td>${escHtml(_formatReminderTimestamp(expected) || String(expected || '—'))}</td>
-      <td>${escHtml(_formatReminderTimestamp(overdueAfter) || String(overdueAfter || '—'))}</td>
-      <td>${escHtml(_formatReminderTimestamp(latest) || String(latest || '—'))}</td>
-      <td>${escHtml(item?.sent ? (_formatReminderTimestamp(item.sent_at) || item.sent_at || '—') : settingsT('health.notSentYet'))}</td>
-      <td>${escHtml(item?.next_allowed_at ? (_formatReminderTimestamp(item.next_allowed_at) || item.next_allowed_at) : '—')}</td>
+      <td><span class="badge reminder-state-badge ${escHtml(tone)}">${escHtml(_reminderStateLabel(state))}</span></td>
+      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(expected) || String(expected || '—'))}</td>
+      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(overdueAfter) || String(overdueAfter || '—'))}</td>
+      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(latest) || String(latest || '—'))}</td>
+      <td class="reminder-date-cell">${escHtml(item?.sent ? (_formatReminderTimestamp(item.sent_at) || item.sent_at || '—') : settingsT('health.notSentYet'))}</td>
+      <td class="reminder-date-cell">${escHtml(item?.next_allowed_at ? (_formatReminderTimestamp(item.next_allowed_at) || item.next_allowed_at) : '—')}</td>
     </tr>
   `;
 }

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.0808">
+<!ENTITY version   "2026.07.02.0821">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.0821###
+- Issue #133:
+  - Notification reminder diagnostics now use a lighter table surface and avoid unnecessary line breaks in job, status and timestamp columns.
+
 ###2026.07.02.0808###
 - Issue #133:
   - Advanced settings now separate notification reminder diagnostics and per-repository passphrases into subtabs.
@@ -222,7 +226,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>eef41fa59dfdd12a61ff84aa3fcfa7ec</MD5>
+<MD5>6afd822c7bf271539227f14f9a25211d</MD5>
 </FILE>
 
 <!--

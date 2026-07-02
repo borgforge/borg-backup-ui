@@ -99,6 +99,10 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert "day: '2-digit'" in script
     assert "month: '2-digit'" in script
     assert ".settings-subtab-card" in css
+    assert "settings-reminder-diagnostics-card" in script
+    assert "reminder-diagnostics-table" in script
+    assert ".reminder-diagnostics-table-wrap" in css
+    assert "white-space: nowrap" in css
 
 
 def test_settings_menu_translations_live_in_settings_namespace() -> None:
