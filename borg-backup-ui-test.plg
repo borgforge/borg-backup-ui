@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.1026">
+<!ENTITY version   "2026.07.02.1117">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,12 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.1117###
+- Issue #123:
+  - Backup runs now persist Docker/VM stop state before continuing, so a restart or crash leaves an auditable recovery warning.
+  - System health now shows pending Docker/VM runtime recovery entries when services may need manual verification.
+  - Schedule save/delete operations now report crontab application failures instead of silently swallowing them.
+
 ###2026.07.02.1026###
 - Issue #125:
   - Restore overwrite handling now revalidates target paths before destructive file operations and blocks unsafe symlink targets.
@@ -239,7 +245,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>917ae96b81343e041a38fb97f05326cf</MD5>
+<MD5>f7286fa55b1c91141d9b01de7ab3cb4d</MD5>
 </FILE>
 
 <!--
