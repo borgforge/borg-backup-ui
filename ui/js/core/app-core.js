@@ -128,8 +128,8 @@ function _systemHealthAttentionCount(data) {
   const runtimeRecovery = data?.runtime_recovery && typeof data.runtime_recovery === 'object'
     ? data.runtime_recovery
     : {};
-  const runtimePending = Number(runtimeRecovery.pending_count || 0);
-  return systemFailed + migrationFailed + registryAttention + jobFailed + runtimePending;
+  const runtimeAttention = Number(runtimeRecovery.attention_count || 0);
+  return systemFailed + migrationFailed + registryAttention + jobFailed + runtimeAttention;
 }
 
 function _setSidebarSystemHealth(tone, text, title = '') {

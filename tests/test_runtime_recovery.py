@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,9 +28,11 @@ def test_runtime_recovery_records_pending_and_restart_state(tmp_path: Path):
 
     summary = runtime_recovery.summarize_runtime_recovery(state_file)
     assert summary["pending_count"] == 1
+    assert summary["attention_count"] == 0
+    assert summary["active_count"] == 1
     assert summary["docker_pending_count"] == 1
-    assert summary["entries"][0]["id"] == entry_id
-    assert summary["entries"][0]["targets"][0]["name"] == "paperless-ngx"
+    assert summary["active_entries"][0]["id"] == entry_id
+    assert summary["active_entries"][0]["targets"][0]["name"] == "paperless-ngx"
 
     runtime_recovery.mark_runtime_restarted(state_file, entry_id, success=True, message="started")
 
@@ -37,7 +40,7 @@ def test_runtime_recovery_records_pending_and_restart_state(tmp_path: Path):
     assert summary["pending_count"] == 0
 
 
-def test_system_health_exposes_runtime_recovery_warning(tmp_path: Path):
+def test_system_health_exposes_stale_runtime_recovery_warning(tmp_path: Path):
     state_file = tmp_path / "config" / "runtime-recovery.json"
     runtime_recovery.record_runtime_stopped(
         state_file,
@@ -48,10 +51,14 @@ def test_system_health_exposes_runtime_recovery_warning(tmp_path: Path):
         backup_location="local",
         log_file="/mnt/user/Logs/Borg-Backup.log",
     )
+    state = runtime_recovery.read_runtime_recovery_state(state_file)
+    state["entries"][0]["pid"] = 999999999
+    state_file.write_text(json.dumps(state), encoding="utf-8")
 
     health = get_system_health_data({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
 
     recovery = health["runtime_recovery"]
     assert recovery["pending_count"] == 1
+    assert recovery["attention_count"] == 1
     assert recovery["vm_pending_count"] == 1
     assert recovery["entries"][0]["job_name"] == "VMs"

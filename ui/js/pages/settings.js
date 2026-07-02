@@ -887,10 +887,10 @@ function renderSettingsSystemHealth(data) {
   const jobItems = Array.isArray(jobHealth.items) ? jobHealth.items : [];
   const jobFailed = Number(jobSummary.failed || 0);
   const runtimeRecovery = data?.runtime_recovery && typeof data.runtime_recovery === 'object' ? data.runtime_recovery : {};
-  const runtimePending = Number(runtimeRecovery.pending_count || 0);
+  const runtimeAttention = Number(runtimeRecovery.attention_count || 0);
   const failedChecks = checks.filter(([, ok]) => !ok).length;
   const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.deprecated_key_candidates || 0);
-  const overallOk = failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0 && runtimePending === 0;
+  const overallOk = failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0 && runtimeAttention === 0;
   const jobTotal = Number(jobSummary.total || jobItems.length || 0);
   const jobsDetail = jobFailed
     ? settingsT('health.jobChecksFailed', { count: jobFailed })
@@ -909,7 +909,7 @@ function renderSettingsSystemHealth(data) {
         <span class="system-health-overview-mark">${overallOk ? '✓' : '!'}</span>
         <div>
           <div class="system-health-overview-title">${overallOk ? settingsT('health.okTitle') : settingsT('health.attentionTitle')}</div>
-          <div class="system-health-overview-subtitle">${overallOk ? settingsT('health.okSubtitle') : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed, runtimePending)}</div>
+          <div class="system-health-overview-subtitle">${overallOk ? settingsT('health.okSubtitle') : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed, runtimeAttention)}</div>
         </div>
         <span class="system-health-badge ${overallOk ? 'ok' : 'bad'}">${overallOk ? settingsT('common.ok') : settingsT('health.check')}</span>
       </div>
@@ -1197,8 +1197,11 @@ function _renderJobHealthProblems(items) {
 }
 
 function _renderRuntimeRecoveryOverview(recovery) {
-  const entries = Array.isArray(recovery?.entries) ? recovery.entries : [];
-  const pending = Number(recovery?.pending_count || entries.length || 0);
+  const attentionEntries = Array.isArray(recovery?.entries) ? recovery.entries : [];
+  const activeEntries = Array.isArray(recovery?.active_entries) ? recovery.active_entries : [];
+  const attention = Number(recovery?.attention_count || attentionEntries.length || 0);
+  const active = Number(recovery?.active_count || activeEntries.length || 0);
+  const pending = Number(recovery?.pending_count || attention + active || 0);
   if (!pending) {
     return `
       <div class="migration-overview-grid">
@@ -1210,29 +1213,45 @@ function _renderRuntimeRecoveryOverview(recovery) {
       </div>
     `;
   }
+  if (!attention) {
+    return `
+      <div class="migration-overview-grid">
+        ${_renderMigrationMetric(settingsT('health.runtimeRecoveryPending'), pending, 'neutral')}
+        ${_renderMigrationMetric(settingsT('health.runtimeRecoveryDocker'), Number(recovery?.docker_pending_count || 0), 'neutral')}
+        ${_renderMigrationMetric(settingsT('health.runtimeRecoveryVms'), Number(recovery?.vm_pending_count || 0), 'neutral')}
+      </div>
+      <div class="migration-action-panel ok">
+        <div class="migration-action-title">${settingsT('health.runtimeRecoveryOk')}</div>
+        <div class="migration-action-list">
+          ${activeEntries.map((entry) => _renderRuntimeRecoveryEntry(entry, 'neutral')).join('')}
+        </div>
+        <div class="migration-action-empty">${escHtml(recovery?.state_file || '')}</div>
+      </div>
+    `;
+  }
   return `
     <div class="migration-overview-grid">
-      ${_renderMigrationMetric(settingsT('health.runtimeRecoveryPending'), pending, 'warn')}
-      ${_renderMigrationMetric(settingsT('health.runtimeRecoveryDocker'), Number(recovery?.docker_pending_count || 0), 'warn')}
-      ${_renderMigrationMetric(settingsT('health.runtimeRecoveryVms'), Number(recovery?.vm_pending_count || 0), 'warn')}
+      ${_renderMigrationMetric(settingsT('health.runtimeRecoveryPending'), attention, 'warn')}
+      ${_renderMigrationMetric(settingsT('health.runtimeRecoveryDocker'), Number(recovery?.docker_attention_count || 0), 'warn')}
+      ${_renderMigrationMetric(settingsT('health.runtimeRecoveryVms'), Number(recovery?.vm_attention_count || 0), 'warn')}
     </div>
     <div class="migration-action-panel attention">
       <div class="migration-action-title">${settingsT('health.runtimeRecoveryAttention')}</div>
       <div class="migration-action-list">
-        ${entries.map((entry) => _renderRuntimeRecoveryEntry(entry)).join('')}
+        ${attentionEntries.map((entry) => _renderRuntimeRecoveryEntry(entry, 'warn')).join('')}
       </div>
       <div class="migration-action-empty">${escHtml(recovery?.state_file || '')}</div>
     </div>
   `;
 }
 
-function _renderRuntimeRecoveryEntry(entry) {
+function _renderRuntimeRecoveryEntry(entry, tone = 'warn') {
   const targets = Array.isArray(entry?.targets) ? entry.targets : [];
   const targetText = targets.map((target) => String(target?.name || target?.id || '').trim()).filter(Boolean).join(', ');
   const kind = String(entry?.kind || '').trim();
   const state = String(entry?.state || '').trim();
   return `
-    <div class="migration-action-row warn">
+    <div class="migration-action-row ${escHtml(tone)}">
       <div>
         <strong>${escHtml(String(entry?.job_name || entry?.backup_type || 'Backup'))}</strong>
         <span>${escHtml(settingsT('health.runtimeRecoveryDetail', {
