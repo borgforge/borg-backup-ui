@@ -404,6 +404,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     meta_keep_yearly = str(meta_ret.get("yearly") or "").strip()
 
     env.setdefault("JOB_NAME", str(meta.get("name") or job_key))
+    env.setdefault("BACKUP_SCRIPTS_DIR", str(backup_scripts_dir))
     env.setdefault("BACKUP_TYPE", type_id)
     env.setdefault("BACKUP_LOCATION", location)
     env.setdefault("DATE_TAG", date_tag)

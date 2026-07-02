@@ -82,6 +82,7 @@ class BackupJobConfig:
     date_tag: str
     log_retention_days: int = 30
     status_dir: Path = Path("/mnt/user/backup-status")
+    runtime_recovery_file: Path = Path("/boot/config/borg-backup/config/runtime-recovery.json")
     borg_repo: str = ""
     borg_check_flag_file: Optional[Path] = None
     borg_check_interval_days: int = 30
@@ -106,6 +107,14 @@ class BackupJobConfig:
         flag_str = env.get("BORG_CHECK_FLAG_FILE", "")
         check_flag_file = Path(flag_str) if flag_str else None
 
+        data_root = Path(env.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup") or "/boot/config/borg-backup")
+        if data_root.name == "scripts":
+            data_root = data_root.parent
+        runtime_recovery_file = Path(
+            env.get("RUNTIME_RECOVERY_FILE", "")
+            or str(data_root / "config" / "runtime-recovery.json")
+        )
+
         return cls(
             job_name=env.get("JOB_NAME", "Borg Backup"),
             backup_type=env.get("BACKUP_TYPE", "unknown"),
@@ -118,6 +127,7 @@ class BackupJobConfig:
             date_tag=env.get("DATE_TAG", datetime.now().strftime("%Y-%m-%d")),
             log_retention_days=int(env.get("LOG_RETENTION_DAYS", "30") or "30"),
             status_dir=Path(status_dir_str),
+            runtime_recovery_file=runtime_recovery_file,
             borg_repo=env.get("BORG_REPO", ""),
             borg_check_flag_file=check_flag_file,
             borg_check_interval_days=int(
@@ -166,8 +176,10 @@ class BackupJob:
         self._final_msg: str = ""
         self._borg_stats: Optional["BorgStats"] = None
         self._docker_stop_result: Optional["DockerStopResult"] = None
+        self._docker_recovery_id: str = ""
         self._docker_restarted: bool = False
         self._vm_shutdown_result: Optional["VmShutdownResult"] = None
+        self._vm_recovery_id: str = ""
         self._vms_restarted: bool = False
         self._final_sent: bool = False
         self._skip_finish: bool = False
@@ -261,6 +273,7 @@ class BackupJob:
                     selected_names,
                     str(self.config.log_file),
                 )
+            self._record_docker_recovery_state()
 
     def start_docker(self) -> None:
         """Startet Docker-Container neu. Wird automatisch in __exit__ aufgerufen."""
@@ -270,7 +283,16 @@ class BackupJob:
             and not self._docker_restarted
         ):
             self._docker_restarted = True
-            self.docker_manager.start_all(self._docker_stop_result)
+            start_result = self.docker_manager.start_all(self._docker_stop_result)
+            self._mark_runtime_restarted(
+                self._docker_recovery_id,
+                success=bool(start_result.success),
+                message=(
+                    "Docker containers restarted successfully."
+                    if start_result.success
+                    else f"{len(start_result.failed_ids)} Docker container(s) could not be restarted."
+                ),
+            )
 
     def shutdown_vms(self, selected_names: Optional[List[str]] = None) -> None:
         """Fährt VMs herunter (mit Vorwarnung). Tracking für Neustart in __exit__."""
@@ -279,6 +301,7 @@ class BackupJob:
                 self._vm_shutdown_result = self.vm_manager.shutdown_all()
             else:
                 self._vm_shutdown_result = self.vm_manager.shutdown_selected(selected_names)
+            self._record_vm_recovery_state()
 
     def start_vms(self) -> None:
         """Startet VMs neu. Wird automatisch in __exit__ aufgerufen."""
@@ -289,6 +312,11 @@ class BackupJob:
         ):
             self._vms_restarted = True
             self.vm_manager.start_all(self._vm_shutdown_result)
+            self._mark_runtime_restarted(
+                self._vm_recovery_id,
+                success=True,
+                message="VM restart was attempted after backup completion.",
+            )
 
     def check_usb_mount(self, mount_path: Path) -> None:
         """
@@ -509,6 +537,67 @@ class BackupJob:
             self.start_docker()
         if not self._vms_restarted and self._vm_shutdown_result is not None:
             self.start_vms()
+
+    def _record_docker_recovery_state(self) -> None:
+        result = self._docker_stop_result
+        if result is None or not result.container_ids:
+            return
+        try:
+            from lib.runtime_recovery import record_runtime_stopped
+        except ImportError:
+            from runtime_recovery import record_runtime_stopped  # type: ignore
+
+        targets = []
+        names = getattr(result, "container_names", []) or []
+        for idx, cid in enumerate(result.container_ids):
+            name = names[idx] if idx < len(names) else cid
+            targets.append({"id": cid, "name": name})
+        self._docker_recovery_id = record_runtime_stopped(
+            self.config.runtime_recovery_file,
+            kind="docker",
+            targets=targets,
+            job_name=self.config.job_name,
+            backup_type=self.config.backup_type,
+            backup_location=self.config.backup_location,
+            log_file=str(self.config.log_file),
+        )
+        if self._docker_recovery_id:
+            logger.info("Runtime recovery state recorded for Docker: %s", self._docker_recovery_id)
+
+    def _record_vm_recovery_state(self) -> None:
+        result = self._vm_shutdown_result
+        if result is None or not result.stopped_vms:
+            return
+        try:
+            from lib.runtime_recovery import record_runtime_stopped
+        except ImportError:
+            from runtime_recovery import record_runtime_stopped  # type: ignore
+
+        self._vm_recovery_id = record_runtime_stopped(
+            self.config.runtime_recovery_file,
+            kind="vm",
+            targets=[{"id": name, "name": name} for name in result.stopped_vms],
+            job_name=self.config.job_name,
+            backup_type=self.config.backup_type,
+            backup_location=self.config.backup_location,
+            log_file=str(self.config.log_file),
+        )
+        if self._vm_recovery_id:
+            logger.info("Runtime recovery state recorded for VMs: %s", self._vm_recovery_id)
+
+    def _mark_runtime_restarted(self, recovery_id: str, *, success: bool, message: str) -> None:
+        if not recovery_id:
+            return
+        try:
+            from lib.runtime_recovery import mark_runtime_restarted
+        except ImportError:
+            from runtime_recovery import mark_runtime_restarted  # type: ignore
+        mark_runtime_restarted(
+            self.config.runtime_recovery_file,
+            recovery_id,
+            success=success,
+            message=message,
+        )
 
     def _do_finish(self) -> None:
         """Sendet Notifications, speichert Status, versendet Fehler-Mail."""

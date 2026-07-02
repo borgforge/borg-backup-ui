@@ -632,6 +632,7 @@ def _load_env() -> dict:
     log_dir = env.get("GLOBAL_LOG_DIR", "/mnt/user/Logs")
 
     env.setdefault("JOB_NAME", "{job_name}")
+    env.setdefault("BACKUP_SCRIPTS_DIR", str(_BORG_BASE))
     env.setdefault("BACKUP_TYPE", "{type_id}")
     env.setdefault("BACKUP_LOCATION", "{location}")
     env.setdefault("DATE_TAG", date_tag)

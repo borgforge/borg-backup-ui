@@ -113,7 +113,7 @@ def _start_bounded_stderr_collector(stream, *, limit: int = 8192):
     return thread, snapshot
 
 
-APP_VERSION = "2026.07.02.1026"
+APP_VERSION = "2026.07.02.1117"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -1450,8 +1450,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         enabled = bool(body.get("enabled", True))
         if not job_key or not cron:
             raise ValueError("job_key and cron are required")
-        save_schedule(self.config, job_key, cron, enabled)
-        return {"saved": True}
+        result = save_schedule(self.config, job_key, cron, enabled)
+        return {"saved": True, **result}
 
     def _put_job_enabled(self) -> dict:
         from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
@@ -1604,8 +1604,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         job_key = body.get("job_key", "")
         if not job_key:
             raise ValueError("job_key is required")
-        delete_schedule(self.config, job_key)
-        return {"deleted": True}
+        result = delete_schedule(self.config, job_key)
+        return {"deleted": True, **result}
 
     def _get_storage(self) -> dict:
         from config_api import get_repositories_data

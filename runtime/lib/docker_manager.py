@@ -91,6 +91,7 @@ class DockerStopResult:
     """Ergebnis von DockerManager.stop_all()."""
     available: bool = False
     container_ids: List[str] = field(default_factory=list)
+    container_names: List[str] = field(default_factory=list)
     count_before: int = 0
     success: bool = False
 
@@ -183,6 +184,7 @@ class DockerManager:
             return result
 
         result.container_ids = container_ids
+        result.container_names = [_get_container_name(cid) for cid in container_ids]
         result.count_before = len(container_ids)
         logger.info(
             "Stopping %d Docker containers (timeout: %ds)",
@@ -248,6 +250,7 @@ class DockerManager:
             return result
 
         result.container_ids = container_ids
+        result.container_names = [_get_container_name(cid) for cid in container_ids]
         result.count_before = len(container_ids)
         logger.info(
             "Stopping %d selected Docker container(s) (timeout: %ds)",
@@ -620,6 +623,7 @@ def _cli_start(state_file: Path) -> int:
     stop_result = DockerStopResult(
         available=True,
         container_ids=ids,
+        container_names=[_get_container_name(cid) for cid in ids],
         count_before=len(ids),
         success=True,
     )
