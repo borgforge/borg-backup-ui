@@ -2947,25 +2947,31 @@ async function sendTestNtfy() {
 function renderSettingsPerRepoPassphrases(list) {
   const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M12 15h8M16 12v6"/></svg>`;
   if (!list.length) {
-    return settingsCard(settingsT('forms.perRepoTitle'), icon,
-      `<div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${settingsT('forms.noPassphrases')}</p></div>`);
+    return `<div class="settings-section settings-passphrase-card">
+      <div class="settings-section-header">${icon}<div><strong>${settingsT('forms.perRepoTitle')}</strong></div></div>
+      <div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${settingsT('forms.noPassphrases')}</p></div>
+    </div>`;
   }
   const rows = list.map(p => {
     const d = new Date(p.mtime * 1000);
     const ts = d.toLocaleDateString(settingsLocale()) + ' ' + d.toLocaleTimeString(settingsLocale(), {hour:'2-digit', minute:'2-digit'});
     return `<tr>
-      <td><code style="font-size:12px">${p.type_id}</code></td>
-      <td style="font-size:12px;color:var(--text-secondary)">${p.path}</td>
-      <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${ts}</td>
+      <td><code class="settings-passphrase-key">${p.type_id}</code></td>
+      <td class="settings-passphrase-path">${p.path}</td>
+      <td class="settings-passphrase-date">${ts}</td>
     </tr>`;
   }).join('');
-  return settingsCard(settingsT('forms.perRepoTitle'), icon,
-    `<div class="settings-body">
-      <table class="settings-table">
-        <thead><tr><th>${settingsT('forms.type')}</th><th>${settingsT('forms.flashPath')}</th><th>${settingsT('forms.changed')}</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`);
+  return `<div class="settings-section settings-passphrase-card">
+    <div class="settings-section-header">${icon}<div><strong>${settingsT('forms.perRepoTitle')}</strong></div></div>
+    <div class="settings-body">
+      <div class="settings-passphrase-table-wrap">
+        <table class="settings-table settings-passphrase-table">
+          <thead><tr><th>${settingsT('forms.type')}</th><th>${settingsT('forms.flashPath')}</th><th>${settingsT('forms.changed')}</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderSettingsStorageboxSetup(s, storageProfiles = []) {

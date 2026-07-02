@@ -272,6 +272,66 @@
   border: 1px solid var(--ui-state-error-border);
 }
 
+.settings-passphrase-card {
+  background: var(--ui-color-surface);
+}
+
+.settings-passphrase-card .settings-section-header {
+  background: var(--ui-color-surface-subtle);
+}
+
+.settings-passphrase-card .settings-body {
+  background: var(--ui-color-surface);
+}
+
+.settings-passphrase-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface);
+}
+
+.settings-passphrase-table {
+  min-width: 48rem;
+  margin: 0;
+  background: var(--ui-color-surface);
+}
+
+.settings-passphrase-table th {
+  padding: var(--ui-space-3);
+  background: var(--ui-color-surface-subtle);
+  color: var(--ui-color-text-muted);
+  font-weight: var(--ui-font-weight-semibold);
+  white-space: nowrap;
+}
+
+.settings-passphrase-table td {
+  padding: var(--ui-space-3);
+  background: var(--ui-color-surface);
+  border-bottom-color: var(--ui-color-border);
+}
+
+.settings-passphrase-table tbody tr:hover td {
+  background: var(--ui-color-surface-hover);
+}
+
+.settings-passphrase-key {
+  font-size: var(--ui-font-size-xs);
+  white-space: nowrap;
+}
+
+.settings-passphrase-path {
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.settings-passphrase-date {
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+  white-space: nowrap;
+}
+
 .settings-tab-panel > .settings-section {
   margin: 0;
   border-color: var(--ui-color-border);

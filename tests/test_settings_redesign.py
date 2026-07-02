@@ -102,6 +102,9 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert "settings-reminder-diagnostics-card" in script
     assert "reminder-diagnostics-table" in script
     assert ".reminder-diagnostics-table-wrap" in css
+    assert "settings-passphrase-card" in script
+    assert "settings-passphrase-table" in script
+    assert ".settings-passphrase-table-wrap" in css
     assert "white-space: nowrap" in css
 
 

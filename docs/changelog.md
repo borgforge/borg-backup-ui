@@ -16,6 +16,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Reminder diagnostics use two-digit day and month formatting for more stable table alignment.
   - Reminder diagnostics use a lighter table surface and avoid unnecessary line breaks in job, status and timestamp columns.
   - Backup overdue diagnostics advance to the next scheduled run once the latest expected run has completed successfully.
+  - Per-repository passphrase settings use the same lighter table surface as notification reminder diagnostics.
 
 ### Issue #132
 - UI:
