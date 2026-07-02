@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.1117">
+<!ENTITY version   "2026.07.02.1145">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.1145###
+- Issue #123:
+  - Backup execution now prefers the packaged plugin runtime over older persistent data-root libraries, so Docker/VM recovery state is written reliably during running jobs.
+
 ###2026.07.02.1117###
 - Issue #123:
   - Backup runs now persist Docker/VM stop state before continuing, so a restart or crash leaves an auditable recovery warning.
@@ -245,7 +249,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>f7286fa55b1c91141d9b01de7ab3cb4d</MD5>
+<MD5>efa578b5a821dbfec83f38bb4e998296</MD5>
 </FILE>
 
 <!--

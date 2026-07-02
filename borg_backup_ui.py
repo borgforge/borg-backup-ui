@@ -113,7 +113,7 @@ def _start_bounded_stderr_collector(stream, *, limit: int = 8192):
     return thread, snapshot
 
 
-APP_VERSION = "2026.07.02.1117"
+APP_VERSION = "2026.07.02.1145"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
