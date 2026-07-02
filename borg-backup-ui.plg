@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.1211">
+<!ENTITY version   "2026.07.02.1242">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.1242###
+- Issue #123:
+  - Runtime recovery warnings can now be marked as resolved after Docker containers or VMs have been checked manually.
+
 ###2026.07.02.1211###
 - Issue #123:
   - Runtime recovery now keeps only open Docker/VM restart problems and removes successfully completed recovery entries.
@@ -257,7 +261,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>26ea299c71dce3b51207feafaf35f6ce</MD5>
+<MD5>ba7ca9b2251cc80db2e8ad64cf594e0e</MD5>
 </FILE>
 
 <!--

@@ -112,6 +112,20 @@ def mark_runtime_restarted(path: Path, entry_id: str, *, success: bool = True, m
         _write_state(path, state)
 
 
+def acknowledge_runtime_recovery(path: Path, entry_id: str) -> bool:
+    clean_id = str(entry_id or "").strip()
+    if not clean_id:
+        return False
+    state = read_runtime_recovery_state(path)
+    entries = [entry for entry in state.get("entries", []) if isinstance(entry, dict)]
+    remaining = [entry for entry in entries if str(entry.get("id") or "") != clean_id]
+    if len(remaining) == len(entries):
+        return False
+    state["entries"] = _open_entries(remaining)
+    _write_state(path, state)
+    return True
+
+
 def summarize_runtime_recovery(path: Path) -> dict[str, Any]:
     state = read_runtime_recovery_state(path)
     pending = pending_runtime_recovery_entries(path)

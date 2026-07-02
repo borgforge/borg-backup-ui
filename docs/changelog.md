@@ -15,6 +15,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Backup execution now prefers the packaged plugin runtime over older persistent data-root libraries, so Docker/VM recovery state is written reliably during running jobs.
   - Runtime recovery diagnostics now distinguish active backup runs from stale or failed recovery entries; active runs no longer turn system health into a warning.
   - Runtime recovery state is now a snapshot of open recovery problems; successfully restarted Docker/VM entries are removed instead of retained as history.
+  - Runtime recovery warnings can now be marked as resolved after Docker containers or VMs have been checked or started manually.
 - Schedules:
   - Crontab read/install failures now raise visible errors when schedules are saved or deleted.
   - Schedule API responses include crontab apply diagnostics for successful saves/deletes.

@@ -1247,6 +1247,7 @@ function _renderRuntimeRecoveryEntry(entry, tone = 'warn') {
   const targetText = targets.map((target) => String(target?.name || target?.id || '').trim()).filter(Boolean).join(', ');
   const kind = String(entry?.kind || '').trim();
   const state = String(entry?.state || '').trim();
+  const entryId = String(entry?.id || '').trim();
   return `
     <div class="migration-action-row ${escHtml(tone)}">
       <div>
@@ -1259,6 +1260,7 @@ function _renderRuntimeRecoveryEntry(entry, tone = 'warn') {
         }))}</span>
         <span>${escHtml(targetText || settingsT('health.noDetails'))}</span>
       </div>
+      ${entryId ? `<button class="btn btn-secondary btn-sm migration-action-button" data-settings-action="runtime-recovery-ack" data-runtime-recovery-id="${escHtml(entryId)}">${settingsT('health.runtimeRecoveryAck')}</button>` : ''}
     </div>
   `;
 }
@@ -2112,6 +2114,32 @@ async function applyLegacyCleanupFromSettings(el) {
     await refreshSettingsConfigBackups();
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('transfer.cleanupFailed', { message: err.message }));
+  }
+}
+
+async function acknowledgeRuntimeRecoveryEntry(el) {
+  const entryId = String(el?.dataset?.runtimeRecoveryId || '').trim();
+  if (!entryId) return;
+  const confirmed = await _openSettingsDialog({
+    title: settingsT('health.runtimeRecoveryAckTitle'),
+    message: settingsT('health.runtimeRecoveryAckMessage'),
+    confirmText: settingsT('health.runtimeRecoveryAck'),
+    confirmClass: 'btn-danger',
+  });
+  if (!confirmed) return;
+  try {
+    const res = await fetch('/api/system-health/runtime-recovery/ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: entryId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    showMsg('settings-message', 'success', settingsT('health.runtimeRecoveryAckSuccess'));
+    await refreshSettings();
+    window.BBUI?.core?.updateSidebarSystemHealth?.(true);
+  } catch (err) {
+    showMsg('settings-message', 'error', settingsT('health.runtimeRecoveryAckFailed', { message: err.message }));
   }
 }
 
@@ -3396,6 +3424,7 @@ async function onSettingsContentClick(event) {
   if (action === 'import-profile-secrets-select-file') return importProfileSecretsPreviewSelectFile();
   if (action === 'import-profile-secrets-apply') return importProfileSecretsApplySelected();
   if (action === 'export-support-bundle') return exportSupportBundle();
+  if (action === 'runtime-recovery-ack') return acknowledgeRuntimeRecoveryEntry(el);
   if (action === 'legacy-cleanup-apply') return applyLegacyCleanupFromSettings(el);
   if (action === 'diff-config-backup') return diffSettingsConfigBackup(el.dataset.backupName || '');
   if (action === 'restore-config-backup') return restoreSettingsConfigBackup(el.dataset.backupName || '');
