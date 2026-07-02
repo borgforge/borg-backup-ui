@@ -11,7 +11,6 @@ from typing import Any
 
 
 _SCHEMA_VERSION = 1
-_MAX_COMPLETED_ENTRIES = 50
 
 
 def runtime_recovery_file_from_env(env: dict[str, Any]) -> Path:
@@ -94,16 +93,22 @@ def mark_runtime_restarted(path: Path, entry_id: str, *, success: bool = True, m
         return
     state = read_runtime_recovery_state(path)
     changed = False
-    for entry in state.get("entries", []):
+    entries = [entry for entry in state.get("entries", []) if isinstance(entry, dict)]
+    remaining: list[dict[str, Any]] = []
+    for entry in entries:
         if str(entry.get("id") or "") != entry_id:
+            remaining.append(entry)
             continue
-        entry["state"] = "restarted" if success else "restart_failed"
+        if success:
+            changed = True
+            continue
+        entry["state"] = "restart_failed"
         entry["restarted_at"] = _now()
-        entry["message"] = str(message or ("Runtime targets were restarted." if success else "Runtime restart failed."))
+        entry["message"] = str(message or "Runtime restart failed.")
+        remaining.append(entry)
         changed = True
-        break
     if changed:
-        state["entries"] = _prune_completed(state.get("entries", []))
+        state["entries"] = _open_entries(remaining)
         _write_state(path, state)
 
 
@@ -156,9 +161,11 @@ def _normalize_targets(targets: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def _prune_completed(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    active = [e for e in entries if str(e.get("state") or "") in {"pending_restart", "restart_failed"}]
-    completed = [e for e in entries if str(e.get("state") or "") not in {"pending_restart", "restart_failed"}]
-    return active + completed[-_MAX_COMPLETED_ENTRIES:]
+    return _open_entries(entries)
+
+
+def _open_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [e for e in entries if str(e.get("state") or "") in {"pending_restart", "restart_failed"}]
 
 
 def _entry_needs_attention(entry: dict[str, Any]) -> bool:

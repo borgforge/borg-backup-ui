@@ -1222,9 +1222,6 @@ function _renderRuntimeRecoveryOverview(recovery) {
       </div>
       <div class="migration-action-panel ok">
         <div class="migration-action-title">${settingsT('health.runtimeRecoveryOk')}</div>
-        <div class="migration-action-list">
-          ${activeEntries.map((entry) => _renderRuntimeRecoveryEntry(entry, 'neutral')).join('')}
-        </div>
         <div class="migration-action-empty">${escHtml(recovery?.state_file || '')}</div>
       </div>
     `;

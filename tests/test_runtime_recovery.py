@@ -38,6 +38,7 @@ def test_runtime_recovery_records_pending_and_restart_state(tmp_path: Path):
 
     summary = runtime_recovery.summarize_runtime_recovery(state_file)
     assert summary["pending_count"] == 0
+    assert runtime_recovery.read_runtime_recovery_state(state_file)["entries"] == []
 
 
 def test_system_health_exposes_stale_runtime_recovery_warning(tmp_path: Path):
