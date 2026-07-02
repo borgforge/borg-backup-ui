@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.0939">
+<!ENTITY version   "2026.07.02.0951">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.0951###
+- Issue #133:
+  - Per-repository passphrase settings now use the same lighter table surface as notification reminder diagnostics.
+
 ###2026.07.02.0939###
 - Issue #133:
   - Backup overdue diagnostics now advance to the next scheduled run once the latest expected run has completed successfully.
@@ -230,7 +234,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>cb44bdf62c1eeab785a419c07476aa84</MD5>
+<MD5>4b186fef8d81f52de7c3f58a6688367d</MD5>
 </FILE>
 
 <!--
