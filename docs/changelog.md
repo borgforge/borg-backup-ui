@@ -6,6 +6,16 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #123
+- Runtime:
+  - Backup runs now write `config/runtime-recovery.json` after Docker containers or VMs are stopped and before Borg work continues.
+  - Normal cleanup marks the matching Docker/VM recovery entry as restarted; hard crashes or restarts leave pending entries for audit.
+  - System health exposes pending runtime recovery entries with job name, runtime type, stopped timestamp, log file and affected targets.
+  - Settings > System health & migration now shows a Runtime Recovery section and the sidebar health badge counts pending recovery entries.
+- Schedules:
+  - Crontab read/install failures now raise visible errors when schedules are saved or deleted.
+  - Schedule API responses include crontab apply diagnostics for successful saves/deletes.
+
 ### Issue #125
 - Security:
   - Restore target handling now revalidates destination paths immediately before unlink, recursive removal, rename and cleanup operations.

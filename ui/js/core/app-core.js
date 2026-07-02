@@ -125,7 +125,11 @@ function _systemHealthAttentionCount(data) {
     ? data.job_health.summary
     : {};
   const jobFailed = Number(jobSummary.failed || 0);
-  return systemFailed + migrationFailed + registryAttention + jobFailed;
+  const runtimeRecovery = data?.runtime_recovery && typeof data.runtime_recovery === 'object'
+    ? data.runtime_recovery
+    : {};
+  const runtimePending = Number(runtimeRecovery.pending_count || 0);
+  return systemFailed + migrationFailed + registryAttention + jobFailed + runtimePending;
 }
 
 function _setSidebarSystemHealth(tone, text, title = '') {

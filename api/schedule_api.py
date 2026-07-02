@@ -37,21 +37,29 @@ def get_schedules(config: dict) -> dict:
         return {}
 
 
-def save_schedule(config: dict, job_key: str, cron: str, enabled: bool) -> None:
+def save_schedule(config: dict, job_key: str, cron: str, enabled: bool) -> dict:
     job_key = validate_schedule_job_key(config, job_key)
     _validate_cron(cron)
     schedules = get_schedules(config)
     schedules[job_key] = {"cron": cron, "enabled": enabled}
     write_schedules(config, schedules)
-    apply_all_schedules(config)
+    try:
+        apply_result = apply_all_schedules(config)
+    except Exception as exc:
+        raise RuntimeError(f"Schedule saved but could not be applied to crontab: {exc}") from exc
+    return {"saved": True, "applied": True, "apply_result": apply_result}
 
 
-def delete_schedule(config: dict, job_key: str) -> None:
+def delete_schedule(config: dict, job_key: str) -> dict:
     job_key = _validate_job_key_text(job_key)
     schedules = get_schedules(config)
     schedules.pop(job_key, None)
     write_schedules(config, schedules)
-    apply_all_schedules(config)
+    try:
+        apply_result = apply_all_schedules(config)
+    except Exception as exc:
+        raise RuntimeError(f"Schedule deleted but crontab could not be updated: {exc}") from exc
+    return {"deleted": True, "applied": True, "apply_result": apply_result}
 
 
 def prune_orphaned_schedules(config: dict, log_fn=None) -> dict:
@@ -110,7 +118,7 @@ def write_schedules(config: dict, schedules: dict, *, validate_known_jobs: bool 
     path.write_text(json.dumps(normalized, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def apply_all_schedules(config: dict) -> None:
+def apply_all_schedules(config: dict) -> dict:
     """Schreibt alle aktiven Schedules in den Crontab (idempotent, sicher bei Fehler)."""
     schedules = get_schedules(config)
     port = _validate_port(config.get("PORT", "8765"))
@@ -134,10 +142,10 @@ def apply_all_schedules(config: dict) -> None:
         line = f"{cron} {_build_schedule_command(url, body, token_file)} >/dev/null 2>&1"
         lines.append(line)
 
-    _update_crontab(lines)
+    return _update_crontab(lines)
 
 
-def _update_crontab(lines: List[str]) -> None:
+def _update_crontab(lines: List[str]) -> dict:
     # Bestehenden Crontab lesen
     result = subprocess.run(
         ["crontab", "-l"],
@@ -145,7 +153,8 @@ def _update_crontab(lines: List[str]) -> None:
     )
     # Exitcode 1 ohne Ausgabe = leerer Crontab (kein Fehler)
     if result.returncode not in (0, 1):
-        return
+        detail = (result.stderr or result.stdout or "").strip() or f"exit {result.returncode}"
+        raise RuntimeError(f"Could not read crontab: {detail}")
     existing = result.stdout if result.returncode == 0 else ""
 
     before, after = _split_crontab(existing)
@@ -163,12 +172,22 @@ def _update_crontab(lines: List[str]) -> None:
 
     # Via `crontab -` installieren — zuverlässiger als direktes Schreiben
     try:
-        subprocess.run(
+        proc = subprocess.run(
             ["crontab", "-"],
-            input=combined, text=True, timeout=10, check=True
+            input=combined,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
-    except (subprocess.SubprocessError, OSError):
-        pass
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Could not update crontab: command timed out") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Could not update crontab: {exc}") from exc
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
+        raise RuntimeError(f"Could not update crontab: {detail}")
+    return {"line_count": len(lines), "changed": combined != existing}
 
 
 def _split_crontab(text: str):

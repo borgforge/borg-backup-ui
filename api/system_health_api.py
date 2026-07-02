@@ -5,6 +5,7 @@ api/system_health_api.py – kleiner Systemzustand fuer Migration/Verzeichnislay
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 from typing import Any, Dict
@@ -431,6 +432,21 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         perm_msg = f"{len(bad_perm)} file(s) have unexpected permissions."
     job_health = _collect_job_health(config, jobs_dir)
     try:
+        runtime_lib = Path(__file__).resolve().parents[1] / "runtime" / "lib"
+        if str(runtime_lib) not in sys.path:
+            sys.path.insert(0, str(runtime_lib))
+        from runtime_recovery import runtime_recovery_file_from_env, summarize_runtime_recovery
+        runtime_recovery = summarize_runtime_recovery(runtime_recovery_file_from_env(config))
+    except Exception as exc:
+        runtime_recovery = {
+            "state_file": str(root / "config" / "runtime-recovery.json"),
+            "pending_count": 0,
+            "docker_pending_count": 0,
+            "vm_pending_count": 0,
+            "entries": [],
+            "error": str(exc),
+        }
+    try:
         from notification_reminder_api import get_notification_reminder_diagnostics
         notification_reminders = get_notification_reminder_diagnostics(config)
     except Exception as exc:
@@ -467,6 +483,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "migration_summary": migration_summary,
         "migration_registry": migration_registry,
         "job_health": job_health,
+        "runtime_recovery": runtime_recovery,
         "notification_reminders": notification_reminders,
         "secrets_permissions": {
             "ok": secrets_permissions_ok,
