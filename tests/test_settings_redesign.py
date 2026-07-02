@@ -84,6 +84,30 @@ def test_settings_layout_is_sticky_and_responsive() -> None:
     assert ".settings-workspace-header" in css
 
 
+def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() -> None:
+    script = _read("ui/js/pages/settings.js")
+    css = _read("ui/settings-redesign.css")
+    assert "settingsState.advancedTab" in script
+    assert 'data-settings-advanced-tab="reminders"' in script
+    assert 'data-settings-advanced-tab="passphrases"' in script
+    assert "renderSettingsNotificationReminderDiagnostics" in script
+    assert "renderSettingsPerRepoPassphrases" in script
+    assert "systemHealth?.notification_reminders" in script
+    assert "backupOverdueDiagnostics" in script
+    assert "restoreTestOverdueDiagnostics" in script
+    assert "function _formatReminderTimestamp" in script
+    assert "day: '2-digit'" in script
+    assert "month: '2-digit'" in script
+    assert ".settings-subtab-card" in css
+    assert "settings-reminder-diagnostics-card" in script
+    assert "reminder-diagnostics-table" in script
+    assert ".reminder-diagnostics-table-wrap" in css
+    assert "settings-passphrase-card" in script
+    assert "settings-passphrase-table" in script
+    assert ".settings-passphrase-table-wrap" in css
+    assert "white-space: nowrap" in css
+
+
 def test_settings_menu_translations_live_in_settings_namespace() -> None:
     import json
 

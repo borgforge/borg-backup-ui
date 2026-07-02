@@ -84,6 +84,34 @@ def _load_settings_payload(config_dir: Path) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def _resolve_restore_test_dir(conf: dict) -> Path:
+    configured_raw = str(conf.get("RESTORE_TEST_STATUS_DIR", "")).strip()
+    configured = Path(configured_raw) if configured_raw else None
+    status_dir = Path(conf.get("STATUS_DIR", "/mnt/user/backup-status"))
+    candidates = []
+    if configured:
+        candidates.append(configured)
+    candidates.append(status_dir.parent / "restore-status")
+    candidates.append(status_dir / "restore-tests")
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return configured or (status_dir.parent / "restore-status")
+
+
+def _extract_test_datetime(test_data: dict, test_file: Path) -> datetime | None:
+    date_str = str(test_data.get("test_date") or "").strip()
+    if date_str:
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
+    try:
+        return datetime.fromtimestamp(test_file.stat().st_mtime)
+    except OSError:
+        return None
+
+
 def _profile_mount_path(payload: dict, group: str, profile_key: str) -> str:
     key_wanted = str(profile_key or "").strip().lower()
     if not key_wanted:
@@ -191,10 +219,7 @@ class RestoreTest:
         self.args = args
         self.test_level      = args.level
         self.test_interval   = int(conf.get("RESTORE_TEST_INTERVAL_DAYS", 30))
-        self.status_dir      = Path(conf.get(
-            "RESTORE_TEST_STATUS_DIR",
-            str(Path(conf.get("STATUS_DIR", "/mnt/user/backup-status")) / "restore-tests")
-        ))
+        self.status_dir      = _resolve_restore_test_dir(conf)
         self.min_coverage    = int(conf.get("RESTORE_TEST_MIN_COVERAGE", 5))
         self.max_entries     = int(conf.get("RESTORE_TEST_MAX_ENTRIES", 10000))
         self.sample_size     = int(conf.get("RESTORE_TEST_SAMPLE_SIZE", 5))
@@ -258,7 +283,7 @@ class RestoreTest:
                     event_type=event_type,
                     title=title,
                     message=message,
-                    severity="warning" if event_type in {"restore_test_failed", "restore_test_overdue"} else "info",
+                    severity="warning" if event_type == "restore_test_failed" else "info",
                     job_name=f"Borg Backup UI ({job_name})",
                     job_key=job_name,
                     status=result,
@@ -444,7 +469,11 @@ class RestoreTest:
             # Bei beschädigter/inkompatibler Testdatei lieber erneut testen.
             self.log("  Latest test file is not readable; a new test is required")
             return True
-        age_days = (time.time() - tf.stat().st_mtime) / 86400
+        dt = _extract_test_datetime(raw, tf)
+        if dt is None:
+            self.log("  Latest test timestamp is not readable; a new test is required")
+            return True
+        age_days = (datetime.now() - dt).total_seconds() / 86400
         if age_days >= self.test_interval:
             self.log(f"  Last test was {age_days:.0f} days ago; test is due")
             return True
@@ -535,7 +564,6 @@ class RestoreTest:
 
         if not self._should_test(key):
             return 2
-        self._notify_event("restore_test_overdue", repo, "Overdue")
 
         smb_mounted_by_me = False
         steps: list = []

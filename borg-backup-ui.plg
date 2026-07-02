@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.01.1626">
+<!ENTITY version   "2026.07.02.0951">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,47 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.0951###
+- Issue #133:
+  - Per-repository passphrase settings now use the same lighter table surface as notification reminder diagnostics.
+
+###2026.07.02.0939###
+- Issue #133:
+  - Backup overdue diagnostics now advance to the next scheduled run once the latest expected run has completed successfully.
+
+###2026.07.02.0821###
+- Issue #133:
+  - Notification reminder diagnostics now use a lighter table surface and avoid unnecessary line breaks in job, status and timestamp columns.
+
+###2026.07.02.0808###
+- Issue #133:
+  - Advanced settings now separate notification reminder diagnostics and per-repository passphrases into subtabs.
+  - Notification reminder diagnostics now use two-digit day and month formatting for more stable table alignment.
+
+###2026.07.02.0747###
+- Issue #133:
+  - Notification reminder diagnostics moved to Settings > Advanced and now use a clearer table layout.
+
+###2026.07.02.0739###
+- Issue #130:
+  - Backup overdue reminder state is now cleared when a later successful backup status satisfies the missed scheduled run.
+
+###2026.07.02.0725###
+- Issue #133:
+  - System health now shows read-only notification reminder diagnostics for backup and restore-test overdue checks.
+
+###2026.07.02.0642###
+- Issue #132:
+  - The main app now applies the stored UI theme before loading stylesheets, preventing a brief dark-theme flash when light mode is selected.
+
+###2026.07.02.0041###
+- Issue #130:
+  - Notification reminder state is now cleaned up automatically so stale entries and old restore-test `never` markers do not grow forever.
+
+###2026.07.02.0025###
+- Issue #130:
+  - Fixed false overdue notifications for restore tests and backup schedules when current status files already show future or completed runs.
+
 ###2026.07.01.1626###
 - Issue #128:
   - Job wizard preview and save errors now show the concrete validation detail, such as the affected source path, instead of only a generic bad-request message.
@@ -193,7 +234,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>80501f638618d8b01c113d8f977a3280</MD5>
+<MD5>4b186fef8d81f52de7c3f58a6688367d</MD5>
 </FILE>
 
 <!--

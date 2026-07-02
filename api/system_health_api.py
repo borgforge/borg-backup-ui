@@ -430,6 +430,16 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
     elif bad_perm:
         perm_msg = f"{len(bad_perm)} file(s) have unexpected permissions."
     job_health = _collect_job_health(config, jobs_dir)
+    try:
+        from notification_reminder_api import get_notification_reminder_diagnostics
+        notification_reminders = get_notification_reminder_diagnostics(config)
+    except Exception as exc:
+        notification_reminders = {
+            "enabled": False,
+            "error": str(exc),
+            "backup_overdue": {"enabled": False, "channels": [], "items": []},
+            "restore_test_overdue": {"enabled": False, "channels": [], "items": []},
+        }
 
     return {
         "checks": {
@@ -457,6 +467,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "migration_summary": migration_summary,
         "migration_registry": migration_registry,
         "job_health": job_health,
+        "notification_reminders": notification_reminders,
         "secrets_permissions": {
             "ok": secrets_permissions_ok,
             "message": perm_msg,

@@ -4,6 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Borg Backup Manager</title>
+  <script>
+    (() => {
+      try {
+        const key = 'bbui_theme_preference';
+        const pref = localStorage.getItem(key);
+        const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'dark';
+        const resolved = clean === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : clean;
+        document.documentElement.setAttribute('data-theme', resolved);
+      } catch (error) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   <link rel="icon" type="image/png" sizes="16x16" href="/ui/assets/favicon-16.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/ui/assets/favicon-32.png">
   <link rel="icon" type="image/png" href="/ui/assets/favicon.png">

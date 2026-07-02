@@ -7,6 +7,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   loaded: false,
   dirty: false,
   activeTab: 'general',
+  advancedTab: 'reminders',
   profileSelection: { usb: '', smb: '', storagebox: '' },
   profileEditing: '',
   storageboxFlash: null,
@@ -220,7 +221,7 @@ function renderSettings(data, systemHealth) {
       ${renderSettingsConfigBackups()}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'advanced' ? '' : 'hidden'}" data-settings-panel="advanced">
-      ${renderSettingsPerRepoPassphrases(data.per_repo_passphrases || [])}
+      ${renderSettingsAdvancedTabs(data, systemHealth)}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'users' ? '' : 'hidden'}" data-settings-panel="users">
       ${renderSettingsUsers()}
@@ -967,12 +968,144 @@ function renderSettingsSystemHealth(data) {
     </div>`);
 }
 
+function renderSettingsAdvancedTabs(data, systemHealth) {
+  const active = settingsState.advancedTab === 'passphrases' ? 'passphrases' : 'reminders';
+  settingsState.advancedTab = active;
+  return `
+    <div class="settings-subtab-card">
+      <div class="segmented-control settings-subtab-control" role="tablist" aria-label="${escHtml(settingsT('tabs.advanced'))}">
+        <button type="button" class="segmented-btn ${active === 'reminders' ? 'active' : ''}" data-settings-advanced-tab="reminders" role="tab" aria-selected="${active === 'reminders' ? 'true' : 'false'}">${settingsT('health.notificationReminders')}</button>
+        <button type="button" class="segmented-btn ${active === 'passphrases' ? 'active' : ''}" data-settings-advanced-tab="passphrases" role="tab" aria-selected="${active === 'passphrases' ? 'true' : 'false'}">${settingsT('forms.perRepoTitle')}</button>
+      </div>
+    </div>
+    <div class="settings-subtab-panel ${active === 'reminders' ? '' : 'hidden'}" data-settings-advanced-panel="reminders">
+      ${renderSettingsNotificationReminderDiagnostics(systemHealth?.notification_reminders || {})}
+    </div>
+    <div class="settings-subtab-panel ${active === 'passphrases' ? '' : 'hidden'}" data-settings-advanced-panel="passphrases">
+      ${renderSettingsPerRepoPassphrases(data.per_repo_passphrases || [])}
+    </div>
+  `;
+}
+
+function renderSettingsNotificationReminderDiagnostics(data) {
+  const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+  if (!data || !data.enabled) {
+    const error = String(data?.error || '').trim();
+    return `<div class="settings-section settings-reminder-diagnostics-card">
+      <div class="settings-section-header">${icon}<div><strong>${settingsT('health.notificationReminders')}</strong></div></div>
+      <div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${escHtml(error || settingsT('health.notificationRemindersInactive'))}</p></div>
+    </div>`;
+  }
+  const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+  const generated = _formatReminderTimestamp(data.generated_at) || String(data.generated_at || '—');
+  return `<div class="settings-section settings-reminder-diagnostics-card">
+    <div class="settings-section-header">${icon}<div><strong>${settingsT('health.notificationReminders')}</strong></div></div>
+    <div class="settings-body">
+      <div class="migration-overview-grid">
+        ${_renderMigrationMetric(settingsT('health.reminderIntervalHours'), Number(settings.reminder_interval_hours || 0), 'neutral')}
+        ${_renderMigrationMetric(settingsT('health.backupToleranceHours'), Number(settings.backup_overdue_tolerance_hours || 0), 'neutral')}
+      </div>
+      <div class="migration-registry-id" style="margin:8px 0 12px">${escHtml(settingsT('health.generatedAt'))}: ${escHtml(generated)}</div>
+      ${_renderReminderGroup(data.backup_overdue || {}, settingsT('health.backupOverdueDiagnostics'))}
+      ${_renderReminderGroup(data.restore_test_overdue || {}, settingsT('health.restoreTestOverdueDiagnostics'))}
+    </div>
+  </div>`;
+}
+
+function _renderReminderGroup(group, title) {
+  if (!group || !group.enabled) return '';
+  const items = Array.isArray(group.items) ? group.items : [];
+  const channels = Array.isArray(group.channels) ? group.channels.join(', ') : '';
+  return `
+    <div class="migration-registry-group">
+      <div class="migration-registry-group-title">${escHtml(title)}${channels ? ` · ${escHtml(channels)}` : ''}</div>
+      ${items.length ? _renderReminderTable(items) : `<div class="migration-action-empty">${settingsT('health.noReminderItems')}</div>`}
+    </div>
+  `;
+}
+
+function _renderReminderTable(items) {
+  return `
+    <div class="reminder-diagnostics-table-wrap">
+      <table class="settings-table reminder-diagnostics-table">
+        <thead>
+          <tr>
+            <th>${settingsT('health.job')}</th>
+            <th>${settingsT('health.status')}</th>
+            <th>${settingsT('health.expectedRun')}</th>
+            <th>${settingsT('health.overdueAfter')}</th>
+            <th>${settingsT('health.latestStatus')}</th>
+            <th>${settingsT('health.sentAt')}</th>
+            <th>${settingsT('health.nextAllowedAt')}</th>
+          </tr>
+        </thead>
+        <tbody>${items.map(_renderReminderTableRow).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function _renderReminderTableRow(item) {
+  const state = String(item?.state || 'unknown').trim();
+  const tone = state === 'overdue_ready' ? 'warn' : (state === 'overdue_waiting' ? 'warning' : (state === 'unsupported' || state === 'missing_due' ? 'error' : 'success'));
+  const type = String(item?.type || '');
+  const expected = type === 'backup_overdue' ? item.expected_run : item.next_due_at;
+  const overdueAfter = type === 'backup_overdue' ? item.overdue_after : item.next_due_at;
+  const latest = type === 'backup_overdue'
+    ? (item.latest_status_at || item.latest_status)
+    : (item.last_test_date || (item.level ? `L${item.level}` : ''));
+  const reminderKey = String(item?.reminder_key || '').trim();
+  return `
+    <tr>
+      <td>
+        <strong class="reminder-job-name" ${reminderKey ? `title="${escHtml(reminderKey)}"` : ''}>${escHtml(String(item?.display_name || item?.job_key || 'Job'))}</strong>
+      </td>
+      <td><span class="badge reminder-state-badge ${escHtml(tone)}">${escHtml(_reminderStateLabel(state))}</span></td>
+      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(expected) || String(expected || '—'))}</td>
+      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(overdueAfter) || String(overdueAfter || '—'))}</td>
+      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(latest) || String(latest || '—'))}</td>
+      <td class="reminder-date-cell">${escHtml(item?.sent ? (_formatReminderTimestamp(item.sent_at) || item.sent_at || '—') : settingsT('health.notSentYet'))}</td>
+      <td class="reminder-date-cell">${escHtml(item?.next_allowed_at ? (_formatReminderTimestamp(item.next_allowed_at) || item.next_allowed_at) : '—')}</td>
+    </tr>
+  `;
+}
+
+function _reminderStateLabel(state) {
+  const labels = {
+    current: settingsT('health.reminderCurrent'),
+    overdue_ready: settingsT('health.reminderReady'),
+    overdue_waiting: settingsT('health.reminderWaiting'),
+    unsupported: settingsT('health.reminderUnsupported'),
+    missing_due: settingsT('health.reminderMissingDue'),
+  };
+  return labels[state] || state || settingsT('health.statusUnknown');
+}
+
 function _formatHealthTimestamp(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   try {
     const d = new Date(raw);
     if (!Number.isNaN(d.getTime())) return d.toLocaleString(settingsLocale());
+  } catch (_) {}
+  return raw;
+}
+
+function _formatReminderTimestamp(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleString(settingsLocale(), {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+    }
   } catch (_) {}
   return raw;
 }
@@ -2814,25 +2947,31 @@ async function sendTestNtfy() {
 function renderSettingsPerRepoPassphrases(list) {
   const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M12 15h8M16 12v6"/></svg>`;
   if (!list.length) {
-    return settingsCard(settingsT('forms.perRepoTitle'), icon,
-      `<div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${settingsT('forms.noPassphrases')}</p></div>`);
+    return `<div class="settings-section settings-passphrase-card">
+      <div class="settings-section-header">${icon}<div><strong>${settingsT('forms.perRepoTitle')}</strong></div></div>
+      <div class="settings-body"><p class="text-muted" style="font-size:13px;margin:0">${settingsT('forms.noPassphrases')}</p></div>
+    </div>`;
   }
   const rows = list.map(p => {
     const d = new Date(p.mtime * 1000);
     const ts = d.toLocaleDateString(settingsLocale()) + ' ' + d.toLocaleTimeString(settingsLocale(), {hour:'2-digit', minute:'2-digit'});
     return `<tr>
-      <td><code style="font-size:12px">${p.type_id}</code></td>
-      <td style="font-size:12px;color:var(--text-secondary)">${p.path}</td>
-      <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${ts}</td>
+      <td><code class="settings-passphrase-key">${p.type_id}</code></td>
+      <td class="settings-passphrase-path">${p.path}</td>
+      <td class="settings-passphrase-date">${ts}</td>
     </tr>`;
   }).join('');
-  return settingsCard(settingsT('forms.perRepoTitle'), icon,
-    `<div class="settings-body">
-      <table class="settings-table">
-        <thead><tr><th>${settingsT('forms.type')}</th><th>${settingsT('forms.flashPath')}</th><th>${settingsT('forms.changed')}</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`);
+  return `<div class="settings-section settings-passphrase-card">
+    <div class="settings-section-header">${icon}<div><strong>${settingsT('forms.perRepoTitle')}</strong></div></div>
+    <div class="settings-body">
+      <div class="settings-passphrase-table-wrap">
+        <table class="settings-table settings-passphrase-table">
+          <thead><tr><th>${settingsT('forms.type')}</th><th>${settingsT('forms.flashPath')}</th><th>${settingsT('forms.changed')}</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderSettingsStorageboxSetup(s, storageProfiles = []) {
@@ -3154,6 +3293,12 @@ async function onSettingsContentClick(event) {
     const tab = tabBtn.dataset.settingsTab || 'general';
     settingsState.activeTab = tab;
     settingsState.profileEditing = '';
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    return;
+  }
+  const advancedTabBtn = event.target.closest('[data-settings-advanced-tab]');
+  if (advancedTabBtn) {
+    settingsState.advancedTab = advancedTabBtn.dataset.settingsAdvancedTab === 'passphrases' ? 'passphrases' : 'reminders';
     renderSettings(settingsState.data || {}, settingsState.systemHealth);
     return;
   }
