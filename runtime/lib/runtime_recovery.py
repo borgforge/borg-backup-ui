@@ -11,7 +11,6 @@ from typing import Any
 
 
 _SCHEMA_VERSION = 1
-_MAX_COMPLETED_ENTRIES = 50
 
 
 def runtime_recovery_file_from_env(env: dict[str, Any]) -> Path:
@@ -94,30 +93,59 @@ def mark_runtime_restarted(path: Path, entry_id: str, *, success: bool = True, m
         return
     state = read_runtime_recovery_state(path)
     changed = False
-    for entry in state.get("entries", []):
+    entries = [entry for entry in state.get("entries", []) if isinstance(entry, dict)]
+    remaining: list[dict[str, Any]] = []
+    for entry in entries:
         if str(entry.get("id") or "") != entry_id:
+            remaining.append(entry)
             continue
-        entry["state"] = "restarted" if success else "restart_failed"
+        if success:
+            changed = True
+            continue
+        entry["state"] = "restart_failed"
         entry["restarted_at"] = _now()
-        entry["message"] = str(message or ("Runtime targets were restarted." if success else "Runtime restart failed."))
+        entry["message"] = str(message or "Runtime restart failed.")
+        remaining.append(entry)
         changed = True
-        break
     if changed:
-        state["entries"] = _prune_completed(state.get("entries", []))
+        state["entries"] = _open_entries(remaining)
         _write_state(path, state)
+
+
+def acknowledge_runtime_recovery(path: Path, entry_id: str) -> bool:
+    clean_id = str(entry_id or "").strip()
+    if not clean_id:
+        return False
+    state = read_runtime_recovery_state(path)
+    entries = [entry for entry in state.get("entries", []) if isinstance(entry, dict)]
+    remaining = [entry for entry in entries if str(entry.get("id") or "") != clean_id]
+    if len(remaining) == len(entries):
+        return False
+    state["entries"] = _open_entries(remaining)
+    _write_state(path, state)
+    return True
 
 
 def summarize_runtime_recovery(path: Path) -> dict[str, Any]:
     state = read_runtime_recovery_state(path)
     pending = pending_runtime_recovery_entries(path)
+    attention = [e for e in pending if _entry_needs_attention(e)]
+    active = [e for e in pending if e not in attention]
     docker_pending = [e for e in pending if str(e.get("kind") or "") == "docker"]
     vm_pending = [e for e in pending if str(e.get("kind") or "") == "vm"]
+    docker_attention = [e for e in attention if str(e.get("kind") or "") == "docker"]
+    vm_attention = [e for e in attention if str(e.get("kind") or "") == "vm"]
     return {
         "state_file": str(path),
         "pending_count": len(pending),
         "docker_pending_count": len(docker_pending),
         "vm_pending_count": len(vm_pending),
-        "entries": pending,
+        "attention_count": len(attention),
+        "docker_attention_count": len(docker_attention),
+        "vm_attention_count": len(vm_attention),
+        "active_count": len(active),
+        "entries": attention,
+        "active_entries": active,
         "updated_at": str(state.get("updated_at") or ""),
         "read_error": str(state.get("read_error") or ""),
     }
@@ -147,9 +175,40 @@ def _normalize_targets(targets: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def _prune_completed(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    active = [e for e in entries if str(e.get("state") or "") in {"pending_restart", "restart_failed"}]
-    completed = [e for e in entries if str(e.get("state") or "") not in {"pending_restart", "restart_failed"}]
-    return active + completed[-_MAX_COMPLETED_ENTRIES:]
+    return _open_entries(entries)
+
+
+def _open_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [e for e in entries if str(e.get("state") or "") in {"pending_restart", "restart_failed"}]
+
+
+def _entry_needs_attention(entry: dict[str, Any]) -> bool:
+    state = str(entry.get("state") or "").strip()
+    if state == "restart_failed":
+        return True
+    if state != "pending_restart":
+        return False
+    pid = _safe_int(entry.get("pid"), 0)
+    return pid <= 0 or not _pid_alive(pid)
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError, AttributeError):
+        return default
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def _write_state(path: Path, state: dict[str, Any]) -> None:
