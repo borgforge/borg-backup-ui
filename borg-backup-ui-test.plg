@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.02.0821">
+<!ENTITY version   "2026.07.02.0939">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.02.0939###
+- Issue #133:
+  - Backup overdue diagnostics now advance to the next scheduled run once the latest expected run has completed successfully.
+
 ###2026.07.02.0821###
 - Issue #133:
   - Notification reminder diagnostics now use a lighter table surface and avoid unnecessary line breaks in job, status and timestamp columns.
@@ -226,7 +230,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>6afd822c7bf271539227f14f9a25211d</MD5>
+<MD5>cb44bdf62c1eeab785a419c07476aa84</MD5>
 </FILE>
 
 <!--
