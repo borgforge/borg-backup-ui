@@ -125,6 +125,44 @@ def _is_under_allowed_roots(path: Path, roots: list[Path]) -> bool:
     return False
 
 
+def _resolved_inside(path: Path, root: Path) -> bool:
+    try:
+        resolved = path.resolve()
+        resolved_root = root.resolve()
+    except OSError:
+        return False
+    full = str(resolved)
+    base = str(resolved_root)
+    return full == base or full.startswith(base.rstrip("/") + "/")
+
+
+def _ensure_restore_path_inside(path: Path, root: Path, *, allow_missing: bool = True) -> Path:
+    """Validate a restore path immediately before filesystem mutation."""
+    if allow_missing and not path.exists() and not path.is_symlink():
+        parent = path.parent
+        if not parent.exists():
+            raise ValueError("Restore destination parent does not exist")
+        if not _resolved_inside(parent, root):
+            raise ValueError("Restore destination parent is outside the target directory")
+        return path
+    if not _resolved_inside(path, root):
+        raise ValueError("Restore destination is outside the target directory")
+    return path
+
+
+def _make_restore_stage_dir(target: Path) -> Path:
+    """Create an exclusive staging directory inside the validated restore target."""
+    for _ in range(10):
+        stage = target / f".bbui-restore-stage-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
+        _ensure_restore_path_inside(stage, target)
+        try:
+            stage.mkdir(mode=0o700, parents=False, exist_ok=False)
+            return stage
+        except FileExistsError:
+            continue
+    raise RuntimeError("Could not create an exclusive restore staging directory")
+
+
 def _restore_runs_file(config: dict) -> Path:
     base = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
     return base / "config" / "restore-runs.json"
@@ -793,13 +831,13 @@ def _validate_target_dir(target_dir: str, config: dict | None = None) -> Path:
     roots = _get_restore_allowed_roots(config or {}) if config is not None else [Path("/mnt/user").resolve()]
     if not _is_under_allowed_roots(rp, roots):
         raise ValueError("Target path is outside the allowed restore roots")
-    if not p.exists():
+    if not rp.exists():
         raise ValueError("Target path does not exist")
-    if not p.is_dir():
+    if not rp.is_dir():
         raise ValueError("Target path is not a directory")
-    if not os.access(p, os.W_OK | os.X_OK):
+    if not os.access(rp, os.W_OK | os.X_OK):
         raise ValueError("Target path is not writable")
-    return p
+    return rp
 
 
 def _precheck_metadata(repo: str, archive: str, source_path: str, env: dict) -> dict:
@@ -939,34 +977,37 @@ def start_restore(
     source_type = str(source_meta.get("source_type", "")).strip()
     same_name_target = bool(source_type == "d" and basename and target.name == basename)
     restore_dir_contents_directly = same_name_target
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     target_stat = target.stat()
     target_uid = int(target_stat.st_uid)
     target_gid = int(target_stat.st_gid)
 
     def _apply_target_owner(path: Path) -> None:
         """Set owner/group recursively to target directory ownership."""
+        _ensure_restore_path_inside(path, target)
         try:
-            os.chown(path, target_uid, target_gid)
+            os.lchown(path, target_uid, target_gid)
         except OSError:
             pass
-        if path.is_dir():
+        if path.is_dir() and not path.is_symlink():
             for root, dirs, files in os.walk(path):
                 root_p = Path(root)
+                _ensure_restore_path_inside(root_p, target)
                 try:
-                    os.chown(root_p, target_uid, target_gid)
+                    os.lchown(root_p, target_uid, target_gid)
                 except OSError:
                     pass
                 for name in dirs:
                     p = root_p / name
+                    _ensure_restore_path_inside(p, target)
                     try:
-                        os.chown(p, target_uid, target_gid)
+                        os.lchown(p, target_uid, target_gid)
                     except OSError:
                         pass
                 for name in files:
                     p = root_p / name
+                    _ensure_restore_path_inside(p, target)
                     try:
-                        os.chown(p, target_uid, target_gid)
+                        os.lchown(p, target_uid, target_gid)
                     except OSError:
                         pass
 
@@ -975,48 +1016,57 @@ def start_restore(
         Merge src into dst and replace only conflicting paths.
         Unrelated existing files in dst stay untouched.
         """
+        _ensure_restore_path_inside(src, target, allow_missing=False)
+        _ensure_restore_path_inside(dst, target)
         if src.is_dir():
             if dst.exists() and not dst.is_dir():
+                _ensure_restore_path_inside(dst, target, allow_missing=False)
                 dst.unlink()
             dst.mkdir(parents=True, exist_ok=True)
+            _ensure_restore_path_inside(dst, target, allow_missing=False)
             for child in src.iterdir():
                 _merge_replace(child, dst / child.name)
             try:
+                _ensure_restore_path_inside(src, target, allow_missing=False)
                 src.rmdir()
             except OSError:
                 pass
             return
 
         # file/symlink/other
-        if dst.exists():
-            if dst.is_dir():
+        if dst.exists() or dst.is_symlink():
+            _ensure_restore_path_inside(dst, target, allow_missing=False)
+            if dst.is_dir() and not dst.is_symlink():
                 shutil.rmtree(dst)
             else:
                 dst.unlink()
+        _ensure_restore_path_inside(dst.parent, target, allow_missing=False)
         shutil.move(str(src), str(dst))
+        _ensure_restore_path_inside(dst, target, allow_missing=False)
 
     # Restore directly on target filesystem (no /tmp usage), so large files do not consume RAM/tmpfs.
     dest = target if restore_dir_contents_directly else (target / basename)
     final_dest = dest
     extract_cwd = target
     cleanup_extract_dir = None
+    _ensure_restore_path_inside(dest, target)
+    _ensure_restore_path_inside(final_dest, target)
     if dest.exists() and not (restore_dir_contents_directly and conflict_mode != "rename"):
         if conflict_mode == "skip":
             return {"started": False, "skipped": True, "reason": "Target file exists", "skip_reason_code": "target_exists", "destination_path": str(dest)}
         if conflict_mode == "overwrite":
-            extract_cwd = target / f".bbui-restore-stage-{timestamp}"
-            extract_cwd.mkdir(parents=True, exist_ok=True)
+            extract_cwd = _make_restore_stage_dir(target)
             cleanup_extract_dir = extract_cwd
         elif conflict_mode == "rename":
-            final_dest = target / f"{basename}.{timestamp}"
-            extract_cwd = target / f".bbui-restore-stage-{timestamp}"
-            extract_cwd.mkdir(parents=True, exist_ok=True)
+            final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            _ensure_restore_path_inside(final_dest, target)
+            extract_cwd = _make_restore_stage_dir(target)
             cleanup_extract_dir = extract_cwd
     elif conflict_mode == "rename":
         # Keep consistent behavior for rename mode even when destination does not yet exist.
-        final_dest = target / f"{basename}.{timestamp}"
-        extract_cwd = target / f".bbui-restore-stage-{timestamp}"
-        extract_cwd.mkdir(parents=True, exist_ok=True)
+        final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        _ensure_restore_path_inside(final_dest, target)
+        extract_cwd = _make_restore_stage_dir(target)
         cleanup_extract_dir = extract_cwd
 
     if restore_dir_contents_directly:
@@ -1027,12 +1077,12 @@ def start_restore(
             except OSError:
                 return {"started": False, "skipped": True, "reason": "Target directory is not readable", "skip_reason_code": "target_unreadable", "destination_path": str(target)}
         if conflict_mode == "overwrite":
-            extract_cwd = target / f".bbui-restore-stage-{timestamp}"
-            extract_cwd.mkdir(parents=True, exist_ok=True)
+            extract_cwd = _make_restore_stage_dir(target)
             cleanup_extract_dir = extract_cwd
         elif conflict_mode == "rename":
-            final_dest = target / f"{basename}.{timestamp}"
-            final_dest.mkdir(parents=True, exist_ok=True)
+            final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            _ensure_restore_path_inside(final_dest, target)
+            final_dest.mkdir(parents=False, exist_ok=False)
             extract_cwd = final_dest
 
     strip_components = max(len(parts), 0) if restore_dir_contents_directly else max(len(parts) - 1, 0)
@@ -1084,23 +1134,31 @@ def start_restore(
     if ret != 0:
         tail = "\n".join(out_lines[-20:]).strip()
         if cleanup_extract_dir and cleanup_extract_dir.exists():
+            _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
             shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
         raise RuntimeError(tail or f"borg extract failed (exit {ret})")
 
     src_temp = extract_cwd if restore_dir_contents_directly else (extract_cwd / basename)
     if not src_temp.exists():
         if cleanup_extract_dir and cleanup_extract_dir.exists():
+            _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
             shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
         raise RuntimeError("Extract succeeded, but the source file was not found in the target")
 
+    _ensure_restore_path_inside(src_temp, target, allow_missing=False)
+    _ensure_restore_path_inside(final_dest, target)
     if restore_dir_contents_directly and conflict_mode == "overwrite":
         for child in src_temp.iterdir():
             _merge_replace(child, final_dest / child.name)
     elif conflict_mode == "overwrite" and final_dest.exists() and src_temp != final_dest:
         _merge_replace(src_temp, final_dest)
     elif src_temp != final_dest:
+        _ensure_restore_path_inside(src_temp, target, allow_missing=False)
+        _ensure_restore_path_inside(final_dest.parent, target, allow_missing=False)
         shutil.move(str(src_temp), str(final_dest))
+        _ensure_restore_path_inside(final_dest, target, allow_missing=False)
     if cleanup_extract_dir and cleanup_extract_dir.exists() and cleanup_extract_dir != final_dest:
+        _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
         shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
     if not preserve_owner:
         _apply_target_owner(final_dest)

@@ -6,6 +6,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #125
+- Security:
+  - Restore target handling now revalidates destination paths immediately before unlink, recursive removal, rename and cleanup operations.
+  - Restore overwrite and rename staging directories are created exclusively inside the validated target directory instead of using predictable names.
+  - Restore ownership normalization uses `lchown` and avoids following symlinked directories.
+  - Restore downloads now collect Borg stderr concurrently while streaming stdout to the browser, preventing stderr pipe backpressure from stalling the process.
+  - Restore downloads now use a watchdog timeout and clean up killed or disconnected Borg subprocesses.
+
 ### Issue #133
 - Notifications:
   - System health now includes read-only diagnostics for active backup and restore-test overdue reminders.

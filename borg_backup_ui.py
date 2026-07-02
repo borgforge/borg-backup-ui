@@ -63,7 +63,57 @@ def _log_client(msg: str) -> None:
         _log(f"CLIENT-LOG-FALLBACK {msg}")
 
 
-APP_VERSION = "2026.07.02.0951"
+def _restore_download_timeout_seconds(config: dict) -> int:
+    raw = str(config.get("RESTORE_DOWNLOAD_TIMEOUT_SECONDS", "")).strip()
+    if raw:
+        try:
+            return max(60, int(raw))
+        except ValueError:
+            pass
+    return 6 * 60 * 60
+
+
+def _start_bounded_stderr_collector(stream, *, limit: int = 8192):
+    chunks: list[bytes] = []
+    total = 0
+    lock = threading.Lock()
+
+    def collect() -> None:
+        nonlocal total
+        try:
+            while True:
+                data = stream.read(4096)
+                if not data:
+                    break
+                if isinstance(data, str):
+                    data = data.encode("utf-8", errors="replace")
+                with lock:
+                    chunks.append(data)
+                    total += len(data)
+                    while total > limit and chunks:
+                        overflow = total - limit
+                        first = chunks[0]
+                        if len(first) <= overflow:
+                            total -= len(chunks.pop(0))
+                            continue
+                        chunks[0] = first[overflow:]
+                        total -= overflow
+                        break
+        except OSError:
+            pass
+
+    thread = threading.Thread(target=collect, name="restore-download-stderr", daemon=True)
+    thread.start()
+
+    def snapshot() -> str:
+        with lock:
+            data = b"".join(chunks)
+        return data.decode("utf-8", errors="replace").strip()
+
+    return thread, snapshot
+
+
+APP_VERSION = "2026.07.02.1026"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -1858,6 +1908,24 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             content_type = "application/octet-stream"
 
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        stderr_thread, stderr_snapshot = _start_bounded_stderr_collector(proc.stderr)
+        finished = threading.Event()
+        timed_out = threading.Event()
+        timeout_seconds = _restore_download_timeout_seconds(self.config)
+
+        def watchdog() -> None:
+            if finished.wait(timeout_seconds):
+                return
+            if proc.poll() is None:
+                timed_out.set()
+                _log(f"Restore download timed out after {timeout_seconds}s; terminating Borg process")
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+
+        watchdog_thread = threading.Thread(target=watchdog, name="restore-download-watchdog", daemon=True)
+        watchdog_thread.start()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Disposition", f'attachment; filename="{dl_name}"')
@@ -1870,11 +1938,39 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
             rc = proc.wait()
+            finished.set()
+            stderr_thread.join(timeout=1)
+            stderr_out = stderr_snapshot()
+            if timed_out.is_set():
+                _log(f"Restore download timeout: {stderr_out[:500] or 'no stderr'}")
+                return
             if rc != 0:
-                stderr_out = (proc.stderr.read() or b"").decode("utf-8", errors="replace").strip()
-                log_line(f"Restore download error (rc={rc}): {stderr_out[:500] or 'no stderr'}")
+                _log(f"Restore download error (rc={rc}): {stderr_out[:500] or 'no stderr'}")
         except (BrokenPipeError, ConnectionResetError):
-            proc.kill()
+            if proc.poll() is None:
+                proc.kill()
+        finally:
+            finished.set()
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                if proc.poll() is None:
+                    proc.kill()
+                try:
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    pass
+            try:
+                if proc.stdout:
+                    proc.stdout.close()
+            except OSError:
+                pass
+            try:
+                if proc.stderr:
+                    proc.stderr.close()
+            except OSError:
+                pass
+            stderr_thread.join(timeout=1)
 
     def _compute_restore_download_check(self, repo_archive: str, source_path: str, env: dict) -> dict:
         import subprocess
