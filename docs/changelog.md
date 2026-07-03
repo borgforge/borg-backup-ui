@@ -6,6 +6,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #142
+- Maintenance:
+  - Startup now executes migrations only through the central migration registry.
+  - Removed legacy migration-state assembly from `borg_backup_ui.py`.
+  - The central registry now owns `migration-state.json` and `migrations.log.jsonl`.
+  - Removed the old Storage path migration status entry from the migration registry UI.
+  - Registry migration tests now cover applied, idempotent and failed startup migration runs.
+
 ### Issue #141
 - Maintenance:
   - Removed the remaining legacy backup-script migration, detection and parser paths.

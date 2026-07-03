@@ -67,17 +67,21 @@ def test_migration_summary_extracts_actions_and_errors():
     event = {
         "success": False,
         "timestamp": "2026-06-06T23:40:00",
-        "reason_code": "storage_paths_changed",
-        "message": "storage_paths=ok(changed=True,moved=2,move_errors=1)",
+        "reason_code": "error",
+        "message": "broken_v1=failed",
         "details": {
-            "storage_paths": {
-                "changed": True,
-                "moved": 2,
-                "move_errors": 1,
-                "settings_changed": True,
-                "forced_conf_write": True,
+            "startup_migrations": {
+                "status": "failed",
+                "applied": [],
+                "failed": ["broken_v1"],
+                "results": {
+                    "broken_v1": {
+                        "migration_id": "broken_v1",
+                        "status": "failed",
+                        "details": {"errors": [{"error": "boom"}]},
+                    },
+                },
             },
-            "jobs_layout": {"status": "error", "error": "jobs unreadable"},
         },
     }
     summary = _build_migration_summary(event, {
@@ -89,13 +93,9 @@ def test_migration_summary_extracts_actions_and_errors():
     assert summary["state"] == "Failed"
     assert summary["last_run"] == "2026-06-06T23:40:00"
     assert summary["last_effective_run"] == "2026-06-06T23:41:00"
-    assert summary["reason"] == "Cache/remotes changed, including backup.conf update"
-    assert "2 items moved" in summary["actions"]
-    assert "Storage paths updated" in summary["actions"]
-    assert "Profile settings updated" in summary["actions"]
-    assert "backup.conf corrected" in summary["actions"]
-    assert "1 move errors" in summary["errors"]
-    assert "Job-Layout: jobs unreadable" in summary["errors"]
+    assert summary["reason"] == "Migration completed with errors"
+    assert summary["actions"] == []
+    assert "broken_v1: 1 error(s)" in summary["errors"]
 
 
 def test_migration_summary_extracts_restore_history_migration():
@@ -104,13 +104,23 @@ def test_migration_summary_extracts_restore_history_migration():
         "timestamp": "2026-06-29T13:45:00",
         "reason_code": "restore_history_migrated",
         "reason_text": "Restore-History aus restore-runs.json migriert",
-        "message": "restore_history=applied(imported=5,active_kept=0,errors=0)",
+        "message": "restore_history_v1=applied",
         "details": {
-            "restore_history": {
-                "status": "applied",
-                "imported": 5,
-                "active_kept": 0,
-                "errors": 0,
+            "startup_migrations": {
+                "status": "ok",
+                "applied": ["restore_history_v1"],
+                "failed": [],
+                "results": {
+                    "restore_history_v1": {
+                        "migration_id": "restore_history_v1",
+                        "status": "applied",
+                        "details": {
+                            "migration_id": "restore_history_v1",
+                            "runner": "central_migration_registry",
+                            "imported": 5,
+                        },
+                    },
+                },
             },
         },
     }
@@ -119,6 +129,7 @@ def test_migration_summary_extracts_restore_history_migration():
 
     assert summary["status"] == "success"
     assert summary["reason_code"] == "restore_history_migrated"
+    assert "restore_history_v1 applied" in summary["actions"]
     assert "5 restore run(s) migrated" in summary["actions"]
     assert summary["errors"] == []
 

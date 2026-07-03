@@ -55,20 +55,6 @@ def _assignment_key(line: str) -> str:
     return key if key and re.fullmatch(r"[A-Z0-9_]+", key) else ""
 
 
-def _disabled_assignment_value(lines: List[str], target_key: str) -> str:
-    prefix = "# LEGACY_CLEANUP_DISABLED "
-    for line in lines:
-        stripped = line.strip()
-        if not stripped.startswith(prefix):
-            continue
-        disabled_line = stripped[len(prefix):]
-        if _assignment_key(disabled_line) != target_key:
-            continue
-        _, _, value = disabled_line.partition("=")
-        return value.strip().strip('"').strip("'")
-    return ""
-
-
 def _disabled_assignment_keys(lines: List[str]) -> List[str]:
     prefix = "# LEGACY_CLEANUP_DISABLED "
     keys: List[str] = []
@@ -344,10 +330,7 @@ def _migration_reason_from_state(migration_id: str, state: str, details: Dict[st
 
 def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
-    skip_ids = {"storage_paths_v1", "restore_history_v1"}
     for migration_id in sorted(str(key) for key in migrations.keys()):
-        if migration_id in skip_ids:
-            continue
         row = migrations.get(migration_id)
         if not isinstance(row, dict):
             continue
@@ -373,13 +356,12 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
 
 
 def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
-    from config_api import read_raw_conf, read_settings_payload
+    from config_api import read_settings_payload
 
     config_dir = _config_dir(ui_config)
     conf_file = config_dir / "backup.conf"
     settings_file = config_dir / "settings.json"
     jobs_dir = config_dir / "jobs"
-    raw_conf = read_raw_conf(ui_config)
     migration_state = _read_migration_state(config_dir)
     example_keys = _read_example_keys(config_dir)
     config_state = analyze_backup_conf_state(ui_config)
@@ -398,31 +380,7 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
             if isinstance(rows, list):
                 profile_count += len(rows)
 
-    try:
-        conf_lines = (conf_file.read_text(encoding="utf-8", errors="replace").splitlines() if conf_file.exists() else [])
-    except OSError:
-        conf_lines = []
     migrations = migration_state.get("migrations") if isinstance(migration_state.get("migrations"), dict) else {}
-    storage_state = migrations.get("storage_paths_v1") if isinstance(migrations.get("storage_paths_v1"), dict) else {}
-    restore_history_state = migrations.get("restore_history_v1") if isinstance(migrations.get("restore_history_v1"), dict) else {}
-    storage_state_name = str(storage_state.get("state", "") or "").strip()
-    restore_history_state_name = str(restore_history_state.get("state", "") or "").strip()
-    storage_marker = str(raw_conf.get("MIGRATION_STORAGE_PATHS_VERSION", "")).strip()
-    if not storage_marker:
-        storage_marker = _disabled_assignment_value(conf_lines, "MIGRATION_STORAGE_PATHS_VERSION")
-    if storage_state_name in {"applied", "baseline_detected", "imported_from_legacy_marker", "not_applicable"}:
-        storage_status = "applied"
-        storage_reason = "Storage path migration is complete in migration state."
-    elif storage_state_name == "failed":
-        storage_status = "failed"
-        storage_reason = "Storage path migration is marked as failed in migration state."
-    else:
-        storage_status = "applied" if storage_marker == "1" else ("failed" if storage_marker == "0" else "pending")
-        storage_reason = (
-            "The legacy storage path migration marker is set."
-            if storage_status == "applied"
-            else ("The legacy storage path migration marker reports a failed or incomplete run." if storage_status == "failed" else "Storage path migration evidence is missing.")
-        )
 
     items = [
         _status_item(
@@ -440,34 +398,6 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
             "settings.json exists." if settings_file.exists() else "settings.json is missing.",
             category="setup",
             details={"settings_file": str(settings_file), "profile_count": profile_count},
-        ),
-        _status_item(
-            "setup_runtime_paths",
-            "Runtime paths from GLOBAL_DATA_DIR",
-            storage_status,
-            storage_reason,
-            category="setup",
-            destructive=True,
-            details={
-                "state": storage_state_name,
-                "marker": storage_marker or "",
-                "legacy_config_key": "MIGRATION_STORAGE_PATHS_VERSION",
-            },
-        ),
-        _status_item(
-            "restore_history_v1",
-            "Restore History migration",
-            "applied" if restore_history_state_name in {"applied", "not_required", "skipped", "not_applicable"} else ("failed" if restore_history_state_name == "failed" else "pending"),
-            (
-                "Restore History migration is complete in migration state."
-                if restore_history_state_name in {"applied", "not_required", "skipped", "not_applicable"}
-                else (
-                    "Restore History migration is marked as failed in migration state."
-                    if restore_history_state_name == "failed" else "Restore History migration has not been recorded yet."
-                )
-            ),
-            category="migration",
-            details=restore_history_state,
         ),
         _status_item(
             "config_backup_conf_schema",
