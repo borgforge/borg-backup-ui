@@ -28,6 +28,16 @@ BORG_BUNDLE_VERSIONED = BORG_BUNDLE_DIR / "borg-linux-glibc231-x86_64-1.4.4"
 BORG_TMP_BIN = Path("/tmp/borg")
 
 
+def _ensure_runtime_import_paths(backup_scripts_dir: Path) -> None:
+    """Prefer the installed plugin runtime while keeping data-root fallbacks."""
+    plugin_runtime = ROOT_DIR / "runtime"
+    for path in (backup_scripts_dir, plugin_runtime):
+        raw = str(path)
+        while raw in sys.path:
+            sys.path.remove(raw)
+        sys.path.insert(0, raw)
+
+
 def _type_upper(type_id: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in type_id.upper())
 
@@ -316,7 +326,7 @@ class SmbMountSession:
 
 
 def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir: Path) -> tuple[dict, dict]:
-    sys.path.insert(0, str(backup_scripts_dir))
+    _ensure_runtime_import_paths(backup_scripts_dir)
     from lib.status import load_config  # type: ignore
 
     from jobs_api import get_jobs_meta_dirs, resolve_data_root
@@ -719,7 +729,7 @@ def main() -> int:
         logging.error("Loading job failed: %s", exc)
         return 2
 
-    sys.path.insert(0, str(backup_scripts_dir))
+    _ensure_runtime_import_paths(backup_scripts_dir)
     from lib.backup_job import BackupJob, BackupJobConfig  # type: ignore
     from lib.borg_runner import BorgConfig, BorgRunner, parse_borg_stats  # type: ignore
     from lib.notifications import MailConfig, NtfyConfig  # type: ignore

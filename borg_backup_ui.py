@@ -113,7 +113,7 @@ def _start_bounded_stderr_collector(stream, *, limit: int = 8192):
     return thread, snapshot
 
 
-APP_VERSION = "2026.07.02.1117"
+APP_VERSION = "2026.07.02.1242"
 APP_AUTHOR  = "Thorsten Steinberg"
 
 _BORG_VERSION: str = ""
@@ -944,6 +944,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/settings/profile-secrets-import": self._post_settings_profile_secrets_import,
             "/api/settings/support-bundle": self._post_settings_support_bundle,
             "/api/settings/legacy-cleanup-apply": self._post_settings_legacy_cleanup_apply,
+            "/api/system-health/runtime-recovery/ack": self._post_runtime_recovery_ack,
             "/api/settings/usb-profiles-status": self._post_settings_usb_profiles_status,
             "/api/settings/smb-profiles-status": self._post_settings_smb_profiles_status,
             "/api/storagebox/key-status": self._post_storagebox_key_status,
@@ -1416,6 +1417,21 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_system_health(self) -> dict:
         from system_health_api import get_system_health_data
         return get_system_health_data(self.config)
+
+    def _post_runtime_recovery_ack(self) -> dict:
+        body = self._read_json_body()
+        entry_id = str(body.get("id") or "").strip()
+        if not entry_id:
+            raise ValueError("id is required")
+        runtime_lib = SCRIPT_DIR / "runtime" / "lib"
+        if str(runtime_lib) not in sys.path:
+            sys.path.insert(0, str(runtime_lib))
+        from runtime_recovery import acknowledge_runtime_recovery, runtime_recovery_file_from_env
+        state_file = runtime_recovery_file_from_env(self.config)
+        removed = acknowledge_runtime_recovery(state_file, entry_id)
+        if not removed:
+            raise FileNotFoundError("Runtime recovery entry not found")
+        return {"ok": True, "removed": entry_id}
 
     def _get_jobs(self) -> dict:
         from jobs_api import list_jobs
