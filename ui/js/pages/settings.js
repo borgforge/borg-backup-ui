@@ -1054,7 +1054,7 @@ function _renderReminderTable(items) {
 
 function _renderReminderTableRow(item) {
   const state = String(item?.state || 'unknown').trim();
-  const tone = state === 'overdue_ready' ? 'warn' : (state === 'overdue_waiting' ? 'warning' : (state === 'unsupported' || state === 'missing_due' ? 'error' : 'success'));
+  const tone = state === 'overdue_ready' ? 'warn' : (state === 'overdue_waiting' ? 'warning' : (state === 'unsupported' || state === 'missing_due' || state === 'missing_status' ? 'error' : 'success'));
   const type = String(item?.type || '');
   const expected = type === 'backup_overdue' ? item.expected_run : item.next_due_at;
   const overdueAfter = type === 'backup_overdue' ? item.overdue_after : item.next_due_at;
@@ -1084,6 +1084,7 @@ function _reminderStateLabel(state) {
     overdue_waiting: settingsT('health.reminderWaiting'),
     unsupported: settingsT('health.reminderUnsupported'),
     missing_due: settingsT('health.reminderMissingDue'),
+    missing_status: settingsT('health.reminderMissingStatus'),
   };
   return labels[state] || state || settingsT('health.statusUnknown');
 }

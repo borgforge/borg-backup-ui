@@ -320,6 +320,26 @@ def _backup_overdue_item(
         }
 
     last_ts = _parse_status_time(str(last.get("timestamp") or ""))
+    if last_ts is None:
+        return {
+            "type": "backup_overdue",
+            "job_key": str(job_key),
+            "display_name": display_name,
+            "cron": cron,
+            "state": "missing_status",
+            "reason": "missing_status",
+            "expected_run": latest_expected_run.isoformat(timespec="seconds"),
+            "expected_run_marker": latest_expected_run.strftime("%Y-%m-%d %H:%M:%S"),
+            "overdue_after": (latest_expected_run + timedelta(hours=backup_tolerance_hours)).isoformat(timespec="seconds"),
+            "latest_status_at": "",
+            "latest_status_at_raw": str(last.get("timestamp") or ""),
+            "latest_status": str(last.get("status") or ""),
+            "reminder_key": "",
+            "sent": False,
+            "sent_at": "",
+            "next_allowed_at": "",
+            "allowed": False,
+        }
     expected_run = latest_expected_run
     if last_ts is not None and last_ts >= latest_expected_run:
         expected_run = _next_expected_run(cron, now) or latest_expected_run

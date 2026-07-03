@@ -3014,8 +3014,17 @@ def _start_notification_reminder_loop(config: dict) -> threading.Thread | None:
         except Exception:
             return 3600
 
+    def _startup_delay_seconds() -> int:
+        try:
+            from config_api import read_expanded_conf
+            conf = read_expanded_conf(config)
+            raw = str(conf.get("NOTIFY_REMINDER_STARTUP_DELAY_SECONDS", "420") or "420")
+            return max(60, min(1800, int(raw.strip())))
+        except Exception:
+            return 420
+
     def _run() -> None:
-        time.sleep(20)
+        time.sleep(_startup_delay_seconds())
         while True:
             try:
                 from notification_reminder_api import run_due_notification_reminders

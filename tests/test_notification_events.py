@@ -394,6 +394,104 @@ class _ThursdayLateNight(datetime):
         return cls(2026, 7, 2, 23, 47, 49)
 
 
+class _FridayLateNight(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 3, 23, 1, 25)
+
+
+def test_backup_overdue_sender_does_not_send_when_diagnostics_are_current_after_success(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["job_name"]) or True)
+    monkeypatch.setattr(notification_reminder_api, "datetime", _FridayLateNight)
+    schedules = {
+        "appdata_local": {"enabled": True, "cron": "0 9 * * 1-5"},
+        "flash_local": {"enabled": True, "cron": "0 9 * * 1-5"},
+        "appdata_usb": {"enabled": True, "cron": "0 10 * * 1-5"},
+        "flash_usb": {"enabled": True, "cron": "0 10 * * 1-5"},
+        "sonstiges_usb": {"enabled": True, "cron": "0 15 * * 1-5"},
+    }
+    jobs = [
+        {"key": "appdata_local", "display_name": "Appdata - Lokal", "enabled": True, "repo_path": "/repo/appdata-local"},
+        {"key": "flash_local", "display_name": "Flash - Lokal", "enabled": True, "repo_path": "/repo/flash-local"},
+        {"key": "appdata_usb", "display_name": "Appdata - USB", "enabled": True, "repo_path": "/repo/appdata-usb"},
+        {"key": "flash_usb", "display_name": "Flash - USB", "enabled": True, "repo_path": "/repo/flash-usb"},
+        {"key": "sonstiges_usb", "display_name": "Sonstiges - USB", "enabled": True, "repo_path": "/repo/sonstiges-usb"},
+    ]
+    backups = [
+        {"key": "appdata_local", "backup_type": "appdata", "location": "local", "timestamp": "2026-07-03 09:06:20", "status": "success"},
+        {"key": "flash_local", "backup_type": "flash", "location": "local", "timestamp": "2026-07-03 13:10:15", "status": "success"},
+        {"key": "appdata_usb", "backup_type": "appdata", "location": "usb", "timestamp": "2026-07-03 10:07:51", "status": "success"},
+        {"key": "flash_usb", "backup_type": "flash", "location": "usb", "timestamp": "2026-07-03 10:00:12", "status": "success"},
+        {"key": "sonstiges_usb", "backup_type": "sonstiges", "location": "usb", "timestamp": "2026-07-03 15:03:32", "status": "success"},
+    ]
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: schedules)
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: jobs)
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": backups})
+    monkeypatch.setattr("restore_tests_api.list_restore_test_plan", lambda cfg: {"jobs": []})
+    cfg = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    }
+    for key in (
+        "backup_overdue:appdata_local:2026-07-03 09:00:00",
+        "backup_overdue:flash_local:2026-07-03 09:00:00",
+        "backup_overdue:appdata_usb:2026-07-03 10:00:00",
+        "backup_overdue:flash_usb:2026-07-03 10:00:00",
+        "backup_overdue:sonstiges_usb:2026-07-03 15:00:00",
+    ):
+        mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, key, now=datetime(2026, 7, 3, 23, 0, 0).timestamp())
+
+    diagnostics = notification_reminder_api.get_notification_reminder_diagnostics(cfg)
+    result = notification_reminder_api.run_due_notification_reminders(cfg)
+    state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+
+    assert {item["job_key"]: item["state"] for item in diagnostics["backup_overdue"]["items"]} == {
+        "appdata_local": "current",
+        "appdata_usb": "current",
+        "flash_local": "current",
+        "flash_usb": "current",
+        "sonstiges_usb": "current",
+    }
+    assert result["sent"] == 0
+    assert calls == []
+    assert state["last_sent"] == {}
+
+
+def test_backup_overdue_sender_skips_when_latest_status_is_missing(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["job_name"]) or True)
+    monkeypatch.setattr(notification_reminder_api, "datetime", _FridayLateNight)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_local": {"enabled": True, "cron": "0 9 * * 1-5"}})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_local", "display_name": "Appdata - Lokal", "enabled": True, "repo_path": "/repo"}])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": []})
+    monkeypatch.setattr("restore_tests_api.list_restore_test_plan", lambda cfg: {"jobs": []})
+
+    result = notification_reminder_api.run_due_notification_reminders({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    })
+    diagnostics = notification_reminder_api.get_notification_reminder_diagnostics({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    })
+
+    assert result["checked"] == 1
+    assert result["sent"] == 0
+    assert result["rows"][0]["reason"] == "missing_status"
+    assert calls == []
+    assert diagnostics["backup_overdue"]["items"][0]["state"] == "missing_status"
+
+
 def test_restore_runner_uses_restore_status_dir_and_test_date(tmp_path):
     script_path = ROOT / "runtime" / "scripts" / "borg_restore_test.py"
     spec = importlib.util.spec_from_file_location("borg_restore_test_for_test", script_path)
