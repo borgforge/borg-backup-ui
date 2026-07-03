@@ -6,6 +6,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #53
+- Documentation:
+  - Added a complete German user manual under `docs/user-manual/de/user-manual.md`.
+  - Added an equivalent English user manual under `docs/user-manual/en/user-manual.md`.
+  - Added current live-UI screenshots for both languages under `docs/user-manual/assets/`.
+  - The manuals follow the application menu order and cover dashboard, jobs, storage, history, reports, browse/restore, restore tests, settings, help, notifications, users, system health, and migrations.
+
 ### Issue #124
 - Tests:
   - Added pre-beta regression coverage for resource locks, selected Docker stop/start behavior, corrupt config/status recovery, and expanded secret masking.
