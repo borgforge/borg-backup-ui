@@ -199,8 +199,9 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
         NotificationEvent,
         clear_reminder_prefix,
         mark_reminder_sent,
-        reminder_allowed,
+        reminder_interval_hours,
         reminder_key,
+        read_notification_state,
         send_event,
     )
 
@@ -221,38 +222,46 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
     skipped = 0
     rows = []
     now = datetime.now()
+    state = read_notification_state(effective)
+    sent_state = state.get("last_sent") if isinstance(state.get("last_sent"), dict) else {}
+    interval_hours = reminder_interval_hours(effective)
+    tolerance_hours = _backup_overdue_tolerance_hours(effective)
     for job_key, sched in schedules.items():
         if job_key == "restore_test" or not isinstance(sched, dict) or not bool(sched.get("enabled", True)):
             continue
         job = jobs.get(str(job_key))
         if not job or job.get("enabled") is False:
             continue
-        cron = str(sched.get("cron") or "").strip()
-        expected_run = _latest_expected_run(cron, now)
-        if expected_run is None:
+        item = _backup_overdue_item(
+            str(job_key),
+            sched,
+            job,
+            latest.get(str(job_key)) or {},
+            sent_state,
+            now,
+            interval_hours,
+            tolerance_hours,
+        )
+        if item["state"] == "unsupported":
             skipped += 1
             rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "unsupported_cron"})
             continue
 
         checked += 1
-        last = latest.get(str(job_key))
-        last_ts = _parse_status_time(str((last or {}).get("timestamp") or ""))
-        tolerance = timedelta(hours=_backup_overdue_tolerance_hours(effective))
-        due_marker = expected_run.strftime("%Y-%m-%d %H:%M:%S")
-        key = reminder_key("backup_overdue", str(job_key), due_marker)
-        if last_ts is not None and last_ts >= expected_run:
-            clear_reminder_prefix(effective, key)
+        if item["state"] == "current":
+            clear_reminder_prefix(effective, f"backup_overdue:{job_key}:")
             continue
-        overdue = now > expected_run + tolerance and (last_ts is None or last_ts < expected_run)
-        if not overdue:
-            continue
-
-        if not reminder_allowed(effective, key):
+        if item["state"] == "overdue_waiting":
             skipped += 1
             rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "interval_not_elapsed"})
             continue
+        if item["state"] != "overdue_ready":
+            skipped += 1
+            rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": item.get("reason") or "not_overdue"})
+            continue
 
         display_name = str(job.get("display_name") or job.get("name") or job_key)
+        due_marker = str(item.get("expected_run_marker") or "")
         message = build_backup_ntfy_message(
             job_name=display_name,
             status="Overdue",
@@ -271,11 +280,11 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
             status="overdue",
             repository=str(job.get("repo_path") or ""),
             source="scheduled_reminder",
-            extra={"cron": cron, "expected_run": due_marker, "last_timestamp": str((last or {}).get("timestamp") or "")},
+            extra={"cron": str(item.get("cron") or ""), "expected_run": due_marker, "last_timestamp": str(item.get("latest_status_at_raw") or "")},
         )
         results = send_event(effective, event, mail_config=mail_config, ntfy_config=ntfy_config)
         if any(results.values()):
-            mark_reminder_sent(effective, key)
+            mark_reminder_sent(effective, str(item.get("reminder_key") or reminder_key("backup_overdue", str(job_key), due_marker)))
             sent += 1
             rows.append({"job_key": job_key, "event": "backup_overdue", "sent": True, "channels": results})
         else:
@@ -283,6 +292,64 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
             rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "no_channel_sent", "channels": results})
 
     return {"checked": checked, "sent": sent, "skipped": skipped, "rows": rows}
+
+
+def _backup_overdue_item(
+    job_key: str,
+    sched: dict,
+    job: dict,
+    last: dict,
+    sent: dict,
+    now: datetime,
+    interval_hours: int,
+    backup_tolerance_hours: int,
+) -> dict[str, Any]:
+    from lib.notification_events import reminder_key
+
+    cron = str(sched.get("cron") or "").strip()
+    latest_expected_run = _latest_expected_run(cron, now)
+    display_name = str(job.get("display_name") or job.get("name") or job_key)
+    if latest_expected_run is None:
+        return {
+            "type": "backup_overdue",
+            "job_key": str(job_key),
+            "display_name": display_name,
+            "cron": cron,
+            "state": "unsupported",
+            "reason": "unsupported_cron",
+        }
+
+    last_ts = _parse_status_time(str(last.get("timestamp") or ""))
+    expected_run = latest_expected_run
+    if last_ts is not None and last_ts >= latest_expected_run:
+        expected_run = _next_expected_run(cron, now) or latest_expected_run
+    overdue_after = expected_run + timedelta(hours=backup_tolerance_hours)
+    overdue = now > overdue_after and (last_ts is None or last_ts < expected_run)
+    expected_marker = expected_run.strftime("%Y-%m-%d %H:%M:%S")
+    key = reminder_key("backup_overdue", str(job_key), expected_marker)
+    reminder = (
+        {"sent": False, "sent_at": "", "next_allowed_at": "", "allowed": True}
+        if last_ts is not None and last_ts >= expected_run
+        else _reminder_state_for_key(sent, key, now, interval_hours)
+    )
+    state = "overdue_ready" if overdue and reminder["allowed"] else ("overdue_waiting" if overdue else "current")
+    reason = "ready_to_send" if state == "overdue_ready" else ("interval_not_elapsed" if state == "overdue_waiting" else "not_overdue")
+    return {
+        "type": "backup_overdue",
+        "job_key": str(job_key),
+        "display_name": display_name,
+        "cron": cron,
+        "state": state,
+        "reason": reason,
+        "expected_run": expected_run.isoformat(timespec="seconds"),
+        "expected_run_marker": expected_marker,
+        "overdue_after": overdue_after.isoformat(timespec="seconds"),
+        "latest_status_at": last_ts.isoformat(timespec="seconds") if last_ts else "",
+        "latest_status_at_raw": str(last.get("timestamp") or ""),
+        "latest_status": str(last.get("status") or ""),
+        "reminder_key": key,
+        **reminder,
+    }
 
 
 def _backup_overdue_diagnostics(
@@ -295,59 +362,28 @@ def _backup_overdue_diagnostics(
     interval_hours: int,
     backup_tolerance_hours: int,
 ) -> list[dict[str, Any]]:
-    from lib.notification_events import reminder_key
-
     if not isinstance(schedules, dict):
         return []
     items: list[dict[str, Any]] = []
-    tolerance = timedelta(hours=backup_tolerance_hours)
     for job_key, sched in sorted(schedules.items()):
         if job_key == "restore_test" or not isinstance(sched, dict) or not bool(sched.get("enabled", True)):
             continue
         job = jobs.get(str(job_key))
         if not job or job.get("enabled") is False:
             continue
-        cron = str(sched.get("cron") or "").strip()
-        latest_expected_run = _latest_expected_run(cron, now)
-        if latest_expected_run is None:
-            items.append({
-                "type": "backup_overdue",
-                "job_key": str(job_key),
-                "display_name": str(job.get("display_name") or job.get("name") or job_key),
-                "cron": cron,
-                "state": "unsupported",
-                "reason": "unsupported_cron",
-            })
-            continue
-        last = latest.get(str(job_key)) or {}
-        last_ts = _parse_status_time(str(last.get("timestamp") or ""))
-        expected_run = latest_expected_run
-        if last_ts is not None and last_ts >= latest_expected_run:
-            expected_run = _next_expected_run(cron, now) or latest_expected_run
-        overdue_after = expected_run + tolerance
-        overdue = now > overdue_after and (last_ts is None or last_ts < expected_run)
-        key = reminder_key("backup_overdue", str(job_key), expected_run.strftime("%Y-%m-%d %H:%M:%S"))
-        reminder = (
-            {"sent": False, "sent_at": "", "next_allowed_at": "", "allowed": True}
-            if last_ts is not None and last_ts >= expected_run
-            else _reminder_state_for_key(sent, key, now, interval_hours)
+        item = _backup_overdue_item(
+            str(job_key),
+            sched,
+            job,
+            latest.get(str(job_key)) or {},
+            sent,
+            now,
+            interval_hours,
+            backup_tolerance_hours,
         )
-        state = "overdue_ready" if overdue and reminder["allowed"] else ("overdue_waiting" if overdue else "current")
-        reason = "ready_to_send" if state == "overdue_ready" else ("interval_not_elapsed" if state == "overdue_waiting" else "not_overdue")
-        items.append({
-            "type": "backup_overdue",
-            "job_key": str(job_key),
-            "display_name": str(job.get("display_name") or job.get("name") or job_key),
-            "cron": cron,
-            "state": state,
-            "reason": reason,
-            "expected_run": expected_run.isoformat(timespec="seconds"),
-            "overdue_after": overdue_after.isoformat(timespec="seconds"),
-            "latest_status_at": last_ts.isoformat(timespec="seconds") if last_ts else "",
-            "latest_status": str(last.get("status") or ""),
-            "reminder_key": key,
-            **reminder,
-        })
+        item.pop("expected_run_marker", None)
+        item.pop("latest_status_at_raw", None)
+        items.append(item)
     return items
 
 

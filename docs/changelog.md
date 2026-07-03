@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #137
+- Notifications:
+  - Backup overdue reminder sending now shares the same expected-run calculation as reminder diagnostics.
+  - Stale `backup_overdue` reminder keys are cleared per job once a newer backup status satisfies the scheduled run.
+  - Added a regression test for mixed current and overdue backup jobs so only truly sendable overdue reminders are delivered.
+
 ### Issue #123
 - Runtime:
   - Backup runs now write `config/runtime-recovery.json` after Docker containers or VMs are stopped and before Borg work continues.

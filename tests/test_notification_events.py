@@ -221,6 +221,41 @@ def test_backup_overdue_clears_stale_sent_key_when_status_satisfies_expected_run
     assert key not in state["last_sent"]
 
 
+def test_backup_overdue_sender_matches_diagnostics_and_sends_only_ready_jobs(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["job_name"]) or True)
+    monkeypatch.setattr(notification_reminder_api, "datetime", _ThursdayLateNight)
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {
+        "appdata_usb": {"enabled": True, "cron": "0 10 * * *"},
+        "sonstiges_usb": {"enabled": True, "cron": "0 15 * * *"},
+    })
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [
+        {"key": "appdata_usb", "display_name": "Appdata - USB", "enabled": True, "repo_path": "/repo/appdata"},
+        {"key": "sonstiges_usb", "display_name": "Sonstiges - USB", "enabled": True, "repo_path": "/repo/sonstiges"},
+    ])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [
+        {"backup_type": "appdata", "location": "usb", "timestamp": "2026-07-02 12:10:27", "status": "success"},
+        {"backup_type": "sonstiges", "location": "usb", "timestamp": "2026-07-01 15:00:01", "status": "success"},
+    ]})
+    stale_appdata = "backup_overdue:appdata_usb:2026-07-02 10:00:00"
+    mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, stale_appdata, now=datetime(2026, 7, 2, 8, 0, 0).timestamp())
+
+    result = notification_reminder_api.run_due_notification_reminders({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    })
+
+    state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert result["checked"] == 2
+    assert result["sent"] == 1
+    assert calls == ["Borg Backup (Sonstiges - USB)"]
+    assert stale_appdata not in state["last_sent"]
+    assert "backup_overdue:sonstiges_usb:2026-07-02 15:00:00" in state["last_sent"]
+
+
 def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeypatch, tmp_path):
     monkeypatch.setattr(notification_reminder_api, "datetime", _ThursdayMorning)
     old_key = "backup_overdue:appdata_usb:2026-07-02 10:00:00"
@@ -351,6 +386,12 @@ class _ThursdayMorning(datetime):
     @classmethod
     def now(cls, tz=None):
         return cls(2026, 7, 2, 11, 34, 54)
+
+
+class _ThursdayLateNight(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 2, 23, 47, 49)
 
 
 def test_restore_runner_uses_restore_status_dir_and_test_date(tmp_path):
