@@ -245,7 +245,6 @@
     "disabledWithKey": "Job ist deaktiviert: {key}",
     "dataDirRequired": "Bitte zuerst GLOBAL_DATA_DIR in Einstellungen setzen.",
     "options": "Optionen",
-    "adoptLegacy": "In Wizard übernehmen",
     "edit": "Job bearbeiten",
     "schedule": "Zeitplan",
     "enable": "Job aktivieren",
@@ -327,7 +326,6 @@
   "wizard": {
     "newTitle": "Neuer Backup-Job",
     "editTitle": "Backup-Job bearbeiten",
-    "adoptTitle": "Legacy-Job übernehmen",
     "loadFailed": "Wizard laden fehlgeschlagen: {message}",
     "stepBasics": "Grunddaten",
     "stepSourcesTarget": "Quellen & Ziel",
@@ -1874,7 +1872,11 @@
       "registryNotificationEventsTitle": "Benachrichtigungsereignisse",
       "registryNotificationEventsApplied": "Zentrale Benachrichtigungsereignisse wurden migriert.",
       "registryNotificationEventsCurrent": "Zentrale Benachrichtigungsereignisse sind aktuell.",
-      "registryNotificationEventsPending": "Zentrale Benachrichtigungsereignisse sind noch nicht final protokolliert."
+      "registryNotificationEventsPending": "Zentrale Benachrichtigungsereignisse sind noch nicht final protokolliert.",
+      "registryLegacyScriptJobsTitle": "Legacy-Skript-Jobs",
+      "registryLegacyScriptJobsApplied": "Legacy-Skript-Jobs wurden in Job-Metadaten migriert.",
+      "registryLegacyScriptJobsCurrent": "Keine Legacy-Skript-Jobs gefunden.",
+      "registryLegacyScriptJobsPending": "Legacy-Skript-Jobs wurden noch nicht final migriert."
     },
     "tabs": {
       "general": "Allgemein",
