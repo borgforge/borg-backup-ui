@@ -1872,11 +1872,7 @@
       "registryNotificationEventsTitle": "Notification events",
       "registryNotificationEventsApplied": "Central notification events were migrated.",
       "registryNotificationEventsCurrent": "Central notification events are current.",
-      "registryNotificationEventsPending": "Central notification events have not reached a final recorded state yet.",
-      "registryLegacyScriptJobsTitle": "Legacy script jobs",
-      "registryLegacyScriptJobsApplied": "Legacy script jobs were migrated into job metadata.",
-      "registryLegacyScriptJobsCurrent": "No legacy script jobs were found.",
-      "registryLegacyScriptJobsPending": "Legacy script jobs have not reached a final migrated state yet."
+      "registryNotificationEventsPending": "Central notification events have not reached a final recorded state yet."
     },
     "tabs": {
       "general": "General",

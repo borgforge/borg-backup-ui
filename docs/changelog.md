@@ -8,11 +8,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #141
 - Maintenance:
-  - Added a central `legacy_script_jobs_v1` startup migration that imports remaining script-only `borg_backup_*.py` jobs into canonical job metadata.
-  - Normal job discovery now reads canonical job metadata only; old script-only jobs are no longer exposed as `standard="legacy"` jobs.
-  - Backup execution and Browse & Restore repository resolution now require wizard/scriptless job metadata instead of parsing legacy Python scripts.
+  - Removed the remaining legacy backup-script migration, detection and parser paths.
+  - Normal job discovery now reads canonical job metadata only.
+  - Backup execution and Browse & Restore repository resolution now require wizard/scriptless job metadata.
   - Removed the legacy job import action from the Jobs UI and Wizard flow.
   - Wizard job save responses no longer carry legacy backup script filenames.
+  - The integrated Restore Test runner remains as utility code and is not treated as a legacy backup job.
 
 ### Issue #53
 - Documentation:

@@ -2,8 +2,7 @@
 api/wizard_api.py - Job wizard metadata validation and storage.
 
 Backup jobs are stored as canonical JSON metadata and executed through the
-scriptless wizard runner. Legacy backup scripts are handled only by the central
-one-time migration path.
+scriptless wizard runner.
 """
 
 import json

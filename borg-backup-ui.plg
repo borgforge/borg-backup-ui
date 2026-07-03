@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.03.1227">
+<!ENTITY version   "2026.07.03.1247">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,14 +18,10 @@
 
 <CHANGES>
 <![CDATA[
-###2026.07.03.1227###
+###2026.07.03.1247###
 - Issue #141:
-  - Wizard job save responses no longer carry legacy backup script filenames; script-only compatibility remains limited to the one-time migration.
-
-###2026.07.03.1214###
-- Issue #141:
-  - Legacy script-only backup jobs are migrated into canonical job metadata before normal job discovery.
-  - The Jobs page no longer exposes the old legacy import action; jobs now run through the scriptless wizard runner.
+  - Remaining legacy backup-script compatibility paths were removed; backup jobs now use canonical job metadata and the scriptless wizard runner only.
+  - The integrated Restore Test runner remains available and is not treated as a legacy backup job.
 
 ###2026.07.03.0021###
 - Issue #137:
@@ -274,7 +270,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>510c137a68f9bac8efcfdc95295b7739</MD5>
+<MD5>813daba03ca01fe2a40cbc1f8bc09c02</MD5>
 </FILE>
 
 <!--
