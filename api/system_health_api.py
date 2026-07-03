@@ -50,16 +50,8 @@ def _is_effective_migration(entry: Dict[str, Any]) -> bool:
     if str(entry.get("reason_code", "")).strip() and str(entry.get("reason_code", "")).strip() != "no_changes":
         return True
     details = entry.get("details") if isinstance(entry.get("details"), dict) else {}
-    storage = details.get("storage_paths") if isinstance(details.get("storage_paths"), dict) else {}
-    restore_history = details.get("restore_history") if isinstance(details.get("restore_history"), dict) else {}
-    jobs = details.get("jobs_layout") if isinstance(details.get("jobs_layout"), dict) else {}
-    if bool(storage.get("changed")) or bool(storage.get("settings_changed")) or bool(storage.get("forced_conf_write")):
-        return True
-    if int(storage.get("moved") or 0) > 0:
-        return True
-    if int(storage.get("move_errors") or 0) > 0:
-        return True
-    if str(jobs.get("status", "")).strip().lower() not in {"", "ok"}:
+    startup = details.get("startup_migrations") if isinstance(details.get("startup_migrations"), dict) else {}
+    if startup.get("applied") or startup.get("failed"):
         return True
     return False
 
@@ -137,32 +129,15 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
     reason_text = str(last_event.get("reason_text", "") or "").strip()
     message = str(last_event.get("message", "") or "").strip()
     details = last_event.get("details") if isinstance(last_event.get("details"), dict) else {}
-    storage = details.get("storage_paths") if isinstance(details.get("storage_paths"), dict) else {}
-    restore_history = details.get("restore_history") if isinstance(details.get("restore_history"), dict) else {}
-    jobs = details.get("jobs_layout") if isinstance(details.get("jobs_layout"), dict) else {}
-
     actions = []
     errors = []
-    moved = _as_int(storage.get("moved"))
-    move_errors = _as_int(storage.get("move_errors"))
-    if moved > 0:
-        actions.append(f"{moved} items moved")
-    if bool(storage.get("changed")):
-        actions.append("Storage paths updated")
-    if bool(storage.get("settings_changed")):
-        actions.append("Profile settings updated")
-    if bool(storage.get("forced_conf_write")):
-        actions.append("backup.conf corrected")
-    restore_imported = _as_int(restore_history.get("imported"))
-    restore_errors = _as_int(restore_history.get("errors"))
-    if restore_imported > 0:
-        actions.append(f"{restore_imported} restore run(s) migrated")
     startup = details.get("startup_migrations") if isinstance(details.get("startup_migrations"), dict) else {}
     startup_applied = startup.get("applied") if isinstance(startup.get("applied"), list) else []
+    startup_failed = startup.get("failed") if isinstance(startup.get("failed"), list) else []
     startup_results = startup.get("results") if isinstance(startup.get("results"), dict) else {}
     for migration_id in startup_applied:
         migration_id_text = str(migration_id or "").strip()
-        if not migration_id_text or migration_id_text == "restore_history_v1":
+        if not migration_id_text:
             continue
         actions.append(f"{migration_id_text} applied")
         result = startup_results.get(migration_id_text) if isinstance(startup_results.get(migration_id_text), dict) else {}
@@ -170,12 +145,24 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
         updated_keys = result_details.get("updated_keys") if isinstance(result_details.get("updated_keys"), list) else []
         if updated_keys:
             actions.append(f"Updated keys: {', '.join(str(key) for key in updated_keys)}")
-    if str(jobs.get("status", "")).strip().lower() not in {"", "ok"}:
-        errors.append(f"Job-Layout: {jobs.get('error') or jobs.get('status')}")
-    if move_errors > 0:
-        errors.append(f"{move_errors} move errors")
-    if restore_errors > 0:
-        errors.append(f"{restore_errors} restore history error(s)")
+        imported = _as_int(result_details.get("imported"))
+        if imported > 0:
+            actions.append(f"{imported} restore run(s) migrated")
+        result_errors = result_details.get("errors") if isinstance(result_details.get("errors"), list) else []
+        if result_errors:
+            errors.append(f"{migration_id_text}: {len(result_errors)} error(s)")
+    for migration_id in startup_failed:
+        migration_id_text = str(migration_id or "").strip()
+        if not migration_id_text:
+            continue
+        result = startup_results.get(migration_id_text) if isinstance(startup_results.get(migration_id_text), dict) else {}
+        result_details = result.get("details") if isinstance(result.get("details"), dict) else {}
+        result_errors = result_details.get("errors") if isinstance(result_details.get("errors"), list) else []
+        if result_errors:
+            errors.append(f"{migration_id_text}: {len(result_errors)} error(s)")
+        else:
+            error_text = str(result_details.get("error") or result.get("error") or "").strip()
+            errors.append(f"{migration_id_text}: {error_text or 'failed'}")
     if not ok and not errors:
         errors.append("Migration failed")
 

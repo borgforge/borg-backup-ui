@@ -69,7 +69,7 @@ def test_registry_reports_deprecated_cleanup_candidates(tmp_path: Path):
     assert cleanup["details"]["dry_run_plan"]["dry_run"] is True
     assert cleanup["details"]["dry_run_plan"]["mode"] == "comment_out"
     assert cleanup["details"]["dry_run_plan"]["candidate_count"] == 4
-    assert registry["summary"]["pending"] == 1
+    assert registry["summary"]["pending"] == 0
     assert registry["summary"]["deprecated_key_candidates"] == 4
 
 
@@ -111,7 +111,7 @@ def test_active_ui_session_timeout_is_not_deprecated(tmp_path: Path):
     assert state["deprecated_active_keys"] == []
 
 
-def test_registry_reports_schema_missing_and_storage_marker(tmp_path: Path):
+def test_registry_reports_schema_missing_without_legacy_storage_marker_status(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         "\n".join([
@@ -129,20 +129,17 @@ def test_registry_reports_schema_missing_and_storage_marker(tmp_path: Path):
     registry = get_migration_registry_status(cfg)
     items = _items_by_id(registry)
 
-    assert items["setup_runtime_paths"]["title"] == "Runtime paths from GLOBAL_DATA_DIR"
-    assert items["setup_runtime_paths"]["category"] == "setup"
-    assert "failed or incomplete run" in items["setup_runtime_paths"]["reason"]
+    assert "setup_runtime_paths" not in items
     assert items["config_backup_conf_schema"]["title"] == "backup.conf schema from backup.conf.example"
     assert items["config_backup_conf_schema"]["category"] == "config"
     assert "missing schema keys" in items["config_backup_conf_schema"]["reason"]
-    assert items["setup_runtime_paths"]["status"] == "failed"
     assert items["config_backup_conf_schema"]["status"] == "pending"
     assert items["config_backup_conf_schema"]["details"]["missing_keys"] == ["BORG_MAX_RUNTIME_HOURS"]
-    assert registry["summary"]["failed"] == 1
+    assert registry["summary"]["failed"] == 0
     assert registry["summary"]["pending"] >= 1
 
 
-def test_registry_prefers_migration_state_v2_over_legacy_marker(tmp_path: Path):
+def test_registry_reports_recorded_restore_history_migration(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         "\n".join([
@@ -159,9 +156,16 @@ def test_registry_prefers_migration_state_v2_over_legacy_marker(tmp_path: Path):
         """{
   "schema_version": 2,
   "migrations": {
-    "storage_paths_v1": {
-      "state": "baseline_detected",
-      "checked_at": "2026-06-07T09:30:00"
+    "restore_history_v1": {
+      "state": "applied",
+      "checked_at": "2026-06-29T15:54:20",
+      "source": "startup_registry",
+      "details": {
+        "migration_id": "restore_history_v1",
+        "introduced_in": "2026.06.29.1544",
+        "runner": "central_migration_registry",
+        "imported": 5
+      }
     }
   }
 }
@@ -170,11 +174,51 @@ def test_registry_prefers_migration_state_v2_over_legacy_marker(tmp_path: Path):
     )
 
     registry = get_migration_registry_status(cfg)
-    item = _items_by_id(registry)["setup_runtime_paths"]
+    item = _items_by_id(registry)["restore_history_v1"]
 
     assert item["status"] == "applied"
-    assert item["details"]["state"] == "baseline_detected"
-    assert "complete in migration state" in item["reason"]
+    assert item["category"] == "migration"
+    assert item["details"]["checked_at"] == "2026-06-29T15:54:20"
+    assert item["details"]["runner"] == "central_migration_registry"
+
+
+def test_registry_hides_obsolete_storage_paths_migration_state(tmp_path: Path):
+    cfg = _write_conf_tree(
+        tmp_path,
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+    )
+    state_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
+    state_file.write_text(
+        """{
+  "schema_version": 2,
+  "migrations": {
+    "storage_paths_v1": {
+      "state": "applied",
+      "checked_at": "2026-06-29T15:54:20",
+      "details": {
+        "runner": "legacy_startup_state"
+      }
+    },
+    "notification_events_v1": {
+      "state": "applied",
+      "checked_at": "2026-06-29T22:55:18",
+      "details": {
+        "runner": "central_migration_registry",
+        "updated_keys": ["NTFY_EVENTS"]
+      }
+    }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+
+    registry = get_migration_registry_status(cfg)
+    items = _items_by_id(registry)
+
+    assert "storage_paths_v1" not in items
+    assert "notification_events_v1" in items
 
 
 def test_registry_does_not_count_not_needed_cleanup_as_planned(tmp_path: Path):
@@ -327,24 +371,3 @@ def test_legacy_cleanup_apply_requires_confirmation(tmp_path: Path):
 
     with pytest.raises(ValueError):
         apply_legacy_cleanup(cfg, confirm="")
-
-
-def test_registry_reads_storage_marker_after_previous_cleanup(tmp_path: Path):
-    cfg = _write_conf_tree(
-        tmp_path,
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            '# LEGACY_CLEANUP_DISABLED MIGRATION_STORAGE_PATHS_VERSION=1',
-            "",
-        ]),
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            "",
-        ]),
-    )
-
-    registry = get_migration_registry_status(cfg)
-    item = _items_by_id(registry)["setup_runtime_paths"]
-
-    assert item["status"] == "applied"
-    assert item["details"]["marker"] == "1"

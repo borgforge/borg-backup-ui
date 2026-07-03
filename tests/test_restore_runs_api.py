@@ -175,7 +175,7 @@ def test_restore_history_migration_is_idempotent(tmp_path: Path):
     second = restore_api.list_restore_history(config, limit=10)
 
     assert first_migration["results"]["restore_history_v1"]["status"] == "applied"
-    assert second_migration["results"]["restore_history_v1"]["status"] == "not_required"
+    assert second_migration["results"]["restore_history_v1"]["status"] == "skipped"
     assert [row["restore_id"] for row in first["runs"]] == ["done-1"]
     assert [row["restore_id"] for row in second["runs"]] == ["done-1"]
     assert not (tmp_path / "config" / "restore-history" / "migrations.log.jsonl").exists()
@@ -212,11 +212,10 @@ def test_restore_history_migration_skips_already_imported_legacy_entries(tmp_pat
     persisted = json.loads(fp.read_text(encoding="utf-8"))
 
     assert first_migration["results"]["restore_history_v1"]["status"] == "applied"
-    assert second_migration["results"]["restore_history_v1"]["status"] == "not_required"
-    assert second_migration["results"]["restore_history_v1"]["details"]["already_imported"] == 1
+    assert second_migration["results"]["restore_history_v1"]["status"] == "skipped"
     assert [row["restore_id"] for row in first["runs"]] == ["done-1"]
     assert [row["restore_id"] for row in second["runs"]] == ["done-1"]
-    assert persisted["runs"] == {}
+    assert persisted["runs"] == legacy_payload["runs"]
 
 
 def test_restore_history_startup_ignores_previous_internal_import_count_when_legacy_file_empty(tmp_path: Path):

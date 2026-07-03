@@ -1353,13 +1353,13 @@ function _migrationRegistryText(item, field) {
       title: 'registrySettingsTitle',
       reason: status === 'applied' ? 'registrySettingsPresent' : 'registrySettingsMissing',
     },
-    setup_runtime_paths: {
-      title: 'registryRuntimeTitle',
-      reason: status === 'applied' ? 'registryRuntimeApplied' : (status === 'failed' ? 'registryRuntimeFailed' : 'registryRuntimePending'),
-    },
     config_backup_conf_schema: {
       title: 'registrySchemaTitle',
       reason: status === 'applied' ? 'registrySchemaComplete' : 'registrySchemaMissing',
+    },
+    restore_history_v1: {
+      title: 'registryRestoreHistoryTitle',
+      reason: status === 'applied' ? 'registryRestoreHistoryApplied' : (status === 'not_needed' ? 'registryRestoreHistoryCurrent' : 'registryRestoreHistoryPending'),
     },
     legacy_deprecated_keys_cleanup_v1: {
       title: 'registryCleanupTitle',
