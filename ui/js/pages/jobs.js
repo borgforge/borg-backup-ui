@@ -421,21 +421,13 @@ function renderJobCard(job) {
               </svg>
             </button>
             <div class="job-menu-dropdown hidden" id="job-menu-${escHtml(job.key)}">
-              ${job.standard === 'legacy'
-                ? `<button class="job-menu-item" data-jobs-action="adopt-legacy" data-job-key="${escHtml(job.key)}">
-                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                       <polyline points="20 6 9 17 4 12"></polyline>
-                     </svg>
-                     ${jobsT('jobs.adoptLegacy')}
-                   </button>`
-                : `<button class="job-menu-item" data-jobs-action="edit-job" data-job-key="${escHtml(job.key)}">
-                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                       <path d="M12 20h9"/>
-                       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-                     </svg>
-                     ${jobsT('jobs.edit')}
-                   </button>`
-              }
+              <button class="job-menu-item" data-jobs-action="edit-job" data-job-key="${escHtml(job.key)}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <path d="M12 20h9"/>
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                </svg>
+                ${jobsT('jobs.edit')}
+              </button>
               ${job.enabled === false ? '' : `<button class="job-menu-item ${schedActive ? 'sched-active' : ''}" data-jobs-action="show-schedule" data-job-key="${escHtml(job.key)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
@@ -550,10 +542,6 @@ function onJobsGridClick(event) {
   if (action === 'open-log') return openLogPanel(jobKey);
   if (action === 'start-job') return showStartModal(jobKey);
   if (action === 'toggle-menu') return toggleJobMenu(event, jobKey);
-  if (action === 'adopt-legacy') {
-    closeAllJobMenus();
-    return adoptLegacyJob(jobKey);
-  }
   if (action === 'edit-job') {
     closeAllJobMenus();
     return openWizardForJob(jobKey, 'edit');

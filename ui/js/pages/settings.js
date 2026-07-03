@@ -1369,6 +1369,10 @@ function _migrationRegistryText(item, field) {
       title: 'registryNotificationEventsTitle',
       reason: status === 'applied' ? 'registryNotificationEventsApplied' : (status === 'not_needed' ? 'registryNotificationEventsCurrent' : 'registryNotificationEventsPending'),
     },
+    legacy_script_jobs_v1: {
+      title: 'registryLegacyScriptJobsTitle',
+      reason: status === 'applied' ? 'registryLegacyScriptJobsApplied' : (status === 'not_needed' ? 'registryLegacyScriptJobsCurrent' : 'registryLegacyScriptJobsPending'),
+    },
   };
   const key = keys[id]?.[field];
   if (key) return settingsT(`health.${key}`);

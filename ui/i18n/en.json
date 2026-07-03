@@ -245,7 +245,6 @@
     "disabledWithKey": "Job is disabled: {key}",
     "dataDirRequired": "Set GLOBAL_DATA_DIR in Settings first.",
     "options": "Options",
-    "adoptLegacy": "Import into wizard",
     "edit": "Edit job",
     "schedule": "Schedule",
     "enable": "Enable job",
@@ -327,7 +326,6 @@
   "wizard": {
     "newTitle": "New backup job",
     "editTitle": "Edit backup job",
-    "adoptTitle": "Import legacy job",
     "loadFailed": "Could not load wizard: {message}",
     "stepBasics": "Basics",
     "stepSourcesTarget": "Sources & target",
@@ -1874,7 +1872,11 @@
       "registryNotificationEventsTitle": "Notification events",
       "registryNotificationEventsApplied": "Central notification events were migrated.",
       "registryNotificationEventsCurrent": "Central notification events are current.",
-      "registryNotificationEventsPending": "Central notification events have not reached a final recorded state yet."
+      "registryNotificationEventsPending": "Central notification events have not reached a final recorded state yet.",
+      "registryLegacyScriptJobsTitle": "Legacy script jobs",
+      "registryLegacyScriptJobsApplied": "Legacy script jobs were migrated into job metadata.",
+      "registryLegacyScriptJobsCurrent": "No legacy script jobs were found.",
+      "registryLegacyScriptJobsPending": "Legacy script jobs have not reached a final migrated state yet."
     },
     "tabs": {
       "general": "General",

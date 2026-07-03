@@ -371,7 +371,7 @@ def _expand_shell_vars(s: str, env: dict) -> str:
 
 
 def _get_job_repo_info(config: dict, job_key: str) -> dict:
-    """Resolve BORG_REPO and passphrase config for legacy and wizard jobs."""
+    """Resolve repository and passphrase config from canonical job metadata."""
     job_key = _validate_job_key(job_key)
     from jobs_api import discover_jobs, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
     scripts_dir = resolve_scripts_dir(config)
@@ -382,105 +382,29 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
 
     job = jobs[job_key]
 
-    # Wizard/scriptless path: read metadata directly.
-    if job.standard == "wizard":
-        meta_path = None
-        for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-            p = meta_dir / f"{job_key}.json"
-            if p.exists():
-                meta_path = p
-                break
-        if meta_path is None:
-            raise ValueError(f"Wizard metadata is missing: {job_key}")
-        raw = json.loads(meta_path.read_text(encoding="utf-8"))
+    if job.standard != "wizard":
+        raise ValueError(f"Unsupported job standard: {job.standard}")
+    meta_path = None
+    for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
+        p = meta_dir / f"{job_key}.json"
+        if p.exists():
+            meta_path = p
+            break
+    if meta_path is None:
+        raise ValueError(f"Wizard metadata is missing: {job_key}")
+    raw = json.loads(meta_path.read_text(encoding="utf-8"))
 
-        repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
-        repo_key = str(repo_cfg.get("conf_key") or "")
-        repo_default = str(repo_cfg.get("default") or "").strip()
-        if not repo_default:
-            raise ValueError(f"Repository default is missing in {meta_path.name}")
-
-        pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
-        pass_key = str(pass_cfg.get("conf_key") or "")
-        pass_default = str(pass_cfg.get("default") or "").strip() or None
-
-        conf: dict = {}
-        for cp in (data_root / "config" / "backup.conf",
-                   scripts_dir / "config" / "backup.conf"):
-            if cp.exists():
-                conf = _read_conf_file(cp)
-                break
-
-        raw_repo = conf.get(repo_key, repo_default) if repo_key else repo_default
-        expand_env = {**dict(os.environ), **conf}
-        repo_path = _expand_shell_vars(raw_repo, expand_env)
-        passphrase_file = conf.get(pass_key, pass_default) if pass_key else pass_default
-        return {"repo": repo_path, "passphrase_file": passphrase_file}
-
-    script_path = job.script_path
-    if script_path is None:
-        raise ValueError(f"Script path is missing for job: {job_key}")
-    content = script_path.read_text(encoding="utf-8")
-
-    # Repo path — try multiple patterns to handle wizard and hand-written scripts
-    repo_key: str | None = None
-    repo_default: str | None = None
-
-    def _resolve_var(varname: str) -> str | None:
-        """Find the string value of a module-level variable like _DEFAULT_REPO = '...'"""
-        vm = re.search(rf'^{re.escape(varname)}\s*=\s*["\']([^"\']+)["\']',
-                       content, re.MULTILINE)
-        return vm.group(1) if vm else None
-
-    # Pattern 1 (wizard): env.setdefault("BORG_REPO", env.get("KEY", "literal"))
-    m = re.search(
-        r'env\.setdefault\("BORG_REPO",\s*env\.get\("([^"]+)",\s*"([^"\']+)"\)\)',
-        content,
-    )
-    if m:
-        repo_key, repo_default = m.group(1), m.group(2)
-
-    # Pattern 2 (variable default): env.setdefault("BORG_REPO", env.get("KEY", VAR))
+    repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
+    repo_key = str(repo_cfg.get("conf_key") or "")
+    repo_default = str(repo_cfg.get("default") or "").strip()
     if not repo_default:
-        m = re.search(
-            r'env\.setdefault\("BORG_REPO",\s*env\.get\("([^"]+)",\s*([_A-Z][_A-Z0-9]*)\)\)',
-            content, re.IGNORECASE,
-        )
-        if m:
-            repo_key = m.group(1)
-            repo_default = _resolve_var(m.group(2))
+        raise ValueError(f"Repository default is missing in {meta_path.name}")
 
-    # Pattern 3: BORG_REPO = "value"  or  BORG_REPO = 'value'
-    if not repo_default:
-        m = re.search(r'^BORG_REPO\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
-        if m:
-            repo_default = m.group(1)
+    pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
+    pass_key = str(pass_cfg.get("conf_key") or "")
+    pass_default = str(pass_cfg.get("default") or "").strip() or None
 
-    # Pattern 4: env.get("BORG_REPO", "value")
-    if not repo_default:
-        m = re.search(r'env\.get\("BORG_REPO",\s*"([^"\']+)"\)', content)
-        if m:
-            repo_default = m.group(1)
-
-    # Pattern 5: env.setdefault("BORG_REPO", "value")
-    if not repo_default:
-        m = re.search(r'env\.setdefault\("BORG_REPO",\s*"([^"\']+)"\)', content)
-        if m:
-            repo_default = m.group(1)
-
-    # Pattern 6: _DEFAULT_REPO / _REPO / similar top-level variable used as BORG_REPO default
-    if not repo_default:
-        m = re.search(r'env\.setdefault\("BORG_REPO",\s*([_A-Z][_A-Z0-9]*)\)', content, re.IGNORECASE)
-        if m:
-            repo_default = _resolve_var(m.group(1))
-
-    if not repo_default:
-        raise ValueError(f"BORG_REPO was not found in {script_path.name}; check the script")
-
-    # Load backup.conf (try both possible locations)
     conf: dict = {}
-    from jobs_api import resolve_data_root
-    data_root = resolve_data_root(config)
     for cp in (data_root / "config" / "backup.conf",
                scripts_dir / "config" / "backup.conf"):
         if cp.exists():
@@ -488,25 +412,9 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
             break
 
     raw_repo = conf.get(repo_key, repo_default) if repo_key else repo_default
-    # Expand ${VAR} / $VAR references using backup.conf values + env
     expand_env = {**dict(os.environ), **conf}
     repo_path = _expand_shell_vars(raw_repo, expand_env)
-
-    # Passphrase file: extract from script pattern
-    # wizard scripts: passphrase_file = env.get("BORG_PASSPHRASE_FILE_X", "/boot/config/borg-backup/secrets/.borg-passphrase-*")
-    pm = re.search(
-        r'env\.get\("(BORG_PASSPHRASE_FILE_[^"]+)",\s*"([^"]+)"\)',
-        content,
-    )
-    passphrase_file: str | None = None
-    if pm:
-        pf_key, pf_default = pm.group(1), pm.group(2)
-        passphrase_file = conf.get(pf_key, pf_default)
-    else:
-        # Fallback: derive from type_id
-        type_id = job.backup_type
-        passphrase_file = f"/boot/config/borg-backup/secrets/.borg-passphrase-{type_id}"
-
+    passphrase_file = conf.get(pass_key, pass_default) if pass_key else pass_default
     return {"repo": repo_path, "passphrase_file": passphrase_file}
 
 

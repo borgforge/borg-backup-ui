@@ -6,9 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from . import notification_events_v1, restore_history_v1
+from . import legacy_script_jobs_v1, notification_events_v1, restore_history_v1
 
 MIGRATIONS = [
+    legacy_script_jobs_v1,
     restore_history_v1,
     notification_events_v1,
 ]

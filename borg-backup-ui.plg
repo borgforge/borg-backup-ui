@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.03.0021">
+<!ENTITY version   "2026.07.03.1214">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.03.1214###
+- Issue #141:
+  - Legacy script-only backup jobs are migrated into canonical job metadata before normal job discovery.
+  - The Jobs page no longer exposes the old legacy import action; jobs now run through the scriptless wizard runner.
+
 ###2026.07.03.0021###
 - Issue #137:
   - Backup overdue reminders now use the same schedule/status calculation as the diagnostics table and no longer send stale notifications for already satisfied runs.
@@ -265,7 +270,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>2850fe2b78d1aee06296496c44805b49</MD5>
+<MD5>46968ea302c95a1534df0bed7f820f52</MD5>
 </FILE>
 
 <!--

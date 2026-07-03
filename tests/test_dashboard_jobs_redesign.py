@@ -58,11 +58,11 @@ def test_jobs_keeps_location_actions_and_live_log_contract() -> None:
         'data-jobs-action="toggle-menu"',
         'data-jobs-action="edit-job"',
         'data-jobs-action="show-schedule"',
-        'data-jobs-action="adopt-legacy"',
         'data-jobs-action="delete-job"',
         "group-log-slot",
     ):
         assert contract in script
+    assert 'data-jobs-action="adopt-legacy"' not in script
 
 
 def test_dashboard_jobs_layout_is_tablet_and_mobile_responsive() -> None:
