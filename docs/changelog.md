@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #124
+- Tests:
+  - Added pre-beta regression coverage for resource locks, selected Docker stop/start behavior, corrupt config/status recovery, and expanded secret masking.
+  - Added `docs/pre-beta-regression-tests.md` with a topic-based coverage map and manual Unraid follow-up checks.
+  - Added a versioned pre-beta regression test report for `2026.07.03.0021`.
+
 ### Issue #137
 - Notifications:
   - Backup overdue reminder sending now shares the same expected-run calculation as reminder diagnostics.

@@ -13,9 +13,9 @@ from security_utils import mask_secrets  # noqa: E402
 
 def test_mask_secrets_handles_common_formats():
     raw = (
-        "password=plain token: abc Authorization: Bearer tok "
+        "password=plain token: abc secret='quoted-value' Authorization: Bearer tok "
         "ssh://user:secret@example.test/repo "
-        "https://example.test/path?token=abc&x=1 "
+        "https://example.test/path?token=abc&x=1&password=hunter2 "
         "BORG_PASSCOMMAND=cat /boot/config/borg-backup/secrets/.borg-passphrase-appdata "
         "/boot/config/borg-backup/secrets/.smb-nas.cred"
     )
@@ -23,12 +23,16 @@ def test_mask_secrets_handles_common_formats():
     masked = mask_secrets(raw)
 
     assert "plain" not in masked
+    assert "quoted-value" not in masked
+    assert "hunter2" not in masked
     assert "Bearer tok" not in masked
     assert "user:secret@" not in masked
     assert "token=abc" not in masked
+    assert "password=hunter2" not in masked
     assert ".borg-passphrase-appdata" not in masked
     assert ".smb-nas.cred" not in masked
     assert "password=***" in masked
+    assert "secret=***" in masked
     assert "Authorization: Bearer ***" in masked
     assert "ssh://user:***@example.test/repo" in masked
 
