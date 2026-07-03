@@ -330,7 +330,10 @@ def _migration_reason_from_state(migration_id: str, state: str, details: Dict[st
 
 def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
+    hidden_legacy_ids = {"storage_paths_v1"}
     for migration_id in sorted(str(key) for key in migrations.keys()):
+        if migration_id in hidden_legacy_ids:
+            continue
         row = migrations.get(migration_id)
         if not isinstance(row, dict):
             continue

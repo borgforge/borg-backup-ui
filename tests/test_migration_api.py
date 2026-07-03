@@ -182,6 +182,45 @@ def test_registry_reports_recorded_restore_history_migration(tmp_path: Path):
     assert item["details"]["runner"] == "central_migration_registry"
 
 
+def test_registry_hides_obsolete_storage_paths_migration_state(tmp_path: Path):
+    cfg = _write_conf_tree(
+        tmp_path,
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+    )
+    state_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
+    state_file.write_text(
+        """{
+  "schema_version": 2,
+  "migrations": {
+    "storage_paths_v1": {
+      "state": "applied",
+      "checked_at": "2026-06-29T15:54:20",
+      "details": {
+        "runner": "legacy_startup_state"
+      }
+    },
+    "notification_events_v1": {
+      "state": "applied",
+      "checked_at": "2026-06-29T22:55:18",
+      "details": {
+        "runner": "central_migration_registry",
+        "updated_keys": ["NTFY_EVENTS"]
+      }
+    }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+
+    registry = get_migration_registry_status(cfg)
+    items = _items_by_id(registry)
+
+    assert "storage_paths_v1" not in items
+    assert "notification_events_v1" in items
+
+
 def test_registry_does_not_count_not_needed_cleanup_as_planned(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
