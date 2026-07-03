@@ -245,7 +245,6 @@
     "disabledWithKey": "Job ist deaktiviert: {key}",
     "dataDirRequired": "Bitte zuerst GLOBAL_DATA_DIR in Einstellungen setzen.",
     "options": "Optionen",
-    "adoptLegacy": "In Wizard übernehmen",
     "edit": "Job bearbeiten",
     "schedule": "Zeitplan",
     "enable": "Job aktivieren",
@@ -327,7 +326,6 @@
   "wizard": {
     "newTitle": "Neuer Backup-Job",
     "editTitle": "Backup-Job bearbeiten",
-    "adoptTitle": "Legacy-Job übernehmen",
     "loadFailed": "Wizard laden fehlgeschlagen: {message}",
     "stepBasics": "Grunddaten",
     "stepSourcesTarget": "Quellen & Ziel",

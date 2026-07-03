@@ -8,6 +8,7 @@ Subprozesse gestartet; deren stdout wird live gepuffert und per SSE ausgeliefert
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -104,15 +105,8 @@ def get_jobs_meta_dir(scripts_dir: Path, data_root: Path | None = None) -> Path:
 
 
 def get_jobs_meta_dirs(scripts_dir: Path, data_root: Path | None = None) -> List[Path]:
-    preferred = get_jobs_meta_dir(scripts_dir, data_root)
-    runtime_legacy = Path("/boot/config/plugins/borg-backup-ui/runtime/config/jobs")
-    legacy = scripts_dir / "config" / "jobs"
-    dirs = [preferred]
-    if runtime_legacy not in dirs:
-        dirs.append(runtime_legacy)
-    if legacy != preferred:
-        dirs.append(legacy)
-    return dirs
+    """Canonical metadata lookup order for normal operation."""
+    return [get_jobs_meta_dir(scripts_dir, data_root)]
 
 
 def migrate_jobs_metadata_dir(scripts_dir: Path, data_root: Path | None = None) -> None:
@@ -133,7 +127,11 @@ def migrate_jobs_metadata_dir(scripts_dir: Path, data_root: Path | None = None) 
             try:
                 src.rename(dst)
             except OSError:
-                continue
+                try:
+                    shutil.copy2(src, dst)
+                    src.unlink()
+                except OSError:
+                    continue
 
 
 def migrate_data_layout(config: dict) -> None:
@@ -239,7 +237,7 @@ class JobInfo:
     icon: str = ""
     icon_color: str = ""
     is_utility: bool = False
-    standard: str = "legacy"
+    standard: str = "wizard"
     enabled: bool = True
     compression: str = ""
     retention_daily: str = ""
@@ -426,16 +424,7 @@ class JobManager:
 
 def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
     """
-    Findet Backup- und Restore-Test-Skripte im scripts/-Verzeichnis.
-
-    Namensschema borg_backup_*.py:
-      borg_backup_{type}.py            → local
-      borg_backup_{type}_usb.py        → usb
-      borg_backup_storagebox_{type}.py → storagebox
-
-    Namensschema borg_restore_test*.py:
-      borg_restore_test.py             → restore_test / local
-      borg_restore_test_usb.py         → restore_test / usb
+    Finds backup jobs from canonical JSON metadata.
     """
     utility_types = {"restore_test"}
 
@@ -451,7 +440,7 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
         description: Optional[str] = None,
         icon: Optional[str] = None,
         icon_color: Optional[str] = None,
-        standard: str = "legacy",
+        standard: str = "wizard",
         enabled: bool = True,
         compression: str = "",
         retention_daily: str = "",
@@ -594,22 +583,6 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
                 restore_test_level=_safe_int(rt_policy.get("level"), 2),
                 restore_test_max_runtime_minutes=_safe_int(rt_policy.get("max_runtime_minutes"), 0),
             ))
-
-    # ── borg_backup_*.py ───────────────────────────────────────────────────────
-    if scripts_dir.exists():
-        for py_file in sorted(scripts_dir.glob("borg_backup_*.py")):
-            if not py_file.is_file():
-                continue
-            name = py_file.stem[len("borg_backup_"):]
-            if name.startswith("storagebox_"):
-                backup_type, location = name[len("storagebox_"):], "storagebox"
-            elif name.endswith("_usb"):
-                backup_type, location = name[: -len("_usb")], "usb"
-            else:
-                backup_type, location = name, "local"
-            legacy = _make_job(py_file, backup_type, location, standard="legacy")
-            # Fallback: nur übernehmen, wenn Metadaten-Job den Key nicht schon abdeckt
-            jobs_by_key.setdefault(legacy.key, legacy)
 
     return list(jobs_by_key.values())
 

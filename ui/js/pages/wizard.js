@@ -518,7 +518,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
   wizardState.mode = mode;
   wizardState.existingJobKey = jobKey;
   const title = document.getElementById('wizard-modal-title');
-  if (title) title.textContent = wizardT(mode === 'adopt' ? 'wizard.adoptTitle' : 'wizard.editTitle');
+  if (title) title.textContent = wizardT('wizard.editTitle');
   _setWizardFormDisabled(true);
   try {
     const res = await fetch(`/api/wizard/job?job_key=${encodeURIComponent(jobKey)}`);
@@ -534,7 +534,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
       docker_control: job.docker_control || { mode: job.use_docker ? 'all' : 'none', selected: [] },
       vm_control: job.vm_control || { mode: job.use_vm ? 'all' : 'none', selected: [] },
     };
-    // In edit/adopt default to existing passphrase handling.
+    // In edit mode, default to existing passphrase handling.
     wizardState.keepPassphrase = true;
     document.getElementById('wizard-passphrase-conflict').classList.add('hidden');
     document.getElementById('wizard-passphrase-replace-warning').classList.add('hidden');
@@ -559,10 +559,6 @@ function wizardNeedsScriptRegeneration(params) {
   if (JSON.stringify(params.docker_control || {}) !== JSON.stringify(orig.docker_control || {})) return true;
   if (JSON.stringify(params.vm_control || {}) !== JSON.stringify(orig.vm_control || {})) return true;
   return false;
-}
-
-function adoptLegacyJob(jobKey) {
-  return openWizardForJob(jobKey, 'adopt');
 }
 
 function closeWizard() {
@@ -1060,7 +1056,6 @@ async function wizardNext() {
   const params = _wizardCollectParams();
   const isEditLikeNoRegeneration =
     wizardState.mode !== 'create' &&
-    wizardState.mode !== 'adopt' &&
     !wizardNeedsScriptRegeneration(params);
   // skip passphrase step when no encryption
   if (cur === 5 && (enc === 'none' || isEditLikeNoRegeneration)) {
@@ -1112,7 +1107,6 @@ function wizardBack() {
   const params = _wizardCollectParams();
   const isEditLikeNoRegeneration =
     wizardState.mode !== 'create' &&
-    wizardState.mode !== 'adopt' &&
     !wizardNeedsScriptRegeneration(params);
   // skip passphrase step going back from Beschreibung when no encryption
   if (cur === 7 && (enc === 'none' || isEditLikeNoRegeneration)) {
@@ -1411,9 +1405,7 @@ function wizardSchedulePreview() {
 window.addEventListener?.('bbui:language-changed', () => {
   const title = document.getElementById('wizard-modal-title');
   if (title) {
-    const titleKey = wizardState.mode === 'adopt'
-      ? 'wizard.adoptTitle'
-      : (wizardState.mode === 'edit' ? 'wizard.editTitle' : 'wizard.newTitle');
+    const titleKey = wizardState.mode === 'edit' ? 'wizard.editTitle' : 'wizard.newTitle';
     title.textContent = wizardT(titleKey);
   }
   const passphrase = document.getElementById('wiz-passphrase');

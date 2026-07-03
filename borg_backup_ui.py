@@ -2079,7 +2079,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode in {"edit", "adopt"}))
+        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"))
         return {"flow": generate_flow_preview(body, self.config, scripts_dir)}
 
     def _post_wizard_save(self) -> dict:
@@ -2089,7 +2089,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode in {"edit", "adopt"}))
+        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"))
         return save_job(body, scripts_dir, data_root, self.config)
 
     def _start_restore_test_from_body(self, body: dict) -> dict:
@@ -2837,29 +2837,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         existing_pp = os.environ.get("PYTHONPATH", "")
         runtime_pp = str(plugin_runtime)
         merged_pp = f"{runtime_pp}:{existing_pp}" if existing_pp else runtime_pp
-        if info.standard == "wizard":
-            runner = Path(__file__).resolve().parent / "api" / "wizard_runner.py"
-            extra_env = {
-                "BORG_UI_BORG_SCRIPTS_DIR": str(borg_scripts_dir),
-                "BORG_UI_JOB_KEY": job_key,
-                "PYTHONPATH": merged_pp,
-            }
-            ok, err = JobManager.get().start(
-                job_key,
-                ["python3", str(runner)],
-                backup_scripts_dir,
-                extra_env=extra_env,
-            )
-        else:
-            if info.script_path is None:
-                raise RuntimeError("A legacy job without a script path cannot be executed")
-            extra_env = {"PYTHONPATH": merged_pp}
-            ok, err = JobManager.get().start(
-                job_key,
-                ["python3", str(info.script_path)],
-                backup_scripts_dir,
-                extra_env=extra_env,
-            )
+        if info.standard != "wizard":
+            raise RuntimeError(f"Unsupported job standard: {info.standard}")
+        runner = Path(__file__).resolve().parent / "api" / "wizard_runner.py"
+        extra_env = {
+            "BORG_UI_BORG_SCRIPTS_DIR": str(borg_scripts_dir),
+            "BORG_UI_JOB_KEY": job_key,
+            "PYTHONPATH": merged_pp,
+        }
+        ok, err = JobManager.get().start(
+            job_key,
+            ["python3", str(runner)],
+            backup_scripts_dir,
+            extra_env=extra_env,
+        )
         if not ok:
             raise RuntimeError(err)
         return {"started": True, "job_key": job_key}

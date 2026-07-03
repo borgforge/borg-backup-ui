@@ -6,6 +6,15 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #141
+- Maintenance:
+  - Removed the remaining legacy backup-script migration, detection and parser paths.
+  - Normal job discovery now reads canonical job metadata only.
+  - Backup execution and Browse & Restore repository resolution now require wizard/scriptless job metadata.
+  - Removed the legacy job import action from the Jobs UI and Wizard flow.
+  - Wizard job save responses no longer carry legacy backup script filenames.
+  - The integrated Restore Test runner remains as utility code and is not treated as a legacy backup job.
+
 ### Issue #53
 - Documentation:
   - Added a complete German user manual under `docs/user-manual/de/user-manual.md`.

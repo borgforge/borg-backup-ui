@@ -1,8 +1,8 @@
 """
-api/wizard_api.py – Job-Wizard: Skript-Generierung und -Speicherung
+api/wizard_api.py - Job wizard metadata validation and storage.
 
-Generiert Python-Backup-Skripte nach dem Muster von borg_backup_flash.py /
-borg_backup_appdata.py und speichert sie im BORG_SCRIPTS_DIR.
+Backup jobs are stored as canonical JSON metadata and executed through the
+scriptless wizard runner.
 """
 
 import json
@@ -18,16 +18,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 def _type_upper(type_id: str) -> str:
     return re.sub(r"[^A-Z0-9]", "_", type_id.upper())
-
-
-def _script_filename(type_id: str, location: str) -> str:
-    if location == "local":
-        return f"borg_backup_{type_id}.py"
-    elif location == "usb":
-        return f"borg_backup_{type_id}_usb.py"
-    elif location == "storagebox":
-        return f"borg_backup_storagebox_{type_id}.py"
-    return f"borg_backup_{type_id}.py"
 
 
 _SECRETS_DIR = Path("/boot/config/borg-backup/secrets")
@@ -195,11 +185,10 @@ def validate_params(
         if not bool(vm_control.get("ack_domains_risk", False)):
             raise ValueError("VM domain backup risk must be acknowledged when not shutting down all VMs")
 
-    filename = _script_filename(type_id, location)
-    target = scripts_dir / filename
     from jobs_api import get_jobs_meta_dir
-    meta_target = get_jobs_meta_dir(scripts_dir, data_root) / f"{type_id}_{location}.json"
-    if (target.exists() or meta_target.exists()) and not allow_existing:
+    job_key = f"{type_id}_{location}"
+    meta_target = get_jobs_meta_dir(scripts_dir, data_root) / f"{job_key}.json"
+    if meta_target.exists() and not allow_existing:
         raise FileExistsError(f"Job already exists: {type_id}_{location}")
 
 
@@ -334,44 +323,6 @@ def _storagebox_repo_from_profile(params: dict, ui_config: Optional[dict]) -> st
         return ""
 
 
-def _extract_script_string(script_path: Optional[Path], pattern: str) -> str:
-    if script_path is None:
-        return ""
-    try:
-        content = script_path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    m = re.search(pattern, content, re.MULTILINE)
-    return m.group(1).strip() if m else ""
-
-
-def _read_script_content(script_path: Optional[Path]) -> str:
-    if script_path is None:
-        return ""
-    try:
-        return script_path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-
-
-def _extract_script_var_string(content: str, var_name: str) -> str:
-    """Extracts string value from VAR = "..." or VAR = ("..." "...") patterns."""
-    if not content or not var_name:
-        return ""
-    m = re.search(
-        rf"^{re.escape(var_name)}\s*=\s*(\((?:.|\n)*?\)|[\"'](?:.|\n)*?[\"'])",
-        content,
-        re.MULTILINE,
-    )
-    if not m:
-        return ""
-    raw = m.group(1).strip()
-    parts = re.findall(r"[\"']([^\"']*)[\"']", raw, re.MULTILINE)
-    if parts:
-        return "".join(parts).strip()
-    return ""
-
-
 def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dict:
     from jobs_api import discover_jobs, get_jobs_meta_dirs, resolve_data_root
     from config_api import read_expanded_conf
@@ -432,43 +383,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         except (json.JSONDecodeError, OSError, UnicodeDecodeError, TypeError, ValueError):
             continue
 
-    # Fallbacks from script defaults
-    script_content = _read_script_content(info.script_path)
-    script_repo_default = _extract_script_string(info.script_path, r'_DEFAULT_REPO\s*=\s*["\']([^"\']+)["\']')
-    script_paths_default = _extract_script_string(info.script_path, r'_DEFAULT_PATHS\s*=\s*["\']([^"\']+)["\']')
-    if not script_paths_default:
-        script_paths_default = _extract_script_string(
-            info.script_path,
-            rf'env\.setdefault\(["\']BACKUP_PATHS_{_type_upper(type_id)}["\'],\s*["\']([^"\']+)["\']\)'
-        )
-    # Legacy compatibility: resolve actual BACKUP_PATHS env-key used in script, if any.
-    script_paths_key = ""
-    if script_content:
-        m_paths_key = re.search(
-            r'env\.setdefault\(\s*["\']BACKUP_PATHS["\']\s*,\s*env\.get\(\s*["\']([^"\']+)["\']\s*,',
-            script_content,
-            re.MULTILINE,
-        )
-        if m_paths_key:
-            script_paths_key = m_paths_key.group(1).strip()
-        if not script_paths_default:
-            m_paths_var = re.search(
-                r'env\.setdefault\(\s*["\']BACKUP_PATHS["\']\s*,\s*env\.get\(\s*["\'][^"\']+["\']\s*,\s*([_A-Za-z][_A-Za-z0-9]*)\s*\)\s*\)',
-                script_content,
-                re.MULTILINE,
-            )
-            if m_paths_var:
-                script_paths_default = _extract_script_var_string(script_content, m_paths_var.group(1).strip())
-
-    job_name = _extract_script_string(info.script_path, r'env\.setdefault\(["\']JOB_NAME["\'],\s*["\']([^"\']+)["\']\)')
-
-    repo_path = meta_repo_default or conf.get(repo_key) or script_repo_default
-    source_paths = (
-        meta_paths_default
-        or conf.get(paths_key)
-        or (conf.get(script_paths_key) if script_paths_key else "")
-        or script_paths_default
-    )
+    repo_path = meta_repo_default or conf.get(repo_key) or ""
+    source_paths = meta_paths_default or conf.get(paths_key) or ""
     compression = meta_compression or conf.get(f"COMPRESSION_{_type_upper(type_id)}", "lz4")
 
     # Prefer explicit job metadata name (JSON) over display label with location suffix.
@@ -476,7 +392,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     params = {
         "job_key": job_key,
         "type_id": type_id,
-        "job_name": (info.name or "").strip() or job_name or info.display_name or job_key,
+        "job_name": (info.name or "").strip() or info.display_name or job_key,
         "description": info.description or "",
         "icon": str(getattr(info, "icon", "") or "").strip().lower(),
         "icon_color": str(getattr(info, "icon_color", "") or "").strip().lower(),
@@ -786,7 +702,6 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     encryption  = params.get("encryption", "repokey-blake2")
     passphrase  = params.get("passphrase", "").strip()
     passphrase_suffix = _passphrase_suffix(type_id, location)
-    filename    = _script_filename(type_id, location)
 
     scripts_dir.mkdir(parents=True, exist_ok=True)
     existing_job_key = str(params.get("existing_job_key", "")).strip()
@@ -907,7 +822,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
                 pass
 
     return {
-        "filename": filename,
+        "filename": "",
         "path": "",
         "script": "",
         "metadata_path": str(meta_path),

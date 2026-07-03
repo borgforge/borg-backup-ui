@@ -11,21 +11,24 @@ Danach gilt:
 - Jede Aenderung braucht ein Issue, auch Kleinstkorrekturen, Doku und Tooling.
 - Issue-Nummer, Nutzerwirkung und Changelog-Relevanz vor der Umsetzung klaeren.
 - Codeaenderung fertigstellen und fokussiert testen.
-- Changelog-Eintrag unter `###NEXT###` in `borg-backup-ui.plg` ergaenzen.
-- `./plugin/build.sh` ausfuehren.
+- Technische Historie bei Bedarf in `docs/changelog.md` pflegen.
 - Fuer testbare nutzerrelevante Aenderungen eine Test-Channel-Version mit
   `./plugin/deploy-test.sh <version>` erstellen und verifizieren.
+- Feature-, Fix- und Maintenance-PRs duerfen keine Stable-Release-Artefakte
+  enthalten. `borg-backup-ui.plg`, reine `APP_VERSION`-Bumps in
+  `borg_backup_ui.py` und `releases/borg-backup-ui-*.txz` gehoeren
+  ausschliesslich in separate Release-PRs.
 - Test-Channel-PRs duerfen nicht nach `main` gemergt werden, solange die
   getestete Version nicht ausdruecklich vom Repository-Maintainer freigegeben
   wurde.
 - Keine Stable-Release-Freigabe vorbereiten, bevor der Repository-Maintainer
   den Test ausdruecklich als erfolgreich freigegeben hat.
-- Geaenderte Plugin-Dateien und neues `releases/borg-backup-ui-<version>.txz` im Abschluss nennen.
+- Im Abschluss die Test-Channel-Version nennen. Stable-Artefakte nur nennen,
+  wenn ein separater Release-PR erstellt wurde.
 - Pull Request vorbereiten oder erstellen, sofern nicht explizit anders vereinbart.
 
-Der `###NEXT###`-Block ist fuer nutzerrelevante Release Notes gedacht und soll
-kurz bleiben. Technische Detailhistorie gehoert bei Bedarf nach
-`docs/changelog.md`.
+Der `###NEXT###`-Block im Plugin-Manifest ist fuer Release-PRs gedacht.
+Technische Detailhistorie gehoert bei Bedarf nach `docs/changelog.md`.
 
 Changelog-Eintraege sollen Issue-Referenzen enthalten, sofern vorhanden. Die
 Entscheidung, ob `borg-backup-ui.plg`, `docs/changelog.md` oder beides gepflegt
@@ -104,9 +107,10 @@ Der Ablauf ist verbindlich:
 2. Fokussierte Tests und Preflight ausfuehren.
 3. Test-Channel-Version mit `./plugin/deploy-test.sh <version>` erstellen.
 4. Test-Channel-Manifest und Paket verifizieren.
-5. PR vorbereiten oder aktualisieren und im Abschluss als "wartet auf
+5. Sicherstellen, dass der Arbeitsbranch keine Stable-Artefakte enthaelt.
+6. PR vorbereiten oder aktualisieren und im Abschluss als "wartet auf
    Nutzertest" kennzeichnen.
-6. Stable-Release oder Promotion nach `main` erst nach ausdruecklicher
+7. Stable-Release oder Promotion nach `main` erst nach ausdruecklicher
    Nutzerfreigabe vorbereiten.
 
 Eine gueltige Freigabe muss eindeutig sein, zum Beispiel:
@@ -119,11 +123,12 @@ Vor dieser Freigabe ist der Test-Channel die einzige bereitgestellte Version.
 Ein Merge nach `main` oder eine Stable-Release-Promotion darf nicht als
 automatischer Folgeschritt erfolgen.
 
-Wichtig: Ein offener PR, der eine Test-Channel-Version beschreibt, ist nur die
-technische Vorbereitung fuer die spaetere Stable-Freigabe. Er darf erst nach
-erfolgreichem Nutzertest gemergt werden. Konfliktloesungen, Rebase- oder
-Merge-Arbeiten an solchen PRs duerfen keine Test-Version stillschweigend nach
-`main` bringen.
+Wichtig: Ein Feature-/Fix-PR, der eine Test-Channel-Version beschreibt,
+enthaelt nur Code-, Test- und Dokumentationsaenderungen. Er enthaelt keine
+Stable-Manifest- oder Stable-Paketdateien. Nach erfolgreichem Nutzertest darf
+der Code-PR gemergt werden, ohne dadurch den stabilen Installationskanal zu
+veraendern. Die Stable-Freigabe erfolgt danach immer ueber einen separaten
+Release-PR.
 
 Vor jedem Merge eines PRs mit Plugin-Code pruefen:
 
@@ -154,7 +159,8 @@ Das Skript:
 - erzeugt `borg-backup-ui-test.plg`
 - kopiert Manifest und Release-Paket in den Branch `test-channel`
 - pusht den Test-Channel
-- laesst den Arbeitsbranch mit den gebauten Stable-Dateien fuer den spaeteren PR stehen
+- stellt lokale Stable-Build-Dateien anschliessend wieder her, damit der
+  Arbeitsbranch kein Stable-Manifest und kein Stable-Paket enthaelt
 
 Die Version kann explizit angegeben werden. Ohne Angabe wird ein Zeitstempel im
 Format `YYYY.MM.DD.HHMM` verwendet.
@@ -168,11 +174,10 @@ Paket-Builds sind aktuell nicht garantiert byte-identisch reproduzierbar. Ein
 erneuter Build derselben Version kann daher eine andere MD5 erzeugen. Relevant
 ist immer der vollstaendig abgeschlossene Deploy-Lauf:
 
-- Nach einem erfolgreichen `deploy-test.sh` die lokal veraenderten Dateien
-  `borg-backup-ui.plg` und `releases/borg-backup-ui-<version>.txz` erneut
-  committen, falls das Deploy-Skript sie geaendert hat.
-- Die MD5 in `borg-backup-ui.plg`, im Remote-Test-Manifest und vom Remote-Paket
-  muessen identisch sein.
+- Nach einem erfolgreichen `deploy-test.sh` duerfen `borg-backup-ui.plg`,
+  `borg_backup_ui.py` und `releases/borg-backup-ui-<version>.txz` nicht als
+  Stable-Artefakte im Feature-/Fix-PR verbleiben.
+- Die MD5 im Remote-Test-Manifest und vom Remote-Paket muessen identisch sein.
 - Erst danach die Testversion als bereit melden.
 
 ### Go-Live vorbereiten
@@ -184,16 +189,19 @@ Nach erfolgreichem Test auf Unraid:
    vollstaendig mit `PASS` abschliessen und das Ergebnis dokumentieren.
 2. Bei der ersten Community-Apps-Veroeffentlichung sowohl den Fresh-Install-
    als auch den Update-Durchlauf ausfuehren.
-3. Arbeitsbranch pruefen und die durch den Test-Build entstandenen Dateien committen.
+3. Sicherstellen, dass der zugehoerige Code-PR bereits nach `main` gemergt ist.
 4. Keine neue Version bauen, damit exakt das getestete Paket freigegeben wird.
-5. Go-Live-PR erstellen:
+5. Separaten Go-Live-/Release-PR erstellen:
 
 ```bash
 ./plugin/promote-release.sh <version>
 ```
 
-Das Skript pusht den aktuellen Branch und erstellt oder zeigt den passenden
-Pull Request gegen `main`. Vor dem Merge muss weiterhin gelten:
+Das Skript erstellt oder aktualisiert einen eigenen Branch
+`codex/release-<version>` aus `origin/main`, kopiert das getestete Paket aus
+`test-channel`, aktualisiert `borg-backup-ui.plg` und `borg_backup_ui.py` und
+erstellt oder zeigt den passenden Pull Request gegen `main`. Vor dem Merge muss
+weiterhin gelten:
 
 ```bash
 ./plugin/mr-preflight.sh
@@ -239,9 +247,10 @@ Nach `deploy-test.sh` immer den Arbeitsbaum pruefen:
 git status --short
 ```
 
-Wenn der Test-Deploy nur den Test-Channel aktualisieren sollte, lokale
-Stable-Build-Dateien wie `borg-backup-ui.plg`, `borg_backup_ui.py` und
-`releases/borg-backup-ui-<version>.txz` nicht ungeprueft in einen PR uebernehmen.
+Lokale Stable-Build-Dateien wie `borg-backup-ui.plg`, `borg_backup_ui.py` und
+`releases/borg-backup-ui-<version>.txz` duerfen in Feature-/Fix-PRs nicht
+auftauchen. Wenn sie nach einem abgebrochenen Deploy doch vorhanden sind, vor
+dem Commit auf den Stand von `origin/main` zuruecksetzen.
 
 Nach erfolgreichem Test-Channel-Deploy zusaetzlich pruefen:
 
@@ -276,53 +285,65 @@ Dazu zaehlen insbesondere:
 - `borg_backup_ui.conf.example`
 - `borg-backup-ui.plg`
 
-In diesem Fall ausfuehren:
+In diesem Fall fuer die Test-Channel-Version ausfuehren:
 
 ```bash
 ./plugin/build.sh
 ```
 
+### Stable release artifacts
+
+Stable release artifacts are intentionally separated from implementation PRs.
+Implementation PRs may change plugin code, tests and documentation, but must
+not include:
+
+- `borg-backup-ui.plg`
+- `borg_backup_ui.py` changes that only bump `APP_VERSION`
+- `releases/borg-backup-ui-*.txz`
+
+Those files are added only by a dedicated release PR after explicit stable
+approval.
+
 ### Deferred release build for approved umbrella features
 
-The default rule remains strict: plugin-code changes require a release build in
-the same branch.
+The default rule is strict separation: plugin-code changes require a
+test-channel build for validation, but the feature/fix branch must not contain
+stable release artifacts.
 
 For explicitly approved umbrella features, incremental pull requests may defer
-the release build until the feature is complete. This is intended for large
-user-facing work that would otherwise create half-finished release artifacts.
+the final stable release PR until the feature is complete. This is intended for
+large user-facing work that would otherwise create half-finished stable
+releases.
 
 Current approved umbrella feature:
 
 - German and English localization, tracked by issue `#11`
 - unified UI redesign, tracked by umbrella issue `#27`
 
-Rules for deferred release-build PRs:
+Rules for deferred stable-release PRs:
 
 - Use one branch and one PR per sub-issue.
 - Keep `main` functional after every merge.
 - Do not update `borg-backup-ui.plg`, `borg_backup_ui.py`, or
-  `releases/borg-backup-ui-*.txz` solely to create a partial feature release.
-- Document in the PR that the release build is intentionally deferred.
-- Run preflight explicitly with:
-
-```bash
-BORG_UI_ALLOW_DEFERRED_RELEASE=1 ./plugin/mr-preflight.sh
-```
+  `releases/borg-backup-ui-*.txz` in feature/fix PRs.
+- Document in the PR that the stable release is intentionally deferred.
+- Run normal preflight; implementation PRs are expected to have no stable
+  artifacts.
 
 Redesign-specific sequence:
 
 - Merge incremental redesign issues `#28` through `#34` without a stable
   release version or stable release artifact.
 - Test-channel candidates may be deployed at any time during the redesign. The
-  generated stable build files must be removed from the incremental PR branch
-  after the remote test-channel manifest and package have been verified.
+  generated stable build files are restored locally by `deploy-test.sh` and
+  must not be committed to incremental PR branches.
 - In issue `#35`, build and deploy a test-channel candidate first.
 - Create and promote the stable release only after the user explicitly approves
   the tested candidate.
 
-Bug fixes, security fixes, and unrelated maintenance or feature releases must
-still include the normal changelog, build, release artifact, and test-channel
-workflow. The final redesign release follows the approval sequence above.
+Bug fixes, security fixes, and unrelated maintenance or feature releases still
+need test-channel validation. Their stable artifacts are added later through a
+separate release PR after explicit approval.
 
 Fuer neue Releases muss `borg-backup-ui.plg` genau einen `###NEXT###`-Block
 enthalten. `plugin/build.sh` ersetzt diesen Block durch die neue Version und
@@ -331,14 +352,14 @@ bricht ab, wenn dadurch doppelte Changelog-Versionen entstehen wuerden.
 Fuer Rebuilds einer bereits getesteten Version darf `###NEXT###` fehlen, wenn
 der passende `###<version>###`-Block bereits im Changelog vorhanden ist.
 
-Der Build aktualisiert typischerweise:
+Der Build aktualisiert fuer die Testversion temporaer:
 
 - `borg_backup_ui.py`
 - `borg-backup-ui.plg`
 - `releases/borg-backup-ui-<version>.txz`
 
-Diese Dateien gehoeren dann mit in denselben Commit oder zumindest in denselben
-Branch, damit der PR auf Unraid installierbar und testbar ist.
+`deploy-test.sh` stellt diese Dateien nach dem Test-Channel-Deploy lokal wieder
+her. Sie gehoeren erst in den separaten Release-PR.
 
 ## Wann ist kein Build erforderlich?
 
@@ -367,6 +388,6 @@ gemergt sind.
 - Python-Syntax
 - `pytest -q`
 - Delta gegen `origin/main`
-- Release-Build-Regel fuer Plugin-Codeaenderungen
+- Stable-Artefakt-Regel fuer Plugin-Codeaenderungen
 - ob der Branch auf GitHub existiert
 - ob lokaler und remote Branch synchron sind

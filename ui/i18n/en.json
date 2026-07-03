@@ -245,7 +245,6 @@
     "disabledWithKey": "Job is disabled: {key}",
     "dataDirRequired": "Set GLOBAL_DATA_DIR in Settings first.",
     "options": "Options",
-    "adoptLegacy": "Import into wizard",
     "edit": "Edit job",
     "schedule": "Schedule",
     "enable": "Enable job",
@@ -327,7 +326,6 @@
   "wizard": {
     "newTitle": "New backup job",
     "editTitle": "Edit backup job",
-    "adoptTitle": "Import legacy job",
     "loadFailed": "Could not load wizard: {message}",
     "stepBasics": "Basics",
     "stepSourcesTarget": "Sources & target",
