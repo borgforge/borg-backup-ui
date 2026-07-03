@@ -36,7 +36,12 @@ changed_files="$(git diff --name-only "${base_ref}...HEAD")"
 plugin_code_changed=0
 release_manifest_changed=0
 release_artifact_changed=0
-deferred_release_allowed="${BORG_UI_ALLOW_DEFERRED_RELEASE:-0}"
+release_pr=0
+case "${branch}" in
+  codex/release-*|release-*)
+    release_pr=1
+    ;;
+esac
 
 while IFS= read -r file; do
   case "${file}" in
@@ -59,17 +64,27 @@ if [[ "${release_manifest_changed}" -eq 1 && "${release_artifact_changed}" -eq 1
   release_build_changed=1
 fi
 
-if [[ "${plugin_code_changed}" -eq 1 && "${release_build_changed}" -eq 0 && "${deferred_release_allowed}" == "1" ]]; then
-  echo "Hinweis: Plugin-Code wurde geändert, aber kein Release-Build ist im Branch enthalten."
-  echo "        Release-Build ist fuer ein freigegebenes Umbrella-Feature bewusst aufgeschoben."
-elif [[ "${plugin_code_changed}" -eq 1 && "${release_build_changed}" -eq 0 ]]; then
-  echo "Fehler: Plugin-Code wurde geändert, aber kein Release-Build ist im Branch enthalten."
-  echo "Bitte ./plugin/build.sh ausführen und die entstehenden Änderungen committen."
-  echo "Erwartet werden typischerweise:"
-  echo "  - borg_backup_ui.py"
-  echo "  - borg-backup-ui.plg"
-  echo "  - releases/borg-backup-ui-<version>.txz"
+if [[ "${release_pr}" -eq 0 && "${release_manifest_changed}" -eq 1 ]]; then
+  echo "Fehler: borg-backup-ui.plg darf nur in einem separaten Release-PR geaendert werden."
+  echo "Bitte Feature-/Fix-PR ohne Stable-Manifest erstellen und spaeter ./plugin/promote-release.sh <version> nutzen."
   exit 1
+fi
+
+if [[ "${release_pr}" -eq 0 && "${release_artifact_changed}" -eq 1 ]]; then
+  echo "Fehler: releases/borg-backup-ui-*.txz darf nur in einem separaten Release-PR geaendert werden."
+  echo "Bitte Test-Channel-Artefakte nicht in Feature-/Fix-PRs committen."
+  exit 1
+fi
+
+if [[ "${release_pr}" -eq 1 && "${release_build_changed}" -eq 0 ]]; then
+  echo "Fehler: Release-PR ohne vollstaendige Stable-Artefakte."
+  echo "Erwartet werden borg-backup-ui.plg und releases/borg-backup-ui-<version>.txz."
+  exit 1
+fi
+
+if [[ "${plugin_code_changed}" -eq 1 && "${release_pr}" -eq 0 ]]; then
+  echo "Hinweis: Plugin-Code wurde geaendert. Stable-Artefakte gehoeren nicht in diesen PR."
+  echo "        Test-Channel-Deploy separat verifizieren; Stable spaeter per eigenem Release-PR."
 fi
 
 echo "==> Prüfe, ob Branch auf origin existiert"

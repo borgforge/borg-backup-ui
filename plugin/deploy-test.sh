@@ -4,8 +4,8 @@
 # This script builds the current tree, generates borg-backup-ui-test.plg, and
 # pushes only the test manifest plus release package to the test-channel branch.
 # The test-channel branch intentionally does not contain the full source tree or
-# history. The current branch remains the source of truth for the later go-live
-# PR.
+# history. Stable build files generated during the build are restored locally
+# before the script exits; stable promotion is handled by a separate release PR.
 
 set -euo pipefail
 
@@ -25,9 +25,51 @@ echo "==> Test-Deploy ${NAME} ${VERSION}"
 echo "==> Source-Branch: ${CURRENT_BRANCH}"
 echo "==> Test-Branch  : ${TEST_BRANCH}"
 
+TMP_ROOT="${REPO_DIR}/.release-tmp"
+mkdir -p "$TMP_ROOT"
+
+PLG_FILE="${REPO_DIR}/${NAME}.plg"
+APP_FILE="${REPO_DIR}/borg_backup_ui.py"
+PKG_FILE="${REPO_DIR}/releases/${NAME}-${VERSION}.txz"
+
+PLG_SNAPSHOT="$(mktemp "${TMP_ROOT}/${NAME}.plg.before.XXXXXX")"
+APP_SNAPSHOT="$(mktemp "${TMP_ROOT}/borg_backup_ui.py.before.XXXXXX")"
+PKG_SNAPSHOT="$(mktemp "${TMP_ROOT}/${NAME}-${VERSION}.txz.before.XXXXXX")"
+PKG_EXISTED=0
+cp "$PLG_FILE" "$PLG_SNAPSHOT"
+cp "$APP_FILE" "$APP_SNAPSHOT"
+if [ -f "$PKG_FILE" ]; then
+  cp "$PKG_FILE" "$PKG_SNAPSHOT"
+  PKG_EXISTED=1
+fi
+
+WORKTREE=""
+TMP_PLG=""
+
+restore_stable_files() {
+  cp "$PLG_SNAPSHOT" "$PLG_FILE"
+  cp "$APP_SNAPSHOT" "$APP_FILE"
+  if [ "$PKG_EXISTED" -eq 1 ]; then
+    cp "$PKG_SNAPSHOT" "$PKG_FILE"
+  else
+    rm -f "$PKG_FILE"
+  fi
+}
+
+cleanup() {
+  restore_stable_files || true
+  if [ -n "$WORKTREE" ]; then
+    rm -rf "$WORKTREE"
+  fi
+  if [ -n "$TMP_PLG" ]; then
+    rm -f "$TMP_PLG"
+  fi
+  rm -f "$PLG_SNAPSHOT" "$APP_SNAPSHOT" "$PKG_SNAPSHOT"
+}
+trap cleanup EXIT
+
 "${SCRIPT_DIR}/build.sh" "$VERSION"
 
-PKG_FILE="${REPO_DIR}/releases/${NAME}-${VERSION}.txz"
 if [ ! -f "$PKG_FILE" ]; then
   echo "ERROR: Release-Paket fehlt: ${PKG_FILE}" >&2
   exit 1
@@ -54,11 +96,8 @@ else
   MD5="$(md5 -q "$PKG_FILE")"
 fi
 
-TMP_ROOT="${REPO_DIR}/.release-tmp"
-mkdir -p "$TMP_ROOT"
-
 TMP_PLG="$(mktemp "${TMP_ROOT}/${NAME}-test.XXXXXX.plg")"
-cp "${REPO_DIR}/${NAME}.plg" "$TMP_PLG"
+cp "$PLG_FILE" "$TMP_PLG"
 sed -i.bak \
   -e "s|<!ENTITY pluginURL \"[^\"]*\">|<!ENTITY pluginURL \"https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/\\&name;-test.plg\">|" \
   -e "s|<!ENTITY pkgurl    \"[^\"]*\">|<!ENTITY pkgurl    \"https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/releases/\\&name;-\\&version;.txz\">|" \
@@ -71,12 +110,6 @@ echo "==> Pruefe Test-Manifest XML"
 python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$TMP_PLG"
 
 WORKTREE="$(mktemp -d "${TMP_ROOT}/${TEST_BRANCH}.XXXXXX")"
-cleanup() {
-  rm -rf "$WORKTREE"
-  rm -f "$TMP_PLG"
-}
-trap cleanup EXIT
-
 ORIGIN_URL="$(git -C "$REPO_DIR" remote get-url origin)"
 git -C "$WORKTREE" init
 git -C "$WORKTREE" remote add origin "$ORIGIN_URL"
@@ -113,5 +146,10 @@ Getestete Version:
   ${VERSION}
 
 Nach erfolgreichem Test:
+  Feature-PR mergen und danach nur mit ausdruecklicher Stable-Freigabe:
   ./plugin/promote-release.sh ${VERSION}
+
+Hinweis:
+  Lokale Stable-Build-Dateien wurden wiederhergestellt. Feature-PRs duerfen
+  borg-backup-ui.plg und releases/*.txz nicht als Stable-Artefakte enthalten.
 EOF

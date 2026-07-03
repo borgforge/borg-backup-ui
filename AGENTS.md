@@ -249,10 +249,19 @@ lesen und befolgen.
 
 Wenn Plugin-Code geaendert wurde:
 
-1. Changelog unter `###NEXT###` pflegen
-2. `./plugin/build.sh` ausfuehren
-3. Release-Artefakt aktualisieren
-4. Release-Ergebnis pruefen
+1. Technische Historie bei Bedarf in `docs/changelog.md` pflegen
+2. Fokussierte Tests ausfuehren
+3. Eine Test-Channel-Version mit `./plugin/deploy-test.sh <version>` erstellen
+4. Test-Channel-Manifest und Paket verifizieren
+
+Feature-, Fix- und Maintenance-PRs duerfen keine Stable-Release-Artefakte
+enthalten. Das gilt insbesondere fuer:
+
+* `borg-backup-ui.plg`
+* reine `APP_VERSION`-Bumps in `borg_backup_ui.py`
+* `releases/borg-backup-ui-*.txz`
+
+Diese Dateien gehoeren ausschliesslich in einen separaten Release-PR.
 
 Nach Abschluss eines testbaren, nutzerrelevanten Tasks muss immer zuerst eine
 Test-Channel-Version erstellt und verifiziert werden:
@@ -275,10 +284,21 @@ Test erfolgreich, Release erstellen
 Ohne diese ausdrueckliche Freigabe bleibt der PR im Status "wartet auf
 Nutzertest"; es wird keine neue Stable-Release-Freigabe erstellt.
 
+Stable-Releases werden immer in einem separaten Release-PR vorbereitet. Nach
+Freigabe wird dafuer verwendet:
+
+```bash
+./plugin/promote-release.sh <version>
+```
+
+Das Skript erstellt bzw. aktualisiert einen Branch `codex/release-<version>`
+aus `origin/main`, kopiert das getestete Paket aus `test-channel` und erstellt
+einen eigenen Pull Request gegen `main`. Feature-/Fix-PRs werden dadurch nicht
+mit Stable-Artefakten vermischt.
+
 Ausnahme fuer ausdruecklich freigegebene Umbrella-Features:
 
-* Schrittweise Teil-PRs duerfen Plugin-Code ohne Release-Artefakt aendern,
-  wenn der Nutzer dies fuer das Umbrella-Feature freigegeben hat.
+* Schrittweise Teil-PRs duerfen Plugin-Code ohne Release-Artefakt aendern.
 * Diese Ausnahme gilt fuer die Zweisprachigkeit aus Issue `#11` und fuer das
   einheitliche UI-Redesign aus Umbrella-Issue `#27`.
 * Die Redesign-Teil-Issues `#28` bis `#34` werden ohne stabile Release-Version
@@ -287,21 +307,17 @@ Ausnahme fuer ausdruecklich freigegebene Umbrella-Features:
 * Issue `#35` erstellt zuerst einen Test-Channel-Kandidaten. Eine stabile
   Release-Version und Promotion nach `main` erfolgen erst nach ausdruecklicher
   Freigabe des Nutzers.
-* Der PR muss dokumentieren, dass der Release-Build bewusst auf den finalen
+* Der PR muss dokumentieren, dass die Stable-Freigabe bewusst auf den finalen
   Feature-Abschluss verschoben wird.
-* Preflight muss in diesem Fall explizit mit
-  `BORG_UI_ALLOW_DEFERRED_RELEASE=1 ./plugin/mr-preflight.sh` ausgefuehrt
-  werden.
 * Bugfixes, Security-Fixes und andere Maintenance- oder Feature-Releases
-  bleiben von dieser Ausnahme unberuehrt. Der finale Redesign-Release folgt dem
-  Test-Channel- und Freigabeablauf aus Issue `#35`.
+  folgen ebenfalls dieser Trennung: Code-PR ohne Stable-Artefakte,
+  Test-Channel-Version zuerst, Release-PR erst nach ausdruecklicher Freigabe.
 
 Unter `releases/` bleiben in `main` ausschliesslich die letzten 5
 `borg-backup-ui-*.txz`-Release-Artefakte.
 
 Wenn ein neues Release-Artefakt hinzukommt und dadurch mehr als 5 Pakete
-vorhanden waeren, das aelteste Release-Artefakt im selben Release- oder
-Aufraeum-PR entfernen.
+vorhanden waeren, das aelteste Release-Artefakt im selben Release-PR entfernen.
 
 ---
 
