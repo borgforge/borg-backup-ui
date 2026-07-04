@@ -8,7 +8,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #155
 - Notifications:
-  - Backup failure e-mails now use the same event message format as other notification e-mails and include the backup log output below the summary.
+  - Backup event e-mails now use the same message format and include the backup log output below the summary when a log file is available.
 
 ### Issue #153
 - Notifications:

@@ -105,7 +105,7 @@ def send_event(
 
 
 def _send_event_mail(config: MailConfig, event: NotificationEvent) -> bool:
-    if event.event_type == "backup_failed" and event.log_file:
+    if event.log_file:
         return send_mail(config, event.title, _event_mail_with_log(event))
     return send_mail(config, event.title, event.message)
 
