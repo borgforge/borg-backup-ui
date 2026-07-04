@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import logging
 import smtplib
+import ssl
 import subprocess
 from dataclasses import dataclass, field
 from email.mime.multipart import MIMEMultipart
@@ -396,17 +397,30 @@ def _build_message(
 
 
 def _send_smtp(config: MailConfig, msg: MIMEMultipart) -> None:
-    if config.smtp_use_tls:
-        smtp_cls = smtplib.SMTP_SSL
-    else:
-        smtp_cls = smtplib.SMTP
+    context = ssl.create_default_context()
+    if int(config.smtp_port) == 465:
+        with smtplib.SMTP_SSL(config.smtp_host, config.smtp_port, timeout=30, context=context) as smtp:
+            smtp.ehlo()
+            _login_if_needed(smtp, config)
+            smtp.send_message(msg)
+        return
 
-    with smtp_cls(config.smtp_host, config.smtp_port, timeout=30) as smtp:
-        if not config.smtp_use_tls and config.smtp_user:
-            smtp.starttls()
-        if config.smtp_user:
-            smtp.login(config.smtp_user, config.smtp_password)
+    with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=30) as smtp:
+        smtp.ehlo()
+        if config.smtp_use_tls or smtp.has_extn("starttls"):
+            smtp.starttls(context=context)
+            smtp.ehlo()
+        _login_if_needed(smtp, config)
         smtp.send_message(msg)
+
+
+def _login_if_needed(smtp_obj, config: MailConfig) -> None:
+    if not config.smtp_user:
+        return
+    try:
+        smtp_obj.login(config.smtp_user, config.smtp_password)
+    except smtplib.SMTPNotSupportedError:
+        return
 
 
 def _safe_ntfy_server(server_url: str) -> str:

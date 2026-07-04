@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #163
+- Notifications:
+  - Backup and restore-test event e-mails now use STARTTLS on port 587, matching the SMTP test mail and weekly report behavior.
+
 ### Issue #158
 - UI:
   - Dashboard run-status details now wrap cleanly instead of overlapping the Restore column for longer duration text.
