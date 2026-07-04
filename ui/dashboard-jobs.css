@@ -181,6 +181,17 @@
   white-space: nowrap;
 }
 
+.dashboard-run-facts .dashboard-fact-row {
+  grid-template-columns: 5.75rem minmax(0, 1fr);
+  gap: var(--ui-space-1);
+}
+
+.dashboard-run-facts .dashboard-fact-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .dashboard-run-facts b,
 .dashboard-restore-facts b,
 .dashboard-storage-facts b {
