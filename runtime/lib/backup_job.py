@@ -34,7 +34,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from lib.docker_manager import DockerManager, DockerStopResult
@@ -164,12 +164,14 @@ class BackupJob:
         vm_manager: Optional["VmManager"] = None,
         mail_config: Optional["MailConfig"] = None,
         ntfy_config: Optional["NtfyConfig"] = None,
+        notification_config: Optional[Dict[str, str]] = None,
     ) -> None:
         self.config = config
         self.docker_manager = docker_manager
         self.vm_manager = vm_manager
         self.mail_config = mail_config
         self.ntfy_config = ntfy_config
+        self.notification_config = notification_config
 
         self._start_time: float = 0.0
         self._borg_exit: int = 99
@@ -757,7 +759,7 @@ class BackupJob:
             from lib.notification_events import NotificationEvent, send_event
 
             send_event(
-                os.environ,
+                self.notification_config or os.environ,
                 NotificationEvent(
                     event_type=event_type,
                     title=title,

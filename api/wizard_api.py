@@ -603,7 +603,7 @@ def main() -> int:
         return init_exit
 
 
-{docker_mgr}    with BackupJob(job_config{docker_param}, mail_config=mail_config, ntfy_config=ntfy_config) as job:
+{docker_mgr}    with BackupJob(job_config{docker_param}, mail_config=mail_config, ntfy_config=ntfy_config, notification_config=env) as job:
         job.check_prerequisites()
         job.cleanup_old_logs()
 {docker_stop}        runner = BorgRunner(borg_config)

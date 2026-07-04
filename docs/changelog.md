@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #153
+- Notifications:
+  - Backup jobs now pass the loaded job notification configuration into the central notification router, so selected e-mail events such as backup success are honored.
+  - Added regression coverage for backup success and restore-test success e-mail event routing.
+
 ### Issue #150
 - UI:
   - The sidebar footer and Settings About card now show the maintainer contact e-mail address.
