@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.04.0712">
+<!ENTITY version   "2026.07.04.1425">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.04.1425###
+- Issue #155:
+  - Backup event e-mails now include the backup log output below the event summary when a log file is available.
+
 ###2026.07.04.0712###
 - Issue #150:
   - Sidebar and About now show maintainer contact information and the current GitHub repository link.
@@ -269,7 +273,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>3ee41f78627c62cdf663eb1efa5efdff</MD5>
+<MD5>17cc6cf8140e6da9332e84694d9095bf</MD5>
 </FILE>
 
 <!--
