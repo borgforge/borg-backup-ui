@@ -111,7 +111,7 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 
 - SMTP-Konfiguration und Testmail liegen unter **Einstellungen > Allgemein**.
 - Das SMTP-Passwort wird nach dem Speichern nicht im Klartext angezeigt. Ein gesetztes Passwort wird nur als Status angezeigt.
-- Backup-Fehler können E-Mails auslösen; reguläre Zusammenfassungen laufen über den Wochenbericht.
+- E-Mail-Benachrichtigungen folgen den ausgewählten Benachrichtigungsereignissen; reguläre Zusammenfassungen laufen über den Wochenbericht.
 - ntfy-Konfiguration und Testnachricht liegen ebenfalls unter **Einstellungen > Allgemein**.
 - ntfy kann Backup-Erfolg, Backup-Fehler/Warnungen und übersprungene Backups als Push-Benachrichtigung senden.
 - Überfällige geplante Backups und Restore-Tests können als Reminder gemeldet werden, wenn das jeweilige Ereignis im Kanal aktiviert ist.

@@ -111,7 +111,7 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 
 - SMTP configuration and the test email are under **Settings > General**.
 - The SMTP password is not shown in clear text after saving. A saved password is shown only as a status.
-- Backup failures can trigger emails; regular summaries are handled by the weekly report.
+- Email notifications follow the selected notification events; regular summaries are handled by the weekly report.
 - ntfy configuration and the test notification are also under **Settings > General**.
 - ntfy can send push notifications for successful backups, failed or warning backups, skipped backups, and overdue scheduled checks.
 - Overdue scheduled restore tests can send reminders when the event is enabled for the channel.

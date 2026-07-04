@@ -790,6 +790,7 @@ def main() -> int:
             vm_manager=vm_mgr,
             mail_config=mail_config,
             ntfy_config=ntfy_config,
+            notification_config=env,
         ) as job:
             if abort_on_parity:
                 logging.info("Parity check enabled (ABORT_ON_PARITY_CHECK=true)")

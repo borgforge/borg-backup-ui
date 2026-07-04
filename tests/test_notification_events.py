@@ -17,8 +17,23 @@ from lib.notification_events import (  # noqa: E402
     reminder_allowed,
     send_event,
 )
+from lib.backup_job import BackupJob, BackupJobConfig  # noqa: E402
 from lib.notifications import MailConfig, NtfyConfig  # noqa: E402
 import notification_reminder_api  # noqa: E402
+
+
+def _backup_job_config(tmp_path: Path) -> BackupJobConfig:
+    return BackupJobConfig(
+        job_name="Flash",
+        backup_type="flash",
+        backup_location="local",
+        lock_file=tmp_path / "job.lock",
+        log_dir=tmp_path,
+        log_file=tmp_path / "backup.log",
+        backup_paths=[],
+        borg_cache_dir=tmp_path / "cache",
+        date_tag="2026-07-04",
+    )
 
 
 def test_send_event_routes_to_configured_channels(monkeypatch):
@@ -45,6 +60,61 @@ def test_send_event_routes_to_configured_channels(monkeypatch):
 
     assert result == {"unraid": True, "email": False, "ntfy": True}
     assert [c[0] for c in calls] == ["unraid", "ntfy"]
+
+
+def test_send_event_routes_restore_test_success_to_email_when_selected(monkeypatch):
+    calls = []
+    monkeypatch.setattr("lib.notification_events.send_mail", lambda config, subject, body: calls.append((subject, body)) or True)
+
+    result = send_event(
+        {
+            "NOTIFY_UNRAID_EVENTS": "",
+            "NOTIFY_EMAIL_EVENTS": "restore_test_success",
+        },
+        NotificationEvent(
+            event_type="restore_test_success",
+            title="Borg Backup UI: Restore test Successful",
+            message="Restore test completed successfully.",
+            job_name="Borg Backup UI (flash_local)",
+        ),
+        mail_config=MailConfig(recipient="admin@example.test"),
+    )
+
+    assert result["email"] is True
+    assert calls == [("Borg Backup UI: Restore test Successful", "Restore test completed successfully.")]
+
+
+def test_backup_job_uses_loaded_notification_config_for_email_events(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_send_event(config, event, *, mail_config=None, ntfy_config=None):
+        captured["config"] = dict(config)
+        captured["event_type"] = event.event_type
+        captured["mail_recipient"] = mail_config.recipient if mail_config else ""
+        return {"unraid": False, "email": True, "ntfy": False}
+
+    monkeypatch.setattr("lib.notification_events.send_event", fake_send_event)
+    job = BackupJob(
+        _backup_job_config(tmp_path),
+        mail_config=MailConfig(recipient="admin@example.test"),
+        notification_config={
+            "NOTIFY_EMAIL_EVENTS": "backup_success,restore_test_success",
+            "NOTIFY_UNRAID_EVENTS": "",
+        },
+    )
+
+    job._send_notification_event(
+        "backup_success",
+        "Borg Backup UI: Backup successful",
+        "Backup completed successfully.",
+        "info",
+        12,
+        0,
+    )
+
+    assert captured["event_type"] == "backup_success"
+    assert captured["config"]["NOTIFY_EMAIL_EVENTS"] == "backup_success,restore_test_success"
+    assert captured["mail_recipient"] == "admin@example.test"
 
 
 def test_backup_warning_keeps_existing_ntfy_backup_failed_selection(monkeypatch):
