@@ -78,6 +78,7 @@
       "rate_limited": "Zu viele Anfragen. Bitte später erneut versuchen.",
       "bad_request": "Die Anfrage enthält ungültige Angaben.",
       "not_found": "Der angeforderte Eintrag wurde nicht gefunden.",
+      "restore_test_already_running": "Ein Restore-Test läuft bereits.",
       "internal_error": "Interner Serverfehler. Bitte Protokoll und Request-ID prüfen."
     },
     "messages": {
@@ -1044,6 +1045,8 @@
     "noDueJobs": "Keine fälligen geplanten Restore-Tests. Intervall oder Plan sind noch nicht erreicht. Einzelne Jobs können in Planung & Policy über Jetzt testen manuell gestartet werden.",
     "errorValue": "Fehler: {message}",
     "running": "Läuft...",
+    "alreadyRunningOpenLog": "Ein Restore-Test läuft bereits. Das Live-Protokoll wurde geöffnet.",
+    "runningWithoutFinalLog": "Ein Restore-Test läuft noch oder hat noch keine Abschlussmeldung geschrieben. Das Live-Protokoll zeigt den aktuellen Stand.",
     "finishedExit": "Fertig (Exit {exit})",
     "errorExit": "Fehler (Exit {exit})",
     "planUnavailable": "Plan nicht verfügbar.",
