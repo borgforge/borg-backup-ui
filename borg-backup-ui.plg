@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.04.2054">
+<!ENTITY version   "2026.07.04.2139">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.04.2139###
+- Issue #163:
+  - Event e-mails now use STARTTLS on port 587, matching SMTP test mail and weekly reports.
+
 ###2026.07.04.2054###
 - Issue #158:
   - Dashboard run-status details now wrap cleanly instead of overlapping the Restore column for longer duration text.
@@ -280,7 +284,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>cb4ec58c79c73e315d575d91f4bb3ce7</MD5>
+<MD5>bb11bf50d0491abccde81b55f872a796</MD5>
 </FILE>
 
 <!--
