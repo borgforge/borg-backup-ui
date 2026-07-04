@@ -10,6 +10,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Notifications:
   - Backup and restore-test event e-mails now fall back to the weekly-report recipient when the global e-mail recipient is empty.
   - Backup logs now show the configured e-mail notification events instead of the old failure-only wording.
+  - SMTP test e-mails now require saving changed SMTP or e-mail settings first, so a successful test reflects the persisted runtime configuration.
 
 ### Issue #155
 - Notifications:

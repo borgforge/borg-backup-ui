@@ -1559,6 +1559,7 @@
       "smtpPasswordSet": "SMTP-Passwort (gesetzt)",
       "useTls": "TLS/STARTTLS verwenden",
       "sendTestEmail": "Test-E-Mail senden",
+      "saveBeforeTestEmail": "Bitte SMTP- und E-Mail-Einstellungen zuerst speichern, bevor eine Test-E-Mail gesendet wird.",
       "notificationReminderTitle": "Reminder & Überfälligkeit",
       "notificationReminderHint": "Diese Einstellungen gelten kanalübergreifend für Unraid, E-Mail und ntfy.",
       "unraidNotifyTitle": "Unraid-Benachrichtigungen",

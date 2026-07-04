@@ -147,6 +147,21 @@ def test_settings_status_checks_do_not_reload_the_page() -> None:
     assert "_storageboxRenderChecks()" in connection_test
 
 
+def test_smtp_test_mail_uses_persisted_settings_only() -> None:
+    script = _read("ui/js/pages/settings.js")
+    send_test = script.split("async function sendTestEmail()", 1)[1].split(
+        "function _notificationEventEnabled", 1
+    )[0]
+
+    assert "saveBeforeTestEmail" in send_test
+    assert "'GLOBAL_MAIL_RECIPIENT'" in send_test
+    assert "'GLOBAL_SMTP_PASSWORD'" in send_test
+    assert "settingsState.data?.smtp?.[key]" in send_test
+    assert "body: JSON.stringify({})," in send_test
+    assert "JSON.stringify({ recipient })" not in send_test
+    assert "document.querySelector('[data-key=\"GLOBAL_MAIL_RECIPIENT\"]')?.value" not in send_test
+
+
 def test_settings_menu_reuses_storage_icons_and_has_no_duplicate_health_footer() -> None:
     script = _read("ui/js/pages/settings.js")
     css = _read("ui/settings-redesign.css")
