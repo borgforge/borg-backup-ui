@@ -118,6 +118,21 @@ def test_settings_menu_translations_live_in_settings_namespace() -> None:
         assert menu["saved"]
 
 
+def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> None:
+    script = _read("ui/js/pages/settings.js")
+    bindings = _read("ui/js/components/app-bindings.js")
+
+    assert "thorsten.steinberg@gmx.de" in script
+    assert "mailto:${escAttr(info.contactEmail)}" in script
+    assert "https://github.com/borgforge/borg-backup-ui" in script
+    assert "borgforge/borg-backup-ui" in script
+    assert "gitlab.thetwist.de" not in script
+    assert "settings-about-contact" in script
+    assert "settings-about-repository" in script
+    assert "settingsState.appInfo" in script
+    assert "v.contact_email, v.repository_url" in bindings
+
+
 def test_settings_status_checks_do_not_reload_the_page() -> None:
     script = _read("ui/js/pages/settings.js")
     key_status = script.split("async function storageboxKeyStatus()", 1)[1].split(

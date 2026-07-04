@@ -36,10 +36,19 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   smbSecretCleanupKeys: [],
   authStatus: null,
   authUsers: [],
+  appInfo: null,
   data: null,
   systemHealth: null,
 };
 const settingsState = window.BBUI.settingsState;
+
+const APP_CONTACT_EMAIL = 'thorsten.steinberg@gmx.de';
+const APP_REPOSITORY_URL = 'https://github.com/borgforge/borg-backup-ui';
+const APP_REPOSITORY_LABEL = 'borgforge/borg-backup-ui';
+
+function escAttr(value) {
+  return escHtml(String(value || ''));
+}
 
 function settingsT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`settings.${key}`, params) || `settings.${key}`;
@@ -119,7 +128,7 @@ async function refreshSettings() {
     document.getElementById('settings-save-btn')?.removeAttribute('disabled');
     if (verRes.ok) {
       const ver = await verRes.json();
-      _applyVersionInfo(ver.version, ver.author, ver.borg_version);
+      _applyVersionInfo(ver.version, ver.author, ver.borg_version, ver.contact_email, ver.repository_url);
     }
     usersRequest.then((uData) => {
       settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
@@ -160,13 +169,32 @@ window.addEventListener?.('bbui:language-changed', () => {
   }
 });
 
-function _applyVersionInfo(version, author, borgVersion) {
+function _normalizeAppInfo(version, author, borgVersion, contactEmail, repositoryUrl) {
+  return {
+    version: String(version || '').trim(),
+    author: String(author || 'Thorsten Steinberg').trim(),
+    borgVersion: String(borgVersion || '').trim(),
+    contactEmail: String(contactEmail || APP_CONTACT_EMAIL).trim(),
+    repositoryUrl: String(repositoryUrl || APP_REPOSITORY_URL).trim(),
+  };
+}
+
+function _applyVersionInfo(version, author, borgVersion, contactEmail, repositoryUrl) {
+  settingsState.appInfo = _normalizeAppInfo(version, author, borgVersion, contactEmail, repositoryUrl);
+  const info = settingsState.appInfo;
   const el = document.getElementById('app-version-info');
-  if (el) el.innerHTML = `<span class="app-version">v${escHtml(version)}</span><span class="app-author">${escHtml(author)}</span>`;
+  if (el) el.innerHTML = `
+    <span class="app-version">${info.version ? `v${escHtml(info.version)}` : 'v—'}</span>
+    <span class="app-author">${escHtml(info.author)}</span>
+    <a class="app-contact" href="mailto:${escAttr(info.contactEmail)}">${escHtml(info.contactEmail)}</a>`;
   const aboutEl = document.getElementById('settings-about-version');
-  if (aboutEl) aboutEl.textContent = version;
+  if (aboutEl) aboutEl.textContent = info.version || '—';
   const borgEl = document.getElementById('settings-about-borg-version');
-  if (borgEl) borgEl.textContent = borgVersion || '—';
+  if (borgEl) borgEl.textContent = info.borgVersion || '—';
+  const contactEl = document.getElementById('settings-about-contact');
+  if (contactEl) contactEl.innerHTML = `<a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a>`;
+  const repoEl = document.getElementById('settings-about-repository');
+  if (repoEl) repoEl.innerHTML = `<a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a>`;
 }
 
 function renderSettings(data, systemHealth) {
@@ -233,6 +261,15 @@ function renderSettings(data, systemHealth) {
   const getThemePref = window.BBUI?.components?.theme?.getStoredThemePreference;
   if (themeSel && typeof getThemePref === 'function') {
     themeSel.value = getThemePref();
+  }
+  if (settingsState.appInfo) {
+    _applyVersionInfo(
+      settingsState.appInfo.version,
+      settingsState.appInfo.author,
+      settingsState.appInfo.borgVersion,
+      settingsState.appInfo.contactEmail,
+      settingsState.appInfo.repositoryUrl,
+    );
   }
   refreshSettingsConfigBackups();
   initializeSettingsProfileManagers();
@@ -4101,13 +4138,15 @@ async function sendWeeklyReport() {
 // ── Settings-Formular-Hilfsfunktionen ─────────────────────────────────────────
 
 function renderSettingsAbout() {
+  const info = settingsState.appInfo || _normalizeAppInfo('', '', '', '', '');
   return settingsCard(settingsT('forms.about'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
     `<div class="settings-body">
       <div class="about-grid">
-        <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">—</span></div>
-        <div class="about-row"><span class="about-label">Borg Version</span><span class="about-value" id="settings-about-borg-version">—</span></div>
-        <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">Thorsten Steinberg</span></div>
+        <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">${escHtml(info.version || '—')}</span></div>
+        <div class="about-row"><span class="about-label">Borg Version</span><span class="about-value" id="settings-about-borg-version">${escHtml(info.borgVersion || '—')}</span></div>
+        <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">${escHtml(info.author)}</span></div>
+        <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
         <div class="about-row"><span class="about-label">${settingsT('forms.license')}</span><span class="about-value">MIT</span></div>
         <div class="about-row">
           <span class="about-label">${settingsT('forms.thirdPartyLicenses')}</span>
@@ -4116,7 +4155,7 @@ function renderSettingsAbout() {
             <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a>
           </span>
         </div>
-        <div class="about-row"><span class="about-label">Repository</span><span class="about-value"><a href="https://gitlab.thetwist.de/tsteinbe/borg-backup-ui" target="_blank" class="about-link">gitlab.thetwist.de/tsteinbe/borg-backup-ui</a></span></div>
+        <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
       </div>
     </div>`);
 }

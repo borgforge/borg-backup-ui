@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #150
+- UI:
+  - The sidebar footer and Settings About card now show the maintainer contact e-mail address.
+  - The Settings About card now uses the current GitHub repository link.
+  - Version and Borg version metadata are kept in UI state so the About card remains populated after tab and language changes.
+
 ### Issue #148
 - Notifications:
   - Backup overdue reminders no longer send when the latest backup status for a scheduled job is missing or temporarily unreadable.

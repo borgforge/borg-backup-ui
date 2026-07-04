@@ -316,7 +316,12 @@
     }).catch(() => {});
     scheduleAutoRefresh();
     updateClock();
-    fetch('/api/version').then(r => r.ok ? r.json() : null).then(v => { if (v) _applyVersionInfo(v.version, v.author, v.borg_version); }).catch(() => {});
+    fetch('/api/version')
+      .then(r => r.ok ? r.json() : null)
+      .then(v => {
+        if (v) _applyVersionInfo(v.version, v.author, v.borg_version, v.contact_email, v.repository_url);
+      })
+      .catch(() => {});
     fetch('/api/auth/status').then(r => r.ok ? r.json() : null).then((a) => {
       const el = document.getElementById('auth-current-user');
       if (!el || !a) return;
