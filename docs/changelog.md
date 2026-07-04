@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #155
+- Notifications:
+  - Backup failure e-mails now use the same event message format as other notification e-mails and include the backup log output below the summary.
+
 ### Issue #153
 - Notifications:
   - Backup jobs now pass the loaded job notification configuration into the central notification router, so selected e-mail events such as backup success are honored.
