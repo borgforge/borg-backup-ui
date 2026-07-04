@@ -1788,6 +1788,7 @@
       "reminderWaiting": "overdue, interval active",
       "reminderUnsupported": "Cron unsupported",
       "reminderMissingDue": "Due timestamp missing",
+      "reminderMissingStatus": "Status missing",
       "noDetails": "No details available.",
       "checkFailed": "Check failed",
       "noRegistryData": "No registry data available.",

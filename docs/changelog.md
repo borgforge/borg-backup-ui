@@ -6,6 +6,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #148
+- Notifications:
+  - Backup overdue reminders no longer send when the latest backup status for a scheduled job is missing or temporarily unreadable.
+  - The scheduled reminder loop now waits for a boot grace period before its first check, avoiding false overdue notifications while Unraid mounts and status directories are still coming online.
+  - Notification reminder diagnostics now show a dedicated missing-status state for these jobs.
+  - Added regression coverage for the reported false-positive backup overdue reminder scenario.
+
 ### Issue #142
 - Maintenance:
   - Startup now executes migrations only through the central migration registry.

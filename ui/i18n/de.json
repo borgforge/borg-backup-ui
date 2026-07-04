@@ -1788,6 +1788,7 @@
       "reminderWaiting": "überfällig, Intervall aktiv",
       "reminderUnsupported": "Cron nicht unterstützt",
       "reminderMissingDue": "Termin fehlt",
+      "reminderMissingStatus": "Status fehlt",
       "noDetails": "Keine Details vorhanden.",
       "checkFailed": "Prüfung fehlgeschlagen",
       "noRegistryData": "Keine Registry-Daten vorhanden.",
