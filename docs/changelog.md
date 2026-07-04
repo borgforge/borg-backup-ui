@@ -10,6 +10,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - UI:
   - Dashboard run-status details now wrap cleanly instead of overlapping the Restore column for longer duration text.
 
+### Issue #160
+- Notifications:
+  - Backup and restore-test event e-mails now fall back to the weekly-report recipient when the global e-mail recipient is empty.
+  - Backup logs now show the configured e-mail notification events instead of the old failure-only wording.
+
 ### Issue #155
 - Notifications:
   - Backup event e-mails now use the same message format and include the backup log output below the summary when a log file is available.
