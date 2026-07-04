@@ -115,6 +115,8 @@ def _start_bounded_stderr_collector(stream, *, limit: int = 8192):
 
 APP_VERSION = "2026.07.03.0021"
 APP_AUTHOR  = "Thorsten Steinberg"
+APP_CONTACT_EMAIL = "thorsten.steinberg@gmx.de"
+APP_REPOSITORY_URL = "https://github.com/borgforge/borg-backup-ui"
 
 _BORG_VERSION: str = ""
 
@@ -649,7 +651,13 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self._handle_check_sse()
         else:
             routes = {
-                "/api/version": lambda: {"version": APP_VERSION, "author": APP_AUTHOR, "borg_version": _get_borg_version()},
+                "/api/version": lambda: {
+                    "version": APP_VERSION,
+                    "author": APP_AUTHOR,
+                    "borg_version": _get_borg_version(),
+                    "contact_email": APP_CONTACT_EMAIL,
+                    "repository_url": APP_REPOSITORY_URL,
+                },
                 "/api/status": self._get_status,
                 "/api/system-health": self._get_system_health,
                 "/api/jobs": self._get_jobs,
