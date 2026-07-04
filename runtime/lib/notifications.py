@@ -93,6 +93,11 @@ class MailConfig:
             GLOBAL_SMTP_HOST, GLOBAL_SMTP_PORT,
             GLOBAL_SMTP_USER, GLOBAL_SMTP_PASSWORD, GLOBAL_SMTP_USE_TLS
 
+        If GLOBAL_MAIL_RECIPIENT is empty, WEEKLY_REPORT_RECIPIENT is used as
+        a fallback. This keeps event e-mails working for installations that
+        already configured a weekly-report recipient but left the global
+        recipient empty.
+
         Beispiel:
             from lib.status import load_config
             from lib.notifications import MailConfig
@@ -109,8 +114,13 @@ class MailConfig:
             logger.warning("Invalid GLOBAL_SMTP_PORT ('%s'); using 25", port_raw)
             port = 25
 
+        recipient = (
+            str(config.get("GLOBAL_MAIL_RECIPIENT", "") or "").strip()
+            or str(config.get("WEEKLY_REPORT_RECIPIENT", "") or "").strip()
+        )
+
         return cls(
-            recipient=config.get("GLOBAL_MAIL_RECIPIENT", ""),
+            recipient=recipient,
             sender=config.get("GLOBAL_MAIL_SENDER", ""),
             smtp_host=config.get("GLOBAL_SMTP_HOST", "localhost"),
             smtp_port=port,

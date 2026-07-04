@@ -217,7 +217,10 @@ class BackupJob:
         logger.info("  Log-Dir:     %s (%d days)", cfg.log_dir, cfg.log_retention_days)
         logger.info("  Cache:       %s", cfg.borg_cache_dir)
         if self.mail_config and self.mail_config.recipient:
-            logger.info("  Mail:        %s (on error)", self.mail_config.recipient)
+            mail_events = "backup_failed"
+            if self.notification_config:
+                mail_events = str(self.notification_config.get("NOTIFY_EMAIL_EVENTS", "backup_failed") or "backup_failed")
+            logger.info("  Mail:        %s (events: %s)", self.mail_config.recipient, mail_events)
         if self.ntfy_config and self.ntfy_config.enabled:
             logger.info("  ntfy:        %s/%s", self.ntfy_config.server_url, self.ntfy_config.topic)
         if self.vm_manager is not None:
