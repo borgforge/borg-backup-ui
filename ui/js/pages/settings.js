@@ -2893,17 +2893,38 @@ async function sendTestEmail() {
   const btn    = document.getElementById('smtp-test-btn');
   const result = document.getElementById('smtp-test-result');
   if (!btn || !result) return;
+  const smtpFields = [
+    'GLOBAL_MAIL_RECIPIENT',
+    'GLOBAL_MAIL_SENDER',
+    'GLOBAL_SMTP_HOST',
+    'GLOBAL_SMTP_PORT',
+    'GLOBAL_SMTP_USER',
+    'GLOBAL_SMTP_PASSWORD',
+    'GLOBAL_SMTP_USE_TLS',
+    'NOTIFY_EMAIL_EVENTS',
+  ];
+  const hasUnsavedSmtpChanges = smtpFields.some((key) => {
+    const el = document.querySelector(`[data-key="${key}"]`);
+    if (!el) return false;
+    const current = el.type === 'checkbox' ? (el.checked ? 'true' : 'false') : String(el.value || '');
+    const saved = String(settingsState.data?.smtp?.[key] ?? '');
+    if (key === 'GLOBAL_SMTP_PASSWORD') return String(current || '').trim() !== '';
+    return current !== saved;
+  });
+  if (hasUnsavedSmtpChanges) {
+    result.textContent = settingsT('forms.saveBeforeTestEmail');
+    result.style.color = 'var(--ui-state-warning-fg)';
+    return;
+  }
   btn.classList.add('loading');
   result.textContent = '';
   result.style.color = '';
-
-  const recipient = document.querySelector('[data-key="GLOBAL_MAIL_RECIPIENT"]')?.value?.trim() || '';
 
   try {
     const res  = await fetch('/api/settings/test-smtp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient }),
+      body: JSON.stringify({}),
     });
     const data = await res.json();
     result.textContent = apiMessage(data, data.success ? settingsT('forms.sent') : settingsT('forms.error'));
