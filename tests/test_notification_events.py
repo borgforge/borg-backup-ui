@@ -84,6 +84,76 @@ def test_send_event_routes_restore_test_success_to_email_when_selected(monkeypat
     assert calls == [("Borg Backup UI: Restore test Successful", "Restore test completed successfully.")]
 
 
+def test_backup_failed_email_uses_event_message_and_appends_log(monkeypatch, tmp_path):
+    calls = []
+    log_file = tmp_path / "backup.log"
+    log_file.write_text("line one\nline two\n", encoding="utf-8")
+    monkeypatch.setattr("lib.notification_events.send_mail", lambda config, subject, body: calls.append((subject, body)) or True)
+
+    result = send_event(
+        {
+            "NOTIFY_UNRAID_EVENTS": "",
+            "NOTIFY_EMAIL_EVENTS": "backup_failed",
+        },
+        NotificationEvent(
+            event_type="backup_failed",
+            title="Borg Backup UI: Backup failed",
+            message="Job: Appdata\nResult: Error\nAction: Review the backup log.",
+            job_name="Borg Backup UI (appdata_local)",
+            log_file=str(log_file),
+            backup_type="appdata",
+            date_tag="2026-07-04",
+            exit_code=2,
+        ),
+        mail_config=MailConfig(recipient="admin@example.test"),
+    )
+
+    assert result["email"] is True
+    assert calls[0][0] == "Borg Backup UI: Backup failed"
+    assert "Job: Appdata" in calls[0][1]
+    assert "Log file:" in calls[0][1]
+    assert str(log_file) in calls[0][1]
+    assert "line one\nline two" in calls[0][1]
+    assert "Borg Backup Summary" not in calls[0][0]
+
+
+def test_backup_success_email_appends_log_when_available(monkeypatch, tmp_path):
+    calls = []
+    log_file = tmp_path / "backup.log"
+    log_file.write_text("backup started\nbackup completed\n", encoding="utf-8")
+    monkeypatch.setattr("lib.notification_events.send_mail", lambda config, subject, body: calls.append((subject, body)) or True)
+
+    result = send_event(
+        {
+            "NOTIFY_UNRAID_EVENTS": "",
+            "NOTIFY_EMAIL_EVENTS": "backup_success",
+        },
+        NotificationEvent(
+            event_type="backup_success",
+            title="Borg Backup UI: Backup successful",
+            message=(
+                "Job: Flash\n"
+                "Result: Successful\n"
+                "Duration: 3 sec\n"
+                "Finished: 2026-07-04 14:22\n"
+                "Target: Local / borg-backup-flash\n"
+                "Archive: flash-backup-2026-07-04_14-22-37"
+            ),
+            job_name="Borg Backup UI (flash_local)",
+            log_file=str(log_file),
+        ),
+        mail_config=MailConfig(recipient="admin@example.test"),
+    )
+
+    assert result["email"] is True
+    assert calls[0][0] == "Borg Backup UI: Backup successful"
+    assert "Job: Flash" in calls[0][1]
+    assert "Archive: flash-backup-2026-07-04_14-22-37" in calls[0][1]
+    assert "Log file:" in calls[0][1]
+    assert str(log_file) in calls[0][1]
+    assert "backup started\nbackup completed" in calls[0][1]
+
+
 def test_backup_job_uses_loaded_notification_config_for_email_events(monkeypatch, tmp_path):
     captured = {}
 

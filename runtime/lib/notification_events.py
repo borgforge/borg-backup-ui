@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from lib.notifications import MailConfig, NtfyConfig, notify, send_backup_log_mail, send_mail, send_ntfy
+from lib.notifications import MailConfig, NtfyConfig, notify, send_mail, send_ntfy
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ DEFAULT_EMAIL_EVENTS = {"backup_failed"}
 DEFAULT_UNRAID_EVENTS = {"backup_success", "backup_warning", "backup_failed", "backup_skipped"}
 DEFAULT_REMINDER_INTERVAL_HOURS = 24
 DEFAULT_REMINDER_STATE_RETENTION_DAYS = 90
+MAX_EMAIL_LOG_CHARS = 40_000
 
 NTFY_EVENT_ALIASES = {
     # Existing ntfy installs used backup_failed for Borg warnings.
@@ -104,16 +105,37 @@ def send_event(
 
 
 def _send_event_mail(config: MailConfig, event: NotificationEvent) -> bool:
-    if event.event_type == "backup_failed" and event.log_file:
-        return send_backup_log_mail(
-            config=config,
-            backup_type=event.backup_type or event.job_key or "backup",
-            date_tag=event.date_tag or datetime.now().strftime("%Y-%m-%d"),
-            exit_code=int(event.exit_code or 2),
-            duration_seconds=max(0, int(event.duration_seconds or 0)),
-            log_file=Path(event.log_file),
-        )
+    if event.log_file:
+        return send_mail(config, event.title, _event_mail_with_log(event))
     return send_mail(config, event.title, event.message)
+
+
+def _event_mail_with_log(event: NotificationEvent) -> str:
+    parts = [event.message.rstrip()]
+    parts.extend([
+        "",
+        "Log file:",
+        str(event.log_file),
+        "",
+        "Log output:",
+        _read_log_excerpt(Path(event.log_file)),
+    ])
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def _read_log_excerpt(log_file: Path) -> str:
+    try:
+        text = log_file.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"Log file is not readable: {exc}"
+
+    if len(text) <= MAX_EMAIL_LOG_CHARS:
+        return text.rstrip() or "(log file is empty)"
+
+    return (
+        f"(log output truncated to the last {MAX_EMAIL_LOG_CHARS} characters)\n"
+        f"{text[-MAX_EMAIL_LOG_CHARS:].rstrip()}"
+    )
 
 
 def _send_event_ntfy(config: NtfyConfig, event: NotificationEvent) -> bool:
