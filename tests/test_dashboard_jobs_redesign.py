@@ -119,6 +119,8 @@ def test_dashboard_labels_relative_time_and_duration_separately() -> None:
     assert "dashboard.runDuration" in script
     assert "backup.time_ago" not in script
     assert ".dashboard-run-facts" in css
+    assert ".dashboard-run-facts .dashboard-fact-row > span" in css
+    assert "overflow-wrap: anywhere" in css
 
 
 def test_dashboard_keeps_run_restore_and_storage_facts_aligned() -> None:
