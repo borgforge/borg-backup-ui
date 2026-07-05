@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.04.2139">
+<!ENTITY version   "2026.07.04.2328">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.04.2328###
+- Issue #166:
+  - Restore Tests now show a clear message and live log when another restore test is already running.
+  - Support bundles now include restore-test status files and mask additional privacy-sensitive fields.
+
 ###2026.07.04.2139###
 - Issue #163:
   - Event e-mails now use STARTTLS on port 587, matching SMTP test mail and weekly reports.
@@ -284,7 +289,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>bb11bf50d0491abccde81b55f872a796</MD5>
+<MD5>866d4e94d6b5a8a7552ff4d5a885366b</MD5>
 </FILE>
 
 <!--
