@@ -48,6 +48,12 @@ class RateLimitExceeded(Exception):
     pass
 
 
+class ApiConflictError(Exception):
+    def __init__(self, message: str, code: str = "conflict") -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def _log(msg: str) -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
@@ -1965,6 +1971,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             backup_scripts_dir,
         )
         if not ok:
+            if "already running" in str(err or "").lower():
+                raise ApiConflictError(
+                    "A restore test is already running. Open the live log or wait until it finishes.",
+                    "restore_test_already_running",
+                )
             raise RuntimeError(err)
         return {
             "started": True,
@@ -2920,6 +2931,8 @@ btn.addEventListener('click',doSetup);
             self._send_api_error(429, "rate_limited", str(exc), request_id=request_id)
         except ValueError as exc:
             self._send_api_error(400, "bad_request", str(exc), request_id=request_id)
+        except ApiConflictError as exc:
+            self._send_api_error(409, exc.code, str(exc), request_id=request_id)
         except Exception as exc:
             self._send_api_error(500, "internal_error", str(exc), request_id=request_id)
         finally:

@@ -6,6 +6,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #166
+- Restore Tests:
+  - Starting a second restore test while one is already running now returns a clear conflict instead of a generic internal server error.
+  - The Restore Tests UI opens the live log and explains that a restore test is already running.
+- Support bundle:
+  - Restore-test `.test` status files are now included in support bundles.
+  - Support bundle sanitizing now masks additional privacy-sensitive values such as e-mail addresses, SMTP/ntfy endpoints and storage profile host/user fields.
+
 ### Issue #163
 - Notifications:
   - Backup and restore-test event e-mails now use STARTTLS on port 587, matching the SMTP test mail and weekly report behavior.

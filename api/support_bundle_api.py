@@ -14,9 +14,19 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|borg_passcommand)", re.IGNORECASE)
-SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|borg_passcommand)\s*=\s*([^\s]+)")
+SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg_passcommand)", re.IGNORECASE)
+SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg_passcommand)\s*=\s*([^\s]+)")
+PRIVACY_KEY_RE = re.compile(
+    r"(?i)(mail|email|recipient|sender|smtp_(host|user)|ntfy_(server_url|username|click_url)|storagebox_(host|user)|"
+    r"\bhost\b|\buser(name)?\b|\burl\b)"
+)
+PRIVACY_LINE_RE = re.compile(
+    r"(?i)\b([A-Z0-9_]*(?:MAIL|EMAIL|RECIPIENT|SENDER|SMTP_HOST|SMTP_USER|NTFY_SERVER_URL|"
+    r"NTFY_USERNAME|NTFY_CLICK_URL|STORAGEBOX_HOST|STORAGEBOX_USER|HOST|USERNAME|USER|URL)[A-Z0-9_]*)\s*=\s*([^\n\r]+)"
+)
 SSH_URI_RE = re.compile(r"ssh://[^\s\"'<>]+", re.IGNORECASE)
+HTTP_URI_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+EMAIL_RE = re.compile(r"(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b")
 SSH_PRIVATE_KEY_RE = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
     re.DOTALL,
@@ -33,7 +43,10 @@ def _sanitize_scalar(value: Any) -> Any:
         return value
     text = SSH_PRIVATE_KEY_RE.sub("[MASKED_PRIVATE_KEY]", value)
     text = SSH_URI_RE.sub("ssh://[MASKED_SSH_REMOTE]", text)
+    text = HTTP_URI_RE.sub(lambda m: "https://[MASKED_URL]" if m.group(0).lower().startswith("https://") else "http://[MASKED_URL]", text)
+    text = EMAIL_RE.sub("[MASKED_EMAIL]", text)
     text = SECRET_LINE_RE.sub(lambda m: f"{m.group(1)}=[MASKED]", text)
+    text = PRIVACY_LINE_RE.sub(lambda m: f"{m.group(1)}=[MASKED]", text)
     return text
 
 
@@ -43,6 +56,8 @@ def sanitize_data(value: Any) -> Any:
         for key, raw in value.items():
             key_s = str(key)
             if SECRET_KEY_RE.search(key_s):
+                out[key_s] = "[MASKED]"
+            elif PRIVACY_KEY_RE.search(key_s):
                 out[key_s] = "[MASKED]"
             else:
                 out[key_s] = sanitize_data(raw)
@@ -105,7 +120,7 @@ def _candidate_jobs_dirs(root: Path, scripts_dir: Path) -> List[Path]:
 
 
 def _status_files(status_dir: Path) -> List[Path]:
-    allowed = {".json", ".status", ".state", ".pid", ".txt", ".log"}
+    allowed = {".json", ".status", ".state", ".pid", ".txt", ".log", ".test"}
     return sorted(
         [p for p in status_dir.iterdir() if p.is_file() and p.suffix.lower() in allowed],
         key=lambda x: x.stat().st_mtime,

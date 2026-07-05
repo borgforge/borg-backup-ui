@@ -18,14 +18,43 @@ from support_bundle_api import create_support_bundle, sanitize_data, sanitize_te
 def test_support_bundle_sanitizes_secret_keys_and_text():
     assert sanitize_data({
         "GLOBAL_SMTP_PASSWORD": "secret",
+        "GLOBAL_MAIL_RECIPIENT": "admin@example.test",
+        "GLOBAL_SMTP_HOST": "smtp.example.test",
+        "GLOBAL_SMTP_USER": "admin@example.test",
+        "NTFY_SERVER_URL": "https://ntfy.example.test/topic",
+        "STORAGEBOX_HOST": "u123.your-storagebox.de",
+        "STORAGEBOX_USER": "u123",
+        "BORG_SSH_KEY": "/root/.ssh/id_rsa",
         "nested": {"api_token": "abc", "name": "ok"},
         "repo": "ssh://backup-user@example.invalid:23/./backup/repo",
     }) == {
         "GLOBAL_SMTP_PASSWORD": "[MASKED]",
+        "GLOBAL_MAIL_RECIPIENT": "[MASKED]",
+        "GLOBAL_SMTP_HOST": "[MASKED]",
+        "GLOBAL_SMTP_USER": "[MASKED]",
+        "NTFY_SERVER_URL": "[MASKED]",
+        "STORAGEBOX_HOST": "[MASKED]",
+        "STORAGEBOX_USER": "[MASKED]",
+        "BORG_SSH_KEY": "[MASKED]",
         "nested": {"api_token": "[MASKED]", "name": "ok"},
         "repo": "ssh://[MASKED_SSH_REMOTE]",
     }
     assert "hunter2" not in sanitize_text("password=hunter2\nnormal=ok")
+    sensitive_text = (
+        "GLOBAL_MAIL_RECIPIENT=admin@example.test\n"
+        "GLOBAL_SMTP_HOST=smtp.example.test\n"
+        "GLOBAL_SMTP_USER=admin@example.test\n"
+        "NTFY_SERVER_URL=https://ntfy.example.test/topic\n"
+        "STORAGEBOX_HOST=u123.your-storagebox.de\n"
+        "STORAGEBOX_USER=u123\n"
+        "BORG_SSH_KEY=/root/.ssh/id_rsa\n"
+    )
+    sensitive_sanitized = sanitize_text(sensitive_text)
+    assert "admin@example.test" not in sensitive_sanitized
+    assert "smtp.example.test" not in sensitive_sanitized
+    assert "ntfy.example.test" not in sensitive_sanitized
+    assert "u123.your-storagebox.de" not in sensitive_sanitized
+    assert "/root/.ssh/id_rsa" not in sensitive_sanitized
     sanitized = sanitize_text('BORG_REPO="ssh://u123@u123.your-storagebox.de:23/./backup/repo"\n')
     assert "u123" not in sanitized
     assert "your-storagebox.de" not in sanitized
@@ -72,11 +101,21 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         encoding="utf-8",
     )
     (restore_status_dir / "restore.state").write_text("restore=ok\n", encoding="utf-8")
+    (restore_status_dir / "job1.test").write_text(
+        "result=failed\nerror=ssh://u123@u123.your-storagebox.de:23/./backup/job1\n",
+        encoding="utf-8",
+    )
     plugin_log = log_dir / "borg_backup_ui.log"
     plugin_log.write_text("started\nTOKEN=abc123\n", encoding="utf-8")
 
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {
         "GLOBAL_SMTP_PASSWORD": "supersecret",
+        "GLOBAL_MAIL_RECIPIENT": "admin@example.test",
+        "GLOBAL_SMTP_HOST": "smtp.example.test",
+        "GLOBAL_SMTP_USER": "admin@example.test",
+        "NTFY_SERVER_URL": "https://ntfy.example.test/topic",
+        "STORAGEBOX_HOST": "u123.your-storagebox.de",
+        "STORAGEBOX_USER": "u123",
         "GLOBAL_LOG_DIR": str(log_dir),
         "STATUS_DIR": str(status_dir),
         "RESTORE_TEST_STATUS_DIR": str(restore_status_dir),
@@ -101,6 +140,7 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         assert "jobs/job1.json" in names
         assert "status/status/job1.status" in names
         assert "status/restore-status/restore.state" in names
+        assert "status/restore-status/job1.test" in names
         assert any(name.startswith("logs/plugin/") and name.endswith("borg_backup_ui.log") for name in names)
         all_text = "\n".join(
             zf.read(name).decode("utf-8", errors="replace")
@@ -112,8 +152,11 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
     assert "secret-passphrase" not in all_text
     assert "hunter2" not in all_text
     assert "abc123" not in all_text
+    assert "admin@example.test" not in all_text
+    assert "smtp.example.test" not in all_text
     assert "u123" not in all_text
     assert "your-storagebox.de" not in all_text
+    assert "ntfy.example.test" not in all_text
     assert "/./backup/job1" not in all_text
     assert "ssh://[MASKED_SSH_REMOTE]" in all_text
     assert "[MASKED]" in all_text

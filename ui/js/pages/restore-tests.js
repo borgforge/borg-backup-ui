@@ -29,6 +29,16 @@ function restoreTestsLocale() {
   return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
 }
 
+function handleRestoreTestAlreadyRunning(payload) {
+  if (String(payload?.code || '') !== 'restore_test_already_running') {
+    return false;
+  }
+  showMsg('restore-tests-message', 'warning', restoreTestsT('alreadyRunningOpenLog'));
+  _openRTLogPanel();
+  startRTPolling();
+  return true;
+}
+
 function restoreTestsLocationLabel(location) {
   const keys = { local: 'local', usb: 'usbDrive', smb: 'smb', storagebox: 'storagebox' };
   const normalized = String(location || '').toLowerCase();
@@ -194,7 +204,10 @@ async function runRestoreTestNow() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) {
+      if (handleRestoreTestAlreadyRunning(data)) return;
+      throw new Error(apiErrorMessage(data, res.status));
+    }
     if (data.started === false && data.reason === 'no_due_jobs') {
       showMsg(
         'restore-tests-message',
@@ -302,6 +315,9 @@ async function _pollRTRunning() {
     const res = await fetch('/api/restore-tests/running');
     if (!res.ok) return;
     const state = await res.json();
+    if (state.running && !restoreTestsState.activeEventSource) {
+      showMsg('restore-tests-message', 'warning', restoreTestsT('runningWithoutFinalLog'));
+    }
     if (!state.running && restoreTestsState.pollingTimer) {
       stopRTPolling();
     }
@@ -312,11 +328,12 @@ async function refreshRestoreTests() {
   const btn = document.getElementById('restore-tests-refresh-btn');
   if (btn) btn.classList.add('loading');
   try {
-    const [testsRes, planRes, schedsRes, settingsRes] = await Promise.all([
+    const [testsRes, planRes, schedsRes, settingsRes, runningRes] = await Promise.all([
       fetch('/api/restore-tests'),
       fetch('/api/restore-tests/plan'),
       fetch('/api/schedules'),
       fetch('/api/settings/basic'),
+      fetch('/api/restore-tests/running'),
     ]);
     if (!testsRes.ok) throw new Error(`HTTP ${testsRes.status}`);
     const testsData = await testsRes.json();
@@ -331,6 +348,13 @@ async function refreshRestoreTests() {
     }
     restoreTestsState.data = testsData.tests || [];
     restoreTestsState.plan = planRes.ok ? await planRes.json() : null;
+    if (runningRes.ok) {
+      const runningState = await runningRes.json().catch(() => ({}));
+      if (runningState.running) {
+        showMsg('restore-tests-message', 'warning', restoreTestsT('runningWithoutFinalLog'));
+        startRTPolling();
+      }
+    }
     restoreTestsState.loaded = true;
     renderRestorePlan(restoreTestsState.plan);
     renderRTReportFilterOptions(restoreTestsState.data);
@@ -477,7 +501,10 @@ async function saveRestorePlanPolicy(jobKey) {
       }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) {
+      if (handleRestoreTestAlreadyRunning(data)) return;
+      throw new Error(apiErrorMessage(data, res.status));
+    }
     const stamp = new Date().toLocaleTimeString(restoreTestsLocale());
     restoreTestsState.rowNote[jobKey] = restoreTestsT('savedAt', { time: stamp });
     showMsg('restore-tests-message', 'success', restoreTestsT('policySaved', { job: jobKey }));
