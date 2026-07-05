@@ -55,7 +55,8 @@ def test_reports_preserves_selection_search_and_analysis_contracts() -> None:
         "_berichtRenderGrowthCards", "_berichtRestoreVerification",
         "_berichtTrendTable", "_berichtSparkline", "_berichtStatusTable",
         "resolveJobIcon(job)", "resolveJobIconColor(job)", "typeIcon(icon)",
-        "configured?.icon", "configured?.icon_color",
+        "configured?.icon", "configured?.icon_color", "_berichtRestoreFailureReason",
+        "restore_verification_failure_code", "restoreFailureReason",
     ):
         assert contract in script
 

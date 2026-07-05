@@ -754,6 +754,7 @@
     "restoreVerified": "Restore verification: verified",
     "restoreOverdue": "Restore verification: overdue",
     "restoreFailed": "Restore verification: failed",
+    "restoreFailureReason": "Reason: {value}",
     "restorePending": "Restore verification: pending",
     "restoreNotScheduled": "Restore verification: not scheduled",
     "lastTest": "Last test: {value}",

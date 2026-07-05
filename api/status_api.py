@@ -133,6 +133,9 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
         b["restore_verification_last_test_date"] = meta.get("last_test_date", "")
         b["restore_verification_valid_until"] = meta.get("valid_until", "")
         b["restore_verification_is_overdue"] = bool(meta.get("is_overdue", False))
+        b["restore_verification_failure_code"] = meta.get("failure_code", "")
+        b["restore_verification_failure_hint"] = meta.get("failure_hint", "")
+        b["restore_verification_failure_category"] = meta.get("failure_category", "")
         if isinstance(meta.get("policy"), dict):
             b["restore_test_policy"] = meta.get("policy")
 

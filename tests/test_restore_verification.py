@@ -15,7 +15,7 @@ class RestoreVerificationTests(unittest.TestCase):
             "RESTORE_TEST_INTERVAL_DAYS": "30",
         }
 
-    def _write_test(self, base: Path, job_key: str, result: str, test_date: datetime) -> None:
+    def _write_test(self, base: Path, job_key: str, result: str, test_date: datetime, extra: dict | None = None) -> None:
         d = base / "restore-status"
         d.mkdir(parents=True, exist_ok=True)
         payload = {
@@ -24,6 +24,8 @@ class RestoreVerificationTests(unittest.TestCase):
             "test_duration_seconds": 12,
             "test_date": test_date.strftime("%Y-%m-%d %H:%M:%S"),
         }
+        if extra:
+            payload.update(extra)
         (d / f"{job_key}.test").write_text(json.dumps(payload), encoding="utf-8")
 
     def test_policy_off_returns_not_required(self):
@@ -65,6 +67,21 @@ class RestoreVerificationTests(unittest.TestCase):
             out = build_restore_verification_map(self._cfg(base), jobs)
             self.assertEqual("failed", out["e_local"]["status"])
 
+    def test_failed_report_exposes_failure_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            self._write_test(base, "g_storagebox", "failed", datetime.now(), {
+                "failure_code": "RT_NETWORK_ERROR",
+                "failure_hint": "Network error or SSH connection failed",
+                "error_analysis": {"error_category": "network"},
+            })
+            jobs = [{"key": "g_storagebox", "location": "storagebox", "restore_test_policy": {"mode": "scheduled", "validity_days": 30}}]
+            out = build_restore_verification_map(self._cfg(base), jobs)
+            self.assertEqual("failed", out["g_storagebox"]["status"])
+            self.assertEqual("RT_NETWORK_ERROR", out["g_storagebox"]["failure_code"])
+            self.assertEqual("Network error or SSH connection failed", out["g_storagebox"]["failure_hint"])
+            self.assertEqual("network", out["g_storagebox"]["failure_category"])
+
     def test_manual_only_success_stays_verified(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -77,4 +94,3 @@ class RestoreVerificationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

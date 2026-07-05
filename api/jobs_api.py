@@ -653,6 +653,9 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
         job["restore_verification_last_test_date"] = meta.get("last_test_date", "")
         job["restore_verification_valid_until"] = meta.get("valid_until", "")
         job["restore_verification_is_overdue"] = bool(meta.get("is_overdue", False))
+        job["restore_verification_failure_code"] = meta.get("failure_code", "")
+        job["restore_verification_failure_hint"] = meta.get("failure_hint", "")
+        job["restore_verification_failure_category"] = meta.get("failure_category", "")
         if isinstance(meta.get("policy"), dict):
             job["restore_test_policy"] = meta.get("policy")
     return result

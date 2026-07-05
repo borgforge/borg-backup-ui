@@ -551,6 +551,17 @@ function _berichtMsg(msg, isError) {
   el.style.color = isError ? 'var(--danger)' : 'var(--text-muted)';
 }
 
+function _berichtRestoreFailureReason(job) {
+  const code = String(job?.restore_verification_failure_code || '').trim();
+  const hint = String(job?.restore_verification_failure_hint || '').trim();
+  if (code) {
+    const key = `restoreTests.failures.${code}`;
+    const translated = window.BBUI?.components?.i18n?.t?.(key) || key;
+    if (translated !== key) return translated;
+  }
+  return hint;
+}
+
 function _berichtRestoreVerification(job) {
   const el = document.getElementById('br-restore-verification');
   if (!el) return;
@@ -572,8 +583,13 @@ function _berichtRestoreVerification(job) {
     job.restore_verification_last_test_date ? reportsT('lastTest', { value: job.restore_verification_last_test_date }) : '',
     job.restore_verification_valid_until ? reportsT('validUntil', { value: job.restore_verification_valid_until }) : '',
   ].filter(Boolean).join(' · ');
+  const failureReason = status === 'failed' ? _berichtRestoreFailureReason(job) : '';
+  const detailParts = [
+    details,
+    failureReason ? reportsT('restoreFailureReason', { value: failureReason }) : '',
+  ].filter(Boolean);
   el.className = `status-message ${item.cls}`;
-  el.textContent = details ? `${item.text} · ${details}` : item.text;
+  el.textContent = detailParts.length ? `${item.text} · ${detailParts.join(' · ')}` : item.text;
 }
 
 async function berichtLoadBorgInfo() {
