@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="620" viewBox="0 0 1440 620" role="img" aria-labelledby="title desc">
+  <title id="title">Mockup: Dashboard strategy widget</title>
+  <desc id="desc">A Borg Backup UI dashboard mockup with a compact 3-2-1-0-0 strategy widget above the existing backup table.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f4f7fb}.panel{fill:#fff;stroke:#d8dee8;stroke-width:1}.soft{fill:#f7fafc;stroke:#d8dee8;stroke-width:1}.header{fill:#111827;font:700 24px Arial,sans-serif}.title{fill:#111827;font:700 16px Arial,sans-serif}.sub{fill:#52637a;font:400 13px Arial,sans-serif}.label{fill:#5f6f86;font:700 11px Arial,sans-serif;letter-spacing:.05em}.text{fill:#172033;font:400 13px Arial,sans-serif}.green{fill:#e8f8ee;stroke:#5ec878}.greenText{fill:#087b34;font:700 13px Arial,sans-serif}.yellow{fill:#fff6dc;stroke:#e6a700}.yellowText{fill:#9a6400;font:700 13px Arial,sans-serif}.blue{fill:#eaf2ff;stroke:#4d8df7}.blueText{fill:#145fd7;font:700 13px Arial,sans-serif}.line{stroke:#d8dee8;stroke-width:1}.muted{fill:#6b7a90;font:400 12px Arial,sans-serif}
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="620"/>
+  <text x="24" y="48" class="header">Dashboard</text>
+  <text x="24" y="72" class="sub">Backup-Übersicht</text>
+  <rect x="24" y="100" width="672" height="112" rx="10" class="panel"/>
+  <text x="44" y="130" class="title">Backup-Läufe</text>
+  <text x="44" y="168" class="header">11</text><text x="44" y="192" class="sub">Gesamt</text>
+  <text x="164" y="168" class="header">11</text><text x="164" y="192" class="sub">Erfolgreich</text>
+  <text x="304" y="168" class="header">0</text><text x="304" y="192" class="sub">Warnungen</text>
+  <text x="444" y="168" class="header">0</text><text x="444" y="192" class="sub">Fehler</text>
+  <rect x="716" y="100" width="700" height="112" rx="10" class="panel"/>
+  <text x="736" y="130" class="title">Restore-Nachweis</text>
+  <text x="736" y="168" class="header">4/4</text><text x="736" y="192" class="sub">Restore verifiziert</text>
+  <text x="896" y="168" class="header">0</text><text x="896" y="192" class="sub">Restore überfällig</text>
+  <text x="1076" y="168" class="header">7</text><text x="1076" y="192" class="sub">Restore nicht geplant</text>
+
+  <rect x="24" y="232" width="1392" height="152" rx="10" class="panel"/>
+  <text x="44" y="264" class="label">NEUER DASHBOARD-BEREICH</text>
+  <text x="44" y="292" class="title">3-2-1-0-0 Strategie</text>
+  <text x="44" y="318" class="sub">Schnelle Einschätzung direkt auf dem Dashboard, Detailseite über „Strategie öffnen“.</text>
+  <rect x="44" y="338" width="420" height="18" rx="9" fill="#e6ebf2"/>
+  <rect x="44" y="338" width="328" height="18" rx="9" fill="#f2b84b"/>
+  <text x="484" y="354" class="yellowText">78 % · teilweise erfüllt</text>
+  <g transform="translate(720 256)">
+    <rect width="112" height="82" rx="8" class="green"/><text x="18" y="31" class="label">3 KOPIEN</text><text x="18" y="58" class="greenText">erfüllt</text>
+  </g>
+  <g transform="translate(846 256)">
+    <rect width="112" height="82" rx="8" class="green"/><text x="18" y="31" class="label">2 MEDIEN</text><text x="18" y="58" class="greenText">erfüllt</text>
+  </g>
+  <g transform="translate(972 256)">
+    <rect width="112" height="82" rx="8" class="yellow"/><text x="18" y="31" class="label">1 OFFSITE</text><text x="18" y="58" class="yellowText">prüfen</text>
+  </g>
+  <g transform="translate(1098 256)">
+    <rect width="112" height="82" rx="8" class="green"/><text x="18" y="31" class="label">0 FEHLER</text><text x="18" y="58" class="greenText">erfüllt</text>
+  </g>
+  <g transform="translate(1224 256)">
+    <rect width="112" height="82" rx="8" class="yellow"/><text x="18" y="31" class="label">0 UNGEPR.</text><text x="18" y="58" class="yellowText">2 offen</text>
+  </g>
+  <rect x="1240" y="342" width="136" height="30" rx="6" class="blue"/>
+  <text x="1262" y="362" class="blueText">Strategie öffnen</text>
+
+  <rect x="24" y="404" width="1392" height="184" rx="10" class="panel"/>
+  <text x="44" y="436" class="label">BESTEHENDE DASHBOARD-TABELLE</text>
+  <line x1="44" y1="462" x2="1390" y2="462" class="line"/>
+  <text x="44" y="490" class="label">BACKUP</text><text x="320" y="490" class="label">STANDORT</text><text x="470" y="490" class="label">LAUFSTATUS</text><text x="650" y="490" class="label">RESTORE</text><text x="870" y="490" class="label">SPEICHERDATEN</text><text x="1120" y="490" class="label">WACHSTUM / CHECK</text>
+  <line x1="44" y1="508" x2="1390" y2="508" class="line"/>
+  <text x="44" y="540" class="title">Flash</text><text x="320" y="540" class="blueText">LOKAL</text><text x="470" y="540" class="greenText">Erfolgreich</text><text x="650" y="540" class="greenText">Restore: verifiziert</text><text x="870" y="540" class="text">Dedupliziert: 28.7 MB</text><text x="1120" y="540" class="greenText">Check OK</text>
+  <text x="44" y="574" class="title">Appdata</text><text x="320" y="574" class="blueText">USB</text><text x="470" y="574" class="greenText">Erfolgreich</text><text x="650" y="574" class="greenText">Restore: verifiziert</text><text x="870" y="574" class="text">Dedupliziert: 347.1 MB</text><text x="1120" y="574" class="greenText">Check OK</text>
+</svg>

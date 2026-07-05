@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="960" viewBox="0 0 1440 960" role="img" aria-labelledby="title desc">
+  <title id="title">Mockup: 3-2-1-0-0 Strategy Monitor overview</title>
+  <desc id="desc">A light theme Borg Backup UI page mockup showing a strategy score, five rule cards, recommendations, and a dataset matrix.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f4f7fb}.panel{fill:#fff;stroke:#d8dee8;stroke-width:1}.soft{fill:#f7fafc;stroke:#d8dee8;stroke-width:1}.header{fill:#111827;font:700 24px Arial,sans-serif}.sub{fill:#52637a;font:400 13px Arial,sans-serif}.label{fill:#5f6f86;font:700 11px Arial,sans-serif;letter-spacing:.05em}.text{fill:#172033;font:400 13px Arial,sans-serif}.strong{fill:#071326;font:700 15px Arial,sans-serif}.muted{fill:#6b7a90;font:400 12px Arial,sans-serif}.green{fill:#e8f8ee;stroke:#5ec878}.greenText{fill:#087b34;font:700 13px Arial,sans-serif}.yellow{fill:#fff6dc;stroke:#e6a700}.yellowText{fill:#9a6400;font:700 13px Arial,sans-serif}.red{fill:#fdecec;stroke:#e26a6a}.redText{fill:#b3261e;font:700 13px Arial,sans-serif}.blue{fill:#eaf2ff;stroke:#4d8df7}.blueText{fill:#145fd7;font:700 13px Arial,sans-serif}.line{stroke:#d8dee8;stroke-width:1}.pill{rx:14;ry:14}.tiny{fill:#52637a;font:400 11px Arial,sans-serif}.mono{fill:#53657c;font:400 12px "Courier New",monospace}
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="960"/>
+  <rect x="24" y="24" width="1392" height="82" rx="10" class="panel"/>
+  <text x="44" y="58" class="header">Backup-Strategie</text>
+  <text x="44" y="84" class="sub">3-2-1-0-0 Monitor: Schutzgrad, Risiken und konkrete nächste Schritte</text>
+  <rect x="1212" y="44" width="94" height="32" rx="16" class="yellow"/>
+  <text x="1234" y="65" class="yellowText">Teilweise</text>
+  <rect x="1318" y="44" width="72" height="32" rx="6" class="soft"/>
+  <text x="1336" y="65" class="text">Aktualisieren</text>
+
+  <rect x="24" y="124" width="270" height="812" rx="10" class="panel"/>
+  <text x="44" y="154" class="label">STRATEGIE</text>
+  <text x="44" y="180" class="strong">Alle Datenbereiche</text>
+  <rect x="44" y="205" width="230" height="54" rx="8" class="blue"/>
+  <text x="70" y="228" class="blueText">Übersicht</text>
+  <text x="70" y="247" class="muted">11 Jobs · 4 Datenbereiche</text>
+  <text x="44" y="304" class="label">DATENBEREICHE</text>
+  <text x="44" y="340" class="strong">Appdata</text><text x="190" y="340" class="greenText">gut</text>
+  <text x="44" y="378" class="strong">Flash</text><text x="190" y="378" class="greenText">gut</text>
+  <text x="44" y="416" class="strong">Photos</text><text x="190" y="416" class="yellowText">Risiko</text>
+  <text x="44" y="454" class="strong">VMs</text><text x="190" y="454" class="yellowText">Risiko</text>
+  <line x1="44" y1="488" x2="274" y2="488" class="line"/>
+  <text x="44" y="520" class="label">FILTER</text>
+  <text x="44" y="552" class="text">Nur Risiken anzeigen</text>
+  <text x="44" y="585" class="text">Nur Offsite-Lücken</text>
+  <text x="44" y="618" class="text">Nur ungeprüfte Jobs</text>
+
+  <rect x="314" y="124" width="1086" height="170" rx="10" class="panel"/>
+  <text x="334" y="156" class="label">GESAMTBEWERTUNG</text>
+  <text x="334" y="190" class="header">78 %</text>
+  <text x="334" y="218" class="sub">Die Strategie ist teilweise erfüllt. Zwei konkrete Lücken verhindern Grün.</text>
+  <rect x="334" y="240" width="500" height="16" rx="8" fill="#e6ebf2"/>
+  <rect x="334" y="240" width="390" height="16" rx="8" fill="#f2b84b"/>
+  <rect x="876" y="150" width="484" height="104" rx="8" class="yellow"/>
+  <text x="900" y="178" class="yellowText">Empfohlener nächster Schritt</text>
+  <text x="900" y="204" class="text">Photos und VMs haben zwar Backups, aber der Offsite-Schutz oder ein aktueller Restore-Test ist nicht vollständig bestätigt.</text>
+  <text x="900" y="232" class="blueText">Storagebox als Offsite bestätigen · Restore-Test planen</text>
+
+  <g transform="translate(314 314)">
+    <rect width="206" height="132" rx="10" class="green"/>
+    <text x="18" y="31" class="label">3 KOPIEN</text>
+    <text x="18" y="65" class="header">3/3</text>
+    <text x="18" y="94" class="text">Original + Lokal + USB/SSH</text>
+    <text x="18" y="116" class="greenText">erfüllt</text>
+  </g>
+  <g transform="translate(536 314)">
+    <rect width="206" height="132" rx="10" class="green"/>
+    <text x="18" y="31" class="label">2 MEDIEN</text>
+    <text x="18" y="65" class="header">3</text>
+    <text x="18" y="94" class="text">Array, USB, Remote</text>
+    <text x="18" y="116" class="greenText">erfüllt</text>
+  </g>
+  <g transform="translate(758 314)">
+    <rect width="206" height="132" rx="10" class="yellow"/>
+    <text x="18" y="31" class="label">1 OFFSITE</text>
+    <text x="18" y="65" class="header">Kandidat</text>
+    <text x="18" y="94" class="text">Storagebox erkannt</text>
+    <text x="18" y="116" class="yellowText">Bestätigung fehlt</text>
+  </g>
+  <g transform="translate(980 314)">
+    <rect width="206" height="132" rx="10" class="green"/>
+    <text x="18" y="31" class="label">0 FEHLER</text>
+    <text x="18" y="65" class="header">0</text>
+    <text x="18" y="94" class="text">keine aktuellen Fehler</text>
+    <text x="18" y="116" class="greenText">erfüllt</text>
+  </g>
+  <g transform="translate(1202 314)">
+    <rect width="198" height="132" rx="10" class="yellow"/>
+    <text x="18" y="31" class="label">0 UNGEPRÜFT</text>
+    <text x="18" y="65" class="header">2</text>
+    <text x="18" y="94" class="text">Tests fehlen/veralten</text>
+    <text x="18" y="116" class="yellowText">Aktion nötig</text>
+  </g>
+
+  <rect x="314" y="468" width="1086" height="162" rx="10" class="panel"/>
+  <text x="334" y="498" class="label">ASSISTENT</text>
+  <text x="334" y="526" class="strong">Konkrete Empfehlungen</text>
+  <rect x="334" y="546" width="320" height="58" rx="8" class="yellow"/>
+  <text x="352" y="570" class="yellowText">1. Offsite eindeutig markieren</text>
+  <text x="352" y="590" class="text">Storagebox ist wahrscheinlich extern.</text>
+  <rect x="674" y="546" width="320" height="58" rx="8" class="yellow"/>
+  <text x="692" y="570" class="yellowText">2. Restore-Test für VMs planen</text>
+  <text x="692" y="590" class="text">Letzter Nachweis ist älter als gewünscht.</text>
+  <rect x="1014" y="546" width="326" height="58" rx="8" class="blue"/>
+  <text x="1032" y="570" class="blueText">3. Photos zweites Ziel prüfen</text>
+  <text x="1032" y="590" class="text">USB und Storagebox decken die Kopien ab.</text>
+
+  <rect x="314" y="650" width="1086" height="286" rx="10" class="panel"/>
+  <text x="334" y="682" class="label">DATENBEREICH-MATRIX</text>
+  <line x1="334" y1="706" x2="1380" y2="706" class="line"/>
+  <text x="334" y="732" class="label">DATEN</text>
+  <text x="520" y="732" class="label">KOPIEN</text>
+  <text x="650" y="732" class="label">MEDIEN</text>
+  <text x="790" y="732" class="label">OFFSITE</text>
+  <text x="930" y="732" class="label">BACKUP HEALTH</text>
+  <text x="1130" y="732" class="label">RESTORE</text>
+  <text x="1270" y="732" class="label">AKTION</text>
+  <line x1="334" y1="746" x2="1380" y2="746" class="line"/>
+  <text x="334" y="782" class="strong">Appdata</text><text x="520" y="782" class="greenText">3/3</text><text x="650" y="782" class="greenText">3</text><text x="790" y="782" class="yellowText">Kandidat</text><text x="930" y="782" class="greenText">OK</text><text x="1130" y="782" class="greenText">verifiziert</text><text x="1270" y="782" class="blueText">prüfen</text>
+  <text x="334" y="832" class="strong">Flash</text><text x="520" y="832" class="greenText">3/3</text><text x="650" y="832" class="greenText">3</text><text x="790" y="832" class="yellowText">Kandidat</text><text x="930" y="832" class="greenText">OK</text><text x="1130" y="832" class="greenText">verifiziert</text><text x="1270" y="832" class="blueText">prüfen</text>
+  <text x="334" y="882" class="strong">Photos</text><text x="520" y="882" class="greenText">3/3</text><text x="650" y="882" class="greenText">3</text><text x="790" y="882" class="yellowText">unklar</text><text x="930" y="882" class="greenText">OK</text><text x="1130" y="882" class="yellowText">bald fällig</text><text x="1270" y="882" class="blueText">Test planen</text>
+</svg>
