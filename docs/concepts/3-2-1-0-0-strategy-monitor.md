@@ -41,6 +41,12 @@ Repositories oder Storage-Profilen** vor. Der erste sinnvolle Schritt wäre ein
 read-only Monitor mit klaren Empfehlungen. Erst spätere Phasen sollten Assistenten
 oder automatische Vorschläge in Wizard und Einstellungen integrieren.
 
+Eine wichtige fachliche Ergänzung: Langfristig sollte die Anwendung Jobs nicht
+nur nach Namen oder `backup_type` gruppieren. Für eine robuste 3-2-1-0-0-Logik
+braucht es ein explizites Modell aus **Backup-Strategie** beziehungsweise
+**Protected Dataset** mit mehreren Ziel-Jobs. Der bestehende Einzeljob-Wizard
+soll dabei erhalten bleiben.
+
 ## 2. Zielbild
 
 Das Feature soll wie ein Assistent wirken:
@@ -199,13 +205,91 @@ ausreichend geschützt ist. Eine globale Anzeige "11 Jobs vorhanden" wäre sonst
 irreführend, wenn beispielsweise Photos dreifach gesichert wird, VMs aber nur
 lokal.
 
-### 4.2 Welche Jobs zählen als Kopie?
+### 4.2 Warum Namen und `backup_type` nicht ausreichen
+
+Die Anwendung darf Jobs nicht allein deshalb als zusammengehörig bewerten, weil
+sie ähnlich heißen oder denselben `backup_type` besitzen. Beispiele:
+
+- `Appdata - Lokal` könnte `/mnt/user/appdata` sichern.
+- `Appdata - USB` könnte nach einer Bearbeitung versehentlich
+  `/mnt/user/photos` sichern.
+- Zwei Custom-Jobs könnten denselben Anzeigenamen verwenden, aber völlig
+  unterschiedliche Quellen haben.
+- Ein bestehender Job kann später editiert werden und dadurch fachlich nicht
+  mehr zur ursprünglichen Gruppe passen.
+
+Eine reine Heuristik über Name, Standort oder `backup_type` wäre deshalb nur
+für eine erste, vorsichtige Analyse geeignet. Die UI müsste dann sichtbar
+kennzeichnen: **automatisch gruppiert, bitte bestätigen**.
+
+Für eine belastbare Strategieauswertung braucht es eine explizite fachliche
+Zuordnung.
+
+### 4.3 Zielmodell: Backup-Strategie mit mehreren Zielen
+
+Langfristig sollte neben dem heutigen Einzeljob ein neues fachliches Objekt
+entstehen:
+
+```text
+Backup-Strategie / Protected Dataset
+```
+
+Beispiel:
+
+```text
+Backup-Strategie: Appdata
+Quelle: /mnt/user/appdata
+
+Ziel 1: Lokal
+Repository: /mnt/backup/appdata
+Zeitplan: 09:00
+
+Ziel 2: USB
+Repository: /mnt/disks/WEDJJER/appdata
+Zeitplan: 10:00
+
+Ziel 3: Storagebox
+Repository: ssh://cccc@ccccc.ykdkdwd.de:23/backup/appdata
+Zeitplan: 22:00
+```
+
+Intern können daraus weiterhin mehrere operative Backup-Jobs entstehen. Fachlich
+werden sie aber über eine gemeinsame Strategiegruppe verbunden.
+
+Vorteile:
+
+- keine unsichere Gruppierung über Namen
+- eine Quelle mit mehreren Zielen
+- pro Ziel eigener Zeitplan
+- pro Ziel eigene Repository-, Retention- und Restore-Test-Policy möglich
+- 3-2-1-0-0 kann direkt auf der Strategiegruppe bewertet werden
+- Job-Änderungen können gegen die Strategiegruppe plausibilisiert werden
+
+### 4.4 Einzeljob und Strategie-Job
+
+Der bestehende Workflow sollte nicht ersetzt werden. Sinnvoll sind zwei klare
+Einstiege:
+
+```text
+Einzelnen Backup-Job erstellen
+Backup-Strategie erstellen
+```
+
+| Einstieg | Zweck |
+| --- | --- |
+| Einzelner Backup-Job | heutiges Verhalten; ein operativer Job, ein Ziel, ein Zeitplan |
+| Backup-Strategie | geführter 3-2-1-0-0-Wizard; ein geschützter Datenbereich, mehrere Ziele |
+
+Damit bleiben Spezialfälle und einfache Setups möglich, während normale Nutzer
+einen geführten Weg zur vollständigen Strategie erhalten.
+
+### 4.5 Welche Jobs zählen als Kopie?
 
 Ein Backup-Job sollte als Backup-Kopie zählen, wenn alle Bedingungen erfüllt
 sind:
 
 - Job ist aktiv.
-- Job gehört zu einem Datenbereich.
+- Job gehört zu einem bestätigten Datenbereich oder einer Strategiegruppe.
 - Repository-Ziel ist konfiguriert.
 - Es gibt mindestens einen erfolgreichen Backup-Lauf innerhalb eines
   konfigurierbaren Gültigkeitsfensters.
@@ -223,7 +307,7 @@ Ein Job sollte nicht als gültige Kopie zählen, wenn:
 - Repository aktuell nicht erreichbar ist, sofern diese Information verfügbar
   ist.
 
-### 4.3 Originaldaten als Kopie
+### 4.6 Originaldaten als Kopie
 
 Bei 3-2-1-0-0 zählen die Originaldaten als erste Kopie. Borg Backup UI kann das
 nur indirekt bewerten:
@@ -235,7 +319,7 @@ nur indirekt bewerten:
 - Wenn Quellpfade nicht mehr existieren oder leer sind, sollte der Datenbereich
   rot werden, weil die Strategie fachlich nicht bewertbar ist.
 
-### 4.4 Wann gilt ein Speicherort als anderes Medium?
+### 4.7 Wann gilt ein Speicherort als anderes Medium?
 
 Eine "andere Speicherart" sollte nicht nur anhand des Anzeigenamens erkannt
 werden. Sinnvoll ist eine Kombination aus Heuristik und Benutzerbestätigung.
@@ -256,7 +340,7 @@ Empfehlung: Jeder Storage-Standort erhält perspektivisch Metadaten:
 - Offsite ja/nein
 - vom Benutzer bestätigt ja/nein
 
-### 4.5 Wann gilt ein Backup als offsite?
+### 4.8 Wann gilt ein Backup als offsite?
 
 Offsite sollte nicht blind aus `ssh` oder `storagebox` abgeleitet werden. Besser:
 
@@ -272,7 +356,7 @@ Beispiele:
 - USB-Platte: nur offsite, wenn sie regelmäßig extern gelagert wird.
 - SMB-Freigabe: abhängig vom Standort.
 
-### 4.6 Wie werden erfolgreiche oder fehlerhafte Backups erkannt?
+### 4.9 Wie werden erfolgreiche oder fehlerhafte Backups erkannt?
 
 Vorhandene `.status`-Dateien enthalten unter anderem:
 
@@ -296,7 +380,7 @@ Bewertung:
 - `error`: rot
 - fehlender Status: nie erfolgreich oder unbekannt
 
-### 4.7 Wie werden Restore-Tests berücksichtigt?
+### 4.10 Wie werden Restore-Tests berücksichtigt?
 
 Vorhandene Restore-Test-Daten liefern:
 
@@ -316,7 +400,7 @@ Bewertung:
 - `not_required`: neutral, aber nicht als 0-ungeprüft erfüllt anzeigen, wenn
   der Datenbereich strategisch relevant ist
 
-### 4.8 Umgang mit deaktivierten oder nicht konfigurierten Jobs
+### 4.11 Umgang mit deaktivierten oder nicht konfigurierten Jobs
 
 Deaktivierte Jobs sollten nicht als Kopie zählen. Sie sollten aber in der
 Detailansicht sichtbar bleiben:
@@ -444,7 +528,39 @@ Die neue Seite sollte aus folgenden Bereichen bestehen:
    - "USB als Wechselmedium markieren"
    - "Datenbereich bewusst aus Strategie ausschließen"
 
-### 6.3 Tonalität
+### 6.3 Einstieg in neue Backups
+
+Der Jobs-Bereich sollte perspektivisch zwei Wege anbieten:
+
+```text
+Neuer Job
+├─ Einzelner Backup-Job
+└─ Backup-Strategie 3-2-1-0-0
+```
+
+Alternativ können zwei direkte Buttons angezeigt werden:
+
+```text
+[ Einzelnen Backup-Job erstellen ]   [ Backup-Strategie erstellen ]
+```
+
+Der erste Weg bleibt der heutige operative Job-Wizard. Der zweite Weg ist ein
+neuer Strategie-Wizard:
+
+1. geschützten Datenbereich wählen oder anlegen
+2. Quelle definieren
+3. mehrere Ziele hinzufügen
+4. pro Ziel Repository und Zeitplan festlegen
+5. Restore-Test-Policy je Ziel oder Gruppe festlegen
+6. 3-2-1-0-0-Vorschau anzeigen
+7. operative Ziel-Jobs erzeugen oder aktualisieren
+
+Das trennt die Bedienlogik sauber:
+
+- Einzeljob = eine konkrete Ausführung
+- Backup-Strategie = fachliche Schutzgruppe mit mehreren Ausführungen
+
+### 6.4 Tonalität
 
 Die Texte sollten nicht wie technische Prüfberichte klingen, sondern wie eine
 verständliche Hilfestellung:
@@ -452,7 +568,7 @@ verständliche Hilfestellung:
 - gut: "Dir fehlt noch eine bestätigte Offsite-Kopie für VMs."
 - weniger gut: "Rule offsite_protection failed for dataset vms."
 
-### 6.4 Keine versteckten Informationen
+### 6.5 Keine versteckten Informationen
 
 Die Seite sollte keine wesentlichen Informationen nur per Mouseover zeigen.
 Tooltips sind als Zusatz okay, aber die Hauptaussage muss sichtbar sein.
@@ -497,17 +613,30 @@ Schwächen:
 - Dashboard darf nicht zu dicht werden
 - nur die Kurzfassung passt sinnvoll hinein
 
-### 7.3 Variante C: Wizard-Integration
+### 7.3 Variante C: Zwei Einstiegspunkte im Jobs-Bereich
 
-Eine spätere Variante könnte im Job-Wizard Hinweise anzeigen:
+Diese Variante ergänzt den Jobs-Bereich um eine klare Entscheidung:
 
-- "Dieser Job ergänzt die zweite Kopie für Appdata."
-- "Dieses Ziel ist ein Offsite-Kandidat."
-- "Für eine vollständige 3-2-1-0-0-Strategie fehlt noch ein Restore-Test."
+- Einzelnen Backup-Job erstellen
+- Backup-Strategie erstellen
 
-Diese Variante sollte nicht die erste Phase sein, weil dafür mehr
-Entscheidungslogik im Wizard nötig wäre. Als spätere Ergänzung ist sie aber
-wertvoll.
+![Mockup: Neuer Job-Einstieg](assets/issue-94/strategy-job-entry.svg)
+
+Der bestehende Einzeljob-Wizard bleibt erhalten. Der neue Strategie-Wizard
+arbeitet dagegen mit einem Protected Dataset und mehreren Ziel-Jobs.
+
+Stärken:
+
+- keine falsche Gruppierung über Namen
+- Nutzer verstehen den Unterschied zwischen Einzeljob und Strategie
+- 3-2-1-0-0 wird schon beim Erstellen geplant
+- bestehende Architektur kann operative Jobs weiterhin nutzen
+
+Schwächen:
+
+- größeres Wizard-Thema
+- benötigt neue Metadaten für Strategiegruppen und Targets
+- Migration bestehender Einzeljobs braucht eine bewusste Zuordnung
 
 ### 7.4 Empfehlung
 
@@ -515,7 +644,7 @@ Empfohlene Kombination:
 
 1. Variante A als neue Detailseite.
 2. Variante B als kompakter Dashboard-Einstieg.
-3. Variante C später, sobald das Bewertungsmodell stabil ist.
+3. Variante C als Zielbild für neue 3-2-1-0-0-Konfigurationen.
 
 ## 8. Benötigte Daten
 
@@ -577,6 +706,41 @@ Pro Datenbereich:
 
 Diese Felder sollten optional starten. In Phase 1 kann die Anwendung
 Datenbereiche aus `backup_type` ableiten.
+
+#### Strategiegruppen
+
+Für den späteren Strategie-Wizard sollte ein eigenes Objekt entstehen:
+
+- `strategy_group_id`
+- Anzeigename
+- geschützter Datenbereich
+- Quellpfade
+- Kritikalität
+- gewünschte 3-2-1-0-0-Policy
+- Status der Benutzerbestätigung
+- Liste der zugehörigen Ziel-Jobs
+
+Eine Strategiegruppe ist keine einzelne Borg-Ausführung. Sie ist die fachliche
+Klammer um mehrere operative Jobs.
+
+#### Strategie-Ziele
+
+Pro Ziel innerhalb einer Strategiegruppe:
+
+- `target_id`
+- `strategy_group_id`
+- zugehöriger `job_key`
+- Storage-Profil oder Repository
+- Standorttyp
+- Zeitplan
+- Retention
+- Restore-Test-Policy
+- Aktivstatus
+- letzte erfolgreiche Ausführung
+- letzte erfolgreiche Verifikation
+
+Damit kann Appdata lokal, Appdata USB und Appdata Storagebox eindeutig
+zusammengehören, ohne dass Namen verglichen werden müssen.
 
 #### Policy-Metadaten
 
@@ -700,6 +864,7 @@ Konzeptionell könnte das UI-Modell so aussehen:
   "datasets": [
     {
       "dataset_id": "appdata",
+      "strategy_group_id": "appdata-main",
       "display_name": "Appdata",
       "status": "yellow",
       "copies": 3,
@@ -709,6 +874,26 @@ Konzeptionell könnte das UI-Modell so aussehen:
       "restore_status": "verified",
       "recommendations": [
         "Storagebox als Offsite bestätigen"
+      ],
+      "targets": [
+        {
+          "job_key": "appdata_local",
+          "location": "local",
+          "repository": "/mnt/backup/appdata",
+          "schedule": "0 9 * * *"
+        },
+        {
+          "job_key": "appdata_usb",
+          "location": "usb",
+          "repository": "/mnt/disks/WEDJJER/appdata",
+          "schedule": "0 10 * * *"
+        },
+        {
+          "job_key": "appdata_storagebox",
+          "location": "storagebox",
+          "repository": "ssh://cccc@ccccc.ykdkdwd.de:23/backup/appdata",
+          "schedule": "0 22 * * *"
+        }
       ]
     }
   ]
@@ -739,7 +924,7 @@ Benutzer sie bestätigt.
 | Risiko | Auswirkung | Gegenmaßnahme |
 | --- | --- | --- |
 | Falsch erkannte Offsite-Ziele | Benutzer erhält trügerisches Grün | Offsite nur als bestätigt werten |
-| Mehrere Jobs sichern nicht dieselben Daten | Kopien werden falsch gruppiert | Phase 1 über `backup_type`, später `dataset_id` |
+| Mehrere Jobs sichern nicht dieselben Daten | Kopien werden falsch gruppiert | Phase 1 nur als unbestätigte Heuristik, später `strategy_group_id` |
 | Alte Statusdateien wirken gültig | Strategie wirkt besser als sie ist | Gültigkeitsfenster pro Job/Policy |
 | Restore-Test-Policy ist deaktiviert | 0-ungeprüft wirkt unklar | Deaktiviert sichtbar als bewusste Ausnahme anzeigen |
 | Custom-Jobs sind schwer klassifizierbar | Bewertung unscharf | manuelle Zuordnung anbieten |
@@ -756,11 +941,13 @@ Benutzer sie bestätigt.
    werden als Flash?
 6. Soll die erste Phase bereits Einstellungen für Offsite/Medium enthalten oder
    nur Empfehlungen anzeigen?
-7. Wie sollen Custom-Jobs mit mehreren Quellpfaden gruppiert werden?
-8. Wie lange bleibt ein Backup-Lauf für die Strategie gültig?
-9. Soll ein deaktivierter Restore-Test als "bewusst ausgeschlossen" oder als
+7. Wie sollen bestehende Einzeljobs initial einer Strategiegruppe zugeordnet
+   werden?
+8. Wie sollen Custom-Jobs mit mehreren Quellpfaden gruppiert werden?
+9. Wie lange bleibt ein Backup-Lauf für die Strategie gültig?
+10. Soll ein deaktivierter Restore-Test als "bewusst ausgeschlossen" oder als
    Risiko bewertet werden?
-10. Soll der Strategy Monitor später Benachrichtigungen erzeugen, wenn die
+11. Soll der Strategy Monitor später Benachrichtigungen erzeugen, wenn die
     Strategie von Grün auf Gelb/Rot wechselt?
 
 ## 12. Umsetzungsvorschlag in späteren Phasen
@@ -772,6 +959,7 @@ Ziel:
 - neue Seite "Backup-Strategie"
 - bestehende Jobs, Statusdateien und Restore-Test-Daten auswerten
 - konservative Heuristiken verwenden
+- automatische Gruppierungen sichtbar als unbestätigt markieren
 - keine neuen Pflichtfelder
 - keine automatischen Änderungen
 
@@ -790,6 +978,7 @@ Ziel:
 - Storage-Profile als Offsite, separates Medium oder Fehlerdomäne markieren
 - Custom-Jobs Datenbereichen zuordnen
 - Datenbereiche bewusst ein- oder ausschließen
+- bestehende Einzeljobs optional einer Strategiegruppe zuordnen
 
 Ergebnis:
 
@@ -797,7 +986,22 @@ Ergebnis:
 - klarere Bewertung
 - weniger falsche Warnungen
 
-### Phase 3: Geführte Empfehlungen
+### Phase 3: Strategiegruppen und Ziel-Jobs
+
+Ziel:
+
+- explizites Modell für Backup-Strategien einführen
+- eine Strategiegruppe mit mehreren Ziel-Jobs verwalten
+- pro Ziel eigener Zeitplan, Repository und Restore-Test-Policy
+- bestehende Einzeljobs manuell einer Strategiegruppe zuordnen können
+
+Ergebnis:
+
+- Appdata lokal, USB und Storagebox gehören eindeutig zusammen
+- kein Raten über Namen oder `backup_type`
+- stabile Grundlage für den Strategie-Wizard
+
+### Phase 4: Geführte Empfehlungen
 
 Ziel:
 
@@ -810,7 +1014,7 @@ Ergebnis:
 
 - die Seite wird vom Monitor zum Assistenten
 
-### Phase 4: Dashboard-Integration
+### Phase 5: Dashboard-Integration
 
 Ziel:
 
@@ -822,12 +1026,15 @@ Ergebnis:
 
 - Strategie wird direkt nach Login sichtbar
 
-### Phase 5: Wizard-Integration
+### Phase 6: Strategie-Wizard
 
 Ziel:
 
-- beim Erstellen neuer Jobs anzeigen, welchen Strategiebeitrag der Job leistet
-- fehlende Kopien/Medien/Offsite-Ziele im Wizard vorschlagen
+- neben "Einzelnen Backup-Job erstellen" einen neuen Einstieg
+  "Backup-Strategie erstellen" anbieten
+- Quelle einmal definieren
+- mehrere Ziele mit eigenen Zeitplänen konfigurieren
+- vor dem Speichern eine 3-2-1-0-0-Vorschau anzeigen
 
 Ergebnis:
 
