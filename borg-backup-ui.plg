@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.04.2328">
+<!ENTITY version   "2026.07.05.1531">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -18,6 +18,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.05.1531###
+- Issue #171:
+  - Reports now show the translated restore-test failure reason, such as network or SSH connection errors, when restore verification fails.
+
 ###2026.07.04.2328###
 - Issue #166:
   - Restore Tests now show a clear message and live log when another restore test is already running.
@@ -289,7 +293,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>866d4e94d6b5a8a7552ff4d5a885366b</MD5>
+<MD5>cbddf6f30f1ece09b383f8e0644aff55</MD5>
 </FILE>
 
 <!--
