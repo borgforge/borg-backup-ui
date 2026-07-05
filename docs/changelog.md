@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #171
+- Reports:
+  - Failed restore verification banners now include the translated restore-test failure reason when the `.test` report contains a failure code such as `RT_NETWORK_ERROR`.
+  - Restore verification metadata now forwards failure code, hint and category to job and dashboard/report API consumers without exposing raw command output.
+
 ### Issue #166
 - Restore Tests:
   - Starting a second restore test while one is already running now returns a clear conflict instead of a generic internal server error.

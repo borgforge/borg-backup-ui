@@ -754,6 +754,7 @@
     "restoreVerified": "Restore-Nachweis: verifiziert",
     "restoreOverdue": "Restore-Nachweis: überfällig",
     "restoreFailed": "Restore-Nachweis: fehlgeschlagen",
+    "restoreFailureReason": "Grund: {value}",
     "restorePending": "Restore-Nachweis: noch offen",
     "restoreNotScheduled": "Restore-Nachweis: nicht geplant",
     "lastTest": "Letzter Test: {value}",

@@ -226,6 +226,9 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
         last_result = ""
         last_level = 0
         last_duration_seconds = 0
+        failure_code = ""
+        failure_hint = ""
+        failure_category = ""
         valid_until = ""
         age_days = None
         is_overdue = False
@@ -240,6 +243,10 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
             last_result = str(test_data.get("test_result") or "").strip().lower()
             last_level = _safe_int(test_data.get("test_level"), 0)
             last_duration_seconds = _safe_int(test_data.get("test_duration_seconds"), 0)
+            failure_code = str(test_data.get("failure_code") or "").strip()
+            failure_hint = str(test_data.get("failure_hint") or "").strip()
+            error_analysis = test_data.get("error_analysis") if isinstance(test_data.get("error_analysis"), dict) else {}
+            failure_category = str(error_analysis.get("error_category") or "").strip()
             dt = _extract_test_datetime(test_data, test_file)
             if dt is not None:
                 last_test_date = dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -276,6 +283,9 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
             "last_test_result": last_result,
             "last_test_level": last_level,
             "last_test_duration_seconds": last_duration_seconds,
+            "failure_code": failure_code,
+            "failure_hint": failure_hint,
+            "failure_category": failure_category,
             "valid_until": valid_until,
             "age_days": age_days,
             "is_overdue": is_overdue,
