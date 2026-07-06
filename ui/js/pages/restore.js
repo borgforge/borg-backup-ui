@@ -404,26 +404,12 @@ function renderRestoreHistory(payload) {
   const panel = document.getElementById('restore-history-panel');
   const content = document.getElementById('restore-history-content');
   const count = document.getElementById('restore-history-count');
-  const migration = document.getElementById('restore-history-migration');
   if (!panel || !content) return;
   const rows = Array.isArray(payload?.runs) ? payload.runs : [];
   const total = Number(payload?.total || rows.length || 0);
   restoreState.history = rows;
   restoreState.historyTotal = total;
   if (count) count.textContent = total ? restoreT('historyCount', { count: total }) : '';
-
-  const migrationState = payload?.migration || {};
-  const migrationDetails = migrationState.details || {};
-  if (migration && migrationState.status === 'failed') {
-    migration.classList.remove('hidden');
-    migration.textContent = restoreT('historyMigrationFailed', {
-      count: migrationDetails.imported || 0,
-      errors: (migrationDetails.errors || []).length,
-    });
-  } else if (migration) {
-    migration.classList.add('hidden');
-    migration.textContent = '';
-  }
 
   if (!rows.length) {
     content.innerHTML = `<div class="restore-history-empty">${escHtml(restoreT('historyEmpty'))}</div>`;

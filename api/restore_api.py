@@ -278,17 +278,6 @@ def _write_history_index(config: dict, rows: list[dict]) -> None:
     _write_json_atomic(_restore_history_index_file(config), payload)
 
 
-def _central_restore_history_migration_state(config: dict) -> dict:
-    try:
-        from migrations.registry import read_central_migration_state
-        state = read_central_migration_state(config)
-        migrations = state.get("migrations") if isinstance(state.get("migrations"), dict) else {}
-        entry = migrations.get("restore_history_v1") if isinstance(migrations.get("restore_history_v1"), dict) else {}
-        return entry
-    except Exception:
-        return {}
-
-
 def _record_restore_history(config: dict, run: dict, source: str) -> None:
     restore_id = str(run.get("restore_id") or "").strip()
     if not restore_id:
@@ -1282,7 +1271,6 @@ def list_restore_history(config: dict, limit: int = 20, offset: int = 0) -> dict
         "total": len(rows),
         "limit": limit,
         "offset": offset,
-        "migration": _central_restore_history_migration_state(config),
     }
 
 
@@ -1331,11 +1319,6 @@ def delete_restore_history_entry(config: dict, restore_id: str) -> dict:
         "detail_deleted": detail_deleted,
         "remaining": len(remaining),
     }
-
-
-def get_restore_history_migration(config: dict) -> dict:
-    _ensure_restore_runs_loaded(config)
-    return {"state": _central_restore_history_migration_state(config), "log": []}
 
 
 def get_restore_state(config: dict, restore_id: str) -> dict:

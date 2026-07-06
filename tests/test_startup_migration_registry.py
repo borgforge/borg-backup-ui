@@ -7,7 +7,6 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-import restore_api  # noqa: E402
 from migrations import registry  # noqa: E402
 
 
@@ -28,74 +27,55 @@ def _log_lines(config: dict) -> list[dict]:
 
 
 def test_registry_writes_central_state_and_log_for_applied_migration(tmp_path: Path):
-    restore_api._RESTORE_RUNS_LOADED = False
-    restore_api._RESTORE_RUNS.clear()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "backup.conf").write_text(
+        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
+        encoding="utf-8",
+    )
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    restore_runs = tmp_path / "config" / "restore-runs.json"
-    restore_runs.parent.mkdir(parents=True)
-    restore_runs.write_text(json.dumps({
-        "schema_version": 1,
-        "runs": {
-            "done-1": {
-                "restore_id": "done-1",
-                "state": "done",
-                "started_at": "2026-06-29T08:00:00",
-                "finished_at": "2026-06-29T08:00:10",
-                "job_key": "appdata_local",
-                "archive": "appdata-archive",
-                "lines": ["done"],
-            },
-        },
-    }), encoding="utf-8")
 
     result = registry.run_startup_migrations(config)
     state = _state(config)
     logs = _log_lines(config)
 
     assert result["status"] == "ok"
-    assert "restore_history_v1" in result["applied"]
+    assert "notification_events_v1" in result["applied"]
     assert state["schema_version"] == 2
-    assert state["last_run"]["reason_code"] in {"restore_history_migrated", "startup_migrations_applied"}
-    assert state["migrations"]["restore_history_v1"]["state"] == "applied"
-    assert state["migrations"]["restore_history_v1"]["details"]["runner"] == "central_migration_registry"
-    assert state["migrations"]["restore_history_v1"]["details"]["imported"] == 1
+    assert state["last_run"]["reason_code"] == "startup_migrations_applied"
+    assert state["migrations"]["notification_events_v1"]["state"] == "applied"
+    assert state["migrations"]["notification_events_v1"]["details"]["runner"] == "central_migration_registry"
+    assert state["migrations"]["notification_events_v1"]["details"]["updated_keys"] == [
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS",
+        "NOTIFY_EMAIL_EVENTS",
+        "NOTIFY_REMINDER_INTERVAL_HOURS",
+        "NOTIFY_UNRAID_EVENTS",
+        "NTFY_EVENTS",
+    ]
     assert len(logs) == 1
     assert logs[0]["event"] == "startup_migration"
-    assert "restore_history_v1" in logs[0]["details"]["startup_migrations"]["applied"]
+    assert "notification_events_v1" in logs[0]["details"]["startup_migrations"]["applied"]
 
 
 def test_registry_second_run_preserves_last_effective_migration(tmp_path: Path):
-    restore_api._RESTORE_RUNS_LOADED = False
-    restore_api._RESTORE_RUNS.clear()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "backup.conf").write_text(
+        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
+        encoding="utf-8",
+    )
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    restore_runs = tmp_path / "config" / "restore-runs.json"
-    restore_runs.parent.mkdir(parents=True)
-    restore_runs.write_text(json.dumps({
-        "schema_version": 1,
-        "runs": {
-            "done-1": {
-                "restore_id": "done-1",
-                "state": "done",
-                "started_at": "2026-06-29T08:00:00",
-                "finished_at": "2026-06-29T08:00:10",
-                "job_key": "appdata_local",
-                "archive": "appdata-archive",
-                "lines": ["done"],
-            },
-        },
-    }), encoding="utf-8")
 
     first_result = registry.run_startup_migrations(config)
     first_state = _state(config)
-    restore_api._RESTORE_RUNS_LOADED = False
     second_result = registry.run_startup_migrations(config)
     second_state = _state(config)
     logs = _log_lines(config)
 
-    assert first_result["results"]["restore_history_v1"]["status"] == "applied"
-    assert second_result["results"]["restore_history_v1"]["status"] in {"skipped", "not_required"}
+    assert first_result["results"]["notification_events_v1"]["status"] == "applied"
+    assert second_result["results"]["notification_events_v1"]["status"] in {"skipped", "not_required"}
     assert second_state["last_run"] == first_state["last_run"]
-    assert second_state["migrations"]["restore_history_v1"]["state"] == "applied"
+    assert second_state["migrations"]["notification_events_v1"]["state"] == "applied"
     assert len(logs) == 1
 
 

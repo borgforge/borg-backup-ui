@@ -69,11 +69,6 @@ def _reason_for(results: dict[str, Any], applied: list[str], failed: list[str]) 
         return "error", "Startup migrations completed with errors"
     if not applied:
         return "no_changes", "No startup migrations required changes"
-    if applied == ["restore_history_v1"]:
-        details = _result_details(results.get("restore_history_v1", {}))
-        imported = int(details.get("imported") or 0)
-        if imported > 0:
-            return "restore_history_migrated", "Restore history migrated from restore-runs.json"
     return "startup_migrations_applied", "Startup migrations applied"
 
 

@@ -139,7 +139,7 @@ def test_registry_reports_schema_missing_without_legacy_storage_marker_status(tm
     assert registry["summary"]["pending"] >= 1
 
 
-def test_registry_reports_recorded_restore_history_migration(tmp_path: Path):
+def test_registry_hides_obsolete_restore_history_migration_state(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         "\n".join([
@@ -174,12 +174,9 @@ def test_registry_reports_recorded_restore_history_migration(tmp_path: Path):
     )
 
     registry = get_migration_registry_status(cfg)
-    item = _items_by_id(registry)["restore_history_v1"]
+    items = _items_by_id(registry)
 
-    assert item["status"] == "applied"
-    assert item["category"] == "migration"
-    assert item["details"]["checked_at"] == "2026-06-29T15:54:20"
-    assert item["details"]["runner"] == "central_migration_registry"
+    assert "restore_history_v1" not in items
 
 
 def test_registry_hides_obsolete_storage_paths_migration_state(tmp_path: Path):
