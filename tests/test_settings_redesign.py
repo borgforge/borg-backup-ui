@@ -101,6 +101,7 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert "monitoredRun" in script
     assert "reminderInfo" in script
     assert "_renderReminderDetailLine" in script
+    assert "_renderReminderStackLine" in script
     assert "function _formatReminderTimestamp" in script
     assert "day: '2-digit'" in script
     assert "month: '2-digit'" in script
@@ -112,6 +113,8 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert "overflow-x: hidden" in css
     assert ".reminder-detail-line" in css
     assert ".reminder-detail-label" in css
+    assert ".reminder-detail-stack" in css
+    assert ".reminder-stack-line" in css
     assert "settings-passphrase-card" in script
     assert "settings-passphrase-table" in script
     assert ".settings-passphrase-table-wrap" in css

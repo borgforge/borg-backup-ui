@@ -1127,8 +1127,8 @@ function _renderReminderTableRow(item) {
         ${scheduleRows.map(([label, value]) => _renderReminderDetailLine(label, value)).join('')}
       </td>
       <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(latestFormatted)}</span></td>
-      <td class="reminder-date-cell">
-        ${reminderRows.map(([label, value]) => _renderReminderDetailLine(label, value)).join('')}
+      <td class="reminder-date-cell reminder-detail-stack">
+        ${reminderRows.map(([label, value]) => _renderReminderStackLine(label, value)).join('')}
       </td>
     </tr>
   `;
@@ -1136,6 +1136,10 @@ function _renderReminderTableRow(item) {
 
 function _renderReminderDetailLine(label, value) {
   return `<span class="reminder-detail-line"><span class="reminder-detail-label">${escHtml(label)}:</span><span class="reminder-detail-value">${escHtml(value || '—')}</span></span>`;
+}
+
+function _renderReminderStackLine(label, value) {
+  return `<span class="reminder-stack-line"><span class="reminder-detail-label">${escHtml(label)}</span><span class="reminder-detail-value">${escHtml(value || '—')}</span></span>`;
 }
 
 function _reminderStateLabel(state) {
