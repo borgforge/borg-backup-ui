@@ -1078,10 +1078,8 @@ function _renderReminderTable(items) {
             <th>${settingsT('health.job')}</th>
             <th>${settingsT('health.status')}</th>
             <th>${settingsT('health.expectedRun')}</th>
-            <th>${settingsT('health.overdueAfter')}</th>
             <th>${settingsT('health.latestStatus')}</th>
-            <th>${settingsT('health.sentAt')}</th>
-            <th>${settingsT('health.nextAllowedAt')}</th>
+            <th>${settingsT('health.reminderInfo')}</th>
           </tr>
         </thead>
         <tbody>${items.map(_renderReminderTableRow).join('')}</tbody>
@@ -1107,6 +1105,18 @@ function _renderReminderTableRow(item) {
   const latestFormatted = _formatReminderTimestamp(latest) || String(latest || '—');
   const sentFormatted = item?.sent ? (_formatReminderTimestamp(item.sent_at) || item.sent_at || '—') : settingsT('health.notSentYet');
   const nextAllowedFormatted = item?.next_allowed_at ? (_formatReminderTimestamp(item.next_allowed_at) || item.next_allowed_at) : '—';
+  const showNextScheduled = nextScheduledFormatted && nextScheduledFormatted !== expectedFormatted;
+  const scheduleRows = type === 'backup_overdue'
+    ? [
+        [settingsT('health.monitoredRun'), expectedFormatted],
+        [settingsT('health.overdueAfter'), overdueAfterFormatted],
+        ...(showNextScheduled ? [[settingsT('health.nextScheduledRun'), nextScheduledFormatted]] : []),
+      ]
+    : [[settingsT('health.nextDueAt'), expectedFormatted]];
+  const reminderRows = [
+    [settingsT('health.sentAt'), sentFormatted],
+    ...(item?.next_allowed_at ? [[settingsT('health.nextAllowedAt'), nextAllowedFormatted]] : []),
+  ];
   return `
     <tr>
       <td>
@@ -1114,15 +1124,18 @@ function _renderReminderTableRow(item) {
       </td>
       <td><span class="badge reminder-state-badge ${escHtml(tone)}">${escHtml(_reminderStateLabel(state))}</span></td>
       <td class="reminder-date-cell">
-        <span class="reminder-date-main">${escHtml(expectedFormatted)}</span>
-        ${nextScheduledFormatted ? `<span class="reminder-date-sub">${escHtml(settingsT('health.nextScheduledRun'))}: ${escHtml(nextScheduledFormatted)}</span>` : ''}
+        ${scheduleRows.map(([label, value]) => _renderReminderDetailLine(label, value)).join('')}
       </td>
-      <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(overdueAfterFormatted)}</span></td>
       <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(latestFormatted)}</span></td>
-      <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(sentFormatted)}</span></td>
-      <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(nextAllowedFormatted)}</span></td>
+      <td class="reminder-date-cell">
+        ${reminderRows.map(([label, value]) => _renderReminderDetailLine(label, value)).join('')}
+      </td>
     </tr>
   `;
+}
+
+function _renderReminderDetailLine(label, value) {
+  return `<span class="reminder-detail-line"><span class="reminder-detail-label">${escHtml(label)}:</span><span class="reminder-detail-value">${escHtml(value || '—')}</span></span>`;
 }
 
 function _reminderStateLabel(state) {

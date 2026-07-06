@@ -238,19 +238,23 @@
 }
 
 .reminder-diagnostics-table th:nth-child(1) {
-  width: 17%;
+  width: 18%;
 }
 
 .reminder-diagnostics-table th:nth-child(2) {
-  width: 15%;
+  width: 14%;
 }
 
-.reminder-diagnostics-table th:nth-child(3),
-.reminder-diagnostics-table th:nth-child(4),
-.reminder-diagnostics-table th:nth-child(5),
-.reminder-diagnostics-table th:nth-child(6),
-.reminder-diagnostics-table th:nth-child(7) {
-  width: 13.6%;
+.reminder-diagnostics-table th:nth-child(3) {
+  width: 31%;
+}
+
+.reminder-diagnostics-table th:nth-child(4) {
+  width: 17%;
+}
+
+.reminder-diagnostics-table th:nth-child(5) {
+  width: 20%;
 }
 
 .reminder-diagnostics-table td {
@@ -285,10 +289,26 @@
   line-height: 1.35;
 }
 
-.reminder-date-sub {
+.reminder-detail-line {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, max-content) minmax(0, 1fr);
+  gap: var(--ui-space-2);
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.reminder-detail-line + .reminder-detail-line {
   margin-top: 2px;
+}
+
+.reminder-detail-label {
   color: var(--ui-color-text-muted);
-  font-size: 12px;
+}
+
+.reminder-detail-value {
+  color: var(--ui-color-text);
+  overflow-wrap: anywhere;
 }
 
 .reminder-state-badge {
