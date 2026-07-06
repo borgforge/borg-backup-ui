@@ -8,7 +8,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #144
 - Maintenance:
-  - Removed the obsolete restore-history startup migration and the dedicated Restore migration status endpoint/UI banner.
+  - Removed the obsolete dedicated Restore migration status endpoint/UI banner.
+  - Kept the internal `restore_history_v1` startup migration so completed legacy restore runs are still imported safely on systems that have not run it yet.
   - Restore active-run tracking remains in `restore-runs.json`; completed restore history remains in canonical per-run files under `restore-history/runs`.
   - Weekly snapshot handling now imports the old status-directory snapshot file once if needed and then writes only the canonical snapshot file.
   - Removed runtime `STORAGEBOX_BASE` alias expansion from the backup status config parser; deprecated keys remain visible through the cleanup audit.
