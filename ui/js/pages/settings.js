@@ -1050,6 +1050,7 @@ function renderSettingsNotificationReminderDiagnostics(data) {
         ${_renderMigrationMetric(settingsT('health.backupToleranceHours'), Number(settings.backup_overdue_tolerance_hours || 0), 'neutral')}
       </div>
       <div class="migration-registry-id" style="margin:8px 0 12px">${escHtml(settingsT('health.generatedAt'))}: ${escHtml(generated)}</div>
+      <p class="reminder-diagnostics-hint">${escHtml(settingsT('health.notificationReminderDiagnosticsHint'))}</p>
       ${_renderReminderGroup(data.backup_overdue || {}, settingsT('health.backupOverdueDiagnostics'))}
       ${_renderReminderGroup(data.restore_test_overdue || {}, settingsT('health.restoreTestOverdueDiagnostics'))}
     </div>
@@ -1094,22 +1095,32 @@ function _renderReminderTableRow(item) {
   const tone = state === 'overdue_ready' ? 'warn' : (state === 'overdue_waiting' ? 'warning' : (state === 'unsupported' || state === 'missing_due' || state === 'missing_status' ? 'error' : 'success'));
   const type = String(item?.type || '');
   const expected = type === 'backup_overdue' ? item.expected_run : item.next_due_at;
+  const nextScheduled = type === 'backup_overdue' ? item.next_scheduled_run : '';
   const overdueAfter = type === 'backup_overdue' ? item.overdue_after : item.next_due_at;
   const latest = type === 'backup_overdue'
     ? (item.latest_status_at || item.latest_status)
     : (item.last_test_date || (item.level ? `L${item.level}` : ''));
   const reminderKey = String(item?.reminder_key || '').trim();
+  const expectedFormatted = _formatReminderTimestamp(expected) || String(expected || '—');
+  const nextScheduledFormatted = _formatReminderTimestamp(nextScheduled) || String(nextScheduled || '');
+  const overdueAfterFormatted = _formatReminderTimestamp(overdueAfter) || String(overdueAfter || '—');
+  const latestFormatted = _formatReminderTimestamp(latest) || String(latest || '—');
+  const sentFormatted = item?.sent ? (_formatReminderTimestamp(item.sent_at) || item.sent_at || '—') : settingsT('health.notSentYet');
+  const nextAllowedFormatted = item?.next_allowed_at ? (_formatReminderTimestamp(item.next_allowed_at) || item.next_allowed_at) : '—';
   return `
     <tr>
       <td>
         <strong class="reminder-job-name" ${reminderKey ? `title="${escHtml(reminderKey)}"` : ''}>${escHtml(String(item?.display_name || item?.job_key || 'Job'))}</strong>
       </td>
       <td><span class="badge reminder-state-badge ${escHtml(tone)}">${escHtml(_reminderStateLabel(state))}</span></td>
-      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(expected) || String(expected || '—'))}</td>
-      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(overdueAfter) || String(overdueAfter || '—'))}</td>
-      <td class="reminder-date-cell">${escHtml(_formatReminderTimestamp(latest) || String(latest || '—'))}</td>
-      <td class="reminder-date-cell">${escHtml(item?.sent ? (_formatReminderTimestamp(item.sent_at) || item.sent_at || '—') : settingsT('health.notSentYet'))}</td>
-      <td class="reminder-date-cell">${escHtml(item?.next_allowed_at ? (_formatReminderTimestamp(item.next_allowed_at) || item.next_allowed_at) : '—')}</td>
+      <td class="reminder-date-cell">
+        <span class="reminder-date-main">${escHtml(expectedFormatted)}</span>
+        ${nextScheduledFormatted ? `<span class="reminder-date-sub">${escHtml(settingsT('health.nextScheduledRun'))}: ${escHtml(nextScheduledFormatted)}</span>` : ''}
+      </td>
+      <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(overdueAfterFormatted)}</span></td>
+      <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(latestFormatted)}</span></td>
+      <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(sentFormatted)}</span></td>
+      <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(nextAllowedFormatted)}</span></td>
     </tr>
   `;
 }

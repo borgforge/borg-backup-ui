@@ -308,6 +308,7 @@ def _backup_overdue_item(
 
     cron = str(sched.get("cron") or "").strip()
     latest_expected_run = _latest_expected_run(cron, now)
+    next_scheduled_run = _next_expected_run(cron, now)
     display_name = str(job.get("display_name") or job.get("name") or job_key)
     if latest_expected_run is None:
         return {
@@ -330,6 +331,7 @@ def _backup_overdue_item(
             "reason": "missing_status",
             "expected_run": latest_expected_run.isoformat(timespec="seconds"),
             "expected_run_marker": latest_expected_run.strftime("%Y-%m-%d %H:%M:%S"),
+            "next_scheduled_run": next_scheduled_run.isoformat(timespec="seconds") if next_scheduled_run else "",
             "overdue_after": (latest_expected_run + timedelta(hours=backup_tolerance_hours)).isoformat(timespec="seconds"),
             "latest_status_at": "",
             "latest_status_at_raw": str(last.get("timestamp") or ""),
@@ -363,6 +365,7 @@ def _backup_overdue_item(
         "reason": reason,
         "expected_run": expected_run.isoformat(timespec="seconds"),
         "expected_run_marker": expected_marker,
+        "next_scheduled_run": next_scheduled_run.isoformat(timespec="seconds") if next_scheduled_run else "",
         "overdue_after": overdue_after.isoformat(timespec="seconds"),
         "latest_status_at": last_ts.isoformat(timespec="seconds") if last_ts else "",
         "latest_status_at_raw": str(last.get("timestamp") or ""),

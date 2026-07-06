@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #174
+- Notifications:
+  - Reminder diagnostics now distinguish the monitored/missed backup run from the next scheduled cron run, making rows such as an overdue weekly USB backup easier to understand.
+  - The reminder diagnostics table now uses a compact fixed layout with wrapped labels so the Settings page no longer needs page-level horizontal scrolling.
+
 ### Issue #171
 - Reports:
   - Failed restore verification banners now include the translated restore-test failure reason when the `.test` report contains a failure code such as `RT_NETWORK_ERROR`.
