@@ -35,13 +35,14 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
         config.get("SNAPSHOT_FILE", str(status_dir.parent / "weekly-snapshots.json"))
     )
     legacy_snapshot_file = status_dir / "weekly-snapshots.json"
+    _import_legacy_snapshot_if_needed(snapshot_file, legacy_snapshot_file)
 
     store = StatusStore(status_dir)
     all_statuses = store.load()
     latest = store.get_latest_per_key(all_statuses)
 
-    _auto_write_weekly_snapshot(snapshot_file, legacy_snapshot_file, latest, force_write=force_snapshot_write)
-    last_week_sizes = _load_last_week_sizes(snapshot_file, legacy_snapshot_file)
+    _auto_write_weekly_snapshot(snapshot_file, latest, force_write=force_snapshot_write)
+    last_week_sizes = _load_last_week_sizes(snapshot_file)
 
     backups: List[Dict[str, Any]] = []
     for key, st in sorted(latest.items()):
@@ -145,7 +146,7 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
     skipped = sum(1 for b in backups if b["status"] == "skipped")
     error = sum(1 for b in backups if b["status"] == "error")
 
-    snapshots = _load_all_snapshots(snapshot_file, legacy_snapshot_file)
+    snapshots = _load_all_snapshots(snapshot_file)
 
     check_interval_days = int(config.get("GLOBAL_BORG_CHECK_INTERVAL_DAYS", "30") or "30")
 
@@ -173,9 +174,24 @@ def _read_snapshot_data(*paths: Path) -> Dict[str, List[Dict]]:
     return {}
 
 
+def _import_legacy_snapshot_if_needed(snapshot_file: Path, legacy_snapshot_file: Path) -> None:
+    if snapshot_file == legacy_snapshot_file or snapshot_file.exists() or not legacy_snapshot_file.exists():
+        return
+    try:
+        data = json.loads(legacy_snapshot_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+    if not isinstance(data, dict):
+        return
+    try:
+        snapshot_file.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def _auto_write_weekly_snapshot(
     snapshot_file: Path,
-    legacy_snapshot_file: Path,
     latest_per_key: dict,
     force_write: bool = False,
 ) -> None:
@@ -186,7 +202,7 @@ def _auto_write_weekly_snapshot(
     today = date.today()
     week_tag = (today - timedelta(days=today.weekday())).isoformat()  # Dieser Montag
 
-    data: Dict[str, List[Dict]] = _read_snapshot_data(snapshot_file, legacy_snapshot_file)
+    data: Dict[str, List[Dict]] = _read_snapshot_data(snapshot_file)
 
     changed = False
     for key, st in latest_per_key.items():
@@ -207,19 +223,13 @@ def _auto_write_weekly_snapshot(
             snapshot_file.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
             )
-            # Legacy-Kompatibilität: parallel im alten Status-Verzeichnis mitführen.
-            if legacy_snapshot_file != snapshot_file:
-                legacy_snapshot_file.parent.mkdir(parents=True, exist_ok=True)
-                legacy_snapshot_file.write_text(
-                    json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-                )
         except OSError:
             pass
 
 
-def _load_last_week_sizes(snapshot_file: Path, legacy_snapshot_file: Path) -> Dict[str, int]:
+def _load_last_week_sizes(snapshot_file: Path) -> Dict[str, int]:
     """Gibt Repository-Größen der Vorwoche zurück (Index -2)."""
-    data = _read_snapshot_data(snapshot_file, legacy_snapshot_file)
+    data = _read_snapshot_data(snapshot_file)
     if not data:
         return {}
     result: Dict[str, int] = {}
@@ -230,9 +240,9 @@ def _load_last_week_sizes(snapshot_file: Path, legacy_snapshot_file: Path) -> Di
     return result
 
 
-def _load_all_snapshots(snapshot_file: Path, legacy_snapshot_file: Path) -> Dict[str, List[Dict]]:
+def _load_all_snapshots(snapshot_file: Path) -> Dict[str, List[Dict]]:
     """Lädt alle Snapshot-Einträge (max. 8 Wochen) für Trend-Charts."""
-    data = _read_snapshot_data(snapshot_file, legacy_snapshot_file)
+    data = _read_snapshot_data(snapshot_file)
     if not data:
         return {}
     result: Dict[str, List[Dict]] = {}

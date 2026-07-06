@@ -628,17 +628,8 @@ def load_config(config_file: Path) -> Dict[str, str]:
             continue
         if key:
             # Expandiere ${VAR} Referenzen mit bereits gelesenen Werten (wie Bash)
-            # Legacy-Kompatibilität Storagebox:
-            # - ${STORAGEBOX_BASE}  -> STORAGEBOX_BASE_PATH
-            # - ${STORAGEBOX_BASE_PATH} -> STORAGEBOX_BASE
             def _resolve_ref(var_name: str) -> str:
-                if var_name in config:
-                    return config[var_name]
-                if var_name == "STORAGEBOX_BASE":
-                    return config.get("STORAGEBOX_BASE_PATH", f"${{{var_name}}}")
-                if var_name == "STORAGEBOX_BASE_PATH":
-                    return config.get("STORAGEBOX_BASE", f"${{{var_name}}}")
-                return f"${{{var_name}}}"
+                return config.get(var_name, f"${{{var_name}}}")
 
             value = re.sub(
                 r'\$\{([^}]+)\}',
@@ -646,11 +637,5 @@ def load_config(config_file: Path) -> Dict[str, str]:
                 value,
             )
             config[key] = value
-
-            # Alias beidseitig mitführen, damit ältere Placeholder weiter auflösbar bleiben.
-            if key == "STORAGEBOX_BASE_PATH" and value and "STORAGEBOX_BASE" not in config:
-                config["STORAGEBOX_BASE"] = value
-            elif key == "STORAGEBOX_BASE" and value and "STORAGEBOX_BASE_PATH" not in config:
-                config["STORAGEBOX_BASE_PATH"] = value
 
     return config

@@ -47,8 +47,7 @@
 .restore-history-card-actions { display: grid; justify-items: start; gap: var(--ui-space-2); }
 .restore-history-delete-btn { color: var(--ui-state-error-fg); border-color: var(--ui-state-error-border); background: transparent; }
 .restore-history-delete-btn:hover { background: var(--ui-state-error-bg); color: var(--ui-state-error-fg); }
-.restore-history-empty, .restore-history-migration { padding: var(--ui-space-3); color: var(--ui-color-text-subtle); }
-.restore-history-migration { border-bottom: 1px solid var(--ui-color-border); color: var(--ui-state-error-fg); }
+.restore-history-empty { padding: var(--ui-space-3); color: var(--ui-color-text-subtle); }
 .restore-history-detail { grid-column: 1 / -1; }
 .restore-history-detail:empty { display: none; }
 .restore-history-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); overflow: hidden; }

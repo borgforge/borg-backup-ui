@@ -688,7 +688,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/restore/state": lambda: self._get_restore_state(parsed.query),
                 "/api/restore/history": lambda: self._get_restore_history(parsed.query),
                 "/api/restore/history/detail": lambda: self._get_restore_history_detail(parsed.query),
-                "/api/restore/history/migration": self._get_restore_history_migration,
                 "/api/reports/jobs": self._get_report_jobs,
                 "/api/reports/data": lambda: self._get_report_data(parsed.query),
                 "/api/history/log": lambda: self._get_log_file(parsed.query),
@@ -2086,10 +2085,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if not restore_id:
             raise ValueError("restore_id is required")
         return get_restore_history_detail(self.config, restore_id)
-
-    def _get_restore_history_migration(self) -> dict:
-        from restore_api import get_restore_history_migration
-        return get_restore_history_migration(self.config)
 
     def _delete_restore_history(self) -> dict:
         from restore_api import delete_restore_history_entry
