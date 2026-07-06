@@ -204,8 +204,15 @@
   margin-top: var(--ui-space-3);
 }
 
+.reminder-diagnostics-hint {
+  margin: 0 0 var(--ui-space-3);
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .reminder-diagnostics-table-wrap {
-  overflow-x: auto;
+  overflow-x: hidden;
   margin-top: var(--ui-space-2);
   border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
@@ -213,23 +220,49 @@
 }
 
 .reminder-diagnostics-table {
-  min-width: 58rem;
+  width: 100%;
+  min-width: 0;
   margin: 0;
   background: var(--ui-color-surface);
+  table-layout: fixed;
+  font-size: 13px;
 }
 
 .reminder-diagnostics-table th {
-  padding: var(--ui-space-3);
+  padding: var(--ui-space-2) var(--ui-space-3);
   background: var(--ui-color-surface-subtle);
   color: var(--ui-color-text-muted);
   font-weight: var(--ui-font-weight-semibold);
-  white-space: nowrap;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.reminder-diagnostics-table th:nth-child(1) {
+  width: 17%;
+}
+
+.reminder-diagnostics-table th:nth-child(2) {
+  width: 13%;
+}
+
+.reminder-diagnostics-table th:nth-child(3) {
+  width: 32%;
+}
+
+.reminder-diagnostics-table th:nth-child(4) {
+  width: 16%;
+}
+
+.reminder-diagnostics-table th:nth-child(5) {
+  width: 22%;
 }
 
 .reminder-diagnostics-table td {
-  padding: var(--ui-space-3);
+  padding: var(--ui-space-2) var(--ui-space-3);
   background: var(--ui-color-surface);
   border-bottom-color: var(--ui-color-border);
+  overflow-wrap: anywhere;
+  vertical-align: top;
 }
 
 .reminder-diagnostics-table tbody tr:hover td {
@@ -246,11 +279,62 @@
 }
 
 .reminder-date-cell {
-  white-space: nowrap;
+  white-space: normal;
+}
+
+.reminder-date-main,
+.reminder-date-sub {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.reminder-detail-line {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, max-content) minmax(0, 1fr);
+  gap: var(--ui-space-2);
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.reminder-detail-line + .reminder-detail-line {
+  margin-top: 2px;
+}
+
+.reminder-detail-label {
+  color: var(--ui-color-text-muted);
+}
+
+.reminder-detail-value {
+  color: var(--ui-color-text);
+  overflow-wrap: anywhere;
+}
+
+.reminder-detail-stack {
+  display: grid;
+  gap: var(--ui-space-2);
+}
+
+.reminder-stack-line {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.reminder-stack-line .reminder-detail-label,
+.reminder-stack-line .reminder-detail-value {
+  display: block;
+}
+
+.reminder-stack-line .reminder-detail-value {
+  margin-top: 1px;
 }
 
 .reminder-state-badge {
-  white-space: nowrap;
+  max-width: 100%;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .reminder-state-badge.success {

@@ -423,11 +423,46 @@ def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeyp
     item = result["backup_overdue"]["items"][0]
     assert item["job_key"] == "appdata_usb"
     assert item["expected_run"] == "2026-07-03T10:00:00"
+    assert item["next_scheduled_run"] == "2026-07-03T10:00:00"
     assert item["overdue_after"] == "2026-07-03T16:00:00"
     assert item["latest_status_at"] == "2026-07-02T10:04:45"
     assert item["state"] == "current"
     assert item["sent"] is False
     assert old_key in read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["last_sent"]
+
+
+def test_notification_reminder_diagnostics_distinguishes_missed_and_next_backup_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(notification_reminder_api, "datetime", _MondayMorning)
+    missed_key = "backup_overdue:photos_usb:2026-07-05 14:00:00"
+    mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, missed_key, now=datetime(2026, 7, 5, 21, 25, 51).timestamp())
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"photos_usb": {"enabled": True, "cron": "0 14 * * 0"}})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "photos_usb", "display_name": "Photos - USB", "enabled": True, "repo_path": "/repo"}])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "backup_type": "photos",
+        "location": "usb",
+        "timestamp": "2026-07-01 07:58:54",
+        "status": "success",
+    }]})
+    monkeypatch.setattr("restore_tests_api.list_restore_test_plan", lambda cfg: {"jobs": []})
+
+    result = notification_reminder_api.get_notification_reminder_diagnostics({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "backup_overdue",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_REMINDER_INTERVAL_HOURS": "24",
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
+        "NTFY_ENABLED": "false",
+    })
+
+    item = result["backup_overdue"]["items"][0]
+    assert item["job_key"] == "photos_usb"
+    assert item["expected_run"] == "2026-07-05T14:00:00"
+    assert item["next_scheduled_run"] == "2026-07-12T14:00:00"
+    assert item["overdue_after"] == "2026-07-05T20:00:00"
+    assert item["latest_status_at"] == "2026-07-01T07:58:54"
+    assert item["state"] == "overdue_waiting"
+    assert item["sent"] is True
+    assert item["next_allowed_at"] == "2026-07-06T21:25:51"
 
 
 def test_notification_reminder_diagnostics_reports_sent_restore_wait(monkeypatch, tmp_path):
@@ -538,6 +573,12 @@ class _FridayLateNight(datetime):
     @classmethod
     def now(cls, tz=None):
         return cls(2026, 7, 3, 23, 1, 25)
+
+
+class _MondayMorning(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 6, 9, 5, 0)
 
 
 def test_backup_overdue_sender_does_not_send_when_diagnostics_are_current_after_success(monkeypatch, tmp_path):
