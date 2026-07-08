@@ -43,10 +43,11 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
 
     _auto_write_weekly_snapshot(snapshot_file, latest, force_write=force_snapshot_write)
     last_week_sizes = _load_last_week_sizes(snapshot_file)
+    previous_status_sizes = _load_previous_status_sizes(all_statuses, latest)
 
     backups: List[Dict[str, Any]] = []
     for key, st in sorted(latest.items()):
-        prev_size = last_week_sizes.get(key, 0)
+        prev_size = last_week_sizes.get(key, 0) or previous_status_sizes.get(key, 0)
         growth: Optional[int] = (st.repository_size - prev_size) if prev_size > 0 else None
 
         if growth is None:
@@ -237,6 +238,37 @@ def _load_last_week_sizes(snapshot_file: Path) -> Dict[str, int]:
         if isinstance(entries, list) and len(entries) >= 2:
             entry = entries[-2]
             result[key] = int(entry.get("size", 0) or 0)
+    return result
+
+
+def _status_key(st: Any) -> str:
+    key = getattr(st, "key", None)
+    if key:
+        return str(key)
+    return f"{getattr(st, 'backup_type', 'unknown')}_{getattr(st, 'location', 'unknown')}"
+
+
+def _load_previous_status_sizes(all_statuses: List[Any], latest_per_key: Dict[str, Any]) -> Dict[str, int]:
+    """Returns the previous repository size per key from .status history."""
+    grouped: Dict[str, List[Any]] = {}
+    for st in all_statuses:
+        key = _status_key(st)
+        if not key:
+            continue
+        size = int(getattr(st, "repository_size", 0) or 0)
+        if size <= 0:
+            continue
+        grouped.setdefault(key, []).append(st)
+
+    result: Dict[str, int] = {}
+    for key, rows in grouped.items():
+        latest = latest_per_key.get(key)
+        rows_sorted = sorted(rows, key=lambda st: str(getattr(st, "timestamp", "") or ""), reverse=True)
+        for st in rows_sorted:
+            if latest is not None and st is latest:
+                continue
+            result[key] = int(getattr(st, "repository_size", 0) or 0)
+            break
     return result
 
 

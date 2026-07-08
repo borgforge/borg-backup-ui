@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #180
+- Dashboard:
+  - Growth now falls back to the previous backup status for the same job when no weekly snapshot baseline exists, avoiding unnecessary dash-only growth values.
+
 ### Issue #144
 - Maintenance:
   - Removed the obsolete dedicated Restore migration status endpoint/UI banner.
