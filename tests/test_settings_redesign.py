@@ -160,6 +160,18 @@ def test_settings_status_checks_do_not_reload_the_page() -> None:
     assert "_storageboxRenderChecks()" in connection_test
 
 
+def test_existing_storagebox_ssh_key_is_shown_as_warning() -> None:
+    script = _read("ui/js/pages/settings.js")
+    generate = script.split("async function storageboxKeyGenerate()", 1)[1].split(
+        "async function storageboxKeyPublic()", 1
+    )[0]
+
+    assert "const generated = d?.generated !== false;" in generate
+    assert "const type = generated ? 'success' : 'warning';" in generate
+    assert "showMsg('storagebox-setup-msg', type, apiMessage(d, settingsT('storagebox.keyGenerated')));" in generate
+    assert "_storageboxRefreshWithFlash" not in script
+
+
 def test_smtp_test_mail_uses_persisted_settings_only() -> None:
     script = _read("ui/js/pages/settings.js")
     send_test = script.split("async function sendTestEmail()", 1)[1].split(

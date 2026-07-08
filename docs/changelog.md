@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #178
+- Settings:
+  - SSH key generation for storage profiles now shows an existing key as a warning instead of a success, making clear that no new key was created and nothing was overwritten.
+
 ### Issue #144
 - Maintenance:
   - Removed the obsolete dedicated Restore migration status endpoint/UI banner.

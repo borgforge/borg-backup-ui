@@ -10,7 +10,6 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   advancedTab: 'reminders',
   profileSelection: { usb: '', smb: '', storagebox: '' },
   profileEditing: '',
-  storageboxFlash: null,
   storageboxPubVisible: false,
   storageboxConnOk: null,
   storageboxConnMsg: '',
@@ -3968,22 +3967,6 @@ function _storageboxShow(msg, ok = true) {
   showMsg('storagebox-setup-msg', ok ? 'success' : 'error', msg);
 }
 
-function _storageboxSetFlash(msg, ok) {
-  settingsState.storageboxFlash = { msg, ok: !!ok };
-}
-
-function _storageboxApplyFlash() {
-  if (!settingsState.storageboxFlash) return;
-  const { msg, ok } = settingsState.storageboxFlash;
-  _storageboxShow(msg, ok);
-  settingsState.storageboxFlash = null;
-}
-
-async function _storageboxRefreshWithFlash(msg, ok = true) {
-  settingsState.storageboxPubVisible = false;
-  _storageboxShow(msg, ok);
-}
-
 function _storageboxRenderChecks() {
   const checks = document.querySelector('[data-storagebox-checks]');
   if (!checks) return;
@@ -4014,7 +3997,9 @@ async function storageboxKeyGenerate() {
   hideEl('storagebox-setup-msg');
   try {
     const d = await _storageboxCall('key-generate');
-    await _storageboxRefreshWithFlash(apiMessage(d, settingsT('storagebox.keyGenerated')), true);
+    const generated = d?.generated !== false;
+    const type = generated ? 'success' : 'warning';
+    showMsg('storagebox-setup-msg', type, apiMessage(d, settingsT('storagebox.keyGenerated')));
   } catch (e) { _storageboxShow(settingsT('error', { message: e.message }), false); }
 }
 
