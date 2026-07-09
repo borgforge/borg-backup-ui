@@ -503,13 +503,42 @@ def _borg_info(storage: dict[str, Any], repo_path: str, passphrase_file: Path | 
     return payload
 
 
-def _borg_info_fields(payload: dict[str, Any]) -> dict[str, Any]:
+def _borg_list(storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
+    try:
+        proc = subprocess.run(
+            ["borg", "list", "--json", repo_path],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=_repo_env(storage, passphrase_file),
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise ValueError("borg binary not found") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError("borg list timed out") from exc
+    output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+    if proc.returncode != 0:
+        first = next((line.strip() for line in _mask_repo_output(output).splitlines() if line.strip()), "borg list failed")
+        raise RuntimeError(first[:500])
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError("borg list returned invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("borg list returned an invalid response")
+    return payload
+
+
+def _borg_info_fields(payload: dict[str, Any], archive_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     repository = payload.get("repository") if isinstance(payload.get("repository"), dict) else {}
     encryption = payload.get("encryption") if isinstance(payload.get("encryption"), dict) else {}
     cache = payload.get("cache") if isinstance(payload.get("cache"), dict) else {}
     stats = cache.get("stats") if isinstance(cache.get("stats"), dict) else {}
-    archives = payload.get("archives") if isinstance(payload.get("archives"), list) else []
-    stats = {**stats, "archives_count": len(archives)}
+    stats = dict(stats)
+    if isinstance(archive_payload, dict):
+        archives = archive_payload.get("archives") if isinstance(archive_payload.get("archives"), list) else []
+        stats["archives_count"] = len(archives)
     return {
         "encryption": str(encryption.get("mode") or "").strip(),
         "borg_repository_id": str(repository.get("id") or "").strip(),
@@ -536,7 +565,9 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if passphrase_file is not None and not passphrase_file.is_file():
         raise ValueError("Repository passphrase file is missing")
-    fields = _borg_info_fields(_borg_info(storage, repo_path, passphrase_file))
+    info_payload = _borg_info(storage, repo_path, passphrase_file)
+    archive_payload = _borg_list(storage, repo_path, passphrase_file)
+    fields = _borg_info_fields(info_payload, archive_payload)
     updated = {
         **repository,
         **{field: value for field, value in fields.items() if value not in ("", None, {})},

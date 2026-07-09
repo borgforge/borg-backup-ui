@@ -91,13 +91,13 @@
 
 .repository-manager-step.is-active,
 .repository-manager-step.is-complete {
-  color: var(--ui-color-primary);
+  color: var(--ui-color-accent);
 }
 
 .repository-manager-step.is-active > span,
 .repository-manager-step.is-complete > span {
-  border-color: var(--ui-color-primary);
-  background: var(--ui-color-primary);
+  border-color: var(--ui-color-accent);
+  background: var(--ui-color-accent);
   color: #fff;
 }
 

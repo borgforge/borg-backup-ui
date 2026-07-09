@@ -29,6 +29,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Repository encryption metadata is owned by the repository object; jobs keep compression settings but no longer choose repository encryption.
   - Repository details now provide metadata refresh, Check, Verify Data, Prune, and Compact actions with confirmations and live output.
   - Removed the old job-based manual Borg Check card and the obsolete Job Wizard passphrase/repository-init path.
+  - Repository info refresh now counts archives with `borg list --json` instead of assuming that `borg info --json` contains an archive list.
+  - Repository Manager steps keep their numbered status circles, and the review distinguishes the display name from the path inside the storage target.
 
 ### Issue #180
 - Dashboard:

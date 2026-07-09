@@ -78,6 +78,10 @@ def test_repository_manager_uses_single_visible_repository_path_field() -> None:
     assert "function repositoryManagerPathChanged" in script
     assert "repositoryManagerPathChanged();" in script
     assert ".repository-manager-form-grid" in css
+    assert "--ui-color-primary" not in css
+    assert "background: var(--ui-color-accent);" in css
+    assert '"repositorySummaryRepository": "Anzeigename"' in german
+    assert '"repositorySummaryPath": "Pfad im Speicherziel"' in german
 
 
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:

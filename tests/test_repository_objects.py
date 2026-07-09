@@ -12,7 +12,7 @@ import config_api  # noqa: E402
 import repositories_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
-from repositories_api import create_or_import_repository, read_repository_store, repository_key_for, write_repository_store  # noqa: E402
+from repositories_api import create_or_import_repository, read_repository_store, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
 
@@ -292,6 +292,40 @@ def test_repository_manager_import_uses_profile_storage_key(tmp_path: Path, monk
     assert storage["base_path"] == "/mnt/disks/USB5TB"
     assert repo["usb_profile_key"] == "usb-5tb"
     assert repo["relative_path"] == "borg-backup-photos"
+
+
+def test_repository_info_counts_archives_from_borg_list(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_flash",
+        "display_name": "Flash",
+        "repository_name": "borg-backup-flash",
+        "storage_key": "storage_local_test",
+        "location": "local",
+        "path_raw": "/mnt/backup/borg-backup-flash",
+    }]})
+    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
+        "repository": {"id": "flash-repo"},
+        "encryption": {"mode": "repokey-blake2"},
+        "cache": {"stats": {"total_size": 100, "total_csize": 90, "unique_csize": 10}},
+    })
+    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {
+        "archives": [{"name": f"flash-{index}"} for index in range(17)],
+    })
+
+    result = refresh_repository_info(config, "repo_flash")
+
+    assert result["repository"]["repository_stats"]["archives_count"] == 17
+    stored = read_repository_store(config)["repositories"][0]
+    assert stored["repository_stats"]["archives_count"] == 17
 
 
 def test_repository_test_uses_repository_object_passphrase(tmp_path: Path, monkeypatch):
