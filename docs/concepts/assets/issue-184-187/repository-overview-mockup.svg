@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="880" viewBox="0 0 1440 880" role="img" aria-labelledby="title desc">
+  <title id="title">Repository overview mockup</title>
+  <desc id="desc">Mockup for a repository overview page in Borg Backup UI.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f4f7fb}.panel{fill:#fff;stroke:#d8dee8}.subtle{fill:#f7f9fc}.text{font:16px Arial,sans-serif;fill:#0f172a}.muted{font:14px Arial,sans-serif;fill:#64748b}.h1{font:bold 28px Arial,sans-serif;fill:#0f172a}.h2{font:bold 18px Arial,sans-serif;fill:#0f172a}.small{font:12px Arial,sans-serif;fill:#64748b}.badge{fill:#e8f8ee;stroke:#57bd73}.badgeText{font:bold 13px Arial,sans-serif;fill:#04733b}.blue{fill:#e8f1ff;stroke:#68a1ff}.orange{fill:#fff2df;stroke:#f0a238}.btn{fill:#2f80ed}.btnText{font:bold 14px Arial,sans-serif;fill:#fff}.line{stroke:#d8dee8}.nav{fill:#ffffff;stroke:#d8dee8}.navActive{fill:#e8f1ff;stroke:#68a1ff}
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="880"/>
+  <rect class="nav" x="24" y="80" width="250" height="720" rx="10"/>
+  <text class="small" x="48" y="115">Gruppierung</text>
+  <text class="h2" x="48" y="140">Repositories</text>
+  <rect class="navActive" x="38" y="170" width="222" height="58" rx="8"/>
+  <text class="h2" x="72" y="197">Alle Repositorys</text>
+  <text class="muted" x="72" y="218">11 verwaltet</text>
+  <text class="h2" x="72" y="270">Lokal</text><text class="muted" x="72" y="292">4 Repositorys</text>
+  <text class="h2" x="72" y="344">USB</text><text class="muted" x="72" y="366">4 Repositorys</text>
+  <text class="h2" x="72" y="418">SMB</text><text class="muted" x="72" y="440">0 Repositorys</text>
+  <text class="h2" x="72" y="492">Storagebox</text><text class="muted" x="72" y="514">3 Repositorys</text>
+
+  <text class="h1" x="300" y="54">Repositories</text>
+  <text class="muted" x="300" y="78">Borg-Repositories erstellen, importieren, prüfen und Jobs zuordnen</text>
+  <rect class="btn" x="1160" y="32" width="230" height="38" rx="7"/><text class="btnText" x="1183" y="56">Repository hinzufügen</text>
+
+  <rect class="panel" x="300" y="100" width="1090" height="92" rx="10"/>
+  <text class="small" x="326" y="130">Auswahl</text>
+  <text class="h1" x="326" y="160">Alle Repositorys</text>
+  <rect class="badge" x="1260" y="128" width="100" height="30" rx="15"/>
+  <text class="badgeText" x="1282" y="148">11 OK</text>
+
+  <rect class="panel" x="300" y="215" width="1090" height="570" rx="10"/>
+  <rect class="subtle" x="300" y="215" width="1090" height="48" rx="10"/>
+  <text class="small" x="324" y="245">REPOSITORY</text>
+  <text class="small" x="550" y="245">STORAGE</text>
+  <text class="small" x="710" y="245">PFAD / URI</text>
+  <text class="small" x="1045" y="245">STATUS</text>
+  <text class="small" x="1160" y="245">VERWENDET VON</text>
+
+  <g transform="translate(0,0)">
+    <line class="line" x1="300" y1="306" x2="1390" y2="306"/>
+    <text class="h2" x="324" y="294">Appdata - Lokal</text><text class="muted" x="324" y="316">repo_appdata_local</text>
+    <text class="text" x="550" y="294">Lokal</text>
+    <text class="text" x="710" y="294">/mnt/backup/borg-backup-appdata</text>
+    <rect class="badge" x="1045" y="272" width="78" height="28" rx="14"/><text class="badgeText" x="1062" y="291">OK</text>
+    <text class="text" x="1160" y="294">appdata_local</text>
+  </g>
+  <g transform="translate(0,86)">
+    <line class="line" x1="300" y1="306" x2="1390" y2="306"/>
+    <text class="h2" x="324" y="294">Appdata - USB</text><text class="muted" x="324" y="316">repo_appdata_usb</text>
+    <text class="text" x="550" y="294">USB-5TB</text>
+    <text class="text" x="710" y="294">/mnt/disks/USB-5TB/borg-backup-appdata</text>
+    <rect class="badge" x="1045" y="272" width="78" height="28" rx="14"/><text class="badgeText" x="1062" y="291">OK</text>
+    <text class="text" x="1160" y="294">appdata_usb</text>
+  </g>
+  <g transform="translate(0,172)">
+    <line class="line" x1="300" y1="306" x2="1390" y2="306"/>
+    <text class="h2" x="324" y="294">Appdata - Storagebox</text><text class="muted" x="324" y="316">repo_appdata_storagebox</text>
+    <text class="text" x="550" y="294">Storagebox</text>
+    <text class="text" x="710" y="294">ssh://user@host:23/./backup/borg-backup-appdata</text>
+    <rect class="badge" x="1045" y="272" width="78" height="28" rx="14"/><text class="badgeText" x="1062" y="291">OK</text>
+    <text class="text" x="1160" y="294">appdata_storagebox</text>
+  </g>
+  <g transform="translate(0,258)">
+    <line class="line" x1="300" y1="306" x2="1390" y2="306"/>
+    <text class="h2" x="324" y="294">Photos - SMB</text><text class="muted" x="324" y="316">repo_photos_smb</text>
+    <text class="text" x="550" y="294">SMB NAS</text>
+    <text class="text" x="710" y="294">smb-nas:/backup/photos</text>
+    <rect class="orange" x="1045" y="272" width="110" height="28" rx="14"/><text class="small" x="1060" y="291" fill="#8a5200">Nicht geprüft</text>
+    <text class="text" x="1160" y="294">-</text>
+  </g>
+
+  <rect class="panel" x="300" y="805" width="1090" height="50" rx="10"/>
+  <text class="muted" x="324" y="835">Hinweis: Löschen entfernt nur das UI-Objekt. Borg-Daten werden niemals automatisch gelöscht.</text>
+</svg>
