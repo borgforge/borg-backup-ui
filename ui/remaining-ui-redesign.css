@@ -226,6 +226,86 @@
   word-break: break-word;
 }
 
+.storage-repository-details-row > td {
+  padding: 0 var(--ui-space-3) var(--ui-space-3);
+  background: var(--ui-color-surface);
+  border-top: 0;
+}
+
+.storage-repository-detail-card {
+  display: grid;
+  gap: var(--ui-space-3);
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface-subtle);
+}
+
+.storage-repository-detail-grid,
+.storage-repository-test-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ui-space-2);
+}
+
+.storage-repository-detail-item {
+  min-width: 0;
+  padding: var(--ui-space-2);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-surface);
+}
+
+.storage-repository-detail-item.span-2 {
+  grid-column: span 2;
+}
+
+.storage-repository-detail-item span {
+  display: block;
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-xs);
+  font-weight: 700;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.storage-repository-detail-item strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ui-color-text);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.storage-repository-test-summary {
+  display: grid;
+  gap: var(--ui-space-2);
+  padding-top: var(--ui-space-3);
+  border-top: 1px solid var(--ui-color-border);
+}
+
+.storage-repository-test-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-2);
+}
+
+.storage-repository-test-summary pre {
+  margin: 0;
+  max-height: 12rem;
+  overflow: auto;
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-xs);
+}
+
 .storage-row-actions {
   display: flex;
   align-items: center;
@@ -443,6 +523,15 @@
     grid-column: 1 / -1;
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .storage-repository-detail-grid,
+  .storage-repository-test-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .storage-repository-detail-item.span-2 {
+    grid-column: auto;
   }
 
   .check-row {

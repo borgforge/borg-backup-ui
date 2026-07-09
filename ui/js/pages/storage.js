@@ -8,10 +8,12 @@ window.BBUI.storageState = window.BBUI.storageState || {
   data: null,
   jobs: [],
   smbActionResults: {},
+  expandedRepositories: {},
   selectedLocation: 'all',
   search: '',
 };
 const storageState = window.BBUI.storageState;
+storageState.expandedRepositories = storageState.expandedRepositories || {};
 
 function storageT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
@@ -299,6 +301,8 @@ function renderStorageRepositoryRow(repo, profiles) {
   const resultKey = String(repositoryKey || repo.path_display || repo.path_raw || repo.repo_uri || repo.repo_path || '').replace(/[^A-Za-z0-9_-]/g, '_');
   const resultId = `repo-test-${resultKey}`;
   const detailsBtnId = `repo-test-details-${resultKey}`;
+  const repositoryDetailsId = `repo-details-${resultKey}`;
+  const expanded = !!storageState.expandedRepositories[resultKey];
   const title = storageRepositoryTitle(repo, job);
   const repositoryName = storageRepositoryName(repo);
   const jobName = storageJobName(repo, job);
@@ -327,7 +331,8 @@ function renderStorageRepositoryRow(repo, profiles) {
       <div class="storage-row-actions">
         <button class="btn btn-secondary btn-sm"
           data-storage-action="show-repo-details"
-          data-repository-key="${escHtml(repositoryKey)}">${storageT('storage.details')}</button>
+          data-details-id="${escHtml(repositoryDetailsId)}"
+          data-result-key="${escHtml(resultKey)}">${storageT(expanded ? 'storage.hideDetails' : 'storage.details')}</button>
         <button class="btn btn-secondary btn-sm"
           data-storage-action="test-repo"
           data-repo-path="${escHtml(repo.path_display)}"
@@ -338,11 +343,49 @@ function renderStorageRepositoryRow(repo, profiles) {
         <button class="btn btn-secondary btn-sm hidden"
           id="${detailsBtnId}"
           data-storage-action="show-test-details"
-          data-result-id="${resultId}">${storageT('storage.details')}</button>
+          data-result-id="${resultId}">${storageT('storage.testLog')}</button>
         <span class="test-result hidden" id="${resultId}"></span>
       </div>
     </td>
+  </tr>
+  <tr id="${repositoryDetailsId}" class="storage-repository-details-row ${expanded ? '' : 'hidden'}">
+    <td colspan="5">${renderStorageRepositoryDetailsPanel(repo, job, resultId)}</td>
   </tr>`;
+}
+
+function storageDetailValue(value) {
+  const text = String(value || '').trim();
+  return text ? escHtml(text) : '—';
+}
+
+function storageDetailItem(labelKey, value, extraClass = '') {
+  return `<div class="storage-repository-detail-item ${extraClass}">
+    <span>${escHtml(storageT(labelKey))}</span>
+    <strong>${storageDetailValue(value)}</strong>
+  </div>`;
+}
+
+function renderStorageRepositoryDetailsPanel(repo, job, resultId) {
+  const usedBy = Array.isArray(repo.used_by) && repo.used_by.length
+    ? repo.used_by.join(', ')
+    : (Array.isArray(repo.source_job_keys) ? repo.source_job_keys.join(', ') : '');
+  const path = repo.path_display || repo.path_raw || repo.repo_uri || repo.repo_path || '';
+  return `<div class="storage-repository-detail-card">
+    <div class="storage-repository-detail-grid">
+      ${storageDetailItem('storage.repositoryNameLabel', storageRepositoryName(repo))}
+      ${storageDetailItem('storage.repositoryIdLabel', repo.repository_key || repo.conf_key || '')}
+      ${storageDetailItem('storage.storageNameLabel', storageName(repo))}
+      ${storageDetailItem('storage.storageIdLabel', repo.storage_key || '')}
+      ${storageDetailItem('storage.jobNameLabel', storageJobName(repo, job))}
+      ${storageDetailItem('storage.jobIdLabel', usedBy)}
+      ${storageDetailItem('storage.location', storageLocationLabel(repo.location))}
+      ${storageDetailItem('storage.repoConfKeyLabel', repo.repo_conf_key || repo.conf_key || '')}
+      ${storageDetailItem('storage.path', path, 'span-2')}
+      ${storageDetailItem('storage.repositoryEncryption', repo.encryption || '')}
+      ${storageDetailItem('storage.repositoryRelativePath', repo.relative_path || '')}
+    </div>
+    <div id="${escHtml(resultId)}-inline" class="storage-repository-test-summary hidden"></div>
+  </div>`;
 }
 
 function storageJobForRepository(repo) {
@@ -397,7 +440,7 @@ function onStorageContentClick(event) {
     return openStorageTestDetails(resultEl.dataset.fullOutput || storageT('storage.noDetails'));
   }
   if (action === 'show-repo-details') {
-    return openStorageRepositoryDetails(el.dataset.repositoryKey || '');
+    return toggleStorageRepositoryDetails(el.dataset.detailsId || '', el.dataset.resultKey || '', el);
   }
   if (action === 'open-repository-manager') {
     return openRepositoryManager();
@@ -521,10 +564,12 @@ async function testRepo(repoPath, resultId, repoConfKey = '', repositoryKey = ''
         el.title = out || `Exit ${data.exit_code}`;
       }
     }
+    updateRepositoryInlineTest(resultId, data);
     if (detailsBtn) detailsBtn.classList.remove('hidden');
   } catch (err) {
     if (el) { el.className = 'test-result fail'; el.textContent = `✗ ${storageT('storage.error')}`; el.title = String(err?.message || storageT('storage.unknownError')); }
     if (el) el.dataset.fullOutput = String(err?.message || storageT('storage.unknownError'));
+    updateRepositoryInlineTest(resultId, { success: false, output: String(err?.message || storageT('storage.unknownError')) });
     if (detailsBtn) detailsBtn.classList.remove('hidden');
   }
 }
@@ -540,30 +585,49 @@ function openStorageModal(title, text) {
 }
 
 function openStorageTestDetails(text) {
-  openStorageModal(storageT('storage.testDetailsTitle'), text);
+  openStorageModal(storageT('storage.repositoryTestDetailsTitle'), text);
 }
 
-function openStorageRepositoryDetails(repositoryKey) {
-  const repos = storageRepositories(storageState.data || {});
-  const repo = repos.find((item) => String(item.repository_key || item.conf_key || '') === String(repositoryKey || ''));
-  if (!repo) return openStorageModal(storageT('storage.repositoryDetailsTitle'), storageT('storage.noDetails'));
-  const job = storageJobForRepository(repo);
-  const values = [
-    [storageT('storage.jobNameLabel'), storageJobName(repo, job)],
-    [storageT('storage.jobIdLabel'), Array.isArray(repo.used_by) ? repo.used_by.join(', ') : ''],
-    [storageT('storage.repositoryNameLabel'), storageRepositoryName(repo)],
-    [storageT('storage.repositoryIdLabel'), repo.repository_key || repo.conf_key || ''],
-    [storageT('storage.storageNameLabel'), storageName(repo)],
-    [storageT('storage.storageIdLabel'), repo.storage_key || ''],
-    [storageT('storage.location'), storageLocationLabel(repo.location)],
-    [storageT('storage.path'), repo.path_display || repo.path_raw || repo.repo_uri || repo.repo_path || ''],
-    [storageT('storage.repoConfKeyLabel'), repo.repo_conf_key || repo.conf_key || ''],
-  ];
-  const text = values
-    .filter(([, value]) => String(value || '').trim())
-    .map(([label, value]) => `${label} ${value}`)
-    .join('\n');
-  openStorageModal(storageT('storage.repositoryDetailsTitle'), text);
+function toggleStorageRepositoryDetails(detailsId, resultKey, button) {
+  const row = document.getElementById(detailsId);
+  if (!row) return;
+  const willOpen = row.classList.contains('hidden');
+  row.classList.toggle('hidden', !willOpen);
+  if (resultKey) storageState.expandedRepositories[resultKey] = willOpen;
+  if (button) button.textContent = storageT(willOpen ? 'storage.hideDetails' : 'storage.details');
+}
+
+function repositoryInfoSummary(output) {
+  const text = String(output || '').trim();
+  if (!text) return '';
+  try {
+    const data = JSON.parse(text);
+    const repo = data.repository || {};
+    const encryption = data.encryption || {};
+    const cache = data.cache || {};
+    return `<div class="storage-repository-test-grid">
+      ${storageDetailItem('storage.repositoryBorgId', repo.id || '')}
+      ${storageDetailItem('storage.repositoryLocation', repo.location || '')}
+      ${storageDetailItem('storage.repositoryLastModified', repo.last_modified || '')}
+      ${storageDetailItem('storage.repositoryEncryption', encryption.mode || '')}
+      ${storageDetailItem('storage.repositoryCachePath', cache.path || '', 'span-2')}
+      ${storageDetailItem('storage.repositorySecurityDir', data.security_dir || '', 'span-2')}
+    </div>`;
+  } catch (_) {
+    return `<pre>${escHtml(text)}</pre>`;
+  }
+}
+
+function updateRepositoryInlineTest(resultId, data) {
+  const el = document.getElementById(`${resultId}-inline`);
+  if (!el) return;
+  const output = String(data?.output || '').trim();
+  const success = !!data?.success;
+  el.classList.remove('hidden');
+  el.innerHTML = `<div class="storage-repository-test-header">
+    <strong>${escHtml(storageT('storage.repositoryTestResult'))}</strong>
+    <span class="badge ${success ? 'success' : 'error'}">${success ? 'OK' : escHtml(storageT('storage.error'))}</span>
+  </div>${repositoryInfoSummary(output) || `<small>${escHtml(storageT('storage.noDetails'))}</small>`}`;
 }
 
 function closeStorageTestDetails() {
