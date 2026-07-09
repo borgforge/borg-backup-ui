@@ -171,6 +171,7 @@ def storage_name_from_job(job: dict[str, Any]) -> str:
 def enrich_repository_display_fields(repo: dict[str, Any], job: dict[str, Any] | None = None) -> dict[str, Any]:
     row = dict(repo or {})
     path_raw = str(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path") or "").strip()
+    display_name = str(row.get("display_name") or "").strip()
     job_name = str(row.get("job_name") or "").strip()
     if isinstance(job, dict):
         job_name = str(job.get("name") or job.get("job_key") or job_name).strip()
@@ -197,7 +198,7 @@ def enrich_repository_display_fields(repo: dict[str, Any], job: dict[str, Any] |
     row["repository_name"] = repository_name
     row["job_name"] = job_name
     row["storage_name"] = storage_name
-    row["display_name"] = job_name or repository_name or str(row.get("display_name") or row.get("repository_key") or "").strip()
+    row["display_name"] = display_name or repository_name or job_name or str(row.get("repository_key") or "").strip()
     return row
 
 
@@ -299,6 +300,9 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "last_test_status": str(row.get("last_test_status") or "").strip(),
             "last_check_status": str(row.get("last_check_status") or "").strip(),
             "last_seen_at": str(row.get("last_seen_at") or "").strip(),
+            "borg_repository_id": str(row.get("borg_repository_id") or "").strip(),
+            "borg_last_modified": str(row.get("borg_last_modified") or "").strip(),
+            "repository_stats": row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {},
             "offsite_candidate": bool(row.get("offsite_candidate", location == "storagebox")),
             "separate_medium_candidate": bool(row.get("separate_medium_candidate", location in {"usb", "storagebox", "smb"})),
             "source_job_keys": source_job_keys,
@@ -472,6 +476,78 @@ def _mask_repo_output(text: str, passphrase: str = "") -> str:
     return out
 
 
+def _borg_info(storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
+    try:
+        proc = subprocess.run(
+            ["borg", "info", "--json", repo_path],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=_repo_env(storage, passphrase_file),
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise ValueError("borg binary not found") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError("borg info timed out") from exc
+    output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+    if proc.returncode != 0:
+        first = next((line.strip() for line in _mask_repo_output(output).splitlines() if line.strip()), "borg info failed")
+        raise RuntimeError(first[:500])
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError("borg info returned invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("borg info returned an invalid response")
+    return payload
+
+
+def _borg_info_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    repository = payload.get("repository") if isinstance(payload.get("repository"), dict) else {}
+    encryption = payload.get("encryption") if isinstance(payload.get("encryption"), dict) else {}
+    cache = payload.get("cache") if isinstance(payload.get("cache"), dict) else {}
+    stats = cache.get("stats") if isinstance(cache.get("stats"), dict) else {}
+    archives = payload.get("archives") if isinstance(payload.get("archives"), list) else []
+    stats = {**stats, "archives_count": len(archives)}
+    return {
+        "encryption": str(encryption.get("mode") or "").strip(),
+        "borg_repository_id": str(repository.get("id") or "").strip(),
+        "borg_last_modified": str(repository.get("last_modified") or "").strip(),
+        "repository_stats": stats,
+    }
+
+
+def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]:
+    key = str(repository_key or "").strip()
+    store = read_repository_store(config)
+    rows = store["repositories"]
+    repository = next((row for row in rows if str(row.get("repository_key") or "") == key), None)
+    if not repository:
+        raise ValueError("Repository not found")
+    storage = _storage_by_key(config).get(str(repository.get("storage_key") or ""), {})
+    if str(storage.get("location") or "").lower() == "smb":
+        from smb_profiles_api import run_smb_profile_action
+        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
+        if not mounted.get("ok"):
+            raise RuntimeError(str(mounted.get("message") or "SMB mount failed"))
+    repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
+    passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
+    passphrase_file = Path(passphrase_ref) if passphrase_ref else None
+    if passphrase_file is not None and not passphrase_file.is_file():
+        raise ValueError("Repository passphrase file is missing")
+    fields = _borg_info_fields(_borg_info(storage, repo_path, passphrase_file))
+    updated = {
+        **repository,
+        **{field: value for field, value in fields.items() if value not in ("", None, {})},
+        "last_test_status": "ok",
+        "last_seen_at": _now(),
+        "updated_at": _now(),
+    }
+    write_repository_store(config, {"repositories": [updated if str(row.get("repository_key") or "") == key else row for row in rows]})
+    return {"ok": True, "repository": enrich_repository_display_fields(updated)}
+
+
 def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
     """Create/import a repository object, optionally running borg init.
 
@@ -494,8 +570,10 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
     relative_path = _safe_relative_path(str(payload.get("relative_path") or repo_name))
     repo_path = effective_repository_path(storage, relative_path)
     location = str(storage.get("location") or storage.get("storage_type") or "").strip().lower()
-    encryption = str(payload.get("encryption") or "repokey-blake2").strip()
-    if encryption not in ALLOWED_ENCRYPTION_MODES:
+    encryption = str(payload.get("encryption") or ("repokey-blake2" if action == "create" else "auto")).strip()
+    if action == "create" and encryption not in ALLOWED_ENCRYPTION_MODES:
+        raise ValueError("Invalid Borg encryption mode")
+    if action == "import" and encryption not in {*ALLOWED_ENCRYPTION_MODES, "auto"}:
         raise ValueError("Invalid Borg encryption mode")
     append_only = bool(payload.get("append_only", False))
     make_parent_dirs = bool(payload.get("make_parent_dirs", True))
@@ -509,22 +587,45 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
 
     seed = f"repo_{repo_name}_{location}"
     repo_key = repository_key_for(seed, repo_path)
-    passphrase_ref = ""
+    store = read_repository_store(config)
+    rows = store["repositories"]
+    existing = next((row for row in rows if _repo_identity(row.get("path_raw") or "") == _repo_identity(repo_path)), None)
+
+    passphrase_ref = str((existing or {}).get("passphrase_ref") or "").strip()
     passphrase_file: Path | None = None
     passphrase = str(payload.get("passphrase") or "").strip()
+    secret_previous: bytes | None = None
+    secret_existed = False
+
+    def restore_secret() -> None:
+        if passphrase_file is None or not passphrase:
+            return
+        if secret_existed:
+            passphrase_file.write_bytes(secret_previous or b"")
+            passphrase_file.chmod(0o600)
+        else:
+            passphrase_file.unlink(missing_ok=True)
+
     if encryption != "none":
-        passphrase_file = _secret_path_for_repository(config, repo_key)
+        passphrase_file = Path(passphrase_ref) if passphrase_ref else _secret_path_for_repository(config, repo_key)
         passphrase_ref = str(passphrase_file)
         if action == "create" and not passphrase:
             raise ValueError("Passphrase is required for encrypted repository creation")
+        if action == "import" and not passphrase and not passphrase_file.is_file():
+            passphrase_file = None
+            passphrase_ref = ""
         if passphrase:
+            assert passphrase_file is not None
+            secret_existed = passphrase_file.exists()
+            secret_previous = passphrase_file.read_bytes() if secret_existed else None
             passphrase_file.parent.mkdir(parents=True, exist_ok=True)
             passphrase_file.write_text(passphrase, encoding="utf-8")
             passphrase_file.chmod(0o600)
 
     output = ""
     exit_code = 0
-    initialized = action == "import"
+    initialized = False
+    info_fields: dict[str, Any] = {}
     if action == "create":
         cmd = ["borg", "init", f"--encryption={encryption}"]
         if append_only:
@@ -546,16 +647,32 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
             exit_code = proc.returncode
             output = _mask_repo_output(((proc.stdout or "") + "\n" + (proc.stderr or "")).strip(), passphrase)
         except FileNotFoundError:
+            restore_secret()
             raise ValueError("borg binary not found")
         except subprocess.TimeoutExpired:
+            restore_secret()
             raise TimeoutError("borg init timed out")
         if exit_code != 0:
+            restore_secret()
             raise RuntimeError(output.splitlines()[0] if output.splitlines() else f"borg init failed with exit {exit_code}")
         initialized = True
+        try:
+            info_fields = _borg_info_fields(_borg_info(storage, repo_path, passphrase_file))
+        except Exception:
+            info_fields = {}
+    else:
+        try:
+            info_fields = _borg_info_fields(_borg_info(storage, repo_path, passphrase_file))
+        except Exception:
+            restore_secret()
+            raise
+        initialized = True
+        detected_encryption = str(info_fields.get("encryption") or "").strip()
+        if detected_encryption:
+            encryption = detected_encryption
+        elif encryption == "auto":
+            encryption = "unknown"
 
-    store = read_repository_store(config)
-    rows = store["repositories"]
-    existing = next((row for row in rows if _repo_identity(row.get("path_raw") or "") == _repo_identity(repo_path)), None)
     if existing:
         repo_key = str(existing.get("repository_key") or repo_key)
         passphrase_ref = str(existing.get("passphrase_ref") or passphrase_ref)
@@ -590,6 +707,9 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         "created_by": str(existing.get("created_by") or action),
         "created_at": str(existing.get("created_at") or now),
         "updated_at": now,
+        **{key: value for key, value in info_fields.items() if value not in ("", None, {})},
+        "last_test_status": "ok",
+        "last_seen_at": now,
         "source_job_keys": existing.get("source_job_keys", []),
         "used_by": existing.get("used_by", []),
     }
@@ -603,3 +723,38 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         "exit_code": exit_code,
         "output": output,
     }
+
+
+def link_repository_to_job(
+    config: dict,
+    repository_key: str,
+    job_key: str,
+    *,
+    previous_repository_key: str = "",
+    previous_job_key: str = "",
+) -> None:
+    selected = str(repository_key or "").strip()
+    current_job = str(job_key or "").strip()
+    if not selected or not current_job:
+        raise ValueError("Repository and job keys are required")
+    store = read_repository_store(config)
+    rows = store["repositories"]
+    if not any(str(row.get("repository_key") or "") == selected for row in rows):
+        raise ValueError("Repository not found")
+    old_repo = str(previous_repository_key or "").strip()
+    old_job = str(previous_job_key or current_job).strip()
+    next_rows = []
+    for row in rows:
+        key = str(row.get("repository_key") or "")
+        used_by = [str(item).strip() for item in row.get("used_by", []) if str(item).strip()]
+        source_jobs = [str(item).strip() for item in row.get("source_job_keys", []) if str(item).strip()]
+        if key == old_repo or old_job != current_job:
+            used_by = [item for item in used_by if item not in {old_job, current_job}]
+            source_jobs = [item for item in source_jobs if item not in {old_job, current_job}]
+        if key == selected:
+            if current_job not in used_by:
+                used_by.append(current_job)
+            if current_job not in source_jobs:
+                source_jobs.append(current_job)
+        next_rows.append({**row, "used_by": used_by, "source_job_keys": source_jobs, "updated_at": _now()})
+    write_repository_store(config, {"repositories": next_rows})

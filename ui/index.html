@@ -68,7 +68,7 @@
           <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
           <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
         </svg>
-        <span data-i18n="nav.storage">Storage</span>
+        <span data-i18n="nav.storage">Repositories</span>
       </li>
       <li class="nav-item" data-page="history">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -297,8 +297,8 @@
     <div id="page-storage" class="page">
       <div class="page-header ui-page-header">
         <div>
-          <h1 data-i18n="storage.title">Storage</h1>
-          <p class="page-subtitle" data-i18n="storage.subtitle">Borg Repositories verwalten</p>
+          <h1 data-i18n="storage.title">Repositories</h1>
+          <p class="page-subtitle" data-i18n="storage.subtitle">Borg Repositories nach Speicherziel verwalten</p>
         </div>
         <div class="header-actions">
           <button class="btn btn-secondary" id="storage-refresh-btn">
@@ -331,48 +331,21 @@
             <div class="loading-spinner"><div class="spinner"></div><span data-i18n="storage.loading">Lade Repositories...</span></div>
           </div>
 
-          <!-- Borg Check Card -->
-          <div class="check-card" id="storage-check-card">
-            <div class="check-card-header">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                <polyline points="22 4 12 14.01 9 11.01"/>
-              </svg>
-              <span data-i18n="storage.check.title">Manueller Borg Check</span>
-            </div>
-            <div class="check-card-body">
-              <div class="check-row">
-                <select id="check-job-select" class="form-input check-select">
-                  <option value="" data-i18n="storage.check.selectJob">— Job wählen —</option>
-                </select>
-                <select id="check-level-select" class="form-input check-level-select">
-                  <option value="quick" data-i18n="storage.check.modeQuick">Schnell</option>
-                  <option value="verbose" data-i18n="storage.check.modeVerbose">Verbose</option>
-                  <option value="verify_data" data-i18n="storage.check.modeVerifyData">Verify Data</option>
-                </select>
-                <span id="check-mode-badge" class="check-mode-badge hidden" aria-live="polite" data-i18n="storage.check.highLoad">Hohe Last</span>
-                <button class="btn btn-primary" id="check-run-btn">
-                  <span data-i18n="storage.check.run">Check starten</span>
+          <div id="check-message" class="status-message hidden"></div>
+          <div id="check-log-panel" class="check-log-panel hidden">
+            <div class="check-log-toolbar">
+              <span id="check-log-status" class="check-log-status"></span>
+              <div class="check-log-actions">
+                <button class="btn btn-secondary btn-sm" id="check-clear-log-btn" data-i18n="storage.check.clear">Leeren</button>
+                <button class="check-close-btn" id="check-close-log-btn" title="Schließen" aria-label="Schließen" data-i18n-title="storage.check.close" data-i18n-aria-label="storage.check.close">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
                 </button>
               </div>
-              <div id="check-mode-hint" class="check-mode-hint" data-i18n="storage.check.quickHint">Standardprüfung mit Fortschrittsanzeige. Schnellster Modus für Routinechecks.</div>
-              <div id="check-message" class="status-message hidden"></div>
-              <div id="check-log-panel" class="check-log-panel hidden">
-                <div class="check-log-toolbar">
-                  <span id="check-log-status" class="check-log-status"></span>
-                  <div class="check-log-actions">
-                    <button class="btn btn-secondary btn-sm" id="check-clear-log-btn" data-i18n="storage.check.clear">Leeren</button>
-                    <button class="check-close-btn" id="check-close-log-btn" title="Schließen" aria-label="Schließen" data-i18n-title="storage.check.close" data-i18n-aria-label="storage.check.close">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <pre id="check-log-output" class="log-output check-log-output"></pre>
-              </div>
             </div>
+            <pre id="check-log-output" class="log-output check-log-output"></pre>
           </div>
         </section>
       </div>
@@ -1097,10 +1070,82 @@
     <div class="modal-body">
       <div id="repository-manager-message" class="status-message hidden"></div>
       <div class="repository-manager-intro" data-i18n="storage.repositoryManagerIntro">Repositories werden hier angelegt oder importiert. Backup-Jobs wählen später nur noch ein vorhandenes Repository aus.</div>
-      <div class="repository-manager-grid">
-        <div class="repository-manager-main">
+      <div class="repository-manager-stepper" aria-label="Repository-Assistent" data-i18n-aria-label="storage.repositoryWizardLabel">
+        <div class="repository-manager-step is-active" id="repository-manager-dot-1"><span>1</span><strong data-i18n="storage.repositoryStepStorage">Speicherziel</strong></div>
+        <div class="repository-manager-step-line"></div>
+        <div class="repository-manager-step" id="repository-manager-dot-2"><span>2</span><strong data-i18n="storage.repositoryStepRepository">Repository</strong></div>
+        <div class="repository-manager-step-line"></div>
+        <div class="repository-manager-step" id="repository-manager-dot-3"><span>3</span><strong data-i18n="storage.repositoryStepSummary">Prüfen</strong></div>
+      </div>
+      <div id="repository-manager-step-1" class="repository-manager-main">
+        <section class="repository-manager-card">
+          <h4 data-i18n="storage.repositoryStepStorageTitle">Speicherziel auswählen oder einrichten</h4>
+          <div class="settings-grid repository-manager-form-grid">
+            <div class="form-group">
+              <label class="form-label" data-i18n="storage.storageTargetMode">Speicherziel</label>
+              <select class="form-select" id="repository-manager-storage-mode">
+                <option value="existing" data-i18n="storage.storageTargetExisting">Vorhandenes Speicherziel verwenden</option>
+                <option value="new" data-i18n="storage.storageTargetNew">Neues Speicherziel einrichten</option>
+              </select>
+            </div>
+            <div class="form-group" id="repository-manager-existing-storage-group">
+              <label class="form-label" data-i18n="storage.storageTargetExistingLabel">Vorhandenes Speicherziel</label>
+              <select class="form-select" id="repository-manager-storage"></select>
+            </div>
+          </div>
+          <div id="repository-manager-new-storage" class="hidden">
+            <div class="settings-grid repository-manager-form-grid">
+              <div class="form-group">
+                <label class="form-label" data-i18n="storage.storageType">Speichertyp</label>
+                <select class="form-select" id="repository-manager-storage-type">
+                  <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
+                  <option value="usb">USB</option>
+                  <option value="smb">SMB</option>
+                  <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox / SSH</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="storage.storageDisplayName">Anzeigename</label>
+                <input class="form-input" type="text" id="repository-manager-storage-name" placeholder="Backup Server" data-i18n-placeholder="storage.storageDisplayNamePlaceholder">
+              </div>
+            </div>
+            <div data-storage-fields="local" class="settings-grid repository-manager-form-grid">
+              <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label" data-i18n="storage.localBasePath">Basis-Pfad</label>
+                <input class="form-input mono" type="text" id="repository-manager-local-path" list="repository-manager-path-options" placeholder="/mnt/backup">
+                <div class="form-hint" data-i18n="storage.localBasePathHint">Dediziertes Verzeichnis unter /mnt. Es wird bei Bedarf angelegt.</div>
+              </div>
+            </div>
+            <div data-storage-fields="usb" class="settings-grid repository-manager-form-grid hidden">
+              <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label" data-i18n="storage.usbMountPath">USB-Mount-Pfad</label>
+                <input class="form-input mono" type="text" id="repository-manager-usb-path" list="repository-manager-path-options" placeholder="/mnt/disks/USB-Backup">
+                <div class="form-hint" data-i18n="storage.usbMountPathHint">Das Laufwerk muss bereits durch Unraid gemountet sein.</div>
+              </div>
+            </div>
+            <div data-storage-fields="smb" class="settings-grid repository-manager-form-grid hidden">
+              <div class="form-group"><label class="form-label" data-i18n="storage.smbServer">Server</label><input class="form-input" type="text" id="repository-manager-smb-server" placeholder="192.168.1.10"></div>
+              <div class="form-group"><label class="form-label" data-i18n="storage.smbShare">Freigabe</label><input class="form-input" type="text" id="repository-manager-smb-share" placeholder="backup" data-i18n-placeholder="storage.smbSharePlaceholder"></div>
+              <div class="form-group"><label class="form-label" data-i18n="storage.smbUsername">Benutzername</label><input class="form-input" type="text" id="repository-manager-smb-user" autocomplete="username"></div>
+              <div class="form-group"><label class="form-label" data-i18n="storage.smbPassword">Passwort</label><input class="form-input" type="password" id="repository-manager-smb-password" autocomplete="new-password"></div>
+              <div class="form-group"><label class="form-label" data-i18n="storage.smbVersion">SMB-Version</label><input class="form-input" type="text" id="repository-manager-smb-version" value="3.0"></div>
+              <div class="form-hint" style="grid-column:1/-1" data-i18n="storage.smbManagedMountHint">Der technische Mount-Pfad wird automatisch verwaltet und muss nicht eingegeben werden.</div>
+            </div>
+            <div data-storage-fields="storagebox" class="settings-grid repository-manager-form-grid hidden">
+              <div class="form-group"><label class="form-label" data-i18n="storage.sshHost">Host / IP</label><input class="form-input" type="text" id="repository-manager-ssh-host"></div>
+              <div class="form-group"><label class="form-label" data-i18n="storage.sshPort">Port</label><input class="form-input" type="number" id="repository-manager-ssh-port" value="23" min="1" max="65535"></div>
+              <div class="form-group"><label class="form-label" data-i18n="storage.sshUser">Benutzer</label><input class="form-input" type="text" id="repository-manager-ssh-user"></div>
+              <div class="form-group"><label class="form-label" data-i18n="storage.sshBasePath">Basis-Pfad</label><input class="form-input mono" type="text" id="repository-manager-ssh-base" value="./backup"></div>
+              <div class="form-group" style="grid-column:1/-1"><label class="form-label" data-i18n="storage.sshKeyPath">SSH-Key</label><input class="form-input mono" type="text" id="repository-manager-ssh-key" value="/root/.ssh/id_rsa"></div>
+            </div>
+            <datalist id="repository-manager-path-options"></datalist>
+          </div>
+          <div id="repository-manager-storage-result" class="status-message hidden"></div>
+        </section>
+      </div>
+      <div id="repository-manager-step-2" class="repository-manager-main hidden">
           <section class="repository-manager-card">
-            <h4 data-i18n="storage.repositorySectionAction">Aktion und Speicherziel</h4>
+            <h4 data-i18n="storage.repositorySectionAction">Aktion</h4>
             <div class="settings-grid">
               <div class="form-group">
                 <label class="form-label" data-i18n="storage.repositoryAction">Aktion</label>
@@ -1109,16 +1154,12 @@
                   <option value="import" data-i18n="storage.repositoryActionImport">Vorhandenes Repository importieren</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label class="form-label" data-i18n="storage.storageTarget">Speicherziel</label>
-                <select class="form-select" id="repository-manager-storage"></select>
-              </div>
             </div>
           </section>
           <section class="repository-manager-card">
             <h4 data-i18n="storage.repositorySectionIdentity">Name und Pfad</h4>
             <div class="settings-grid repository-manager-form-grid">
-              <div class="form-group">
+              <div class="form-group" id="repository-manager-encryption-group">
                 <label class="form-label" data-i18n="storage.repositoryDisplayName">Anzeigename</label>
                 <input class="form-input" type="text" id="repository-manager-display-name" placeholder="Appdata - USB" data-i18n-placeholder="storage.repositoryDisplayNamePlaceholder">
               </div>
@@ -1144,7 +1185,8 @@
                   <option value="authenticated" data-i18n="storage.encryptionModeAuthenticated">authenticated</option>
                   <option value="none" data-i18n="storage.encryptionModeNone">none</option>
                 </select>
-                <div class="form-hint" data-i18n="storage.repositoryEncryptionHint">Diese Auswahl gilt beim Erstellen für borg init und wird beim Import als Repository-Metadatum gespeichert.</div>
+                <div class="form-hint" data-i18n="storage.repositoryEncryptionHint">Diese Auswahl gilt beim Erstellen für borg init. Beim Import wird die Verschlüsselung automatisch erkannt.</div>
+                <div class="form-hint" id="repository-manager-encryption-description"></div>
               </div>
               <div class="form-group" id="repository-manager-passphrase-group">
                 <label class="form-label" data-i18n="storage.repositoryPassphrase">Passphrase</label>
@@ -1168,7 +1210,12 @@
               </div>
             </div>
           </section>
-        </div>
+      </div>
+      <div id="repository-manager-step-3" class="repository-manager-grid hidden">
+        <section class="repository-manager-card">
+          <h4 data-i18n="storage.repositoryReviewTitle">Repository prüfen und speichern</h4>
+          <p class="form-hint" data-i18n="storage.repositoryReviewHint">Prüfe Speicherziel, Pfad und Verschlüsselung. Beim Erstellen wird anschließend borg init ausgeführt; beim Import wird borg info geprüft.</p>
+        </section>
         <aside class="repository-manager-summary">
           <h4 data-i18n="storage.repositorySummaryTitle">Zusammenfassung</h4>
           <div id="repository-manager-summary"></div>
@@ -1177,7 +1224,9 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="repository-manager-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
-      <button class="btn btn-primary" id="repository-manager-save-btn" data-i18n="storage.repositorySave">Repository speichern</button>
+      <button class="btn btn-secondary hidden" id="repository-manager-back-btn" data-i18n="wizard.back">Zurück</button>
+      <button class="btn btn-primary" id="repository-manager-next-btn" data-i18n="wizard.next">Weiter</button>
+      <button class="btn btn-primary hidden" id="repository-manager-save-btn" data-i18n="storage.repositorySave">Repository speichern</button>
     </div>
   </div>
 </div>
@@ -1221,23 +1270,18 @@
         <div class="wizard-step-label" data-i18n="wizard.stepRetention">Retention</div>
       </div>
       <div class="wizard-step-line"></div>
-      <div class="wizard-step" id="wstep-dot-6">
-        <div class="wizard-step-dot">6</div>
-        <div class="wizard-step-label" data-i18n="wizard.stepPassphrase">Passphrase</div>
-      </div>
-      <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-7">
-        <div class="wizard-step-dot">7</div>
+        <div class="wizard-step-dot">6</div>
         <div class="wizard-step-label" data-i18n="wizard.stepDescription">Beschreibung</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-8">
-        <div class="wizard-step-dot">8</div>
+        <div class="wizard-step-dot">7</div>
         <div class="wizard-step-label" data-i18n="wizard.stepSchedule">Zeitplan</div>
       </div>
       <div class="wizard-step-line"></div>
       <div class="wizard-step" id="wstep-dot-9">
-        <div class="wizard-step-dot">9</div>
+        <div class="wizard-step-dot">8</div>
         <div class="wizard-step-label" data-i18n="wizard.stepPreview">Flow-Vorschau</div>
       </div>
     </div>
@@ -1310,15 +1354,6 @@
               <span id="wiz-icon-preview-label" data-i18n="wizard.automatic">Automatisch</span>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label"><span data-i18n="wizard.location">Location</span> <span class="form-hint" data-i18n="wizard.aliasProfileHint">(Alias/Profil)</span></label>
-            <select class="form-select" id="wiz-location">
-              <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
-              <option value="usb">USB</option>
-              <option value="smb">SMB</option>
-              <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox</option>
-            </select>
-          </div>
           <div class="wizard-feature-grid" style="grid-column:1/-1">
             <div class="form-group wizard-feature-box">
             <label class="form-label"><span data-i18n="wizard.stopDocker">Docker-Container stoppen</span> <span class="form-hint" data-i18n="wizard.appdataHint">(für Appdata-Backups)</span></label>
@@ -1350,20 +1385,19 @@
             <textarea class="form-input path-list-input hidden" id="wiz-source-paths" rows="4"
               placeholder="/mnt/user/data/&#10;/mnt/user/documents/"></textarea>
           </div>
-          <div class="form-group hidden" id="wiz-usb-profile-group">
-            <label class="form-label" data-i18n="wizard.usbProfile">USB-Profil</label>
-            <select class="form-select" id="wiz-usb-profile"></select>
-            <div id="wiz-usb-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="wizard.storageType">Speichertyp</label>
+            <select class="form-select" id="wiz-location">
+              <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
+              <option value="usb">USB</option>
+              <option value="smb">SMB</option>
+              <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox</option>
+            </select>
           </div>
-          <div class="form-group hidden" id="wiz-smb-profile-group">
-            <label class="form-label" data-i18n="wizard.smbProfile">SMB-Profil</label>
-            <select class="form-select" id="wiz-smb-profile"></select>
-            <div id="wiz-smb-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
-          </div>
-          <div class="form-group hidden" id="wiz-storage-profile-group">
-            <label class="form-label" data-i18n="wizard.storageProfile">Storage-Profil</label>
-            <select class="form-select" id="wiz-storage-profile"></select>
-            <div id="wiz-storage-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="wizard.storageTarget">Speicherziel</label>
+            <select class="form-select" id="wiz-storage-key"></select>
+            <div id="wiz-storage-target-hint" class="form-hint" style="margin-top:6px"></div>
           </div>
           <div class="form-group hidden" id="wiz-smb-mount-options-group">
             <label class="form-label" data-i18n="wizard.smbMountOptions">SMB-Mount-Optionen</label>
@@ -1379,10 +1413,7 @@
           <div class="form-group">
             <label class="form-label" data-i18n="wizard.repositorySelect">Repository</label>
             <select class="form-select" id="wiz-repository-key"></select>
-            <input class="form-input mono hidden" type="text" id="wiz-repo-path"
-              placeholder="/mnt/backup/borg-backup-meinedaten" data-i18n-placeholder="wizard.repositoryPlaceholder">
             <div id="wiz-repository-hint" class="form-hint" style="margin-top:6px"></div>
-            <div id="wiz-storagebox-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
           </div>
           <div class="form-group">
             <label class="form-label"><span data-i18n="wizard.compression">Kompression</span> <span class="form-hint" data-i18n="wizard.compressionJobHint">Backup-Job / Archiv</span></label>
@@ -1393,18 +1424,6 @@
               <option value="zstd,6">zstd,6</option>
               <option value="zstd,9">zstd,9</option>
               <option value="none" data-i18n="wizard.compressionNone">none (keine Kompression)</option>
-            </select>
-          </div>
-          <div class="form-group hidden">
-            <label class="form-label"><span data-i18n="wizard.encryption">Verschlüsselung</span> <span class="form-hint" data-i18n="wizard.borgInitHint">(für borg init)</span></label>
-            <select class="form-select" id="wiz-encryption">
-              <option value="repokey-blake2" data-i18n="wizard.encryptionRecommended">repokey-blake2 (empfohlen)</option>
-              <option value="repokey">repokey</option>
-              <option value="keyfile-blake2">keyfile-blake2</option>
-              <option value="keyfile">keyfile</option>
-              <option value="authenticated-blake2" data-i18n="storage.encryptionModeAuthenticatedBlake2">authenticated-blake2</option>
-              <option value="authenticated" data-i18n="storage.encryptionModeAuthenticated">authenticated</option>
-              <option value="none" data-i18n="wizard.encryptionNone">none (keine Verschlüsselung)</option>
             </select>
           </div>
         </div>
@@ -1517,57 +1536,6 @@
         </div>
       </div>
 
-      <!-- Step 6: Passphrase -->
-      <div id="wizard-step-6" class="wizard-step-body hidden">
-        <div id="wizard-error-6" class="status-message error hidden"></div>
-
-        <!-- shown when passphrase file already exists -->
-        <div id="wizard-passphrase-conflict" class="hidden">
-          <div class="status-message warning passphrase-conflict-box">
-            <strong data-i18n="wizard.passphraseExists">Passphrase-Datei existiert bereits</strong>
-            <span id="wizard-passphrase-conflict-path" style="font-size:12px;display:block;margin-top:2px;opacity:.8"></span>
-            <div class="passphrase-conflict-btns">
-              <button class="btn btn-secondary btn-sm" id="wiz-keep-btn" data-i18n="wizard.keepExisting">Vorhandene behalten</button>
-              <button class="btn btn-sm btn-danger-sm" id="wiz-replace-btn" data-i18n="wizard.setNewPassphrase">Neue Passphrase setzen</button>
-            </div>
-            <div id="wizard-passphrase-keep-confirm" class="passphrase-keep-confirm hidden">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>
-              <span data-i18n="wizard.keepingExisting">Vorhandene Passphrase wird beibehalten</span>
-            </div>
-          </div>
-          <div id="wizard-passphrase-replace-warning" class="status-message error hidden passphrase-warning">
-            <strong data-i18n="wizard.warningLabel">Achtung:</strong> <span data-i18n="wizard.replaceWarningText">Eine neue Passphrase macht das vorhandene Repository dauerhaft unlesbar!</span>
-          </div>
-        </div>
-
-        <div id="wizard-passphrase-form" class="settings-body">
-          <div class="form-group">
-            <label class="form-label"><span data-i18n="wizard.passphrase">Passphrase</span> <span class="form-hint"><span data-i18n="wizard.storedPrefix">(wird in</span> <code>/boot/config/borg-backup/secrets/.borg-passphrase-&lt;typ&gt;_&lt;location&gt;</code> <span data-i18n="wizard.storedSuffix">gespeichert)</span></span></label>
-            <div class="passphrase-input-wrap">
-              <input class="form-input mono" type="password" id="wiz-passphrase"
-                placeholder="Passphrase eingeben oder generieren" data-i18n-placeholder="wizard.passphrasePlaceholder"
-                autocomplete="new-password">
-              <button class="btn btn-secondary btn-sm" type="button"
-                id="wiz-passphrase-toggle" data-i18n="wizard.show">Anzeigen</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <div class="passphrase-actions">
-              <button class="btn btn-secondary btn-sm" type="button" id="wiz-generate-btn">
-                <span data-i18n="wizard.generateRandom">Zufällig generieren</span>
-              </button>
-              <button class="btn btn-secondary btn-sm" type="button"
-                id="wiz-copy-btn" disabled>
-                <span data-i18n="wizard.copy">Kopieren</span>
-              </button>
-            </div>
-          </div>
-          <div class="status-message warning passphrase-warning">
-            <strong data-i18n="wizard.importantLabel">Wichtig:</strong> <span data-i18n="wizard.passphraseImportantText">Speichere die Passphrase sicher. Ohne sie sind verschlüsselte Backups nicht wiederherstellbar.</span>
-          </div>
-        </div><!-- /#wizard-passphrase-form -->
-      </div>
-
       <!-- Step 7: Beschreibung -->
       <div id="wizard-step-7" class="wizard-step-body hidden">
         <div id="wizard-error-7" class="status-message error hidden"></div>
@@ -1668,12 +1636,6 @@
           <div id="wizard-preview-mode-info" class="wizard-preview-mode-info"></div>
           <div id="wizard-remote-repo-status" class="status-message hidden"></div>
           <pre id="wizard-preview-code" class="code-preview"></pre>
-          <div id="wizard-remote-init-confirm-wrap" class="hidden" style="margin-top:10px">
-            <label class="form-checkbox-row">
-              <input type="checkbox" id="wiz-remote-init-confirm">
-              <span data-i18n="wizard.confirmRemoteInit">Remote-Repository bei Bedarf anlegen bestätigen</span>
-            </label>
-          </div>
         </div>
       </div>
 

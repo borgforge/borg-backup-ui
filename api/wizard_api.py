@@ -125,17 +125,6 @@ def _passphrase_suffix(type_id: str, location: str | None = None) -> str:
     return type_id
 
 
-def check_passphrase_exists(type_id: str, location: str | None = None) -> dict:
-    """Prüft ob bereits eine Passphrase-Datei für Typ/Location existiert."""
-    suffix = _passphrase_suffix(type_id, location)
-    path = _SECRETS_DIR / f".borg-passphrase-{suffix}"
-    if path.is_file():
-        return {"exists": True, "path": str(path)}
-    # Backward compatibility: alte type_id-Datei ebenfalls erkennen
-    fallback = _SECRETS_DIR / f".borg-passphrase-{type_id}"
-    return {"exists": fallback.is_file(), "path": str(fallback if fallback.is_file() else path)}
-
-
 def validate_params(
     params: dict,
     scripts_dir: Path,
@@ -165,6 +154,14 @@ def validate_params(
         raise ValueError(f"Invalid location: {location!r}")
     if selected_repo and str(selected_repo.get("location") or "").strip().lower() != location:
         raise ValueError("Selected repository does not match the selected storage location")
+    selected_storage_key = str(selected_repo.get("storage_key") or "").strip()
+    requested_storage_key = str(params.get("storage_key") or "").strip()
+    if requested_storage_key and requested_storage_key != selected_storage_key:
+        raise ValueError("Selected repository does not belong to the selected storage target")
+    params["storage_key"] = selected_storage_key
+    params["usb_profile_key"] = str(selected_repo.get("usb_profile_key") or "").strip()
+    params["smb_profile_key"] = str(selected_repo.get("smb_profile_key") or "").strip()
+    params["storage_profile_key"] = str(selected_repo.get("storage_profile_key") or "").strip()
     if location == "smb" and not str(params.get("smb_profile_key", "")).strip():
         raise ValueError("SMB profile is missing")
     if location == "storagebox" and not str(params.get("storage_profile_key", "")).strip():
@@ -674,8 +671,6 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     source_paths = [p for p in params.get("source_paths", "").split() if p]
     selected_repo = _repository_from_params(params, ui_config)
     repo_path = _repository_path(selected_repo) or params.get("repo_path", "").strip()
-    if location == "storagebox" and not selected_repo:
-        repo_path = _storagebox_repo_from_profile(params, ui_config) or repo_path
     encryption = _repository_encryption(selected_repo, params.get("encryption", "repokey-blake2"))
     docker_control = _runtime_control_from_params(params, "docker")
     vm_control = _runtime_control_from_params(params, "vm")
@@ -710,7 +705,12 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
         add_step("dockerStart", "Start Docker containers stopped by this job")
     add_step("resourceLocksRelease", "Release resource locks")
 
-    remote_repo = _storagebox_repo_status({**params, "repo_path": repo_path}, ui_config, scripts_dir)
+    remote_repo = {
+        "checked": bool(selected_repo),
+        "exists": bool(selected_repo),
+        "needs_init_confirm": False,
+        "message": "Managed repository selected" if selected_repo else "Repository object is missing",
+    } if location == "storagebox" else {"checked": False, "exists": False, "needs_init_confirm": False, "message": ""}
     return {
         "runner": "scriptless-wizard-runner",
         "job_key": f"{type_id}_{location}",
@@ -747,22 +747,16 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     icon = str(params.get("icon", "")).strip().lower()
     icon_color = str(params.get("icon_color", "")).strip().lower()
     selected_repo = _repository_from_params(params, ui_config)
+    if not selected_repo:
+        raise ValueError("Selected repository object was not found")
     selected_repo_path = _repository_path(selected_repo)
     selected_repo_passphrase = _repository_passphrase_ref(selected_repo)
     selected_repository_key = str((selected_repo or {}).get("repository_key") or params.get("repository_key") or "").strip()
     encryption  = _repository_encryption(selected_repo, str(params.get("encryption", "repokey-blake2")))
-    passphrase  = params.get("passphrase", "").strip()
     passphrase_suffix = _passphrase_suffix(type_id, location)
 
     scripts_dir.mkdir(parents=True, exist_ok=True)
     existing_job_key = str(params.get("existing_job_key", "")).strip()
-
-    if encryption != "none" and passphrase:
-        secrets_dir = Path("/boot/config/borg-backup/secrets")
-        secrets_dir.mkdir(parents=True, exist_ok=True)
-        secret_file = secrets_dir / f".borg-passphrase-{passphrase_suffix}"
-        secret_file.write_text(passphrase, encoding="utf-8")
-        secret_file.chmod(0o600)
 
     # ── Wizard-Metadaten schreiben (Phase 2) ─────────────────────────────────
     job_key = f"{type_id}_{location}"
@@ -794,20 +788,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     docker_control = _runtime_control_from_params(params, "docker", existing)
     vm_control = _runtime_control_from_params(params, "vm", existing)
 
-    create_repo_default = True if location in {"local", "usb", "smb", "storagebox"} else False
-    create_repo_if_missing = bool(existing.get("create_repo_if_missing", create_repo_default))
-
-    repo_default = selected_repo_path or str(params.get("repo_path", "")).strip()
-    if selected_repo:
-        create_repo_if_missing = False
-    elif location == "storagebox":
-        repo_default = _storagebox_repo_from_profile(params, ui_config) or _inject_storage_profile_user_into_repo(repo_default, storage_profile_key, scripts_dir)
-        repo_status = _storagebox_repo_status({**params, "repo_path": repo_default}, ui_config, scripts_dir)
-        if bool(repo_status.get("exists", False)):
-            create_repo_if_missing = False
-        elif create_repo_if_missing and not remote_init_confirmed:
-            msg = str(repo_status.get("message") or "Remote repository existence is not confirmed.")
-            raise ValueError(f"Remote repository creation is not confirmed: {msg}")
+    repo_default = selected_repo_path
 
     metadata = {
         "job_key": job_key,
@@ -819,12 +800,13 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "standard": "wizard",
         "backup_type": type_id,
         "location": location,
+        "storage_key": str(selected_repo.get("storage_key") or "").strip(),
         "usb_profile_key": usb_profile_key if location == "usb" else "",
         "smb_profile_key": smb_profile_key if location == "smb" else "",
         "storage_profile_key": storage_profile_key if location == "storagebox" else "",
         "mount_before_run": mount_before_run if location == "smb" else True,
         "unmount_after_run": unmount_after_run if location == "smb" else True,
-        "remote_init_confirmed": remote_init_confirmed if location == "storagebox" else False,
+        "remote_init_confirmed": False,
         "script": "",
         "runner": "scriptless-wizard-runner",
         "repo": {
@@ -834,7 +816,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "passphrase": {
             "conf_key": pass_conf_key,
             "default": selected_repo_passphrase or f"/boot/config/borg-backup/secrets/.borg-passphrase-{passphrase_suffix}",
-            "mode": "none" if encryption == "none" else ("create_new" if passphrase else "existing_file"),
+            "mode": "none" if encryption == "none" else "existing_file",
         },
         "paths": {
             "conf_key": f"BACKUP_PATHS_{type_upper}",
@@ -853,13 +835,12 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
             "monthly": str(params.get("keep_monthly", "6")).strip() or "6",
             "yearly": str(params.get("keep_yearly", "3")).strip() or "3",
         },
-        "create_repo_if_missing": create_repo_if_missing,
+        "create_repo_if_missing": False,
         "encryption": encryption,
         "created_at": existing.get("created_at", now_iso),
         "updated_at": now_iso,
     }
-    if selected_repository_key:
-        metadata["repository_key"] = selected_repository_key
+    metadata["repository_key"] = selected_repository_key
 
     if repo_default and "://" not in repo_default and not repo_default.startswith("ssh:"):
         repo_path = Path(repo_default)
@@ -869,15 +850,14 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     repo_config = ui_config or {
         "BACKUP_SCRIPTS_DIR": str(data_root or (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)),
     }
-    try:
-        from repositories_api import upsert_repository_for_job
-        repository_key = upsert_repository_for_job(repo_config, metadata, created_by="wizard")
-        if repository_key:
-            metadata["repository_key"] = repository_key
-    except Exception:
-        # Repository objects are metadata for the UI. Job saving must not fail
-        # solely because the inventory could not be refreshed.
-        pass
+    from repositories_api import link_repository_to_job
+    link_repository_to_job(
+        repo_config,
+        selected_repository_key,
+        job_key,
+        previous_repository_key=str(existing.get("repository_key") or ""),
+        previous_job_key=existing_job_key or job_key,
+    )
 
     meta_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 

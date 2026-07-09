@@ -268,12 +268,16 @@ function applyDataDirActionGates() {
   const hint = disabled
     ? (window.BBUI?.components?.i18n?.t?.('settings.setup.actionHint') || '')
     : '';
-  for (const id of ['check-run-btn', 'rt-run-btn']) {
+  for (const id of ['rt-run-btn']) {
     const el = document.getElementById(id);
     if (!el) continue;
     el.disabled = disabled;
     el.title = hint;
   }
+  document.querySelectorAll('[data-storage-action="repository-maintenance"]').forEach((el) => {
+    el.disabled = disabled;
+    el.title = hint;
+  });
 }
 
 function invalidateSetupStatusCache() {

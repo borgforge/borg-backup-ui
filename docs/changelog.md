@@ -22,10 +22,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #187
 - Storage:
-  - Added a repository manager flow that can import existing repositories or create new Borg repositories with explicit `borg init` encryption options.
-  - Job wizard repository handling now selects existing repository objects filtered by storage/location instead of accepting free-form repository paths.
+  - Added a three-step repository manager that selects or creates and tests Local, USB, SMB, and SSH/Storagebox targets before repository setup.
+  - SMB targets receive a managed mount path; users no longer have to invent a technical temporary mount path.
+  - Existing repository imports are validated with `borg info` and do not run `borg init`.
+  - Job wizard repository handling now selects existing repository objects filtered by the exact storage target instead of accepting free-form repository paths.
   - Repository encryption metadata is owned by the repository object; jobs keep compression settings but no longer choose repository encryption.
-  - The temporary Repository test and Testlog controls were removed from the repository list until the final repository action flow is implemented.
+  - Repository details now provide metadata refresh, Check, Verify Data, Prune, and Compact actions with confirmations and live output.
+  - Removed the old job-based manual Borg Check card and the obsolete Job Wizard passphrase/repository-init path.
 
 ### Issue #180
 - Dashboard:

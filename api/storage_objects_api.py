@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -190,6 +193,188 @@ def write_storage_store(config: dict, store: dict[str, Any]) -> None:
         "storages": normalize_storages(store.get("storages") if isinstance(store, dict) else []),
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _profile_key(value: str, prefix: str, existing: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-") or prefix
+    if not base.startswith(f"{prefix}-"):
+        base = f"{prefix}-{base}"
+    candidate = base
+    index = 2
+    while candidate in existing:
+        candidate = f"{base}-{index}"
+        index += 1
+    return candidate
+
+
+def _safe_local_storage_path(value: str, *, field: str) -> str:
+    raw = str(value or "").strip().rstrip("/") or "/"
+    path = Path(raw)
+    if not path.is_absolute():
+        raise ValueError(f"{field} must be an absolute path")
+    blocked = {"/", "/mnt", "/boot", "/etc", "/usr", "/var"}
+    if raw in blocked or not raw.startswith("/mnt/"):
+        raise ValueError(f"{field} must be a dedicated directory below /mnt")
+    if any(part in {".", ".."} for part in path.parts):
+        raise ValueError(f"{field} contains unsafe path segments")
+    return raw
+
+
+def create_storage_target(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+    """Create one storage target and persist profile-backed targets in settings.json."""
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid storage target payload")
+    location = str(payload.get("storage_type") or payload.get("location") or "").strip().lower()
+    if location == "ssh":
+        location = "storagebox"
+    if location not in {"local", "usb", "smb", "storagebox"}:
+        raise ValueError("Invalid storage target type")
+    display_name = str(payload.get("display_name") or "").strip()
+    if not display_name:
+        raise ValueError("Storage target display name is required")
+
+    from config_api import read_settings_payload, write_settings_payload
+
+    settings = read_settings_payload(config)
+    store = read_storage_store(config)
+    storages = store.get("storages", [])
+
+    if location == "local":
+        base_path = _safe_local_storage_path(payload.get("base_path", ""), field="Local storage path")
+        identity = f"local:{base_path}"
+        existing = next((row for row in storages if str(row.get("identity") or "") == identity), None)
+        if existing:
+            return {"ok": True, "created": False, "storage": existing}
+        if bool(payload.get("create_base_path", True)):
+            Path(base_path).mkdir(parents=True, exist_ok=True)
+        now = _now()
+        storage = {
+            "storage_key": storage_key_for("local", identity),
+            "display_name": display_name,
+            "storage_type": "local",
+            "location": "local",
+            "identity": identity,
+            "profile_key": "",
+            "base_path": base_path,
+            "mount_path": "",
+            "created_by": "repository_wizard",
+            "created_at": now,
+            "updated_at": now,
+            "source": "repository_wizard",
+        }
+        write_storage_store(config, {"storages": [*storages, storage]})
+        return {"ok": True, "created": True, "storage": normalize_storages([storage])[0]}
+
+    profile_field = {
+        "usb": "usb_profiles",
+        "smb": "smb_profiles",
+        "storagebox": "storage_profiles",
+    }[location]
+    profiles = list(settings.get(profile_field) if isinstance(settings.get(profile_field), list) else [])
+    existing_keys = {str(row.get("key") or "").strip().lower() for row in profiles if isinstance(row, dict)}
+    prefix = {"usb": "usb", "smb": "smb", "storagebox": "storage"}[location]
+    key = _profile_key(display_name, prefix, existing_keys)
+
+    if location == "usb":
+        mount_path = _safe_local_storage_path(payload.get("mount_path", ""), field="USB mount path")
+        if not Path(mount_path).is_dir():
+            raise ValueError("USB mount path does not exist or is not mounted")
+        profile = {"key": key, "name": display_name, "mount_path": mount_path}
+    elif location == "smb":
+        server = str(payload.get("server") or "").strip()
+        share = str(payload.get("share") or "").strip().lstrip("/")
+        username = str(payload.get("username") or "").strip()
+        password = str(payload.get("password") or "")
+        if not server or not share or not username or not password:
+            raise ValueError("SMB server, share, username and password are required")
+        mount_path = f"/mnt/borg-backup-ui/smb/{key}"
+        profile = {
+            "key": key,
+            "name": display_name,
+            "server": server,
+            "share": share,
+            "mount_path": mount_path,
+            "username": username,
+            "smb_password": password,
+            "vers": str(payload.get("vers") or "3.0").strip() or "3.0",
+            "sec": str(payload.get("sec") or "").strip(),
+        }
+        from smb_profiles_api import prepare_smb_profiles_for_save
+        profiles = prepare_smb_profiles_for_save(json.dumps([*profiles, profile], ensure_ascii=False))
+        settings[profile_field] = profiles
+        write_settings_payload(config, settings)
+        storage_key = storage_key_for("smb", f"smb-profile:{key}")
+        storage = next((row for row in read_storage_store(config)["storages"] if row["storage_key"] == storage_key), None)
+        return {"ok": True, "created": True, "storage": storage, "managed_mount_path": mount_path}
+    else:
+        host = str(payload.get("host") or "").strip()
+        user = str(payload.get("user") or "").strip()
+        base_path = str(payload.get("base_path") or "").strip()
+        port = str(payload.get("port") or "23").strip() or "23"
+        ssh_key_path = str(payload.get("ssh_key_path") or "/root/.ssh/id_rsa").strip()
+        if not host or not user or not base_path:
+            raise ValueError("SSH host, user and base path are required")
+        try:
+            port_num = int(port)
+        except ValueError as exc:
+            raise ValueError("SSH port must be numeric") from exc
+        if port_num < 1 or port_num > 65535:
+            raise ValueError("SSH port is out of range")
+        if ssh_key_path and not Path(ssh_key_path).is_absolute():
+            raise ValueError("SSH key path must be absolute")
+        profile = {
+            "key": key,
+            "name": display_name,
+            "host": host,
+            "port": str(port_num),
+            "user": user,
+            "base_path": base_path,
+            "target_type": str(payload.get("target_type") or "storagebox").strip() or "storagebox",
+            "ssh_key_path": ssh_key_path,
+        }
+
+    settings[profile_field] = [*profiles, profile]
+    write_settings_payload(config, settings)
+    storage_type = "storagebox" if location == "storagebox" else location
+    storage_key = storage_key_for(storage_type, f"{storage_type}-profile:{key}")
+    storage = next((row for row in read_storage_store(config)["storages"] if row["storage_key"] == storage_key), None)
+    if not storage:
+        raise RuntimeError("Storage target inventory was not updated")
+    return {"ok": True, "created": True, "storage": storage}
+
+
+def test_storage_target(config: dict, storage_key: str) -> dict[str, Any]:
+    key = str(storage_key or "").strip()
+    storage = next((row for row in read_storage_store(config)["storages"] if row["storage_key"] == key), None)
+    if not storage:
+        raise ValueError("Storage target not found")
+    location = str(storage.get("location") or storage.get("storage_type") or "").strip().lower()
+    if location == "smb":
+        from smb_profiles_api import run_smb_profile_action
+        result = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "test")
+        return {"ok": bool(result.get("ok", False)), "storage_key": key, "details": result}
+    if location == "storagebox" or str(storage.get("storage_type") or "").lower() == "ssh":
+        from storagebox_api import storagebox_connection_test
+        result = storagebox_connection_test(config, str(storage.get("profile_key") or ""))
+        return {"ok": bool(result.get("success", False)), "storage_key": key, "details": result}
+
+    path = str(storage.get("base_path") or storage.get("mount_path") or "").strip()
+    if not path or not Path(path).is_dir():
+        return {"ok": False, "storage_key": key, "message": "Storage path does not exist or is not mounted"}
+    probe = Path(path) / f".bbui-storage-test-{uuid.uuid4().hex[:10]}"
+    fd: int | None = None
+    try:
+        fd = os.open(str(probe), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        os.write(fd, b"ok\n")
+        os.close(fd)
+        fd = None
+        probe.unlink(missing_ok=True)
+    except Exception as exc:
+        if fd is not None:
+            os.close(fd)
+        probe.unlink(missing_ok=True)
+        return {"ok": False, "storage_key": key, "message": f"Storage path is not writable: {exc}"}
+    return {"ok": True, "storage_key": key, "message": "Storage path is readable and writable"}
 
 
 def storage_from_repository(repo: dict[str, Any], settings: dict[str, Any] | None = None) -> dict[str, Any] | None:

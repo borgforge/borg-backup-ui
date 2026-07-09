@@ -173,7 +173,6 @@ async function refreshStorage() {
   } catch (err) {
     showMsg('storage-message', 'error', storageT('storage.errorPrefix', { message: err.message }));
   }
-  checkLoadJobs();
 }
 
 function renderStorage(data) {
@@ -351,12 +350,37 @@ function storageDetailItem(labelKey, value, extraClass = '') {
   </div>`;
 }
 
+function storageFormatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+function renderRepositoryStats(repo) {
+  const stats = repo?.repository_stats && typeof repo.repository_stats === 'object' ? repo.repository_stats : {};
+  if (!Object.keys(stats).length) return '';
+  const total = Number(stats.total_size || 0);
+  const unique = Number(stats.unique_csize || 0);
+  const saving = total > 0 ? `${Math.max(0, (1 - (unique / total)) * 100).toFixed(0)}%` : '—';
+  return `<div class="storage-repository-stats">
+    ${storageDetailItem('storage.repositoryTotalSize', storageFormatBytes(total))}
+    ${storageDetailItem('storage.repositoryCompressedSize', storageFormatBytes(stats.total_csize))}
+    ${storageDetailItem('storage.repositoryDeduplicatedSize', storageFormatBytes(unique))}
+    ${storageDetailItem('storage.repositorySaving', saving)}
+    ${storageDetailItem('storage.repositoryArchiveCount', String(stats.archives_count ?? '—'))}
+  </div>`;
+}
+
 function storageRepositoryEncryption(repo, job) {
   return String(repo?.encryption || job?.encryption || '').trim() || storageT('storage.unknown');
 }
 
 function renderStorageRepositoryDetailsPanel(repo, job) {
   const path = repo.path_display || repo.path_raw || repo.repo_uri || repo.repo_path || '';
+  const repositoryKey = String(repo.repository_key || '').trim();
+  const pruneDisabled = !job ? ' disabled' : '';
   return `<div class="storage-repository-detail-card">
     <div class="storage-repository-detail-grid">
       ${storageDetailItem('storage.repositoryNameLabel', storageRepositoryName(repo))}
@@ -365,6 +389,20 @@ function renderStorageRepositoryDetailsPanel(repo, job) {
       ${storageDetailItem('storage.path', path, 'span-2')}
       ${storageDetailItem('storage.repositoryEncryption', storageRepositoryEncryption(repo, job))}
       ${storageDetailItem('storage.repositoryRelativePath', repo.relative_path || '')}
+    </div>
+    ${renderRepositoryStats(repo)}
+    <div class="storage-repository-maintenance">
+      <div>
+        <strong>${escHtml(storageT('storage.repositoryMaintenance'))}</strong>
+        <small>${escHtml(storageT('storage.repositoryMaintenanceHint'))}</small>
+      </div>
+      <div class="storage-row-actions">
+        <button class="btn btn-secondary btn-sm" data-storage-action="repository-info" data-repository-key="${escHtml(repositoryKey)}">${escHtml(storageT('storage.repositoryRefreshInfo'))}</button>
+        <button class="btn btn-secondary btn-sm" data-storage-action="repository-maintenance" data-repository-key="${escHtml(repositoryKey)}" data-repository-action="check" data-check-mode="quick">${escHtml(storageT('storage.repositoryCheck'))}</button>
+        <button class="btn btn-secondary btn-sm" data-storage-action="repository-maintenance" data-repository-key="${escHtml(repositoryKey)}" data-repository-action="check" data-check-mode="verify_data">${escHtml(storageT('storage.repositoryVerifyData'))}</button>
+        <button class="btn btn-secondary btn-sm" data-storage-action="repository-maintenance" data-repository-key="${escHtml(repositoryKey)}" data-repository-action="prune"${pruneDisabled}>${escHtml(storageT('storage.repositoryPrune'))}</button>
+        <button class="btn btn-secondary btn-sm" data-storage-action="repository-maintenance" data-repository-key="${escHtml(repositoryKey)}" data-repository-action="compact">${escHtml(storageT('storage.repositoryCompact'))}</button>
+      </div>
     </div>
   </div>`;
 }
@@ -417,6 +455,36 @@ function onStorageContentClick(event) {
   }
   if (action === 'open-repository-manager') {
     return openRepositoryManager();
+  }
+  if (action === 'repository-maintenance') {
+    return checkRun(
+      el.dataset.repositoryKey || '',
+      el.dataset.repositoryAction || 'check',
+      el.dataset.checkMode || 'quick',
+    );
+  }
+  if (action === 'repository-info') {
+    return refreshRepositoryInfo(el.dataset.repositoryKey || '', el);
+  }
+}
+
+async function refreshRepositoryInfo(repositoryKey, button) {
+  if (!repositoryKey) return;
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch('/api/repositories/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repository_key: repositoryKey }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    await refreshStorage();
+    showMsg('storage-message', 'success', storageT('storage.repositoryInfoUpdated'));
+  } catch (error) {
+    showMsg('storage-message', 'error', error.message || storageT('storage.error'));
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -532,15 +600,76 @@ function repositoryManagerSetMessage(type, message) {
   el.textContent = message;
 }
 
+window.BBUI.repositoryManagerState = window.BBUI.repositoryManagerState || {
+  step: 1,
+  storageKey: '',
+};
+const repositoryManagerState = window.BBUI.repositoryManagerState;
+
+function repositoryManagerRenderStep(step) {
+  const target = Math.max(1, Math.min(3, Number(step) || 1));
+  repositoryManagerState.step = target;
+  [1, 2, 3].forEach((number) => {
+    document.getElementById(`repository-manager-step-${number}`)?.classList.toggle('hidden', number !== target);
+    const dot = document.getElementById(`repository-manager-dot-${number}`);
+    dot?.classList.toggle('is-active', number === target);
+    dot?.classList.toggle('is-complete', number < target);
+  });
+  document.getElementById('repository-manager-back-btn')?.classList.toggle('hidden', target === 1);
+  document.getElementById('repository-manager-next-btn')?.classList.toggle('hidden', target === 3);
+  document.getElementById('repository-manager-save-btn')?.classList.toggle('hidden', target !== 3);
+  if (target === 3) repositoryManagerUpdateSummary();
+}
+
+function repositoryManagerStorageModeChanged() {
+  const isNew = document.getElementById('repository-manager-storage-mode')?.value === 'new';
+  document.getElementById('repository-manager-existing-storage-group')?.classList.toggle('hidden', isNew);
+  document.getElementById('repository-manager-new-storage')?.classList.toggle('hidden', !isNew);
+  repositoryManagerStorageTypeChanged();
+}
+
+function repositoryManagerStorageTypeChanged() {
+  const type = document.getElementById('repository-manager-storage-type')?.value || 'local';
+  document.querySelectorAll('[data-storage-fields]').forEach((el) => {
+    el.classList.toggle('hidden', el.dataset.storageFields !== type);
+  });
+}
+
+async function repositoryManagerLoadPathOptions() {
+  const target = document.getElementById('repository-manager-path-options');
+  if (!target) return;
+  try {
+    const responses = await Promise.all(['/mnt', '/mnt/disks'].map((prefix) =>
+      fetch(`/api/wizard/source-dirs?prefix=${encodeURIComponent(prefix)}&limit=100`)
+        .then((response) => response.ok ? response.json() : { dirs: [] })
+        .catch(() => ({ dirs: [] }))));
+    const paths = Array.from(new Set(responses.flatMap((payload) =>
+      (Array.isArray(payload?.dirs) ? payload.dirs : []).map((row) => String(row?.path || '').trim()).filter(Boolean))));
+    target.innerHTML = paths.map((path) => `<option value="${escHtml(path)}"></option>`).join('');
+  } catch (_) {
+    target.innerHTML = '';
+  }
+}
+
 function repositoryManagerSyncFields() {
   const action = document.getElementById('repository-manager-action')?.value || 'create';
   const encryption = document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2';
+  document.getElementById('repository-manager-encryption-group')?.classList.toggle('hidden', action !== 'create');
   document.getElementById('repository-manager-passphrase-group')
-    ?.classList.toggle('hidden', encryption === 'none');
+    ?.classList.toggle('hidden', action === 'create' && encryption === 'none');
   ['repository-manager-storage-quota', 'repository-manager-append-only', 'repository-manager-make-parent-dirs'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.disabled = action !== 'create';
   });
+  document.getElementById('repository-manager-storage-quota')?.closest('.form-group')?.classList.toggle('hidden', action !== 'create');
+  document.querySelector('.repository-manager-checks')?.classList.toggle('hidden', action !== 'create');
+  const encryptionDescription = document.getElementById('repository-manager-encryption-description');
+  if (encryptionDescription) {
+    const family = encryption.startsWith('keyfile')
+      ? 'Keyfile'
+      : (encryption.startsWith('authenticated') ? 'Authenticated' : (encryption === 'none' ? 'None' : 'Repokey'));
+    encryptionDescription.textContent = storageT(`storage.repositoryEncryption${family}Hint`);
+  }
   repositoryManagerUpdateSummary();
 }
 
@@ -560,6 +689,10 @@ function repositoryManagerSelectedStorageLabel() {
   return String(sel.options?.[sel.selectedIndex]?.textContent || sel.value || '').trim();
 }
 
+function repositoryManagerSelectedStorageKey() {
+  return String(repositoryManagerState.storageKey || document.getElementById('repository-manager-storage')?.value || '').trim();
+}
+
 function repositoryManagerSelectedActionLabel() {
   const sel = document.getElementById('repository-manager-action');
   if (!sel) return '';
@@ -577,7 +710,9 @@ function repositoryManagerUpdateSummary() {
   const el = document.getElementById('repository-manager-summary');
   if (!el) return;
   const action = document.getElementById('repository-manager-action')?.value || 'create';
-  const encryption = String(document.getElementById('repository-manager-encryption')?.value || '').trim();
+  const encryption = action === 'import'
+    ? storageT('storage.repositoryEncryptionAutomatic')
+    : String(document.getElementById('repository-manager-encryption')?.value || '').trim();
   const passphrase = String(document.getElementById('repository-manager-passphrase')?.value || '').trim();
   const repositoryName = String(document.getElementById('repository-manager-repository-name')?.value || '').trim();
   const displayName = String(document.getElementById('repository-manager-display-name')?.value || '').trim();
@@ -608,6 +743,21 @@ function openRepositoryManager() {
   repositoryManagerSetMessage('', '');
   repositoryManagerFillStorages();
   const defaults = {
+    'repository-manager-storage-mode': 'existing',
+    'repository-manager-storage-type': 'local',
+    'repository-manager-storage-name': '',
+    'repository-manager-local-path': '/mnt/backup',
+    'repository-manager-usb-path': '',
+    'repository-manager-smb-server': '',
+    'repository-manager-smb-share': '',
+    'repository-manager-smb-user': '',
+    'repository-manager-smb-password': '',
+    'repository-manager-smb-version': '3.0',
+    'repository-manager-ssh-host': '',
+    'repository-manager-ssh-port': '23',
+    'repository-manager-ssh-user': '',
+    'repository-manager-ssh-base': './backup',
+    'repository-manager-ssh-key': '/root/.ssh/id_rsa',
     'repository-manager-action': 'create',
     'repository-manager-display-name': '',
     'repository-manager-repository-name': '',
@@ -624,7 +774,11 @@ function openRepositoryManager() {
   const parentDirs = document.getElementById('repository-manager-make-parent-dirs');
   if (appendOnly) appendOnly.checked = false;
   if (parentDirs) parentDirs.checked = true;
+  repositoryManagerState.storageKey = '';
+  repositoryManagerLoadPathOptions();
+  repositoryManagerStorageModeChanged();
   repositoryManagerSyncFields();
+  repositoryManagerRenderStep(1);
   modal.classList.remove('hidden');
 }
 
@@ -655,17 +809,111 @@ function repositoryManagerPathChanged() {
   repositoryManagerUpdateSummary();
 }
 
+function repositoryManagerNewStoragePayload() {
+  const type = document.getElementById('repository-manager-storage-type')?.value || 'local';
+  const payload = {
+    storage_type: type,
+    display_name: document.getElementById('repository-manager-storage-name')?.value || '',
+  };
+  if (type === 'local') payload.base_path = document.getElementById('repository-manager-local-path')?.value || '';
+  if (type === 'usb') payload.mount_path = document.getElementById('repository-manager-usb-path')?.value || '';
+  if (type === 'smb') Object.assign(payload, {
+    server: document.getElementById('repository-manager-smb-server')?.value || '',
+    share: document.getElementById('repository-manager-smb-share')?.value || '',
+    username: document.getElementById('repository-manager-smb-user')?.value || '',
+    password: document.getElementById('repository-manager-smb-password')?.value || '',
+    vers: document.getElementById('repository-manager-smb-version')?.value || '3.0',
+  });
+  if (type === 'storagebox') Object.assign(payload, {
+    host: document.getElementById('repository-manager-ssh-host')?.value || '',
+    port: document.getElementById('repository-manager-ssh-port')?.value || '23',
+    user: document.getElementById('repository-manager-ssh-user')?.value || '',
+    base_path: document.getElementById('repository-manager-ssh-base')?.value || './backup',
+    ssh_key_path: document.getElementById('repository-manager-ssh-key')?.value || '/root/.ssh/id_rsa',
+  });
+  return payload;
+}
+
+async function repositoryManagerPrepareStorage() {
+  const mode = document.getElementById('repository-manager-storage-mode')?.value || 'existing';
+  let storageKey = document.getElementById('repository-manager-storage')?.value || '';
+  if (mode === 'new') {
+    const createResponse = await fetch('/api/storages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(repositoryManagerNewStoragePayload()),
+    });
+    const created = await createResponse.json();
+    if (!createResponse.ok) throw new Error(apiErrorMessage(created, createResponse.status));
+    storageKey = String(created?.storage?.storage_key || '').trim();
+    if (!storageKey) throw new Error(storageT('storage.storageTargetCreateFailed'));
+    await refreshStorage();
+    repositoryManagerFillStorages();
+    const select = document.getElementById('repository-manager-storage');
+    if (select) select.value = storageKey;
+    repositoryManagerState.storageKey = storageKey;
+    const modeSelect = document.getElementById('repository-manager-storage-mode');
+    if (modeSelect) modeSelect.value = 'existing';
+    repositoryManagerStorageModeChanged();
+  }
+  if (!storageKey) throw new Error(storageT('storage.storageTargetRequired'));
+  const testResponse = await fetch('/api/storages/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storage_key: storageKey }),
+  });
+  const tested = await testResponse.json();
+  if (!testResponse.ok || !tested.ok) {
+    throw new Error(apiMessage(tested?.details || tested, storageT('storage.storageTargetTestFailed')));
+  }
+  repositoryManagerState.storageKey = storageKey;
+  return storageKey;
+}
+
+async function repositoryManagerNext() {
+  repositoryManagerSetMessage('', '');
+  const button = document.getElementById('repository-manager-next-btn');
+  if (button) button.disabled = true;
+  try {
+    if (repositoryManagerState.step === 1) {
+      await repositoryManagerPrepareStorage();
+      repositoryManagerRenderStep(2);
+      return;
+    }
+    repositoryManagerPathChanged();
+    const action = document.getElementById('repository-manager-action')?.value || 'create';
+    const displayName = String(document.getElementById('repository-manager-display-name')?.value || '').trim();
+    const relativePath = String(document.getElementById('repository-manager-relative-path')?.value || '').trim();
+    const encryption = document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2';
+    const passphrase = String(document.getElementById('repository-manager-passphrase')?.value || '').trim();
+    if (!displayName || !relativePath) throw new Error(storageT('storage.repositoryIdentityRequired'));
+    if (action === 'create' && encryption !== 'none' && !passphrase) {
+      throw new Error(storageT('storage.repositoryPassphraseRequired'));
+    }
+    repositoryManagerRenderStep(3);
+  } catch (err) {
+    repositoryManagerSetMessage('error', err.message || storageT('storage.error'));
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function repositoryManagerBack() {
+  repositoryManagerSetMessage('', '');
+  repositoryManagerRenderStep(repositoryManagerState.step - 1);
+}
+
 async function saveRepositoryManager() {
   repositoryManagerSetMessage('', '');
   repositoryManagerPathChanged();
   const action = document.getElementById('repository-manager-action')?.value || 'create';
   const payload = {
     action,
-    storage_key: document.getElementById('repository-manager-storage')?.value || '',
+    storage_key: repositoryManagerSelectedStorageKey(),
     display_name: document.getElementById('repository-manager-display-name')?.value || '',
     repository_name: document.getElementById('repository-manager-repository-name')?.value || '',
     relative_path: document.getElementById('repository-manager-relative-path')?.value || '',
-    encryption: document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2',
+    encryption: action === 'import' ? 'auto' : (document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2'),
     passphrase: document.getElementById('repository-manager-passphrase')?.value || '',
     storage_quota: action === 'create' ? (document.getElementById('repository-manager-storage-quota')?.value || '') : '',
     append_only: action === 'create' && !!document.getElementById('repository-manager-append-only')?.checked,
@@ -698,33 +946,12 @@ async function saveRepositoryManager() {
 window.BBUI.storageCheckState = window.BBUI.storageCheckState || { es: null };
 const checkState = window.BBUI.storageCheckState;
 
-function _checkModeLabel(mode) {
+function _checkModeLabel(mode, action = 'check') {
+  if (action === 'prune') return storageT('storage.repositoryPrune');
+  if (action === 'compact') return storageT('storage.repositoryCompact');
   if (mode === 'verbose') return storageT('storage.check.modeVerbose');
   if (mode === 'verify_data') return storageT('storage.check.modeVerifyData');
   return storageT('storage.check.modeQuick');
-}
-
-function checkUpdateModeHint() {
-  const sel = document.getElementById('check-level-select');
-  const hint = document.getElementById('check-mode-hint');
-  const badge = document.getElementById('check-mode-badge');
-  if (!sel || !hint) return;
-  if (sel.value === 'verify_data') {
-    sel.classList.add('warn');
-    if (badge) badge.classList.remove('hidden');
-    hint.dataset.i18n = 'storage.check.verifyDataHint';
-    hint.textContent = storageT(hint.dataset.i18n);
-    return;
-  }
-  sel.classList.remove('warn');
-  if (badge) badge.classList.add('hidden');
-  if (sel.value === 'verbose') {
-    hint.dataset.i18n = 'storage.check.verboseHint';
-    hint.textContent = storageT(hint.dataset.i18n);
-    return;
-  }
-  hint.dataset.i18n = 'storage.check.quickHint';
-  hint.textContent = storageT(hint.dataset.i18n);
 }
 
 function _appendCheckLog(rawLine) {
@@ -735,30 +962,14 @@ function _appendCheckLog(rawLine) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-async function checkLoadJobs() {
-  try {
-    const res = await fetch('/api/storage/check/jobs');
-    if (!res.ok) return;
-    const data = await res.json();
-    const sel = document.getElementById('check-job-select');
-    if (!sel) return;
-    const selected = sel.value;
-    sel.innerHTML = `<option value="">${storageT('storage.check.selectJob')}</option>` +
-      (data.jobs || []).map(j => `<option value="${escHtml(j.key)}">${escHtml(j.name)}</option>`).join('');
-    sel.value = selected;
-  } catch (_) {}
-  checkUpdateModeHint();
-}
-
-async function checkRun() {
-  const sel = document.getElementById('check-job-select');
-  const jobKey = sel ? sel.value : '';
-  if (!jobKey) { showMsg('check-message', 'error', storageT('storage.check.chooseJob')); return; }
-  const modeSel = document.getElementById('check-level-select');
-  const mode = modeSel ? modeSel.value : 'quick';
-
-  const btn = document.getElementById('check-run-btn');
-  if (btn) btn.disabled = true;
+async function checkRun(repositoryKey, action = 'check', mode = 'quick') {
+  if (!repositoryKey) return;
+  if (['prune', 'compact', 'verify_data'].includes(action === 'check' ? mode : action)) {
+    const confirmKey = action === 'prune'
+      ? 'storage.repositoryPruneConfirm'
+      : (action === 'compact' ? 'storage.repositoryCompactConfirm' : 'storage.repositoryVerifyConfirm');
+    if (!window.confirm(storageT(confirmKey))) return;
+  }
   hideEl('check-message');
   const logPanel = document.getElementById('check-log-panel');
   if (logPanel) logPanel.classList.remove('hidden');
@@ -766,7 +977,7 @@ async function checkRun() {
   const statusEl = document.getElementById('check-log-status');
   if (logEl) logEl.textContent = '';
   if (statusEl) {
-    statusEl.textContent = storageT('storage.check.running', { mode: _checkModeLabel(mode) });
+    statusEl.textContent = storageT('storage.check.running', { mode: _checkModeLabel(mode, action) });
     statusEl.className = 'check-log-status running';
   }
 
@@ -776,17 +987,15 @@ async function checkRun() {
     const res = await fetch('/api/storage/check/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job: jobKey, mode }),
+      body: JSON.stringify({ repository_key: repositoryKey, action, mode }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       showMsg('check-message', 'error', err.error || `HTTP ${res.status}`);
-      if (btn) btn.disabled = false;
       return;
     }
   } catch (err) {
     showMsg('check-message', 'error', storageT('storage.errorPrefix', { message: err.message }));
-    if (btn) btn.disabled = false;
     return;
   }
 
@@ -806,14 +1015,12 @@ async function checkRun() {
       statusEl.className = `check-log-status ${code === 0 ? 'success' : 'error'}`;
     }
     es.close(); checkState.es = null;
-    if (btn) btn.disabled = false;
   });
 
   es.addEventListener('error', (e) => {
     if (e.data) _appendCheckLog(storageT('storage.check.logError', { message: e.data }));
     if (statusEl) { statusEl.textContent = storageT('storage.error'); statusEl.className = 'check-log-status error'; }
     es.close(); checkState.es = null;
-    if (btn) btn.disabled = false;
   });
 }
 
@@ -829,12 +1036,8 @@ function checkCloseLog() {
     checkState.es.close();
     checkState.es = null;
   }
-  const btn = document.getElementById('check-run-btn');
-  if (btn) btn.disabled = false;
 }
 
 window.addEventListener('bbui:language-changed', () => {
   if (storageState.loaded && storageState.data) renderStorage(storageState.data);
-  checkUpdateModeHint();
-  checkLoadJobs();
 });

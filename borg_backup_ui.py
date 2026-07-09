@@ -586,6 +586,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore-tests/run",
             "/api/restore-tests/run-job",
             "/api/storage/test",
+            "/api/storages/test",
+            "/api/repositories/info",
             "/api/storage/smb-action",
             "/api/storage/check/run",
             "/api/restore/precheck",
@@ -602,7 +604,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             or p.startswith("/api/storagebox")
             or p.startswith("/api/wizard")
             or p.startswith("/api/client-log")
-            or p in {"/api/jobs/enabled", "/api/jobs", "/api/schedules", "/api/restore-tests", "/api/restore-tests/policy"}
+            or p in {"/api/jobs/enabled", "/api/jobs", "/api/schedules", "/api/storages", "/api/repositories", "/api/restore-tests", "/api/restore-tests/policy"}
         ):
             return "admin"
 
@@ -692,7 +694,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/reports/jobs": self._get_report_jobs,
                 "/api/reports/data": lambda: self._get_report_data(parsed.query),
                 "/api/history/log": lambda: self._get_log_file(parsed.query),
-                "/api/wizard/passphrase-check": lambda: self._get_wizard_passphrase_check(parsed.query),
                 "/api/wizard/job": lambda: self._get_wizard_job(parsed.query),
                 "/api/wizard/source-dirs": lambda: self._get_wizard_source_dirs(parsed.query),
                 "/api/wizard/runtime-inventory": self._get_wizard_runtime_inventory,
@@ -715,7 +716,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore-tests/run": self._post_run_restore_test,
             "/api/restore-tests/run-job": self._post_run_restore_test_job,
             "/api/storage/test": self._post_test_repo,
+            "/api/storages": self._post_storage_target,
+            "/api/storages/test": self._post_storage_target_test,
             "/api/repositories": self._post_repository,
+            "/api/repositories/info": self._post_repository_info,
             "/api/storage/smb-action": self._post_storage_smb_action,
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
@@ -1431,6 +1435,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         return create_or_import_repository(self.config, body)
 
+    def _post_repository_info(self) -> dict:
+        from repositories_api import refresh_repository_info
+        body = self._read_json_body()
+        return refresh_repository_info(self.config, str(body.get("repository_key") or ""))
+
+    def _post_storage_target(self) -> dict:
+        from storage_objects_api import create_storage_target
+        return create_storage_target(self.config, self._read_json_body())
+
+    def _post_storage_target_test(self) -> dict:
+        from storage_objects_api import test_storage_target
+        body = self._read_json_body()
+        return test_storage_target(self.config, str(body.get("storage_key") or ""))
+
     def _get_settings(self) -> dict:
         from config_api import get_settings_data
         return get_settings_data(self.config)
@@ -1511,19 +1529,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_rt_running(self) -> dict:
         from jobs_api import JobManager
         return JobManager.get().get_state("restore_test")
-
-    def _get_wizard_passphrase_check(self, qs: str) -> dict:
-        import re as _re
-        from urllib.parse import parse_qs as _pqs
-        from wizard_api import check_passphrase_exists
-        params = _pqs(qs)
-        type_id = (params.get("type_id") or [""])[0].strip()
-        location = (params.get("location") or [""])[0].strip().lower()
-        if not _re.fullmatch(r"[a-z0-9_]+", type_id):
-            raise ValueError("Invalid type_id")
-        if location and location not in {"local", "usb", "smb", "storagebox", "custom"}:
-            raise ValueError("Invalid location")
-        return check_passphrase_exists(type_id, location or None)
 
     def _get_wizard_job(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs
@@ -1645,14 +1650,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_run_check(self) -> dict:
         self._require_data_dir_ready()
         body = self._read_json_body()
-        job_key = body.get("job", "")
-        if not job_key:
-            raise ValueError("job parameter is required")
+        repository_key = str(body.get("repository_key") or "").strip()
+        job_key = str(body.get("job") or "").strip()
         mode = str(body.get("mode", "quick")).strip().lower()
         if mode not in {"quick", "verbose", "verify_data"}:
             raise ValueError("Invalid mode parameter")
         from check_api import CheckManager
-        ok, err = CheckManager.get().start(self.config, job_key, mode)
+        if repository_key:
+            action = str(body.get("action") or "check").strip().lower()
+            ok, err = CheckManager.get().start_repository(self.config, repository_key, action, mode)
+        elif job_key:
+            ok, err = CheckManager.get().start(self.config, job_key, mode)
+        else:
+            raise ValueError("repository_key parameter is required")
         if not ok:
             raise RuntimeError(err)
         return {"ok": True}

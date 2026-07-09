@@ -22,12 +22,11 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         "storage-location-list",
         "storage-workspace-header",
         "storage-content",
-        "storage-check-card",
-        "check-job-select",
-        "check-level-select",
-        "check-run-btn",
         "check-log-panel",
         "check-log-output",
+        "repository-manager-modal",
+        "repository-manager-storage-mode",
+        "repository-manager-next-btn",
     ):
         assert f'id="{element_id}"' in html
     for contract in (
@@ -35,7 +34,9 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         "renderStorageRepositoryRow",
         "renderStorageSmbProfiles",
         'data-storage-action="show-repo-details"',
+        'data-storage-action="repository-maintenance"',
         'data-storage-action="smb-action"',
+        "/api/storages/test",
         "/api/storage/smb-action",
         "/api/storage/check/run",
         "/api/storage/check/stream",

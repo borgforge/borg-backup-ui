@@ -15,14 +15,17 @@ from typing import Generator, List, Optional
 
 
 class _CheckState:
-    def __init__(self, proc: subprocess.Popen, job_key: str, mode: str, start_time: datetime):
+    def __init__(self, proc: subprocess.Popen, target_key: str, mode: str, start_time: datetime, action: str = "check"):
         self.proc = proc
-        self.job_key = job_key
+        self.target_key = target_key
+        self.job_key = target_key
         self.mode = mode
+        self.action = action
         self.start_time = start_time
         self.lines: List[str] = []
         self.finished = False
         self.exit_code: Optional[int] = None
+        self.cleanup = None
         self._lock = threading.Lock()
 
     def append_line(self, line: str) -> None:
@@ -105,6 +108,116 @@ class CheckManager:
         t.start()
         return True, None
 
+    def start_repository(self, config: dict, repository_key: str, action: str = "check", mode: str = "quick") -> tuple:
+        """Start a maintenance action for one managed repository object."""
+        with self._lock:
+            if self._state is not None and not self._state.finished:
+                return False, "A repository maintenance action is already running"
+
+        action = str(action or "check").strip().lower()
+        mode = str(mode or "quick").strip().lower()
+        if action not in {"check", "prune", "compact"}:
+            return False, f"Invalid repository action: {action}"
+        if action == "check" and mode not in self._MODE_ARGS:
+            return False, f"Invalid check mode: {mode}"
+
+        cleanup = None
+        try:
+            from repositories_api import _repo_env, read_repository_store
+            from storage_objects_api import read_storage_store
+            repositories = {
+                str(row.get("repository_key") or ""): row
+                for row in read_repository_store(config).get("repositories", [])
+            }
+            repository = repositories.get(str(repository_key or "").strip())
+            if not repository:
+                return False, "Repository object was not found"
+            storages = {
+                str(row.get("storage_key") or ""): row
+                for row in read_storage_store(config).get("storages", [])
+            }
+            storage = storages.get(str(repository.get("storage_key") or ""), {})
+            repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
+            if not repo_path:
+                return False, "Repository path is missing"
+            passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
+            passphrase_file = Path(passphrase_ref) if passphrase_ref else None
+            if passphrase_file is not None and not passphrase_file.is_file():
+                return False, "Repository passphrase file is missing"
+            if str(storage.get("location") or "").lower() == "smb":
+                from smb_profiles_api import run_smb_profile_action
+                mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
+                if not mounted.get("ok"):
+                    return False, str(mounted.get("message") or "SMB mount failed")
+                if mounted.get("message_code") == "smb_mount_success":
+                    profile_key = str(storage.get("profile_key") or "")
+                    cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+            env = _repo_env(storage, passphrase_file)
+            cmd = self._repository_command(config, repository, repo_path, action, mode)
+        except Exception as exc:
+            return False, f"Repository information is not readable: {exc}"
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=env,
+                text=True,
+                bufsize=1,
+            )
+        except OSError as exc:
+            if cleanup:
+                cleanup()
+            return False, f"Start failed: {exc}"
+
+        state = _CheckState(proc, str(repository_key), mode, datetime.now(), action=action)
+        state.cleanup = cleanup
+        state.append_line(f"[Info] Starting repository {action}: {' '.join(cmd[:-1])} {repo_path}")
+        with self._lock:
+            self._state = state
+        threading.Thread(
+            target=self._reader,
+            args=(state,),
+            daemon=True,
+            name=f"borg-{action}-reader",
+        ).start()
+        return True, None
+
+    def _repository_command(self, config: dict, repository: dict, repo_path: str, action: str, mode: str) -> list[str]:
+        if action == "check":
+            return ["borg", "check", *self._MODE_ARGS[mode], repo_path]
+        if action == "compact":
+            return ["borg", "compact", "--progress", repo_path]
+
+        used_by = repository.get("used_by") if isinstance(repository.get("used_by"), list) else []
+        job_key = next((str(item or "").strip() for item in used_by if str(item or "").strip()), "")
+        if not job_key:
+            raise ValueError("Prune requires a backup job with a retention policy")
+        retention = self._job_retention(config, job_key)
+        cmd = ["borg", "prune", "--list", "--progress"]
+        for key, option in (("daily", "--keep-daily"), ("weekly", "--keep-weekly"), ("monthly", "--keep-monthly"), ("yearly", "--keep-yearly")):
+            value = str(retention.get(key) or "").strip()
+            if value:
+                cmd.extend([option, value])
+        if len(cmd) == 4:
+            raise ValueError("The selected job has no retention policy")
+        cmd.append(repo_path)
+        return cmd
+
+    @staticmethod
+    def _job_retention(config: dict, job_key: str) -> dict:
+        from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
+        scripts_dir = resolve_scripts_dir(config)
+        data_root = resolve_data_root(config)
+        for directory in get_jobs_meta_dirs(scripts_dir, data_root):
+            path = directory / f"{job_key}.json"
+            if not path.is_file():
+                continue
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return payload.get("retention") if isinstance(payload.get("retention"), dict) else {}
+        raise ValueError(f"Job metadata not found: {job_key}")
+
     def _reader(self, state: _CheckState) -> None:
         last_emitted: Optional[str] = None
 
@@ -140,6 +253,11 @@ class CheckManager:
             pass
         finally:
             state.proc.wait()
+            if state.cleanup:
+                try:
+                    state.cleanup()
+                except Exception as exc:
+                    state.append_line(f"[Warning] Repository cleanup failed: {exc}")
             with state._lock:
                 state.exit_code = state.proc.returncode
                 state.finished = True
@@ -154,6 +272,8 @@ class CheckManager:
             "running": not finished,
             "exit_code": exit_code,
             "job_key": state.job_key,
+            "target_key": state.target_key,
+            "action": state.action,
             "mode": state.mode,
             "start_time": state.start_time.isoformat(),
         }

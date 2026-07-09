@@ -1,11 +1,16 @@
 # Designstudie: Repository-Modell und Storage-/Repository-Wizard
 
 - Issues: #184, #187
-- Status: Designstudie, keine Implementierung
+- Status: Designstudie, in Issues #184 und #187 umgesetzt
 - Stand: 2026-07-09
 - Referenzsystem: Borg Backup UI auf `http://192.168.178.23:8765`
 
 ## 1. Ziel der Studie
+
+> **Umsetzungsstand:** Variante A wurde umgesetzt. Repositorys bleiben im
+> bisherigen Storage-Kontext, die Seite heißt nun **Repositories**, und der
+> Job-Wizard akzeptiert für neue und bearbeitete Jobs keinen freien
+> Repository-Pfad mehr.
 
 Diese Designstudie beschreibt, wie die Repository-Objekte aus #184 und der
 Storage-/Repository-Wizard aus #187 in die bestehende Oberfläche integriert

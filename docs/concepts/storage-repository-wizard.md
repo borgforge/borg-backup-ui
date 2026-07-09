@@ -1,10 +1,17 @@
 # Konzept: Geführter Storage- und Repository-Wizard
 
 - Issue: #187
-- Status: Konzept, keine Implementierung
+- Status: Als Grundlage für Issue #187 umgesetzt
 - Stand: 2026-07-09
 
 ## 1. Zusammenfassung
+
+> **Umsetzungsstand:** Der Assistent verwendet nun vorhandene Storage- und
+> Repository-Objekte, kann Local, USB, SMB und SSH/Storagebox geführt anlegen,
+> prüft das Speicherziel vor dem nächsten Schritt und erstellt oder importiert
+> Repositorys. Der Job-Wizard wählt nur noch vorhandene Repositorys nach dem
+> exakten Speicherziel. Die folgenden Abschnitte dokumentieren die fachliche
+> Herleitung dieser Umsetzung.
 
 Tester-Feedback zeigt, dass die Einrichtung von Storage-Zielen und Borg-
 Repositories aktuell zu technisch wirkt. Besonders SMB ist schwer verständlich,

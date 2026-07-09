@@ -13,7 +13,7 @@ This manual describes Borg-Backup-UI in the same order as the application's menu
 1. [Basics](#1-basics)
 2. [Dashboard](#2-dashboard)
 3. [Jobs](#3-jobs)
-4. [Storage](#4-storage)
+4. [Repositories](#4-repositories)
 5. [History](#5-history)
 6. [Reports](#6-reports)
 7. [Browse & Restore](#7-browse--restore)
@@ -145,20 +145,19 @@ The job wizard guides creation or editing of a job through fixed steps.
 
 #### Step 1: Basics
 
-This step sets job name, type ID, icon, icon color, location, and initial runtime options.
+This step sets job name, type ID, icon, icon color, and initial runtime options.
 
 Important fields:
 
 - **Job name:** Visible name in the UI, reports, and notifications.
 - **Type ID:** Technical key component. It should be short, unique, and stable.
 - **Icon / icon color:** Representation in Dashboard, Jobs, Restore, and Reports.
-- **Location:** `Local`, `USB`, `SMB`, or `Storagebox`.
 - **Stop Docker before backup:** Enables Docker control.
 - **Shut down VMs before backup:** Enables VM control.
 
 #### Step 2: Sources & Target
 
-This step configures source paths and the repository target. Depending on the location, a profile is selected or a path/URI is built.
+This step selects source paths, storage type, the exact storage target, and an existing repository. The repository list only shows repositories belonging to the selected storage target. Repository paths are no longer entered freely in a job.
 
 Typical source paths:
 
@@ -182,9 +181,9 @@ When `/mnt/user/appdata` is backed up, the application recommends stopping all D
 
 > **Warning:** Appdata and VM backups can produce warnings or inconsistent data if files change during the backup. For full appdata or domains backups, stop all affected services where possible.
 
-#### Retention, Passphrase, and Description
+#### Retention, Compression, and Description
 
-The wizard configures Borg options such as compression, retention, and encryption. Passphrases are treated as secrets and are not displayed in clear text.
+The wizard configures job-specific Borg options such as compression and retention. Encryption and passphrase belong to the repository and are only set when that repository is created or imported.
 
 #### Schedule
 
@@ -221,58 +220,61 @@ Best practices:
 
 ### 3.6 Typical Messages
 
-- **Preview error / invalid data:** A wizard field is not plausible. Check source paths, repository path, type ID, and profiles.
-- **No profile available:** A USB, SMB, or Storagebox profile must be created in Settings first.
-- **Confirm remote repository initialization:** The target could not be recognized as an existing Borg repository.
+- **Preview error / invalid data:** A wizard field is not plausible. Check source paths, type ID, storage target, and repository selection.
+- **No storage target or repository available:** Open **Repositories** and first set up a storage target and repository, or import an existing repository.
 - **Schedule disabled:** The job only runs manually.
 
-## 4. Storage
+## 4. Repositories
 
 ![Storage](../assets/en/storage.png)
 
-The **Storage** page shows storage targets, repositories, and access tests.
+The **Repositories** page groups Borg repositories by storage target. **Add repository** guides users through storage-target setup and repository creation or import.
 
 ### 4.1 Purpose of the Page
 
-Storage helps verify whether backup targets are reachable. The page is not primarily used to create profiles; profiles are managed in **Settings**.
+The page separates storage targets, Borg repositories, and backup jobs. A storage target describes the physical or remote location. A repository contains Borg archives. A job selects an existing repository and defines sources, schedule, compression, and retention.
 
 ### 4.2 Areas and Functions
 
 - **Location sidebar:** Filters by `Local`, `USB`, `SMB`, and `Storagebox`.
-- **Repository table:** Shows jobs, repository paths, check status, and actions.
-- **Repository test:** Checks access, passphrase, and Borg availability for a concrete repository.
+- **Repository table:** Shows display name, linked job, storage target, path, and status.
+- **Add repository:** Opens a wizard for existing or new storage targets and for creating or importing a repository.
 - **SMB mount actions:** If SMB targets exist, mount status and mount actions may be visible.
-- **Borg Check:** Runs a more intensive repository check when needed.
-- **Details:** Show test output and failure reasons.
+- **Details:** Show repository path, encryption, and loaded Borg statistics.
+- **Repository maintenance:** Provides Refresh Info, Check, Verify Data, Prune, and Compact per repository.
 
-### 4.3 Profile Test, Job Check, and Repository Test
+### 4.3 Create or Import a Repository
 
-There are three different types of checks:
+1. Open **Repositories** and select **Add repository**.
+2. Select an existing storage target or set up Local, USB, SMB, or Storagebox/SSH.
+3. The wizard validates connectivity and write access. For SMB, the technical mount path is managed automatically.
+4. Select **Create new repository** or **Import existing repository**.
+5. Enter a display name and relative repository path.
+6. For creation, select encryption and passphrase. For import, encryption is detected through `borg info`.
+7. Review the summary and save.
 
-- **Profile test:** Verifies that a USB, SMB, or SSH profile is basically usable.
-- **Job check:** Performs local plausibility checks, such as profile references, source paths, and secret files.
-- **Repository test:** Checks the concrete Borg repository and is the most important access test.
+> **Warning:** Import does not initialize or modify the repository. Creation explicitly runs `borg init`.
 
 ### 4.4 Typical Actions
 
-Check a repository:
+Check and maintain a repository:
 
-1. Open **Storage**.
+1. Open **Repositories**.
 2. Select the location.
 3. Find the repository.
-4. Start the repository test.
-5. Read the result and open details if a warning or error is displayed.
+4. Open **Details**.
+5. Refresh repository information or start a maintenance action as required.
 
 Check an SMB target:
 
 1. First check the SMB profile in **Settings > SMB Profiles**.
-2. Open **Storage**.
+2. Open **Repositories**.
 3. Make sure the SMB target is mounted.
-4. Then run the repository test.
+4. Then open repository details and refresh its information.
 
 ### 4.5 Notes
 
-> **Note:** A successful SSH profile test does not automatically mean that every job repository exists. Also check the concrete repository on the Storage page.
+> **Note:** Prune uses the linked job's retention policy. Prune remains disabled without a linked job.
 
 > **Warning:** Borg Check can take a long time depending on repository size and target. Start it deliberately and not too frequently.
 

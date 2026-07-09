@@ -13,6 +13,8 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+from repositories_api import write_repository_store
+from storage_objects_api import write_storage_store
 from wizard_api import generate_flow_preview, load_job_for_wizard, save_job
 
 
@@ -35,32 +37,20 @@ class _RunResult:
         self.stderr = "not found" if returncode else ""
 
 
-def test_wizard_preview_marks_existing_storagebox_repo_without_confirm(monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
-
+def test_wizard_preview_does_not_initialize_unmanaged_storagebox_repository():
     flow = generate_flow_preview(_storagebox_params(), {}, Path("/tmp/scripts"))
 
-    assert flow["remote_repo"]["checked"] is True
-    assert flow["remote_repo"]["exists"] is True
+    assert flow["remote_repo"]["checked"] is False
+    assert flow["remote_repo"]["exists"] is False
     assert flow["remote_repo"]["needs_init_confirm"] is False
 
 
-def test_wizard_preview_rebuilds_storagebox_repo_from_profile(monkeypatch):
-    import storage_profiles_api
-
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
-    monkeypatch.setattr(storage_profiles_api, "resolve_storage_profile", lambda _cfg, _key: {
-        "key": "storage-1",
-        "host": "u123.your-storagebox.de",
-        "port": "23",
-        "user": "u123",
-        "base_path": "./backup",
-    })
+def test_wizard_preview_does_not_rebuild_repository_from_profile():
     params = _storagebox_params("ssh://u123@u123.your-storagebox.de:23./backup/borg-backup-flash")
 
     flow = generate_flow_preview(params, {}, Path("/tmp/scripts"))
 
-    assert flow["summary"]["repo"] == "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash"
+    assert flow["summary"]["repo"] == params["repo_path"]
 
 
 def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypatch):
@@ -86,20 +76,44 @@ def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypa
     assert "Benachrichtigung" not in fallback
 
 
-def test_save_storagebox_job_existing_repo_disables_create_if_missing(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
-
-    result = save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})
+def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "data")}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Storagebox",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "identity": "storagebox-profile:storage-1",
+        "profile_key": "storage-1",
+        "host": "u123.your-storagebox.de",
+        "port": "23",
+        "user": "u123",
+        "base_path": "./backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_flash_storagebox_test",
+        "display_name": "Flash Storagebox",
+        "repository_name": "borg-backup-flash",
+        "location": "storagebox",
+        "storage_type": "ssh",
+        "storage_key": "storage_storagebox_test",
+        "storage_profile_key": "storage-1",
+        "repo_uri": _storagebox_params()["repo_path"],
+        "path_raw": _storagebox_params()["repo_path"],
+        "path_display": _storagebox_params()["repo_path"],
+        "encryption": "none",
+    }]})
+    params = _storagebox_params()
+    params["repository_key"] = "repo_flash_storagebox_test"
+    result = save_job(params, tmp_path / "scripts", tmp_path / "data", config)
     metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
 
     assert metadata["remote_init_confirmed"] is False
     assert metadata["create_repo_if_missing"] is False
 
 
-def test_save_storagebox_job_missing_repo_requires_confirm(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(2))
-
-    with pytest.raises(ValueError, match="Remote repository creation is not confirmed"):
+def test_save_storagebox_job_without_repository_object_is_rejected(tmp_path: Path):
+    with pytest.raises(ValueError, match="Selected repository object was not found"):
         save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})
 
 

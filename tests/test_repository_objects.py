@@ -9,6 +9,7 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 import config_api  # noqa: E402
+import repositories_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
 from repositories_api import create_or_import_repository, read_repository_store, repository_key_for, write_repository_store  # noqa: E402
@@ -110,7 +111,7 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
     assert data["storages"][0]["storage_key"] == rows[0]["storage_key"]
 
 
-def test_wizard_save_uses_selected_repository_object(tmp_path: Path):
+def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     source.mkdir()
     scripts = tmp_path / "scripts"
@@ -123,6 +124,11 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path):
         "identity": "local:/mnt/backup",
         "base_path": "/mnt/backup",
     }]})
+    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
+        "repository": {"id": "photos-repo"},
+        "encryption": {"mode": "none"},
+        "cache": {"stats": {}},
+    })
     created = create_or_import_repository(config, {
         "action": "import",
         "storage_key": "storage_local_test",
@@ -185,7 +191,7 @@ def test_repository_objects_v2_enriches_existing_repository_names(tmp_path: Path
     repo = store["repositories"][0]
 
     assert result["results"]["repository_objects_v2"]["status"] == "applied"
-    assert repo["display_name"] == "Appdata"
+    assert repo["display_name"] == "Appdata - Local"
     assert repo["repository_name"] == "borg-backup-appdata"
     assert repo["job_name"] == "Appdata"
     assert repo["storage_name"] == "Local"
@@ -234,7 +240,7 @@ def test_storage_objects_v1_links_existing_repository_objects(tmp_path: Path):
     assert repo["relative_path"] == "borg-backup-appdata"
 
 
-def test_repository_manager_import_uses_profile_storage_key(tmp_path: Path):
+def test_repository_manager_import_uses_profile_storage_key(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     source.mkdir()
     settings_file = tmp_path / "config" / "settings.json"
@@ -263,6 +269,11 @@ def test_repository_manager_import_uses_profile_storage_key(tmp_path: Path):
         "source": "usb_profile",
     }]})
     storage = read_storage_store(config)["storages"][0]
+    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
+        "repository": {"id": "usb-photos"},
+        "encryption": {"mode": "none"},
+        "cache": {"stats": {}},
+    })
     create_or_import_repository(config, {
         "action": "import",
         "storage_key": storage["storage_key"],
@@ -553,10 +564,17 @@ def test_repository_manager_import_can_store_passphrase_without_borg_init(tmp_pa
         "ssh_key_path": "/root/.ssh/id_rsa",
     }]})
 
-    def fail_run(*_args, **_kwargs):
-        raise AssertionError("import must not run borg init")
+    calls = []
 
-    monkeypatch.setattr(subprocess, "run", fail_run)
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return subprocess.CompletedProcess(cmd, 0, json.dumps({
+            "repository": {"id": "remote-flash", "last_modified": "2026-07-09T10:00:00Z"},
+            "encryption": {"mode": "repokey-blake2"},
+            "cache": {"stats": {"total_size": 42}},
+        }), "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
     result = create_or_import_repository(config, {
         "action": "import",
         "storage_key": "storage_storagebox_test",
@@ -568,9 +586,52 @@ def test_repository_manager_import_can_store_passphrase_without_borg_init(tmp_pa
     })
 
     repo = result["repository"]
+    assert calls[0][0][:3] == ["borg", "info", "--json"]
+    assert all("init" not in call[0] for call in calls)
     assert repo["initialized"] is True
     assert repo["storage_profile_key"] == "storage-1"
     assert repo["repo_uri"] == "ssh://u1@example.test:23/./backup/borg-backup-flash"
     secret = Path(repo["passphrase_ref"])
     assert secret.is_file()
     assert secret.read_text(encoding="utf-8") == "import-secret"
+
+
+def test_repository_import_failure_restores_existing_secret(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    secret = tmp_path / "secrets" / ".borg-passphrase-repo_test"
+    secret.parent.mkdir(parents=True)
+    secret.write_text("correct-secret", encoding="utf-8")
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_test",
+        "display_name": "Test",
+        "repository_name": "test",
+        "storage_key": "storage_local_test",
+        "location": "local",
+        "path_raw": "/mnt/backup/test",
+        "passphrase_ref": str(secret),
+        "encryption": "repokey-blake2",
+    }]})
+    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: (_ for _ in ()).throw(RuntimeError("wrong passphrase")))
+
+    try:
+        create_or_import_repository(config, {
+            "action": "import",
+            "storage_key": "storage_local_test",
+            "display_name": "Test",
+            "repository_name": "test",
+            "relative_path": "test",
+            "passphrase": "wrong-secret",
+        })
+        raise AssertionError("import should fail")
+    except RuntimeError as exc:
+        assert "wrong passphrase" in str(exc)
+
+    assert secret.read_text(encoding="utf-8") == "correct-secret"

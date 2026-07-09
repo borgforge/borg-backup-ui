@@ -14,26 +14,27 @@ Borg Backup UI manages Borg backup jobs on Unraid. It helps configure jobs, stor
 - When a warning is displayed, click **System status** and review the pending items under **Settings > System Health & Migration**.
 - The area separates system checks, job checks, the latest migration, and configuration or maintenance items.
 
-### 2) Prepare profiles
+### 2) Prepare the storage target and repository
 
-- **Local/USB**: Check the target path or USB profile.
-- **SMB**: Create, save, and test a profile under **Settings > SMB Profiles**.
-- **SSH/Storage Box/Synology**: Configure host, port, user, base path, and SSH key under **Settings > SSH Profiles**, then run the profile test.
+- Under **Repositories**, select **Add repository**.
+- Use an existing storage target or set up Local, USB, SMB, or SSH/Storage Box through the guided flow.
+- For SMB, the application manages the technical mount path automatically.
+- Then create a Borg repository or import an existing repository.
 
-Tip: Repository URIs for SSH targets should be generated from the profile. Do not guess or manually assemble the path.
+Tip: Import validates the repository with `borg info` without modifying or initializing it.
 
 ### 3) Create or edit a job
 
 - Under **Jobs**, select **New Job** or edit an existing job.
-- Select the job name, type, and target location.
+- Select the job name and type.
 - Enter the source paths.
-- Check the repository, encryption, passphrase, compression, and retention.
+- Select a storage type, storage target, and an existing repository on that target.
+- Review compression and retention. Encryption and passphrase belong to the repository and are not changed by the job.
 - Enable a schedule if the job should run automatically.
 
 ### 4) Review the preview and checks
 
-- The wizard displays a preview of the repository path.
-- For SSH or Storage Box jobs, it indicates whether the repository was found or its creation must be confirmed.
+- The wizard displays the selected managed repository and its path.
 - The quick job check is a local plausibility check. It does not replace a complete Borg repository test.
 
 ### 5) Run the first backup manually
@@ -93,12 +94,12 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - Test the specific repository under **Storage** or through the repository preview in the wizard.
 - A correct relative base path can look like `./backup` and is represented as `/./backup/...` in the URI.
 
-## Storage
+## Repositories
 
-- **Storage** is the correct place for repository tests.
-- Repository tests verify access to the Borg repository.
-- SMB repositories must be mounted first.
-- SSH profile tests validate the profile but do not automatically check every job repository.
+- **Repositories** is where Borg repositories are configured, imported, and maintained.
+- Repository details provide information refresh, Check, Verify Data, Prune, and Compact actions.
+- Prune uses the linked job's retention policy and is disabled without a linked job.
+- Verify Data, Prune, and Compact require explicit confirmation.
 
 ## Restore and Restore Tests
 
@@ -144,12 +145,11 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - Read the specific message under **Pending items**.
 - If only cleanup candidates are shown, this is usually maintenance rather than an immediate backup failure.
 
-### Repository creation must be confirmed
+### No repository is available in the job wizard
 
-- The wizard could not reliably determine that the repository exists.
-- Run the appropriate repository test under **Storage**.
-- For SMB, mount the target first.
-- For SSH, check the profile test and repository path.
+- Create or import a repository under **Repositories** first.
+- Verify the selected storage type and exact storage target in the job wizard.
+- Only repositories belonging to that exact storage target are shown.
 
 ### SMB repository test does not work
 

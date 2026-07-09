@@ -14,26 +14,27 @@ Borg Backup UI verwaltet Borg-Backup-Jobs auf Unraid. Die Anwendung hilft beim E
 - Bei Warnung auf **Systemstatus** klicken und in **Einstellungen > Systemzustand & Migration** die offenen Punkte ansehen.
 - Wichtig: Der Bereich trennt Systemprüfungen, Job-Prüfungen, letzte Migration und Konfigurations-/Wartungspunkte.
 
-### 2) Profile vorbereiten
+### 2) Speicherziel und Repository vorbereiten
 
-- **Local/USB**: Zielpfad bzw. USB-Profil prüfen.
-- **SMB**: In **Einstellungen > SMB-Profile** Profil anlegen, speichern und testen.
-- **SSH/Storagebox/Synology**: In **Einstellungen > SSH-Profile** Host, Port, User, Basispfad und SSH-Key pflegen und den Profiltest ausführen.
+- In **Repositories** auf **Repository hinzufügen** klicken.
+- Ein vorhandenes Speicherziel verwenden oder Local, USB, SMB bzw. SSH/Storagebox geführt einrichten.
+- Bei SMB verwaltet die Anwendung den technischen Mount-Pfad automatisch.
+- Anschließend ein neues Borg-Repository erstellen oder ein vorhandenes Repository importieren.
 
-Tipp: Repository-URIs für SSH-Ziele sollten aus dem Profil entstehen. Nicht manuell raten oder den Pfad frei zusammenbauen.
+Tipp: Beim Import wird das Repository mit `borg info` geprüft, aber nicht verändert oder initialisiert.
 
 ### 3) Job anlegen oder bearbeiten
 
 - In **Jobs** auf **Neuer Job** klicken oder einen bestehenden Job bearbeiten.
-- Jobname, Typ und Ziel-Location wählen.
+- Jobname und Typ wählen.
 - Quellpfade eintragen.
-- Repository, Verschlüsselung, Passphrase, Kompression und Aufbewahrung prüfen.
+- Speichertyp, Speicherziel und ein dazugehöriges vorhandenes Repository wählen.
+- Kompression und Aufbewahrung prüfen. Verschlüsselung und Passphrase gehören zum Repository und werden nicht im Job geändert.
 - Zeitplan aktivieren, falls der Job automatisch laufen soll.
 
 ### 4) Vorschau und Prüfungen beachten
 
-- Der Wizard zeigt eine Vorschau des Repository-Pfads.
-- Bei SSH-/Storagebox-Jobs wird angezeigt, ob das Repository gefunden wurde oder eine Anlage bestätigt werden muss.
+- Der Wizard zeigt das ausgewählte verwaltete Repository und dessen Pfad.
 - Die schnelle Job-Prüfung ist eine lokale Plausibilitätsprüfung. Sie ersetzt keinen vollständigen Borg-Repo-Test.
 
 ### 5) Ersten Lauf manuell starten
@@ -93,12 +94,12 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - Der konkrete Repository-Test erfolgt über **Storage** oder im Wizard über die Repo-Vorschau.
 - Ein korrekter relativer Basispfad sieht z. B. wie `./backup` aus und wird in der URI als `/./backup/...` verwendet.
 
-## Storage
+## Repositories
 
-- **Storage** ist der richtige Ort für Repository-Tests.
-- Repo-Tests prüfen den Zugriff auf das Borg-Repository.
-- SMB-Repos müssen vorher gemountet sein.
-- SSH-Profiltests bestätigen das Profil, prüfen aber nicht automatisch jedes einzelne Job-Repository.
+- **Repositories** ist der Ort zum Einrichten, Importieren und Warten von Borg-Repositories.
+- In den Details eines Repositorys können Informationen aktualisiert sowie Check, Datenprüfung, Prune und Compact gestartet werden.
+- Prune verwendet die Aufbewahrungsrichtlinie des verknüpften Jobs und ist ohne Job-Zuordnung deaktiviert.
+- Datenprüfung, Prune und Compact müssen ausdrücklich bestätigt werden.
 
 ## Restore und Restore Tests
 
@@ -144,12 +145,11 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - In **Offene Punkte** die konkrete Meldung lesen.
 - Wenn nur Cleanup-Kandidaten angezeigt werden, ist das meist Wartung und kein akuter Backup-Fehler.
 
-### Repository-Anlage muss bestätigt werden
+### Kein Repository im Job-Wizard auswählbar
 
-- Der Wizard konnte das Repository nicht sicher als vorhanden erkennen.
-- In **Storage** den passenden Repo-Test ausführen.
-- Bei SMB zuerst mounten.
-- Bei SSH Profiltest und Repository-Pfad prüfen.
+- Unter **Repositories** zuerst ein Repository erstellen oder importieren.
+- Prüfen, ob Speichertyp und Speicherziel im Job-Wizard richtig gewählt wurden.
+- Es werden nur Repositorys angezeigt, die zum exakten Speicherziel gehören.
 
 ### SMB-Repo-Test funktioniert nicht
 
