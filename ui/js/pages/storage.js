@@ -242,6 +242,10 @@ function renderStorageRepositoryRow(repo, profiles) {
     : (Array.isArray(repo.source_job_keys) ? repo.source_job_keys.join(', ') : '');
   const repositoryKey = repo.repository_key || repo.conf_key || '';
   const title = storageRepositoryTitle(repo, job);
+  const metaTitle = [
+    repositoryKey ? storageT('storage.repositoryKey', { key: repositoryKey }) : '',
+    usedBy ? storageT('storage.usedBy', { jobs: usedBy }) : '',
+  ].filter(Boolean).join(' · ');
 
   return `<tr>
     <td>
@@ -249,9 +253,9 @@ function renderStorageRepositoryRow(repo, profiles) {
         <span class="type-icon type-icon-${escHtml(String(repo.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(icon)}</span>
         <span>
           <strong title="${escHtml(title)}">${escHtml(title)}</strong>
-          <small class="storage-repository-meta" title="${escHtml([repositoryKey, usedBy ? storageT('storage.usedBy', { jobs: usedBy }) : ''].filter(Boolean).join(' · '))}">
-            <span>${escHtml(repositoryKey)}</span>
-            ${usedBy ? `<span>${escHtml(usedBy)}</span>` : ''}
+          <small class="storage-repository-meta" title="${escHtml(metaTitle)}">
+            ${repositoryKey ? `<span><b>${storageT('storage.repositoryKeyLabel')}</b>${escHtml(repositoryKey)}</span>` : ''}
+            ${usedBy ? `<span><b>${storageT('storage.usedByLabel')}</b>${escHtml(usedBy)}</span>` : ''}
           </small>
         </span>
       </div>
