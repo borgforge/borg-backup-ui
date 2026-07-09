@@ -589,6 +589,7 @@ function repositoryManagerSyncFields() {
     const el = document.getElementById(id);
     if (el) el.disabled = action !== 'create';
   });
+  repositoryManagerUpdateSummary();
 }
 
 function repositoryManagerFillStorages() {
@@ -598,6 +599,55 @@ function repositoryManagerFillStorages() {
   sel.innerHTML = rows.length
     ? rows.map((storage) => `<option value="${escHtml(storage.storage_key || '')}">${escHtml(storageTargetLabel(storage))}</option>`).join('')
     : `<option value="">${storageT('storage.noStorageTargets')}</option>`;
+  repositoryManagerUpdateSummary();
+}
+
+function repositoryManagerSelectedStorageLabel() {
+  const sel = document.getElementById('repository-manager-storage');
+  if (!sel) return '';
+  return String(sel.options?.[sel.selectedIndex]?.textContent || sel.value || '').trim();
+}
+
+function repositoryManagerSelectedActionLabel() {
+  const sel = document.getElementById('repository-manager-action');
+  if (!sel) return '';
+  return String(sel.options?.[sel.selectedIndex]?.textContent || sel.value || '').trim();
+}
+
+function repositoryManagerSummaryRow(labelKey, value) {
+  return `<div>
+    <span>${escHtml(storageT(labelKey))}</span>
+    <strong>${escHtml(String(value || '').trim() || '—')}</strong>
+  </div>`;
+}
+
+function repositoryManagerUpdateSummary() {
+  const el = document.getElementById('repository-manager-summary');
+  if (!el) return;
+  const action = document.getElementById('repository-manager-action')?.value || 'create';
+  const encryption = String(document.getElementById('repository-manager-encryption')?.value || '').trim();
+  const passphrase = String(document.getElementById('repository-manager-passphrase')?.value || '').trim();
+  const repositoryName = String(document.getElementById('repository-manager-repository-name')?.value || '').trim();
+  const displayName = String(document.getElementById('repository-manager-display-name')?.value || '').trim();
+  const relativePath = String(document.getElementById('repository-manager-relative-path')?.value || '').trim();
+  const passphraseState = encryption === 'none'
+    ? storageT('storage.repositorySummaryPassphraseNone')
+    : (passphrase
+      ? storageT('storage.repositorySummaryPassphraseStored')
+      : storageT('storage.repositorySummaryPassphraseNone'));
+  const hint = action === 'create'
+    ? storageT('storage.repositorySummaryCreateHint')
+    : storageT('storage.repositorySummaryImportHint');
+  el.innerHTML = `
+    <div class="repository-manager-summary-list">
+      ${repositoryManagerSummaryRow('storage.repositorySummaryAction', repositoryManagerSelectedActionLabel())}
+      ${repositoryManagerSummaryRow('storage.repositorySummaryStorage', repositoryManagerSelectedStorageLabel())}
+      ${repositoryManagerSummaryRow('storage.repositorySummaryRepository', displayName || repositoryName)}
+      ${repositoryManagerSummaryRow('storage.repositorySummaryPath', relativePath || repositoryName)}
+      ${repositoryManagerSummaryRow('storage.repositorySummaryEncryption', encryption || '—')}
+      ${repositoryManagerSummaryRow('storage.repositorySummaryPassphrase', passphraseState)}
+    </div>
+    <p>${escHtml(hint)}</p>`;
 }
 
 function openRepositoryManager() {
@@ -648,6 +698,7 @@ function repositoryManagerNameChanged() {
     relative.value = repositoryManagerSlug(repoName.value);
     relative.dataset.autofilled = 'true';
   }
+  repositoryManagerUpdateSummary();
 }
 
 async function saveRepositoryManager() {

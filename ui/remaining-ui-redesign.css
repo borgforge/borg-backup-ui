@@ -19,9 +19,9 @@
 }
 
 .storage-repository-tools {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(16rem, 24rem);
   align-items: center;
-  justify-content: space-between;
   gap: var(--ui-space-3);
   padding: var(--ui-space-3) var(--ui-space-4);
   border-bottom: 1px solid var(--ui-color-border);
@@ -29,7 +29,7 @@
 }
 
 .storage-repository-tools input {
-  width: min(22rem, 45%);
+  width: 100%;
 }
 
 .storage-table-wrap {
@@ -47,6 +47,104 @@
 .storage-repository-table th:nth-child(3) { width: 41%; }
 .storage-repository-table th:nth-child(4) { width: 9%; }
 .storage-repository-table th:nth-child(5) { width: 13%; }
+
+.repository-manager-wizard {
+  width: min(980px, 96vw);
+  max-width: 980px;
+}
+
+.repository-manager-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: var(--ui-space-4) var(--ui-space-5) 0;
+  overflow-x: auto;
+}
+
+.repository-manager-intro {
+  margin-bottom: var(--ui-space-4);
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface-subtle);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-sm);
+  line-height: 1.45;
+}
+
+.repository-manager-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 19rem);
+  gap: var(--ui-space-4);
+  align-items: start;
+}
+
+.repository-manager-main {
+  display: grid;
+  gap: var(--ui-space-3);
+  min-width: 0;
+}
+
+.repository-manager-card,
+.repository-manager-summary {
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface);
+  padding: var(--ui-space-4);
+}
+
+.repository-manager-card h4,
+.repository-manager-summary h4 {
+  margin: 0 0 var(--ui-space-3);
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-sm);
+  font-weight: 700;
+}
+
+.repository-manager-summary {
+  position: sticky;
+  top: var(--ui-space-4);
+}
+
+.repository-manager-summary-list {
+  display: grid;
+  gap: var(--ui-space-2);
+}
+
+.repository-manager-summary-list div {
+  padding-bottom: var(--ui-space-2);
+  border-bottom: 1px solid var(--ui-color-border);
+}
+
+.repository-manager-summary-list span {
+  display: block;
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-xs);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.repository-manager-summary-list strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.repository-manager-summary p {
+  margin: var(--ui-space-3) 0 0;
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.45;
+}
+
+.repository-manager-checks {
+  display: grid;
+  gap: var(--ui-space-2);
+  align-content: end;
+}
 
 .storage-location-group-row > td {
   padding: var(--ui-space-2) var(--ui-space-3);
@@ -329,11 +427,20 @@
   .storage-repository-tools,
   .storage-smb-panel .ui-panel__header {
     align-items: stretch;
+    display: flex;
     flex-direction: column;
   }
 
   .storage-repository-tools input {
     width: 100%;
+  }
+
+  .repository-manager-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .repository-manager-summary {
+    position: static;
   }
 
   .storage-smb-profile {

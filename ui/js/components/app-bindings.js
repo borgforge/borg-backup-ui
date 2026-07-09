@@ -185,8 +185,15 @@
     document.getElementById('repository-manager-cancel-btn')?.addEventListener('click', closeRepositoryManager);
     document.getElementById('repository-manager-save-btn')?.addEventListener('click', saveRepositoryManager);
     document.getElementById('repository-manager-action')?.addEventListener('change', repositoryManagerSyncFields);
+    document.getElementById('repository-manager-storage')?.addEventListener('change', repositoryManagerSyncFields);
     document.getElementById('repository-manager-encryption')?.addEventListener('change', repositoryManagerSyncFields);
+    document.getElementById('repository-manager-display-name')?.addEventListener('input', repositoryManagerUpdateSummary);
     document.getElementById('repository-manager-repository-name')?.addEventListener('input', repositoryManagerNameChanged);
+    document.getElementById('repository-manager-relative-path')?.addEventListener('input', (event) => {
+      event.target.dataset.autofilled = 'false';
+      repositoryManagerUpdateSummary();
+    });
+    document.getElementById('repository-manager-passphrase')?.addEventListener('input', repositoryManagerUpdateSummary);
     document.getElementById('storage-deploy-close-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-ok-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-send-btn')?.addEventListener('click', storageDeploySendInput);

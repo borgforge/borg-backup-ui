@@ -1106,7 +1106,7 @@
 
 <!-- Repository Manager Modal -->
 <div id="repository-manager-modal" class="modal-backdrop hidden">
-  <div class="modal">
+  <div class="modal modal-wizard repository-manager-wizard">
     <div class="modal-header">
       <h3 data-i18n="storage.repositoryManagerTitle">Repository verwalten</h3>
       <button class="modal-close" id="repository-manager-close-btn" data-i18n-aria-label="storage.check.close" aria-label="Schließen">
@@ -1116,64 +1116,104 @@
         </svg>
       </button>
     </div>
+    <div class="repository-manager-stepper">
+      <div class="wizard-step active">
+        <div class="wizard-step-dot">1</div>
+        <div class="wizard-step-label" data-i18n="storage.repositoryManagerStepStorage">Speicherziel</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step active">
+        <div class="wizard-step-dot">2</div>
+        <div class="wizard-step-label" data-i18n="storage.repositoryManagerStepRepository">Repository</div>
+      </div>
+      <div class="wizard-step-line"></div>
+      <div class="wizard-step active">
+        <div class="wizard-step-dot">3</div>
+        <div class="wizard-step-label" data-i18n="storage.repositoryManagerStepOptions">Borg init</div>
+      </div>
+    </div>
     <div class="modal-body">
       <div id="repository-manager-message" class="status-message hidden"></div>
-      <div class="settings-grid">
-        <div class="form-group">
-          <label class="form-label" data-i18n="storage.repositoryAction">Aktion</label>
-          <select class="form-select" id="repository-manager-action">
-            <option value="create" data-i18n="storage.repositoryActionCreate">Neues Repository erstellen</option>
-            <option value="import" data-i18n="storage.repositoryActionImport">Vorhandenes Repository importieren</option>
-          </select>
+      <div class="repository-manager-intro" data-i18n="storage.repositoryManagerIntro">Repositories werden hier angelegt oder importiert. Backup-Jobs wählen später nur noch ein vorhandenes Repository aus.</div>
+      <div class="repository-manager-grid">
+        <div class="repository-manager-main">
+          <section class="repository-manager-card">
+            <h4 data-i18n="storage.repositorySectionAction">Aktion und Speicherziel</h4>
+            <div class="settings-grid">
+              <div class="form-group">
+                <label class="form-label" data-i18n="storage.repositoryAction">Aktion</label>
+                <select class="form-select" id="repository-manager-action">
+                  <option value="create" data-i18n="storage.repositoryActionCreate">Neues Repository erstellen</option>
+                  <option value="import" data-i18n="storage.repositoryActionImport">Vorhandenes Repository importieren</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="storage.storageTarget">Speicherziel</label>
+                <select class="form-select" id="repository-manager-storage"></select>
+              </div>
+            </div>
+          </section>
+          <section class="repository-manager-card">
+            <h4 data-i18n="storage.repositorySectionIdentity">Name und Pfad</h4>
+            <div class="settings-grid">
+              <div class="form-group">
+                <label class="form-label" data-i18n="storage.repositoryDisplayName">Anzeigename</label>
+                <input class="form-input" type="text" id="repository-manager-display-name" placeholder="Appdata - USB" data-i18n-placeholder="storage.repositoryDisplayNamePlaceholder">
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="storage.repositoryDirectoryName">Repository-Verzeichnis</label>
+                <input class="form-input mono" type="text" id="repository-manager-repository-name" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryDirectoryNamePlaceholder">
+              </div>
+              <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label" data-i18n="storage.repositoryRelativePath">Relativer Pfad</label>
+                <input class="form-input mono" type="text" id="repository-manager-relative-path" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryRelativePathPlaceholder">
+                <div class="form-hint" data-i18n="storage.repositoryRelativePathHint">Relativ zum Speicherziel. Keine absoluten Pfade und keine .. Segmente.</div>
+              </div>
+            </div>
+          </section>
+          <section class="repository-manager-card">
+            <h4 data-i18n="storage.repositorySectionBorgInit">Borg init Optionen</h4>
+            <div class="settings-grid">
+              <div class="form-group">
+                <label class="form-label" data-i18n="storage.repositoryEncryption">Verschlüsselung</label>
+                <select class="form-select" id="repository-manager-encryption">
+                  <option value="repokey-blake2" data-i18n="storage.encryptionModeRepokeyBlake2">repokey-blake2</option>
+                  <option value="repokey" data-i18n="storage.encryptionModeRepokey">repokey</option>
+                  <option value="keyfile-blake2" data-i18n="storage.encryptionModeKeyfileBlake2">keyfile-blake2</option>
+                  <option value="keyfile" data-i18n="storage.encryptionModeKeyfile">keyfile</option>
+                  <option value="authenticated-blake2" data-i18n="storage.encryptionModeAuthenticatedBlake2">authenticated-blake2</option>
+                  <option value="authenticated" data-i18n="storage.encryptionModeAuthenticated">authenticated</option>
+                  <option value="none" data-i18n="storage.encryptionModeNone">none</option>
+                </select>
+                <div class="form-hint" data-i18n="storage.repositoryEncryptionHint">Diese Auswahl gilt beim Erstellen für borg init und wird beim Import als Repository-Metadatum gespeichert.</div>
+              </div>
+              <div class="form-group" id="repository-manager-passphrase-group">
+                <label class="form-label" data-i18n="storage.repositoryPassphrase">Passphrase</label>
+                <input class="form-input" type="password" id="repository-manager-passphrase" autocomplete="new-password">
+                <div class="form-hint" data-i18n="storage.repositoryPassphraseHint">Beim Erstellen erforderlich, beim Import optional zum Speichern der Repository-Passphrase.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="storage.repositoryStorageQuota">Storage Quota</label>
+                <input class="form-input" type="text" id="repository-manager-storage-quota" placeholder="5G" data-i18n-placeholder="storage.repositoryStorageQuotaPlaceholder">
+                <div class="form-hint" data-i18n="storage.repositoryStorageQuotaHint">Optional, z. B. 5G oder 1.5T.</div>
+              </div>
+              <div class="repository-manager-checks">
+                <label class="form-checkbox-row">
+                  <input type="checkbox" id="repository-manager-append-only">
+                  <span data-i18n="storage.repositoryAppendOnly">Append-only Repository erstellen</span>
+                </label>
+                <label class="form-checkbox-row">
+                  <input type="checkbox" id="repository-manager-make-parent-dirs" checked>
+                  <span data-i18n="storage.repositoryMakeParentDirs">Übergeordnete Verzeichnisse bei Bedarf anlegen</span>
+                </label>
+              </div>
+            </div>
+          </section>
         </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="storage.storageTarget">Speicherziel</label>
-          <select class="form-select" id="repository-manager-storage"></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="storage.repositoryDisplayName">Anzeigename</label>
-          <input class="form-input" type="text" id="repository-manager-display-name" placeholder="Appdata - USB" data-i18n-placeholder="storage.repositoryDisplayNamePlaceholder">
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="storage.repositoryDirectoryName">Repository-Verzeichnis</label>
-          <input class="form-input mono" type="text" id="repository-manager-repository-name" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryDirectoryNamePlaceholder">
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="storage.repositoryRelativePath">Relativer Pfad</label>
-          <input class="form-input mono" type="text" id="repository-manager-relative-path" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryRelativePathPlaceholder">
-          <div class="form-hint" data-i18n="storage.repositoryRelativePathHint">Relativ zum Speicherziel. Keine absoluten Pfade und keine .. Segmente.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="storage.repositoryEncryption">Verschlüsselung</label>
-          <select class="form-select" id="repository-manager-encryption">
-            <option value="repokey-blake2" data-i18n="storage.encryptionModeRepokeyBlake2">repokey-blake2</option>
-            <option value="repokey" data-i18n="storage.encryptionModeRepokey">repokey</option>
-            <option value="keyfile-blake2" data-i18n="storage.encryptionModeKeyfileBlake2">keyfile-blake2</option>
-            <option value="keyfile" data-i18n="storage.encryptionModeKeyfile">keyfile</option>
-            <option value="authenticated-blake2" data-i18n="storage.encryptionModeAuthenticatedBlake2">authenticated-blake2</option>
-            <option value="authenticated" data-i18n="storage.encryptionModeAuthenticated">authenticated</option>
-            <option value="none" data-i18n="storage.encryptionModeNone">none</option>
-          </select>
-          <div class="form-hint" data-i18n="storage.repositoryEncryptionHint">Diese Auswahl gilt nur beim Erstellen und kann später nicht pro Job geändert werden.</div>
-        </div>
-        <div class="form-group" id="repository-manager-passphrase-group">
-          <label class="form-label" data-i18n="storage.repositoryPassphrase">Passphrase</label>
-          <input class="form-input" type="password" id="repository-manager-passphrase" autocomplete="new-password">
-          <div class="form-hint" data-i18n="storage.repositoryPassphraseHint">Beim Erstellen erforderlich, beim Import optional zum Speichern der Repository-Passphrase.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="storage.repositoryStorageQuota">Storage Quota</label>
-          <input class="form-input" type="text" id="repository-manager-storage-quota" placeholder="5G" data-i18n-placeholder="storage.repositoryStorageQuotaPlaceholder">
-          <div class="form-hint" data-i18n="storage.repositoryStorageQuotaHint">Optional, z. B. 5G oder 1.5T.</div>
-        </div>
-        <label class="form-checkbox-row">
-          <input type="checkbox" id="repository-manager-append-only">
-          <span data-i18n="storage.repositoryAppendOnly">Append-only Repository erstellen</span>
-        </label>
-        <label class="form-checkbox-row">
-          <input type="checkbox" id="repository-manager-make-parent-dirs" checked>
-          <span data-i18n="storage.repositoryMakeParentDirs">Übergeordnete Verzeichnisse bei Bedarf anlegen</span>
-        </label>
+        <aside class="repository-manager-summary">
+          <h4 data-i18n="storage.repositorySummaryTitle">Zusammenfassung</h4>
+          <div id="repository-manager-summary"></div>
+        </aside>
       </div>
     </div>
     <div class="modal-footer">
@@ -1351,14 +1391,6 @@
             <textarea class="form-input path-list-input hidden" id="wiz-source-paths" rows="4"
               placeholder="/mnt/user/data/&#10;/mnt/user/documents/"></textarea>
           </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="wizard.repositorySelect">Repository</label>
-            <select class="form-select" id="wiz-repository-key"></select>
-            <input class="form-input mono hidden" type="text" id="wiz-repo-path"
-              placeholder="/mnt/backup/borg-backup-meinedaten" data-i18n-placeholder="wizard.repositoryPlaceholder">
-            <div id="wiz-repository-hint" class="form-hint" style="margin-top:6px"></div>
-            <div id="wiz-storagebox-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
-          </div>
           <div class="form-group hidden" id="wiz-usb-profile-group">
             <label class="form-label" data-i18n="wizard.usbProfile">USB-Profil</label>
             <select class="form-select" id="wiz-usb-profile"></select>
@@ -1386,7 +1418,15 @@
             </label>
           </div>
           <div class="form-group">
-            <label class="form-label" data-i18n="wizard.compression">Kompression</label>
+            <label class="form-label" data-i18n="wizard.repositorySelect">Repository</label>
+            <select class="form-select" id="wiz-repository-key"></select>
+            <input class="form-input mono hidden" type="text" id="wiz-repo-path"
+              placeholder="/mnt/backup/borg-backup-meinedaten" data-i18n-placeholder="wizard.repositoryPlaceholder">
+            <div id="wiz-repository-hint" class="form-hint" style="margin-top:6px"></div>
+            <div id="wiz-storagebox-profile-hint" class="form-hint hidden" style="margin-top:6px"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label"><span data-i18n="wizard.compression">Kompression</span> <span class="form-hint" data-i18n="wizard.compressionJobHint">Backup-Job / Archiv</span></label>
             <select class="form-select" id="wiz-compression">
               <option value="lz4" data-i18n="wizard.compressionLz4">lz4 (schnell, Standard)</option>
               <option value="zstd,1">zstd,1</option>

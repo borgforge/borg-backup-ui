@@ -332,8 +332,8 @@ function wizardRepositoryPath(repo) {
 function wizardRepositoryLabel(repo) {
   const name = String(repo?.display_name || repo?.repository_name || repo?.repository_key || '').trim();
   const storage = String(repo?.storage_name || '').trim();
-  const path = wizardRepositoryPath(repo);
-  return [name, storage].filter(Boolean).join(' — ') + (path ? ` (${path})` : '');
+  const repoName = String(repo?.repository_name || '').trim();
+  return [name, storage, repoName].filter(Boolean).join(' — ');
 }
 
 function wizardRepositoryMatchesSelection(repo, location) {
@@ -387,8 +387,9 @@ function wizardApplySelectedRepository() {
     if (repo) {
       const encryption = String(repo.encryption || '-').trim() || '-';
       const name = String(repo.repository_name || repo.display_name || '').trim();
+      const path = wizardRepositoryPath(repo);
       hintEl.textContent = wizardT('wizard.repositorySelectedHint', {
-        name: name || String(repo.repository_key || ''),
+        name: [name || String(repo.repository_key || ''), path].filter(Boolean).join(' · '),
         encryption,
       });
       hintEl.classList.remove('status-message', 'warning-state');
