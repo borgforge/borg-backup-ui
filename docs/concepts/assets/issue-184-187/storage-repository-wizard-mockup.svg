@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="760" viewBox="0 0 1100 760" role="img" aria-labelledby="title desc">
+  <title id="title">Storage and repository wizard mockup</title>
+  <desc id="desc">Mockup for a guided storage and repository setup wizard.</desc>
+  <defs>
+    <style>
+      .back{fill:#111820}.modal{fill:#1b222b;stroke:#334155}.panel{fill:#151b22;stroke:#334155}.soft{fill:#202833;stroke:#3f4c5d}.text{font:15px Arial,sans-serif;fill:#f8fafc}.muted{font:13px Arial,sans-serif;fill:#94a3b8}.h1{font:bold 23px Arial,sans-serif;fill:#f8fafc}.h2{font:bold 16px Arial,sans-serif;fill:#f8fafc}.step{fill:#101722;stroke:#334155}.stepOn{fill:#0f2a4f;stroke:#2f80ed}.blue{fill:#2f80ed}.btnText{font:bold 14px Arial,sans-serif;fill:white}.ok{fill:#0f3b25;stroke:#2eb463}.warn{fill:#3a2a13;stroke:#d89425}.line{stroke:#334155}.small{font:12px Arial,sans-serif;fill:#94a3b8}
+    </style>
+  </defs>
+  <rect class="back" width="1100" height="760"/>
+  <rect class="modal" x="60" y="36" width="980" height="688" rx="14"/>
+  <text class="h1" x="92" y="82">Repository einrichten</text>
+  <text class="muted" x="92" y="106">Speicherziel wählen, Verbindung prüfen und Repository erstellen oder importieren.</text>
+  <text class="muted" x="1004" y="82">×</text>
+  <line class="line" x1="60" y1="126" x2="1040" y2="126"/>
+
+  <g transform="translate(92,150)">
+    <rect class="stepOn" x="0" y="0" width="170" height="54" rx="8"/><text class="h2" x="18" y="24">1 Zieltyp</text><text class="small" x="18" y="43">SMB gewählt</text>
+    <rect class="step" x="180" y="0" width="170" height="54" rx="8"/><text class="h2" x="198" y="24">2 Verbindung</text><text class="small" x="198" y="43">Server & Login</text>
+    <rect class="step" x="360" y="0" width="170" height="54" rx="8"/><text class="h2" x="378" y="24">3 Test</text><text class="small" x="378" y="43">Mount & Schreibtest</text>
+    <rect class="step" x="540" y="0" width="170" height="54" rx="8"/><text class="h2" x="558" y="24">4 Repository</text><text class="small" x="558" y="43">Neu oder Import</text>
+    <rect class="step" x="720" y="0" width="170" height="54" rx="8"/><text class="h2" x="738" y="24">5 Abschluss</text><text class="small" x="738" y="43">Speichern</text>
+  </g>
+
+  <rect class="panel" x="92" y="230" width="915" height="350" rx="10"/>
+  <text class="h1" x="122" y="268">Zieltyp wählen</text>
+  <text class="muted" x="122" y="292">Wähle, wo das Borg-Repository liegen soll. Technische Pfade werden soweit möglich vorgeschlagen.</text>
+
+  <rect class="soft" x="122" y="326" width="170" height="130" rx="10"/><text class="h2" x="146" y="360">Lokal</text><text class="muted" x="146" y="386">Pfad auf Unraid</text>
+  <rect class="soft" x="310" y="326" width="170" height="130" rx="10"/><text class="h2" x="334" y="360">USB</text><text class="muted" x="334" y="386">Lokaler Datenträger</text>
+  <rect class="stepOn" x="498" y="326" width="170" height="130" rx="10"/><text class="h2" x="522" y="360">SMB</text><text class="muted" x="522" y="386">Netzwerkfreigabe</text><text class="small" x="522" y="420">Mount wird verwaltet</text>
+  <rect class="soft" x="686" y="326" width="170" height="130" rx="10"/><text class="h2" x="710" y="360">SSH</text><text class="muted" x="710" y="386">Storagebox/Server</text>
+
+  <rect class="ok" x="122" y="490" width="830" height="54" rx="9"/>
+  <text class="text" x="146" y="514">SMB-Hinweis</text>
+  <text class="muted" x="146" y="534">Borg Backup UI schlägt einen internen Mount-Pfad vor. Du musst nur Server, Share und Login angeben.</text>
+
+  <line class="line" x1="60" y1="620" x2="1040" y2="620"/>
+  <rect class="soft" x="760" y="650" width="105" height="38" rx="7"/><text class="text" x="786" y="674">Zurück</text>
+  <rect class="blue" x="880" y="650" width="126" height="38" rx="7"/><text class="btnText" x="914" y="674">Weiter</text>
+</svg>
