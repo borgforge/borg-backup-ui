@@ -77,10 +77,16 @@ Mögliche Felder:
 
 | Feld | Bedeutung |
 | --- | --- |
-| `storage_key` | stabile technische ID |
-| `type` | `local`, `usb`, `smb`, `ssh`, später `rclone` |
+| `storage_key` | stabile technische ID, z. B. `storage_storagebox_5bf81d53` |
+| `storage_type` | `local`, `usb`, `smb`, `ssh`, später `rclone` |
+| `location` | UI-/Job-Kategorie wie `local`, `usb`, `smb`, `storagebox` |
 | `display_name` | sichtbarer Name |
-| `profile_key` | Referenz auf USB-/SMB-/SSH-Profil, falls vorhanden |
+| `profile_key` | bisherige Profil-ID während der Migration, z. B. `storage-1` |
+| `base_path` | Basis-Pfad des Speicherziels |
+| `mount_path` | lokaler Mount-Pfad, falls vorhanden |
+| `host`, `port`, `user` | SSH-/Storagebox-Verbindungsdaten ohne Secrets |
+| `server`, `share` | SMB-Zieldaten ohne Passwort |
+| `ssh_key_path` | Pfad zum SSH-Key, kein Key-Inhalt |
 | `mount_mode` | none, managed, external |
 | `status` | letzter Verbindungs-/Mount-Status |
 
@@ -92,10 +98,12 @@ Mögliche Felder:
 
 | Feld | Bedeutung |
 | --- | --- |
-| `repository_key` | stabile technische ID, z. B. `repo_appdata_usb` |
+| `repository_key` | stabile technische ID mit Hash-Suffix, z. B. `repo_appdata_usb_7f3c45ab` |
 | `display_name` | sichtbarer Name |
 | `storage_key` | Referenz auf Storage Target |
-| `repo_path` | lokaler Pfad oder relativer Pfad auf dem Storage |
+| `repository_name` | Name des Borg-Repositories, z. B. `borg-backup-appdata` |
+| `relative_path` | relativer Repository-Pfad auf dem Storage |
+| `repo_path` | lokaler Pfad, falls lokal |
 | `repo_uri` | effektive Borg-URI, falls remote |
 | `borg_repo_id` | optional aus `borg info`, falls verfügbar |
 | `passphrase_ref` | optionaler Secret-/Passphrase-Verweis |
@@ -114,7 +122,7 @@ Ein Job referenziert künftig ein Repository:
 {
   "job_key": "appdata_usb",
   "source_paths": ["/mnt/user/appdata"],
-  "repository_key": "repo_appdata_usb"
+  "repository_key": "repo_appdata_usb_7f3c45ab"
 }
 ```
 
@@ -172,8 +180,8 @@ Beispiel:
   "migration_id": "repository_objects_v1",
   "status": "applied",
   "actions": [
-    "created repository repo_appdata_usb from job appdata_usb",
-    "linked job appdata_usb to repo_appdata_usb"
+    "created repository repo_appdata_usb_7f3c45ab from job appdata_usb",
+    "linked job appdata_usb to repo_appdata_usb_7f3c45ab"
   ]
 }
 ```

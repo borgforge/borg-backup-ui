@@ -9,8 +9,8 @@ if str(API_ROOT) not in sys.path:
 
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
-from repositories_api import read_repository_store  # noqa: E402
-from storage_objects_api import read_storage_store  # noqa: E402
+from repositories_api import read_repository_store, repository_key_for  # noqa: E402
+from storage_objects_api import read_storage_store, storage_key_for  # noqa: E402
 from wizard_api import save_job  # noqa: E402
 
 
@@ -50,10 +50,11 @@ def test_repository_objects_migration_links_existing_jobs(tmp_path: Path):
     result = run_startup_migrations(config)
     store = read_repository_store(config)
     job = json.loads(job_file.read_text(encoding="utf-8"))
+    expected_key = repository_key_for("repo_appdata_local", "/mnt/backup/borg-backup-appdata")
 
     assert result["results"]["repository_objects_v1"]["status"] == "applied"
-    assert job["repository_key"] == "repo_appdata_local"
-    assert store["repositories"][0]["repository_key"] == "repo_appdata_local"
+    assert job["repository_key"] == expected_key
+    assert store["repositories"][0]["repository_key"] == expected_key
     assert store["repositories"][0]["repository_name"] == "borg-backup-appdata"
     assert store["repositories"][0]["job_name"] == "Appdata"
     assert store["repositories"][0]["storage_name"] == "Local"
@@ -87,8 +88,9 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
 
     data = get_repositories_data(config)
     rows = data["groups"]["local"]
+    expected_key = repository_key_for("repo_appdata_local", "/mnt/backup/borg-backup-appdata")
 
-    assert rows[0]["repository_key"] == "repo_appdata_local"
+    assert rows[0]["repository_key"] == expected_key
     assert rows[0]["display_name"] == "Appdata"
     assert rows[0]["repository_name"] == "borg-backup-appdata"
     assert rows[0]["job_name"] == "Appdata"
@@ -113,9 +115,10 @@ def test_wizard_save_creates_repository_object(tmp_path: Path):
     result = save_job(params, scripts, tmp_path, {"BACKUP_SCRIPTS_DIR": str(tmp_path)})
     job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     store = read_repository_store({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    expected_key = repository_key_for("repo_photos_local", "/mnt/backup/borg-backup-photos")
 
-    assert job["repository_key"] == "repo_photos_local"
-    assert store["repositories"][0]["repository_key"] == "repo_photos_local"
+    assert job["repository_key"] == expected_key
+    assert store["repositories"][0]["repository_key"] == expected_key
     assert store["repositories"][0]["repository_name"] == "borg-backup-photos"
     assert store["repositories"][0]["job_name"] == "Photos"
     assert store["repositories"][0]["storage_key"].startswith("storage_local_")
@@ -239,3 +242,124 @@ def test_repository_objects_use_profile_storage_key_for_new_jobs(tmp_path: Path)
     assert storage["profile_key"] == "usb-5tb"
     assert storage["base_path"] == "/mnt/disks/USB5TB"
     assert repo["relative_path"] == "borg-backup-photos"
+
+
+def test_repository_objects_v3_migrates_legacy_repository_keys(tmp_path: Path):
+    job_file = _write_job(tmp_path, "flash_local", "/mnt/backup/borg-backup-flash")
+    job = json.loads(job_file.read_text(encoding="utf-8"))
+    job["repository_key"] = "repo_flash_local"
+    job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    repo_file = tmp_path / "config" / "repositories.json"
+    repo_file.write_text(json.dumps({
+        "schema_version": 1,
+        "updated_at": "2026-07-09T10:00:00Z",
+        "repositories": [{
+            "repository_key": "repo_flash_local",
+            "display_name": "Flash",
+            "repository_name": "borg-backup-flash",
+            "job_name": "Flash",
+            "backup_type": "flash",
+            "location": "local",
+            "storage_type": "local",
+            "storage_key": "storage_local_old",
+            "storage_name": "Local",
+            "repo_path": "/mnt/backup/borg-backup-flash",
+            "path_raw": "/mnt/backup/borg-backup-flash",
+            "path_display": "/mnt/backup/borg-backup-flash",
+            "source_job_keys": ["flash_local"],
+            "used_by": ["flash_local"],
+        }],
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    result = run_startup_migrations(config)
+    repo = read_repository_store(config)["repositories"][0]
+    job_after = json.loads(job_file.read_text(encoding="utf-8"))
+    expected_key = repository_key_for("repo_flash_local", "/mnt/backup/borg-backup-flash")
+
+    assert result["results"]["repository_objects_v3"]["status"] == "applied"
+    assert repo["repository_key"] == expected_key
+    assert job_after["repository_key"] == expected_key
+
+
+def test_storage_objects_v2_enriches_storage_profile_fields(tmp_path: Path):
+    repo_file = tmp_path / "config" / "repositories.json"
+    repo_file.parent.mkdir(parents=True, exist_ok=True)
+    repo_key = repository_key_for("repo_flash_storagebox", "ssh://u1@example.test:23/./backup/borg-backup-flash")
+    storage_key = storage_key_for("storagebox", "storagebox-profile:storage-1")
+    repo_file.write_text(json.dumps({
+        "schema_version": 1,
+        "updated_at": "2026-07-09T10:00:00Z",
+        "repositories": [{
+            "repository_key": repo_key,
+            "display_name": "Flash",
+            "repository_name": "borg-backup-flash",
+            "job_name": "Flash",
+            "backup_type": "flash",
+            "location": "storagebox",
+            "storage_type": "ssh",
+            "storage_key": storage_key,
+            "storage_name": "storage-1",
+            "storage_profile_key": "storage-1",
+            "repo_uri": "ssh://u1@example.test:23/./backup/borg-backup-flash",
+            "path_raw": "ssh://u1@example.test:23/./backup/borg-backup-flash",
+            "path_display": "ssh://u1@example.test:23/./backup/borg-backup-flash",
+            "source_job_keys": ["flash_storagebox"],
+            "used_by": ["flash_storagebox"],
+        }],
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    settings_file = tmp_path / "config" / "settings.json"
+    settings_file.write_text(json.dumps({
+        "schema_version": 1,
+        "usb_profiles": [],
+        "smb_profiles": [],
+        "storage_profiles": [{
+            "key": "storage-1",
+            "name": "Hetzner Storagebox",
+            "host": "example.test",
+            "port": "23",
+            "user": "u1",
+            "base_path": "./backup",
+            "target_type": "storagebox",
+            "ssh_key_path": "/root/.ssh/id_rsa_storagebox",
+        }],
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (tmp_path / "config" / "storages.json").write_text(json.dumps({
+        "schema_version": 1,
+        "updated_at": "2026-07-09T10:00:00Z",
+        "storages": [{
+            "storage_key": storage_key,
+            "display_name": "Storagebox",
+            "storage_type": "ssh",
+            "location": "storagebox",
+            "identity": "storagebox-profile:storage-1",
+            "profile_key": "storage-1",
+            "base_path": "./backup",
+            "source": "storage_profile",
+        }],
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (tmp_path / "config" / "migration-state.json").write_text(json.dumps({
+        "schema_version": 2,
+        "migrations": {
+            "storage_objects_v1": {
+                "state": "applied",
+                "checked_at": "2026-07-09T10:00:00",
+                "source": "startup_registry",
+                "details": {"runner": "central_migration_registry"},
+            }
+        },
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    result = run_startup_migrations(config)
+    storages = read_storage_store(config)["storages"]
+    storage = next(row for row in storages if row["profile_key"] == "storage-1")
+
+    assert result["results"]["storage_objects_v2"]["status"] == "applied"
+    assert storage["storage_key"].startswith("storage_storagebox_")
+    assert storage["display_name"] == "Hetzner Storagebox"
+    assert storage["host"] == "example.test"
+    assert storage["port"] == "23"
+    assert storage["user"] == "u1"
+    assert storage["base_path"] == "./backup"
+    assert storage["ssh_key_path"] == "/root/.ssh/id_rsa_storagebox"

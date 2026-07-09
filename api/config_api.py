@@ -9,6 +9,7 @@ Zwei Lesemodi:
 import os
 import re
 import json
+import logging
 import subprocess
 import shutil
 import shlex
@@ -54,6 +55,8 @@ from usb_profiles_api import (
     test_usb_profiles_status,
     validate_usb_profile_usage_before_save,
 )
+
+logger = logging.getLogger(__name__)
 
 BACKUP_TYPES = ["flash", "appdata", "photos", "VMs", "sonstiges"]
 
@@ -512,6 +515,11 @@ def write_settings_payload(ui_config: dict, payload: Dict[str, Any]) -> None:
     }
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(sf)
+    try:
+        from storage_objects_api import upsert_storages_from_settings
+        upsert_storages_from_settings(ui_config, data)
+    except Exception as exc:
+        logger.warning("Storage object sync after settings save failed: %s", exc)
 
 
 def _strip_profile_keys_from_conf(ui_config: dict) -> bool:

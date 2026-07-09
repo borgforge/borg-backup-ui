@@ -16,6 +16,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - The Storage table shows display names by default and moves technical repository/job/storage IDs into the Details view.
   - Added `config/storages.json` as storage target inventory with stable `storage_*` IDs.
   - Existing repositories are migrated to reference storage objects and keep relative repository paths for the later repository wizard.
+  - Repository objects now use deterministic hash-suffixed technical IDs such as `repo_flash_local_7f3c45ab`.
+  - Storage objects now include the configured profile details needed by the later Storage/Repository wizard.
 
 ### Issue #180
 - Dashboard:

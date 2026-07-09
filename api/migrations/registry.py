@@ -7,14 +7,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import notification_events_v1, repository_objects_v1, repository_objects_v2, restore_history_v1, storage_objects_v1
+from . import (
+    notification_events_v1,
+    repository_objects_v1,
+    repository_objects_v2,
+    repository_objects_v3,
+    restore_history_v1,
+    storage_objects_v1,
+    storage_objects_v2,
+)
 
 MIGRATIONS = [
     restore_history_v1,
     notification_events_v1,
     repository_objects_v1,
     repository_objects_v2,
+    repository_objects_v3,
     storage_objects_v1,
+    storage_objects_v2,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}

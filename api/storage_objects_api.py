@@ -155,6 +155,13 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
             "base_path": str(row.get("base_path") or "").strip(),
             "mount_path": str(row.get("mount_path") or "").strip(),
             "endpoint": str(row.get("endpoint") or "").strip(),
+            "host": str(row.get("host") or "").strip(),
+            "port": str(row.get("port") or "").strip(),
+            "user": str(row.get("user") or "").strip(),
+            "server": str(row.get("server") or "").strip(),
+            "share": str(row.get("share") or "").strip(),
+            "target_type": str(row.get("target_type") or "").strip(),
+            "ssh_key_path": str(row.get("ssh_key_path") or "").strip(),
             "created_by": str(row.get("created_by") or "migration").strip(),
             "created_at": str(row.get("created_at") or "").strip(),
             "updated_at": str(row.get("updated_at") or "").strip(),
@@ -199,6 +206,13 @@ def storage_from_repository(repo: dict[str, Any], settings: dict[str, Any] | Non
     base_path = ""
     mount_path = ""
     endpoint = ""
+    host = ""
+    port = ""
+    user = ""
+    server = ""
+    share = ""
+    target_type = ""
+    ssh_key_path = ""
     source = "repository"
     identity = ""
 
@@ -222,7 +236,9 @@ def storage_from_repository(repo: dict[str, Any], settings: dict[str, Any] | Non
             display_name = str(profile.get("name") or profile_key).strip()
             mount_path = str(profile.get("mount_path") or "").strip()
             base_path = mount_path
-            endpoint = "/".join(part for part in (str(profile.get("server") or "").strip(), str(profile.get("share") or "").strip()) if part)
+            server = str(profile.get("server") or "").strip()
+            share = str(profile.get("share") or "").strip()
+            endpoint = "/".join(part for part in (server, share) if part)
             identity = f"smb-profile:{profile_key}"
             source = "smb_profile"
         else:
@@ -234,13 +250,21 @@ def storage_from_repository(repo: dict[str, Any], settings: dict[str, Any] | Non
         profile = storage_profiles.get(profile_key) if profile_key else None
         if profile:
             display_name = str(profile.get("name") or profile_key).strip()
-            endpoint = ":".join(part for part in (str(profile.get("host") or "").strip(), str(profile.get("port") or "").strip()) if part)
+            host = str(profile.get("host") or "").strip()
+            port = str(profile.get("port") or "").strip()
+            user = str(profile.get("user") or "").strip()
+            target_type = str(profile.get("target_type") or "").strip()
+            ssh_key_path = str(profile.get("ssh_key_path") or "").strip()
+            endpoint = ":".join(part for part in (host, port) if part)
             base_path = str(profile.get("base_path") or "").strip()
             identity = f"storagebox-profile:{profile_key}"
             source = "storage_profile"
         else:
             parsed = urlsplit(path_raw)
             endpoint = parsed.netloc
+            host = parsed.hostname or ""
+            port = str(parsed.port or "")
+            user = parsed.username or ""
             base_path = _parent_path(path_raw)
             display_name = str(repo.get("storage_name") or "Storagebox").strip()
             identity = f"storagebox:{endpoint}:{base_path}"
@@ -263,6 +287,13 @@ def storage_from_repository(repo: dict[str, Any], settings: dict[str, Any] | Non
         "base_path": base_path,
         "mount_path": mount_path,
         "endpoint": endpoint,
+        "host": host,
+        "port": port,
+        "user": user,
+        "server": server,
+        "share": share,
+        "target_type": target_type,
+        "ssh_key_path": ssh_key_path,
         "created_by": "migration",
         "created_at": ts,
         "updated_at": ts,
@@ -298,3 +329,112 @@ def upsert_storage_for_repository(config: dict, repo: dict[str, Any], settings: 
     next_rows.append(merged)
     write_storage_store(config, {"storages": next_rows})
     return merged
+
+
+def upsert_storages_from_settings(config: dict, settings: dict[str, Any] | None) -> list[str]:
+    """Create/update storage objects from configured storage profiles.
+
+    The Settings page is still the input surface for profiles during the
+    #184/#187 transition. This function writes the future storage inventory
+    without deleting existing storage objects or repositories.
+    """
+    payload = settings if isinstance(settings, dict) else {}
+    store = read_storage_store(config)
+    rows = store["storages"]
+    by_key = {str(row.get("storage_key") or ""): row for row in rows if str(row.get("storage_key") or "").strip()}
+    changed: list[str] = []
+
+    def merge(storage: dict[str, Any]) -> None:
+        key = str(storage.get("storage_key") or "").strip()
+        if not key:
+            return
+        previous = by_key.get(key, {})
+        merged = {
+            **previous,
+            **storage,
+            "storage_key": key,
+            "created_at": str(previous.get("created_at") or storage.get("created_at") or _now()),
+            "created_by": str(previous.get("created_by") or storage.get("created_by") or "settings"),
+            "updated_at": _now(),
+        }
+        before_norm = normalize_storages([previous])[0] if previous else {}
+        after_norm = normalize_storages([merged])[0]
+        if before_norm != after_norm:
+            changed.append(key)
+        by_key[key] = merged
+
+    for profile in payload.get("usb_profiles") if isinstance(payload.get("usb_profiles"), list) else []:
+        if not isinstance(profile, dict):
+            continue
+        profile_key = str(profile.get("key") or "").strip().lower()
+        mount_path = str(profile.get("mount_path") or "").strip()
+        if not profile_key or not mount_path:
+            continue
+        merge({
+            "storage_key": storage_key_for("usb", f"usb-profile:{profile_key}"),
+            "display_name": str(profile.get("name") or profile_key).strip(),
+            "storage_type": "usb",
+            "location": "usb",
+            "identity": f"usb-profile:{profile_key}",
+            "profile_key": profile_key,
+            "base_path": mount_path,
+            "mount_path": mount_path,
+            "source": "usb_profile",
+            "created_by": "settings",
+        })
+
+    for profile in payload.get("smb_profiles") if isinstance(payload.get("smb_profiles"), list) else []:
+        if not isinstance(profile, dict):
+            continue
+        profile_key = str(profile.get("key") or "").strip().lower()
+        mount_path = str(profile.get("mount_path") or "").strip()
+        if not profile_key or not mount_path:
+            continue
+        server = str(profile.get("server") or "").strip()
+        share = str(profile.get("share") or "").strip()
+        merge({
+            "storage_key": storage_key_for("smb", f"smb-profile:{profile_key}"),
+            "display_name": str(profile.get("name") or profile_key).strip(),
+            "storage_type": "smb",
+            "location": "smb",
+            "identity": f"smb-profile:{profile_key}",
+            "profile_key": profile_key,
+            "base_path": mount_path,
+            "mount_path": mount_path,
+            "endpoint": "/".join(part for part in (server, share) if part),
+            "server": server,
+            "share": share,
+            "source": "smb_profile",
+            "created_by": "settings",
+        })
+
+    for profile in payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []:
+        if not isinstance(profile, dict):
+            continue
+        profile_key = str(profile.get("key") or "").strip().lower()
+        host = str(profile.get("host") or "").strip()
+        base_path = str(profile.get("base_path") or "").strip()
+        if not profile_key or not host or not base_path:
+            continue
+        port = str(profile.get("port") or "").strip()
+        merge({
+            "storage_key": storage_key_for("storagebox", f"storagebox-profile:{profile_key}"),
+            "display_name": str(profile.get("name") or profile_key).strip(),
+            "storage_type": "ssh",
+            "location": "storagebox",
+            "identity": f"storagebox-profile:{profile_key}",
+            "profile_key": profile_key,
+            "base_path": base_path,
+            "endpoint": ":".join(part for part in (host, port) if part),
+            "host": host,
+            "port": port,
+            "user": str(profile.get("user") or "").strip(),
+            "target_type": str(profile.get("target_type") or "storagebox").strip(),
+            "ssh_key_path": str(profile.get("ssh_key_path") or "").strip(),
+            "source": "storage_profile",
+            "created_by": "settings",
+        })
+
+    if changed:
+        write_storage_store(config, {"storages": list(by_key.values())})
+    return sorted(set(changed))

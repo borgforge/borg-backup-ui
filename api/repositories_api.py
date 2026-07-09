@@ -7,6 +7,7 @@ Borg repositories on disk or remote targets.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,10 @@ def _slug(value: str, fallback: str = "repository") -> str:
     return text or fallback
 
 
+def _hash_suffix(value: str) -> str:
+    return hashlib.sha1(str(value or "").encode("utf-8")).hexdigest()[:8]
+
+
 def _repo_identity(path_or_uri: str) -> str:
     text = str(path_or_uri or "").strip()
     if not text:
@@ -43,6 +48,16 @@ def _repo_identity(path_or_uri: str) -> str:
     if "://" in text:
         return text.rstrip("/")
     return text.rstrip("/")
+
+
+def repository_key_for(seed: str, identity: str) -> str:
+    base = _slug(seed, "repository")
+    if not base.startswith("repo_"):
+        base = f"repo_{base}"
+    suffix = _hash_suffix(_repo_identity(identity))
+    if base.endswith(f"_{suffix}"):
+        return base
+    return f"{base}_{suffix}"
 
 
 def repository_name_from_path(path_or_uri: str) -> str:
@@ -115,7 +130,7 @@ def enrich_repository_display_fields(repo: dict[str, Any], job: dict[str, Any] |
 
 
 def _unique_repository_key(base_key: str, existing: dict[str, dict[str, Any]], identity: str) -> str:
-    base = _slug(base_key, "repo")
+    base = repository_key_for(base_key, identity)
     current = existing.get(base)
     if not current or _repo_identity(current.get("repo_uri") or current.get("repo_path") or current.get("path_raw")) == identity:
         return base
@@ -243,7 +258,7 @@ def repository_from_job(job: dict[str, Any], *, created_by: str = "migration") -
     local_path = "" if repo_uri else repo_path
     ts = _now()
     return {
-        "repository_key": f"repo_{job_key}",
+        "repository_key": repository_key_for(f"repo_{job_key}", repo_path),
         "display_name": display_name,
         "repository_name": repository_name,
         "job_name": display_name,
