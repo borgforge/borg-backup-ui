@@ -1,21 +1,34 @@
 """Repository object inventory for Borg Backup UI.
 
-Repository objects are UI metadata only. They do not create, modify, or delete
-Borg repositories on disk or remote targets.
+Repository objects are the canonical metadata inventory for Borg repositories.
+They can also be created or imported through the repository manager; backup jobs
+only reference these objects.
 """
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
+import os
 import re
+import shlex
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 
 SCHEMA_VERSION = 1
+ALLOWED_ENCRYPTION_MODES = {
+    "repokey-blake2",
+    "repokey",
+    "keyfile-blake2",
+    "keyfile",
+    "authenticated-blake2",
+    "authenticated",
+    "none",
+}
 
 
 def _now() -> str:
@@ -67,6 +80,65 @@ def repository_name_from_path(path_or_uri: str) -> str:
     parsed_path = urlsplit(text).path if "://" in text else text
     name = unquote(parsed_path.rstrip("/").rsplit("/", 1)[-1]).strip()
     return name or text.rstrip("/").rsplit("/", 1)[-1].strip()
+
+
+def _normalize_repo_segment(value: str) -> str:
+    text = str(value or "").strip().strip("/")
+    text = re.sub(r"\s+", "-", text)
+    text = re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-._")
+    if not text:
+        raise ValueError("Repository name must not be empty")
+    if text in {".", ".."} or "/" in text:
+        raise ValueError("Repository name must be a single path segment")
+    return text
+
+
+def _safe_relative_path(value: str) -> str:
+    text = str(value or "").strip().strip("/")
+    if not text:
+        raise ValueError("Repository path must not be empty")
+    parts = []
+    for raw in text.split("/"):
+        part = raw.strip()
+        if not part or part in {".", ".."}:
+            raise ValueError("Repository path contains unsafe path segments")
+        parts.append(_normalize_repo_segment(part))
+    return "/".join(parts)
+
+
+def _join_path(base: str, relative: str) -> str:
+    b = str(base or "").strip().rstrip("/")
+    r = _safe_relative_path(relative)
+    if not b:
+        raise ValueError("Storage base path is missing")
+    if "://" in b:
+        parsed = urlsplit(b)
+        path = "/".join(part for part in (parsed.path.rstrip("/"), quote(r, safe="/._-")) if part)
+        return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))
+    return f"{b}/{r}" if b != "/" else f"/{r}"
+
+
+def effective_repository_path(storage: dict[str, Any], relative_path: str) -> str:
+    """Build the effective Borg repository path/URI for a storage object."""
+    if not isinstance(storage, dict):
+        raise ValueError("Storage target is missing")
+    location = str(storage.get("location") or storage.get("storage_type") or "").strip().lower()
+    relative = _safe_relative_path(relative_path)
+    if location == "storagebox" or str(storage.get("storage_type") or "").strip().lower() == "ssh":
+        user = str(storage.get("user") or "").strip()
+        host = str(storage.get("host") or "").strip()
+        port = str(storage.get("port") or "23").strip() or "23"
+        base_path = str(storage.get("base_path") or "").strip() or "/./backup"
+        if not user or not host:
+            raise ValueError("SSH storage target is incomplete")
+        if base_path.startswith("./"):
+            base_path = f"/{base_path}"
+        elif not base_path.startswith("/"):
+            base_path = f"/{base_path}"
+        base_path = base_path.rstrip("/") or "/"
+        return f"ssh://{quote(user, safe='')}@{host}:{port}{base_path}/{quote(relative, safe='/._-')}"
+    base_path = str(storage.get("base_path") or storage.get("mount_path") or "").strip()
+    return _join_path(base_path, relative)
 
 
 def _storage_name_from_location(location: str) -> str:
@@ -217,6 +289,10 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "path_raw": path_raw,
             "path_display": str(row.get("path_display") or path_raw).strip(),
             "passphrase_ref": str(row.get("passphrase_ref") or "").strip(),
+            "encryption": str(row.get("encryption") or "").strip(),
+            "append_only": bool(row.get("append_only", False)),
+            "storage_quota": str(row.get("storage_quota") or "").strip(),
+            "initialized": bool(row.get("initialized", False)),
             "created_by": str(row.get("created_by") or "manual").strip(),
             "created_at": str(row.get("created_at") or "").strip(),
             "updated_at": str(row.get("updated_at") or "").strip(),
@@ -276,6 +352,10 @@ def repository_from_job(job: dict[str, Any], *, created_by: str = "migration") -
         "path_raw": repo_path,
         "path_display": repo_path,
         "passphrase_ref": str(pass_cfg.get("default") or "").strip(),
+        "encryption": str(job.get("encryption") or "").strip(),
+        "append_only": bool(job.get("append_only", False)),
+        "storage_quota": str(job.get("storage_quota") or "").strip(),
+        "initialized": bool(job.get("initialized", False)),
         "created_by": created_by,
         "created_at": ts,
         "updated_at": ts,
@@ -356,3 +436,170 @@ def build_repository_groups(config: dict) -> dict[str, list[dict[str, Any]]]:
     for rows in groups.values():
         rows.sort(key=lambda row: (str(row.get("backup_type") or ""), str(row.get("display_name") or "")))
     return groups
+
+
+def _secret_path_for_repository(config: dict, repository_key: str) -> Path:
+    return _data_root(config) / "secrets" / f".borg-passphrase-{repository_key}"
+
+
+def _storage_by_key(config: dict) -> dict[str, dict[str, Any]]:
+    from storage_objects_api import read_storage_store
+    return {
+        str(row.get("storage_key") or ""): row
+        for row in read_storage_store(config).get("storages", [])
+        if str(row.get("storage_key") or "").strip()
+    }
+
+
+def _repo_env(storage: dict[str, Any], passphrase_file: Path | None) -> dict[str, str]:
+    env = dict(os.environ)
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
+    if passphrase_file is not None:
+        env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(passphrase_file))}"
+    ssh_key = str(storage.get("ssh_key_path") or "").strip()
+    if ssh_key:
+        env["BORG_RSH"] = f"ssh -i {shlex.quote(ssh_key)} -o WarnWeakCrypto=no"
+    elif str(storage.get("storage_type") or "").strip().lower() == "ssh":
+        env["BORG_RSH"] = "ssh -o WarnWeakCrypto=no"
+    return env
+
+
+def _mask_repo_output(text: str, passphrase: str = "") -> str:
+    out = str(text or "")
+    if passphrase:
+        out = out.replace(passphrase, "***")
+    return out
+
+
+def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+    """Create/import a repository object, optionally running borg init.
+
+    The command is intentionally scoped to repository management. Backup jobs
+    should only select existing repository objects.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid repository payload")
+    action = str(payload.get("action") or "import").strip().lower()
+    if action not in {"import", "create"}:
+        raise ValueError("Invalid repository action")
+    storage_key = str(payload.get("storage_key") or "").strip()
+    storages = _storage_by_key(config)
+    storage = storages.get(storage_key)
+    if not storage:
+        raise ValueError("Storage target not found")
+
+    display_name = str(payload.get("display_name") or "").strip()
+    repo_name = _normalize_repo_segment(str(payload.get("repository_name") or display_name or "repository"))
+    relative_path = _safe_relative_path(str(payload.get("relative_path") or repo_name))
+    repo_path = effective_repository_path(storage, relative_path)
+    location = str(storage.get("location") or storage.get("storage_type") or "").strip().lower()
+    encryption = str(payload.get("encryption") or "repokey-blake2").strip()
+    if encryption not in ALLOWED_ENCRYPTION_MODES:
+        raise ValueError("Invalid Borg encryption mode")
+    append_only = bool(payload.get("append_only", False))
+    make_parent_dirs = bool(payload.get("make_parent_dirs", True))
+    storage_quota = str(payload.get("storage_quota") or "").strip()
+    if action != "create":
+        append_only = False
+        make_parent_dirs = False
+        storage_quota = ""
+    if storage_quota and not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?[KMGTP]?", storage_quota, re.IGNORECASE):
+        raise ValueError("Invalid storage quota")
+
+    seed = f"repo_{repo_name}_{location}"
+    repo_key = repository_key_for(seed, repo_path)
+    passphrase_ref = ""
+    passphrase_file: Path | None = None
+    passphrase = str(payload.get("passphrase") or "").strip()
+    if encryption != "none":
+        passphrase_file = _secret_path_for_repository(config, repo_key)
+        passphrase_ref = str(passphrase_file)
+        if action == "create" and not passphrase:
+            raise ValueError("Passphrase is required for encrypted repository creation")
+        if passphrase:
+            passphrase_file.parent.mkdir(parents=True, exist_ok=True)
+            passphrase_file.write_text(passphrase, encoding="utf-8")
+            passphrase_file.chmod(0o600)
+
+    output = ""
+    exit_code = 0
+    initialized = action == "import"
+    if action == "create":
+        cmd = ["borg", "init", f"--encryption={encryption}"]
+        if append_only:
+            cmd.append("--append-only")
+        if storage_quota:
+            cmd.extend(["--storage-quota", storage_quota])
+        if make_parent_dirs:
+            cmd.append("--make-parent-dirs")
+        cmd.append(repo_path)
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=_repo_env(storage, passphrase_file),
+                check=False,
+            )
+            exit_code = proc.returncode
+            output = _mask_repo_output(((proc.stdout or "") + "\n" + (proc.stderr or "")).strip(), passphrase)
+        except FileNotFoundError:
+            raise ValueError("borg binary not found")
+        except subprocess.TimeoutExpired:
+            raise TimeoutError("borg init timed out")
+        if exit_code != 0:
+            raise RuntimeError(output.splitlines()[0] if output.splitlines() else f"borg init failed with exit {exit_code}")
+        initialized = True
+
+    store = read_repository_store(config)
+    rows = store["repositories"]
+    existing = next((row for row in rows if _repo_identity(row.get("path_raw") or "") == _repo_identity(repo_path)), None)
+    if existing:
+        repo_key = str(existing.get("repository_key") or repo_key)
+        passphrase_ref = str(existing.get("passphrase_ref") or passphrase_ref)
+
+    now = _now()
+    existing = existing if isinstance(existing, dict) else {}
+    profile_key = str(storage.get("profile_key") or "").strip()
+    row = {
+        **existing,
+        "repository_key": repo_key,
+        "display_name": display_name or repo_name,
+        "repository_name": repo_name,
+        "job_name": str((existing or {}).get("job_name") or "").strip(),
+        "backup_type": str((existing or {}).get("backup_type") or "").strip(),
+        "location": location,
+        "storage_type": str(storage.get("storage_type") or location).strip().lower(),
+        "storage_key": storage_key,
+        "storage_name": str(storage.get("display_name") or "").strip(),
+        "relative_path": relative_path,
+        "storage_profile_key": profile_key if location == "storagebox" else str(existing.get("storage_profile_key") or ""),
+        "usb_profile_key": profile_key if location == "usb" else str(existing.get("usb_profile_key") or ""),
+        "smb_profile_key": profile_key if location == "smb" else str(existing.get("smb_profile_key") or ""),
+        "repo_path": "" if repo_path.startswith("ssh://") else repo_path,
+        "repo_uri": repo_path if repo_path.startswith("ssh://") else "",
+        "path_raw": repo_path,
+        "path_display": repo_path,
+        "passphrase_ref": passphrase_ref,
+        "encryption": encryption,
+        "append_only": append_only,
+        "storage_quota": storage_quota,
+        "initialized": initialized,
+        "created_by": str(existing.get("created_by") or action),
+        "created_at": str(existing.get("created_at") or now),
+        "updated_at": now,
+        "source_job_keys": existing.get("source_job_keys", []),
+        "used_by": existing.get("used_by", []),
+    }
+    next_rows = [item for item in rows if str(item.get("repository_key") or "") != repo_key]
+    next_rows.append(row)
+    write_repository_store(config, {"repositories": next_rows})
+    return {
+        "ok": True,
+        "action": action,
+        "repository": enrich_repository_display_fields(row),
+        "exit_code": exit_code,
+        "output": output,
+    }

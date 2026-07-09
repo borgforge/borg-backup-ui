@@ -715,6 +715,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore-tests/run": self._post_run_restore_test,
             "/api/restore-tests/run-job": self._post_run_restore_test_job,
             "/api/storage/test": self._post_test_repo,
+            "/api/repositories": self._post_repository,
             "/api/storage/smb-action": self._post_storage_smb_action,
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
@@ -1425,6 +1426,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from repositories_api import read_repository_store
         return read_repository_store(self.config)
 
+    def _post_repository(self) -> dict:
+        from repositories_api import create_or_import_repository
+        body = self._read_json_body()
+        return create_or_import_repository(self.config, body)
+
     def _get_settings(self) -> dict:
         from config_api import get_settings_data
         return get_settings_data(self.config)
@@ -1877,7 +1883,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"))
+        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"), ui_config=self.config)
         return {"flow": generate_flow_preview(body, self.config, scripts_dir)}
 
     def _post_wizard_save(self) -> dict:
@@ -1887,7 +1893,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"))
+        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"), ui_config=self.config)
         return save_job(body, scripts_dir, data_root, self.config)
 
     def _start_restore_test_from_body(self, body: dict) -> dict:

@@ -13,6 +13,8 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   selectedStorageProfileKey: '',
   usbProfiles: [],
   smbProfiles: [],
+  repositories: [],
+  selectedRepositoryKey: '',
   selectedUsbProfileKey: '',
   selectedSmbProfileKey: '',
   sourcePaths: [],
@@ -311,6 +313,94 @@ function wizardSetStorageProfileOptions() {
   }
 }
 
+async function wizardLoadRepositories() {
+  try {
+    const res = await fetch('/api/repositories');
+    if (!res.ok) return;
+    const data = await res.json();
+    wizardState.repositories = Array.isArray(data?.repositories) ? data.repositories : [];
+  } catch (_) {
+    wizardState.repositories = [];
+  }
+  wizardSetRepositoryOptions();
+}
+
+function wizardRepositoryPath(repo) {
+  return String(repo?.path_raw || repo?.repo_uri || repo?.repo_path || repo?.path_display || '').trim();
+}
+
+function wizardRepositoryLabel(repo) {
+  const name = String(repo?.display_name || repo?.repository_name || repo?.repository_key || '').trim();
+  const storage = String(repo?.storage_name || '').trim();
+  const path = wizardRepositoryPath(repo);
+  return [name, storage].filter(Boolean).join(' — ') + (path ? ` (${path})` : '');
+}
+
+function wizardRepositoryMatchesSelection(repo, location) {
+  if (String(repo?.location || '').trim().toLowerCase() !== location) return false;
+  if (location === 'usb') {
+    const key = String(document.getElementById('wiz-usb-profile')?.value || wizardState.selectedUsbProfileKey || '').trim();
+    return !key || String(repo?.usb_profile_key || '').trim() === key || String(repo?.storage_profile_key || '').trim() === key;
+  }
+  if (location === 'smb') {
+    const key = String(document.getElementById('wiz-smb-profile')?.value || wizardState.selectedSmbProfileKey || '').trim();
+    return !key || String(repo?.smb_profile_key || '').trim() === key;
+  }
+  if (location === 'storagebox') {
+    const key = String(document.getElementById('wiz-storage-profile')?.value || wizardState.selectedStorageProfileKey || '').trim();
+    return !key || String(repo?.storage_profile_key || '').trim() === key;
+  }
+  return true;
+}
+
+function wizardSetRepositoryOptions() {
+  const sel = document.getElementById('wiz-repository-key');
+  if (!sel) return;
+  const location = String(document.getElementById('wiz-location')?.value || 'local').trim().toLowerCase();
+  const rows = (Array.isArray(wizardState.repositories) ? wizardState.repositories : [])
+    .filter((repo) => wizardRepositoryMatchesSelection(repo, location));
+  sel.innerHTML = rows.length
+    ? rows.map((repo) => `<option value="${escHtml(repo.repository_key || '')}">${escHtml(wizardRepositoryLabel(repo))}</option>`).join('')
+    : `<option value="">${wizardT('wizard.noRepositoriesForLocation')}</option>`;
+  const wanted = wizardState.selectedRepositoryKey || '';
+  const found = rows.find((repo) => String(repo.repository_key || '') === wanted);
+  sel.value = found ? wanted : (rows[0]?.repository_key || '');
+  wizardState.selectedRepositoryKey = sel.value;
+  wizardApplySelectedRepository();
+}
+
+function wizardSelectedRepository() {
+  const key = String(document.getElementById('wiz-repository-key')?.value || wizardState.selectedRepositoryKey || '').trim();
+  wizardState.selectedRepositoryKey = key;
+  return (Array.isArray(wizardState.repositories) ? wizardState.repositories : [])
+    .find((repo) => String(repo.repository_key || '') === key) || null;
+}
+
+function wizardApplySelectedRepository() {
+  const repo = wizardSelectedRepository();
+  const repoEl = document.getElementById('wiz-repo-path');
+  const encEl = document.getElementById('wiz-encryption');
+  const hintEl = document.getElementById('wiz-repository-hint');
+  if (repoEl) repoEl.value = wizardRepositoryPath(repo);
+  if (encEl) encEl.value = String(repo?.encryption || 'repokey-blake2').trim() || 'repokey-blake2';
+  if (hintEl) {
+    if (repo) {
+      const encryption = String(repo.encryption || '-').trim() || '-';
+      const name = String(repo.repository_name || repo.display_name || '').trim();
+      hintEl.textContent = wizardT('wizard.repositorySelectedHint', {
+        name: name || String(repo.repository_key || ''),
+        encryption,
+      });
+      hintEl.classList.remove('status-message', 'warning-state');
+      hintEl.classList.add('form-hint');
+    } else {
+      hintEl.textContent = wizardT('wizard.noRepositorySelectedHint');
+      hintEl.classList.remove('form-hint');
+      hintEl.classList.add('status-message', 'warning-state');
+    }
+  }
+}
+
 async function wizardLoadUsbProfiles() {
   try {
     const res = await fetch('/api/settings');
@@ -380,6 +470,7 @@ function openWizard() {
   wizardState.selectedUsbProfileKey = '';
   wizardState.selectedSmbProfileKey = '';
   wizardState.selectedStorageProfileKey = '';
+  wizardState.selectedRepositoryKey = '';
   wizardState.remoteRepoStatus = null;
   wizardState.selectedDockerContainers = [];
   wizardState.selectedVms = [];
@@ -437,7 +528,7 @@ function openWizard() {
   _wizardScheduleApplyUI('daily');
   wizardSchedulePreview();
   wizardUpdateIconPreview();
-  Promise.all([wizardLoadStorageboxProfile(), wizardLoadUsbProfiles(), wizardLoadSmbProfiles(), wizardLoadRuntimeInventory()]).finally(() => wizardAutoFill());
+  Promise.all([wizardLoadStorageboxProfile(), wizardLoadUsbProfiles(), wizardLoadSmbProfiles(), wizardLoadRepositories(), wizardLoadRuntimeInventory()]).finally(() => wizardAutoFill());
   [1,2,3,4,5,6,7,8,9].forEach(n => wizardClearError(n));
   wizardRenderRuntimeControls();
   _renderWizardStep(1);
@@ -459,6 +550,7 @@ function _wizardFillFromJob(job) {
   wizardState.sourcePaths = parsedPaths;
   wizardRenderSourcePaths();
   document.getElementById('wiz-repo-path').value = job.repo_path || '';
+  wizardState.selectedRepositoryKey = String(job.repository_key || '').trim();
   const smbMountBefore = document.getElementById('wiz-smb-mount-before-run');
   const smbUnmountAfter = document.getElementById('wiz-smb-unmount-after-run');
   if (smbMountBefore) smbMountBefore.checked = job.mount_before_run !== false;
@@ -529,6 +621,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
     wizardState.original = {
       type_id: (job.type_id || '').toLowerCase(),
       location: job.location || 'local',
+      repository_key: String(job.repository_key || '').trim(),
       use_docker: !!job.use_docker,
       use_vm: !!job.use_vm,
       docker_control: job.docker_control || { mode: job.use_docker ? 'all' : 'none', selected: [] },
@@ -554,6 +647,7 @@ function wizardNeedsScriptRegeneration(params) {
   if (!orig) return true;
   if (params.type_id !== orig.type_id) return true;
   if (params.location !== orig.location) return true;
+  if (params.repository_key !== orig.repository_key) return true;
   if (!!params.use_docker !== !!orig.use_docker) return true;
   if (!!params.use_vm !== !!orig.use_vm) return true;
   if (JSON.stringify(params.docker_control || {}) !== JSON.stringify(orig.docker_control || {})) return true;
@@ -741,6 +835,7 @@ function wizardAutoFill() {
       }
     }
   }
+  wizardSetRepositoryOptions();
   // If icon not explicitly chosen, keep "auto" (empty) and let rendering
   // derive it from backup_type/type_id.
   if (iconEl && iconEl.value === '') iconEl.value = '';
@@ -827,6 +922,7 @@ function _wizardCollectParams() {
       ack_domains_risk: !!document.getElementById('wiz-ack-domains-risk')?.checked,
     },
     source_paths: rawPaths,
+    repository_key: (document.getElementById('wiz-repository-key')?.value || wizardState.selectedRepositoryKey || '').trim(),
     repo_path:    (document.getElementById('wiz-repo-path').value || '').trim(),
     compression:  document.getElementById('wiz-compression').value,
     encryption:   document.getElementById('wiz-encryption').value,
@@ -989,6 +1085,7 @@ function _wizardValidate(step) {
   }
   if (step === 2) {
     if (!p.source_paths) { _wizardShowError(2, wizardT('wizard.validationSource')); return false; }
+    if (!p.repository_key) { _wizardShowError(2, wizardT('wizard.validationRepositorySelect')); return false; }
     if (!p.repo_path)    { _wizardShowError(2, wizardT('wizard.validationRepository')); return false; }
     if (p.location === 'usb') {
       const rows = Array.isArray(wizardState.usbProfiles) ? wizardState.usbProfiles : [];
@@ -1041,7 +1138,7 @@ function _wizardValidate(step) {
     }
   }
   if (step === 6) {
-    if (p.encryption !== 'none' && !wizardState.keepPassphrase && !p.passphrase) {
+    if (!p.repository_key && p.encryption !== 'none' && !wizardState.keepPassphrase && !p.passphrase) {
       _wizardShowError(6, wizardT('wizard.validationPassphrase'));
       return false;
     }
@@ -1058,7 +1155,7 @@ async function wizardNext() {
     wizardState.mode !== 'create' &&
     !wizardNeedsScriptRegeneration(params);
   // skip passphrase step when no encryption
-  if (cur === 5 && (enc === 'none' || isEditLikeNoRegeneration)) {
+  if (cur === 5 && (params.repository_key || enc === 'none' || isEditLikeNoRegeneration)) {
     _renderWizardStep(7);
     return;
   }
@@ -1109,7 +1206,7 @@ function wizardBack() {
     wizardState.mode !== 'create' &&
     !wizardNeedsScriptRegeneration(params);
   // skip passphrase step going back from Beschreibung when no encryption
-  if (cur === 7 && (enc === 'none' || isEditLikeNoRegeneration)) {
+  if (cur === 7 && (params.repository_key || enc === 'none' || isEditLikeNoRegeneration)) {
     _renderWizardStep(5);
     return;
   }
@@ -1196,7 +1293,7 @@ async function _wizardPreview() {
       repoStatusEl.textContent = '';
     }
     const confirmWrap = document.getElementById('wizard-remote-init-confirm-wrap');
-    const needsRemoteConfirm = params.location === 'storagebox' && (!remoteRepo || remoteRepo.needs_init_confirm !== false);
+    const needsRemoteConfirm = !params.repository_key && params.location === 'storagebox' && (!remoteRepo || remoteRepo.needs_init_confirm !== false);
     if (confirmWrap) confirmWrap.classList.toggle('hidden', !needsRemoteConfirm);
     wrap.classList.remove('hidden');
   } catch (err) {

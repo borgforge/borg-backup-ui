@@ -142,6 +142,7 @@ def validate_params(
     data_root: Optional[Path] = None,
     *,
     allow_existing: bool = False,
+    ui_config: Optional[dict] = None,
 ) -> None:
     """Wirft ValueError bei ungültigen Parametern."""
     type_id = params.get("type_id", "").strip()
@@ -153,12 +154,17 @@ def validate_params(
         raise ValueError("Job name must not be empty")
     if not params.get("source_paths", "").strip():
         raise ValueError("At least one source path is required")
-    if not params.get("repo_path", "").strip():
-        raise ValueError("Repository path must not be empty")
+    selected_repo = _repository_from_params(params, ui_config)
+    if not selected_repo:
+        raise ValueError("Repository selection is required")
+    params["repo_path"] = _repository_path(selected_repo)
+    params["encryption"] = _repository_encryption(selected_repo, str(params.get("encryption", "repokey-blake2")))
 
     location = params.get("location", "local")
     if location not in ("local", "usb", "smb", "storagebox"):
         raise ValueError(f"Invalid location: {location!r}")
+    if selected_repo and str(selected_repo.get("location") or "").strip().lower() != location:
+        raise ValueError("Selected repository does not match the selected storage location")
     if location == "smb" and not str(params.get("smb_profile_key", "")).strip():
         raise ValueError("SMB profile is missing")
     if location == "storagebox" and not str(params.get("storage_profile_key", "")).strip():
@@ -217,6 +223,39 @@ def _wizard_repo_passphrase_path(params: dict) -> str:
     if fallback.is_file():
         return str(fallback)
     return str(path)
+
+
+def _repository_from_params(params: dict, ui_config: Optional[dict]) -> Optional[dict]:
+    repository_key = str(params.get("repository_key") or "").strip()
+    if not repository_key or not ui_config:
+        return None
+    try:
+        from repositories_api import read_repository_store
+        rows = read_repository_store(ui_config).get("repositories", [])
+    except Exception:
+        return None
+    for row in rows if isinstance(rows, list) else []:
+        if str(row.get("repository_key") or "").strip() == repository_key:
+            return row
+    return None
+
+
+def _repository_path(repo: Optional[dict]) -> str:
+    if not isinstance(repo, dict):
+        return ""
+    return str(repo.get("path_raw") or repo.get("repo_uri") or repo.get("repo_path") or repo.get("path_display") or "").strip()
+
+
+def _repository_passphrase_ref(repo: Optional[dict]) -> str:
+    if not isinstance(repo, dict):
+        return ""
+    return str(repo.get("passphrase_ref") or "").strip()
+
+
+def _repository_encryption(repo: Optional[dict], fallback: str = "repokey-blake2") -> str:
+    if not isinstance(repo, dict):
+        return fallback
+    return str(repo.get("encryption") or fallback).strip() or fallback
 
 
 def _storagebox_repo_status(params: dict, ui_config: Optional[dict], scripts_dir: Optional[Path]) -> dict:
@@ -352,6 +391,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     meta_usb_profile_key = ""
     meta_smb_profile_key = ""
     meta_storage_profile_key = ""
+    meta_repository_key = ""
+    meta_encryption = ""
     meta_mount_before_run = True
     meta_unmount_after_run = True
     meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False}
@@ -375,6 +416,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
             meta_usb_profile_key = str(meta.get("usb_profile_key") or "").strip()
             meta_smb_profile_key = str(meta.get("smb_profile_key") or "").strip()
             meta_storage_profile_key = str(meta.get("storage_profile_key") or "").strip()
+            meta_repository_key = str(meta.get("repository_key") or "").strip()
+            meta_encryption = str(meta.get("encryption") or "").strip()
             meta_mount_before_run = bool(meta.get("mount_before_run", True))
             meta_unmount_after_run = bool(meta.get("unmount_after_run", True))
             meta_docker_control = _runtime_control_from_meta(meta, "docker")
@@ -403,13 +446,14 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "vm_control": meta_vm_control,
         "source_paths": source_paths or "",
         "repo_path": repo_path or "",
+        "repository_key": meta_repository_key,
         "usb_profile_key": meta_usb_profile_key,
         "smb_profile_key": meta_smb_profile_key,
         "storage_profile_key": meta_storage_profile_key,
         "mount_before_run": meta_mount_before_run,
         "unmount_after_run": meta_unmount_after_run,
         "compression": compression,
-        "encryption": "repokey-blake2",
+        "encryption": meta_encryption or "repokey-blake2",
         "passphrase": "",
         "keep_daily": meta_keep_daily or conf.get(f"RETENTION_{_type_upper(type_id)}_DAILY", "7"),
         "keep_weekly": meta_keep_weekly or conf.get(f"RETENTION_{_type_upper(type_id)}_WEEKLY", "4"),
@@ -628,10 +672,11 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     type_id = params["type_id"].strip()
     location = params.get("location", "local")
     source_paths = [p for p in params.get("source_paths", "").split() if p]
-    repo_path = params.get("repo_path", "").strip()
-    if location == "storagebox":
+    selected_repo = _repository_from_params(params, ui_config)
+    repo_path = _repository_path(selected_repo) or params.get("repo_path", "").strip()
+    if location == "storagebox" and not selected_repo:
         repo_path = _storagebox_repo_from_profile(params, ui_config) or repo_path
-    encryption = params.get("encryption", "repokey-blake2")
+    encryption = _repository_encryption(selected_repo, params.get("encryption", "repokey-blake2"))
     docker_control = _runtime_control_from_params(params, "docker")
     vm_control = _runtime_control_from_params(params, "vm")
     use_docker = docker_control["mode"] != "none"
@@ -672,6 +717,8 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
         "summary": {
             "location": location,
             "repo": repo_path,
+            "repository_key": str((selected_repo or {}).get("repository_key") or params.get("repository_key") or "").strip(),
+            "repository_name": str((selected_repo or {}).get("repository_name") or "").strip(),
             "encryption": encryption,
             "sources_count": len(source_paths),
             "docker": use_docker,
@@ -699,7 +746,11 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     description = params.get("description", "").strip()
     icon = str(params.get("icon", "")).strip().lower()
     icon_color = str(params.get("icon_color", "")).strip().lower()
-    encryption  = params.get("encryption", "repokey-blake2")
+    selected_repo = _repository_from_params(params, ui_config)
+    selected_repo_path = _repository_path(selected_repo)
+    selected_repo_passphrase = _repository_passphrase_ref(selected_repo)
+    selected_repository_key = str((selected_repo or {}).get("repository_key") or params.get("repository_key") or "").strip()
+    encryption  = _repository_encryption(selected_repo, str(params.get("encryption", "repokey-blake2")))
     passphrase  = params.get("passphrase", "").strip()
     passphrase_suffix = _passphrase_suffix(type_id, location)
 
@@ -746,8 +797,10 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     create_repo_default = True if location in {"local", "usb", "smb", "storagebox"} else False
     create_repo_if_missing = bool(existing.get("create_repo_if_missing", create_repo_default))
 
-    repo_default = str(params.get("repo_path", "")).strip()
-    if location == "storagebox":
+    repo_default = selected_repo_path or str(params.get("repo_path", "")).strip()
+    if selected_repo:
+        create_repo_if_missing = False
+    elif location == "storagebox":
         repo_default = _storagebox_repo_from_profile(params, ui_config) or _inject_storage_profile_user_into_repo(repo_default, storage_profile_key, scripts_dir)
         repo_status = _storagebox_repo_status({**params, "repo_path": repo_default}, ui_config, scripts_dir)
         if bool(repo_status.get("exists", False)):
@@ -780,7 +833,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         },
         "passphrase": {
             "conf_key": pass_conf_key,
-            "default": f"/boot/config/borg-backup/secrets/.borg-passphrase-{passphrase_suffix}",
+            "default": selected_repo_passphrase or f"/boot/config/borg-backup/secrets/.borg-passphrase-{passphrase_suffix}",
             "mode": "none" if encryption == "none" else ("create_new" if passphrase else "existing_file"),
         },
         "paths": {
@@ -805,6 +858,8 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "created_at": existing.get("created_at", now_iso),
         "updated_at": now_iso,
     }
+    if selected_repository_key:
+        metadata["repository_key"] = selected_repository_key
 
     if repo_default and "://" not in repo_default and not repo_default.startswith("ssh:"):
         repo_path = Path(repo_default)

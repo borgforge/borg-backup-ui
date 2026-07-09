@@ -181,6 +181,12 @@
     document.getElementById('storage-test-close-btn')?.addEventListener('click', closeStorageTestDetails);
     document.getElementById('storage-test-ok-btn')?.addEventListener('click', closeStorageTestDetails);
     document.getElementById('storage-test-copy-btn')?.addEventListener('click', copyStorageTestDetails);
+    document.getElementById('repository-manager-close-btn')?.addEventListener('click', closeRepositoryManager);
+    document.getElementById('repository-manager-cancel-btn')?.addEventListener('click', closeRepositoryManager);
+    document.getElementById('repository-manager-save-btn')?.addEventListener('click', saveRepositoryManager);
+    document.getElementById('repository-manager-action')?.addEventListener('change', repositoryManagerSyncFields);
+    document.getElementById('repository-manager-encryption')?.addEventListener('change', repositoryManagerSyncFields);
+    document.getElementById('repository-manager-repository-name')?.addEventListener('input', repositoryManagerNameChanged);
     document.getElementById('storage-deploy-close-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-ok-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-send-btn')?.addEventListener('click', storageDeploySendInput);
@@ -237,6 +243,7 @@
     document.getElementById('wiz-usb-profile')?.addEventListener('change', wizardAutoFill);
     document.getElementById('wiz-smb-profile')?.addEventListener('change', wizardAutoFill);
     document.getElementById('wiz-storage-profile')?.addEventListener('change', wizardAutoFill);
+    document.getElementById('wiz-repository-key')?.addEventListener('change', wizardApplySelectedRepository);
     document.getElementById('wiz-icon')?.addEventListener('change', wizardUpdateIconPreview);
     document.getElementById('wiz-icon-color')?.addEventListener('change', wizardUpdateIconPreview);
     document.getElementById('wiz-source-paths')?.addEventListener('input', () => wizardClearError(2));
@@ -297,6 +304,7 @@
     m.setAction('closeScheduleModal', typeof closeScheduleModal === 'function' ? closeScheduleModal : null);
     m.setAction('closeWizardHelpModal', typeof closeWizardDescriptionHelp === 'function' ? closeWizardDescriptionHelp : null);
     m.setAction('closeStorageTestModal', typeof closeStorageTestDetails === 'function' ? closeStorageTestDetails : null);
+    m.setAction('closeRepositoryManager', typeof closeRepositoryManager === 'function' ? closeRepositoryManager : null);
     m.setAction('closeStorageDeployModal', typeof closeStorageDeployModal === 'function' ? closeStorageDeployModal : null);
   }
 

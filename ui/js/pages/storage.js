@@ -110,6 +110,24 @@ function storageName(repo) {
   return raw;
 }
 
+function storageTargetLabel(storage) {
+  const name = String(storage?.display_name || storage?.storage_key || '').trim();
+  const meta = String(storage?.base_path || storage?.mount_path || storage?.endpoint || storage?.identity || '').trim();
+  return meta ? `${name} — ${meta}` : name;
+}
+
+function storageTargets(data) {
+  const rows = Array.isArray(data?.storages) ? data.storages : [];
+  return rows
+    .filter((row) => String(row?.storage_key || '').trim())
+    .sort((a, b) => {
+      const ai = STORAGE_LOCATION_ORDER.indexOf(String(a.location || a.storage_type || '').toLowerCase());
+      const bi = STORAGE_LOCATION_ORDER.indexOf(String(b.location || b.storage_type || '').toLowerCase());
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi)
+        || String(a.display_name || '').localeCompare(String(b.display_name || ''));
+    });
+}
+
 function storageRepositories(data) {
   const groups = data?.groups || {};
   return STORAGE_LOCATION_ORDER.flatMap((location) =>
@@ -123,7 +141,17 @@ function storageVisibleRepositories(data) {
   return storageRepositories(data).filter((repo) => {
     if (location !== 'all' && repo.location !== location) return false;
     if (!query) return true;
-    return [repo.backup_type, repo.conf_key, repo.repository_key, repo.path_display, storageLocationLabel(repo.location), ...(repo.used_by || [])]
+    return [
+      repo.backup_type,
+      repo.conf_key,
+      repo.repository_key,
+      repo.repository_name,
+      repo.display_name,
+      repo.storage_name,
+      repo.path_display,
+      storageLocationLabel(repo.location),
+      ...(repo.used_by || []),
+    ]
       .some((value) => String(value || '').toLocaleLowerCase().includes(query));
   });
 }
@@ -173,6 +201,9 @@ function renderStorage(data) {
     <section class="storage-repository-panel ui-panel">
       <div class="storage-repository-tools">
         <strong>${storageT('storage.repositories')}</strong>
+        <button class="btn btn-primary btn-sm" type="button" data-storage-action="open-repository-manager">
+          ${storageT('storage.addRepository')}
+        </button>
         <input id="storage-repo-search" class="form-input" type="search"
           value="${escHtml(storageState.search || '')}"
           placeholder="${storageT('storage.searchPlaceholder')}"
@@ -366,6 +397,9 @@ function onStorageContentClick(event) {
   if (action === 'show-repo-details') {
     return openStorageRepositoryDetails(el.dataset.repositoryKey || '');
   }
+  if (action === 'open-repository-manager') {
+    return openRepositoryManager();
+  }
 }
 
 function _normPath(v) {
@@ -532,6 +566,123 @@ function openStorageRepositoryDetails(repositoryKey) {
 
 function closeStorageTestDetails() {
   document.getElementById('storage-test-modal')?.classList.add('hidden');
+}
+
+function repositoryManagerSetMessage(type, message) {
+  const el = document.getElementById('repository-manager-message');
+  if (!el) return;
+  if (!message) {
+    el.className = 'status-message hidden';
+    el.textContent = '';
+    return;
+  }
+  el.className = `status-message ${type || 'info'}`;
+  el.textContent = message;
+}
+
+function repositoryManagerSyncFields() {
+  const action = document.getElementById('repository-manager-action')?.value || 'create';
+  const encryption = document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2';
+  document.getElementById('repository-manager-passphrase-group')
+    ?.classList.toggle('hidden', encryption === 'none');
+  ['repository-manager-storage-quota', 'repository-manager-append-only', 'repository-manager-make-parent-dirs'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = action !== 'create';
+  });
+}
+
+function repositoryManagerFillStorages() {
+  const sel = document.getElementById('repository-manager-storage');
+  if (!sel) return;
+  const rows = storageTargets(storageState.data || {});
+  sel.innerHTML = rows.length
+    ? rows.map((storage) => `<option value="${escHtml(storage.storage_key || '')}">${escHtml(storageTargetLabel(storage))}</option>`).join('')
+    : `<option value="">${storageT('storage.noStorageTargets')}</option>`;
+}
+
+function openRepositoryManager() {
+  const modal = document.getElementById('repository-manager-modal');
+  if (!modal) return;
+  repositoryManagerSetMessage('', '');
+  repositoryManagerFillStorages();
+  const defaults = {
+    'repository-manager-action': 'create',
+    'repository-manager-display-name': '',
+    'repository-manager-repository-name': '',
+    'repository-manager-relative-path': '',
+    'repository-manager-encryption': 'repokey-blake2',
+    'repository-manager-passphrase': '',
+    'repository-manager-storage-quota': '',
+  };
+  Object.entries(defaults).forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  });
+  const relative = document.getElementById('repository-manager-relative-path');
+  if (relative) relative.dataset.autofilled = 'false';
+  const appendOnly = document.getElementById('repository-manager-append-only');
+  const parentDirs = document.getElementById('repository-manager-make-parent-dirs');
+  if (appendOnly) appendOnly.checked = false;
+  if (parentDirs) parentDirs.checked = true;
+  repositoryManagerSyncFields();
+  modal.classList.remove('hidden');
+}
+
+function closeRepositoryManager() {
+  document.getElementById('repository-manager-modal')?.classList.add('hidden');
+}
+
+function repositoryManagerSlug(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Za-z0-9._/-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function repositoryManagerNameChanged() {
+  const repoName = document.getElementById('repository-manager-repository-name');
+  const relative = document.getElementById('repository-manager-relative-path');
+  if (!repoName || !relative) return;
+  if (!relative.value || relative.dataset.autofilled === 'true') {
+    relative.value = repositoryManagerSlug(repoName.value);
+    relative.dataset.autofilled = 'true';
+  }
+}
+
+async function saveRepositoryManager() {
+  repositoryManagerSetMessage('', '');
+  const action = document.getElementById('repository-manager-action')?.value || 'create';
+  const payload = {
+    action,
+    storage_key: document.getElementById('repository-manager-storage')?.value || '',
+    display_name: document.getElementById('repository-manager-display-name')?.value || '',
+    repository_name: document.getElementById('repository-manager-repository-name')?.value || '',
+    relative_path: document.getElementById('repository-manager-relative-path')?.value || '',
+    encryption: document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2',
+    passphrase: document.getElementById('repository-manager-passphrase')?.value || '',
+    storage_quota: action === 'create' ? (document.getElementById('repository-manager-storage-quota')?.value || '') : '',
+    append_only: action === 'create' && !!document.getElementById('repository-manager-append-only')?.checked,
+    make_parent_dirs: action === 'create' && !!document.getElementById('repository-manager-make-parent-dirs')?.checked,
+  };
+  const btn = document.getElementById('repository-manager-save-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/repositories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    closeRepositoryManager();
+    await refreshStorage();
+    showMsg('storage-message', 'success', storageT('storage.repositorySaved'));
+  } catch (err) {
+    repositoryManagerSetMessage('error', err.message || storageT('storage.error'));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function copyStorageTestDetails() {

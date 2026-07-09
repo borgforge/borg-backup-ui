@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,8 +10,8 @@ if str(API_ROOT) not in sys.path:
 
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
-from repositories_api import read_repository_store, repository_key_for  # noqa: E402
-from storage_objects_api import read_storage_store, storage_key_for  # noqa: E402
+from repositories_api import create_or_import_repository, read_repository_store, repository_key_for  # noqa: E402
+from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
 
 
@@ -99,32 +100,49 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
     assert data["storages"][0]["storage_key"] == rows[0]["storage_key"]
 
 
-def test_wizard_save_creates_repository_object(tmp_path: Path):
+def test_wizard_save_uses_selected_repository_object(tmp_path: Path):
     source = tmp_path / "source"
     source.mkdir()
     scripts = tmp_path / "scripts"
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    created = create_or_import_repository(config, {
+        "action": "import",
+        "storage_key": "storage_local_test",
+        "display_name": "Photos",
+        "repository_name": "borg-backup-photos",
+        "relative_path": "borg-backup-photos",
+        "encryption": "none",
+    })
+    repo_key = created["repository"]["repository_key"]
     params = {
         "type_id": "photos",
         "job_name": "Photos",
         "source_paths": str(source),
-        "repo_path": "/mnt/backup/borg-backup-photos",
+        "repository_key": repo_key,
         "location": "local",
-        "encryption": "none",
     }
 
-    result = save_job(params, scripts, tmp_path, {"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    result = save_job(params, scripts, tmp_path, config)
     job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
-    store = read_repository_store({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
-    expected_key = repository_key_for("repo_photos_local", "/mnt/backup/borg-backup-photos")
-
-    assert job["repository_key"] == expected_key
-    assert store["repositories"][0]["repository_key"] == expected_key
+    store = read_repository_store(config)
+    assert job["repository_key"] == repo_key
+    assert job["repo"]["default"] == "/mnt/backup/borg-backup-photos"
+    assert job["create_repo_if_missing"] is False
+    assert store["repositories"][0]["repository_key"] == repo_key
     assert store["repositories"][0]["repository_name"] == "borg-backup-photos"
     assert store["repositories"][0]["job_name"] == "Photos"
     assert store["repositories"][0]["storage_key"].startswith("storage_local_")
     assert store["repositories"][0]["relative_path"] == "borg-backup-photos"
     assert store["repositories"][0]["used_by"] == ["photos_local"]
-    assert read_storage_store({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["storages"][0]["base_path"] == "/mnt/backup"
+    assert read_storage_store(config)["storages"][0]["base_path"] == "/mnt/backup"
 
 
 def test_repository_objects_v2_enriches_existing_repository_names(tmp_path: Path):
@@ -206,7 +224,7 @@ def test_storage_objects_v1_links_existing_repository_objects(tmp_path: Path):
     assert repo["relative_path"] == "borg-backup-appdata"
 
 
-def test_repository_objects_use_profile_storage_key_for_new_jobs(tmp_path: Path):
+def test_repository_manager_import_uses_profile_storage_key(tmp_path: Path):
     source = tmp_path / "source"
     source.mkdir()
     settings_file = tmp_path / "config" / "settings.json"
@@ -221,19 +239,29 @@ def test_repository_objects_use_profile_storage_key_for_new_jobs(tmp_path: Path)
         "smb_profiles": [],
         "storage_profiles": [],
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    params = {
-        "type_id": "photos",
-        "job_name": "Photos",
-        "source_paths": str(source),
-        "repo_path": "/mnt/disks/USB5TB/borg-backup-photos",
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    storage_key = storage_key_for("usb", "usb-profile:usb-5tb")
+    write_storage_store(config, {"storages": [{
+        "storage_key": storage_key,
+        "display_name": "USB-5TB",
+        "storage_type": "usb",
         "location": "usb",
-        "usb_profile_key": "usb-5tb",
+        "identity": "usb-profile:usb-5tb",
+        "profile_key": "usb-5tb",
+        "base_path": "/mnt/disks/USB5TB",
+        "mount_path": "/mnt/disks/USB5TB",
+        "source": "usb_profile",
+    }]})
+    storage = read_storage_store(config)["storages"][0]
+    create_or_import_repository(config, {
+        "action": "import",
+        "storage_key": storage["storage_key"],
+        "display_name": "Photos",
+        "repository_name": "borg-backup-photos",
+        "relative_path": "borg-backup-photos",
         "encryption": "none",
-    }
-
-    save_job(params, tmp_path / "scripts", tmp_path, {"BACKUP_SCRIPTS_DIR": str(tmp_path)})
-    repo = read_repository_store({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["repositories"][0]
-    storage = read_storage_store({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["storages"][0]
+    })
+    repo = read_repository_store(config)["repositories"][0]
 
     assert repo["storage_key"] == storage["storage_key"]
     assert repo["storage_key"].startswith("storage_usb_")
@@ -241,6 +269,7 @@ def test_repository_objects_use_profile_storage_key_for_new_jobs(tmp_path: Path)
     assert storage["display_name"] == "USB-5TB"
     assert storage["profile_key"] == "usb-5tb"
     assert storage["base_path"] == "/mnt/disks/USB5TB"
+    assert repo["usb_profile_key"] == "usb-5tb"
     assert repo["relative_path"] == "borg-backup-photos"
 
 
@@ -363,3 +392,99 @@ def test_storage_objects_v2_enriches_storage_profile_fields(tmp_path: Path):
     assert storage["user"] == "u1"
     assert storage["base_path"] == "./backup"
     assert storage["ssh_key_path"] == "/root/.ssh/id_rsa_storagebox"
+
+
+def test_repository_manager_create_runs_borg_init_and_stores_secret(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return Result()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = create_or_import_repository(config, {
+        "action": "create",
+        "storage_key": "storage_local_test",
+        "display_name": "Photos",
+        "repository_name": "borg-backup-photos",
+        "relative_path": "borg-backup-photos",
+        "encryption": "repokey-blake2",
+        "passphrase": "super-secret-passphrase",
+        "append_only": True,
+        "make_parent_dirs": True,
+        "storage_quota": "5G",
+    })
+
+    repo = result["repository"]
+    assert result["ok"] is True
+    assert calls
+    cmd = calls[0][0]
+    assert cmd == [
+        "borg",
+        "init",
+        "--encryption=repokey-blake2",
+        "--append-only",
+        "--storage-quota",
+        "5G",
+        "--make-parent-dirs",
+        "/mnt/backup/borg-backup-photos",
+    ]
+    assert "shell" not in calls[0][1]
+    secret = Path(repo["passphrase_ref"])
+    assert secret.is_file()
+    assert secret.read_text(encoding="utf-8") == "super-secret-passphrase"
+    assert "super-secret-passphrase" not in result["output"]
+    assert repo["initialized"] is True
+
+
+def test_repository_manager_import_can_store_passphrase_without_borg_init(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Storagebox",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "identity": "storagebox-profile:storage-1",
+        "profile_key": "storage-1",
+        "host": "example.test",
+        "port": "23",
+        "user": "u1",
+        "base_path": "./backup",
+        "ssh_key_path": "/root/.ssh/id_rsa",
+    }]})
+
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("import must not run borg init")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+    result = create_or_import_repository(config, {
+        "action": "import",
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Flash Storagebox",
+        "repository_name": "borg-backup-flash",
+        "relative_path": "borg-backup-flash",
+        "encryption": "repokey-blake2",
+        "passphrase": "import-secret",
+    })
+
+    repo = result["repository"]
+    assert repo["initialized"] is True
+    assert repo["storage_profile_key"] == "storage-1"
+    assert repo["repo_uri"] == "ssh://u1@example.test:23/./backup/borg-backup-flash"
+    secret = Path(repo["passphrase_ref"])
+    assert secret.is_file()
+    assert secret.read_text(encoding="utf-8") == "import-secret"
