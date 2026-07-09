@@ -6,6 +6,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #184
+- Storage:
+  - Added repository objects as a dedicated metadata inventory in `config/repositories.json`.
+  - Existing wizard jobs are migrated to repository objects and receive a stable `repository_key`.
+  - New or edited wizard jobs update the repository inventory automatically.
+  - The Storage page now prefers managed repository objects and shows which jobs use each repository.
+
 ### Issue #180
 - Dashboard:
   - Growth now falls back to the previous backup status for the same job when no weekly snapshot baseline exists, avoiding unnecessary dash-only growth values.

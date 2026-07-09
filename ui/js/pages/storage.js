@@ -84,7 +84,7 @@ function storageVisibleRepositories(data) {
   return storageRepositories(data).filter((repo) => {
     if (location !== 'all' && repo.location !== location) return false;
     if (!query) return true;
-    return [repo.backup_type, repo.conf_key, repo.path_display, storageLocationLabel(repo.location)]
+    return [repo.backup_type, repo.conf_key, repo.repository_key, repo.path_display, storageLocationLabel(repo.location), ...(repo.used_by || [])]
       .some((value) => String(value || '').toLocaleLowerCase().includes(query));
   });
 }
@@ -215,20 +215,30 @@ function renderStorageRepositoryRow(repo, profiles) {
   const detailsBtnId = `repo-test-details-${repo.conf_key}`;
   const profile = repo.location === 'smb' ? _findSmbProfileForRepo(repo, profiles) : null;
   const unavailable = repo.location === 'smb' && profile && !profile.is_mounted;
-  const statusText = unavailable ? storageT('storage.notMounted') : storageT('storage.configured');
+  const managed = !!repo.repository_key;
+  const statusText = unavailable
+    ? storageT('storage.notMounted')
+    : (managed ? storageT('storage.managedRepository') : storageT('storage.configured'));
   const statusClass = unavailable ? 'warning' : 'success';
   const job = storageJobForRepository(repo);
   const icon = typeof resolveJobIcon === 'function' ? resolveJobIcon(job || repo) : repo.backup_type;
   const color = typeof resolveJobIconColor === 'function' ? resolveJobIconColor(job || repo) : '';
   const iconColorClass = color ? ` type-icon-color-${color}` : '';
+  const usedBy = Array.isArray(repo.used_by) && repo.used_by.length
+    ? repo.used_by.join(', ')
+    : (Array.isArray(repo.source_job_keys) ? repo.source_job_keys.join(', ') : '');
+  const meta = [
+    repo.repository_key || repo.conf_key || '',
+    usedBy ? storageT('storage.usedBy', { jobs: usedBy }) : '',
+  ].filter(Boolean).join(' · ');
 
   return `<tr>
     <td>
       <div class="storage-repository-main">
         <span class="type-icon type-icon-${escHtml(String(repo.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(icon)}</span>
         <span>
-          <strong>${escHtml(storageTypeLabel(repo))}</strong>
-          <small>${escHtml(repo.conf_key || '')}</small>
+          <strong>${escHtml(repo.display_name || storageTypeLabel(repo))}</strong>
+          <small>${escHtml(meta)}</small>
         </span>
       </div>
     </td>
@@ -257,7 +267,10 @@ function storageJobForRepository(repo) {
   const jobs = Array.isArray(storageState.jobs) ? storageState.jobs : [];
   const confKey = String(repo?.conf_key || '');
   const jobKey = confKey.startsWith('JOB:') ? confKey.slice(4) : '';
-  return jobs.find((job) => jobKey && String(job.key || '') === jobKey)
+  const usedBy = Array.isArray(repo?.used_by) ? repo.used_by.map((x) => String(x || '')) : [];
+  const sourceJobKeys = Array.isArray(repo?.source_job_keys) ? repo.source_job_keys.map((x) => String(x || '')) : [];
+  return jobs.find((job) => usedBy.includes(String(job.key || '')) || sourceJobKeys.includes(String(job.key || '')))
+    || jobs.find((job) => jobKey && String(job.key || '') === jobKey)
     || jobs.find((job) =>
       String(job.backup_type || '').toLowerCase() === String(repo?.backup_type || '').toLowerCase()
       && String(job.location || '').toLowerCase() === String(repo?.location || '').toLowerCase()

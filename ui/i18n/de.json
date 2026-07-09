@@ -162,6 +162,8 @@
     "searchPlaceholder": "Repository suchen...",
     "noMatchingRepositories": "Keine passenden Repositories gefunden",
     "configured": "Konfiguriert",
+    "managedRepository": "Verwaltet",
+    "usedBy": "Verwendet von: {jobs}",
     "smbProfiles": "SMB-Profile",
     "smbProfilesHint": "Mount-Status und Profilaktionen",
     "smbProfileMeta": "{profiles} Profile · {mounted} gemountet",

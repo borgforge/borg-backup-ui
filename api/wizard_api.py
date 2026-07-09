@@ -811,6 +811,19 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         if repo_path.exists() and (repo_path / "config").exists():
             metadata["create_repo_if_missing"] = False
 
+    repo_config = ui_config or {
+        "BACKUP_SCRIPTS_DIR": str(data_root or (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)),
+    }
+    try:
+        from repositories_api import upsert_repository_for_job
+        repository_key = upsert_repository_for_job(repo_config, metadata, created_by="wizard")
+        if repository_key:
+            metadata["repository_key"] = repository_key
+    except Exception:
+        # Repository objects are metadata for the UI. Job saving must not fail
+        # solely because the inventory could not be refreshed.
+        pass
+
     meta_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     if existing_job_key and existing_job_key != job_key:

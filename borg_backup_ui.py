@@ -670,6 +670,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/jobs/running": self._get_running,
                 "/api/schedules": self._get_schedules,
                 "/api/storage": self._get_storage,
+                "/api/repositories": self._get_repositories,
                 "/api/settings": self._get_settings,
                 "/api/settings/basic": self._get_settings_basic,
                 "/api/setup-status": self._get_setup_status,
@@ -1419,6 +1420,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_storage(self) -> dict:
         from config_api import get_repositories_data
         return get_repositories_data(self.config)
+
+    def _get_repositories(self) -> dict:
+        from repositories_api import read_repository_store
+        return read_repository_store(self.config)
 
     def _get_settings(self) -> dict:
         from config_api import get_settings_data

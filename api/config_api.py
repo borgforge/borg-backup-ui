@@ -950,6 +950,17 @@ def get_repositories_data(ui_config: dict) -> dict:
     except Exception:
         pass
 
+    # Prefer the explicit repository object inventory when available. The
+    # fallback above keeps older/incomplete setups visible until the startup
+    # migration has populated repositories.json.
+    try:
+        from repositories_api import build_repository_groups
+        object_groups = build_repository_groups(ui_config)
+        if any(object_groups.get(loc) for loc in object_groups):
+            groups = object_groups
+    except Exception:
+        pass
+
     # Sortierung innerhalb Gruppen
     type_order = {}
     for i, t in enumerate(BACKUP_TYPES):
