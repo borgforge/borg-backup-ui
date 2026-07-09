@@ -15,12 +15,20 @@
     "setupSubtitle": "Bitte den ersten Admin-Benutzer anlegen.",
     "username": "Benutzername",
     "password": "Passwort",
+    "passwordHint": "Mindestens 12 Zeichen.",
     "passwordConfirm": "Passwort bestätigen",
     "loginAction": "Anmelden",
     "setupAction": "Admin anlegen",
     "loginFailed": "Anmeldung fehlgeschlagen.",
     "setupFailed": "Erstkonfiguration fehlgeschlagen.",
-    "autoLoginFailed": "Die automatische Anmeldung ist fehlgeschlagen."
+    "autoLoginFailed": "Die automatische Anmeldung ist fehlgeschlagen.",
+    "errors": {
+      "usernameRequired": "Bitte einen Benutzernamen eingeben.",
+      "usernameInvalid": "Der Benutzername muss 3-64 Zeichen enthalten. Erlaubt sind a-z, 0-9, Punkt, Unterstrich und Bindestrich.",
+      "passwordTooShort": "Das Passwort muss mindestens 12 Zeichen enthalten.",
+      "passwordMismatch": "Die Passwortbestätigung stimmt nicht überein.",
+      "setupNotRequired": "Die Erstkonfiguration ist nicht mehr erforderlich."
+    }
   },
   "nav": {
     "dashboard": "Dashboard",

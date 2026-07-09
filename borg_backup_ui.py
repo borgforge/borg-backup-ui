@@ -2836,7 +2836,7 @@ if(document.getElementById('login-username')){document.getElementById('login-use
 <div class="login-sub" data-i18n="auth.setupSubtitle"></div>
 <div class="login-body">
 <div class="form-group"><label class="form-label" data-i18n="auth.username"></label><input id="setup-username" class="form-input" type="text" autocomplete="username" autofocus></div>
-<div class="form-group"><label class="form-label" data-i18n="auth.password"></label><input id="setup-password" class="form-input" type="password" autocomplete="new-password"></div>
+<div class="form-group"><label class="form-label" data-i18n="auth.password"></label><input id="setup-password" class="form-input" type="password" autocomplete="new-password"><div class="ui-field__hint" data-i18n="auth.passwordHint"></div></div>
 <div class="form-group"><label class="form-label" data-i18n="auth.passwordConfirm"></label><input id="setup-password-confirm" class="form-input" type="password" autocomplete="new-password"></div>
 <div id="setup-msg" class="status-message hidden login-msg"></div>
 <button id="setup-btn" class="btn btn-primary" style="width:100%" data-i18n="auth.setupAction"></button>
@@ -2845,7 +2845,18 @@ if(document.getElementById('login-username')){document.getElementById('login-use
 const btn=document.getElementById('setup-btn');const msg=document.getElementById('setup-msg');
 const i18nReady=window.BBUI.components.i18n.init().then(()=>{document.title=window.BBUI.components.i18n.t('auth.setupTitle');});
 function authT(key){return window.BBUI.components.i18n.t(key);}
-function authApiError(data,fallback){const code=String(data?.code||'').trim();if(code==='bad_request'||code==='forbidden')return authT(fallback);const key=code?`api.errors.${code}`:'';const translated=key?authT(key):'';return translated&&translated!==key?translated:authT(fallback);}
+function setupValidationMessage(data){
+ const raw=String(data?.message||data?.details||'').trim();
+ const known={
+  'Username is required':'auth.errors.usernameRequired',
+  'Username is invalid (3-64 characters: a-z, 0-9, ., _, -)':'auth.errors.usernameInvalid',
+  'Password must contain at least 12 characters':'auth.errors.passwordTooShort',
+  'The password confirmation does not match':'auth.errors.passwordMismatch',
+  'Administrator setup is not required':'auth.errors.setupNotRequired'
+ };
+ const key=known[raw]||'';return key?authT(key):'';
+}
+function authApiError(data,fallback){const code=String(data?.code||'').trim();if(code==='forbidden')return authT(fallback);if(code==='bad_request')return setupValidationMessage(data)||authT(fallback);const key=code?`api.errors.${code}`:'';const translated=key?authT(key):'';return translated&&translated!==key?translated:authT(fallback);}
 function showErr(t){msg.textContent=t;msg.className='status-message error login-msg';}
 async function doSetup(){btn.classList.add('loading');msg.className='status-message hidden login-msg';
 try{
@@ -2853,6 +2864,10 @@ try{
  const username=(document.getElementById('setup-username').value||'').trim();
  const password=document.getElementById('setup-password').value||'';
  const password_confirm=document.getElementById('setup-password-confirm').value||'';
+ if(!username)throw new Error(authT('auth.errors.usernameRequired'));
+ if(!/^[a-z0-9._-]{3,64}$/.test(username))throw new Error(authT('auth.errors.usernameInvalid'));
+ if(password.length<12)throw new Error(authT('auth.errors.passwordTooShort'));
+ if(password!==password_confirm)throw new Error(authT('auth.errors.passwordMismatch'));
  const r=await fetch('/api/auth/setup-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,password_confirm})});
  const d=await r.json();if(!r.ok||!d.ok)throw new Error(authApiError(d,'auth.setupFailed'));
  const lr=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});

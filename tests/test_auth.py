@@ -78,7 +78,10 @@ def test_setup_page_uses_shared_language_preference_and_localized_error_codes():
 
     assert '/ui/js/components/i18n.js' in html
     assert 'data-i18n="auth.setupTitle"' in html
+    assert 'data-i18n="auth.passwordHint"' in html
     assert 'data-i18n="auth.passwordConfirm"' in html
+    assert "auth.errors.passwordTooShort" in html
+    assert "auth.errors.passwordMismatch" in html
     assert "api.errors.${code}" in html
     assert "d.message" not in html
     assert "Setup fehlgeschlagen" not in html
