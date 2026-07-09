@@ -12,6 +12,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Existing wizard jobs are migrated to repository objects and receive a stable `repository_key`.
   - New or edited wizard jobs update the repository inventory automatically.
   - The Storage page now prefers managed repository objects and shows which jobs use each repository.
+  - Repository objects now separate human-readable job, storage and repository names from technical IDs.
+  - The Storage table shows display names by default and moves technical repository/job/storage IDs into the Details view.
 
 ### Issue #180
 - Dashboard:

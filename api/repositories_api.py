@@ -11,6 +11,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 
 SCHEMA_VERSION = 1
@@ -42,6 +43,75 @@ def _repo_identity(path_or_uri: str) -> str:
     if "://" in text:
         return text.rstrip("/")
     return text.rstrip("/")
+
+
+def repository_name_from_path(path_or_uri: str) -> str:
+    text = str(path_or_uri or "").strip()
+    if not text:
+        return ""
+    parsed_path = urlsplit(text).path if "://" in text else text
+    name = unquote(parsed_path.rstrip("/").rsplit("/", 1)[-1]).strip()
+    return name or text.rstrip("/").rsplit("/", 1)[-1].strip()
+
+
+def _storage_name_from_location(location: str) -> str:
+    return {
+        "local": "Local",
+        "usb": "USB",
+        "smb": "SMB",
+        "storagebox": "Storagebox",
+    }.get(str(location or "").strip().lower(), str(location or "").strip())
+
+
+def storage_name_from_job(job: dict[str, Any]) -> str:
+    location = str(job.get("location") or "").strip().lower()
+    candidates = [
+        job.get("storage_profile_name"),
+        job.get("usb_profile_name"),
+        job.get("smb_profile_name"),
+        job.get("profile_name"),
+        job.get("storage_profile_key"),
+        job.get("usb_profile_key"),
+        job.get("smb_profile_key"),
+    ]
+    for item in candidates:
+        value = str(item or "").strip()
+        if value:
+            return value
+    return _storage_name_from_location(location)
+
+
+def enrich_repository_display_fields(repo: dict[str, Any], job: dict[str, Any] | None = None) -> dict[str, Any]:
+    row = dict(repo or {})
+    path_raw = str(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path") or "").strip()
+    job_name = str(row.get("job_name") or "").strip()
+    if isinstance(job, dict):
+        job_name = str(job.get("name") or job.get("job_key") or job_name).strip()
+    if not job_name:
+        job_name = str(row.get("display_name") or row.get("backup_type") or row.get("repository_key") or "").strip()
+
+    repository_name = str(row.get("repository_name") or "").strip()
+    if not repository_name:
+        repository_name = repository_name_from_path(path_raw)
+    if not repository_name:
+        repository_name = str(row.get("repository_key") or "").strip()
+
+    storage_name = str(row.get("storage_name") or "").strip()
+    if isinstance(job, dict):
+        storage_name = storage_name_from_job(job)
+    if not storage_name:
+        profile_key = (
+            str(row.get("storage_profile_key") or "").strip()
+            or str(row.get("usb_profile_key") or "").strip()
+            or str(row.get("smb_profile_key") or "").strip()
+        )
+        storage_name = profile_key or _storage_name_from_location(str(row.get("location") or row.get("storage_type") or ""))
+
+    row["repository_name"] = repository_name
+    row["job_name"] = job_name
+    row["storage_name"] = storage_name
+    row["display_name"] = job_name or repository_name or str(row.get("display_name") or row.get("repository_key") or "").strip()
+    return row
 
 
 def _unique_repository_key(base_key: str, existing: dict[str, dict[str, Any]], identity: str) -> str:
@@ -112,17 +182,20 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             repo_uri = path_raw
         if "://" not in path_raw and not repo_path:
             repo_path = path_raw
-        out.append({
+        normalized = enrich_repository_display_fields({
             "repository_key": key,
             "display_name": str(row.get("display_name") or key).strip() or key,
             "backup_type": str(row.get("backup_type") or "").strip().lower(),
             "location": location,
             "storage_type": str(row.get("storage_type") or location).strip().lower(),
             "storage_key": str(row.get("storage_key") or location).strip(),
+            "storage_name": str(row.get("storage_name") or "").strip(),
             "storage_profile_key": str(row.get("storage_profile_key") or "").strip(),
             "usb_profile_key": str(row.get("usb_profile_key") or "").strip(),
             "smb_profile_key": str(row.get("smb_profile_key") or "").strip(),
             "repo_conf_key": str(row.get("repo_conf_key") or row.get("conf_key") or "").strip(),
+            "repository_name": str(row.get("repository_name") or "").strip(),
+            "job_name": str(row.get("job_name") or "").strip(),
             "repo_path": repo_path,
             "repo_uri": repo_uri,
             "path_raw": path_raw,
@@ -139,6 +212,7 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "source_job_keys": source_job_keys,
             "used_by": used_by,
         })
+        out.append(normalized)
     out.sort(key=lambda item: (str(item.get("location") or ""), str(item.get("display_name") or "")))
     return out
 
@@ -158,6 +232,8 @@ def repository_from_job(job: dict[str, Any], *, created_by: str = "migration") -
     usb_profile_key = str(job.get("usb_profile_key") or "").strip()
     smb_profile_key = str(job.get("smb_profile_key") or "").strip()
     display_name = str(job.get("name") or job_key).strip()
+    repository_name = repository_name_from_path(repo_path)
+    storage_name = storage_name_from_job(job)
     storage_key = location
     profile_key = storage_profile_key or usb_profile_key or smb_profile_key
     if profile_key:
@@ -168,10 +244,13 @@ def repository_from_job(job: dict[str, Any], *, created_by: str = "migration") -
     return {
         "repository_key": f"repo_{job_key}",
         "display_name": display_name,
+        "repository_name": repository_name,
+        "job_name": display_name,
         "backup_type": backup_type,
         "location": location,
         "storage_type": "ssh" if location == "storagebox" else location,
         "storage_key": storage_key,
+        "storage_name": storage_name,
         "storage_profile_key": storage_profile_key,
         "usb_profile_key": usb_profile_key,
         "smb_profile_key": smb_profile_key,

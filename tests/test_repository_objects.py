@@ -50,6 +50,9 @@ def test_repository_objects_migration_links_existing_jobs(tmp_path: Path):
     assert result["results"]["repository_objects_v1"]["status"] == "applied"
     assert job["repository_key"] == "repo_appdata_local"
     assert store["repositories"][0]["repository_key"] == "repo_appdata_local"
+    assert store["repositories"][0]["repository_name"] == "borg-backup-appdata"
+    assert store["repositories"][0]["job_name"] == "Appdata"
+    assert store["repositories"][0]["storage_name"] == "Local"
     assert store["repositories"][0]["path_raw"] == "/mnt/backup/borg-backup-appdata"
     assert store["repositories"][0]["used_by"] == ["appdata_local"]
 
@@ -76,6 +79,8 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
 
     assert rows[0]["repository_key"] == "repo_appdata_local"
     assert rows[0]["display_name"] == "Appdata"
+    assert rows[0]["repository_name"] == "borg-backup-appdata"
+    assert rows[0]["job_name"] == "Appdata"
     assert rows[0]["used_by"] == ["appdata_local"]
 
 
@@ -98,4 +103,42 @@ def test_wizard_save_creates_repository_object(tmp_path: Path):
 
     assert job["repository_key"] == "repo_photos_local"
     assert store["repositories"][0]["repository_key"] == "repo_photos_local"
+    assert store["repositories"][0]["repository_name"] == "borg-backup-photos"
+    assert store["repositories"][0]["job_name"] == "Photos"
     assert store["repositories"][0]["used_by"] == ["photos_local"]
+
+
+def test_repository_objects_v2_enriches_existing_repository_names(tmp_path: Path):
+    job_file = _write_job(tmp_path, "appdata_local", "/mnt/backup/borg-backup-appdata")
+    job = json.loads(job_file.read_text(encoding="utf-8"))
+    job["repository_key"] = "repo_appdata_local"
+    job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    repo_file = tmp_path / "config" / "repositories.json"
+    repo_file.write_text(json.dumps({
+        "schema_version": 1,
+        "updated_at": "2026-07-09T10:00:00Z",
+        "repositories": [{
+            "repository_key": "repo_appdata_local",
+            "display_name": "Appdata - Local",
+            "backup_type": "appdata",
+            "location": "local",
+            "storage_type": "local",
+            "storage_key": "local",
+            "repo_path": "/mnt/backup/borg-backup-appdata",
+            "path_raw": "/mnt/backup/borg-backup-appdata",
+            "path_display": "/mnt/backup/borg-backup-appdata",
+            "source_job_keys": ["appdata_local"],
+            "used_by": ["appdata_local"],
+        }],
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    result = run_startup_migrations(config)
+    store = read_repository_store(config)
+    repo = store["repositories"][0]
+
+    assert result["results"]["repository_objects_v2"]["status"] == "applied"
+    assert repo["display_name"] == "Appdata"
+    assert repo["repository_name"] == "borg-backup-appdata"
+    assert repo["job_name"] == "Appdata"
+    assert repo["storage_name"] == "Local"

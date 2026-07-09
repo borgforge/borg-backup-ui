@@ -84,6 +84,32 @@ function storageRepositoryTitle(repo, job) {
   return location ? `${base} - ${location}` : base;
 }
 
+function storageRepositoryName(repo) {
+  const explicit = String(repo?.repository_name || '').trim();
+  if (explicit) return explicit;
+  const path = String(repo?.path_display || repo?.path_raw || repo?.repo_uri || repo?.repo_path || '').trim().replace(/\/+$/, '');
+  if (!path) return String(repo?.repository_key || repo?.conf_key || '').trim();
+  const pathOnly = path.includes('://') ? path.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, '') : path;
+  const leaf = (pathOnly.split('/').filter(Boolean).pop() || path).trim();
+  try {
+    return decodeURIComponent(leaf);
+  } catch (_) {
+    return leaf;
+  }
+}
+
+function storageJobName(repo, job) {
+  return String(repo?.job_name || job?.name || repo?.display_name || repo?.used_by?.[0] || repo?.source_job_keys?.[0] || '').trim();
+}
+
+function storageName(repo) {
+  const raw = String(repo?.storage_name || '').trim();
+  const location = String(repo?.location || '').trim().toLowerCase();
+  if (!raw || raw.toLowerCase() === location) return storageLocationLabel(location);
+  if ({ local: true, usb: true, smb: true, storagebox: true }[raw.toLowerCase()]) return storageLocationLabel(raw.toLowerCase());
+  return raw;
+}
+
 function storageRepositories(data) {
   const groups = data?.groups || {};
   return STORAGE_LOCATION_ORDER.flatMap((location) =>
@@ -242,9 +268,11 @@ function renderStorageRepositoryRow(repo, profiles) {
     : (Array.isArray(repo.source_job_keys) ? repo.source_job_keys.join(', ') : '');
   const repositoryKey = repo.repository_key || repo.conf_key || '';
   const title = storageRepositoryTitle(repo, job);
+  const repositoryName = storageRepositoryName(repo);
+  const jobName = storageJobName(repo, job);
   const metaTitle = [
-    repositoryKey ? storageT('storage.repositoryKey', { key: repositoryKey }) : '',
-    usedBy ? storageT('storage.usedBy', { jobs: usedBy }) : '',
+    repositoryName ? `${storageT('storage.repositoryNameLabel')} ${repositoryName}` : '',
+    jobName ? `${storageT('storage.jobNameLabel')} ${jobName}` : '',
   ].filter(Boolean).join(' · ');
 
   return `<tr>
@@ -254,17 +282,20 @@ function renderStorageRepositoryRow(repo, profiles) {
         <span>
           <strong title="${escHtml(title)}">${escHtml(title)}</strong>
           <small class="storage-repository-meta" title="${escHtml(metaTitle)}">
-            ${repositoryKey ? `<span><b>${storageT('storage.repositoryKeyLabel')}</b>${escHtml(repositoryKey)}</span>` : ''}
-            ${usedBy ? `<span><b>${storageT('storage.usedByLabel')}</b>${escHtml(usedBy)}</span>` : ''}
+            ${repositoryName ? `<span><b>${storageT('storage.repositoryNameLabel')}</b>${escHtml(repositoryName)}</span>` : ''}
+            ${jobName ? `<span><b>${storageT('storage.jobNameLabel')}</b>${escHtml(jobName)}</span>` : ''}
           </small>
         </span>
       </div>
     </td>
-    <td><span class="badge info">${escHtml(storageLocationLabel(repo.location))}</span></td>
+    <td><span class="badge info" title="${escHtml(storageLocationLabel(repo.location))}">${escHtml(storageName(repo))}</span></td>
     <td><span class="storage-repository-path" title="${escHtml(repo.path_display)}">${escHtml(repo.path_display)}</span></td>
     <td><span class="badge ${statusClass}">${escHtml(statusText)}</span></td>
     <td>
       <div class="storage-row-actions">
+        <button class="btn btn-secondary btn-sm"
+          data-storage-action="show-repo-details"
+          data-repository-key="${escHtml(repositoryKey)}">${storageT('storage.details')}</button>
         <button class="btn btn-secondary btn-sm"
           data-storage-action="test-repo"
           data-repo-path="${escHtml(repo.path_display)}"
@@ -331,6 +362,9 @@ function onStorageContentClick(event) {
     const resultEl = document.getElementById(el.dataset.resultId || '');
     if (!resultEl) return;
     return openStorageTestDetails(resultEl.dataset.fullOutput || storageT('storage.noDetails'));
+  }
+  if (action === 'show-repo-details') {
+    return openStorageRepositoryDetails(el.dataset.repositoryKey || '');
   }
 }
 
@@ -459,12 +493,41 @@ async function testRepo(repoPath, resultId, repoConfKey = '') {
   }
 }
 
-function openStorageTestDetails(text) {
+function openStorageModal(title, text) {
   const modal = document.getElementById('storage-test-modal');
   const output = document.getElementById('storage-test-modal-output');
   if (!modal || !output) return;
+  const titleEl = modal.querySelector('.modal-header h3');
+  if (titleEl) titleEl.textContent = title;
   output.textContent = String(text || '').trim() || storageT('storage.noDetails');
   modal.classList.remove('hidden');
+}
+
+function openStorageTestDetails(text) {
+  openStorageModal(storageT('storage.testDetailsTitle'), text);
+}
+
+function openStorageRepositoryDetails(repositoryKey) {
+  const repos = storageRepositories(storageState.data || {});
+  const repo = repos.find((item) => String(item.repository_key || item.conf_key || '') === String(repositoryKey || ''));
+  if (!repo) return openStorageModal(storageT('storage.repositoryDetailsTitle'), storageT('storage.noDetails'));
+  const job = storageJobForRepository(repo);
+  const values = [
+    [storageT('storage.jobNameLabel'), storageJobName(repo, job)],
+    [storageT('storage.jobIdLabel'), Array.isArray(repo.used_by) ? repo.used_by.join(', ') : ''],
+    [storageT('storage.repositoryNameLabel'), storageRepositoryName(repo)],
+    [storageT('storage.repositoryIdLabel'), repo.repository_key || repo.conf_key || ''],
+    [storageT('storage.storageNameLabel'), storageName(repo)],
+    [storageT('storage.storageIdLabel'), repo.storage_key || ''],
+    [storageT('storage.location'), storageLocationLabel(repo.location)],
+    [storageT('storage.path'), repo.path_display || repo.path_raw || repo.repo_uri || repo.repo_path || ''],
+    [storageT('storage.repoConfKeyLabel'), repo.repo_conf_key || repo.conf_key || ''],
+  ];
+  const text = values
+    .filter(([, value]) => String(value || '').trim())
+    .map(([label, value]) => `${label} ${value}`)
+    .join('\n');
+  openStorageModal(storageT('storage.repositoryDetailsTitle'), text);
 }
 
 function closeStorageTestDetails() {

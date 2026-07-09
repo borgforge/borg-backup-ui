@@ -43,8 +43,13 @@ def test_storage_repositories_use_configured_job_icons() -> None:
     assert "typeIcon(icon)" in repository_row
     assert "storageRepositoryTitle(repo, job)" in repository_row
     assert "storage-repository-meta" in repository_row
+    assert "storageRepositoryName(repo)" in repository_row
+    assert "storageJobName(repo, job)" in repository_row
+    assert "storage.repositoryNameLabel" in repository_row
+    assert "storage.jobNameLabel" in repository_row
     assert "storageLocationIcon(repo.location)" not in repository_row
     assert ".storage-repository-meta" in css
+    assert "function openStorageRepositoryDetails(repositoryKey)" in script
 
 
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:
