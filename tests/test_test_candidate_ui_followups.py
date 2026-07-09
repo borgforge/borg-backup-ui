@@ -49,7 +49,9 @@ def test_storage_repositories_use_configured_job_icons() -> None:
     assert "storage.jobNameLabel" in repository_row
     assert "storageLocationIcon(repo.location)" not in repository_row
     assert ".storage-repository-meta" in css
-    assert "function openStorageRepositoryDetails(repositoryKey)" in script
+    assert "function toggleStorageRepositoryDetails(detailsId, resultKey, button)" in script
+    assert "function renderStorageRepositoryDetailsPanel(repo, job, resultId)" in script
+    assert ".storage-repository-detail-card" in css
 
 
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:
