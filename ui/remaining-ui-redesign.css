@@ -241,8 +241,7 @@
   background: var(--ui-color-surface-subtle);
 }
 
-.storage-repository-detail-grid,
-.storage-repository-test-grid {
+.storage-repository-detail-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--ui-space-2);
@@ -278,32 +277,6 @@
   line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: normal;
-}
-
-.storage-repository-test-summary {
-  display: grid;
-  gap: var(--ui-space-2);
-  padding-top: var(--ui-space-3);
-  border-top: 1px solid var(--ui-color-border);
-}
-
-.storage-repository-test-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ui-space-2);
-}
-
-.storage-repository-test-summary pre {
-  margin: 0;
-  max-height: 12rem;
-  overflow: auto;
-  padding: var(--ui-space-3);
-  border: 1px solid var(--ui-color-border);
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-color-surface);
-  color: var(--ui-color-text);
-  font-size: var(--ui-font-size-xs);
 }
 
 .storage-row-actions {
@@ -525,8 +498,7 @@
     flex-wrap: wrap;
   }
 
-  .storage-repository-detail-grid,
-  .storage-repository-test-grid {
+  .storage-repository-detail-grid {
     grid-template-columns: 1fr;
   }
 

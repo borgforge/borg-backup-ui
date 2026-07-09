@@ -18,12 +18,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Existing repositories are migrated to reference storage objects and keep relative repository paths for the later repository wizard.
   - Repository objects now use deterministic hash-suffixed technical IDs such as `repo_flash_local_7f3c45ab`.
   - Storage objects now include the configured profile details needed by the later Storage/Repository wizard.
+  - Missing repository encryption metadata is enriched once from linked job metadata instead of guessing a default value.
 
 ### Issue #187
 - Storage:
   - Added a repository manager flow that can import existing repositories or create new Borg repositories with explicit `borg init` encryption options.
   - Job wizard repository handling now selects existing repository objects filtered by storage/location instead of accepting free-form repository paths.
   - Repository encryption metadata is owned by the repository object; jobs keep compression settings but no longer choose repository encryption.
+  - The temporary Repository test and Testlog controls were removed from the repository list until the final repository action flow is implemented.
 
 ### Issue #180
 - Dashboard:

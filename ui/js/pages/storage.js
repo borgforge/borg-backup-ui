@@ -299,8 +299,6 @@ function renderStorageRepositoryRow(repo, profiles) {
     : (Array.isArray(repo.source_job_keys) ? repo.source_job_keys.join(', ') : '');
   const repositoryKey = repo.repository_key || repo.conf_key || '';
   const resultKey = String(repositoryKey || repo.path_display || repo.path_raw || repo.repo_uri || repo.repo_path || '').replace(/[^A-Za-z0-9_-]/g, '_');
-  const resultId = `repo-test-${resultKey}`;
-  const detailsBtnId = `repo-test-details-${resultKey}`;
   const repositoryDetailsId = `repo-details-${resultKey}`;
   const expanded = !!storageState.expandedRepositories[resultKey];
   const title = storageRepositoryTitle(repo, job);
@@ -333,23 +331,11 @@ function renderStorageRepositoryRow(repo, profiles) {
           data-storage-action="show-repo-details"
           data-details-id="${escHtml(repositoryDetailsId)}"
           data-result-key="${escHtml(resultKey)}">${storageT(expanded ? 'storage.hideDetails' : 'storage.details')}</button>
-        <button class="btn btn-secondary btn-sm"
-          data-storage-action="test-repo"
-          data-repo-path="${escHtml(repo.path_display)}"
-          data-repo-conf-key="${escHtml(repo.conf_key || '')}"
-          data-repository-key="${escHtml(repositoryKey)}"
-          data-result-id="${resultId}"
-          ${unavailable ? `disabled title="${storageT('storage.mountFirst')}"` : ''}>${storageT('storage.test')}</button>
-        <button class="btn btn-secondary btn-sm hidden"
-          id="${detailsBtnId}"
-          data-storage-action="show-test-details"
-          data-result-id="${resultId}">${storageT('storage.testLog')}</button>
-        <span class="test-result hidden" id="${resultId}"></span>
       </div>
     </td>
   </tr>
   <tr id="${repositoryDetailsId}" class="storage-repository-details-row ${expanded ? '' : 'hidden'}">
-    <td colspan="5">${renderStorageRepositoryDetailsPanel(repo, job, resultId)}</td>
+    <td colspan="5">${renderStorageRepositoryDetailsPanel(repo, job)}</td>
   </tr>`;
 }
 
@@ -365,26 +351,22 @@ function storageDetailItem(labelKey, value, extraClass = '') {
   </div>`;
 }
 
-function renderStorageRepositoryDetailsPanel(repo, job, resultId) {
-  const usedBy = Array.isArray(repo.used_by) && repo.used_by.length
-    ? repo.used_by.join(', ')
-    : (Array.isArray(repo.source_job_keys) ? repo.source_job_keys.join(', ') : '');
+function storageRepositoryEncryption(repo, job) {
+  return String(repo?.encryption || job?.encryption || '').trim() || storageT('storage.unknown');
+}
+
+function renderStorageRepositoryDetailsPanel(repo, job) {
   const path = repo.path_display || repo.path_raw || repo.repo_uri || repo.repo_path || '';
   return `<div class="storage-repository-detail-card">
     <div class="storage-repository-detail-grid">
       ${storageDetailItem('storage.repositoryNameLabel', storageRepositoryName(repo))}
-      ${storageDetailItem('storage.repositoryIdLabel', repo.repository_key || repo.conf_key || '')}
       ${storageDetailItem('storage.storageNameLabel', storageName(repo))}
-      ${storageDetailItem('storage.storageIdLabel', repo.storage_key || '')}
       ${storageDetailItem('storage.jobNameLabel', storageJobName(repo, job))}
-      ${storageDetailItem('storage.jobIdLabel', usedBy)}
       ${storageDetailItem('storage.location', storageLocationLabel(repo.location))}
-      ${storageDetailItem('storage.repoConfKeyLabel', repo.repo_conf_key || repo.conf_key || '')}
       ${storageDetailItem('storage.path', path, 'span-2')}
-      ${storageDetailItem('storage.repositoryEncryption', repo.encryption || '')}
+      ${storageDetailItem('storage.repositoryEncryption', storageRepositoryEncryption(repo, job))}
       ${storageDetailItem('storage.repositoryRelativePath', repo.relative_path || '')}
     </div>
-    <div id="${escHtml(resultId)}-inline" class="storage-repository-test-summary hidden"></div>
   </div>`;
 }
 
@@ -428,16 +410,8 @@ function onStorageContentClick(event) {
   const el = event.target.closest('[data-storage-action]');
   if (!el) return;
   const action = el.dataset.storageAction || '';
-  if (action === 'test-repo') {
-    return testRepo(el.dataset.repoPath || '', el.dataset.resultId || '', el.dataset.repoConfKey || '', el.dataset.repositoryKey || '');
-  }
   if (action === 'smb-action') {
     return runSmbAction(el.dataset.profileKey || '', el.dataset.smbAction || '', el.dataset.resultId || '');
-  }
-  if (action === 'show-test-details') {
-    const resultEl = document.getElementById(el.dataset.resultId || '');
-    if (!resultEl) return;
-    return openStorageTestDetails(resultEl.dataset.fullOutput || storageT('storage.noDetails'));
   }
   if (action === 'show-repo-details') {
     return toggleStorageRepositoryDetails(el.dataset.detailsId || '', el.dataset.resultKey || '', el);
@@ -538,56 +512,6 @@ async function runSmbAction(profileKey, action, resultId) {
   }
 }
 
-async function testRepo(repoPath, resultId, repoConfKey = '', repositoryKey = '') {
-  const el = document.getElementById(resultId);
-  const detailsBtn = document.getElementById(String(resultId || '').replace(/^repo-test-/, 'repo-test-details-'));
-  if (el) { el.className = 'test-result testing'; el.textContent = storageT('storage.checking'); el.title = ''; }
-  if (detailsBtn) detailsBtn.classList.add('hidden');
-  try {
-    const res = await fetch('/api/storage/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo_path: repoPath, repo_conf_key: repoConfKey, repository_key: repositoryKey }),
-    });
-    const data = await res.json();
-    if (el) {
-      el.className = `test-result ${data.success ? 'ok' : 'fail'}`;
-      if (data.success) {
-        el.textContent = '✓ OK';
-        el.dataset.fullOutput = String(data.output || '');
-        el.title = String((data.output || '').trim() || 'OK');
-      } else {
-        const out = String(data.output || '').trim();
-        const first = out.split('\n')[0] || `Exit ${data.exit_code}`;
-        el.textContent = `✗ ${first}`;
-        el.dataset.fullOutput = out || `Exit ${data.exit_code}`;
-        el.title = out || `Exit ${data.exit_code}`;
-      }
-    }
-    updateRepositoryInlineTest(resultId, data);
-    if (detailsBtn) detailsBtn.classList.remove('hidden');
-  } catch (err) {
-    if (el) { el.className = 'test-result fail'; el.textContent = `✗ ${storageT('storage.error')}`; el.title = String(err?.message || storageT('storage.unknownError')); }
-    if (el) el.dataset.fullOutput = String(err?.message || storageT('storage.unknownError'));
-    updateRepositoryInlineTest(resultId, { success: false, output: String(err?.message || storageT('storage.unknownError')) });
-    if (detailsBtn) detailsBtn.classList.remove('hidden');
-  }
-}
-
-function openStorageModal(title, text) {
-  const modal = document.getElementById('storage-test-modal');
-  const output = document.getElementById('storage-test-modal-output');
-  if (!modal || !output) return;
-  const titleEl = modal.querySelector('.modal-header h3');
-  if (titleEl) titleEl.textContent = title;
-  output.textContent = String(text || '').trim() || storageT('storage.noDetails');
-  modal.classList.remove('hidden');
-}
-
-function openStorageTestDetails(text) {
-  openStorageModal(storageT('storage.repositoryTestDetailsTitle'), text);
-}
-
 function toggleStorageRepositoryDetails(detailsId, resultKey, button) {
   const row = document.getElementById(detailsId);
   if (!row) return;
@@ -595,43 +519,6 @@ function toggleStorageRepositoryDetails(detailsId, resultKey, button) {
   row.classList.toggle('hidden', !willOpen);
   if (resultKey) storageState.expandedRepositories[resultKey] = willOpen;
   if (button) button.textContent = storageT(willOpen ? 'storage.hideDetails' : 'storage.details');
-}
-
-function repositoryInfoSummary(output) {
-  const text = String(output || '').trim();
-  if (!text) return '';
-  try {
-    const data = JSON.parse(text);
-    const repo = data.repository || {};
-    const encryption = data.encryption || {};
-    const cache = data.cache || {};
-    return `<div class="storage-repository-test-grid">
-      ${storageDetailItem('storage.repositoryBorgId', repo.id || '')}
-      ${storageDetailItem('storage.repositoryLocation', repo.location || '')}
-      ${storageDetailItem('storage.repositoryLastModified', repo.last_modified || '')}
-      ${storageDetailItem('storage.repositoryEncryption', encryption.mode || '')}
-      ${storageDetailItem('storage.repositoryCachePath', cache.path || '', 'span-2')}
-      ${storageDetailItem('storage.repositorySecurityDir', data.security_dir || '', 'span-2')}
-    </div>`;
-  } catch (_) {
-    return `<pre>${escHtml(text)}</pre>`;
-  }
-}
-
-function updateRepositoryInlineTest(resultId, data) {
-  const el = document.getElementById(`${resultId}-inline`);
-  if (!el) return;
-  const output = String(data?.output || '').trim();
-  const success = !!data?.success;
-  el.classList.remove('hidden');
-  el.innerHTML = `<div class="storage-repository-test-header">
-    <strong>${escHtml(storageT('storage.repositoryTestResult'))}</strong>
-    <span class="badge ${success ? 'success' : 'error'}">${success ? 'OK' : escHtml(storageT('storage.error'))}</span>
-  </div>${repositoryInfoSummary(output) || `<small>${escHtml(storageT('storage.noDetails'))}</small>`}`;
-}
-
-function closeStorageTestDetails() {
-  document.getElementById('storage-test-modal')?.classList.add('hidden');
 }
 
 function repositoryManagerSetMessage(type, message) {
@@ -799,34 +686,6 @@ async function saveRepositoryManager() {
     repositoryManagerSetMessage('error', err.message || storageT('storage.error'));
   } finally {
     if (btn) btn.disabled = false;
-  }
-}
-
-async function copyStorageTestDetails() {
-  const output = document.getElementById('storage-test-modal-output');
-  const text = String(output?.textContent || '').trim();
-  if (!text) return;
-  try {
-    await navigator.clipboard.writeText(text);
-    return;
-  } catch (_) {
-    // Fall back for non-secure contexts or browsers that deny navigator.clipboard.
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.setAttribute('readonly', 'readonly');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  textarea.style.top = '0';
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  try {
-    document.execCommand('copy');
-  } catch (_) {
-    // Best effort only. The details remain visible for manual copying.
-  } finally {
-    textarea.remove();
   }
 }
 

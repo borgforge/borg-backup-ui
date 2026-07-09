@@ -16,7 +16,15 @@ from storage_objects_api import read_storage_store, storage_key_for, write_stora
 from wizard_api import save_job  # noqa: E402
 
 
-def _write_job(root: Path, job_key: str, repo_path: str, *, location: str = "local", profile_key: str = "") -> Path:
+def _write_job(
+    root: Path,
+    job_key: str,
+    repo_path: str,
+    *,
+    location: str = "local",
+    profile_key: str = "",
+    encryption: str = "",
+) -> Path:
     jobs_dir = root / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
     job = {
@@ -39,6 +47,7 @@ def _write_job(root: Path, job_key: str, repo_path: str, *, location: str = "loc
             "conf_key": "BACKUP_PATHS_APPDATA",
             "default": "/mnt/user/appdata",
         },
+        "encryption": encryption,
     }
     path = jobs_dir / f"{job_key}.json"
     path.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -343,6 +352,49 @@ def test_repository_objects_v3_migrates_legacy_repository_keys(tmp_path: Path):
     assert result["results"]["repository_objects_v3"]["status"] == "applied"
     assert repo["repository_key"] == expected_key
     assert job_after["repository_key"] == expected_key
+
+
+def test_repository_objects_v4_enriches_missing_encryption_from_jobs(tmp_path: Path):
+    job_file = _write_job(
+        tmp_path,
+        "flash_local",
+        "/mnt/backup/borg-backup-flash",
+        encryption="repokey-blake2",
+    )
+    job = json.loads(job_file.read_text(encoding="utf-8"))
+    job["repository_key"] = "repo_flash_local"
+    job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    repo_file = tmp_path / "config" / "repositories.json"
+    repo_file.write_text(json.dumps({
+        "schema_version": 1,
+        "updated_at": "2026-07-09T10:00:00Z",
+        "repositories": [{
+            "repository_key": "repo_flash_local",
+            "display_name": "Flash",
+            "repository_name": "borg-backup-flash",
+            "job_name": "Flash",
+            "backup_type": "flash",
+            "location": "local",
+            "storage_type": "local",
+            "storage_key": "storage_local_old",
+            "storage_name": "Local",
+            "repo_path": "/mnt/backup/borg-backup-flash",
+            "path_raw": "/mnt/backup/borg-backup-flash",
+            "path_display": "/mnt/backup/borg-backup-flash",
+            "encryption": "",
+            "source_job_keys": ["flash_local"],
+            "used_by": ["flash_local"],
+        }],
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    result = run_startup_migrations(config)
+    second = run_startup_migrations(config)
+    repo = read_repository_store(config)["repositories"][0]
+
+    assert result["results"]["repository_objects_v4"]["status"] == "applied"
+    assert second["results"]["repository_objects_v4"]["status"] == "skipped"
+    assert repo["encryption"] == "repokey-blake2"
 
 
 def test_storage_objects_v2_enriches_storage_profile_fields(tmp_path: Path):

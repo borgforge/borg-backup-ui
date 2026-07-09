@@ -17,16 +17,26 @@ def test_storage_groups_locations_and_scopes_smb_profiles() -> None:
     assert "const showSmbProfiles = (storageState.selectedLocation || 'all') === 'smb';" in script
 
 
-def test_storage_test_details_are_visible_after_success_or_failure() -> None:
+def test_storage_repository_details_focus_on_user_facing_metadata() -> None:
     script = _read("ui/js/pages/storage.js")
     css = _read("ui/remaining-ui-redesign.css")
-    test_repo = script.split("async function testRepo", 1)[1].split(
-        "function openStorageTestDetails", 1
+    details_panel = script.split("function renderStorageRepositoryDetailsPanel(repo, job)", 1)[1].split(
+        "function renderStorageRepositoryRow", 1
     )[0]
-    assert "if (detailsBtn) detailsBtn.classList.remove('hidden');" in test_repo
-    assert "el.dataset.fullOutput = String(data.output || '');" in test_repo
-    assert 'class="test-result hidden"' in script
-    assert ".storage-row-actions .test-result:empty { display: none; }" in css
+    assert "function storageRepositoryEncryption(repo, job)" in script
+    assert "storage.repositoryNameLabel" in details_panel
+    assert "storage.storageNameLabel" in details_panel
+    assert "storage.jobNameLabel" in details_panel
+    assert "storage.location" in details_panel
+    assert "storage.path" in details_panel
+    assert "storage.repositoryEncryption" in details_panel
+    assert "storage.repositoryRelativePath" in details_panel
+    assert "storage.repositoryIdLabel" not in details_panel
+    assert "storage.storageIdLabel" not in details_panel
+    assert "storage.jobIdLabel" not in details_panel
+    assert "storage.repoConfKeyLabel" not in details_panel
+    assert 'data-storage-action="test-repo"' not in script
+    assert ".storage-repository-detail-card" in css
 
 
 def test_storage_repositories_use_configured_job_icons() -> None:
@@ -50,7 +60,7 @@ def test_storage_repositories_use_configured_job_icons() -> None:
     assert "storageLocationIcon(repo.location)" not in repository_row
     assert ".storage-repository-meta" in css
     assert "function toggleStorageRepositoryDetails(detailsId, resultKey, button)" in script
-    assert "function renderStorageRepositoryDetailsPanel(repo, job, resultId)" in script
+    assert "function renderStorageRepositoryDetailsPanel(repo, job)" in script
     assert ".storage-repository-detail-card" in css
 
 

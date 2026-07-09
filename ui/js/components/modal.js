@@ -55,9 +55,6 @@
     document.getElementById('settings-dialog-modal')?.addEventListener('click', (e) => {
       if (e.target === e.currentTarget) document.getElementById('settings-dialog-cancel-btn')?.click();
     });
-    document.getElementById('storage-test-modal')?.addEventListener('click', (e) => {
-      if (e.target === e.currentTarget) runAction('closeStorageTestModal');
-    });
     document.getElementById('repository-manager-modal')?.addEventListener('click', (e) => {
       if (e.target === e.currentTarget) runAction('closeRepositoryManager');
     });

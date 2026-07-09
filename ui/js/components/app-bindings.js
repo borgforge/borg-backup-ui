@@ -63,7 +63,6 @@
     _setHidden('[data-jobs-action="open-wizard"]', isViewer);
 
     _setHidden('#check-run-btn', isViewer);
-    _setHidden('[data-storage-action="test-repo"]', isViewer);
     _setHidden('[data-storage-action="smb-action"]', isViewer);
 
     _setHidden('#rt-run-btn', isViewer);
@@ -178,9 +177,6 @@
       if (sel) theme()?.applyThemePreference?.(sel.value, true);
     });
     document.getElementById('log-viewer-close-btn')?.addEventListener('click', () => logViewer()?.close?.());
-    document.getElementById('storage-test-close-btn')?.addEventListener('click', closeStorageTestDetails);
-    document.getElementById('storage-test-ok-btn')?.addEventListener('click', closeStorageTestDetails);
-    document.getElementById('storage-test-copy-btn')?.addEventListener('click', copyStorageTestDetails);
     document.getElementById('repository-manager-close-btn')?.addEventListener('click', closeRepositoryManager);
     document.getElementById('repository-manager-cancel-btn')?.addEventListener('click', closeRepositoryManager);
     document.getElementById('repository-manager-save-btn')?.addEventListener('click', saveRepositoryManager);
@@ -219,7 +215,6 @@
         '[data-jobs-action="start-job"]',
         '[data-jobs-action="open-wizard"]',
         '[data-jobs-action="toggle-menu"]',
-        '[data-storage-action="test-repo"]',
         '[data-storage-action="smb-action"]',
         '#check-run-btn',
         '#rt-run-btn',
@@ -310,7 +305,6 @@
     m.setAction('confirmInputChanged', typeof checkDeleteConfirmInput === 'function' ? checkDeleteConfirmInput : null);
     m.setAction('closeScheduleModal', typeof closeScheduleModal === 'function' ? closeScheduleModal : null);
     m.setAction('closeWizardHelpModal', typeof closeWizardDescriptionHelp === 'function' ? closeWizardDescriptionHelp : null);
-    m.setAction('closeStorageTestModal', typeof closeStorageTestDetails === 'function' ? closeStorageTestDetails : null);
     m.setAction('closeRepositoryManager', typeof closeRepositoryManager === 'function' ? closeRepositoryManager : null);
     m.setAction('closeStorageDeployModal', typeof closeStorageDeployModal === 'function' ? closeStorageDeployModal : null);
   }
