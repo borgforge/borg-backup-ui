@@ -27,7 +27,7 @@ def test_storage_repository_details_focus_on_user_facing_metadata() -> None:
     assert "storage.repositoryNameLabel" in details_panel
     assert "storage.storageNameLabel" in details_panel
     assert "storage.jobNameLabel" in details_panel
-    assert "storage.location" in details_panel
+    assert "storage.location" not in details_panel
     assert "storage.path" in details_panel
     assert "storage.repositoryEncryption" in details_panel
     assert "storage.repositoryRelativePath" in details_panel
@@ -62,6 +62,22 @@ def test_storage_repositories_use_configured_job_icons() -> None:
     assert "function toggleStorageRepositoryDetails(detailsId, resultKey, button)" in script
     assert "function renderStorageRepositoryDetailsPanel(repo, job)" in script
     assert ".storage-repository-detail-card" in css
+
+
+def test_repository_manager_uses_single_visible_repository_path_field() -> None:
+    html = _read("ui/index.html")
+    script = _read("ui/js/pages/storage.js")
+    german = _read("ui/i18n/de.json")
+    css = _read("ui/remaining-ui-redesign.css")
+    assert 'id="repository-manager-repository-name"' in html
+    assert 'type="hidden" id="repository-manager-repository-name"' in html
+    assert 'id="repository-manager-relative-path"' in html
+    assert "storage.repositoryRelativePath" in html
+    assert "Repository-Pfad im Speicherziel" in german
+    assert "function repositoryManagerNameFromRelativePath" in script
+    assert "function repositoryManagerPathChanged" in script
+    assert "repositoryManagerPathChanged();" in script
+    assert ".repository-manager-form-grid" in css
 
 
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:

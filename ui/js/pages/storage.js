@@ -215,7 +215,7 @@ function renderStorage(data) {
         <table class="storage-repository-table ui-table">
           <thead><tr>
             <th>${storageT('storage.repository')}</th>
-            <th>${storageT('storage.location')}</th>
+            <th>${storageT('storage.storageTargetColumn')}</th>
             <th>${storageT('storage.path')}</th>
             <th>${storageT('storage.status')}</th>
             <th>${storageT('storage.actions')}</th>
@@ -362,7 +362,6 @@ function renderStorageRepositoryDetailsPanel(repo, job) {
       ${storageDetailItem('storage.repositoryNameLabel', storageRepositoryName(repo))}
       ${storageDetailItem('storage.storageNameLabel', storageName(repo))}
       ${storageDetailItem('storage.jobNameLabel', storageJobName(repo, job))}
-      ${storageDetailItem('storage.location', storageLocationLabel(repo.location))}
       ${storageDetailItem('storage.path', path, 'span-2')}
       ${storageDetailItem('storage.repositoryEncryption', storageRepositoryEncryption(repo, job))}
       ${storageDetailItem('storage.repositoryRelativePath', repo.relative_path || '')}
@@ -621,8 +620,6 @@ function openRepositoryManager() {
     const el = document.getElementById(id);
     if (el) el.value = value;
   });
-  const relative = document.getElementById('repository-manager-relative-path');
-  if (relative) relative.dataset.autofilled = 'false';
   const appendOnly = document.getElementById('repository-manager-append-only');
   const parentDirs = document.getElementById('repository-manager-make-parent-dirs');
   if (appendOnly) appendOnly.checked = false;
@@ -643,19 +640,24 @@ function repositoryManagerSlug(value) {
     .replace(/^-+|-+$/g, '');
 }
 
-function repositoryManagerNameChanged() {
+function repositoryManagerNameFromRelativePath(value) {
+  const path = repositoryManagerSlug(value);
+  const parts = path.split('/').map((part) => part.trim()).filter(Boolean);
+  return parts[parts.length - 1] || path;
+}
+
+function repositoryManagerPathChanged() {
   const repoName = document.getElementById('repository-manager-repository-name');
   const relative = document.getElementById('repository-manager-relative-path');
   if (!repoName || !relative) return;
-  if (!relative.value || relative.dataset.autofilled === 'true') {
-    relative.value = repositoryManagerSlug(repoName.value);
-    relative.dataset.autofilled = 'true';
-  }
+  relative.value = repositoryManagerSlug(relative.value);
+  repoName.value = repositoryManagerNameFromRelativePath(relative.value);
   repositoryManagerUpdateSummary();
 }
 
 async function saveRepositoryManager() {
   repositoryManagerSetMessage('', '');
+  repositoryManagerPathChanged();
   const action = document.getElementById('repository-manager-action')?.value || 'create';
   const payload = {
     action,

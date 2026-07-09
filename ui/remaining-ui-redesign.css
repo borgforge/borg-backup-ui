@@ -93,6 +93,27 @@
   font-weight: 700;
 }
 
+.repository-manager-card .settings-grid {
+  gap: var(--ui-space-4);
+}
+
+.repository-manager-form-grid {
+  row-gap: var(--ui-space-5);
+}
+
+.repository-manager-card .form-group {
+  margin: 0;
+}
+
+.repository-manager-card .form-label {
+  margin-bottom: var(--ui-space-2);
+}
+
+.repository-manager-card .form-hint {
+  margin-top: var(--ui-space-2);
+  line-height: 1.45;
+}
+
 .repository-manager-summary {
   position: sticky;
   top: var(--ui-space-4);

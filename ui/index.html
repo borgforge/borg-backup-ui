@@ -1117,17 +1117,14 @@
           </section>
           <section class="repository-manager-card">
             <h4 data-i18n="storage.repositorySectionIdentity">Name und Pfad</h4>
-            <div class="settings-grid">
+            <div class="settings-grid repository-manager-form-grid">
               <div class="form-group">
                 <label class="form-label" data-i18n="storage.repositoryDisplayName">Anzeigename</label>
                 <input class="form-input" type="text" id="repository-manager-display-name" placeholder="Appdata - USB" data-i18n-placeholder="storage.repositoryDisplayNamePlaceholder">
               </div>
-              <div class="form-group">
-                <label class="form-label" data-i18n="storage.repositoryDirectoryName">Repository-Verzeichnis</label>
-                <input class="form-input mono" type="text" id="repository-manager-repository-name" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryDirectoryNamePlaceholder">
-              </div>
+              <input type="hidden" id="repository-manager-repository-name" value="">
               <div class="form-group" style="grid-column:1/-1">
-                <label class="form-label" data-i18n="storage.repositoryRelativePath">Relativer Pfad</label>
+                <label class="form-label" data-i18n="storage.repositoryRelativePath">Repository-Pfad im Speicherziel</label>
                 <input class="form-input mono" type="text" id="repository-manager-relative-path" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryRelativePathPlaceholder">
                 <div class="form-hint" data-i18n="storage.repositoryRelativePathHint">Relativ zum Speicherziel. Keine absoluten Pfade und keine .. Segmente.</div>
               </div>
@@ -1135,7 +1132,7 @@
           </section>
           <section class="repository-manager-card">
             <h4 data-i18n="storage.repositorySectionBorgInit">Borg init Optionen</h4>
-            <div class="settings-grid">
+            <div class="settings-grid repository-manager-form-grid">
               <div class="form-group">
                 <label class="form-label" data-i18n="storage.repositoryEncryption">Verschlüsselung</label>
                 <select class="form-select" id="repository-manager-encryption">
