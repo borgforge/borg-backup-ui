@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -10,8 +11,9 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 import storage_objects_api  # noqa: E402
+import check_api  # noqa: E402
 from check_api import CheckManager  # noqa: E402
-from repositories_api import write_repository_store  # noqa: E402
+from repositories_api import read_repository_store, write_repository_store  # noqa: E402
 from storage_objects_api import create_storage_target, read_storage_store, test_storage_target as run_storage_target_test, write_storage_store  # noqa: E402
 
 
@@ -127,3 +129,98 @@ def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: P
     assert captured["cmd"] == ["borg", "check", "--progress", "/mnt/backup/test"]
     assert "shell" not in captured["kwargs"]
     assert captured["kwargs"]["env"]["BORG_PASSCOMMAND"].endswith(str(secret))
+
+
+def test_repository_maintenance_persists_structured_prune_and_compact_results(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    repository = {
+        "repository_key": "repo_test",
+        "display_name": "Test",
+        "path_raw": "/mnt/backup/test",
+    }
+    write_repository_store(config, {"repositories": [repository]})
+
+    class Process:
+        returncode = 0
+
+    prune = check_api._CheckState(
+        Process(),
+        "repo_test",
+        "quick",
+        datetime.now() - timedelta(seconds=4),
+        action="prune",
+        config=config,
+        repository=repository,
+    )
+    prune.append_line("Pruning archive (1/2): test-2026-06-01")
+    prune.append_line("Pruning archive (2/2): test-2026-06-02")
+    prune_result = CheckManager._persist_repository_result(prune)
+
+    compact = check_api._CheckState(
+        Process(),
+        "repo_test",
+        "quick",
+        datetime.now() - timedelta(seconds=2),
+        action="compact",
+        config=config,
+        repository=repository,
+    )
+    compact.append_line("Repository compaction freed about 12.6 GB repository space.")
+    compact_result = CheckManager._persist_repository_result(compact)
+
+    stored = read_repository_store(config)["repositories"][0]["maintenance_results"]
+    assert prune_result["status"] == "success"
+    assert prune_result["deleted_archives_count"] == 2
+    assert stored["prune"]["deleted_archives"] == ["test-2026-06-01", "test-2026-06-02"]
+    assert compact_result["freed_space"] == "12.6 GB"
+    assert stored["compact"]["freed_space"] == "12.6 GB"
+
+
+def test_repository_maintenance_masks_error_details(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    repository = {
+        "repository_key": "repo_test",
+        "display_name": "Test",
+        "path_raw": "/mnt/backup/test",
+    }
+    write_repository_store(config, {"repositories": [repository]})
+
+    class Process:
+        returncode = 2
+
+    state = check_api._CheckState(
+        Process(),
+        "repo_test",
+        "quick",
+        datetime.now() - timedelta(seconds=1),
+        action="check",
+        config=config,
+        repository=repository,
+    )
+    state.append_line("Connection failed: password=hunter2 token=secret-token")
+
+    result = CheckManager._persist_repository_result(state)
+
+    assert result["status"] == "error"
+    assert result["details"] == ["Connection failed: password=*** token=***"]
+    stored = read_repository_store(config)["repositories"][0]["maintenance_results"]["check"]
+    assert "hunter2" not in json.dumps(stored)
+    assert "secret-token" not in json.dumps(stored)
+
+
+def test_repository_maintenance_stream_exposes_completion_not_raw_output():
+    class Process:
+        returncode = 2
+
+    state = check_api._CheckState(Process(), "repo_test", "quick", datetime.now(), action="check")
+    state.append_line("password=hunter2")
+    state.finished = True
+    state.exit_code = 2
+    manager = CheckManager()
+    manager._state = state
+
+    stream = "".join(manager.stream_output())
+
+    assert "event: done" in stream
+    assert "data: 2" in stream
+    assert "hunter2" not in stream

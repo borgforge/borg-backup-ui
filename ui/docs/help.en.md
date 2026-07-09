@@ -97,8 +97,14 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 ## Repositories
 
 - **Repositories** is where Borg repositories are configured, imported, and maintained.
-- Repository details provide information refresh, Check, Verify Data, Prune, and Compact actions.
+- The left side groups repositories by their exact storage target. Search filters the repository list without changing the selected target.
+- **Overview** shows Borg statistics, the last known maintenance state, and human-readable repository details.
+- **Archives** loads the current archive inventory directly from the selected repository.
+- **Maintenance** provides Check, Verify Data, Prune, and Compact. Status and result remain visible after completion without requiring a technical live log.
+- **Activities** presents the stored maintenance results in chronological order.
 - Prune uses the linked job's retention policy and is disabled without a linked job.
+- Prune summarizes deleted archives. Compact shows reclaimed space when Borg reports that value.
+- Failed actions provide expandable, secret-masked technical details in the affected status card.
 - Verify Data, Prune, and Compact require explicit confirmation.
 
 ## Restore and Restore Tests

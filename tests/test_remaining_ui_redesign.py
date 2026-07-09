@@ -22,8 +22,7 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         "storage-location-list",
         "storage-workspace-header",
         "storage-content",
-        "check-log-panel",
-        "check-log-output",
+        "storage-add-repository-btn",
         "repository-manager-modal",
         "repository-manager-storage-mode",
         "repository-manager-next-btn",
@@ -31,17 +30,20 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         assert f'id="{element_id}"' in html
     for contract in (
         "STORAGE_LOCATION_ORDER = ['local', 'usb', 'smb', 'storagebox']",
-        "renderStorageRepositoryRow",
-        "renderStorageSmbProfiles",
-        'data-storage-action="show-repo-details"',
+        "renderStorageRepositoryWorkspace",
+        "renderStorageLocationSidebar",
+        "renderStorageRepositoryArchives",
+        "repositoryPruneDetails",
+        "deleted_archives",
+        'data-storage-action="select-repository-tab"',
         'data-storage-action="repository-maintenance"',
-        'data-storage-action="smb-action"',
         "/api/storages/test",
-        "/api/storage/smb-action",
         "/api/storage/check/run",
         "/api/storage/check/stream",
     ):
         assert contract in script
+    assert 'id="check-log-panel"' not in html
+    assert 'id="check-log-output"' not in html
 
 
 def test_storage_reuses_location_icons_without_summary_ledger() -> None:
@@ -69,8 +71,9 @@ def test_remaining_surfaces_are_responsive_and_modal_content_is_contained() -> N
     css = _read("ui/remaining-ui-redesign.css")
     assert "@media (max-width: 1023px)" in css
     assert "@media (max-width: 767px)" in css
-    assert ".storage-table-wrap" in css
-    assert "overflow-x: auto" in css
+    assert ".storage-repository-master-detail" in css
+    assert ".storage-repository-tabs { overflow-x: auto; }" in css
+    assert ".storage-archive-list article { grid-template-columns: .5rem minmax(0, 1fr); }" in css
     assert ".modal-body" in css
     assert "overflow-y: auto" in css
     assert ".modal-wizard" in css

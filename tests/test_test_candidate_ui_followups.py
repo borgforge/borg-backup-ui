@@ -8,20 +8,23 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_storage_groups_locations_and_scopes_smb_profiles() -> None:
+def test_storage_uses_repository_master_detail_navigation() -> None:
     html = _read("ui/index.html")
     script = _read("ui/js/pages/storage.js")
     assert '<small data-i18n="storage.locationsHint">' not in html
-    assert "function renderStorageRepositoryRows(repos, profiles)" in script
-    assert "STORAGE_LOCATION_ORDER.map((location)" in script
-    assert "const showSmbProfiles = (storageState.selectedLocation || 'all') === 'smb';" in script
+    assert "function renderStorageLocationSidebar(data, repos)" in script
+    assert "function renderStorageRepositoryWorkspace(repo, job)" in script
+    assert "function storageGroupRows(data, repos)" in script
+    assert 'data-storage-repository-key=' in script
+    assert 'data-storage-action="select-repository-tab"' in script
+    assert "renderStorageSmbProfiles" not in script
 
 
 def test_storage_repository_details_focus_on_user_facing_metadata() -> None:
     script = _read("ui/js/pages/storage.js")
     css = _read("ui/remaining-ui-redesign.css")
-    details_panel = script.split("function renderStorageRepositoryDetailsPanel(repo, job)", 1)[1].split(
-        "function renderStorageRepositoryRow", 1
+    details_panel = script.split("function renderStorageRepositoryOverview(repo, job)", 1)[1].split(
+        "function renderStorageRepositoryArchives", 1
     )[0]
     assert "function storageRepositoryEncryption(repo, job)" in script
     assert "storage.repositoryNameLabel" in details_panel
@@ -36,7 +39,8 @@ def test_storage_repository_details_focus_on_user_facing_metadata() -> None:
     assert "storage.jobIdLabel" not in details_panel
     assert "storage.repoConfKeyLabel" not in details_panel
     assert 'data-storage-action="test-repo"' not in script
-    assert ".storage-repository-detail-card" in css
+    assert ".storage-repository-master-detail" in css
+    assert ".storage-maintenance-summary-grid" in css
 
 
 def test_storage_repositories_use_configured_job_icons() -> None:
@@ -47,21 +51,15 @@ def test_storage_repositories_use_configured_job_icons() -> None:
     assert "function storageRepositoryTitle(repo, job)" in script
     assert "resolveJobIcon(job || repo)" in script
     assert "resolveJobIconColor(job || repo)" in script
-    repository_row = script.split("function renderStorageRepositoryRow", 1)[1].split(
-        "function storageJobForRepository", 1
+    repository_row = script.split("function renderStorageLocationSidebar(data, repos)", 1)[1].split(
+        "function onStorageLocationClick", 1
     )[0]
-    assert "typeIcon(icon)" in repository_row
+    assert "storageRepositoryIcon(repo, job)" in repository_row
     assert "storageRepositoryTitle(repo, job)" in repository_row
-    assert "storage-repository-meta" in repository_row
     assert "storageRepositoryName(repo)" in repository_row
-    assert "storageJobName(repo, job)" in repository_row
-    assert "storage.repositoryNameLabel" in repository_row
-    assert "storage.jobNameLabel" in repository_row
-    assert "storageLocationIcon(repo.location)" not in repository_row
-    assert ".storage-repository-meta" in css
-    assert "function toggleStorageRepositoryDetails(detailsId, resultKey, button)" in script
-    assert "function renderStorageRepositoryDetailsPanel(repo, job)" in script
-    assert ".storage-repository-detail-card" in css
+    assert "storageRepositoryStatus(repo)" in repository_row
+    assert ".storage-repository-nav-item" in css
+    assert "function toggleStorageRepositoryDetails" not in script
 
 
 def test_repository_manager_uses_single_visible_repository_path_field() -> None:

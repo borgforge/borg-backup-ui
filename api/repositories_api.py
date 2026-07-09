@@ -303,6 +303,7 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "borg_repository_id": str(row.get("borg_repository_id") or "").strip(),
             "borg_last_modified": str(row.get("borg_last_modified") or "").strip(),
             "repository_stats": row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {},
+            "maintenance_results": row.get("maintenance_results") if isinstance(row.get("maintenance_results"), dict) else {},
             "offsite_candidate": bool(row.get("offsite_candidate", location == "storagebox")),
             "separate_medium_candidate": bool(row.get("separate_medium_candidate", location in {"usb", "storagebox", "smb"})),
             "source_job_keys": source_job_keys,
@@ -555,18 +556,26 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     if not repository:
         raise ValueError("Repository not found")
     storage = _storage_by_key(config).get(str(repository.get("storage_key") or ""), {})
+    cleanup = None
     if str(storage.get("location") or "").lower() == "smb":
         from smb_profiles_api import run_smb_profile_action
         mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
         if not mounted.get("ok"):
             raise RuntimeError(str(mounted.get("message") or "SMB mount failed"))
+        if mounted.get("message_code") == "smb_mount_success":
+            profile_key = str(storage.get("profile_key") or "")
+            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
     repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
     passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if passphrase_file is not None and not passphrase_file.is_file():
         raise ValueError("Repository passphrase file is missing")
-    info_payload = _borg_info(storage, repo_path, passphrase_file)
-    archive_payload = _borg_list(storage, repo_path, passphrase_file)
+    try:
+        info_payload = _borg_info(storage, repo_path, passphrase_file)
+        archive_payload = _borg_list(storage, repo_path, passphrase_file)
+    finally:
+        if cleanup:
+            cleanup()
     fields = _borg_info_fields(info_payload, archive_payload)
     updated = {
         **repository,
@@ -577,6 +586,51 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     }
     write_repository_store(config, {"repositories": [updated if str(row.get("repository_key") or "") == key else row for row in rows]})
     return {"ok": True, "repository": enrich_repository_display_fields(updated)}
+
+
+def get_repository_archives(config: dict, repository_key: str, limit: int = 100) -> dict[str, Any]:
+    key = str(repository_key or "").strip()
+    maximum = max(1, min(int(limit or 100), 500))
+    store = read_repository_store(config)
+    repository = next(
+        (row for row in store.get("repositories", []) if str(row.get("repository_key") or "") == key),
+        None,
+    )
+    if not repository:
+        raise ValueError("Repository not found")
+    storage = _storage_by_key(config).get(str(repository.get("storage_key") or ""), {})
+    cleanup = None
+    if str(storage.get("location") or "").lower() == "smb":
+        from smb_profiles_api import run_smb_profile_action
+        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
+        if not mounted.get("ok"):
+            raise RuntimeError(str(mounted.get("message") or "SMB mount failed"))
+        if mounted.get("message_code") == "smb_mount_success":
+            profile_key = str(storage.get("profile_key") or "")
+            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+    repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
+    passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
+    passphrase_file = Path(passphrase_ref) if passphrase_ref else None
+    if passphrase_file is not None and not passphrase_file.is_file():
+        raise ValueError("Repository passphrase file is missing")
+    try:
+        payload = _borg_list(storage, repo_path, passphrase_file)
+    finally:
+        if cleanup:
+            cleanup()
+    rows = payload.get("archives") if isinstance(payload.get("archives"), list) else []
+    archives = []
+    for row in rows[:maximum]:
+        if not isinstance(row, dict):
+            continue
+        archives.append({
+            "name": str(row.get("name") or ""),
+            "id": str(row.get("id") or ""),
+            "start": str(row.get("start") or ""),
+            "end": str(row.get("end") or ""),
+            "duration": row.get("duration"),
+        })
+    return {"repository_key": key, "archive_count": len(rows), "archives": archives}
 
 
 def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[str, Any]:

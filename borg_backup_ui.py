@@ -571,6 +571,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             or p.startswith("/api/jobs")
             or p.startswith("/api/schedules")
             or p.startswith("/api/storage")
+            or p.startswith("/api/repositories")
             or p.startswith("/api/history")
             or p.startswith("/api/restore")
             or p.startswith("/api/reports")
@@ -673,6 +674,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/schedules": self._get_schedules,
                 "/api/storage": self._get_storage,
                 "/api/repositories": self._get_repositories,
+                "/api/repositories/archives": lambda: self._get_repository_archives(parsed.query),
                 "/api/settings": self._get_settings,
                 "/api/settings/basic": self._get_settings_basic,
                 "/api/setup-status": self._get_setup_status,
@@ -1440,6 +1442,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         return refresh_repository_info(self.config, str(body.get("repository_key") or ""))
 
+    def _get_repository_archives(self, qs_str: str) -> dict:
+        from repositories_api import get_repository_archives
+        from urllib.parse import parse_qs
+        qs = parse_qs(qs_str)
+        repository_key = str((qs.get("repository_key") or [""])[0]).strip()
+        limit = int(str((qs.get("limit") or ["100"])[0]) or "100")
+        return get_repository_archives(self.config, repository_key, limit)
+
     def _post_storage_target(self) -> dict:
         from storage_objects_api import create_storage_target
         return create_storage_target(self.config, self._read_json_body())
@@ -1651,18 +1661,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._require_data_dir_ready()
         body = self._read_json_body()
         repository_key = str(body.get("repository_key") or "").strip()
-        job_key = str(body.get("job") or "").strip()
+        if not repository_key:
+            raise ValueError("repository_key parameter is required")
         mode = str(body.get("mode", "quick")).strip().lower()
         if mode not in {"quick", "verbose", "verify_data"}:
             raise ValueError("Invalid mode parameter")
         from check_api import CheckManager
-        if repository_key:
-            action = str(body.get("action") or "check").strip().lower()
-            ok, err = CheckManager.get().start_repository(self.config, repository_key, action, mode)
-        elif job_key:
-            ok, err = CheckManager.get().start(self.config, job_key, mode)
-        else:
-            raise ValueError("repository_key parameter is required")
+        action = str(body.get("action") or "check").strip().lower()
+        ok, err = CheckManager.get().start_repository(self.config, repository_key, action, mode)
         if not ok:
             raise RuntimeError(err)
         return {"ok": True}

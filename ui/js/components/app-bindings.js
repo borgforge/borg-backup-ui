@@ -63,7 +63,7 @@
     _setHidden('[data-jobs-action="open-wizard"]', isViewer);
 
     _setHidden('[data-storage-action="repository-maintenance"]', isViewer);
-    _setHidden('[data-storage-action="smb-action"]', isViewer);
+    _setHidden('#storage-add-repository-btn', !canSettings);
 
     _setHidden('#rt-run-btn', isViewer);
     _setHidden('#restore-start-btn', isViewer);
@@ -116,11 +116,10 @@
     document.getElementById('history-refresh-btn')?.addEventListener('click', refreshHistory);
     document.getElementById('history-content')?.addEventListener('click', onHistoryContentClick);
     document.getElementById('storage-refresh-btn')?.addEventListener('click', refreshStorage);
+    document.getElementById('storage-add-repository-btn')?.addEventListener('click', openRepositoryManager);
     document.getElementById('storage-location-list')?.addEventListener('click', onStorageLocationClick);
+    document.getElementById('storage-location-list')?.addEventListener('input', onStorageSearchInput);
     document.getElementById('storage-content')?.addEventListener('click', onStorageContentClick);
-    document.getElementById('storage-content')?.addEventListener('input', onStorageSearchInput);
-    document.getElementById('check-clear-log-btn')?.addEventListener('click', checkClearLog);
-    document.getElementById('check-close-log-btn')?.addEventListener('click', checkCloseLog);
     document.getElementById('history-filter-type')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-location')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-status')?.addEventListener('change', applyHistoryFilters);
@@ -213,7 +212,6 @@
         '[data-jobs-action="start-job"]',
         '[data-jobs-action="open-wizard"]',
         '[data-jobs-action="toggle-menu"]',
-        '[data-storage-action="smb-action"]',
         '[data-storage-action="repository-maintenance"]',
         '#rt-run-btn',
         '#restore-start-btn',

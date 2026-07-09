@@ -228,7 +228,7 @@ Best practices:
 
 ![Storage](../assets/en/storage.png)
 
-The **Repositories** page groups Borg repositories by storage target. **Add repository** guides users through storage-target setup and repository creation or import.
+The **Repositories** page uses a master-detail workspace. Borg repositories are grouped by their exact storage target on the left, while the selected repository remains visible in the workspace on the right. **Add repository** guides users through storage-target setup and repository creation or import.
 
 ### 4.1 Purpose of the Page
 
@@ -236,12 +236,14 @@ The page separates storage targets, Borg repositories, and backup jobs. A storag
 
 ### 4.2 Areas and Functions
 
-- **Location sidebar:** Filters by `Local`, `USB`, `SMB`, and `Storagebox`.
-- **Repository table:** Shows display name, linked job, storage target, path, and status.
+- **Repository sidebar:** Groups repositories by the exact storage target and shows display name, repository directory, and status for each entry.
+- **Search:** Filters sidebar entries by name, path, job, or storage target.
+- **Workspace header:** Shows the selected repository, its path, and the summarized current state.
+- **Overview:** Shows Borg statistics, maintenance state, and human-readable repository, storage target, job, encryption, and path details.
+- **Archives:** Loads the current Borg archive inventory with archive name, technical ID, start time, and duration.
+- **Maintenance:** Provides Check, Verify Data, Prune, and Compact as separate actions with persistent results.
+- **Activities:** Lists the most recently stored maintenance results in chronological order.
 - **Add repository:** Opens a wizard for existing or new storage targets and for creating or importing a repository.
-- **SMB mount actions:** If SMB targets exist, mount status and mount actions may be visible.
-- **Details:** Show repository path, encryption, and loaded Borg statistics.
-- **Repository maintenance:** Provides Refresh Info, Check, Verify Data, Prune, and Compact per repository.
 
 ### 4.3 Create or Import a Repository
 
@@ -260,21 +262,23 @@ The page separates storage targets, Borg repositories, and backup jobs. A storag
 Check and maintain a repository:
 
 1. Open **Repositories**.
-2. Select the location.
-3. Find the repository.
-4. Open **Details**.
-5. Refresh repository information or start a maintenance action as required.
+2. Select the repository in the sidebar grouped by storage target.
+3. Review Borg statistics and the latest state under **Overview**.
+4. Open **Maintenance** and start Check, Verify Data, Prune, or Compact as required.
+5. Review the status after completion. For failures, expand the secret-masked technical details in the status card.
 
 Check an SMB target:
 
 1. First check the SMB profile in **Settings > SMB Profiles**.
 2. Open **Repositories**.
-3. Make sure the SMB target is mounted.
-4. Then open repository details and refresh its information.
+3. Select the repository. The application temporarily mounts a managed SMB target when access is needed and unmounts it afterwards if it mounted it.
+4. Then refresh repository information under **Overview**.
 
 ### 4.5 Notes
 
 > **Note:** Prune uses the linked job's retention policy. Prune remains disabled without a linked job.
+
+> **Note:** Prune lists deleted archives in its result. Compact only shows a numeric reclaimed-space value when Borg reports it.
 
 > **Warning:** Borg Check can take a long time depending on repository size and target. Start it deliberately and not too frequently.
 

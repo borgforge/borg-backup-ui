@@ -10,9 +10,10 @@ if str(API_ROOT) not in sys.path:
 
 import config_api  # noqa: E402
 import repositories_api  # noqa: E402
+import smb_profiles_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
-from repositories_api import create_or_import_repository, read_repository_store, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
+from repositories_api import create_or_import_repository, get_repository_archives, read_repository_store, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
 
@@ -326,6 +327,75 @@ def test_repository_info_counts_archives_from_borg_list(tmp_path: Path, monkeypa
     assert result["repository"]["repository_stats"]["archives_count"] == 17
     stored = read_repository_store(config)["repositories"][0]
     assert stored["repository_stats"]["archives_count"] == 17
+
+
+def test_repository_archives_are_loaded_by_repository_key(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_flash",
+        "display_name": "Flash",
+        "storage_key": "storage_local_test",
+        "path_raw": "/mnt/backup/borg-backup-flash",
+    }]})
+    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {
+        "archives": [
+            {"name": "flash-2", "id": "two", "start": "2026-07-10T09:00:00", "duration": 2.5},
+            {"name": "flash-1", "id": "one", "start": "2026-07-09T09:00:00", "duration": 2.0},
+        ],
+    })
+
+    result = get_repository_archives(config, "repo_flash", 1)
+
+    assert result["archive_count"] == 2
+    assert result["archives"] == [{
+        "name": "flash-2",
+        "id": "two",
+        "start": "2026-07-10T09:00:00",
+        "end": "",
+        "duration": 2.5,
+    }]
+
+
+def test_repository_archives_unmounts_smb_only_when_api_mounted_it(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_smb_test",
+        "display_name": "NAS",
+        "storage_type": "smb",
+        "location": "smb",
+        "profile_key": "smb-1",
+        "mount_path": "/mnt/borg-backup-ui/smb/smb-1",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_smb_test",
+        "display_name": "SMB Test",
+        "storage_key": "storage_smb_test",
+        "location": "smb",
+        "path_raw": "/mnt/borg-backup-ui/smb/smb-1/borg-test",
+    }]})
+    calls = []
+
+    def fake_action(_config, profile_key, action):
+        calls.append((profile_key, action))
+        return {
+            "ok": True,
+            "message_code": "smb_mount_success" if action == "mount" else "smb_unmount_success",
+        }
+
+    monkeypatch.setattr(smb_profiles_api, "run_smb_profile_action", fake_action)
+    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {"archives": []})
+
+    result = get_repository_archives(config, "repo_smb_test")
+
+    assert result["archive_count"] == 0
+    assert calls == [("smb-1", "mount"), ("smb-1", "unmount")]
 
 
 def test_repository_test_uses_repository_object_passphrase(tmp_path: Path, monkeypatch):

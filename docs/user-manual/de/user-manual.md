@@ -228,7 +228,7 @@ Best Practices:
 
 ![Storage](../assets/de/storage.png)
 
-Die Seite **Repositories** zeigt Borg-Repositorys nach Speicherziel gruppiert. Über **Repository hinzufügen** können Speicherziele geführt eingerichtet sowie Repositorys erstellt oder importiert werden.
+Die Seite **Repositories** verwendet eine Master-Detail-Ansicht. Links werden Borg-Repositorys nach dem exakten Speicherziel gruppiert; rechts bleibt der Arbeitsbereich des ausgewählten Repositorys sichtbar. Über **Repository hinzufügen** können Speicherziele geführt eingerichtet sowie Repositorys erstellt oder importiert werden.
 
 ### 4.1 Zweck der Seite
 
@@ -236,12 +236,14 @@ Die Seite trennt Speicherziele, Borg-Repositorys und Backup-Jobs. Ein Speicherzi
 
 ### 4.2 Bereiche und Funktionen
 
-- **Standort-Sidebar:** Filtert nach `Lokal`, `USB`, `SMB` und `Storagebox`.
-- **Repository-Tabelle:** Zeigt Anzeigename, verknüpften Job, Speicherziel, Pfad und Status.
+- **Repository-Sidebar:** Gruppiert Repositorys nach dem konkreten Speicherziel und zeigt pro Eintrag Anzeigename, Repository-Verzeichnis und Status.
+- **Suche:** Filtert die Einträge der Sidebar nach Namen, Pfad, Job oder Speicherziel.
+- **Kopfbereich:** Zeigt das ausgewählte Repository, seinen Pfad und den aktuellen zusammengefassten Zustand.
+- **Übersicht:** Zeigt Borg-Kennzahlen, Wartungsstatus sowie verständliche Angaben zu Repository, Speicherziel, Job, Verschlüsselung und Pfad.
+- **Archive:** Lädt die aktuelle Archivliste mit Archivname, technischer ID, Startzeit und Dauer direkt aus Borg.
+- **Wartung:** Bietet Check, Datenprüfung, Prune und Compact als klar getrennte Aktionen mit dauerhaft sichtbarem Ergebnis.
+- **Aktivitäten:** Zeigt die zuletzt gespeicherten Wartungsergebnisse in zeitlicher Reihenfolge.
 - **Repository hinzufügen:** Öffnet einen Assistenten für vorhandene oder neue Speicherziele und für Erstellen oder Importieren eines Repositorys.
-- **SMB-Mount-Aktionen:** Wenn SMB-Ziele vorhanden sind, können Mount-Status und Mount-Aktionen sichtbar sein.
-- **Details:** Zeigen Repository-Pfad, Verschlüsselung und geladene Borg-Statistiken.
-- **Repository-Wartung:** Bietet Info aktualisieren, Check, Datenprüfung, Prune und Compact pro Repository.
 
 ### 4.3 Repository erstellen oder importieren
 
@@ -260,21 +262,23 @@ Die Seite trennt Speicherziele, Borg-Repositorys und Backup-Jobs. Ein Speicherzi
 Repository prüfen und warten:
 
 1. Öffnen Sie **Repositories**.
-2. Wählen Sie den Standort.
-3. Suchen Sie das Repository.
-4. Öffnen Sie **Details**.
-5. Aktualisieren Sie bei Bedarf die Repository-Informationen oder starten Sie eine Wartungsaktion.
+2. Wählen Sie das Repository in der nach Speicherziel gruppierten Sidebar.
+3. Prüfen Sie unter **Übersicht** die Borg-Kennzahlen und den letzten Zustand.
+4. Öffnen Sie **Wartung** und starten Sie bei Bedarf Check, Datenprüfung, Prune oder Compact.
+5. Prüfen Sie nach Abschluss den Status. Bei einem Fehler können Sie die maskierten technischen Details im Statusfeld öffnen.
 
 SMB-Ziel prüfen:
 
 1. Prüfen Sie zuerst das SMB-Profil in **Einstellungen > SMB-Profile**.
 2. Öffnen Sie **Repositories**.
-3. Stellen Sie sicher, dass das SMB-Ziel gemountet ist.
-4. Öffnen Sie danach die Repository-Details und aktualisieren Sie die Informationen.
+3. Wählen Sie das Repository. Die Anwendung hängt ein noch nicht eingehängtes verwaltetes SMB-Ziel für den Zugriff temporär ein und anschließend wieder aus.
+4. Aktualisieren Sie danach unter **Übersicht** die Repository-Informationen.
 
 ### 4.5 Hinweise
 
 > **Hinweis:** Prune nutzt die Retention des verknüpften Jobs. Ohne Job-Zuordnung bleibt Prune deaktiviert.
+
+> **Hinweis:** Prune listet entfernte Archive im Ergebnis. Compact zeigt den freigegebenen Speicherplatz nur dann numerisch an, wenn Borg diesen Wert ausgibt.
 
 > **Warnung:** Borg Check kann je nach Repository-Größe und Ziel sehr lange laufen. Starten Sie ihn bewusst und nicht unnötig häufig.
 

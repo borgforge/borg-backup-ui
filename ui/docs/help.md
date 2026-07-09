@@ -97,8 +97,14 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 ## Repositories
 
 - **Repositories** ist der Ort zum Einrichten, Importieren und Warten von Borg-Repositories.
-- In den Details eines Repositorys können Informationen aktualisiert sowie Check, Datenprüfung, Prune und Compact gestartet werden.
+- Links werden Repositorys nach dem konkreten Speicherziel gruppiert. Die Suche filtert die Repository-Liste, ohne den ausgewählten Speicherort zu verändern.
+- **Übersicht** zeigt Borg-Kennzahlen, den letzten bekannten Wartungszustand und die verständlichen Repository-Daten.
+- **Archive** lädt die aktuelle Archivliste direkt aus dem ausgewählten Repository.
+- **Wartung** bietet Check, Datenprüfung, Prune und Compact. Der Status und das Ergebnis bleiben nach Abschluss sichtbar; ein technisches Live-Log ist dafür nicht erforderlich.
+- **Aktivitäten** ordnet die zuletzt gespeicherten Wartungsergebnisse chronologisch ein.
 - Prune verwendet die Aufbewahrungsrichtlinie des verknüpften Jobs und ist ohne Job-Zuordnung deaktiviert.
+- Nach Prune werden die entfernten Archive zusammengefasst. Compact zeigt den freigegebenen Speicherplatz, wenn Borg diesen Wert ausgibt.
+- Bei Fehlern können maskierte technische Details im betreffenden Statusfeld geöffnet werden.
 - Datenprüfung, Prune und Compact müssen ausdrücklich bestätigt werden.
 
 ## Restore und Restore Tests

@@ -4940,57 +4940,6 @@ body {
   font-weight: 600;
   letter-spacing: 0;
 }
-.check-mode-hint {
-  margin: -4px 0 12px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.check-log-panel { margin-top: 12px; }
-.check-log-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 10px;
-  background: var(--sidebar-bg);
-  border-radius: 6px 6px 0 0;
-  border: 1px solid var(--border);
-  border-bottom: none;
-}
-.check-log-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.check-close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.check-close-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
-}
-.check-log-status { font-size: 12px; font-weight: 600; }
-.check-log-status.running { color: var(--text-muted); }
-.check-log-status.success { color: var(--success); }
-.check-log-status.error   { color: var(--danger); }
-.check-log-output {
-  margin: 0;
-  border-radius: 0 0 6px 6px;
-  border: 1px solid var(--border);
-  max-height: 360px;
-  overflow-y: auto;
-}
-
 /* ── Page Empty State ── */
 .page-empty-state {
   display: flex;

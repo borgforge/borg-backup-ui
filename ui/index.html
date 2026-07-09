@@ -308,14 +308,15 @@
             </svg>
             <span data-i18n="storage.refresh">Aktualisieren</span>
           </button>
+          <button class="btn btn-primary" id="storage-add-repository-btn" data-i18n="storage.addRepository">Repository hinzufügen</button>
         </div>
       </div>
       <div id="storage-message" class="status-message hidden"></div>
       <div class="storage-redesign-layout ui-context-layout">
         <aside class="storage-location-sidebar ui-context-sidebar">
           <div class="ui-context-sidebar__header">
-            <small data-i18n="storage.grouping">Gruppierung</small>
-            <strong data-i18n="storage.locations">Standorte</strong>
+            <small data-i18n="storage.storageTargets">Speicherziele</small>
+            <strong data-i18n="storage.repositories">Repositories</strong>
           </div>
           <nav id="storage-location-list" class="ui-context-nav" data-i18n-aria-label="storage.locations" aria-label="Standorte"></nav>
         </aside>
@@ -329,23 +330,6 @@
           </header>
           <div id="storage-content">
             <div class="loading-spinner"><div class="spinner"></div><span data-i18n="storage.loading">Lade Repositories...</span></div>
-          </div>
-
-          <div id="check-message" class="status-message hidden"></div>
-          <div id="check-log-panel" class="check-log-panel hidden">
-            <div class="check-log-toolbar">
-              <span id="check-log-status" class="check-log-status"></span>
-              <div class="check-log-actions">
-                <button class="btn btn-secondary btn-sm" id="check-clear-log-btn" data-i18n="storage.check.clear">Leeren</button>
-                <button class="check-close-btn" id="check-close-log-btn" title="Schließen" aria-label="Schließen" data-i18n-title="storage.check.close" data-i18n-aria-label="storage.check.close">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <pre id="check-log-output" class="log-output check-log-output"></pre>
           </div>
         </section>
       </div>
