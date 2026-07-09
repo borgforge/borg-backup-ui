@@ -281,8 +281,6 @@ function onStorageSearchInput(event) {
 }
 
 function renderStorageRepositoryRow(repo, profiles) {
-  const resultId = `repo-test-${repo.conf_key}`;
-  const detailsBtnId = `repo-test-details-${repo.conf_key}`;
   const profile = repo.location === 'smb' ? _findSmbProfileForRepo(repo, profiles) : null;
   const unavailable = repo.location === 'smb' && profile && !profile.is_mounted;
   const managed = !!repo.repository_key;
@@ -298,6 +296,9 @@ function renderStorageRepositoryRow(repo, profiles) {
     ? repo.used_by.join(', ')
     : (Array.isArray(repo.source_job_keys) ? repo.source_job_keys.join(', ') : '');
   const repositoryKey = repo.repository_key || repo.conf_key || '';
+  const resultKey = String(repositoryKey || repo.path_display || repo.path_raw || repo.repo_uri || repo.repo_path || '').replace(/[^A-Za-z0-9_-]/g, '_');
+  const resultId = `repo-test-${resultKey}`;
+  const detailsBtnId = `repo-test-details-${resultKey}`;
   const title = storageRepositoryTitle(repo, job);
   const repositoryName = storageRepositoryName(repo);
   const jobName = storageJobName(repo, job);
@@ -331,6 +332,7 @@ function renderStorageRepositoryRow(repo, profiles) {
           data-storage-action="test-repo"
           data-repo-path="${escHtml(repo.path_display)}"
           data-repo-conf-key="${escHtml(repo.conf_key || '')}"
+          data-repository-key="${escHtml(repositoryKey)}"
           data-result-id="${resultId}"
           ${unavailable ? `disabled title="${storageT('storage.mountFirst')}"` : ''}>${storageT('storage.test')}</button>
         <button class="btn btn-secondary btn-sm hidden"
@@ -384,7 +386,7 @@ function onStorageContentClick(event) {
   if (!el) return;
   const action = el.dataset.storageAction || '';
   if (action === 'test-repo') {
-    return testRepo(el.dataset.repoPath || '', el.dataset.resultId || '', el.dataset.repoConfKey || '');
+    return testRepo(el.dataset.repoPath || '', el.dataset.resultId || '', el.dataset.repoConfKey || '', el.dataset.repositoryKey || '');
   }
   if (action === 'smb-action') {
     return runSmbAction(el.dataset.profileKey || '', el.dataset.smbAction || '', el.dataset.resultId || '');
@@ -493,16 +495,16 @@ async function runSmbAction(profileKey, action, resultId) {
   }
 }
 
-async function testRepo(repoPath, resultId, repoConfKey = '') {
+async function testRepo(repoPath, resultId, repoConfKey = '', repositoryKey = '') {
   const el = document.getElementById(resultId);
-  const detailsBtn = document.getElementById(`repo-test-details-${repoConfKey}`);
+  const detailsBtn = document.getElementById(String(resultId || '').replace(/^repo-test-/, 'repo-test-details-'));
   if (el) { el.className = 'test-result testing'; el.textContent = storageT('storage.checking'); el.title = ''; }
   if (detailsBtn) detailsBtn.classList.add('hidden');
   try {
     const res = await fetch('/api/storage/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo_path: repoPath, repo_conf_key: repoConfKey }),
+      body: JSON.stringify({ repo_path: repoPath, repo_conf_key: repoConfKey, repository_key: repositoryKey }),
     });
     const data = await res.json();
     if (el) {
@@ -742,7 +744,26 @@ async function copyStorageTestDetails() {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-  } catch (_) {}
+    return;
+  } catch (_) {
+    // Fall back for non-secure contexts or browsers that deny navigator.clipboard.
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'readonly');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    document.execCommand('copy');
+  } catch (_) {
+    // Best effort only. The details remain visible for manual copying.
+  } finally {
+    textarea.remove();
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

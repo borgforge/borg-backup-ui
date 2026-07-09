@@ -991,11 +991,25 @@ def get_repositories_data(ui_config: dict) -> dict:
     }
 
 
-def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "") -> dict:
+def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "", repository_key: str = "") -> dict:
     """Führt 'borg info' auf dem Repository aus."""
     env = dict(os.environ)
     raw_conf = read_raw_conf(ui_config)
     expanded = read_expanded_conf(ui_config)
+    repository_key = str(repository_key or "").strip()
+
+    def _repository_object() -> dict:
+        if not repository_key:
+            return {}
+        try:
+            from repositories_api import read_repository_store
+            rows = read_repository_store(ui_config).get("repositories", [])
+        except Exception:
+            return {}
+        for row in rows:
+            if str(row.get("repository_key") or "").strip() == repository_key:
+                return row if isinstance(row, dict) else {}
+        return {}
 
     def _storagebox_user_from_conf() -> str:
         user = str(expanded.get("STORAGEBOX_USER", "")).strip()
@@ -1080,11 +1094,16 @@ def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "") ->
                 return pass_default
         return ""
 
+    repo_obj = _repository_object()
+    if not str(repo_path or "").strip() and repo_obj:
+        repo_path = str(repo_obj.get("path_raw") or repo_obj.get("path_display") or repo_obj.get("repo_uri") or repo_obj.get("repo_path") or "").strip()
     repo_path = _inject_storagebox_user(repo_path)
 
     # Passphrase job-basiert auflösen (inkl. _local/_usb/_storagebox).
     # Zentrale Legacy-Passphrase-Keys werden nicht mehr verwendet.
-    pf = _resolve_job_passphrase_path()
+    pf = str(repo_obj.get("passphrase_ref") or "").strip() if repo_obj else ""
+    if not pf:
+        pf = _resolve_job_passphrase_path()
     if pf:
         env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pf))}"
     env["BORG_REPO"] = repo_path

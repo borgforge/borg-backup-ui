@@ -8,9 +8,10 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+import config_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
-from repositories_api import create_or_import_repository, read_repository_store, repository_key_for  # noqa: E402
+from repositories_api import create_or_import_repository, read_repository_store, repository_key_for, write_repository_store  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
 
@@ -271,6 +272,39 @@ def test_repository_manager_import_uses_profile_storage_key(tmp_path: Path):
     assert storage["base_path"] == "/mnt/disks/USB5TB"
     assert repo["usb_profile_key"] == "usb-5tb"
     assert repo["relative_path"] == "borg-backup-photos"
+
+
+def test_repository_test_uses_repository_object_passphrase(tmp_path: Path, monkeypatch):
+    secret = tmp_path / "secrets" / ".borg-passphrase-repo_test"
+    secret.parent.mkdir(parents=True)
+    secret.write_text("test-passphrase\n", encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_test",
+        "display_name": "Test",
+        "repository_name": "borg-backup-test",
+        "location": "local",
+        "storage_type": "local",
+        "repo_path": "/mnt/backup/borg-backup-test",
+        "path_raw": "/mnt/backup/borg-backup-test",
+        "path_display": "/mnt/backup/borg-backup-test",
+        "passphrase_ref": str(secret),
+        "encryption": "repokey-blake2",
+    }]})
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env") or {}
+        return subprocess.CompletedProcess(cmd, 0, '{"ok":true}', "")
+
+    monkeypatch.setattr(config_api.subprocess, "run", fake_run)
+
+    result = config_api.test_repository("", config, repository_key="repo_test")
+
+    assert result["success"] is True
+    assert captured["cmd"] == ["borg", "info", "--json", "/mnt/backup/borg-backup-test"]
+    assert captured["env"]["BORG_PASSCOMMAND"].endswith(str(secret))
 
 
 def test_repository_objects_v3_migrates_legacy_repository_keys(tmp_path: Path):
