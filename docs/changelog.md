@@ -9,6 +9,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #180
 - Dashboard:
   - Growth now falls back to the previous backup status for the same job when no weekly snapshot baseline exists, avoiding unnecessary dash-only growth values.
+### Issue #178
+- Settings:
+  - SSH key generation for storage profiles now shows an existing key as a warning instead of a success, making clear that no new key was created and nothing was overwritten.
 
 ### Issue #144
 - Maintenance:
