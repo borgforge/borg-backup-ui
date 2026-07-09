@@ -955,11 +955,13 @@ def get_repositories_data(ui_config: dict) -> dict:
     # migration has populated repositories.json.
     try:
         from repositories_api import build_repository_groups
+        from storage_objects_api import read_storage_store
         object_groups = build_repository_groups(ui_config)
         if any(object_groups.get(loc) for loc in object_groups):
             groups = object_groups
+        storages = read_storage_store(ui_config).get("storages", [])
     except Exception:
-        pass
+        storages = []
 
     # Sortierung innerhalb Gruppen
     type_order = {}
@@ -971,6 +973,7 @@ def get_repositories_data(ui_config: dict) -> dict:
 
     return {
         "groups": groups,
+        "storages": storages,
         "smb_profiles": get_smb_profiles_with_status(ui_config),
         "usb_mount": usb_mount,
         "storagebox_host": storagebox_host,

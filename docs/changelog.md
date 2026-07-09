@@ -14,6 +14,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - The Storage page now prefers managed repository objects and shows which jobs use each repository.
   - Repository objects now separate human-readable job, storage and repository names from technical IDs.
   - The Storage table shows display names by default and moves technical repository/job/storage IDs into the Details view.
+  - Added `config/storages.json` as storage target inventory with stable `storage_*` IDs.
+  - Existing repositories are migrated to reference storage objects and keep relative repository paths for the later repository wizard.
 
 ### Issue #180
 - Dashboard:

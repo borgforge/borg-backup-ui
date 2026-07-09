@@ -190,6 +190,7 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "storage_type": str(row.get("storage_type") or location).strip().lower(),
             "storage_key": str(row.get("storage_key") or location).strip(),
             "storage_name": str(row.get("storage_name") or "").strip(),
+            "relative_path": str(row.get("relative_path") or "").strip(),
             "storage_profile_key": str(row.get("storage_profile_key") or "").strip(),
             "usb_profile_key": str(row.get("usb_profile_key") or "").strip(),
             "smb_profile_key": str(row.get("smb_profile_key") or "").strip(),
@@ -292,6 +293,21 @@ def upsert_repository_for_job(config: dict, job: dict[str, Any], *, created_by: 
         key = _unique_repository_key(str(repo.get("repository_key") or ""), by_key, identity)
 
     repo["repository_key"] = key
+    try:
+        from storage_objects_api import repository_relative_path, upsert_storage_for_repository
+        try:
+            from config_api import read_settings_payload
+            settings = read_settings_payload(config)
+        except Exception:
+            settings = None
+        storage = upsert_storage_for_repository(config, repo, settings=settings)
+        if storage:
+            repo["storage_key"] = str(storage.get("storage_key") or repo.get("storage_key") or "")
+            repo["storage_name"] = str(storage.get("display_name") or repo.get("storage_name") or "")
+            repo["relative_path"] = repository_relative_path(repo, storage)
+    except Exception:
+        pass
+
     previous = by_key.get(key, {})
     source_jobs = sorted(set((previous.get("source_job_keys") if isinstance(previous.get("source_job_keys"), list) else []) + repo["source_job_keys"]))
     used_by = sorted(set((previous.get("used_by") if isinstance(previous.get("used_by"), list) else []) + repo["used_by"]))
