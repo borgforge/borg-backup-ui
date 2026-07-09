@@ -31,15 +31,20 @@ def test_storage_test_details_are_visible_after_success_or_failure() -> None:
 
 def test_storage_repositories_use_configured_job_icons() -> None:
     script = _read("ui/js/pages/storage.js")
+    css = _read("ui/remaining-ui-redesign.css")
     assert "fetch('/api/jobs')" in script
     assert "function storageJobForRepository(repo)" in script
+    assert "function storageRepositoryTitle(repo, job)" in script
     assert "resolveJobIcon(job || repo)" in script
     assert "resolveJobIconColor(job || repo)" in script
     repository_row = script.split("function renderStorageRepositoryRow", 1)[1].split(
         "function storageJobForRepository", 1
     )[0]
     assert "typeIcon(icon)" in repository_row
+    assert "storageRepositoryTitle(repo, job)" in repository_row
+    assert "storage-repository-meta" in repository_row
     assert "storageLocationIcon(repo.location)" not in repository_row
+    assert ".storage-repository-meta" in css
 
 
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:

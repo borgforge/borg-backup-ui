@@ -75,7 +75,7 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
     rows = data["groups"]["local"]
 
     assert rows[0]["repository_key"] == "repo_appdata_local"
-    assert rows[0]["display_name"] == "Appdata - Local"
+    assert rows[0]["display_name"] == "Appdata"
     assert rows[0]["used_by"] == ["appdata_local"]
 
 
@@ -99,4 +99,3 @@ def test_wizard_save_creates_repository_object(tmp_path: Path):
     assert job["repository_key"] == "repo_photos_local"
     assert store["repositories"][0]["repository_key"] == "repo_photos_local"
     assert store["repositories"][0]["used_by"] == ["photos_local"]
-

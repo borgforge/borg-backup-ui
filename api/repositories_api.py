@@ -158,8 +158,6 @@ def repository_from_job(job: dict[str, Any], *, created_by: str = "migration") -
     usb_profile_key = str(job.get("usb_profile_key") or "").strip()
     smb_profile_key = str(job.get("smb_profile_key") or "").strip()
     display_name = str(job.get("name") or job_key).strip()
-    if location:
-        display_name = f"{display_name} - {location_label(location)}"
     storage_key = location
     profile_key = storage_profile_key or usb_profile_key or smb_profile_key
     if profile_key:
@@ -194,15 +192,6 @@ def repository_from_job(job: dict[str, Any], *, created_by: str = "migration") -
         "source_job_keys": [job_key],
         "used_by": [job_key],
     }
-
-
-def location_label(location: str) -> str:
-    return {
-        "local": "Local",
-        "usb": "USB",
-        "smb": "SMB",
-        "storagebox": "Storagebox",
-    }.get(str(location or "").strip().lower(), str(location or "").strip() or "Repository")
 
 
 def upsert_repository_for_job(config: dict, job: dict[str, Any], *, created_by: str = "wizard") -> str:
@@ -257,4 +246,3 @@ def build_repository_groups(config: dict) -> dict[str, list[dict[str, Any]]]:
     for rows in groups.values():
         rows.sort(key=lambda row: (str(row.get("backup_type") or ""), str(row.get("display_name") or "")))
     return groups
-

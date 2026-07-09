@@ -71,6 +71,19 @@ function storageTypeLabel(repo) {
   }[repo.backup_type] || String(repo.backup_type || '').toUpperCase();
 }
 
+function storageRepositoryTitle(repo, job) {
+  const raw = String(repo?.display_name || job?.name || storageTypeLabel(repo) || '').trim();
+  const cleaned = raw
+    .replace(/\s+-\s+Local$/i, '')
+    .replace(/\s+-\s+USB$/i, '')
+    .replace(/\s+-\s+SMB$/i, '')
+    .replace(/\s+-\s+Storagebox$/i, '')
+    .trim();
+  const base = cleaned || String(job?.name || storageTypeLabel(repo) || repo?.repository_key || '').trim();
+  const location = storageLocationLabel(repo?.location || '');
+  return location ? `${base} - ${location}` : base;
+}
+
 function storageRepositories(data) {
   const groups = data?.groups || {};
   return STORAGE_LOCATION_ORDER.flatMap((location) =>
@@ -227,18 +240,19 @@ function renderStorageRepositoryRow(repo, profiles) {
   const usedBy = Array.isArray(repo.used_by) && repo.used_by.length
     ? repo.used_by.join(', ')
     : (Array.isArray(repo.source_job_keys) ? repo.source_job_keys.join(', ') : '');
-  const meta = [
-    repo.repository_key || repo.conf_key || '',
-    usedBy ? storageT('storage.usedBy', { jobs: usedBy }) : '',
-  ].filter(Boolean).join(' · ');
+  const repositoryKey = repo.repository_key || repo.conf_key || '';
+  const title = storageRepositoryTitle(repo, job);
 
   return `<tr>
     <td>
       <div class="storage-repository-main">
         <span class="type-icon type-icon-${escHtml(String(repo.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(icon)}</span>
         <span>
-          <strong>${escHtml(repo.display_name || storageTypeLabel(repo))}</strong>
-          <small>${escHtml(meta)}</small>
+          <strong title="${escHtml(title)}">${escHtml(title)}</strong>
+          <small class="storage-repository-meta" title="${escHtml([repositoryKey, usedBy ? storageT('storage.usedBy', { jobs: usedBy }) : ''].filter(Boolean).join(' · '))}">
+            <span>${escHtml(repositoryKey)}</span>
+            ${usedBy ? `<span>${escHtml(usedBy)}</span>` : ''}
+          </small>
         </span>
       </div>
     </td>

@@ -98,6 +98,28 @@
   font-size: var(--ui-font-size-xs);
 }
 
+.storage-repository-meta {
+  display: flex !important;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+.storage-repository-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-repository-meta span:first-child {
+  flex: 0 1 auto;
+}
+
+.storage-repository-meta span:last-child {
+  flex: 1 1 auto;
+  color: var(--ui-color-text-muted);
+}
+
 .storage-repository-path {
   display: block;
   overflow: hidden;
