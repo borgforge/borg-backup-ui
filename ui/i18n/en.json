@@ -580,7 +580,7 @@
     "noDockerContainers": "No Docker containers found.",
     "noVms": "No VMs found.",
     "sourcePaths": "Source paths",
-    "sourcePathsHint": "(autocomplete from /mnt, press Enter to add)",
+    "sourcePathsHint": "(from /mnt: ↑/↓ select, → open directory, Enter to add)",
     "storageType": "Storage type",
     "storageTarget": "Storage target",
     "noStorageTargetsForLocation": "No storage targets are available for this storage type",

@@ -784,6 +784,16 @@ function wizardSourcePathKeydown(event) {
     wizardRenderSourceSuggest();
     return;
   }
+  if (event.key === 'ArrowRight' && rows.length) {
+    const input = document.getElementById('wiz-source-path-input');
+    const selected = rows[wizardState.sourceSuggestIndex]?.path;
+    if (!input || !selected) return;
+    event.preventDefault();
+    input.value = selected;
+    wizardHideSourceSuggest();
+    wizardSourcePathInputChanged();
+    return;
+  }
   if (event.key === 'Enter') {
     event.preventDefault();
     const input = document.getElementById('wiz-source-path-input');

@@ -580,7 +580,7 @@
     "noDockerContainers": "Keine Docker-Container gefunden.",
     "noVms": "Keine VMs gefunden.",
     "sourcePaths": "Quellpfade",
-    "sourcePathsHint": "(Autocomplete ab /mnt, Enter zum Übernehmen)",
+    "sourcePathsHint": "(ab /mnt: ↑/↓ auswählen, → Verzeichnis öffnen, Enter übernehmen)",
     "storageType": "Speichertyp",
     "storageTarget": "Speicherziel",
     "noStorageTargetsForLocation": "Keine Speicherziele für diesen Speichertyp vorhanden",

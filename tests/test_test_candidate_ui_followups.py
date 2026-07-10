@@ -95,10 +95,16 @@ def test_repository_manager_uses_single_visible_repository_path_field() -> None:
 
 def test_wizard_source_autocomplete_cancels_stale_requests() -> None:
     script = _read("ui/js/pages/wizard.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
     assert "function wizardCancelSourceSuggestRequest" in script
     assert "new AbortController()" in script
     assert "requestId !== wizardState.sourceSuggestRequest" in script
     assert "}, 180);" in script
+    assert "event.key === 'ArrowRight' && rows.length" in script
+    assert "input.value = selected" in script
+    assert "→ Verzeichnis öffnen" in german
+    assert "→ open directory" in english
 
 
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:

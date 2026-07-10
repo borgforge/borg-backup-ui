@@ -33,6 +33,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #187
 - Storage:
+  - Source-path suggestions support keyboard drill-down: Up/Down selects, Right opens the selected directory, and Enter adds the final source path.
   - Job source-path autocomplete now browses safely below `/mnt`, debounces input and prevents stale requests from clearing newer suggestions.
   - Repository paths can be typed naturally with internal hyphens; live input no longer removes a trailing hyphen before the next character is entered.
   - Added a three-step repository manager that selects or creates and tests Local, USB, SMB, and SSH/Storagebox targets before repository setup.
