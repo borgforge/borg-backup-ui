@@ -13,8 +13,8 @@ from typing import Any, Dict, List
 
 
 DEPRECATED_CONF_KEYS: Dict[str, str] = {
-    "BORG_PASSPHRASE_FILE_LOCAL": "Passphrase path is now stored per job",
-    "BORG_PASSPHRASE_FILE_STORAGEBOX": "Passphrase path is now stored per job",
+    "BORG_PASSPHRASE_FILE_LOCAL": "Passphrase reference is now stored by the repository object",
+    "BORG_PASSPHRASE_FILE_STORAGEBOX": "Passphrase reference is now stored by the repository object",
     "GLOBAL_DOCKER_STOP_TIMEOUT": "replaced by DOCKER_STOP_TIMEOUT",
     "GLOBAL_DOCKER_STOP_WAIT": "replaced by DOCKER_STOP_WAIT",
     "GLOBAL_DOCKER_START_WAIT": "replaced by DOCKER_START_WAIT",
@@ -91,7 +91,7 @@ def _read_migration_state(config_dir: Path) -> Dict[str, Any]:
 
 def _deprecated_reason(key: str) -> str:
     if key.startswith("BORG_PASSPHRASE_FILE_"):
-        return "Passphrase path is now stored per job"
+        return "Passphrase reference is now stored by the repository object"
     return DEPRECATED_CONF_KEYS.get(key, "")
 
 

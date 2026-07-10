@@ -108,8 +108,11 @@ def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
     result = save_job(params, tmp_path / "scripts", tmp_path / "data", config)
     metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
 
-    assert metadata["remote_init_confirmed"] is False
-    assert metadata["create_repo_if_missing"] is False
+    assert metadata["repository_key"] == "repo_flash_storagebox_test"
+    assert "remote_init_confirmed" not in metadata
+    assert "create_repo_if_missing" not in metadata
+    assert "repo" not in metadata
+    assert "passphrase" not in metadata
 
 
 def test_save_storagebox_job_without_repository_object_is_rejected(tmp_path: Path):
@@ -117,7 +120,7 @@ def test_save_storagebox_job_without_repository_object_is_rejected(tmp_path: Pat
         save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})
 
 
-def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypatch):
+def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkeypatch):
     data_root = tmp_path / "borg-backup"
     scripts_dir = data_root / "scripts"
     jobs_dir = data_root / "config" / "jobs"
@@ -125,16 +128,14 @@ def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypat
     jobs_dir.mkdir(parents=True)
     (jobs_dir / "vms_local.json").write_text(
         json.dumps({
+            "schema_version": 2,
             "job_key": "vms_local",
             "backup_type": "vms",
             "location": "local",
             "name": "VMs",
             "enabled": True,
             "runner": "scriptless-wizard-runner",
-            "repo": {
-                "conf_key": "REPO_VMS_LOCAL",
-                "default": "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms",
-            },
+            "repository_key": "repo_vms_local_test",
             "paths": {
                 "conf_key": "BACKUP_PATHS_VMS",
                 "default": "/mnt/user/domains",
@@ -142,11 +143,27 @@ def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypat
         }),
         encoding="utf-8",
     )
+    config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/remotes/192.168.1.5_raid_backup",
+        "base_path": "/mnt/remotes/192.168.1.5_raid_backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_vms_local_test",
+        "display_name": "VMs",
+        "storage_key": "storage_local_test",
+        "relative_path": "borg-backup-vms",
+        "path_raw": "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms",
+        "encryption": "none",
+    }]})
 
     monkeypatch.setattr(
         "config_api.read_expanded_conf",
         lambda _cfg: {
-            "REPO_VMS_LOCAL": "/mnt/backup/borg-backup-vms",
             "BACKUP_PATHS_VMS": "/mnt/legacy/domains",
         },
     )
@@ -154,7 +171,7 @@ def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypat
     loaded = load_job_for_wizard(
         "vms_local",
         scripts_dir,
-        {"BACKUP_SCRIPTS_DIR": str(data_root)},
+        config,
     )
 
     assert loaded["repo_path"] == "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms"

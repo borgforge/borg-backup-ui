@@ -39,7 +39,7 @@ def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> 
     jobs_dir = _jobs_dir(config)
     schedules = get_schedules(config)
     jobs: List[dict] = []
-    passphrase_meta: Dict[str, dict] = {}
+    repository_keys: set[str] = set()
     for p in sorted(jobs_dir.glob("*.json")):
         try:
             raw = json.loads(p.read_text(encoding="utf-8"))
@@ -49,24 +49,43 @@ def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> 
         if selected and key not in selected:
             continue
         jobs.append(raw)
-        pp = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
-        pp_path = str(pp.get("default") or "").strip()
+        repository_key = str(raw.get("repository_key") or "").strip()
+        if repository_key:
+            repository_keys.add(repository_key)
+
+    from repositories_api import read_repository_store
+    from storage_objects_api import read_storage_store
+    repositories = [
+        row for row in read_repository_store(config).get("repositories", [])
+        if str(row.get("repository_key") or "").strip() in repository_keys
+    ]
+    storage_keys = {str(row.get("storage_key") or "").strip() for row in repositories}
+    storages = [
+        row for row in read_storage_store(config).get("storages", [])
+        if str(row.get("storage_key") or "").strip() in storage_keys
+    ]
+    passphrase_meta: Dict[str, dict] = {}
+    for repository in repositories:
+        repository_key = str(repository.get("repository_key") or "").strip()
+        pp_path = str(repository.get("passphrase_ref") or "").strip()
         if pp_path:
             f = Path(pp_path)
             if f.exists() and f.is_file():
                 b = f.read_bytes()
-                passphrase_meta[key] = {
+                passphrase_meta[repository_key] = {
                     "path": str(f),
                     "exists": True,
                     "sha256": hashlib.sha256(b).hexdigest(),
                     "size": len(b),
                 }
             else:
-                passphrase_meta[key] = {"path": pp_path, "exists": False}
+                passphrase_meta[repository_key] = {"path": pp_path, "exists": False}
     bundle = {
-        "format": "bbui-job-bundle-v1",
+        "format": "bbui-job-bundle-v2",
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "jobs": jobs,
+        "repositories": repositories,
+        "storages": storages,
         "schedules": {k: v for k, v in schedules.items() if not selected or k in selected},
         "passphrase_meta": passphrase_meta,
         "settings_payload": read_settings_payload(config),
@@ -82,22 +101,21 @@ def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> 
 
 def _collect_job_passphrase_files(bundle: dict) -> dict[str, dict]:
     out: dict[str, dict] = {}
-    jobs = bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []
-    for raw in jobs:
-        if not isinstance(raw, dict):
+    repositories = bundle.get("repositories") if isinstance(bundle.get("repositories"), list) else []
+    for repository in repositories:
+        if not isinstance(repository, dict):
             continue
-        job_key = str(raw.get("job_key") or "").strip()
-        if not job_key:
+        repository_key = str(repository.get("repository_key") or "").strip()
+        if not repository_key:
             continue
-        pp = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
-        pp_path = str(pp.get("default") or "").strip()
+        pp_path = str(repository.get("passphrase_ref") or "").strip()
         if not pp_path:
             continue
         p = Path(pp_path)
         if not p.is_file():
             continue
         content = p.read_bytes()
-        out[job_key] = {
+        out[repository_key] = {
             "path": str(p),
             "sha256": hashlib.sha256(content).hexdigest(),
             "content_b64": base64.b64encode(content).decode("ascii"),
@@ -149,7 +167,8 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
             conflict = "exists"
         schedule = schedules.get(src_key, {})
         feats = raw.get("features") if isinstance(raw.get("features"), dict) else {}
-        pp = pp_meta.get(src_key) if isinstance(pp_meta.get(src_key), dict) else {}
+        repository_key = str(raw.get("repository_key") or "").strip()
+        pp = pp_meta.get(repository_key) if isinstance(pp_meta.get(repository_key), dict) else {}
         pp_status = "unknown"
         pp_local = None
         if pp:
@@ -183,7 +202,7 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
 def preview_jobs_bundle(config: dict, bundle: dict) -> dict:
     if not isinstance(bundle, dict):
         raise ValueError("Invalid bundle")
-    if bundle.get("format") != "bbui-job-bundle-v1":
+    if bundle.get("format") != "bbui-job-bundle-v2":
         raise ValueError("Unknown bundle format")
     rows = _job_preview_rows(config, bundle)
     settings_preview = _preview_settings_payload(config, bundle.get("settings_payload"))
@@ -354,6 +373,69 @@ def _apply_settings_payload(
     return False, {"mode": "merge", "applied": applied, "conflicts": conflicts}, None
 
 
+def _apply_repository_inventory(config: dict, bundle: dict, jobs: list[dict], dry_run: bool) -> dict:
+    from repositories_api import read_repository_store, write_repository_store
+    from storage_objects_api import read_storage_store, write_storage_store
+
+    incoming_repositories = [row for row in (bundle.get("repositories") or []) if isinstance(row, dict)]
+    incoming_storages = [row for row in (bundle.get("storages") or []) if isinstance(row, dict)]
+    referenced_repository_keys = {
+        str(job.get("repository_key") or "").strip() for job in jobs if isinstance(job, dict)
+    }
+    referenced_repository_keys.discard("")
+    incoming_repositories = [
+        row for row in incoming_repositories
+        if str(row.get("repository_key") or "").strip() in referenced_repository_keys
+    ]
+    referenced_storage_keys = {
+        str(row.get("storage_key") or "").strip() for row in incoming_repositories
+    }
+    incoming_storages = [
+        row for row in incoming_storages
+        if str(row.get("storage_key") or "").strip() in referenced_storage_keys
+    ]
+
+    current_repositories = read_repository_store(config).get("repositories", [])
+    current_storages = read_storage_store(config).get("storages", [])
+    repositories_by_key = {str(row.get("repository_key") or "").strip(): row for row in current_repositories}
+    storages_by_key = {str(row.get("storage_key") or "").strip(): row for row in current_storages}
+
+    for storage in incoming_storages:
+        key = str(storage.get("storage_key") or "").strip()
+        if not key:
+            raise ValueError("Imported storage target has no key")
+        existing = storages_by_key.get(key)
+        if existing and str(existing.get("identity") or "") != str(storage.get("identity") or ""):
+            raise ValueError(f"Storage key conflict: {key}")
+        storages_by_key.setdefault(key, storage)
+
+    for repository in incoming_repositories:
+        key = str(repository.get("repository_key") or "").strip()
+        if not key:
+            raise ValueError("Imported repository has no key")
+        storage_key = str(repository.get("storage_key") or "").strip()
+        if storage_key not in storages_by_key:
+            raise ValueError(f"Imported repository references an unknown storage target: {storage_key}")
+        existing = repositories_by_key.get(key)
+        incoming_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").rstrip("/")
+        existing_path = str((existing or {}).get("path_raw") or (existing or {}).get("repo_uri") or (existing or {}).get("repo_path") or "").rstrip("/")
+        if existing and existing_path != incoming_path:
+            raise ValueError(f"Repository key conflict: {key}")
+        repositories_by_key.setdefault(key, repository)
+
+    missing = sorted(key for key in referenced_repository_keys if key not in repositories_by_key)
+    if missing:
+        raise ValueError(f"Imported jobs reference missing repositories: {', '.join(missing)}")
+
+    if not dry_run:
+        write_storage_store(config, {"storages": list(storages_by_key.values())})
+        write_repository_store(config, {"repositories": list(repositories_by_key.values())})
+    return {
+        "repositories": len(incoming_repositories),
+        "storages": len(incoming_storages),
+    }
+
+
 def import_jobs_bundle(
     config: dict,
     bundle: dict,
@@ -368,7 +450,7 @@ def import_jobs_bundle(
         raise ValueError("Invalid import mode")
     if not isinstance(bundle, dict):
         raise ValueError("Invalid bundle")
-    if bundle.get("format") != "bbui-job-bundle-v1":
+    if bundle.get("format") != "bbui-job-bundle-v2":
         raise ValueError("Unknown bundle format")
     if settings_mode not in {"ignore", "merge", "replace"}:
         raise ValueError("Invalid settings import mode")
@@ -378,6 +460,13 @@ def import_jobs_bundle(
     if not isinstance(jobs, list):
         raise ValueError("Bundle does not contain a job list")
 
+    selected_set = set(str(x).strip() for x in (selected_jobs or []) if str(x).strip())
+    inventory_jobs = [
+        row for row in jobs
+        if isinstance(row, dict) and (not selected_set or str(row.get("job_key") or "").strip() in selected_set)
+    ]
+    inventory_report = _apply_repository_inventory(config, bundle, inventory_jobs, bool(dry_run))
+
     jobs_dir = _jobs_dir(config)
     existing_files = {p.stem for p in jobs_dir.glob("*.json")}
     existing = set(existing_files)
@@ -385,7 +474,7 @@ def import_jobs_bundle(
     applied_jobs: List[Tuple[str, dict]] = []
     schedule_updates: Dict[str, dict] = {}
 
-    selected = set(str(x).strip() for x in (selected_jobs or []) if str(x).strip())
+    selected = selected_set
     per_mode = per_job_mode if isinstance(per_job_mode, dict) else {}
 
     for raw in jobs:
@@ -444,6 +533,7 @@ def import_jobs_bundle(
         "settings_applied": settings_applied,
         "settings_report": settings_report,
         "settings_backup": settings_backup,
+        "repository_inventory": inventory_report,
     }
 
 
@@ -742,7 +832,7 @@ def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: lis
     bundle.pop("settings_payload", None)
     passphrase_files = _collect_job_passphrase_files(bundle)
     payload = {
-        "format": "bbui-job-bundle-secure-v1",
+        "format": "bbui-job-bundle-secure-v2",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "bundle": bundle,
         "passphrase_files": passphrase_files,
@@ -760,7 +850,7 @@ def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str)
     enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
     plaintext = _openssl_decrypt(enc, str(password or ""))
     payload = json.loads(plaintext.decode("utf-8"))
-    if payload.get("format") != "bbui-job-bundle-secure-v1":
+    if payload.get("format") != "bbui-job-bundle-secure-v2":
         raise ValueError("Unknown encrypted jobs format")
     bundle = payload.get("bundle")
     bundle = dict(bundle) if isinstance(bundle, dict) else {}
@@ -787,7 +877,7 @@ def import_jobs_bundle_encrypted(
     enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
     plaintext = _openssl_decrypt(enc, str(password or ""))
     payload = json.loads(plaintext.decode("utf-8"))
-    if payload.get("format") != "bbui-job-bundle-secure-v1":
+    if payload.get("format") != "bbui-job-bundle-secure-v2":
         raise ValueError("Unknown encrypted jobs format")
     bundle = payload.get("bundle")
     if not isinstance(bundle, dict):
@@ -822,35 +912,19 @@ def import_jobs_bundle_encrypted(
 
     restored = 0
     if not dry_run and import_passphrases and passphrase_files:
-        jobs_dir = _jobs_dir(config)
-        keys_map: dict[str, str] = {}
-        if import_jobs:
-            for row in (result.get("report") or []):
-                if not isinstance(row, dict):
-                    continue
-                src_key = str(row.get("job_key") or "").strip()
-                new_key = str(row.get("new_job_key") or "").strip()
-                status = str(row.get("status") or "")
-                if status in {"new", "overwrite", "renamed"} and src_key and new_key:
-                    keys_map[src_key] = new_key
-        else:
-            for src_key in passphrase_files.keys():
-                if (jobs_dir / f"{src_key}.json").is_file():
-                    keys_map[src_key] = src_key
-
-        for src_key, new_key in keys_map.items():
-            pf = passphrase_files.get(src_key) if isinstance(passphrase_files.get(src_key), dict) else None
+        from repositories_api import read_repository_store
+        repositories = {
+            str(row.get("repository_key") or "").strip(): row
+            for row in read_repository_store(config).get("repositories", [])
+        }
+        for repository_key, raw_file in passphrase_files.items():
+            pf = raw_file if isinstance(raw_file, dict) else None
             if not pf:
                 continue
-            target_job_file = jobs_dir / f"{new_key}.json"
-            if not target_job_file.is_file():
+            repository = repositories.get(str(repository_key or "").strip())
+            if not repository:
                 continue
-            try:
-                job_raw = json.loads(target_job_file.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            pp = job_raw.get("passphrase") if isinstance(job_raw.get("passphrase"), dict) else {}
-            pp_path = str(pp.get("default") or "").strip()
+            pp_path = str(repository.get("passphrase_ref") or "").strip()
             if not pp_path:
                 continue
             try:

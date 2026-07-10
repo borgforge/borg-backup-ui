@@ -41,9 +41,10 @@ Im Job-Wizard wählt der Nutzer dann:
 statt einen Repository-Pfad direkt in den Job zu tippen oder indirekt erzeugen
 zu lassen.
 
-## 3. Ist-Zustand
+## 3. Ausgangszustand vor Umsetzung
 
-Aktuell liegen repository-relevante Informationen an mehreren Stellen:
+Vor Issue #184/#187 lagen repository-relevante Informationen an mehreren
+Stellen:
 
 - Job-Metadaten enthalten `repo.conf_key` und `repo.default`.
 - `backup.conf` enthält Repository-Keys und weitere Laufzeitwerte.
@@ -126,8 +127,12 @@ Ein Job referenziert künftig ein Repository:
 }
 ```
 
-Der Job kann für eine Übergangszeit weiterhin `repo.default` speichern, aber die
-führende Quelle wäre langfristig `repository_key`.
+Der Job speichert ausschließlich `repository_key`. Repository-Pfad,
+Verschlüsselung und Passphrase-Verweis werden zur Laufzeit aus dem
+Repository-Objekt aufgelöst; Storage- und Profilinformationen stammen über
+`storage_key` aus dem Storage-Objekt. Die früheren Jobfelder `repo`,
+`passphrase`, `encryption` sowie direkte Storage-/Profil-Keys werden einmalig
+migriert und danach entfernt.
 
 ## 5. Warum das wichtig ist
 
@@ -294,5 +299,7 @@ Neue Prüfungen:
 
 ### Phase 5: Aufräumen
 
-- Alte direkte Repository-Pfad-Eingabe nur noch als erweiterter Modus.
-- Doppelte Repository-Auflösung reduzieren.
+- Direkte Repository-Pfad- und Passphrase-Felder aus Jobs entfernen.
+- `repository_key` als einzigen produktiven Repository-Verweis erzwingen.
+- Alte Werte aus `backup.conf` nach validierter Migration mit Audit-Backup
+  entfernen.

@@ -74,6 +74,27 @@ def _primary_job_for_repo(repo: dict[str, Any], jobs: dict[str, dict[str, Any]])
     return None
 
 
+def _enrich_from_legacy_job(repo: dict[str, Any], job: dict[str, Any] | None) -> dict[str, Any]:
+    row = dict(repo)
+    if not isinstance(job, dict):
+        return enrich_repository_display_fields(row)
+    row["job_name"] = str(job.get("name") or job.get("job_key") or row.get("job_name") or "").strip()
+    for field in (
+        "storage_profile_name",
+        "usb_profile_name",
+        "smb_profile_name",
+        "profile_name",
+        "storage_profile_key",
+        "usb_profile_key",
+        "smb_profile_key",
+    ):
+        value = str(job.get(field) or "").strip()
+        if value:
+            row["storage_name"] = value
+            break
+    return enrich_repository_display_fields(row)
+
+
 def _needs_enrichment(repo: dict[str, Any]) -> bool:
     for field in ("repository_name", "job_name", "storage_name"):
         if not str(repo.get(field) or "").strip():
@@ -107,7 +128,7 @@ def apply(config: dict) -> dict[str, Any]:
             continue
         before = json.dumps(repo, sort_keys=True, ensure_ascii=False)
         job = _primary_job_for_repo(repo, jobs)
-        enriched = enrich_repository_display_fields(repo, job)
+        enriched = _enrich_from_legacy_job(repo, job)
         after = json.dumps(enriched, sort_keys=True, ensure_ascii=False)
         if before != after:
             changed.append(str(enriched.get("repository_key") or ""))

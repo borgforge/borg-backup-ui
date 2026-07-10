@@ -7,7 +7,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlsplit
 from typing import Any, Dict
 
 
@@ -194,21 +193,6 @@ def _split_job_paths(value: Any) -> list[str]:
 
 
 def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
-    try:
-        from storage_profiles_api import normalize_storage_profile_rows
-        from config_api import read_settings_payload
-        settings = read_settings_payload(config)
-        storage_profiles = normalize_storage_profile_rows(
-            settings.get("storage_profiles") if isinstance(settings.get("storage_profiles"), list) else []
-        )
-    except Exception:
-        storage_profiles = []
-    storage_by_key = {
-        str(row.get("key") or "").strip().lower(): row
-        for row in storage_profiles
-        if str(row.get("key") or "").strip()
-    }
-
     items = []
     if jobs_dir.is_dir():
         job_files = sorted(jobs_dir.glob("*.json"))
@@ -241,19 +225,13 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             errors.append(message)
             error_details.append({"code": code, "params": params})
 
-        repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
-        repo = str(repo_cfg.get("default") or "").strip()
-        if not repo:
-            add_error("repository_missing", "Repository is missing")
-        elif location == "storagebox":
-            if not repo.startswith("ssh://"):
-                add_error("storagebox_repo_not_ssh", "Storage Box repository is not an ssh:// URI")
-            else:
-                parts = urlsplit(repo)
-                if not parts.netloc or not parts.path.startswith("/"):
-                    add_error("storagebox_repo_incomplete", "Storage Box repository URI is incomplete")
-                if ":23." in repo:
-                    add_error("storagebox_repo_port_slash", "Storage Box repository URI is missing a slash after the port")
+        repository_context = None
+        try:
+            from repository_context import resolve_job_repository_context
+            repository_context = resolve_job_repository_context(config, job_key, job=raw)
+            location = str(repository_context.get("location") or location)
+        except Exception as exc:
+            add_error("repository_context_invalid", str(exc))
 
         paths_cfg = raw.get("paths") if isinstance(raw.get("paths"), dict) else {}
         source_paths = _split_job_paths(paths_cfg.get("default"))
@@ -264,29 +242,13 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             if missing:
                 add_error("source_paths_not_found", f"{len(missing)} source path(s) do not exist", count=len(missing))
 
-        encryption = str(raw.get("encryption") or "").strip().lower()
-        pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
-        pass_mode = str(pass_cfg.get("mode") or "").strip().lower()
-        pass_path = str(pass_cfg.get("default") or "").strip()
-        if encryption != "none" and pass_mode != "none":
-            if not pass_path:
-                add_error("passphrase_metadata_missing", "Passphrase file is missing from metadata")
-            elif not Path(pass_path).is_file():
-                add_error("passphrase_file_missing", "Passphrase file does not exist")
-
-        if location == "storagebox":
-            profile_key = str(raw.get("storage_profile_key") or "").strip().lower()
-            profile = storage_by_key.get(profile_key)
-            if not profile_key:
-                add_error("storage_profile_missing", "Storage profile is missing")
-            elif profile is None:
-                add_error("storage_profile_not_found", f"Storage profile '{profile_key}' not found", profile=profile_key)
-            else:
-                ssh_key = str(profile.get("ssh_key_path") or "").strip()
-                if ssh_key and not Path(ssh_key).is_file():
-                    add_error("ssh_key_file_missing", "SSH key file does not exist")
-                if not str(profile.get("host") or "").strip() or not str(profile.get("user") or "").strip():
-                    add_error("storage_profile_incomplete", "Storage profile is incomplete")
+        if repository_context and location == "storagebox":
+            storage = repository_context.get("storage") if isinstance(repository_context.get("storage"), dict) else {}
+            ssh_key = str(storage.get("ssh_key_path") or "").strip()
+            if ssh_key and not Path(ssh_key).is_file():
+                add_error("ssh_key_file_missing", "SSH key file does not exist")
+            if not str(storage.get("host") or "").strip() or not str(storage.get("user") or "").strip():
+                add_error("storage_profile_incomplete", "Storage target is incomplete")
 
         state = "bad" if errors else ("warn" if warnings else "ok")
         items.append({

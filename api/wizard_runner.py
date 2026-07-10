@@ -346,41 +346,37 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
         raise FileNotFoundError(f"Job metadata file not found: {job_key}")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
 
+    from repository_context import resolve_job_repository_context
+    repository_context = resolve_job_repository_context(
+        {"BACKUP_SCRIPTS_DIR": str(backup_scripts_dir)},
+        job_key,
+        job=meta,
+    )
+    storage = repository_context["storage"]
+    meta = {
+        **meta,
+        "_resolved_repository": repository_context["repository"],
+        "_resolved_storage": storage,
+    }
+
     env = dict(os.environ)
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
     conf_file = backup_scripts_dir / "config" / "backup.conf"
     if conf_file.is_file():
         env.update(load_config(conf_file))
 
     type_id = str(meta.get("backup_type") or "").strip().lower()
-    location = str(meta.get("location") or "local").strip().lower()
+    location = str(repository_context.get("location") or meta.get("location") or "local").strip().lower()
     if not type_id:
         raise ValueError("backup_type is missing from job metadata")
     if location not in {"local", "usb", "smb", "storagebox", "custom"}:
         raise ValueError(f"invalid location in job metadata: {location}")
     if location == "storagebox":
-        storage_profile_key = str(meta.get("storage_profile_key") or "").strip().lower()
-        if not storage_profile_key:
-            raise ValueError("Storage profile is missing from job metadata (storage_profile_key).")
-        try:
-            from config_api import read_settings_payload
-            payload = read_settings_payload({"BACKUP_SCRIPTS_DIR": str(backup_scripts_dir)})
-            profiles = payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []
-            selected = None
-            for row in profiles:
-                if not isinstance(row, dict):
-                    continue
-                key = str(row.get("key") or "").strip().lower()
-                if key == storage_profile_key:
-                    selected = row
-                    break
-            if not isinstance(selected, dict):
-                raise ValueError(f"Storage profile not found: {storage_profile_key}")
-            env["STORAGEBOX_HOST"] = str(selected.get("host", "")).strip()
-            env["STORAGEBOX_PORT"] = str(selected.get("port", "23")).strip() or "23"
-            env["STORAGEBOX_USER"] = str(selected.get("user", "")).strip()
-            env["STORAGEBOX_BASE_PATH"] = str(selected.get("base_path", "/./backup")).strip() or "/./backup"
-        except Exception as exc:
-            raise ValueError(f"Storage profile resolution failed: {exc}")
+        env["STORAGEBOX_HOST"] = str(storage.get("host", "")).strip()
+        env["STORAGEBOX_PORT"] = str(storage.get("port", "23")).strip() or "23"
+        env["STORAGEBOX_USER"] = str(storage.get("user", "")).strip()
+        env["STORAGEBOX_BASE_PATH"] = str(storage.get("base_path", "/./backup")).strip() or "/./backup"
     elif location == "smb":
         try:
             from config_api import read_settings_payload
@@ -396,21 +392,10 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     date_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_dir = env.get("GLOBAL_LOG_DIR", "/mnt/user/Logs")
 
-    repo_cfg = meta.get("repo") if isinstance(meta.get("repo"), dict) else {}
-    repo_key = str(repo_cfg.get("conf_key") or "")
-    repo_default = str(repo_cfg.get("default") or "")
-
     paths_cfg = meta.get("paths") if isinstance(meta.get("paths"), dict) else {}
     paths_key = str(paths_cfg.get("conf_key") or f"BACKUP_PATHS_{tu}")
     paths_default = str(paths_cfg.get("default") or "")
 
-    pass_cfg = meta.get("passphrase") if isinstance(meta.get("passphrase"), dict) else {}
-    pass_key = str(pass_cfg.get("conf_key") or f"BORG_PASSPHRASE_FILE_{tu}")
-    pass_default = str(
-        pass_cfg.get("default")
-        or f"/boot/config/borg-backup/secrets/.borg-passphrase-{type_id}_{location}"
-    )
-    pass_mode = str(pass_cfg.get("mode") or "existing_file")
     meta_compression = str(meta.get("compression") or "").strip()
     meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
     meta_keep_daily = str(meta_ret.get("daily") or "").strip()
@@ -427,7 +412,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     # Use job_key for log filename so variants like flash_local/flash_usb are separated.
     env.setdefault("LOG_FILE", f"{log_dir}/Borg-Backup_{job_key}--{date_tag}.log")
     env.setdefault("LOG_RETENTION_DAYS", env.get("GLOBAL_LOG_RETENTION_DAYS", "30"))
-    env.setdefault("BORG_REPO", env.get(repo_key, repo_default) if repo_key else repo_default)
+    env["BORG_REPO"] = str(repository_context["repository_path"])
     # Storagebox compatibility: if ssh repo URI misses user component, inject STORAGEBOX_USER.
     repo_uri = str(env.get("BORG_REPO", "") or "").strip()
     storagebox_user = str(env.get("STORAGEBOX_USER", "") or "").strip()
@@ -458,16 +443,21 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
             env["BORG_RSH"] = "ssh -o WarnWeakCrypto=no"
         env["BORG_RSH"] = _ensure_legacy_remote_ssh_options(str(env["BORG_RSH"]))
 
-    if pass_mode != "none":
-        pass_file = env.get(pass_key, pass_default)
-        pass_path = Path(pass_file)
-        if not pass_path.exists():
-            raise FileNotFoundError(f"Passphrase file not found: {pass_file}")
-        os.environ["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pass_file))}"
+    pass_file = str(repository_context.get("passphrase_ref") or "").strip()
+    if repository_context.get("encryption") != "none":
+        os.environ["BORG_PASSCOMMAND"] = f"cat {shlex.quote(pass_file)}"
+    else:
+        os.environ.pop("BORG_PASSCOMMAND", None)
+
+    ssh_key = str(storage.get("ssh_key_path") or "").strip()
+    if ssh_key:
+        env["BORG_RSH"] = f"ssh -i {shlex.quote(ssh_key)} -o WarnWeakCrypto=no"
 
     os.environ["BORG_REPO"] = env["BORG_REPO"]
     os.environ["BORG_CACHE_DIR"] = env["BORG_CACHE_DIR"]
     os.environ["BORG_SCRIPT_DIR"] = str(backup_scripts_dir)
+    os.environ["LC_ALL"] = "C"
+    os.environ["LANG"] = "C"
     if env.get("BORG_RSH"):
         os.environ["BORG_RSH"] = str(env["BORG_RSH"])
 
@@ -518,9 +508,10 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
         logging.info("SMB mount before run is disabled (mount_before_run=false)")
         return sess
 
-    profile_key = str(meta.get("smb_profile_key") or "").strip()
+    storage = meta.get("_resolved_storage") if isinstance(meta.get("_resolved_storage"), dict) else {}
+    profile_key = str(storage.get("profile_key") or "").strip()
     if not profile_key:
-        raise ValueError("SMB profile is missing from job metadata (smb_profile_key).")
+        raise ValueError("SMB storage target has no profile assignment.")
 
     profiles = _parse_smb_profiles(env)
     profile = profiles.get(profile_key)
@@ -576,88 +567,12 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
     return sess
 
 
-def _init_repo_if_needed(env: dict, encryption: str) -> int:
-    import subprocess
-
-    repo = env.get("BORG_REPO", "")
-    if not repo:
-        return 0
-
-    # Lokales Repo robust erkennen: wenn Borg-Config-Datei existiert, kein init.
-    if "://" not in repo and not repo.startswith("ssh:"):
-        repo_path = Path(repo)
-        if repo_path.exists() and (repo_path / "config").exists():
-            logging.info("Repository already exists (local check): %s", repo)
-            return 0
-
-    check = subprocess.run(
-        ["borg", "info", repo],
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-    )
-    if check.returncode == 0:
-        return 0
-
-    logging.info("Repository not found; initializing: %s", repo)
-    result = subprocess.run(
-        ["borg", "init", f"--encryption={encryption}", repo],
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-    )
-    combined = f"{result.stdout}\n{result.stderr}".lower()
-    if "already exists at" in combined or "repository already exists" in combined:
-        logging.info("Repository already exists (borg init output): %s", repo)
-        return 0
-    if result.returncode != 0:
-        for line in (result.stdout + result.stderr).splitlines():
-            if line.strip():
-                logging.error("[borg init] %s", line)
-        logging.error("borg init failed (exit %d)", result.returncode)
-    else:
-        logging.info("Repository initialized successfully: %s", repo)
-    return result.returncode
-
-
-def _normalize_storage_base_for_repo(base_path: str) -> str:
-    raw = str(base_path or "").strip()
-    if raw.startswith("/./"):
-        return "/" + raw[3:].lstrip("/")
-    if raw.startswith("./"):
-        return "/" + raw[2:].lstrip("/")
-    if raw.startswith("/"):
-        return raw
-    return "/" + raw.lstrip("/")
-
-
-def _guard_remote_repo_init(env: dict, meta: dict) -> tuple[bool, str]:
-    location = str(meta.get("location") or "").strip().lower()
-    if location != "storagebox":
-        return True, ""
-    if not bool(meta.get("create_repo_if_missing", False)):
-        return True, ""
-    if not bool(meta.get("remote_init_confirmed", False)):
-        return False, "Remote initialization is not confirmed."
-
-    repo = str(env.get("BORG_REPO", "")).strip()
-    if not repo.startswith("ssh://"):
-        return False, "Storage Box repository is not an ssh:// URI."
-    parts = urlsplit(repo)
-    if ".." in (parts.path or ""):
-        return False, "Invalid repository path ('..' is not allowed)."
-    base_norm = _normalize_storage_base_for_repo(str(env.get("STORAGEBOX_BASE_PATH", "/./backup")))
-    repo_path = str(parts.path or "")
-    if not repo_path.startswith(base_norm.rstrip("/") + "/"):
-        return False, f"Repository path is not below STORAGEBOX_BASE_PATH ({base_norm})."
-    return True, ""
-
-
 def _build_resources(env: dict, meta: dict) -> list[str]:
     resources = [f"repo:{env.get('BORG_REPO', '')}"]
     location = str(meta.get("location") or "").strip().lower()
     if location == "smb":
-        smb_key = str(meta.get("smb_profile_key") or "").strip()
+        storage = meta.get("_resolved_storage") if isinstance(meta.get("_resolved_storage"), dict) else {}
+        smb_key = str(storage.get("profile_key") or "").strip()
         if smb_key:
             resources.append(f"smb-mount:{smb_key}")
     features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
@@ -690,25 +605,8 @@ def _resolve_usb_mount_path(meta: dict, backup_scripts_dir: Path) -> str:
     location = str(meta.get("location") or "").strip().lower()
     if location != "usb":
         return ""
-    usb_profile_key = str(meta.get("usb_profile_key") or "").strip().lower()
-    if not usb_profile_key:
-        return ""
-    try:
-        from config_api import read_settings_payload
-        payload = read_settings_payload({"BACKUP_SCRIPTS_DIR": str(backup_scripts_dir)})
-        profiles = payload.get("usb_profiles") if isinstance(payload.get("usb_profiles"), list) else []
-        for row in profiles:
-            if not isinstance(row, dict):
-                continue
-            key = str(row.get("key") or "").strip().lower()
-            if key != usb_profile_key:
-                continue
-            mount_path = str(row.get("mount_path") or "").strip()
-            if mount_path:
-                return mount_path
-    except Exception:
-        return ""
-    return ""
+    storage = meta.get("_resolved_storage") if isinstance(meta.get("_resolved_storage"), dict) else {}
+    return str(storage.get("mount_path") or storage.get("base_path") or "").strip()
 
 
 def main() -> int:
@@ -772,16 +670,6 @@ def main() -> int:
     smb_session = SmbMountSession()
     try:
         smb_session = _ensure_smb_mount(env, meta)
-        encryption = str(meta.get("encryption") or "repokey-blake2")
-        if bool(meta.get("create_repo_if_missing", True)):
-            ok_guard, guard_msg = _guard_remote_repo_init(env, meta)
-            if not ok_guard:
-                logging.error("Remote initialization guard blocked the run: %s", guard_msg)
-                return 2
-            init_exit = _init_repo_if_needed(env, encryption)
-            if init_exit != 0:
-                return init_exit
-
         docker_mgr = None
         vm_mgr = None
         docker_control = _runtime_control(meta, "docker")

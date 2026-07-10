@@ -19,6 +19,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Repository objects now use deterministic hash-suffixed technical IDs such as `repo_flash_local_7f3c45ab`.
   - Storage objects now include the configured profile details needed by the later Storage/Repository wizard.
   - Missing repository encryption metadata is enriched once from linked job metadata instead of guessing a default value.
+  - Jobs now keep only `repository_key`; repository paths, passphrase references, encryption and storage/profile links are resolved exclusively through the repository and storage inventories.
+  - Added an audited, idempotent migration that validates effective legacy paths and secrets, creates a rollback backup, removes duplicate job fields and cleans deprecated repository/passphrase keys from `backup.conf`.
+  - Backup, restore, restore-test, health, profile-usage and transfer paths now share the same canonical repository resolver and refuse unmigrated job metadata instead of silently falling back.
 
 ### Issue #187
 - Storage:

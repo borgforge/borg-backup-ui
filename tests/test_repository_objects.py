@@ -27,10 +27,13 @@ def _write_job(
     *,
     location: str = "local",
     profile_key: str = "",
-    encryption: str = "",
+    encryption: str = "repokey-blake2",
 ) -> Path:
     jobs_dir = root / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
+    secret = root / "secrets" / f".borg-passphrase-{job_key}"
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    secret.write_text("secret\n", encoding="utf-8")
     job = {
         "job_key": job_key,
         "name": "Appdata",
@@ -68,7 +71,12 @@ def test_repository_objects_migration_links_existing_jobs(tmp_path: Path):
     expected_key = repository_key_for("repo_appdata_local", "/mnt/backup/borg-backup-appdata")
 
     assert result["results"]["repository_objects_v1"]["status"] == "applied"
+    assert result["results"]["repository_runtime_v1"]["status"] == "applied"
     assert job["repository_key"] == expected_key
+    assert job["schema_version"] == 2
+    assert "repo" not in job
+    assert "passphrase" not in job
+    assert "encryption" not in job
     assert store["repositories"][0]["repository_key"] == expected_key
     assert store["repositories"][0]["repository_name"] == "borg-backup-appdata"
     assert store["repositories"][0]["job_name"] == "Appdata"
@@ -77,6 +85,10 @@ def test_repository_objects_migration_links_existing_jobs(tmp_path: Path):
     assert store["repositories"][0]["relative_path"] == "borg-backup-appdata"
     assert store["repositories"][0]["path_raw"] == "/mnt/backup/borg-backup-appdata"
     assert store["repositories"][0]["used_by"] == ["appdata_local"]
+    assert "repo_conf_key" not in store["repositories"][0]
+    assert "storage_profile_key" not in store["repositories"][0]
+    assert "usb_profile_key" not in store["repositories"][0]
+    assert "smb_profile_key" not in store["repositories"][0]
     storages = read_storage_store(config)["storages"]
     assert len(storages) == 1
     assert storages[0]["storage_key"] == store["repositories"][0]["storage_key"]
@@ -153,8 +165,11 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     store = read_repository_store(config)
     assert job["repository_key"] == repo_key
-    assert job["repo"]["default"] == "/mnt/backup/borg-backup-photos"
-    assert job["create_repo_if_missing"] is False
+    assert job["schema_version"] == 2
+    assert "repo" not in job
+    assert "passphrase" not in job
+    assert "encryption" not in job
+    assert "create_repo_if_missing" not in job
     assert store["repositories"][0]["repository_key"] == repo_key
     assert store["repositories"][0]["repository_name"] == "borg-backup-photos"
     assert store["repositories"][0]["job_name"] == "Photos"
@@ -293,7 +308,7 @@ def test_repository_manager_import_uses_profile_storage_key(tmp_path: Path, monk
     assert storage["display_name"] == "USB-5TB"
     assert storage["profile_key"] == "usb-5tb"
     assert storage["base_path"] == "/mnt/disks/USB5TB"
-    assert repo["usb_profile_key"] == "usb-5tb"
+    assert "usb_profile_key" not in repo
     assert repo["relative_path"] == "borg-backup-photos"
 
 
@@ -519,12 +534,22 @@ def test_repository_test_uses_repository_object_passphrase(tmp_path: Path, monke
     secret.parent.mkdir(parents=True)
     secret.write_text("test-passphrase\n", encoding="utf-8")
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
     write_repository_store(config, {"repositories": [{
         "repository_key": "repo_test",
         "display_name": "Test",
         "repository_name": "borg-backup-test",
         "location": "local",
         "storage_type": "local",
+        "storage_key": "storage_local_test",
+        "relative_path": "borg-backup-test",
         "repo_path": "/mnt/backup/borg-backup-test",
         "path_raw": "/mnt/backup/borg-backup-test",
         "path_display": "/mnt/backup/borg-backup-test",
@@ -809,7 +834,8 @@ def test_repository_manager_import_can_store_passphrase_without_borg_init(tmp_pa
     assert calls[0][0][:3] == ["borg", "info", "--json"]
     assert all("init" not in call[0] for call in calls)
     assert repo["initialized"] is True
-    assert repo["storage_profile_key"] == "storage-1"
+    assert "storage_profile_key" not in repo
+    assert read_storage_store(config)["storages"][0]["profile_key"] == "storage-1"
     assert repo["repo_uri"] == "ssh://u1@example.test:23/./backup/borg-backup-flash"
     secret = Path(repo["passphrase_ref"])
     assert secret.is_file()

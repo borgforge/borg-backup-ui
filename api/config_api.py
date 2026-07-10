@@ -547,30 +547,6 @@ def _strip_profile_keys_from_conf(ui_config: dict) -> bool:
 
 
 def ensure_settings_migrated(ui_config: dict) -> Dict[str, Any]:
-    def _ensure_storage_job_profile_links(default_key: str) -> None:
-        if not default_key:
-            return
-        try:
-            from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-            scripts_dir = resolve_scripts_dir(ui_config)
-            data_root = resolve_data_root(ui_config)
-            for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-                if not meta_dir.is_dir():
-                    continue
-                for p in meta_dir.glob("*.json"):
-                    try:
-                        raw = json.loads(p.read_text(encoding="utf-8"))
-                    except Exception:
-                        continue
-                    if str(raw.get("location") or "").strip().lower() != "storagebox":
-                        continue
-                    if str(raw.get("storage_profile_key") or "").strip():
-                        continue
-                    raw["storage_profile_key"] = default_key
-                    p.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        except Exception:
-            return
-
     sf = _settings_file(ui_config)
     if sf.exists():
         payload = read_settings_payload(ui_config)
@@ -594,9 +570,6 @@ def ensure_settings_migrated(ui_config: dict) -> Dict[str, Any]:
                 payload = read_settings_payload(ui_config)
         # enforce no legacy profile keys in backup.conf after migration
         _strip_profile_keys_from_conf(ui_config)
-        storage_rows = payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []
-        first_key = str(storage_rows[0].get("key") or "").strip() if storage_rows and isinstance(storage_rows[0], dict) else ""
-        _ensure_storage_job_profile_links(first_key)
         return payload
 
     conf = read_raw_conf(ui_config)
@@ -639,9 +612,6 @@ def ensure_settings_migrated(ui_config: dict) -> Dict[str, Any]:
     write_settings_payload(ui_config, payload)
     _strip_profile_keys_from_conf(ui_config)
     out = read_settings_payload(ui_config)
-    storage_rows = out.get("storage_profiles") if isinstance(out.get("storage_profiles"), list) else []
-    first_key = str(storage_rows[0].get("key") or "").strip() if storage_rows and isinstance(storage_rows[0], dict) else ""
-    _ensure_storage_job_profile_links(first_key)
     return out
 
 
@@ -874,99 +844,10 @@ def get_repositories_data(ui_config: dict) -> dict:
     storagebox_port = expanded.get("STORAGEBOX_PORT", "23")
 
     groups: Dict[str, List[Dict]] = {"local": [], "usb": [], "smb": [], "storagebox": []}
-
-    for key, display_val in expanded.items():
-        if not key.startswith("REPO_"):
-            continue
-        name = key[5:]  # e.g. "FLASH_LOCAL"
-        # Split auf letzten Underscore für Location
-        parts = name.rsplit("_", 1)
-        if len(parts) != 2:
-            continue
-        type_raw, loc_raw = parts
-        backup_type = _CONF_TYPE_MAP.get(type_raw.upper(), type_raw.lower())
-        location = loc_raw.lower()
-        if location == "storagebox":
-            location = "storagebox"
-
-        if location not in groups:
-            groups[location] = []
-
-        fixed_display = _inject_storagebox_user(display_val) if location == "storagebox" else display_val
-        fixed_raw = _inject_storagebox_user(raw.get(key, display_val)) if location == "storagebox" else raw.get(key, display_val)
-
-        groups[location].append(
-            {
-                "conf_key": key,
-                "backup_type": backup_type,
-                "location": location,
-                "path_display": fixed_display,
-                "path_raw": fixed_raw,
-            }
-        )
-
-    # Ergänze Wizard-Repositorys (scriptless Jobs), falls nicht als REPO_* in backup.conf vorhanden.
-    try:
-        from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-        scripts_dir = resolve_scripts_dir(ui_config)
-        data_root = resolve_data_root(ui_config)
-        seen = {
-            (
-                str(r.get("backup_type") or "").strip().lower(),
-                str(r.get("location") or "").strip().lower(),
-                str(r.get("path_raw") or "").strip(),
-            )
-            for g in groups.values()
-            for r in g
-        }
-        for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-            if not meta_dir.is_dir():
-                continue
-            for meta_file in sorted(meta_dir.glob("*.json")):
-                try:
-                    job = json.loads(meta_file.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                job_key = str(job.get("job_key") or "").strip()
-                if not job_key:
-                    continue
-                repo_cfg = job.get("repo") if isinstance(job.get("repo"), dict) else {}
-                repo_key = str(repo_cfg.get("conf_key") or "").strip()
-                repo_default = str(repo_cfg.get("default") or "").strip()
-                repo_raw = raw.get(repo_key, repo_default) if repo_key else repo_default
-                repo_display = expanded.get(repo_key, repo_default) if repo_key else repo_default
-                backup_type = str(job.get("backup_type") or "").strip().lower()
-                location = str(job.get("location") or "").strip().lower()
-                if location == "storagebox":
-                    repo_raw = _inject_storagebox_user(repo_raw)
-                    repo_display = _inject_storagebox_user(repo_display)
-                if not repo_raw or location not in {"local", "usb", "smb", "storagebox", "custom"}:
-                    continue
-                marker = (backup_type.lower(), location.lower(), repo_raw)
-                if marker in seen:
-                    continue
-                seen.add(marker)
-                groups.setdefault(location, []).append(
-                    {
-                        "conf_key": repo_key or f"JOB:{job_key}",
-                        "backup_type": backup_type,
-                        "location": location,
-                        "path_display": _inject_storagebox_user(repo_display) if location == "storagebox" else repo_display,
-                        "path_raw": _inject_storagebox_user(repo_raw) if location == "storagebox" else repo_raw,
-                    }
-                )
-    except Exception:
-        pass
-
-    # Prefer the explicit repository object inventory when available. The
-    # fallback above keeps older/incomplete setups visible until the startup
-    # migration has populated repositories.json.
     try:
         from repositories_api import build_repository_groups
         from storage_objects_api import read_storage_store
-        object_groups = build_repository_groups(ui_config)
-        if any(object_groups.get(loc) for loc in object_groups):
-            groups = object_groups
+        groups = build_repository_groups(ui_config)
         storages = read_storage_store(ui_config).get("storages", [])
     except Exception:
         storages = []
@@ -992,138 +873,38 @@ def get_repositories_data(ui_config: dict) -> dict:
 
 
 def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "", repository_key: str = "") -> dict:
-    """Führt 'borg info' auf dem Repository aus."""
+    """Run borg info for one canonical repository object."""
+    from repository_context import repository_by_key, repository_path, storage_by_key
+
+    key = str(repository_key or "").strip()
+    if not key:
+        raise ValueError("repository_key is required")
+    repository = repository_by_key(ui_config, key)
+    storage = storage_by_key(ui_config, str(repository.get("storage_key") or ""))
+    resolved_path = repository_path(repository, storage)
+    passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
+
     env = dict(os.environ)
-    raw_conf = read_raw_conf(ui_config)
-    expanded = read_expanded_conf(ui_config)
-    repository_key = str(repository_key or "").strip()
-
-    def _repository_object() -> dict:
-        if not repository_key:
-            return {}
-        try:
-            from repositories_api import read_repository_store
-            rows = read_repository_store(ui_config).get("repositories", [])
-        except Exception:
-            return {}
-        for row in rows:
-            if str(row.get("repository_key") or "").strip() == repository_key:
-                return row if isinstance(row, dict) else {}
-        return {}
-
-    def _storagebox_user_from_conf() -> str:
-        user = str(expanded.get("STORAGEBOX_USER", "")).strip()
-        if user:
-            return user
-        host = str(expanded.get("STORAGEBOX_HOST", "")).strip()
-        if host and "." in host:
-            prefix = host.split(".", 1)[0].strip()
-            if prefix:
-                return prefix
-        return ""
-
-    def _inject_storagebox_user(uri: str) -> str:
-        text = str(uri or "").strip()
-        if not text.startswith("ssh://"):
-            return text
-        rest = text[6:]
-        if not rest or "@" in rest.split("/", 1)[0]:
-            return text
-        user = _storagebox_user_from_conf()
-        if not user:
-            return text
-        return f"ssh://{user}@{rest}"
-
-    def _repo_variants(value: str) -> set[str]:
-        v = str(value or "").strip()
-        if not v:
-            return set()
-        variants = {v}
-        def _expand_local(text: str) -> str:
-            return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", lambda m: str(raw_conf.get(m.group(1), m.group(0))), text)
-        try:
-            variants.add(_expand_local(v))
-        except Exception:
-            pass
-        return {x.strip() for x in variants if x and x.strip()}
-
-    def _resolve_job_passphrase_path() -> str:
-        """Versucht die Passphrase über Wizard-Jobmetadaten aufzulösen."""
-        try:
-            from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-            scripts_dir = resolve_scripts_dir(ui_config)
-            data_root = resolve_data_root(ui_config)
-        except Exception:
-            return ""
-
-        repo_candidates = _repo_variants(repo_path)
-        if not repo_candidates:
-            return ""
-
-        for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-            if not meta_dir.is_dir():
-                continue
-            for meta_file in sorted(meta_dir.glob("*.json")):
-                try:
-                    job = json.loads(meta_file.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-
-                repo_cfg = job.get("repo") if isinstance(job.get("repo"), dict) else {}
-                repo_key = str(repo_cfg.get("conf_key") or "").strip()
-                if repo_conf_key and repo_key and repo_conf_key == repo_key:
-                    pass_cfg = job.get("passphrase") if isinstance(job.get("passphrase"), dict) else {}
-                    pass_key = str(pass_cfg.get("conf_key") or "").strip()
-                    pass_default = str(pass_cfg.get("default") or "").strip()
-                    if pass_key:
-                        return str(expanded.get(pass_key, pass_default)).strip()
-                    return pass_default
-                repo_default = str(repo_cfg.get("default") or "").strip()
-                repo_raw = str(raw_conf.get(repo_key, repo_default)).strip() if repo_key else repo_default
-                if not repo_raw:
-                    continue
-                job_repo_candidates = _repo_variants(repo_raw)
-                if repo_candidates.isdisjoint(job_repo_candidates):
-                    continue
-
-                pass_cfg = job.get("passphrase") if isinstance(job.get("passphrase"), dict) else {}
-                pass_key = str(pass_cfg.get("conf_key") or "").strip()
-                pass_default = str(pass_cfg.get("default") or "").strip()
-                if pass_key:
-                    return str(expanded.get(pass_key, pass_default)).strip()
-                return pass_default
-        return ""
-
-    repo_obj = _repository_object()
-    if not str(repo_path or "").strip() and repo_obj:
-        repo_path = str(repo_obj.get("path_raw") or repo_obj.get("path_display") or repo_obj.get("repo_uri") or repo_obj.get("repo_path") or "").strip()
-    repo_path = _inject_storagebox_user(repo_path)
-
-    # Passphrase job-basiert auflösen (inkl. _local/_usb/_storagebox).
-    # Zentrale Legacy-Passphrase-Keys werden nicht mehr verwendet.
-    pf = str(repo_obj.get("passphrase_ref") or "").strip() if repo_obj else ""
-    if not pf:
-        pf = _resolve_job_passphrase_path()
-    if pf:
-        env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pf))}"
-    env["BORG_REPO"] = repo_path
-    if expanded.get("BORG_SSH_KEY"):
-        env["BORG_RSH"] = f"ssh -i {expanded['BORG_SSH_KEY']}"
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
+    if str(repository.get("encryption") or "").strip().lower() != "none":
+        if not passphrase_ref or not Path(passphrase_ref).is_file():
+            raise ValueError("Repository passphrase file is missing")
+        env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(passphrase_ref)}"
+    ssh_key = str(storage.get("ssh_key_path") or "").strip()
+    if ssh_key:
+        env["BORG_RSH"] = f"ssh -i {shlex.quote(ssh_key)} -o WarnWeakCrypto=no"
 
     try:
         result = subprocess.run(
-            ["borg", "info", "--json", repo_path],
+            ["borg", "info", "--json", resolved_path],
             capture_output=True,
             text=True,
             timeout=20,
             env=env,
         )
         output = mask_secrets((result.stdout or "") + (result.stderr or ""))
-        return {
-            "success": result.returncode == 0,
-            "output": output[:2000],  # Ausgabe begrenzen
-            "exit_code": result.returncode,
-        }
+        return {"success": result.returncode == 0, "output": output[:2000], "exit_code": result.returncode}
     except FileNotFoundError:
         return {"success": False, "output": "borg binary not found.", "exit_code": -1}
     except subprocess.TimeoutExpired:

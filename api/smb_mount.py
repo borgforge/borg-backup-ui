@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 from pathlib import Path
@@ -58,29 +57,23 @@ def _is_smb_mounted(mount_path: str) -> bool:
 
 
 def _job_smb_meta(config: dict, job_key: str) -> Optional[dict]:
-    from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
+    from repository_context import RepositoryContextError, resolve_job_repository_context
 
-    scripts_dir = resolve_scripts_dir(config)
-    data_root = resolve_data_root(config)
-    for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-        p = meta_dir / f"{job_key}.json"
-        if not p.exists():
-            continue
-        try:
-            raw = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return None
-        if str(raw.get("location") or "").strip().lower() != "smb":
-            return None
-        smb_key = str(raw.get("smb_profile_key") or "").strip()
-        if not smb_key:
-            return None
-        return {
-            "smb_profile_key": smb_key,
-            "mount_before_run": bool(raw.get("mount_before_run", True)),
-            "unmount_after_run": bool(raw.get("unmount_after_run", True)),
-        }
-    return None
+    try:
+        context = resolve_job_repository_context(config, job_key, require_passphrase_file=False)
+    except RepositoryContextError:
+        return None
+    if str(context.get("location") or "").strip().lower() != "smb":
+        return None
+    raw = context.get("job") if isinstance(context.get("job"), dict) else {}
+    smb_key = str(context.get("profile_key") or "").strip()
+    if not smb_key:
+        return None
+    return {
+        "smb_profile_key": smb_key,
+        "mount_before_run": bool(raw.get("mount_before_run", True)),
+        "unmount_after_run": bool(raw.get("unmount_after_run", True)),
+    }
 
 
 def _validate_mount_option_value(val: str) -> str:

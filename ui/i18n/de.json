@@ -2029,6 +2029,7 @@
       "migrationFailed": "Migration fehlgeschlagen",
       "jobErrors": {
         "metadata_unreadable": "Job-Metadaten nicht lesbar: {message}",
+        "repository_context_invalid": "Repository-Zuordnung ist ungültig: {message}",
         "repository_missing": "Repository fehlt",
         "storagebox_repo_not_ssh": "Storagebox-Repository ist keine ssh:// URI",
         "storagebox_repo_incomplete": "Storagebox-Repository-URI ist unvollständig",

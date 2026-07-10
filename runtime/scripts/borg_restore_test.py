@@ -36,6 +36,10 @@ VERSION = "1.0.0"
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 
+_API_DIR = SCRIPT_DIR.parent.parent / "api"
+if _API_DIR.is_dir() and str(_API_DIR) not in sys.path:
+    sys.path.insert(0, str(_API_DIR))
+
 # Lib-Pfad: ausschließlich plugin runtime/lib (kein Fallback)
 _LIB_DIR = SCRIPT_DIR.parent / "lib"
 if _LIB_DIR.is_dir():
@@ -73,17 +77,6 @@ def load_conf() -> dict:
     return {}
 
 
-def _load_settings_payload(config_dir: Path) -> dict:
-    settings_file = config_dir / "settings.json"
-    if not settings_file.is_file():
-        return {}
-    try:
-        payload = json.loads(settings_file.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
 def _resolve_restore_test_dir(conf: dict) -> Path:
     configured_raw = str(conf.get("RESTORE_TEST_STATUS_DIR", "")).strip()
     configured = Path(configured_raw) if configured_raw else None
@@ -112,92 +105,63 @@ def _extract_test_datetime(test_data: dict, test_file: Path) -> datetime | None:
         return None
 
 
-def _profile_mount_path(payload: dict, group: str, profile_key: str) -> str:
-    key_wanted = str(profile_key or "").strip().lower()
-    if not key_wanted:
-        return ""
-    rows = payload.get(group) if isinstance(payload.get(group), list) else []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        key = str(row.get("key") or "").strip().lower()
-        if key != key_wanted:
-            continue
-        return str(row.get("mount_path") or "").strip()
-    return ""
-
-
-def _profile_repo_path(raw: dict, btype: str, location: str, settings_payload: dict) -> str:
-    if location == "usb":
-        mount_path = _profile_mount_path(settings_payload, "usb_profiles", raw.get("usb_profile_key"))
-    elif location == "smb":
-        mount_path = _profile_mount_path(settings_payload, "smb_profiles", raw.get("smb_profile_key"))
-    else:
-        mount_path = ""
-    if not mount_path:
-        return ""
-    return str(Path(mount_path.rstrip("/")) / f"borg-backup-{btype.strip().lower()}")
+def _repository_data_root() -> Path:
+    configured = str(os.environ.get("BORG_UI_DATA_ROOT") or "").strip()
+    if configured:
+        return Path(configured)
+    production = Path("/boot/config/borg-backup")
+    if production.is_dir():
+        return production
+    return SCRIPT_DIR.parent
 
 
 def discover_repos(conf: dict) -> list:
-    """Baut Repo-Liste ausschließlich aus Job-Metadaten."""
-    jobs_dir_candidates = [
-        Path("/boot/config/borg-backup/config/jobs"),
-        SCRIPT_DIR / "config" / "jobs",
-        SCRIPT_DIR.parent / "config" / "jobs",
-    ]
+    """Build the restore-test list from canonical job/repository links."""
+    data_root = _repository_data_root()
+    jobs_dir = data_root / "config" / "jobs"
     repos = []
     seen = set()
 
-    for jobs_dir in jobs_dir_candidates:
-        if not jobs_dir.is_dir():
+    if not jobs_dir.is_dir():
+        return repos
+    from repository_context import RepositoryContextError, resolve_job_repository_context
+
+    config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    for jf in sorted(jobs_dir.glob("*.json")):
+        try:
+            raw = json.loads(jf.read_text(encoding="utf-8"))
+        except Exception:
             continue
-        settings_payload = _load_settings_payload(jobs_dir.parent)
-        for jf in sorted(jobs_dir.glob("*.json")):
-            try:
-                raw = json.loads(jf.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            if not bool(raw.get("enabled", True)):
-                continue
-            if str(raw.get("runner", "")).strip() != "scriptless-wizard-runner":
-                continue
-
-            btype = str(raw.get("backup_type", "")).strip()
-            location = str(raw.get("location", "")).strip().lower()
-            if not btype or location not in {"local", "usb", "smb", "storagebox", "custom"}:
-                continue
-
-            repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
-            pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
-
-            repo_key = str(repo_cfg.get("conf_key") or "").strip()
-            repo_default = str(repo_cfg.get("default") or "").strip()
-            repo_path = conf.get(repo_key, repo_default) if repo_key else repo_default
-            if not repo_path:
-                repo_path = _profile_repo_path(raw, btype, location, settings_payload)
-            if not repo_path:
-                continue
-
-            pass_key = str(pass_cfg.get("conf_key") or "").strip()
-            pass_default = str(pass_cfg.get("default") or "").strip()
-            pass_file = conf.get(pass_key, pass_default) if pass_key else pass_default
-
-            key = (btype.lower(), location, repo_path)
-            if key in seen:
-                continue
-            seen.add(key)
-            repos.append({
-                "job_key":         str(raw.get("job_key") or f"{btype}_{location}").strip(),
-                "type":            btype,
-                "location":        location,
-                "path":            repo_path,
-                "passphrase_file": pass_file,
-                "usb_profile_key": str(raw.get("usb_profile_key") or "").strip().lower(),
-                "smb_profile_key": str(raw.get("smb_profile_key") or "").strip().lower(),
-                "mount_before_run": bool(raw.get("mount_before_run", True)),
-                "unmount_after_run": bool(raw.get("unmount_after_run", True)),
-            })
+        if not bool(raw.get("enabled", True)):
+            continue
+        if str(raw.get("runner", "")).strip() != "scriptless-wizard-runner":
+            continue
+        btype = str(raw.get("backup_type", "")).strip()
+        job_key = str(raw.get("job_key") or jf.stem).strip()
+        if not btype or not job_key:
+            continue
+        try:
+            context = resolve_job_repository_context(config, job_key, job=raw)
+        except RepositoryContextError:
+            continue
+        location = str(context.get("location") or "").strip().lower()
+        repo_path = str(context.get("repository_path") or "").strip()
+        profile_key = str(context.get("profile_key") or "").strip().lower()
+        key = (context["repository_key"], job_key)
+        if key in seen:
+            continue
+        seen.add(key)
+        repos.append({
+            "job_key": job_key,
+            "type": btype,
+            "location": location,
+            "path": repo_path,
+            "passphrase_file": str(context.get("passphrase_ref") or ""),
+            "usb_profile_key": profile_key if location == "usb" else "",
+            "smb_profile_key": profile_key if location == "smb" else "",
+            "mount_before_run": bool(raw.get("mount_before_run", True)),
+            "unmount_after_run": bool(raw.get("unmount_after_run", True)),
+        })
 
     return repos
 

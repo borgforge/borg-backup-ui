@@ -190,7 +190,7 @@ def test_migration_summary_no_changes_has_no_actions():
     assert summary["errors"] == []
 
 
-def test_collect_job_health_flags_broken_storagebox_repo_uri(tmp_path, monkeypatch):
+def test_collect_job_health_rejects_job_without_repository_assignment(tmp_path, monkeypatch):
     import config_api
 
     source_dir = tmp_path / "source"
@@ -227,7 +227,7 @@ def test_collect_job_health_flags_broken_storagebox_repo_uri(tmp_path, monkeypat
     health = _collect_job_health({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, jobs_dir)
 
     assert health["summary"]["failed"] == 1
-    assert "missing a slash" in " ".join(health["items"][0]["errors"])
+    assert "awaits repository migration" in " ".join(health["items"][0]["errors"])
     assert [row["code"] for row in health["items"][0]["error_details"]] == [
-        "storagebox_repo_port_slash",
+        "repository_context_invalid",
     ]

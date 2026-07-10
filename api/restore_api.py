@@ -14,8 +14,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-_SECRETS_DIR = Path("/boot/config/borg-backup/secrets")
-
 # In-memory cache: (repo, archive) → {expires, index}
 # index: parent_path → {child_name: entry_dict}
 _CACHE: dict = {}
@@ -338,90 +336,26 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
                 pass
 
 
-def _read_conf_file(path: Path) -> dict:
-    """Simple KEY=VALUE parser for backup.conf."""
-    result = {}
-    if not path.exists():
-        return result
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, _, v = line.partition("=")
-            result[k.strip()] = v.strip().strip('"').strip("'")
-    return result
-
-
-def _expand_shell_vars(s: str, env: dict) -> str:
-    """Expand ${VAR} and $VAR references using env dict."""
-    def _repl(m: re.Match) -> str:
-        name = m.group(1) or m.group(2)
-        return env.get(name, m.group(0))
-    return re.sub(r'\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)', _repl, s)
-
-
 def _get_job_repo_info(config: dict, job_key: str) -> dict:
-    """Resolve repository and passphrase config from canonical job metadata."""
+    """Resolve repository and passphrase from the canonical repository object."""
     job_key = _validate_job_key(job_key)
-    from jobs_api import discover_jobs, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-    scripts_dir = resolve_scripts_dir(config)
-    data_root = resolve_data_root(config)
-    jobs = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
-    if job_key not in jobs:
-        raise ValueError(f"Unknown job: {job_key}")
+    from repository_context import resolve_job_repository_context
 
-    job = jobs[job_key]
-
-    if job.standard != "wizard":
-        raise ValueError(f"Unsupported job standard: {job.standard}")
-    meta_path = None
-    for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-        p = meta_dir / f"{job_key}.json"
-        if p.exists():
-            meta_path = p
-            break
-    if meta_path is None:
-        raise ValueError(f"Wizard metadata is missing: {job_key}")
-    raw = json.loads(meta_path.read_text(encoding="utf-8"))
-
-    repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
-    repo_key = str(repo_cfg.get("conf_key") or "")
-    repo_default = str(repo_cfg.get("default") or "").strip()
-    if not repo_default:
-        raise ValueError(f"Repository default is missing in {meta_path.name}")
-
-    pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
-    pass_key = str(pass_cfg.get("conf_key") or "")
-    pass_default = str(pass_cfg.get("default") or "").strip() or None
-
-    conf: dict = {}
-    for cp in (data_root / "config" / "backup.conf",
-               scripts_dir / "config" / "backup.conf"):
-        if cp.exists():
-            conf = _read_conf_file(cp)
-            break
-
-    raw_repo = conf.get(repo_key, repo_default) if repo_key else repo_default
-    expand_env = {**dict(os.environ), **conf}
-    repo_path = _expand_shell_vars(raw_repo, expand_env)
-    passphrase_file = conf.get(pass_key, pass_default) if pass_key else pass_default
-    return {"repo": repo_path, "passphrase_file": passphrase_file}
+    context = resolve_job_repository_context(config, job_key)
+    return {
+        "repo": context["repository_path"],
+        "passphrase_file": context["passphrase_ref"] or None,
+        "repository_key": context["repository_key"],
+        "storage_key": context["storage_key"],
+    }
 
 
 def _borg_env(passphrase_file: str | None) -> dict:
     env = dict(os.environ)
-    candidates = []
     if passphrase_file:
         pass_path = Path(passphrase_file)
-        candidates.append(pass_path)
-        name = pass_path.name
-        flash = _SECRETS_DIR / (name if name.startswith(".") else f".{name}")
-        if flash != pass_path:
-            candidates.append(flash)
-
-    for p in candidates:
-        if p.exists():
-            env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(p))}"
-            break
+        if pass_path.exists():
+            env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pass_path))}"
     return env
 
 

@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from repositories_api import read_repository_store, upsert_repository_for_job
+from repositories_api import (
+    read_repository_store,
+    repository_key_for,
+    repository_name_from_path,
+    write_repository_store,
+)
 
 
 MIGRATION_ID = "repository_objects_v1"
@@ -47,6 +53,133 @@ def _has_repository_payload(job: dict[str, Any]) -> bool:
     return bool(str(job.get("job_key") or "").strip() and str(repo_cfg.get("default") or "").strip())
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _identity(path_or_uri: Any) -> str:
+    return str(path_or_uri or "").strip().rstrip("/")
+
+
+def _storage_name(job: dict[str, Any]) -> str:
+    location = str(job.get("location") or "").strip().lower()
+    for field in (
+        "storage_profile_name",
+        "usb_profile_name",
+        "smb_profile_name",
+        "profile_name",
+        "storage_profile_key",
+        "usb_profile_key",
+        "smb_profile_key",
+    ):
+        value = str(job.get(field) or "").strip()
+        if value:
+            return value
+    return {
+        "local": "Local",
+        "usb": "USB",
+        "smb": "SMB",
+        "storagebox": "Storagebox",
+    }.get(location, location)
+
+
+def _repository_from_legacy_job(job: dict[str, Any]) -> dict[str, Any] | None:
+    job_key = str(job.get("job_key") or "").strip()
+    location = str(job.get("location") or "").strip().lower()
+    repo_cfg = job.get("repo") if isinstance(job.get("repo"), dict) else {}
+    repo_path = str(repo_cfg.get("default") or "").strip()
+    if not job_key or not repo_path or location not in {"local", "usb", "smb", "storagebox"}:
+        return None
+    passphrase = job.get("passphrase") if isinstance(job.get("passphrase"), dict) else {}
+    profile_keys = {
+        "storage_profile_key": str(job.get("storage_profile_key") or "").strip(),
+        "usb_profile_key": str(job.get("usb_profile_key") or "").strip(),
+        "smb_profile_key": str(job.get("smb_profile_key") or "").strip(),
+    }
+    profile_key = next((value for value in profile_keys.values() if value), "")
+    display_name = str(job.get("name") or job_key).strip()
+    timestamp = _now()
+    return {
+        "repository_key": repository_key_for(f"repo_{job_key}", repo_path),
+        "display_name": display_name,
+        "repository_name": repository_name_from_path(repo_path),
+        "job_name": display_name,
+        "backup_type": str(job.get("backup_type") or "").strip().lower(),
+        "location": location,
+        "storage_type": "ssh" if location == "storagebox" else location,
+        "storage_key": f"{location}:{profile_key}" if profile_key else location,
+        "storage_name": _storage_name(job),
+        **profile_keys,
+        "repo_conf_key": str(repo_cfg.get("conf_key") or "").strip(),
+        "repo_path": "" if "://" in repo_path else repo_path,
+        "repo_uri": repo_path if "://" in repo_path else "",
+        "path_raw": repo_path,
+        "path_display": repo_path,
+        "passphrase_ref": str(passphrase.get("default") or "").strip(),
+        "encryption": str(job.get("encryption") or "").strip(),
+        "append_only": bool(job.get("append_only", False)),
+        "storage_quota": str(job.get("storage_quota") or "").strip(),
+        "initialized": bool(job.get("initialized", False)),
+        "created_by": "migration",
+        "created_at": timestamp,
+        "updated_at": timestamp,
+        "last_test_status": "",
+        "last_check_status": "",
+        "last_seen_at": "",
+        "offsite_candidate": location == "storagebox",
+        "separate_medium_candidate": location in {"usb", "storagebox", "smb"},
+        "source_job_keys": [job_key],
+        "used_by": [job_key],
+    }
+
+
+def _upsert_repository_for_legacy_job(config: dict, job: dict[str, Any]) -> str:
+    repository = _repository_from_legacy_job(job)
+    if not repository:
+        return ""
+    store = read_repository_store(config)
+    rows = store.get("repositories", [])
+    identity = _identity(repository.get("path_raw"))
+    existing = next(
+        (
+            row for row in rows
+            if _identity(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path")) == identity
+        ),
+        None,
+    )
+    key = str((existing or {}).get("repository_key") or repository.get("repository_key") or "")
+    repository["repository_key"] = key
+
+    from storage_objects_api import repository_relative_path, upsert_storage_for_repository
+    try:
+        from config_api import read_settings_payload
+        settings = read_settings_payload(config)
+    except Exception:
+        settings = None
+    storage = upsert_storage_for_repository(config, repository, settings=settings)
+    if storage:
+        repository["storage_key"] = str(storage.get("storage_key") or repository.get("storage_key") or "")
+        repository["storage_name"] = str(storage.get("display_name") or repository.get("storage_name") or "")
+        repository["relative_path"] = repository_relative_path(repository, storage)
+
+    previous = existing or {}
+    repository["created_at"] = str(previous.get("created_at") or repository.get("created_at") or _now())
+    repository["created_by"] = str(previous.get("created_by") or "migration")
+    repository["updated_at"] = _now()
+    repository["source_job_keys"] = sorted(set(
+        (previous.get("source_job_keys") if isinstance(previous.get("source_job_keys"), list) else [])
+        + repository["source_job_keys"]
+    ))
+    repository["used_by"] = sorted(set(
+        (previous.get("used_by") if isinstance(previous.get("used_by"), list) else [])
+        + repository["used_by"]
+    ))
+    write_repository_store(config, {"repositories": [
+        row for row in rows if str(row.get("repository_key") or "") != key
+    ] + [repository]})
+    return key
+
+
 def detect(config: dict) -> dict[str, Any]:
     files = _job_files(config)
     jobs = [job for path in files if (job := _read_job(path))]
@@ -77,7 +210,7 @@ def apply(config: dict) -> dict[str, Any]:
         if not job or not _has_repository_payload(job):
             continue
         job_key = str(job.get("job_key") or "").strip()
-        repository_key = upsert_repository_for_job(config, job, created_by="migration")
+        repository_key = _upsert_repository_for_legacy_job(config, job)
         if not repository_key:
             continue
         repository_keys.append(repository_key)
@@ -121,4 +254,3 @@ def apply(config: dict) -> dict[str, Any]:
             "actions": actions,
         },
     }
-

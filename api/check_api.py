@@ -88,7 +88,7 @@ class CheckManager:
 
         cleanup = None
         try:
-            from repositories_api import _repo_env, read_repository_store
+            from repositories_api import _repo_env, effective_repository_path, read_repository_store
             from storage_objects_api import read_storage_store
             repositories = {
                 str(row.get("repository_key") or ""): row
@@ -102,7 +102,7 @@ class CheckManager:
                 for row in read_storage_store(config).get("storages", [])
             }
             storage = storages.get(str(repository.get("storage_key") or ""), {})
-            repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
+            repo_path = effective_repository_path(storage, str(repository.get("relative_path") or ""))
             if not repo_path:
                 return False, "Repository path is missing"
             passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
@@ -163,7 +163,8 @@ class CheckManager:
         if action == "compact":
             return ["borg", "compact", "--progress", repo_path]
 
-        used_by = repository.get("used_by") if isinstance(repository.get("used_by"), list) else []
+        from repository_context import jobs_using_repository
+        used_by = jobs_using_repository(config, str(repository.get("repository_key") or ""))
         job_key = next((str(item or "").strip() for item in used_by if str(item or "").strip()), "")
         if not job_key:
             raise ValueError("Prune requires a backup job with a retention policy")

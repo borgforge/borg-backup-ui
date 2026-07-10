@@ -154,31 +154,11 @@ def _storage_name_from_location(location: str) -> str:
     }.get(str(location or "").strip().lower(), str(location or "").strip())
 
 
-def storage_name_from_job(job: dict[str, Any]) -> str:
-    location = str(job.get("location") or "").strip().lower()
-    candidates = [
-        job.get("storage_profile_name"),
-        job.get("usb_profile_name"),
-        job.get("smb_profile_name"),
-        job.get("profile_name"),
-        job.get("storage_profile_key"),
-        job.get("usb_profile_key"),
-        job.get("smb_profile_key"),
-    ]
-    for item in candidates:
-        value = str(item or "").strip()
-        if value:
-            return value
-    return _storage_name_from_location(location)
-
-
-def enrich_repository_display_fields(repo: dict[str, Any], job: dict[str, Any] | None = None) -> dict[str, Any]:
+def enrich_repository_display_fields(repo: dict[str, Any]) -> dict[str, Any]:
     row = dict(repo or {})
     path_raw = str(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path") or "").strip()
     display_name = str(row.get("display_name") or "").strip()
     job_name = str(row.get("job_name") or "").strip()
-    if isinstance(job, dict):
-        job_name = str(job.get("name") or job.get("job_key") or job_name).strip()
     if not job_name:
         job_name = str(row.get("display_name") or row.get("backup_type") or row.get("repository_key") or "").strip()
 
@@ -189,35 +169,14 @@ def enrich_repository_display_fields(repo: dict[str, Any], job: dict[str, Any] |
         repository_name = str(row.get("repository_key") or "").strip()
 
     storage_name = str(row.get("storage_name") or "").strip()
-    if isinstance(job, dict):
-        storage_name = storage_name_from_job(job)
     if not storage_name:
-        profile_key = (
-            str(row.get("storage_profile_key") or "").strip()
-            or str(row.get("usb_profile_key") or "").strip()
-            or str(row.get("smb_profile_key") or "").strip()
-        )
-        storage_name = profile_key or _storage_name_from_location(str(row.get("location") or row.get("storage_type") or ""))
+        storage_name = _storage_name_from_location(str(row.get("location") or row.get("storage_type") or ""))
 
     row["repository_name"] = repository_name
     row["job_name"] = job_name
     row["storage_name"] = storage_name
     row["display_name"] = display_name or repository_name or job_name or str(row.get("repository_key") or "").strip()
     return row
-
-
-def _unique_repository_key(base_key: str, existing: dict[str, dict[str, Any]], identity: str) -> str:
-    base = repository_key_for(base_key, identity)
-    current = existing.get(base)
-    if not current or _repo_identity(current.get("repo_uri") or current.get("repo_path") or current.get("path_raw")) == identity:
-        return base
-    idx = 2
-    while True:
-        candidate = f"{base}_{idx}"
-        current = existing.get(candidate)
-        if not current or _repo_identity(current.get("repo_uri") or current.get("repo_path") or current.get("path_raw")) == identity:
-            return candidate
-        idx += 1
 
 
 def _read_json_file(path: Path) -> dict[str, Any]:
@@ -282,11 +241,7 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "storage_type": str(row.get("storage_type") or location).strip().lower(),
             "storage_key": str(row.get("storage_key") or location).strip(),
             "storage_name": str(row.get("storage_name") or "").strip(),
-            "relative_path": str(row.get("relative_path") or "").strip(),
-            "storage_profile_key": str(row.get("storage_profile_key") or "").strip(),
-            "usb_profile_key": str(row.get("usb_profile_key") or "").strip(),
-            "smb_profile_key": str(row.get("smb_profile_key") or "").strip(),
-            "repo_conf_key": str(row.get("repo_conf_key") or row.get("conf_key") or "").strip(),
+            "relative_path": str(row.get("relative_path") or repository_name_from_path(path_raw)).strip(),
             "repository_name": str(row.get("repository_name") or "").strip(),
             "job_name": str(row.get("job_name") or "").strip(),
             "repo_path": repo_path,
@@ -316,123 +271,18 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "source_job_keys": source_job_keys,
             "used_by": used_by,
         })
+        for legacy_field in (
+            "storage_profile_key",
+            "usb_profile_key",
+            "smb_profile_key",
+            "repo_conf_key",
+        ):
+            if legacy_field in row or (legacy_field == "repo_conf_key" and "conf_key" in row):
+                source_field = "conf_key" if legacy_field == "repo_conf_key" and legacy_field not in row else legacy_field
+                normalized[legacy_field] = str(row.get(source_field) or "").strip()
         out.append(normalized)
     out.sort(key=lambda item: (str(item.get("location") or ""), str(item.get("display_name") or "")))
     return out
-
-
-def repository_from_job(job: dict[str, Any], *, created_by: str = "migration") -> dict[str, Any] | None:
-    if not isinstance(job, dict):
-        return None
-    job_key = str(job.get("job_key") or "").strip()
-    backup_type = str(job.get("backup_type") or "").strip().lower()
-    location = str(job.get("location") or "").strip().lower()
-    repo_cfg = job.get("repo") if isinstance(job.get("repo"), dict) else {}
-    repo_path = str(repo_cfg.get("default") or "").strip()
-    if not job_key or not repo_path or location not in {"local", "usb", "smb", "storagebox"}:
-        return None
-    pass_cfg = job.get("passphrase") if isinstance(job.get("passphrase"), dict) else {}
-    storage_profile_key = str(job.get("storage_profile_key") or "").strip()
-    usb_profile_key = str(job.get("usb_profile_key") or "").strip()
-    smb_profile_key = str(job.get("smb_profile_key") or "").strip()
-    display_name = str(job.get("name") or job_key).strip()
-    repository_name = repository_name_from_path(repo_path)
-    storage_name = storage_name_from_job(job)
-    storage_key = location
-    profile_key = storage_profile_key or usb_profile_key or smb_profile_key
-    if profile_key:
-        storage_key = f"{location}:{profile_key}"
-    repo_uri = repo_path if "://" in repo_path else ""
-    local_path = "" if repo_uri else repo_path
-    ts = _now()
-    return {
-        "repository_key": repository_key_for(f"repo_{job_key}", repo_path),
-        "display_name": display_name,
-        "repository_name": repository_name,
-        "job_name": display_name,
-        "backup_type": backup_type,
-        "location": location,
-        "storage_type": "ssh" if location == "storagebox" else location,
-        "storage_key": storage_key,
-        "storage_name": storage_name,
-        "storage_profile_key": storage_profile_key,
-        "usb_profile_key": usb_profile_key,
-        "smb_profile_key": smb_profile_key,
-        "repo_conf_key": str(repo_cfg.get("conf_key") or "").strip(),
-        "repo_path": local_path,
-        "repo_uri": repo_uri,
-        "path_raw": repo_path,
-        "path_display": repo_path,
-        "passphrase_ref": str(pass_cfg.get("default") or "").strip(),
-        "encryption": str(job.get("encryption") or "").strip(),
-        "append_only": bool(job.get("append_only", False)),
-        "storage_quota": str(job.get("storage_quota") or "").strip(),
-        "initialized": bool(job.get("initialized", False)),
-        "created_by": created_by,
-        "created_at": ts,
-        "updated_at": ts,
-        "last_test_status": "",
-        "last_check_status": "",
-        "last_seen_at": "",
-        "offsite_candidate": location == "storagebox",
-        "separate_medium_candidate": location in {"usb", "storagebox", "smb"},
-        "source_job_keys": [job_key],
-        "used_by": [job_key],
-    }
-
-
-def upsert_repository_for_job(config: dict, job: dict[str, Any], *, created_by: str = "wizard") -> str:
-    repo = repository_from_job(job, created_by=created_by)
-    if not repo:
-        return ""
-
-    store = read_repository_store(config)
-    rows = store["repositories"]
-    by_key = {str(row.get("repository_key")): row for row in rows}
-    identity = _repo_identity(repo["path_raw"])
-    existing_for_identity = next(
-        (row for row in rows if _repo_identity(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path")) == identity),
-        None,
-    )
-    if existing_for_identity:
-        key = str(existing_for_identity.get("repository_key") or "")
-    else:
-        key = _unique_repository_key(str(repo.get("repository_key") or ""), by_key, identity)
-
-    repo["repository_key"] = key
-    try:
-        from storage_objects_api import repository_relative_path, upsert_storage_for_repository
-        try:
-            from config_api import read_settings_payload
-            settings = read_settings_payload(config)
-        except Exception:
-            settings = None
-        storage = upsert_storage_for_repository(config, repo, settings=settings)
-        if storage:
-            repo["storage_key"] = str(storage.get("storage_key") or repo.get("storage_key") or "")
-            repo["storage_name"] = str(storage.get("display_name") or repo.get("storage_name") or "")
-            repo["relative_path"] = repository_relative_path(repo, storage)
-    except Exception:
-        pass
-
-    previous = by_key.get(key, {})
-    source_jobs = sorted(set((previous.get("source_job_keys") if isinstance(previous.get("source_job_keys"), list) else []) + repo["source_job_keys"]))
-    used_by = sorted(set((previous.get("used_by") if isinstance(previous.get("used_by"), list) else []) + repo["used_by"]))
-    merged = {
-        **previous,
-        **repo,
-        "repository_key": key,
-        "created_at": str(previous.get("created_at") or repo.get("created_at") or _now()),
-        "created_by": str(previous.get("created_by") or repo.get("created_by") or created_by),
-        "updated_at": _now(),
-        "source_job_keys": source_jobs,
-        "used_by": used_by,
-    }
-
-    next_rows = [row for row in rows if str(row.get("repository_key") or "") != key]
-    next_rows.append(merged)
-    write_repository_store(config, {"repositories": next_rows})
-    return key
 
 
 def build_repository_groups(config: dict) -> dict[str, list[dict[str, Any]]]:
@@ -443,7 +293,7 @@ def build_repository_groups(config: dict) -> dict[str, list[dict[str, Any]]]:
             groups[location] = []
         groups[location].append({
             **repo,
-            "conf_key": str(repo.get("repo_conf_key") or repo.get("repository_key") or ""),
+            "conf_key": str(repo.get("repository_key") or ""),
         })
     for rows in groups.values():
         rows.sort(key=lambda row: (str(row.get("backup_type") or ""), str(row.get("display_name") or "")))
@@ -572,7 +422,7 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     if not repository:
         raise ValueError("Repository not found")
     storage = _storage_by_key(config).get(str(repository.get("storage_key") or ""), {})
-    repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
+    repo_path = effective_repository_path(storage, str(repository.get("relative_path") or ""))
     from jobs_api import is_resource_active
     if is_resource_active(config, f"repo:{repo_path}"):
         _record_repository_info_busy(config, key, _now())
@@ -782,7 +632,7 @@ def get_repository_archives(config: dict, repository_key: str, limit: int = 100)
         if mounted.get("message_code") == "smb_mount_success":
             profile_key = str(storage.get("profile_key") or "")
             cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
-    repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
+    repo_path = effective_repository_path(storage, str(repository.get("relative_path") or ""))
     passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if passphrase_file is not None and not passphrase_file.is_file():
@@ -945,7 +795,6 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
 
     now = _now()
     existing = existing if isinstance(existing, dict) else {}
-    profile_key = str(storage.get("profile_key") or "").strip()
     row = {
         **existing,
         "repository_key": repo_key,
@@ -958,9 +807,6 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         "storage_key": storage_key,
         "storage_name": str(storage.get("display_name") or "").strip(),
         "relative_path": relative_path,
-        "storage_profile_key": profile_key if location == "storagebox" else str(existing.get("storage_profile_key") or ""),
-        "usb_profile_key": profile_key if location == "usb" else str(existing.get("usb_profile_key") or ""),
-        "smb_profile_key": profile_key if location == "smb" else str(existing.get("smb_profile_key") or ""),
         "repo_path": "" if repo_path.startswith("ssh://") else repo_path,
         "repo_uri": repo_path if repo_path.startswith("ssh://") else "",
         "path_raw": repo_path,
@@ -982,6 +828,8 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         "source_job_keys": existing.get("source_job_keys", []),
         "used_by": existing.get("used_by", []),
     }
+    for legacy_field in ("storage_profile_key", "usb_profile_key", "smb_profile_key", "repo_conf_key", "conf_key"):
+        row.pop(legacy_field, None)
     next_rows = [item for item in rows if str(item.get("repository_key") or "") != repo_key]
     next_rows.append(row)
     write_repository_store(config, {"repositories": next_rows})

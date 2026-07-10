@@ -65,6 +65,7 @@ def test_repository_maintenance_commands_use_repository_and_job_retention(tmp_pa
     jobs.mkdir(parents=True)
     (jobs / "photos_local.json").write_text(json.dumps({
         "job_key": "photos_local",
+        "repository_key": "repo_photos",
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
     }), encoding="utf-8")
     repository = {"repository_key": "repo_photos", "used_by": ["photos_local"]}
@@ -102,6 +103,7 @@ def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: P
         "repository_name": "test",
         "storage_key": "storage_local_test",
         "location": "local",
+        "relative_path": "test",
         "path_raw": "/mnt/backup/test",
         "passphrase_ref": str(secret),
     }]})

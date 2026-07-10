@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Dict, Generator, List, Optional
 
 DEFAULT_DATA_ROOT = Path("/boot/config/borg-backup")
-DEFAULT_SECRETS_DIR = DEFAULT_DATA_ROOT / "secrets"
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _RUNTIME_MODES = {"all", "selected", "none"}
 
@@ -273,96 +272,6 @@ def migrate_jobs_metadata_dir(scripts_dir: Path, data_root: Path | None = None) 
                     src.unlink()
                 except OSError:
                     continue
-
-
-def migrate_data_layout(config: dict) -> None:
-    """
-    One-time idempotent migration to canonical data layout:
-      - jobs -> /boot/config/borg-backup/config/jobs
-      - secrets -> /boot/config/borg-backup/secrets
-      - backup.conf passphrase paths -> /boot/config/borg-backup/secrets/.borg-passphrase-*
-      - job metadata passphrase defaults -> /boot/config/borg-backup/secrets/.borg-passphrase-*
-    """
-    data_root = resolve_data_root(config)
-    scripts_dir = resolve_scripts_dir(config)
-    jobs_dir = data_root / "config" / "jobs"
-    jobs_dir.mkdir(parents=True, exist_ok=True)
-    migrate_jobs_metadata_dir(scripts_dir, data_root)
-
-    secrets_dir = DEFAULT_SECRETS_DIR
-    secrets_dir.mkdir(parents=True, exist_ok=True)
-
-    # Move secrets from old location.
-    old_secrets = Path("/boot/config/borg-secrets")
-    if old_secrets.is_dir():
-        for src in old_secrets.glob(".borg-passphrase-*"):
-            if not src.is_file():
-                continue
-            dst = secrets_dir / src.name
-            if dst.exists():
-                continue
-            try:
-                src.rename(dst)
-            except OSError:
-                pass
-
-    # Normalize metadata passphrase default path.
-    for meta in jobs_dir.glob("*.json"):
-        try:
-            raw = json.loads(meta.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        changed = False
-        pass_cfg = raw.get("passphrase")
-        if isinstance(pass_cfg, dict):
-            default = str(pass_cfg.get("default") or "").strip()
-            m = re.search(r"\.borg-passphrase-[A-Za-z0-9_]+$", default)
-            if m:
-                desired = str(secrets_dir / m.group(0))
-                if default != desired:
-                    pass_cfg["default"] = desired
-                    changed = True
-        if changed:
-            try:
-                meta.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            except OSError:
-                pass
-
-    # Update backup.conf passphrase values.
-    conf_file = data_root / "config" / "backup.conf"
-    if conf_file.exists():
-        try:
-            lines = conf_file.read_text(encoding="utf-8").splitlines(keepends=True)
-        except OSError:
-            lines = []
-        out: list[str] = []
-        changed = False
-        for line in lines:
-            s = line.strip()
-            if not s or s.startswith("#") or "=" not in s:
-                out.append(line)
-                continue
-            key, _, val = s.partition("=")
-            key = key.strip()
-            if not key.startswith("BORG_PASSPHRASE_FILE_"):
-                out.append(line)
-                continue
-            raw_val = val.strip().strip('"').strip("'")
-            name = Path(raw_val).name
-            if not name.startswith(".borg-passphrase-"):
-                out.append(line)
-                continue
-            new_val = str(secrets_dir / name)
-            q = '"' if (' ' in new_val or '/' in new_val or ':' in new_val) else ""
-            newline = f"{key}={q}{new_val}{q}\n"
-            if line != newline:
-                changed = True
-            out.append(newline)
-        if changed:
-            try:
-                conf_file.write_text("".join(out), encoding="utf-8")
-            except OSError:
-                pass
 
 
 @dataclass
@@ -798,6 +707,14 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
     for info in discover_jobs(scripts_dir, data_root):
         last = latest_statuses.get(info.key)
         run_state = runtime_states.get(info.key, {"running": False})
+        try:
+            from repository_context import resolve_job_repository_context
+            repository_context = resolve_job_repository_context(config, info.key, require_passphrase_file=False)
+            repo_path = str(repository_context.get("repository_path") or "")
+            repository_key = str(repository_context.get("repository_key") or "")
+        except Exception:
+            repo_path = ""
+            repository_key = ""
 
         result.append(
             {
@@ -821,6 +738,8 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "retention_weekly": info.retention_weekly,
                 "retention_monthly": info.retention_monthly,
                 "retention_yearly": info.retention_yearly,
+                "repository_key": repository_key,
+                "repo_path": repo_path,
                 "restore_test_policy": {
                     "mode": info.restore_test_policy_mode,
                     "interval_days": info.restore_test_interval_days,

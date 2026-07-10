@@ -252,11 +252,14 @@ Er sollte aber visuell untergeordnet sein.
 ### Phase 4: Job-Wizard anbinden
 
 - Job-Wizard wählt Repository-Objekt.
-- Direkter Pfad wird erweiterter Modus.
 - Neue Jobs werden immer mit `repository_key` gespeichert.
+- Jobs speichern keine Repository-Pfade, Verschlüsselung, Passphrase-Verweise
+  oder Storage-Profil-Keys mehr. Diese Daten gehören ausschließlich den
+  Repository- und Storage-Objekten.
 
 ### Phase 5: Aufräumen vor Go-Live
 
+- Direkte Repository-Pfade werden nicht mehr im Job gespeichert.
 - Alte Zwischenmigrationen entfernen, sofern für öffentliche Nutzer nicht
   relevant.
 - Nur das saubere Zielmodell behalten.

@@ -2029,6 +2029,7 @@
       "migrationFailed": "Migration failed",
       "jobErrors": {
         "metadata_unreadable": "Job metadata cannot be read: {message}",
+        "repository_context_invalid": "Repository assignment is invalid: {message}",
         "repository_missing": "Repository missing",
         "storagebox_repo_not_ssh": "Storagebox repository is not an ssh:// URI",
         "storagebox_repo_incomplete": "Storagebox repository URI is incomplete",

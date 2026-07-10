@@ -53,8 +53,8 @@ def test_technical_log_literals_are_english_only():
     assert not violations, "German technical log text found:\n" + "\n".join(violations)
 
 
-def test_generated_job_script_forces_english_subprocess_locale():
-    source = (ROOT / "api" / "wizard_api.py").read_text(encoding="utf-8")
+def test_scriptless_job_runner_forces_english_subprocess_locale():
+    source = (ROOT / "api" / "wizard_runner.py").read_text(encoding="utf-8")
 
     assert 'os.environ["LC_ALL"] = "C"' in source
     assert 'os.environ["LANG"] = "C"' in source

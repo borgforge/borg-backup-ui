@@ -1998,6 +1998,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "restore_test",
             cmd,
             backup_scripts_dir,
+            extra_env={"BORG_UI_DATA_ROOT": str(backup_scripts_dir)},
         )
         if not ok:
             if "already running" in str(err or "").lower():
