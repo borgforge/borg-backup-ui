@@ -3106,6 +3106,35 @@ def _start_notification_reminder_loop(config: dict) -> threading.Thread | None:
         return None
 
 
+def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None:
+    """Refresh cached Borg repository information without blocking UI requests."""
+    startup_delay_seconds = 300
+    check_interval_seconds = 3600
+
+    def _run() -> None:
+        time.sleep(startup_delay_seconds)
+        while True:
+            try:
+                from repositories_api import refresh_due_repository_info
+                result = refresh_due_repository_info(config, max_age_hours=24, retry_after_hours=1)
+                if int(result.get("due") or 0):
+                    _log(
+                        "Repository information refresh completed: "
+                        f"due={result.get('due')} refreshed={result.get('refreshed')} failed={result.get('failed')}"
+                    )
+            except Exception as exc:
+                _log(f"WARNING: Repository information refresh failed: {_mask_secrets(str(exc))}")
+            time.sleep(check_interval_seconds)
+
+    try:
+        thread = threading.Thread(target=_run, name="repository-info-refresh", daemon=True)
+        thread.start()
+        return thread
+    except Exception as exc:
+        _log(f"WARNING: Repository information refresh loop could not be started: {_mask_secrets(str(exc))}")
+        return None
+
+
 def _apply_runtime_dirs_from_conf(config: dict) -> None:
     """Synchronisiert runtime-pfade aus backup.conf in die laufende UI-Konfiguration."""
     try:
@@ -3179,6 +3208,7 @@ def main():
         _log(f"WARNING: Cron schedules could not be applied: {exc}")
 
     _start_notification_reminder_loop(config)
+    _start_repository_info_refresh_loop(config)
 
     port = int(config["PORT"])
     bind = config["BIND"]

@@ -27,11 +27,12 @@ def test_storage_repository_details_focus_on_user_facing_metadata() -> None:
         "function renderStorageRepositoryArchives", 1
     )[0]
     assert "function storageRepositoryEncryption(repo, job)" in script
-    assert "storage.repositoryNameLabel" in details_panel
+    assert "storage.repositoryDisplayNameLabel" in details_panel
+    assert "storage.repositoryDirectoryLabel" in details_panel
     assert "storage.storageNameLabel" in details_panel
     assert "storage.jobNameLabel" in details_panel
     assert "storage.location" not in details_panel
-    assert "storage.path" in details_panel
+    assert "storage.repositoryPathLabel" in details_panel
     assert "storage.repositoryEncryption" in details_panel
     assert "storage.repositoryRelativePath" in details_panel
     assert "storage.repositoryIdLabel" not in details_panel
@@ -51,6 +52,13 @@ def test_storage_repositories_use_configured_job_icons() -> None:
     assert "function storageRepositoryTitle(repo, job)" in script
     assert "resolveJobIcon(job || repo)" in script
     assert "resolveJobIconColor(job || repo)" in script
+    assert ".storage-repository-icon-large" in css
+    assert "justify-content: center" in css
+    title_helper = script.split("function storageRepositoryTitle(repo, job)", 1)[1].split(
+        "function storageRepositoryName", 1
+    )[0]
+    assert "repo?.display_name" in title_helper
+    assert "storageLocationLabel" not in title_helper
     repository_row = script.split("function renderStorageLocationSidebar(data, repos)", 1)[1].split(
         "function onStorageLocationClick", 1
     )[0]

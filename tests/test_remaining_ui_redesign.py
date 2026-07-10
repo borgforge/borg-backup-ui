@@ -46,6 +46,16 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
     assert 'id="check-log-output"' not in html
 
 
+def test_repository_information_has_a_background_refresh_loop() -> None:
+    backend = _read("borg_backup_ui.py")
+    repository_api = _read("api/repositories_api.py")
+    assert "def _start_repository_info_refresh_loop(config: dict)" in backend
+    assert "_start_repository_info_refresh_loop(config)" in backend
+    assert "def refresh_due_repository_info(" in repository_api
+    assert "max_age_hours: int = 24" in repository_api
+    assert "retry_after_hours: int = 1" in repository_api
+
+
 def test_storage_reuses_location_icons_without_summary_ledger() -> None:
     script = _read("ui/js/pages/storage.js")
     for distinctive_path in (

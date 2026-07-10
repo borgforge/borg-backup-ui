@@ -33,6 +33,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Repository maintenance now stores structured, secret-masked results for Check, Verify Data, Prune and Compact.
   - Prune results list deleted archives, Compact reports reclaimed space when Borg provides it, and failed actions expose concise technical details.
   - The Archives tab loads the live archive inventory for the selected repository and shows names, IDs, timestamps and duration.
+  - Borg repository information is refreshed in the background every 24 hours and cached; failed refreshes are retried after one hour.
+  - Repository headers now use the configured repository display name instead of combining job and location names.
+  - Display name, repository directory, absolute repository path and path inside the storage target are labeled separately.
+  - Corrected repository header icon alignment.
   - Removed the old job-based manual Borg Check card and the obsolete Job Wizard passphrase/repository-init path.
   - Repository info refresh now counts archives with `borg list --json` instead of assuming that `borg info --json` contains an archive list.
   - Repository Manager steps keep their numbered status circles, and the review distinguishes the display name from the path inside the storage target.

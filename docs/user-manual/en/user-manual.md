@@ -245,6 +245,10 @@ The page separates storage targets, Borg repositories, and backup jobs. A storag
 - **Activities:** Lists the most recently stored maintenance results in chronological order.
 - **Add repository:** Opens a wizard for existing or new storage targets and for creating or importing a repository.
 
+Borg statistics are refreshed in the background every 24 hours and cached in `repositories.json`. Missing or stale information is loaded during the next hourly scan. Failed refreshes are retried after one hour. Opening the page therefore does not wait for every local and remote repository.
+
+The repository header uses the **display name** assigned during creation or import. **Repository directory** is the final directory name, **repository path** is the complete local or remote target path, and **path in storage target** is the relative path below the selected storage target.
+
 ### 4.3 Create or Import a Repository
 
 1. Open **Repositories** and select **Add repository**.

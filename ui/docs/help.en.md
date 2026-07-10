@@ -99,6 +99,8 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - **Repositories** is where Borg repositories are configured, imported, and maintained.
 - The left side groups repositories by their exact storage target. Search filters the repository list without changing the selected target.
 - **Overview** shows Borg statistics, the last known maintenance state, and human-readable repository details.
+- Borg statistics are refreshed in the background at least every 24 hours and cached. After a connection failure, the application retries after one hour.
+- The workspace header uses the configured repository display name. Repository directory, absolute repository path, and path inside the storage target are labeled separately.
 - **Archives** loads the current archive inventory directly from the selected repository.
 - **Maintenance** provides Check, Verify Data, Prune, and Compact. Status and result remain visible after completion without requiring a technical live log.
 - **Activities** presents the stored maintenance results in chronological order.

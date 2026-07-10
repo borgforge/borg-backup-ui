@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 import json
 import subprocess
 import sys
@@ -13,7 +14,7 @@ import repositories_api  # noqa: E402
 import smb_profiles_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
-from repositories_api import create_or_import_repository, get_repository_archives, read_repository_store, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
+from repositories_api import create_or_import_repository, get_repository_archives, read_repository_store, refresh_due_repository_info, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
 
@@ -327,6 +328,75 @@ def test_repository_info_counts_archives_from_borg_list(tmp_path: Path, monkeypa
     assert result["repository"]["repository_stats"]["archives_count"] == 17
     stored = read_repository_store(config)["repositories"][0]
     assert stored["repository_stats"]["archives_count"] == 17
+    assert stored["last_info_refresh_status"] == "success"
+    assert stored["last_info_refresh_at"]
+
+
+def test_due_repository_info_uses_24_hour_cache(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_flash",
+        "display_name": "Flash",
+        "storage_key": "storage_local_test",
+        "path_raw": "/mnt/backup/borg-backup-flash",
+    }]})
+    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
+        "repository": {"id": "flash-repo"},
+        "encryption": {"mode": "repokey-blake2"},
+        "cache": {"stats": {"total_size": 100}},
+    })
+    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {"archives": []})
+    now = datetime.now(timezone.utc)
+
+    first = refresh_due_repository_info(config, now=now)
+    second = refresh_due_repository_info(config, now=now + timedelta(hours=23))
+    third = refresh_due_repository_info(config, now=now + timedelta(hours=25))
+
+    assert first["refreshed"] == 1
+    assert second["due"] == 0
+    assert third["refreshed"] == 1
+
+
+def test_failed_repository_info_refresh_is_masked_and_retried_hourly(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_flash",
+        "display_name": "Flash",
+        "storage_key": "storage_local_test",
+        "path_raw": "/mnt/backup/borg-backup-flash",
+    }]})
+    monkeypatch.setattr(
+        repositories_api,
+        "_borg_info",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("password=hunter2 network unavailable")),
+    )
+    now = datetime.now(timezone.utc)
+
+    first = refresh_due_repository_info(config, now=now)
+    second = refresh_due_repository_info(config, now=now + timedelta(minutes=30))
+    third = refresh_due_repository_info(config, now=now + timedelta(hours=2))
+
+    stored = read_repository_store(config)["repositories"][0]
+    assert first["failed"] == 1
+    assert second["due"] == 0
+    assert third["failed"] == 1
+    assert stored["last_info_refresh_status"] == "error"
+    assert "hunter2" not in stored["last_info_refresh_error"]
+    assert "password=***" in stored["last_info_refresh_error"]
 
 
 def test_repository_archives_are_loaded_by_repository_key(tmp_path: Path, monkeypatch):

@@ -76,16 +76,14 @@ function storageTypeLabel(repo) {
 }
 
 function storageRepositoryTitle(repo, job) {
-  const raw = String(repo?.display_name || job?.name || storageTypeLabel(repo) || '').trim();
-  const cleaned = raw
-    .replace(/\s+-\s+Local$/i, '')
-    .replace(/\s+-\s+USB$/i, '')
-    .replace(/\s+-\s+SMB$/i, '')
-    .replace(/\s+-\s+Storagebox$/i, '')
-    .trim();
-  const base = cleaned || String(job?.name || storageTypeLabel(repo) || repo?.repository_key || '').trim();
-  const location = storageLocationLabel(repo?.location || '');
-  return location ? `${base} - ${location}` : base;
+  return String(
+    repo?.display_name
+    || repo?.repository_name
+    || job?.name
+    || storageTypeLabel(repo)
+    || repo?.repository_key
+    || '',
+  ).trim();
 }
 
 function storageRepositoryName(repo) {
@@ -187,7 +185,7 @@ function renderStorage(data) {
   renderStorageLocationSidebar(data, visible);
   const repo = visible.find((row) => String(row.repository_key || '') === storageState.selectedRepositoryKey) || null;
   const job = repo ? storageJobForRepository(repo) : null;
-  renderStorageWorkspaceHeader(repo, job, visible.length);
+  renderStorageWorkspaceHeader(repo, job);
   el.innerHTML = repo
     ? renderStorageRepositoryWorkspace(repo, job)
     : `<section class="ui-panel storage-empty">${storageT('storage.noMatchingRepositories')}</section>`;
@@ -205,6 +203,9 @@ function storageRepositoryStatus(repo) {
   const latest = results.sort((a, b) => String(b.finished_at || '').localeCompare(String(a.finished_at || '')))[0];
   if (latest?.status === 'error') return { className: 'error', label: storageT('storage.repositoryStatusError') };
   if (latest?.status === 'warning') return { className: 'warning', label: storageT('storage.repositoryStatusWarning') };
+  if (String(repo?.last_info_refresh_status || '').toLowerCase() === 'error') {
+    return { className: 'warning', label: storageT('storage.repositoryStatusWarning') };
+  }
   return { className: 'success', label: storageT('storage.repositoryStatusReady') };
 }
 
@@ -283,7 +284,7 @@ function onStorageSearchInput(event) {
   input?.setSelectionRange(storageState.search.length, storageState.search.length);
 }
 
-function renderStorageWorkspaceHeader(repo, job, count) {
+function renderStorageWorkspaceHeader(repo, job) {
   const header = document.getElementById('storage-workspace-header');
   if (!header) return;
   if (!repo) {
@@ -291,12 +292,16 @@ function renderStorageWorkspaceHeader(repo, job, count) {
     return;
   }
   const status = storageRepositoryStatus(repo);
+  const infoUpdatedAt = repo.last_info_refresh_at || repo.last_seen_at || '';
+  const infoState = infoUpdatedAt
+    ? storageT('storage.repositoryInfoLastUpdated', { date: storageFormatDateTime(infoUpdatedAt) })
+    : storageT('storage.repositoryInfoPending');
   header.innerHTML = `
     <div class="storage-repository-workspace-identity">
       ${storageRepositoryIcon(repo, job, true)}
-      <span><small>${storageT('storage.repository')}</small><h2>${escHtml(storageRepositoryTitle(repo, job))}</h2><span>${escHtml(repo.path_display || repo.path_raw || '')}</span></span>
+      <span><small>${storageT('storage.repository')}</small><h2>${escHtml(storageRepositoryTitle(repo, job))}</h2><span><b>${escHtml(storageT('storage.repositoryPathLabel'))}:</b> ${escHtml(repo.path_display || repo.path_raw || '')}</span></span>
     </div>
-    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span><small>${storageCount(count, 'storage.repositoryCountOne', 'storage.repositoryCountMany')}</small></div>`;
+    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span><small>${escHtml(infoState)}</small></div>`;
 }
 
 function storageFormatDateTime(value) {
@@ -379,7 +384,8 @@ function renderStorageMaintenanceCard(repo, key, { withAction = false, job = nul
 }
 
 function renderStorageRepositoryOverview(repo, job) {
-  const stats = renderRepositoryStats(repo) || `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryInfoMissing')}</p><button class="btn btn-secondary btn-sm" data-storage-action="repository-info" data-repository-key="${escHtml(storageRepositoryKey(repo))}">${storageT('storage.repositoryRefreshInfo')}</button></div>`;
+  const infoError = String(repo?.last_info_refresh_error || '').trim();
+  const stats = renderRepositoryStats(repo) || `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryInfoMissing')}</p>${infoError ? `<small>${escHtml(infoError)}</small>` : ''}<button class="btn btn-secondary btn-sm" data-storage-action="repository-info" data-repository-key="${escHtml(storageRepositoryKey(repo))}">${storageT('storage.repositoryRefreshInfo')}</button></div>`;
   return `<div class="storage-repository-overview">
     ${stats}
     <div class="storage-section-heading"><div><h3>${storageT('storage.repositoryHealth')}</h3><p>${storageT('storage.repositoryHealthHint')}</p></div><button class="btn btn-secondary btn-sm" data-storage-action="repository-info" data-repository-key="${escHtml(storageRepositoryKey(repo))}">${storageT('storage.repositoryRefreshInfo')}</button></div>
@@ -390,11 +396,12 @@ function renderStorageRepositoryOverview(repo, job) {
     </div>
     <div class="storage-section-heading"><div><h3>${storageT('storage.repositoryDetails')}</h3><p>${storageT('storage.repositoryDetailsHint')}</p></div></div>
     <div class="storage-repository-detail-grid storage-repository-facts">
-      ${storageDetailItem('storage.repositoryNameLabel', storageRepositoryName(repo))}
+      ${storageDetailItem('storage.repositoryDisplayNameLabel', storageRepositoryTitle(repo, job))}
+      ${storageDetailItem('storage.repositoryDirectoryLabel', storageRepositoryName(repo))}
       ${storageDetailItem('storage.storageNameLabel', storageName(repo))}
       ${storageDetailItem('storage.jobNameLabel', storageJobName(repo, job))}
       ${storageDetailItem('storage.repositoryEncryption', storageRepositoryEncryption(repo, job))}
-      ${storageDetailItem('storage.path', repo.path_display || repo.path_raw || '', 'span-2')}
+      ${storageDetailItem('storage.repositoryPathLabel', repo.path_display || repo.path_raw || '', 'span-2')}
       ${storageDetailItem('storage.repositoryRelativePath', repo.relative_path || '', 'span-2')}
     </div>
   </div>`;

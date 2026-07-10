@@ -13,7 +13,7 @@ import os
 import re
 import shlex
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
@@ -300,6 +300,9 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "last_test_status": str(row.get("last_test_status") or "").strip(),
             "last_check_status": str(row.get("last_check_status") or "").strip(),
             "last_seen_at": str(row.get("last_seen_at") or "").strip(),
+            "last_info_refresh_at": str(row.get("last_info_refresh_at") or "").strip(),
+            "last_info_refresh_status": str(row.get("last_info_refresh_status") or "").strip(),
+            "last_info_refresh_error": str(row.get("last_info_refresh_error") or "").strip(),
             "borg_repository_id": str(row.get("borg_repository_id") or "").strip(),
             "borg_last_modified": str(row.get("borg_last_modified") or "").strip(),
             "repository_stats": row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {},
@@ -471,7 +474,9 @@ def _repo_env(storage: dict[str, Any], passphrase_file: Path | None) -> dict[str
 
 
 def _mask_repo_output(text: str, passphrase: str = "") -> str:
-    out = str(text or "")
+    from security_utils import mask_secrets
+
+    out = mask_secrets(str(text or ""))
     if passphrase:
         out = out.replace(passphrase, "***")
     return out
@@ -577,15 +582,128 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
         if cleanup:
             cleanup()
     fields = _borg_info_fields(info_payload, archive_payload)
+    refreshed_at = _now()
+    latest_store = read_repository_store(config)
+    latest_rows = latest_store["repositories"]
+    latest_repository = next(
+        (row for row in latest_rows if str(row.get("repository_key") or "") == key),
+        None,
+    )
+    if not latest_repository:
+        raise ValueError("Repository was removed while its information was refreshed")
     updated = {
-        **repository,
+        **latest_repository,
         **{field: value for field, value in fields.items() if value not in ("", None, {})},
         "last_test_status": "ok",
-        "last_seen_at": _now(),
-        "updated_at": _now(),
+        "last_seen_at": refreshed_at,
+        "last_info_refresh_at": refreshed_at,
+        "last_info_refresh_status": "success",
+        "last_info_refresh_error": "",
+        "updated_at": refreshed_at,
     }
-    write_repository_store(config, {"repositories": [updated if str(row.get("repository_key") or "") == key else row for row in rows]})
+    write_repository_store(config, {
+        "repositories": [updated if str(row.get("repository_key") or "") == key else row for row in latest_rows],
+    })
     return {"ok": True, "repository": enrich_repository_display_fields(updated)}
+
+
+def _parse_repository_timestamp(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _repository_info_is_due(
+    repository: dict[str, Any],
+    now: datetime,
+    *,
+    max_age_hours: int,
+    retry_after_hours: int,
+) -> bool:
+    status = str(repository.get("last_info_refresh_status") or "").strip().lower()
+    stats = repository.get("repository_stats") if isinstance(repository.get("repository_stats"), dict) else {}
+    if status != "error" and not stats:
+        return True
+    timestamp = _parse_repository_timestamp(
+        repository.get("last_info_refresh_at") or repository.get("last_seen_at")
+    )
+    if timestamp is None:
+        return True
+    hours = retry_after_hours if status == "error" else max_age_hours
+    return timestamp <= now - timedelta(hours=max(1, int(hours)))
+
+
+def _record_repository_info_error(config: dict, repository_key: str, message: str, checked_at: str) -> None:
+    store = read_repository_store(config)
+    rows = store["repositories"]
+    found = False
+    next_rows = []
+    for row in rows:
+        if str(row.get("repository_key") or "") != repository_key:
+            next_rows.append(row)
+            continue
+        found = True
+        next_rows.append({
+            **row,
+            "last_info_refresh_at": checked_at,
+            "last_info_refresh_status": "error",
+            "last_info_refresh_error": _mask_repo_output(str(message or "Repository information refresh failed"))[:500],
+            "updated_at": checked_at,
+        })
+    if found:
+        write_repository_store(config, {"repositories": next_rows})
+
+
+def refresh_due_repository_info(
+    config: dict,
+    *,
+    max_age_hours: int = 24,
+    retry_after_hours: int = 1,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Refresh cached Borg information that is missing, stale, or due for retry."""
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    current = current.astimezone(timezone.utc)
+    repositories = read_repository_store(config)["repositories"]
+    due_keys = [
+        str(row.get("repository_key") or "").strip()
+        for row in repositories
+        if str(row.get("repository_key") or "").strip()
+        and _repository_info_is_due(
+            row,
+            current,
+            max_age_hours=max_age_hours,
+            retry_after_hours=retry_after_hours,
+        )
+    ]
+    refreshed = 0
+    failed = 0
+    errors = []
+    for repository_key in due_keys:
+        try:
+            refresh_repository_info(config, repository_key)
+            refreshed += 1
+        except Exception as exc:
+            failed += 1
+            safe_message = _mask_repo_output(str(exc or "Repository information refresh failed"))[:500]
+            _record_repository_info_error(config, repository_key, safe_message, _now())
+            errors.append({"repository_key": repository_key, "error": safe_message})
+    return {
+        "checked": len(repositories),
+        "due": len(due_keys),
+        "refreshed": refreshed,
+        "failed": failed,
+        "errors": errors,
+    }
 
 
 def get_repository_archives(config: dict, repository_key: str, limit: int = 100) -> dict[str, Any]:
@@ -795,6 +913,9 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         **{key: value for key, value in info_fields.items() if value not in ("", None, {})},
         "last_test_status": "ok",
         "last_seen_at": now,
+        "last_info_refresh_at": now,
+        "last_info_refresh_status": "success",
+        "last_info_refresh_error": "",
         "source_job_keys": existing.get("source_job_keys", []),
         "used_by": existing.get("used_by", []),
     }

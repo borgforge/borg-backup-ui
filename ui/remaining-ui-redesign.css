@@ -427,9 +427,9 @@
   min-width: 0;
 }
 
-.storage-repository-workspace-identity small,
-.storage-repository-workspace-identity h2,
-.storage-repository-workspace-identity span {
+.storage-repository-workspace-identity > span:last-child small,
+.storage-repository-workspace-identity > span:last-child h2,
+.storage-repository-workspace-identity > span:last-child > span {
   display: block;
 }
 
@@ -446,7 +446,15 @@
   white-space: nowrap;
 }
 
+.storage-repository-workspace-identity > span:last-child > span b {
+  font-family: inherit;
+  font-weight: 600;
+}
+
 .storage-repository-icon-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 2.75rem;
   height: 2.75rem;
 }
@@ -664,6 +672,12 @@
 
 .storage-repository-empty-state {
   flex-direction: column;
+}
+
+.storage-repository-empty-state small {
+  max-width: 48rem;
+  color: var(--ui-color-text-subtle);
+  overflow-wrap: anywhere;
 }
 
 .storage-archive-toolbar {

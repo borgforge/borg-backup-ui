@@ -99,6 +99,8 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - **Repositories** ist der Ort zum Einrichten, Importieren und Warten von Borg-Repositories.
 - Links werden Repositorys nach dem konkreten Speicherziel gruppiert. Die Suche filtert die Repository-Liste, ohne den ausgewählten Speicherort zu verändern.
 - **Übersicht** zeigt Borg-Kennzahlen, den letzten bekannten Wartungszustand und die verständlichen Repository-Daten.
+- Borg-Kennzahlen werden im Hintergrund mindestens alle 24 Stunden neu geladen und zwischengespeichert. Nach einem Verbindungsfehler versucht die Anwendung die Aktualisierung nach einer Stunde erneut.
+- Der Kopfbereich verwendet den konfigurierten Anzeigenamen des Repositorys. Repository-Verzeichnis, absoluter Repository-Pfad und Pfad im Speicherziel werden getrennt bezeichnet.
 - **Archive** lädt die aktuelle Archivliste direkt aus dem ausgewählten Repository.
 - **Wartung** bietet Check, Datenprüfung, Prune und Compact. Der Status und das Ergebnis bleiben nach Abschluss sichtbar; ein technisches Live-Log ist dafür nicht erforderlich.
 - **Aktivitäten** ordnet die zuletzt gespeicherten Wartungsergebnisse chronologisch ein.
