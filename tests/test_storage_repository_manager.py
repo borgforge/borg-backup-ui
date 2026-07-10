@@ -273,19 +273,34 @@ def test_repository_remove_from_inventory_keeps_data_and_secret(tmp_path: Path):
     config, repository_path, secret = _write_lifecycle_repository(tmp_path)
 
     preview = prepare_repository_lifecycle(config, "repo_photos", "remove")
-    result = apply_repository_lifecycle(config, {
-        "repository_key": "repo_photos",
-        "mode": "remove",
-        "confirmation_name": "Photos",
-    })
+    result = apply_repository_lifecycle(
+        config,
+        {
+            "repository_key": "repo_photos",
+            "mode": "remove",
+            "confirmation_name": "Photos",
+        },
+        audit_context={
+            "actor": "testadmin",
+            "actor_role": "admin",
+            "auth_method": "session",
+            "request_id": "request-123",
+        },
+    )
 
     assert preview["allowed"] is True
     assert result["repository_deleted"] is False
     assert read_repository_store(config)["repositories"] == []
     assert repository_path.is_dir()
     assert secret.is_file()
-    audit = (tmp_path / "config" / "repository-lifecycle.log.jsonl").read_text(encoding="utf-8")
-    assert '"action": "remove_from_inventory"' in audit
+    audit = json.loads(
+        (tmp_path / "config" / "repository-lifecycle.log.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert audit["action"] == "remove_from_inventory"
+    assert audit["actor"] == "testadmin"
+    assert audit["actor_role"] == "admin"
+    assert audit["auth_method"] == "session"
+    assert audit["request_id"] == "request-123"
 
 
 def test_repository_lifecycle_blocks_live_job_reference(tmp_path: Path):

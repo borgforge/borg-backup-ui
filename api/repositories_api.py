@@ -718,13 +718,19 @@ def _write_repository_lifecycle_audit(
     action: str,
     status: str,
     details: dict[str, Any] | None = None,
+    audit_context: dict[str, Any] | None = None,
 ) -> None:
     path = _repository_lifecycle_audit_file(config)
     path.parent.mkdir(parents=True, exist_ok=True)
+    context = audit_context if isinstance(audit_context, dict) else {}
     payload = {
         "timestamp": _now(),
         "action": str(action or ""),
         "status": str(status or ""),
+        "actor": str(context.get("actor") or "system"),
+        "actor_role": str(context.get("actor_role") or "system"),
+        "auth_method": str(context.get("auth_method") or "internal"),
+        "request_id": str(context.get("request_id") or ""),
         "repository_key": str(repository.get("repository_key") or ""),
         "repository_id": str(repository.get("borg_repository_id") or ""),
         "display_name": str(repository.get("display_name") or ""),
@@ -847,7 +853,12 @@ def _remove_repository_secret(config: dict, repository: dict[str, Any]) -> bool:
     return False
 
 
-def apply_repository_lifecycle(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+def apply_repository_lifecycle(
+    config: dict,
+    payload: dict[str, Any],
+    *,
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Invalid repository lifecycle payload")
     key = str(payload.get("repository_key") or "").strip()
@@ -872,6 +883,7 @@ def apply_repository_lifecycle(config: dict, payload: dict[str, Any]) -> dict[st
             action="remove_from_inventory",
             status="success",
             details={"repository_data_deleted": False, "secret_deleted": False},
+            audit_context=audit_context,
         )
         return {"ok": True, "mode": mode, "repository_key": key, "repository_deleted": False, "secret_deleted": False}
 
@@ -924,6 +936,7 @@ def apply_repository_lifecycle(config: dict, payload: dict[str, Any]) -> dict[st
             action="delete_repository",
             status="failed",
             details={"error": _mask_repo_output(str(exc))[:500]},
+            audit_context=audit_context,
         )
         raise
 
@@ -935,6 +948,7 @@ def apply_repository_lifecycle(config: dict, payload: dict[str, Any]) -> dict[st
         action="delete_repository",
         status="success",
         details={"archive_count": expected_archives, "secret_deleted": secret_deleted},
+        audit_context=audit_context,
     )
     return {"ok": True, "mode": mode, "repository_key": key, "repository_deleted": True, "secret_deleted": secret_deleted}
 

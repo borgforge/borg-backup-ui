@@ -125,6 +125,60 @@ def test_is_api_authorized_ignores_api_token_cookie_for_automation_auth():
     assert h._is_api_authorized() is False
 
 
+def test_repository_request_context_contains_safe_lifecycle_fields():
+    h = _make_handler()
+    h.path = "/api/repositories"
+    h._last_json_body = {
+        "repository_key": "repo_photos_local_12345678",
+        "mode": "delete",
+        "confirmation_phrase": "DELETE",
+    }
+
+    context = h._extract_request_context()
+    context = h._augment_context_from_response(
+        h.path,
+        {
+            "repository_key": "repo_photos_local_12345678",
+            "mode": "delete",
+            "repository_deleted": True,
+            "secret_deleted": True,
+        },
+        context,
+    )
+
+    assert context["repository_key"] == "repo_photos_local_12345678"
+    assert context["repository_mode"] == "delete"
+    assert context["repository_deleted"] is True
+    assert context["secret_deleted"] is True
+    assert "confirmation_phrase" not in context
+
+
+def test_repository_delete_passes_authenticated_actor_to_audit(monkeypatch):
+    import repositories_api
+
+    captured = {}
+
+    def fake_apply(_config, payload, *, audit_context=None):
+        captured["payload"] = payload
+        captured["audit_context"] = audit_context
+        return {"ok": True}
+
+    monkeypatch.setattr(repositories_api, "apply_repository_lifecycle", fake_apply)
+    h = _make_handler()
+    h._current_request_id = "request-456"
+    h._read_json_body = lambda: {"repository_key": "repo_photos", "mode": "delete"}
+    h._get_current_session_meta = lambda: {"username": "Admin.User", "role": "admin"}
+    h._has_valid_api_token_header = lambda: False
+
+    assert h._delete_repository() == {"ok": True}
+    assert captured["audit_context"] == {
+        "actor": "admin.user",
+        "actor_role": "admin",
+        "auth_method": "session",
+        "request_id": "request-456",
+    }
+
+
 def test_ui_session_expired_is_invalid_and_removed():
     h = _make_handler()
     h.headers = {"Cookie": "bbui_session=sid-expired"}

@@ -53,6 +53,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Restore Tests now builds its sidebar from the already loaded plan and resolves all repository/storage assignments from one inventory snapshot per request.
   - Added a separate Repository Management tab with a non-destructive inventory removal and a guarded permanent Borg repository deletion.
   - Permanent deletion requires no linked jobs or running operations, revalidates repository ID/path/archive count, requires display-name plus `DELETE` confirmation, and records an audit entry.
+  - Repository lifecycle audit entries now record the authenticated actor, role, authentication method and request ID; the general API log also identifies the repository action and outcome without exposing secrets.
 
 ### Issue #180
 - Dashboard:

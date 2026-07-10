@@ -1467,8 +1467,30 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from repositories_api import RepositoryBusyError, RepositoryLifecycleConflict, apply_repository_lifecycle
 
         body = self._read_json_body()
+        session = self._get_current_session_meta() or {}
+        actor = _normalize_username(session.get("username", ""))
+        actor_role = str(session.get("role", "") or "").strip().lower()
+        auth_method = "session"
+        if not actor:
+            if self._has_valid_api_token_header():
+                actor = "api-token"
+                actor_role = "admin"
+                auth_method = "api-token"
+            else:
+                actor = "system"
+                actor_role = self._get_current_role() or "system"
+                auth_method = "internal"
         try:
-            return apply_repository_lifecycle(self.config, body)
+            return apply_repository_lifecycle(
+                self.config,
+                body,
+                audit_context={
+                    "actor": actor,
+                    "actor_role": actor_role,
+                    "auth_method": auth_method,
+                    "request_id": str(getattr(self, "_current_request_id", "") or ""),
+                },
+            )
         except RepositoryLifecycleConflict as exc:
             raise ApiConflictError(str(exc), code=exc.code) from exc
         except RepositoryBusyError as exc:
@@ -3067,15 +3089,26 @@ btn.addEventListener('click',doSetup);
             or ""
         )
         location_raw = body.get("location") or (qs.get("location") or [""])[0] or ""
+        repository_key_raw = (
+            body.get("repository_key")
+            or (qs.get("repository_key") or [""])[0]
+            or ""
+        )
+        repository_mode_raw = body.get("mode") or ""
 
         job_key = _mask_secrets(str(job_key_raw))
         profile_key = _mask_secrets(str(profile_key_raw))
         location = _mask_secrets(str(location_raw))
-        return {
+        context = {
             "job_key": job_key,
             "profile_key": profile_key,
             "location": location,
         }
+        if repository_key_raw:
+            context["repository_key"] = _mask_secrets(str(repository_key_raw))
+        if repository_mode_raw:
+            context["repository_mode"] = _mask_secrets(str(repository_mode_raw))
+        return context
 
     @staticmethod
     def _augment_context_from_response(path: str, data: dict, ctx: dict) -> dict:
@@ -3087,6 +3120,14 @@ btn.addEventListener('click',doSetup);
             ]
             if running_keys:
                 out["job_key"] = _mask_secrets(",".join(running_keys[:5]))
+        if path == "/api/repositories" and isinstance(data, dict):
+            for key in ("repository_key", "mode"):
+                if data.get(key):
+                    context_key = "repository_mode" if key == "mode" else key
+                    out[context_key] = _mask_secrets(str(data.get(key)))
+            for key in ("repository_deleted", "secret_deleted"):
+                if isinstance(data.get(key), bool):
+                    out[key] = data[key]
         return out
 
     def log_message(self, fmt, *args):
