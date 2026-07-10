@@ -82,6 +82,8 @@ def test_repository_manager_uses_single_visible_repository_path_field() -> None:
     assert "storage.repositoryRelativePath" in html
     assert "Repository-Pfad im Speicherziel" in german
     assert "function repositoryManagerNameFromRelativePath" in script
+    assert "function repositoryManagerPathInputChanged" in script
+    assert "addEventListener('input', repositoryManagerPathInputChanged)" in _read("ui/js/components/app-bindings.js")
     assert "function repositoryManagerPathChanged" in script
     assert "repositoryManagerPathChanged();" in script
     assert ".repository-manager-form-grid" in css

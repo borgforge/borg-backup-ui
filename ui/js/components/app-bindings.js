@@ -199,7 +199,7 @@
     document.getElementById('repository-manager-storage')?.addEventListener('change', repositoryManagerSyncFields);
     document.getElementById('repository-manager-encryption')?.addEventListener('change', repositoryManagerSyncFields);
     document.getElementById('repository-manager-display-name')?.addEventListener('input', repositoryManagerUpdateSummary);
-    document.getElementById('repository-manager-relative-path')?.addEventListener('input', repositoryManagerPathChanged);
+    document.getElementById('repository-manager-relative-path')?.addEventListener('input', repositoryManagerPathInputChanged);
     document.getElementById('repository-manager-passphrase')?.addEventListener('input', repositoryManagerUpdateSummary);
     document.getElementById('storage-deploy-close-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-ok-btn')?.addEventListener('click', closeStorageDeployModal);

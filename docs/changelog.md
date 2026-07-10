@@ -33,6 +33,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #187
 - Storage:
+  - Repository paths can be typed naturally with internal hyphens; live input no longer removes a trailing hyphen before the next character is entered.
   - Added a three-step repository manager that selects or creates and tests Local, USB, SMB, and SSH/Storagebox targets before repository setup.
   - SMB targets receive a managed mount path; users no longer have to invent a technical temporary mount path.
   - Existing repository imports are validated with `borg info` and do not run `borg init`.

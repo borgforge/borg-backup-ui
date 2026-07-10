@@ -882,6 +882,18 @@ function repositoryManagerNameFromRelativePath(value) {
   return parts[parts.length - 1] || path;
 }
 
+function repositoryManagerPathInputChanged() {
+  const repoName = document.getElementById('repository-manager-repository-name');
+  const relative = document.getElementById('repository-manager-relative-path');
+  if (!repoName || !relative) return;
+  relative.value = String(relative.value || '')
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Za-z0-9._/-]+/g, '-')
+    .replace(/^-+/, '');
+  repoName.value = repositoryManagerNameFromRelativePath(relative.value);
+  repositoryManagerUpdateSummary();
+}
+
 function repositoryManagerPathChanged() {
   const repoName = document.getElementById('repository-manager-repository-name');
   const relative = document.getElementById('repository-manager-relative-path');
