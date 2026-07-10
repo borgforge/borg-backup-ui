@@ -50,39 +50,73 @@ def load_job_metadata(config: dict, job_key: str) -> dict[str, Any]:
     return payload
 
 
-def repository_by_key(config: dict, repository_key: str) -> dict[str, Any]:
+def load_repository_inventory(config: dict) -> dict[str, dict[str, dict[str, Any]]]:
+    """Load canonical repository and storage objects once for one operation."""
+    from repositories_api import read_repository_store
+    from storage_objects_api import read_storage_store
+
+    repositories = {
+        str(row.get("repository_key") or "").strip(): row
+        for row in read_repository_store(config).get("repositories", [])
+        if isinstance(row, dict) and str(row.get("repository_key") or "").strip()
+    }
+    storages = {
+        str(row.get("storage_key") or "").strip(): row
+        for row in read_storage_store(config).get("storages", [])
+        if isinstance(row, dict) and str(row.get("storage_key") or "").strip()
+    }
+    return {"repositories": repositories, "storages": storages}
+
+
+def repository_by_key(
+    config: dict,
+    repository_key: str,
+    *,
+    inventory: dict[str, dict[str, dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     from repositories_api import read_repository_store
 
     key = str(repository_key or "").strip()
     if not key:
         raise RepositoryContextError("Job has no repository assignment")
-    repository = next(
-        (
-            row
-            for row in read_repository_store(config).get("repositories", [])
-            if str(row.get("repository_key") or "").strip() == key
-        ),
-        None,
-    )
+    if isinstance(inventory, dict):
+        repository = inventory.get("repositories", {}).get(key)
+    else:
+        repository = next(
+            (
+                row
+                for row in read_repository_store(config).get("repositories", [])
+                if str(row.get("repository_key") or "").strip() == key
+            ),
+            None,
+        )
     if not isinstance(repository, dict):
         raise RepositoryContextError(f"Assigned repository was not found: {key}")
     return repository
 
 
-def storage_by_key(config: dict, storage_key: str) -> dict[str, Any]:
+def storage_by_key(
+    config: dict,
+    storage_key: str,
+    *,
+    inventory: dict[str, dict[str, dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     from storage_objects_api import read_storage_store
 
     key = str(storage_key or "").strip()
     if not key:
         raise RepositoryContextError("Repository has no storage assignment")
-    storage = next(
-        (
-            row
-            for row in read_storage_store(config).get("storages", [])
-            if str(row.get("storage_key") or "").strip() == key
-        ),
-        None,
-    )
+    if isinstance(inventory, dict):
+        storage = inventory.get("storages", {}).get(key)
+    else:
+        storage = next(
+            (
+                row
+                for row in read_storage_store(config).get("storages", [])
+                if str(row.get("storage_key") or "").strip() == key
+            ),
+            None,
+        )
     if not isinstance(storage, dict):
         raise RepositoryContextError(f"Assigned storage target was not found: {key}")
     return storage
@@ -107,6 +141,7 @@ def resolve_job_repository_context(
     job: dict[str, Any] | None = None,
     require_passphrase_file: bool = True,
     allow_legacy_job: bool = False,
+    inventory: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     metadata = dict(job) if isinstance(job, dict) else load_job_metadata(config, job_key)
     resolved_job_key = str(metadata.get("job_key") or job_key or "").strip()
@@ -118,9 +153,10 @@ def resolve_job_repository_context(
                 f"Job '{resolved_job_key}' awaits repository migration ({details})"
             )
     repository_key = str(metadata.get("repository_key") or "").strip()
-    repository = repository_by_key(config, repository_key)
+    source = inventory if isinstance(inventory, dict) else load_repository_inventory(config)
+    repository = repository_by_key(config, repository_key, inventory=source)
     storage_key = str(repository.get("storage_key") or "").strip()
-    storage = storage_by_key(config, storage_key)
+    storage = storage_by_key(config, storage_key, inventory=source)
     path = repository_path(repository, storage)
 
     storage_location = str(storage.get("location") or storage.get("storage_type") or "").strip().lower()
@@ -164,6 +200,7 @@ def profile_job_references(config: dict, location: str) -> dict[str, list[str]]:
     directory = jobs_dir(config)
     if not directory.is_dir():
         return references
+    inventory = load_repository_inventory(config)
     for path in sorted(directory.glob("*.json")):
         try:
             job = json.loads(path.read_text(encoding="utf-8"))
@@ -178,6 +215,7 @@ def profile_job_references(config: dict, location: str) -> dict[str, list[str]]:
                 job_key,
                 job=job,
                 require_passphrase_file=False,
+                inventory=inventory,
             )
         except RepositoryContextError:
             continue

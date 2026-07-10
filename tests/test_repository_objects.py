@@ -16,6 +16,7 @@ import smb_profiles_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
 from repositories_api import create_or_import_repository, get_repository_archives, read_repository_store, refresh_due_repository_info, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
+from restore_tests_api import list_restore_test_plan  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
 
@@ -177,6 +178,51 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     assert store["repositories"][0]["relative_path"] == "borg-backup-photos"
     assert store["repositories"][0]["used_by"] == ["photos_local"]
     assert read_storage_store(config)["storages"][0]["base_path"] == "/mnt/backup"
+
+    job["restore_test_policy"] = {
+        "mode": "scheduled",
+        "interval_days": 30,
+        "validity_days": 30,
+        "level": 3,
+    }
+    Path(result["metadata_path"]).write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
+    save_job({**params, "existing_job_key": "photos_local"}, scripts, tmp_path, config)
+    updated_job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
+    assert updated_job["restore_test_policy"] == job["restore_test_policy"]
+
+
+def test_restore_test_plan_loads_repository_inventory_once(tmp_path: Path, monkeypatch):
+    job_file = _write_job(tmp_path, "appdata_local", "/mnt/backup/borg-backup-appdata")
+    config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "STATUS_DIR": str(tmp_path / "status"),
+        "RESTORE_TEST_STATUS_DIR": str(tmp_path / "restore-status"),
+        "RUNTIME_RUNS_DIR": str(tmp_path / "runtime-runs"),
+    }
+    run_startup_migrations(config)
+    job = json.loads(job_file.read_text(encoding="utf-8"))
+    job["restore_test_policy"] = {"mode": "scheduled", "interval_days": 30, "level": 3}
+    job_file.write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
+
+    original_repo_read = repositories_api.read_repository_store
+    original_storage_read = read_storage_store
+    reads = {"repositories": 0, "storages": 0}
+
+    def counted_repo_read(cfg):
+        reads["repositories"] += 1
+        return original_repo_read(cfg)
+
+    def counted_storage_read(cfg):
+        reads["storages"] += 1
+        return original_storage_read(cfg)
+
+    monkeypatch.setattr(repositories_api, "read_repository_store", counted_repo_read)
+    monkeypatch.setattr("storage_objects_api.read_storage_store", counted_storage_read)
+
+    plan = list_restore_test_plan(config)
+
+    assert plan["jobs"][0]["policy"]["level"] == 3
+    assert reads == {"repositories": 1, "storages": 1}
 
 
 def test_repository_objects_v2_enriches_existing_repository_names(tmp_path: Path):

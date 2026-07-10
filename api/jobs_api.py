@@ -703,13 +703,23 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
     scripts_dir = resolve_scripts_dir(config)
     data_root = resolve_data_root(config)
     runtime_states = get_all_runtime_states(config)
+    try:
+        from repository_context import load_repository_inventory
+        repository_inventory = load_repository_inventory(config)
+    except Exception:
+        repository_inventory = {"repositories": {}, "storages": {}}
     result = []
     for info in discover_jobs(scripts_dir, data_root):
         last = latest_statuses.get(info.key)
         run_state = runtime_states.get(info.key, {"running": False})
         try:
             from repository_context import resolve_job_repository_context
-            repository_context = resolve_job_repository_context(config, info.key, require_passphrase_file=False)
+            repository_context = resolve_job_repository_context(
+                config,
+                info.key,
+                require_passphrase_file=False,
+                inventory=repository_inventory,
+            )
             repo_path = str(repository_context.get("repository_path") or "")
             repository_key = str(repository_context.get("repository_key") or "")
         except Exception:

@@ -401,6 +401,13 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
             existing = json.loads(meta_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             existing = {}
+    elif existing_job_key and existing_job_key != job_key:
+        old_meta_path = jobs_meta_dir / f"{existing_job_key}.json"
+        if old_meta_path.exists():
+            try:
+                existing = json.loads(old_meta_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                existing = {}
 
     mount_before_run = bool(params.get("mount_before_run", existing.get("mount_before_run", True)))
     unmount_after_run = bool(params.get("unmount_after_run", existing.get("unmount_after_run", True)))
@@ -443,6 +450,8 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "updated_at": now_iso,
     }
     metadata["repository_key"] = selected_repository_key
+    if isinstance(existing.get("restore_test_policy"), dict):
+        metadata["restore_test_policy"] = dict(existing["restore_test_policy"])
 
     repo_config = ui_config or {
         "BACKUP_SCRIPTS_DIR": str(data_root or (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)),

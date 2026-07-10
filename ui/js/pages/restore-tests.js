@@ -348,6 +348,12 @@ async function refreshRestoreTests() {
     }
     restoreTestsState.data = testsData.tests || [];
     restoreTestsState.plan = planRes.ok ? await planRes.json() : null;
+    restoreTestsState.jobs = (restoreTestsState.plan?.jobs || [])
+      .filter((j) => !j.is_utility)
+      .map((job) => ({
+        ...job,
+        key: job.job_key,
+      }));
     if (runningRes.ok) {
       const runningState = await runningRes.json().catch(() => ({}));
       if (runningState.running) {
@@ -361,7 +367,7 @@ async function refreshRestoreTests() {
     renderRestoreTests(restoreTestsState.data);
     renderRestoreTestsSubtab();
     _updateRTScheduleBtn();
-    await refreshRestoreTestJobOptions();
+    refreshRestoreTestJobsForSelection();
     renderRestoreTestsSidebar();
     updateRestoreTestsWorkspace();
   } catch (err) {
@@ -572,18 +578,6 @@ async function refreshRestorePlanOnly() {
       const running = await runningRes.json();
       if (running?.running) startRTPolling();
     }
-  } catch (_) {}
-}
-
-async function refreshRestoreTestJobOptions() {
-  try {
-    const res = await fetch('/api/jobs');
-    if (!res.ok) return;
-    const data = await res.json();
-    restoreTestsState.jobs = (data.jobs || []).filter(j => !j.is_utility);
-    renderRestoreTestsSidebar();
-    updateRestoreTestsWorkspace();
-    refreshRestoreTestJobsForSelection();
   } catch (_) {}
 }
 

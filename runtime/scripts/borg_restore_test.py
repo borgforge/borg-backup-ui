@@ -124,9 +124,10 @@ def discover_repos(conf: dict) -> list:
 
     if not jobs_dir.is_dir():
         return repos
-    from repository_context import RepositoryContextError, resolve_job_repository_context
+    from repository_context import RepositoryContextError, load_repository_inventory, resolve_job_repository_context
 
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    inventory = load_repository_inventory(config)
     for jf in sorted(jobs_dir.glob("*.json")):
         try:
             raw = json.loads(jf.read_text(encoding="utf-8"))
@@ -141,7 +142,7 @@ def discover_repos(conf: dict) -> list:
         if not btype or not job_key:
             continue
         try:
-            context = resolve_job_repository_context(config, job_key, job=raw)
+            context = resolve_job_repository_context(config, job_key, job=raw, inventory=inventory)
         except RepositoryContextError:
             continue
         location = str(context.get("location") or "").strip().lower()

@@ -49,6 +49,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Automatic repository information refreshes are deferred while a backup uses the same repository and are shown as in use instead of as a repository failure.
   - Repository maintenance durations now use timezone-aware start times instead of collapsing valid runtimes to zero seconds.
   - The repository overview removes the redundant storage-relative path field, gives the absolute path the remaining row width, and drops the duplicate Activities tab until a real multi-run audit history exists.
+  - Restore-test policies now survive Job Wizard edits instead of falling back to manual/L2 for local jobs.
+  - Restore Tests now builds its sidebar from the already loaded plan and resolves all repository/storage assignments from one inventory snapshot per request.
 
 ### Issue #180
 - Dashboard:
