@@ -204,6 +204,9 @@ function storageRepositoryStatus(repo) {
   const latest = results.sort((a, b) => String(b.finished_at || '').localeCompare(String(a.finished_at || '')))[0];
   if (latest?.status === 'error') return { className: 'error', label: storageT('storage.repositoryStatusError') };
   if (latest?.status === 'warning') return { className: 'warning', label: storageT('storage.repositoryStatusWarning') };
+  if (String(repo?.last_info_refresh_status || '').toLowerCase() === 'busy') {
+    return { className: 'info', label: storageT('storage.repositoryStatusBusy') };
+  }
   if (String(repo?.last_info_refresh_status || '').toLowerCase() === 'error') {
     return { className: 'warning', label: storageT('storage.repositoryStatusWarning') };
   }
@@ -386,7 +389,8 @@ function renderStorageMaintenanceCard(repo, key, { withAction = false, job = nul
 
 function renderStorageRepositoryOverview(repo, job) {
   const infoError = String(repo?.last_info_refresh_error || '').trim();
-  const stats = renderRepositoryStats(repo) || `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryInfoMissing')}</p>${infoError ? `<small>${escHtml(infoError)}</small>` : ''}<button class="btn btn-secondary btn-sm" data-storage-action="repository-info" data-repository-key="${escHtml(storageRepositoryKey(repo))}">${storageT('storage.repositoryRefreshInfo')}</button></div>`;
+  const infoBusy = String(repo?.last_info_refresh_status || '').toLowerCase() === 'busy';
+  const stats = renderRepositoryStats(repo) || `<div class="storage-repository-empty-state"><p>${storageT(infoBusy ? 'storage.repositoryInfoBusy' : 'storage.repositoryInfoMissing')}</p>${!infoBusy && infoError ? `<small>${escHtml(infoError)}</small>` : ''}<button class="btn btn-secondary btn-sm" data-storage-action="repository-info" data-repository-key="${escHtml(storageRepositoryKey(repo))}">${storageT('storage.repositoryRefreshInfo')}</button></div>`;
   return `<div class="storage-repository-overview">
     ${stats}
     <div class="storage-section-heading"><div><h3>${storageT('storage.repositoryHealth')}</h3><p>${storageT('storage.repositoryHealthHint')}</p></div><button class="btn btn-secondary btn-sm" data-storage-action="repository-info" data-repository-key="${escHtml(storageRepositoryKey(repo))}">${storageT('storage.repositoryRefreshInfo')}</button></div>
@@ -566,7 +570,14 @@ async function refreshRepositoryInfo(repositoryKey, button) {
       body: JSON.stringify({ repository_key: repositoryKey }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    if (!response.ok) {
+      if (data?.code === 'repository_busy') {
+        await refreshStorage();
+        showMsg('storage-message', 'warning', storageT('storage.repositoryInfoBusy'));
+        return;
+      }
+      throw new Error(apiErrorMessage(data, response.status));
+    }
     await refreshStorage();
     showMsg('storage-message', 'success', storageT('storage.repositoryInfoUpdated'));
   } catch (error) {

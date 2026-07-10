@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import json
+import os
 import subprocess
 import sys
 
@@ -397,6 +398,51 @@ def test_failed_repository_info_refresh_is_masked_and_retried_hourly(tmp_path: P
     assert stored["last_info_refresh_status"] == "error"
     assert "hunter2" not in stored["last_info_refresh_error"]
     assert "password=***" in stored["last_info_refresh_error"]
+
+
+def test_repository_info_refresh_is_deferred_while_backup_uses_repository(tmp_path: Path, monkeypatch):
+    config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "BORG_RESOURCE_LOCK_DIR": str(tmp_path / "locks"),
+    }
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_appdata",
+        "display_name": "Appdata",
+        "storage_key": "storage_local_test",
+        "path_raw": "/mnt/backup/borg-backup-appdata",
+        "repository_stats": {"total_size": 100},
+        "last_info_refresh_status": "error",
+        "last_info_refresh_at": datetime.now(timezone.utc).isoformat(),
+        "last_info_refresh_error": "Failed to create/acquire the lock",
+    }]})
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    (lock_dir / "repo.lock.json").write_text(json.dumps({
+        "resource": "repo:/mnt/backup/borg-backup-appdata",
+        "job_key": "appdata_local",
+        "pid": os.getpid(),
+        "started_at": "2026-07-10T09:00:00+00:00",
+    }), encoding="utf-8")
+    monkeypatch.setattr(
+        repositories_api,
+        "_borg_info",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("borg info must not run")),
+    )
+
+    result = refresh_due_repository_info(config)
+
+    stored = read_repository_store(config)["repositories"][0]
+    assert result["deferred"] == 1
+    assert result["failed"] == 0
+    assert stored["last_info_refresh_status"] == "busy"
+    assert "in use" in stored["last_info_refresh_error"]
 
 
 def test_repository_archives_are_loaded_by_repository_key(tmp_path: Path, monkeypatch):

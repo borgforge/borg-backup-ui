@@ -1251,8 +1251,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return {"jobs": list_jobs(self.config, latest)}
 
     def _get_running(self) -> dict:
-        from jobs_api import JobManager
-        return JobManager.get().get_all_states()
+        from jobs_api import get_all_runtime_states
+        return get_all_runtime_states(self.config)
 
     def _get_schedules(self) -> dict:
         from schedule_api import get_schedules, prune_orphaned_schedules
@@ -1288,7 +1288,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return {"saved": True, "job_key": job_key, "enabled": enabled}
 
     def _delete_job(self) -> dict:
-        from jobs_api import JobManager, discover_jobs, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
+        from jobs_api import discover_jobs, get_job_runtime_state, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
         from restore_tests_api import resolve_restore_test_dir
         from config_api import read_expanded_conf
         from schedule_api import delete_schedule
@@ -1303,7 +1303,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if job_key not in jobs:
             raise ValueError(f"Unknown job: {job_key}")
 
-        if JobManager.get().is_running(job_key):
+        if get_job_runtime_state(self.config, job_key).get("running"):
             raise RuntimeError("The job is currently running; wait for it to finish")
 
         info = jobs[job_key]
@@ -1438,9 +1438,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return create_or_import_repository(self.config, body)
 
     def _post_repository_info(self) -> dict:
-        from repositories_api import refresh_repository_info
+        from repositories_api import RepositoryBusyError, refresh_repository_info
         body = self._read_json_body()
-        return refresh_repository_info(self.config, str(body.get("repository_key") or ""))
+        try:
+            return refresh_repository_info(self.config, str(body.get("repository_key") or ""))
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
 
     def _get_repository_archives(self, qs_str: str) -> dict:
         from repositories_api import get_repository_archives
@@ -2639,7 +2642,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _post_run_job(self) -> dict:
         self._require_data_dir_ready()
-        from jobs_api import JobManager, discover_jobs, resolve_data_root, resolve_scripts_dir
+        from jobs_api import JobManager, discover_jobs, get_job_runtime_state, resolve_data_root, resolve_scripts_dir
         body = self._read_json_body()
         job_key = body.get("job_key", "")
         if not job_key:
@@ -2653,6 +2656,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise ValueError(f"Unknown job: {job_key}")
         if not jobs[job_key].enabled:
             raise RuntimeError(f"Job is disabled: {job_key}")
+        if get_job_runtime_state(self.config, job_key).get("running"):
+            raise RuntimeError("Job is already running")
 
         info = jobs[job_key]
         plugin_runtime = Path(__file__).resolve().parent / "runtime"
@@ -2680,7 +2685,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     # ── SSE-Handler ───────────────────────────────────────────────────────────
 
     def _handle_sse(self, job_key: str):
-        from jobs_api import JobManager
+        from jobs_api import stream_job_output
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
@@ -2688,7 +2693,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
         try:
-            for chunk in JobManager.get().stream_output(job_key):
+            for chunk in stream_job_output(self.config, job_key):
                 self.wfile.write(chunk.encode("utf-8"))
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
@@ -3120,7 +3125,8 @@ def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None
                 if int(result.get("due") or 0):
                     _log(
                         "Repository information refresh completed: "
-                        f"due={result.get('due')} refreshed={result.get('refreshed')} failed={result.get('failed')}"
+                        f"due={result.get('due')} refreshed={result.get('refreshed')} "
+                        f"deferred={result.get('deferred')} failed={result.get('failed')}"
                     )
             except Exception as exc:
                 _log(f"WARNING: Repository information refresh failed: {_mask_secrets(str(exc))}")

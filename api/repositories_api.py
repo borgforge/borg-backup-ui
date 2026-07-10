@@ -31,6 +31,10 @@ ALLOWED_ENCRYPTION_MODES = {
 }
 
 
+class RepositoryBusyError(RuntimeError):
+    """The repository is healthy but currently used by another operation."""
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -482,6 +486,15 @@ def _mask_repo_output(text: str, passphrase: str = "") -> str:
     return out
 
 
+def _raise_borg_command_error(output: str, fallback: str) -> None:
+    safe_output = _mask_repo_output(output)
+    lowered = safe_output.lower()
+    if "failed to create/acquire the lock" in lowered or "lock.exclusive" in lowered:
+        raise RepositoryBusyError("Repository is currently in use by another Borg operation.")
+    first = next((line.strip() for line in safe_output.splitlines() if line.strip()), fallback)
+    raise RuntimeError(first[:500])
+
+
 def _borg_info(storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
     try:
         proc = subprocess.run(
@@ -498,8 +511,7 @@ def _borg_info(storage: dict[str, Any], repo_path: str, passphrase_file: Path | 
         raise TimeoutError("borg info timed out") from exc
     output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
     if proc.returncode != 0:
-        first = next((line.strip() for line in _mask_repo_output(output).splitlines() if line.strip()), "borg info failed")
-        raise RuntimeError(first[:500])
+        _raise_borg_command_error(output, "borg info failed")
     try:
         payload = json.loads(proc.stdout or "{}")
     except (json.JSONDecodeError, TypeError) as exc:
@@ -525,8 +537,7 @@ def _borg_list(storage: dict[str, Any], repo_path: str, passphrase_file: Path | 
         raise TimeoutError("borg list timed out") from exc
     output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
     if proc.returncode != 0:
-        first = next((line.strip() for line in _mask_repo_output(output).splitlines() if line.strip()), "borg list failed")
-        raise RuntimeError(first[:500])
+        _raise_borg_command_error(output, "borg list failed")
     try:
         payload = json.loads(proc.stdout or "{}")
     except (json.JSONDecodeError, TypeError) as exc:
@@ -561,6 +572,11 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     if not repository:
         raise ValueError("Repository not found")
     storage = _storage_by_key(config).get(str(repository.get("storage_key") or ""), {})
+    repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
+    from jobs_api import is_resource_active
+    if is_resource_active(config, f"repo:{repo_path}"):
+        _record_repository_info_busy(config, key, _now())
+        raise RepositoryBusyError("Repository is currently in use by a backup job.")
     cleanup = None
     if str(storage.get("location") or "").lower() == "smb":
         from smb_profiles_api import run_smb_profile_action
@@ -570,7 +586,6 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
         if mounted.get("message_code") == "smb_mount_success":
             profile_key = str(storage.get("profile_key") or "")
             cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
-    repo_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").strip()
     passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if passphrase_file is not None and not passphrase_file.is_file():
@@ -578,6 +593,9 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     try:
         info_payload = _borg_info(storage, repo_path, passphrase_file)
         archive_payload = _borg_list(storage, repo_path, passphrase_file)
+    except RepositoryBusyError:
+        _record_repository_info_busy(config, key, _now())
+        raise
     finally:
         if cleanup:
             cleanup()
@@ -636,7 +654,7 @@ def _repository_info_is_due(
     )
     if timestamp is None:
         return True
-    hours = retry_after_hours if status == "error" else max_age_hours
+    hours = retry_after_hours if status in {"error", "busy"} else max_age_hours
     return timestamp <= now - timedelta(hours=max(1, int(hours)))
 
 
@@ -661,6 +679,27 @@ def _record_repository_info_error(config: dict, repository_key: str, message: st
         write_repository_store(config, {"repositories": next_rows})
 
 
+def _record_repository_info_busy(config: dict, repository_key: str, checked_at: str) -> None:
+    store = read_repository_store(config)
+    rows = store["repositories"]
+    found = False
+    next_rows = []
+    for row in rows:
+        if str(row.get("repository_key") or "") != repository_key:
+            next_rows.append(row)
+            continue
+        found = True
+        next_rows.append({
+            **row,
+            "last_info_refresh_at": checked_at,
+            "last_info_refresh_status": "busy",
+            "last_info_refresh_error": "Repository information refresh was deferred because the repository is in use.",
+            "updated_at": checked_at,
+        })
+    if found:
+        write_repository_store(config, {"repositories": next_rows})
+
+
 def refresh_due_repository_info(
     config: dict,
     *,
@@ -674,24 +713,40 @@ def refresh_due_repository_info(
         current = current.replace(tzinfo=timezone.utc)
     current = current.astimezone(timezone.utc)
     repositories = read_repository_store(config)["repositories"]
+    from jobs_api import active_resource_locks
+    active_resources = {
+        str(row.get("resource") or "").strip()
+        for row in active_resource_locks(config)
+        if str(row.get("resource") or "").strip()
+    }
     due_keys = [
         str(row.get("repository_key") or "").strip()
         for row in repositories
         if str(row.get("repository_key") or "").strip()
-        and _repository_info_is_due(
-            row,
-            current,
-            max_age_hours=max_age_hours,
-            retry_after_hours=retry_after_hours,
+        and (
+            (
+                str(row.get("last_info_refresh_status") or "").strip().lower() == "error"
+                and f"repo:{str(row.get('path_raw') or row.get('repo_uri') or row.get('repo_path') or '').strip()}" in active_resources
+            )
+            or _repository_info_is_due(
+                row,
+                current,
+                max_age_hours=max_age_hours,
+                retry_after_hours=retry_after_hours,
+            )
         )
     ]
     refreshed = 0
     failed = 0
+    deferred = 0
     errors = []
     for repository_key in due_keys:
         try:
             refresh_repository_info(config, repository_key)
             refreshed += 1
+        except RepositoryBusyError:
+            deferred += 1
+            _record_repository_info_busy(config, repository_key, _now())
         except Exception as exc:
             failed += 1
             safe_message = _mask_repo_output(str(exc or "Repository information refresh failed"))[:500]
@@ -702,6 +757,7 @@ def refresh_due_repository_info(
         "due": len(due_keys),
         "refreshed": refreshed,
         "failed": failed,
+        "deferred": deferred,
         "errors": errors,
     }
 

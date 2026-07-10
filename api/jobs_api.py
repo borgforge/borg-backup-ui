@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Generator, List, Optional
 
@@ -78,6 +78,147 @@ def resolve_data_root(config: dict) -> Path:
     if base.name == "scripts":
         return base.parent
     return base
+
+
+def resolve_resource_lock_dir(config: dict) -> Path:
+    """Return the shared runner lock directory for the current data root."""
+    configured = str(config.get("BORG_RESOURCE_LOCK_DIR") or "").strip()
+    if not configured:
+        try:
+            from config_api import read_expanded_conf
+            configured = str(read_expanded_conf(config).get("BORG_RESOURCE_LOCK_DIR") or "").strip()
+        except Exception:
+            configured = ""
+    return Path(configured) if configured else resolve_data_root(config) / "locks"
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def active_resource_locks(config: dict) -> List[dict]:
+    """Read live runner locks without mutating or recovering them."""
+    lock_dir = resolve_resource_lock_dir(config)
+    if not lock_dir.is_dir():
+        return []
+    rows: List[dict] = []
+    for path in sorted(lock_dir.glob("*.lock.json")):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            continue
+        if not isinstance(raw, dict):
+            continue
+        job_key = str(raw.get("job_key") or "").strip()
+        try:
+            job_key = _validate_job_key(job_key)
+        except ValueError:
+            continue
+        pid = _safe_int(raw.get("pid"), 0)
+        if not _pid_alive(pid):
+            continue
+        rows.append({
+            "job_key": job_key,
+            "pid": pid,
+            "resource": str(raw.get("resource") or "").strip(),
+            "started_at": str(raw.get("started_at") or "").strip(),
+            "updated_at": str(raw.get("updated_at") or "").strip(),
+            "log_file": str(raw.get("log_file") or "").strip(),
+        })
+    return rows
+
+
+def is_resource_active(config: dict, resource: str) -> bool:
+    expected = str(resource or "").strip()
+    return bool(expected) and any(row.get("resource") == expected for row in active_resource_locks(config))
+
+
+def _runtime_log_dir(config: dict) -> Path:
+    configured = str(config.get("GLOBAL_LOG_DIR") or "").strip()
+    if not configured:
+        try:
+            from config_api import read_expanded_conf
+            configured = str(read_expanded_conf(config).get("GLOBAL_LOG_DIR") or "").strip()
+        except Exception:
+            configured = ""
+    return Path(configured or "/mnt/user/Logs")
+
+
+def _fallback_runtime_log(config: dict, job_key: str, started_at: str) -> str:
+    log_dir = _runtime_log_dir(config)
+    if not log_dir.is_dir():
+        return ""
+    try:
+        candidates = sorted(
+            log_dir.glob(f"Borg-Backup_{job_key}--*.log"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return ""
+    if not candidates:
+        return ""
+    if started_at:
+        try:
+            started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            if candidates[0].stat().st_mtime < started.timestamp() - 120:
+                return ""
+        except (OSError, ValueError):
+            pass
+    return str(candidates[0])
+
+
+def durable_running_states(config: dict) -> Dict[str, dict]:
+    """Aggregate live runner locks into one durable state per job."""
+    grouped: Dict[str, dict] = {}
+    for lock in active_resource_locks(config):
+        job_key = str(lock.get("job_key") or "")
+        current = grouped.setdefault(job_key, {
+            "running": True,
+            "exit_code": None,
+            "start_time": str(lock.get("started_at") or ""),
+            "pid": lock.get("pid"),
+            "log_file": str(lock.get("log_file") or ""),
+            "source": "resource_lock",
+        })
+        started_at = str(lock.get("started_at") or "")
+        if started_at and (not current["start_time"] or started_at < current["start_time"]):
+            current["start_time"] = started_at
+        if not current["log_file"] and lock.get("log_file"):
+            current["log_file"] = str(lock.get("log_file"))
+    for job_key, state in grouped.items():
+        if not state.get("log_file"):
+            state["log_file"] = _fallback_runtime_log(config, job_key, str(state.get("start_time") or ""))
+        state["log_available"] = bool(state.get("log_file") and Path(str(state["log_file"])).is_file())
+    return grouped
+
+
+def get_job_runtime_state(config: dict, job_key: str) -> dict:
+    key = _validate_job_key(job_key)
+    memory = JobManager.get().get_state(key)
+    if memory.get("running"):
+        return memory
+    return durable_running_states(config).get(key, memory)
+
+
+def get_all_runtime_states(config: dict) -> Dict[str, dict]:
+    states = JobManager.get().get_all_states()
+    for job_key, durable in durable_running_states(config).items():
+        if not states.get(job_key, {}).get("running"):
+            states[job_key] = durable
+    return states
 
 
 def resolve_scripts_dir(config: dict) -> Path:
@@ -420,6 +561,64 @@ class JobManager:
             time.sleep(0.1)
 
 
+def _latest_job_exit_code(config: dict, job_key: str) -> Optional[int]:
+    try:
+        from status_api import get_status_data
+        for row in get_status_data(config).get("backups", []):
+            if str(row.get("key") or "") == job_key:
+                value = row.get("exit_code")
+                return int(value) if value is not None else None
+    except Exception:
+        pass
+    return None
+
+
+def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
+    """Stream in-memory output or resume a live runner log discovered via locks."""
+    key = _validate_job_key(job_key)
+    manager = JobManager.get()
+    if manager.is_running(key):
+        yield from manager.stream_output(key)
+        return
+
+    durable = durable_running_states(config).get(key)
+    if not durable:
+        yield from manager.stream_output(key)
+        return
+    log_file = Path(str(durable.get("log_file") or ""))
+    if not log_file.is_file():
+        yield "event: error\ndata: Live log is not available for the recovered job run.\n\n"
+        return
+
+    yield ": heartbeat\n\n"
+    position = 0
+    idle_after_finish = 0
+    while True:
+        emitted = False
+        try:
+            with log_file.open("r", encoding="utf-8", errors="replace") as handle:
+                handle.seek(position)
+                for line in handle:
+                    emitted = True
+                    clean_line = line.rstrip("\r\n")
+                    yield f"data: {clean_line}\n\n"
+                position = handle.tell()
+        except OSError:
+            yield "event: error\ndata: Live log could not be read.\n\n"
+            return
+
+        if key not in durable_running_states(config):
+            idle_after_finish = 0 if emitted else idle_after_finish + 1
+            if idle_after_finish >= 2:
+                exit_code = _latest_job_exit_code(config, key)
+                value = str(exit_code) if exit_code is not None else "?"
+                yield f"event: done\ndata: {value}\n\n"
+                return
+        else:
+            idle_after_finish = 0
+        time.sleep(0.5)
+
+
 # ── Job-Erkennung ─────────────────────────────────────────────────────────────
 
 def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
@@ -594,12 +793,11 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
     """
     scripts_dir = resolve_scripts_dir(config)
     data_root = resolve_data_root(config)
-    manager = JobManager.get()
-
+    runtime_states = get_all_runtime_states(config)
     result = []
     for info in discover_jobs(scripts_dir, data_root):
         last = latest_statuses.get(info.key)
-        run_state = manager.get_state(info.key)
+        run_state = runtime_states.get(info.key, {"running": False})
 
         result.append(
             {
@@ -638,6 +836,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 # Aktueller Laufzustand
                 "running": run_state.get("running", False),
                 "run_start_time": run_state.get("start_time"),
+                "run_log_available": run_state.get("log_available", True),
             }
         )
     try:

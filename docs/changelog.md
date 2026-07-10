@@ -42,6 +42,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Removed the old job-based manual Borg Check card and the obsolete Job Wizard passphrase/repository-init path.
   - Repository info refresh now counts archives with `borg list --json` instead of assuming that `borg info --json` contains an archive list.
   - Repository Manager steps keep their numbered status circles, and the review distinguishes the display name from the path inside the storage target.
+  - Running backup jobs are recovered from persistent resource locks when the UI process has lost its in-memory state, including live-log continuation from the active log file.
+  - Automatic repository information refreshes are deferred while a backup uses the same repository and are shown as in use instead of as a repository failure.
 
 ### Issue #180
 - Dashboard:

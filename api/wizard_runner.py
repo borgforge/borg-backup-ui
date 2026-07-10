@@ -179,12 +179,14 @@ class ResourceLockSet:
         ttl_seconds: int = 7200,
         grace_seconds: int = 60,
         heartbeat_seconds: int = 20,
+        log_file: str = "",
     ) -> None:
         self.lock_dir = lock_dir
         self.job_key = job_key
         self.ttl_seconds = ttl_seconds
         self.grace_seconds = grace_seconds
         self.heartbeat_seconds = heartbeat_seconds
+        self.log_file = str(log_file or "").strip()
         self._owned: list[Path] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -196,7 +198,7 @@ class ResourceLockSet:
 
     def _payload(self, resource: str) -> dict:
         now = datetime.now(timezone.utc).isoformat()
-        return {
+        payload = {
             "resource": resource,
             "job_key": self.job_key,
             "pid": os.getpid(),
@@ -205,6 +207,9 @@ class ResourceLockSet:
             "updated_at": now,
             "ttl_seconds": self.ttl_seconds,
         }
+        if self.log_file:
+            payload["log_file"] = self.log_file
+        return payload
 
     def _write_new(self, path: Path, payload: dict) -> bool:
         flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
@@ -742,7 +747,10 @@ def main() -> int:
     mail_config = MailConfig.from_config(env)
     ntfy_config = NtfyConfig.from_config(env)
 
-    lock_dir = Path(env.get("BORG_RESOURCE_LOCK_DIR", "/boot/config/borg-backup/locks"))
+    data_root = Path(str(env.get("BACKUP_SCRIPTS_DIR") or backup_scripts_dir))
+    if data_root.name == "scripts":
+        data_root = data_root.parent
+    lock_dir = Path(env.get("BORG_RESOURCE_LOCK_DIR", str(data_root / "locks")))
     ttl_seconds = int(env.get("BORG_RESOURCE_LOCK_TTL_SECONDS", "7200") or "7200")
     grace_seconds = int(env.get("BORG_RESOURCE_LOCK_GRACE_SECONDS", "60") or "60")
     heartbeat_seconds = int(env.get("BORG_RESOURCE_LOCK_HEARTBEAT_SECONDS", "20") or "20")
@@ -753,6 +761,7 @@ def main() -> int:
         ttl_seconds=ttl_seconds,
         grace_seconds=grace_seconds,
         heartbeat_seconds=heartbeat_seconds,
+        log_file=str(env.get("LOG_FILE") or ""),
     )
     resources = _build_resources(env, meta)
     ok, reason = lock_set.acquire(resources)
