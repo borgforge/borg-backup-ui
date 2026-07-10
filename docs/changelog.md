@@ -51,6 +51,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - The repository overview removes the redundant storage-relative path field, gives the absolute path the remaining row width, and drops the duplicate Activities tab until a real multi-run audit history exists.
   - Restore-test policies now survive Job Wizard edits instead of falling back to manual/L2 for local jobs.
   - Restore Tests now builds its sidebar from the already loaded plan and resolves all repository/storage assignments from one inventory snapshot per request.
+  - Added a separate Repository Management tab with a non-destructive inventory removal and a guarded permanent Borg repository deletion.
+  - Permanent deletion requires no linked jobs or running operations, revalidates repository ID/path/archive count, requires display-name plus `DELETE` confirmation, and records an audit entry.
 
 ### Issue #180
 - Dashboard:

@@ -103,11 +103,12 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - The workspace header uses the configured repository display name. Repository directory, absolute repository path, and path inside the storage target are labeled separately.
 - **Archives** loads the current archive inventory directly from the selected repository.
 - **Maintenance** provides Check, Verify Data, Prune, and Compact. Status and result remain visible after completion without requiring a technical live log.
-- **Activities** presents the stored maintenance results in chronological order.
+- **Management** shows job links. An unused repository can be removed only from the UI or permanently deleted after its identity is revalidated.
 - Prune uses the linked job's retention policy and is disabled without a linked job.
 - Prune summarizes deleted archives. Compact shows reclaimed space when Borg reports that value.
 - Failed actions provide expandable, secret-masked technical details in the affected status card.
 - Verify Data, Prune, and Compact require explicit confirmation.
+- Permanent deletion is blocked while jobs or running operations use the repository and requires the display name plus `DELETE` as a two-step confirmation.
 
 ## Restore and Restore Tests
 

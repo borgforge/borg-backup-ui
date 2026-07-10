@@ -242,7 +242,7 @@ The page separates storage targets, Borg repositories, and backup jobs. A storag
 - **Overview:** Shows Borg statistics, maintenance state, and human-readable repository, storage target, job, encryption, and path details.
 - **Archives:** Loads the current Borg archive inventory with archive name, technical ID, start time, and duration.
 - **Maintenance:** Provides Check, Verify Data, Prune, and Compact as separate actions with persistent results.
-- **Activities:** Lists the most recently stored maintenance results in chronological order.
+- **Management:** Shows current job links and separates non-destructive removal from the UI from permanent repository deletion.
 - **Add repository:** Opens a wizard for existing or new storage targets and for creating or importing a repository.
 
 Borg statistics are refreshed in the background every 24 hours and cached in `repositories.json`. Missing or stale information is loaded during the next hourly scan. Failed refreshes are retried after one hour. Opening the page therefore does not wait for every local and remote repository.
@@ -278,6 +278,14 @@ Check an SMB target:
 3. Select the repository. The application temporarily mounts a managed SMB target when access is needed and unmounts it afterwards if it mounted it.
 4. Then refresh repository information under **Overview**.
 
+Remove a repository from the application or delete it permanently:
+
+1. Remove every linked backup job or assign those jobs to another repository first.
+2. Open the repository's **Management** tab and verify that no job link or running operation remains.
+3. **Remove from Borg Backup UI** only deletes the repository inventory entry. Repository data and the passphrase file remain intact.
+4. **Permanently delete repository** revalidates repository ID, path, and archive count and requires the exact display name plus the safety word `DELETE`.
+5. Only after `borg delete` succeeds does the application remove the inventory entry and a passphrase file used exclusively by that repository.
+
 ### 4.5 Notes
 
 > **Note:** Prune uses the linked job's retention policy. Prune remains disabled without a linked job.
@@ -285,6 +293,8 @@ Check an SMB target:
 > **Note:** Prune lists deleted archives in its result. Compact only shows a numeric reclaimed-space value when Borg reports it.
 
 > **Warning:** Borg Check can take a long time depending on repository size and target. Start it deliberately and not too frequently.
+
+> **Warning:** Permanent repository deletion irreversibly removes every archive. It is blocked while jobs are linked or a backup, restore, restore test, or maintenance operation is running.
 
 ## 5. History
 

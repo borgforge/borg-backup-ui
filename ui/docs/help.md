@@ -103,11 +103,12 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - Der Kopfbereich verwendet den konfigurierten Anzeigenamen des Repositorys. Repository-Verzeichnis, absoluter Repository-Pfad und Pfad im Speicherziel werden getrennt bezeichnet.
 - **Archive** lädt die aktuelle Archivliste direkt aus dem ausgewählten Repository.
 - **Wartung** bietet Check, Datenprüfung, Prune und Compact. Der Status und das Ergebnis bleiben nach Abschluss sichtbar; ein technisches Live-Log ist dafür nicht erforderlich.
-- **Aktivitäten** ordnet die zuletzt gespeicherten Wartungsergebnisse chronologisch ein.
+- **Verwaltung** zeigt Job-Verknüpfungen. Dort kann ein ungenutztes Repository nur aus der UI entfernt oder nach erneuter Identitätsprüfung endgültig gelöscht werden.
 - Prune verwendet die Aufbewahrungsrichtlinie des verknüpften Jobs und ist ohne Job-Zuordnung deaktiviert.
 - Nach Prune werden die entfernten Archive zusammengefasst. Compact zeigt den freigegebenen Speicherplatz, wenn Borg diesen Wert ausgibt.
 - Bei Fehlern können maskierte technische Details im betreffenden Statusfeld geöffnet werden.
 - Datenprüfung, Prune und Compact müssen ausdrücklich bestätigt werden.
+- Eine endgültige Löschung ist gesperrt, solange Jobs oder laufende Aktionen das Repository verwenden, und verlangt Anzeigename sowie `DELETE` als doppelte Bestätigung.
 
 ## Restore und Restore Tests
 

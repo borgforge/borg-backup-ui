@@ -13,6 +13,7 @@ import os
 import re
 import shlex
 import subprocess
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -35,8 +36,23 @@ class RepositoryBusyError(RuntimeError):
     """The repository is healthy but currently used by another operation."""
 
 
+class RepositoryLifecycleConflict(RuntimeError):
+    """A repository cannot be removed while references or operations exist."""
+
+    def __init__(self, message: str, code: str = "repository_lifecycle_conflict") -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _data_root(config: dict) -> Path:
@@ -343,6 +359,33 @@ def _raise_borg_command_error(output: str, fallback: str) -> None:
         raise RepositoryBusyError("Repository is currently in use by another Borg operation.")
     first = next((line.strip() for line in safe_output.splitlines() if line.strip()), fallback)
     raise RuntimeError(first[:500])
+
+
+@contextmanager
+def _repository_access(config: dict, repository: dict[str, Any]):
+    storage = _storage_by_key(config).get(str(repository.get("storage_key") or ""), {})
+    if not storage:
+        raise ValueError("Repository storage target was not found")
+    repo_path = effective_repository_path(storage, str(repository.get("relative_path") or ""))
+    cleanup = None
+    if str(storage.get("location") or "").lower() == "smb":
+        from smb_profiles_api import run_smb_profile_action
+
+        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
+        if not mounted.get("ok"):
+            raise RuntimeError(str(mounted.get("message") or "SMB mount failed"))
+        if mounted.get("message_code") == "smb_mount_success":
+            profile_key = str(storage.get("profile_key") or "")
+            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+    passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
+    passphrase_file = Path(passphrase_ref) if passphrase_ref else None
+    if passphrase_file is not None and not passphrase_file.is_file():
+        raise ValueError("Repository passphrase file is missing")
+    try:
+        yield storage, repo_path, passphrase_file
+    finally:
+        if cleanup:
+            cleanup()
 
 
 def _borg_info(storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
@@ -664,6 +707,238 @@ def get_repository_archives(config: dict, repository_key: str, limit: int = 100)
     return {"repository_key": key, "archive_count": len(rows), "archives": archives}
 
 
+def _repository_lifecycle_audit_file(config: dict) -> Path:
+    return _data_root(config) / "config" / "repository-lifecycle.log.jsonl"
+
+
+def _write_repository_lifecycle_audit(
+    config: dict,
+    repository: dict[str, Any],
+    *,
+    action: str,
+    status: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    path = _repository_lifecycle_audit_file(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "timestamp": _now(),
+        "action": str(action or ""),
+        "status": str(status or ""),
+        "repository_key": str(repository.get("repository_key") or ""),
+        "repository_id": str(repository.get("borg_repository_id") or ""),
+        "display_name": str(repository.get("display_name") or ""),
+        "storage_key": str(repository.get("storage_key") or ""),
+        "details": details if isinstance(details, dict) else {},
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
+def _repository_lifecycle_context(config: dict, repository_key: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    from check_api import CheckManager
+    from jobs_api import JobManager, is_resource_active
+    from repository_context import jobs_using_repository
+    from restore_api import list_restore_runs
+
+    key = str(repository_key or "").strip()
+    store = read_repository_store(config)
+    repository = next(
+        (row for row in store.get("repositories", []) if str(row.get("repository_key") or "") == key),
+        None,
+    )
+    if not repository:
+        raise ValueError("Repository not found")
+    storage = _storage_by_key(config).get(str(repository.get("storage_key") or ""), {})
+    if not storage:
+        raise ValueError("Repository storage target was not found")
+    repo_path = effective_repository_path(storage, str(repository.get("relative_path") or ""))
+    jobs = jobs_using_repository(config, key)
+    blockers: list[str] = []
+    if jobs:
+        blockers.append("jobs_linked")
+    if is_resource_active(config, f"repo:{repo_path}"):
+        blockers.append("repository_active")
+    maintenance = CheckManager.get().get_state()
+    if maintenance.get("running") and str(maintenance.get("target_key") or "") == key:
+        blockers.append("maintenance_running")
+    if JobManager.get().get_state("restore_test").get("running"):
+        blockers.append("restore_test_running")
+    if list_restore_runs(config, 50).get("active"):
+        blockers.append("restore_running")
+    blockers = list(dict.fromkeys(blockers))
+    stats = repository.get("repository_stats") if isinstance(repository.get("repository_stats"), dict) else {}
+    return repository, {
+        "repository_key": key,
+        "display_name": str(repository.get("display_name") or repository.get("repository_name") or key),
+        "repository_name": str(repository.get("repository_name") or ""),
+        "repository_path": repo_path,
+        "storage_name": str(storage.get("display_name") or repository.get("storage_name") or ""),
+        "repository_id": str(repository.get("borg_repository_id") or ""),
+        "archive_count": _nonnegative_int(stats.get("archives_count")),
+        "deduplicated_size": _nonnegative_int(stats.get("unique_csize")),
+        "job_keys": jobs,
+        "blockers": blockers,
+        "allowed": not blockers,
+    }
+
+
+def prepare_repository_lifecycle(config: dict, repository_key: str, mode: str) -> dict[str, Any]:
+    requested_mode = str(mode or "remove").strip().lower()
+    if requested_mode not in {"remove", "delete"}:
+        raise ValueError("Repository lifecycle mode is invalid")
+    repository, context = _repository_lifecycle_context(config, repository_key)
+    if not context["allowed"] or requested_mode == "remove":
+        return {"ok": True, "mode": requested_mode, **context}
+
+    with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
+        info_payload = _borg_info(storage, repo_path, passphrase_file)
+        archive_payload = _borg_list(storage, repo_path, passphrase_file)
+    fields = _borg_info_fields(info_payload, archive_payload)
+    live_stats = fields.get("repository_stats") if isinstance(fields.get("repository_stats"), dict) else {}
+    context.update({
+        "repository_id": str(fields.get("borg_repository_id") or ""),
+        "archive_count": _nonnegative_int(live_stats.get("archives_count")),
+        "deduplicated_size": _nonnegative_int(live_stats.get("unique_csize")),
+    })
+    if not context["repository_id"]:
+        raise RuntimeError("Borg did not return a repository ID")
+    return {"ok": True, "mode": requested_mode, **context}
+
+
+def _remove_repository_metadata(config: dict, repository_key: str) -> dict[str, Any]:
+    key = str(repository_key or "").strip()
+    store = read_repository_store(config)
+    repository = next(
+        (row for row in store.get("repositories", []) if str(row.get("repository_key") or "") == key),
+        None,
+    )
+    if not repository:
+        raise ValueError("Repository not found")
+    remaining = [row for row in store.get("repositories", []) if str(row.get("repository_key") or "") != key]
+    write_repository_store(config, {"repositories": remaining})
+    return repository
+
+
+def _remove_repository_secret(config: dict, repository: dict[str, Any]) -> bool:
+    raw = str(repository.get("passphrase_ref") or "").strip()
+    if not raw:
+        return False
+    candidate = Path(raw)
+    secrets_root = (_data_root(config) / "secrets").resolve()
+    try:
+        if candidate.parent.resolve() != secrets_root or not candidate.name.startswith(".borg-passphrase-"):
+            return False
+    except OSError:
+        return False
+    for row in read_repository_store(config).get("repositories", []):
+        if str(row.get("passphrase_ref") or "").strip() == raw:
+            return False
+    try:
+        if candidate.is_symlink() or candidate.exists():
+            candidate.unlink()
+            return True
+    except OSError:
+        return False
+    return False
+
+
+def apply_repository_lifecycle(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid repository lifecycle payload")
+    key = str(payload.get("repository_key") or "").strip()
+    mode = str(payload.get("mode") or "remove").strip().lower()
+    if mode not in {"remove", "delete"}:
+        raise ValueError("Repository lifecycle mode is invalid")
+    repository, context = _repository_lifecycle_context(config, key)
+    display_name = str(repository.get("display_name") or repository.get("repository_name") or key)
+    if str(payload.get("confirmation_name") or "") != display_name:
+        raise ValueError("Repository display name confirmation does not match")
+    if not context["allowed"]:
+        raise RepositoryLifecycleConflict(
+            "Repository cannot be removed while jobs or operations are active",
+            code="repository_lifecycle_blocked",
+        )
+
+    if mode == "remove":
+        removed = _remove_repository_metadata(config, key)
+        _write_repository_lifecycle_audit(
+            config,
+            removed,
+            action="remove_from_inventory",
+            status="success",
+            details={"repository_data_deleted": False, "secret_deleted": False},
+        )
+        return {"ok": True, "mode": mode, "repository_key": key, "repository_deleted": False, "secret_deleted": False}
+
+    if str(payload.get("confirmation_phrase") or "") != "DELETE":
+        raise ValueError("Permanent repository deletion requires DELETE confirmation")
+    expected_id = str(payload.get("expected_repository_id") or "").strip()
+    expected_path = str(payload.get("expected_repository_path") or "").strip()
+    try:
+        expected_archives = int(payload.get("expected_archive_count"))
+    except (TypeError, ValueError):
+        raise ValueError("Expected archive count is required") from None
+    if not expected_id or expected_path != context["repository_path"]:
+        raise ValueError("Repository identity confirmation is incomplete")
+
+    try:
+        with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
+            info_payload = _borg_info(storage, repo_path, passphrase_file)
+            archive_payload = _borg_list(storage, repo_path, passphrase_file)
+            live_fields = _borg_info_fields(info_payload, archive_payload)
+            live_id = str(live_fields.get("borg_repository_id") or "").strip()
+            live_stats = live_fields.get("repository_stats") if isinstance(live_fields.get("repository_stats"), dict) else {}
+            live_archives = _nonnegative_int(live_stats.get("archives_count"))
+            if live_id != expected_id or live_archives != expected_archives:
+                raise RepositoryLifecycleConflict(
+                    "Repository identity or archive count changed; repeat the deletion review",
+                    code="repository_identity_changed",
+                )
+            env = _repo_env(storage, passphrase_file)
+            env["BORG_DELETE_I_KNOW_WHAT_I_AM_DOING"] = "YES"
+            timeout_raw = str(config.get("REPOSITORY_DELETE_TIMEOUT_SECONDS") or "3600").strip()
+            try:
+                timeout = max(60, min(int(timeout_raw), 86400))
+            except ValueError:
+                timeout = 3600
+            proc = subprocess.run(
+                ["borg", "delete", "--lock-wait", "30", repo_path],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+                check=False,
+            )
+            output = _mask_repo_output(((proc.stdout or "") + "\n" + (proc.stderr or "")).strip())
+            if proc.returncode != 0:
+                _raise_borg_command_error(output, f"borg delete failed with exit {proc.returncode}")
+    except Exception as exc:
+        _write_repository_lifecycle_audit(
+            config,
+            repository,
+            action="delete_repository",
+            status="failed",
+            details={"error": _mask_repo_output(str(exc))[:500]},
+        )
+        raise
+
+    removed = _remove_repository_metadata(config, key)
+    secret_deleted = _remove_repository_secret(config, removed)
+    _write_repository_lifecycle_audit(
+        config,
+        removed,
+        action="delete_repository",
+        status="success",
+        details={"archive_count": expected_archives, "secret_deleted": secret_deleted},
+    )
+    return {"ok": True, "mode": mode, "repository_key": key, "repository_deleted": True, "secret_deleted": secret_deleted}
+
+
 def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
     """Create/import a repository object, optionally running borg init.
 
@@ -875,3 +1150,28 @@ def link_repository_to_job(
                 source_jobs.append(current_job)
         next_rows.append({**row, "used_by": used_by, "source_job_keys": source_jobs, "updated_at": _now()})
     write_repository_store(config, {"repositories": next_rows})
+
+
+def unlink_job_from_repositories(config: dict, job_key: str) -> None:
+    current_job = str(job_key or "").strip()
+    if not current_job:
+        return
+    store = read_repository_store(config)
+    changed = False
+    next_rows = []
+    for row in store.get("repositories", []):
+        used_by = [str(item).strip() for item in row.get("used_by", []) if str(item).strip()]
+        source_jobs = [str(item).strip() for item in row.get("source_job_keys", []) if str(item).strip()]
+        next_used_by = [item for item in used_by if item != current_job]
+        next_source_jobs = [item for item in source_jobs if item != current_job]
+        if next_used_by != used_by or next_source_jobs != source_jobs:
+            changed = True
+            row = {
+                **row,
+                "used_by": next_used_by,
+                "source_job_keys": next_source_jobs,
+                "updated_at": _now(),
+            }
+        next_rows.append(row)
+    if changed:
+        write_repository_store(config, {"repositories": next_rows})

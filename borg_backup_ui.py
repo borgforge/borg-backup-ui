@@ -722,6 +722,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/storages/test": self._post_storage_target_test,
             "/api/repositories": self._post_repository,
             "/api/repositories/info": self._post_repository_info,
+            "/api/repositories/lifecycle": self._post_repository_lifecycle,
             "/api/storage/smb-action": self._post_storage_smb_action,
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
@@ -797,6 +798,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/jobs": self._delete_job,
             "/api/restore-tests": self._delete_restore_test,
             "/api/restore/history": self._delete_restore_history,
+            "/api/repositories": self._delete_repository,
             "/api/auth/users": self._delete_auth_user,
         }
         fn = routes.get(path)
@@ -1341,6 +1343,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 deleted_metadata = True
             except OSError:
                 pass
+        if deleted_metadata:
+            from repositories_api import unlink_job_from_repositories
+            unlink_job_from_repositories(self.config, job_key)
 
         delete_artifacts = bool(body.get("delete_artifacts", False))
 
@@ -1442,6 +1447,30 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         try:
             return refresh_repository_info(self.config, str(body.get("repository_key") or ""))
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _post_repository_lifecycle(self) -> dict:
+        from repositories_api import RepositoryBusyError, prepare_repository_lifecycle
+
+        body = self._read_json_body()
+        try:
+            return prepare_repository_lifecycle(
+                self.config,
+                str(body.get("repository_key") or ""),
+                str(body.get("mode") or "remove"),
+            )
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _delete_repository(self) -> dict:
+        from repositories_api import RepositoryBusyError, RepositoryLifecycleConflict, apply_repository_lifecycle
+
+        body = self._read_json_body()
+        try:
+            return apply_repository_lifecycle(self.config, body)
+        except RepositoryLifecycleConflict as exc:
+            raise ApiConflictError(str(exc), code=exc.code) from exc
         except RepositoryBusyError as exc:
             raise ApiConflictError(str(exc), code="repository_busy") from exc
 

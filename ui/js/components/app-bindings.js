@@ -126,6 +126,14 @@
     document.getElementById('storage-maintenance-confirm-modal')?.addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeStorageMaintenanceConfirm(false);
     });
+    document.getElementById('repository-lifecycle-close-btn')?.addEventListener('click', closeRepositoryLifecycle);
+    document.getElementById('repository-lifecycle-cancel-btn')?.addEventListener('click', closeRepositoryLifecycle);
+    document.getElementById('repository-lifecycle-confirm-btn')?.addEventListener('click', confirmRepositoryLifecycle);
+    document.getElementById('repository-lifecycle-name-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
+    document.getElementById('repository-lifecycle-phrase-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
+    document.getElementById('repository-lifecycle-modal')?.addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeRepositoryLifecycle();
+    });
     document.getElementById('history-filter-type')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-location')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-status')?.addEventListener('change', applyHistoryFilters);

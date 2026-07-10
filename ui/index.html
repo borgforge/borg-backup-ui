@@ -1062,6 +1062,37 @@
   </div>
 </div>
 
+<!-- Repository Lifecycle Confirmation Modal -->
+<div id="repository-lifecycle-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="repository-lifecycle-title" data-i18n="storage.repositoryManagement">Repository-Verwaltung</h3>
+      <button class="modal-close" id="repository-lifecycle-close-btn" data-i18n-aria-label="storage.check.close" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="repository-lifecycle-description"></p>
+      <div id="repository-lifecycle-info" class="modal-info-list"></div>
+      <div class="form-group repository-lifecycle-confirm-field">
+        <label class="form-label" id="repository-lifecycle-name-label" for="repository-lifecycle-name-input"></label>
+        <input class="form-input" type="text" id="repository-lifecycle-name-input" autocomplete="off">
+      </div>
+      <div class="form-group repository-lifecycle-confirm-field hidden" id="repository-lifecycle-phrase-group">
+        <label class="form-label" for="repository-lifecycle-phrase-input" data-i18n="storage.repositoryConfirmDeletePhrase">Zur Bestätigung DELETE eingeben</label>
+        <input class="form-input mono" type="text" id="repository-lifecycle-phrase-input" autocomplete="off" placeholder="DELETE" data-i18n-placeholder="storage.repositoryConfirmDeletePlaceholder">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="repository-lifecycle-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
+      <button class="btn-danger" id="repository-lifecycle-confirm-btn" data-i18n="storage.repositoryDeletePermanent" disabled>Repository endgültig löschen</button>
+    </div>
+  </div>
+</div>
+
 <!-- Repository Manager Modal -->
 <div id="repository-manager-modal" class="modal-backdrop hidden">
   <div class="modal modal-wizard repository-manager-wizard">
