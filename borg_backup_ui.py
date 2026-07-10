@@ -1607,14 +1607,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_wizard_source_dirs(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs
-        from restore_api import list_target_dirs
+        from wizard_api import list_source_directories
         params = _pqs(qs)
         prefix = (params.get("prefix") or [""])[0]
         try:
             limit = int((params.get("limit") or ["25"])[0])
         except Exception:
             limit = 25
-        return {"dirs": list_target_dirs(prefix=prefix, limit=limit)}
+        return {"dirs": list_source_directories(prefix=prefix, limit=limit)}
 
     def _get_wizard_runtime_inventory(self) -> dict:
         try:

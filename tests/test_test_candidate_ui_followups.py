@@ -93,6 +93,14 @@ def test_repository_manager_uses_single_visible_repository_path_field() -> None:
     assert '"repositorySummaryPath": "Pfad im Speicherziel"' in german
 
 
+def test_wizard_source_autocomplete_cancels_stale_requests() -> None:
+    script = _read("ui/js/pages/wizard.js")
+    assert "function wizardCancelSourceSuggestRequest" in script
+    assert "new AbortController()" in script
+    assert "requestId !== wizardState.sourceSuggestRequest" in script
+    assert "}, 180);" in script
+
+
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:
     script = _read("ui/js/pages/restore-tests.js")
     css = _read("ui/restore-tests-redesign.css")

@@ -19,6 +19,54 @@ def _type_upper(type_id: str) -> str:
 _RUNTIME_MODES = {"all", "selected", "none"}
 
 
+def list_source_directories(prefix: str = "", limit: int = 40, base_path: Path | None = None) -> list[dict]:
+    """Return safe directory suggestions below /mnt for backup sources."""
+    base = (base_path or Path("/mnt")).resolve()
+    if not base.is_dir():
+        return []
+    raw = str(prefix or "").strip()
+    display_base = "/mnt" if base_path is None else base.as_posix().rstrip("/")
+    if not raw:
+        return [{"path": f"{display_base}/"}]
+    candidate = Path(raw)
+    try:
+        if base_path is None:
+            if raw != "/mnt" and not raw.startswith("/mnt/"):
+                return []
+        elif candidate != base and base not in candidate.parents:
+            return []
+        has_trailing = raw.endswith("/")
+        if has_trailing or candidate.is_dir():
+            search_parent = candidate.resolve()
+            name_prefix = ""
+        else:
+            search_parent = candidate.parent.resolve()
+            name_prefix = candidate.name
+        search_parent.relative_to(base)
+    except (OSError, ValueError):
+        return []
+    if not search_parent.is_dir():
+        return []
+    result: list[dict] = []
+    safe_limit = max(1, min(int(limit or 40), 100))
+    try:
+        for child in sorted(search_parent.iterdir(), key=lambda path: path.name.lower()):
+            if not child.is_dir() or child.is_symlink():
+                continue
+            if name_prefix and not child.name.lower().startswith(name_prefix.lower()):
+                continue
+            try:
+                child.resolve().relative_to(base)
+            except (OSError, ValueError):
+                continue
+            result.append({"path": f"{child.as_posix().rstrip('/')}/"})
+            if len(result) >= safe_limit:
+                break
+    except OSError:
+        return []
+    return result
+
+
 def _split_selected(raw) -> list[str]:
     if isinstance(raw, list):
         vals = raw

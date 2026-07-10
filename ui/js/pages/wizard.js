@@ -15,6 +15,9 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   sourcePaths: [],
   sourceSuggest: [],
   sourceSuggestIndex: -1,
+  sourceSuggestTimer: null,
+  sourceSuggestController: null,
+  sourceSuggestRequest: 0,
   scrollHintBound: false,
   remoteRepoStatus: null,
   dockerContainers: [],
@@ -373,6 +376,8 @@ function openWizard() {
   if (dockerGroup) dockerGroup.style.display = '';
   if (vmGroup) vmGroup.style.display = '';
   document.getElementById('wiz-source-paths').value = '';
+  document.getElementById('wiz-source-path-input').value = '';
+  wizardCancelSourceSuggestRequest();
   wizardState.sourcePaths = [];
   wizardState.sourceSuggest = [];
   wizardState.sourceSuggestIndex = -1;
@@ -675,6 +680,18 @@ function wizardHideSourceSuggest() {
   wizardState.sourceSuggestIndex = -1;
 }
 
+function wizardCancelSourceSuggestRequest() {
+  if (wizardState.sourceSuggestTimer) {
+    clearTimeout(wizardState.sourceSuggestTimer);
+    wizardState.sourceSuggestTimer = null;
+  }
+  if (wizardState.sourceSuggestController) {
+    wizardState.sourceSuggestController.abort();
+    wizardState.sourceSuggestController = null;
+  }
+  wizardState.sourceSuggestRequest += 1;
+}
+
 function wizardRenderSourceSuggest() {
   const box = document.getElementById('wiz-source-path-suggest');
   const rows = wizardState.sourceSuggest || [];
@@ -698,10 +715,11 @@ function wizardIsAllowedSourcePath(path) {
   return v.startsWith('/mnt') || v.startsWith('/boot');
 }
 
-async function wizardSourcePathInputChanged() {
+function wizardSourcePathInputChanged() {
   const input = document.getElementById('wiz-source-path-input');
   if (!input) return;
   const prefix = String(input.value || '').trim();
+  wizardCancelSourceSuggestRequest();
   if (prefix.startsWith('/boot')) {
     // /boot is allowed as free text source path, but autocomplete remains /mnt-based.
     wizardHideSourceSuggest();
@@ -711,16 +729,31 @@ async function wizardSourcePathInputChanged() {
     wizardHideSourceSuggest();
     return;
   }
-  try {
-    const res = await fetch(`/api/wizard/source-dirs?prefix=${encodeURIComponent(prefix)}&limit=100`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
-    wizardState.sourceSuggest = Array.isArray(data?.dirs) ? data.dirs : [];
-    wizardState.sourceSuggestIndex = wizardState.sourceSuggest.length ? 0 : -1;
-    wizardRenderSourceSuggest();
-  } catch (_) {
-    wizardHideSourceSuggest();
-  }
+  const requestId = wizardState.sourceSuggestRequest;
+  wizardState.sourceSuggestTimer = setTimeout(async () => {
+    wizardState.sourceSuggestTimer = null;
+    const controller = new AbortController();
+    wizardState.sourceSuggestController = controller;
+    try {
+      const res = await fetch(`/api/wizard/source-dirs?prefix=${encodeURIComponent(prefix)}&limit=100`, {
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
+      if (requestId !== wizardState.sourceSuggestRequest) return;
+      wizardState.sourceSuggest = Array.isArray(data?.dirs) ? data.dirs : [];
+      wizardState.sourceSuggestIndex = wizardState.sourceSuggest.length ? 0 : -1;
+      wizardRenderSourceSuggest();
+    } catch (error) {
+      if (error?.name !== 'AbortError' && requestId === wizardState.sourceSuggestRequest) {
+        wizardHideSourceSuggest();
+      }
+    } finally {
+      if (requestId === wizardState.sourceSuggestRequest) {
+        wizardState.sourceSuggestController = null;
+      }
+    }
+  }, 180);
 }
 
 function wizardAddSourcePath(value) {
@@ -728,6 +761,7 @@ function wizardAddSourcePath(value) {
   if (!v) return false;
   if (!wizardIsAllowedSourcePath(v)) return false;
   if ((wizardState.sourcePaths || []).includes(v)) return false;
+  wizardCancelSourceSuggestRequest();
   wizardState.sourcePaths.push(v);
   wizardRenderSourcePaths();
   const input = document.getElementById('wiz-source-path-input');
