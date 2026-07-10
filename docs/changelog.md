@@ -37,6 +37,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Repository headers now use the configured repository display name instead of combining job and location names.
   - Display name, repository directory, absolute repository path and path inside the storage target are labeled separately.
   - Corrected repository header icon alignment.
+  - Archive lists are sorted newest first and no longer show an unexplained empty duration column.
+  - Verify Data, Prune and Compact confirmations now use an application-styled modal instead of the browser's native confirm dialog.
   - Removed the old job-based manual Borg Check card and the obsolete Job Wizard passphrase/repository-init path.
   - Repository info refresh now counts archives with `borg list --json` instead of assuming that `borg info --json` contains an archive list.
   - Repository Manager steps keep their numbered status circles, and the review distinguishes the display name from the path inside the storage target.

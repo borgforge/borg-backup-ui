@@ -416,8 +416,8 @@ def test_repository_archives_are_loaded_by_repository_key(tmp_path: Path, monkey
     }]})
     monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {
         "archives": [
-            {"name": "flash-2", "id": "two", "start": "2026-07-10T09:00:00", "duration": 2.5},
             {"name": "flash-1", "id": "one", "start": "2026-07-09T09:00:00", "duration": 2.0},
+            {"name": "flash-2", "id": "two", "start": "2026-07-10T09:00:00", "duration": 2.5},
         ],
     })
 

@@ -120,6 +120,12 @@
     document.getElementById('storage-location-list')?.addEventListener('click', onStorageLocationClick);
     document.getElementById('storage-location-list')?.addEventListener('input', onStorageSearchInput);
     document.getElementById('storage-content')?.addEventListener('click', onStorageContentClick);
+    document.getElementById('storage-maintenance-confirm-close-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(false));
+    document.getElementById('storage-maintenance-confirm-cancel-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(false));
+    document.getElementById('storage-maintenance-confirm-start-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(true));
+    document.getElementById('storage-maintenance-confirm-modal')?.addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeStorageMaintenanceConfirm(false);
+    });
     document.getElementById('history-filter-type')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-location')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-status')?.addEventListener('change', applyHistoryFilters);

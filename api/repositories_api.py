@@ -737,10 +737,17 @@ def get_repository_archives(config: dict, repository_key: str, limit: int = 100)
         if cleanup:
             cleanup()
     rows = payload.get("archives") if isinstance(payload.get("archives"), list) else []
+    rows = [row for row in rows if isinstance(row, dict)]
+    rows.sort(
+        key=lambda row: (
+            _parse_repository_timestamp(row.get("start") or row.get("end"))
+            or datetime.min.replace(tzinfo=timezone.utc),
+            str(row.get("name") or ""),
+        ),
+        reverse=True,
+    )
     archives = []
     for row in rows[:maximum]:
-        if not isinstance(row, dict):
-            continue
         archives.append({
             "name": str(row.get("name") or ""),
             "id": str(row.get("id") or ""),

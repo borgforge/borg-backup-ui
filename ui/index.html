@@ -1039,6 +1039,29 @@
   </div>
 </div>
 
+<!-- Repository Maintenance Confirmation Modal -->
+<div id="storage-maintenance-confirm-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="storage-maintenance-confirm-title" data-i18n="storage.repositoryMaintenanceConfirmTitle">Repository-Wartung starten</h3>
+      <button class="modal-close" id="storage-maintenance-confirm-close-btn" data-i18n-aria-label="storage.check.close" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="storage-maintenance-confirm-description"></p>
+      <div id="storage-maintenance-confirm-info" class="modal-info-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="storage-maintenance-confirm-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
+      <button class="btn btn-primary" id="storage-maintenance-confirm-start-btn" data-i18n="storage.repositoryMaintenanceConfirmStart">Jetzt starten</button>
+    </div>
+  </div>
+</div>
+
 <!-- Repository Manager Modal -->
 <div id="repository-manager-modal" class="modal-backdrop hidden">
   <div class="modal modal-wizard repository-manager-wizard">

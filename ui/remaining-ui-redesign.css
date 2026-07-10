@@ -694,13 +694,22 @@
   overflow: hidden;
 }
 
+.storage-archive-list > header,
 .storage-archive-list article {
   display: grid;
-  grid-template-columns: .6rem minmax(0, 1fr) 10rem 6rem;
+  grid-template-columns: .6rem minmax(0, 1fr) 10rem;
   align-items: center;
   gap: var(--ui-space-3);
   padding: var(--ui-space-3);
   border-bottom: 1px solid var(--ui-color-border);
+}
+
+.storage-archive-list > header {
+  background: var(--ui-color-surface-subtle);
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-xs);
+  letter-spacing: .03em;
+  text-transform: uppercase;
 }
 
 .storage-archive-list article:last-child,
@@ -717,8 +726,7 @@
 }
 
 .storage-archive-list small,
-.storage-archive-list time,
-.storage-archive-list article > span:last-child {
+.storage-archive-list time {
   color: var(--ui-color-text-muted);
   font-size: var(--ui-font-size-xs);
 }
@@ -791,9 +799,9 @@
   .storage-repository-tab-content { padding: var(--ui-space-3); }
   .storage-maintenance-card { grid-template-columns: 2rem minmax(0, 1fr); }
   .storage-maintenance-card > button { grid-column: 1 / -1; width: 100%; }
+  .storage-archive-list > header { display: none; }
   .storage-archive-list article { grid-template-columns: .5rem minmax(0, 1fr); }
-  .storage-archive-list article time,
-  .storage-archive-list article > span:last-child { grid-column: 2; }
+  .storage-archive-list article time { grid-column: 2; }
   .storage-activity-list article { grid-template-columns: minmax(0, 1fr); }
 
   .storage-repository-stats {

@@ -16,6 +16,7 @@ window.BBUI.storageState = window.BBUI.storageState || {
 const storageState = window.BBUI.storageState;
 storageState.archiveCache = storageState.archiveCache || {};
 storageState.maintenanceState = storageState.maintenanceState || { running: false };
+storageState.maintenanceConfirmation = null;
 
 function storageT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
@@ -415,7 +416,7 @@ function renderStorageRepositoryArchives(repo) {
   const archives = Array.isArray(cache.data?.archives) ? cache.data.archives : [];
   if (!archives.length) return `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryNoArchives')}</p></div>`;
   return `<div class="storage-archive-toolbar"><strong>${storageCount(cache.data.archive_count || archives.length, 'storage.archiveCountOne', 'storage.archiveCountMany')}</strong><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-archives" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
-    <div class="storage-archive-list">${archives.map((archive) => `<article><span class="storage-archive-dot"></span><div><strong>${escHtml(archive.name || '—')}</strong><small>${escHtml(archive.id || '')}</small></div><time>${escHtml(storageFormatDateTime(archive.start))}</time><span>${archive.duration == null ? '—' : escHtml(storageFormatDuration(archive.duration))}</span></article>`).join('')}</div>`;
+    <div class="storage-archive-list"><header><span></span><strong>${storageT('storage.repositoryArchiveName')}</strong><strong>${storageT('storage.repositoryArchiveCreated')}</strong></header>${archives.map((archive) => `<article><span class="storage-archive-dot"></span><div><strong>${escHtml(archive.name || '—')}</strong><small>${escHtml(archive.id || '')}</small></div><time>${escHtml(storageFormatDateTime(archive.start))}</time></article>`).join('')}</div>`;
 }
 
 function renderStorageRepositoryMaintenance(repo, job) {
@@ -933,13 +934,42 @@ async function saveRepositoryManager() {
 window.BBUI.storageCheckState = window.BBUI.storageCheckState || { es: null };
 const checkState = window.BBUI.storageCheckState;
 
-async function checkRun(repositoryKey, action = 'check', mode = 'quick') {
-  if (!repositoryKey) return;
-  if (['prune', 'compact', 'verify_data'].includes(action === 'check' ? mode : action)) {
+function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('storage-maintenance-confirm-modal');
+    if (!modal) {
+      resolve(false);
+      return;
+    }
+    const repo = storageRepositories(storageState.data || {})
+      .find((row) => storageRepositoryKey(row) === String(repositoryKey || ''));
+    const job = repo ? storageJobForRepository(repo) : null;
+    const resultKey = action === 'check' && mode === 'verify_data' ? 'verify_data' : action;
     const confirmKey = action === 'prune'
       ? 'storage.repositoryPruneConfirm'
       : (action === 'compact' ? 'storage.repositoryCompactConfirm' : 'storage.repositoryVerifyConfirm');
-    if (!window.confirm(storageT(confirmKey))) return;
+    const title = document.getElementById('storage-maintenance-confirm-title');
+    const description = document.getElementById('storage-maintenance-confirm-description');
+    const info = document.getElementById('storage-maintenance-confirm-info');
+    if (title) title.textContent = storageT('storage.repositoryMaintenanceConfirmTitle');
+    if (description) description.textContent = storageT(confirmKey);
+    if (info) info.innerHTML = `<div class="modal-info-item warning"><span class="modal-info-text"><strong>${escHtml(storageRepositoryTitle(repo || {}, job))}</strong><br>${escHtml(storageT('storage.repositoryMaintenanceConfirmAction', { action: storageMaintenanceTitle(resultKey) }))}</span></div>`;
+    storageState.maintenanceConfirmation = { resolve };
+    modal.classList.remove('hidden');
+  });
+}
+
+function closeStorageMaintenanceConfirm(confirmed = false) {
+  const pending = storageState.maintenanceConfirmation;
+  storageState.maintenanceConfirmation = null;
+  document.getElementById('storage-maintenance-confirm-modal')?.classList.add('hidden');
+  if (typeof pending?.resolve === 'function') pending.resolve(!!confirmed);
+}
+
+async function checkRun(repositoryKey, action = 'check', mode = 'quick') {
+  if (!repositoryKey) return;
+  if (['prune', 'compact', 'verify_data'].includes(action === 'check' ? mode : action)) {
+    if (!await openStorageMaintenanceConfirm(repositoryKey, action, mode)) return;
   }
   if (checkState.es) { checkState.es.close(); checkState.es = null; }
   storageState.maintenanceState = {

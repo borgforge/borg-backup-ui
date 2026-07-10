@@ -23,6 +23,8 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         "storage-workspace-header",
         "storage-content",
         "storage-add-repository-btn",
+        "storage-maintenance-confirm-modal",
+        "storage-maintenance-confirm-start-btn",
         "repository-manager-modal",
         "repository-manager-storage-mode",
         "repository-manager-next-btn",
@@ -33,6 +35,8 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         "renderStorageRepositoryWorkspace",
         "renderStorageLocationSidebar",
         "renderStorageRepositoryArchives",
+        "openStorageMaintenanceConfirm",
+        "storage.repositoryArchiveCreated",
         "repositoryPruneDetails",
         "deleted_archives",
         'data-storage-action="select-repository-tab"',
@@ -44,6 +48,7 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         assert contract in script
     assert 'id="check-log-panel"' not in html
     assert 'id="check-log-output"' not in html
+    assert "window.confirm" not in script
 
 
 def test_repository_information_has_a_background_refresh_loop() -> None:
