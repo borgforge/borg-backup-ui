@@ -350,13 +350,15 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
     }
 
 
-def _borg_env(passphrase_file: str | None) -> dict:
+def _borg_env(config: dict, passphrase_file: str | None) -> dict:
+    from borg_key_store import apply_borg_key_environment
+
     env = dict(os.environ)
     if passphrase_file:
         pass_path = Path(passphrase_file)
         if pass_path.exists():
             env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pass_path))}"
-    return env
+    return apply_borg_key_environment(env, config)
 
 
 def _get_max_runtime_hours(config: dict) -> int:
@@ -383,7 +385,7 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
     guard = ensure_smb_mount_for_job(config, job_key)
     try:
         info = _get_job_repo_info(config, job_key)
-        env = _borg_env(info["passphrase_file"])
+        env = _borg_env(config, info["passphrase_file"])
 
         r = subprocess.run(
             ["borg", "list", "--json", info["repo"]],
@@ -483,7 +485,7 @@ def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict
     guard = ensure_smb_mount_for_job(config, job_key)
     try:
         info = _get_job_repo_info(config, job_key)
-        env = _borg_env(info["passphrase_file"])
+        env = _borg_env(config, info["passphrase_file"])
 
         index = _build_index(info["repo"], archive, env)
 
@@ -506,7 +508,7 @@ def get_repo_stats(config: dict, job_key: str) -> dict:
     from smb_mount import ensure_smb_mount_for_job
     ensure_smb_mount_for_job(config, job_key)
     info = _get_job_repo_info(config, job_key)
-    env = _borg_env(info["passphrase_file"])
+    env = _borg_env(config, info["passphrase_file"])
 
     r_info = subprocess.run(
         ["borg", "info", "--json", info["repo"]],
@@ -742,7 +744,7 @@ def restore_precheck(
     from smb_mount import ensure_smb_mount_for_job
     ensure_smb_mount_for_job(config, job_key)
     info = _get_job_repo_info(config, job_key)
-    env = _borg_env(info["passphrase_file"])
+    env = _borg_env(config, info["passphrase_file"])
     target = _validate_target_dir(target_dir, config)
     if conflict_mode not in {"skip", "overwrite", "rename"}:
         raise ValueError("Invalid conflict mode")
@@ -794,7 +796,7 @@ def start_restore(
     from smb_mount import ensure_smb_mount_for_job
     ensure_smb_mount_for_job(config, job_key)
     info = _get_job_repo_info(config, job_key)
-    env = _borg_env(info["passphrase_file"])
+    env = _borg_env(config, info["passphrase_file"])
     target = _validate_target_dir(target_dir, config)
     if conflict_mode not in {"skip", "overwrite", "rename"}:
         raise ValueError("Invalid conflict mode")

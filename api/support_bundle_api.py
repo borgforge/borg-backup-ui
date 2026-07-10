@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg_passcommand)", re.IGNORECASE)
-SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg_passcommand)\s*=\s*([^\s]+)")
+SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
+SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
 PRIVACY_KEY_RE = re.compile(
     r"(?i)(mail|email|recipient|sender|smtp_(host|user)|ntfy_(server_url|username|click_url)|storagebox_(host|user)|"
     r"\bhost\b|\buser(name)?\b|\burl\b)"

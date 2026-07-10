@@ -265,10 +265,12 @@ class RestoreTest:
             self.log(f"  notification event failed: {exc}")
 
     def _env(self, passphrase: str) -> dict:
+        from borg_key_store import apply_borg_key_environment
+
         env = dict(os.environ)
         env["BORG_PASSPHRASE"] = passphrase
         env.pop("BORG_PASSCOMMAND", None)
-        return env
+        return apply_borg_key_environment(env, self.conf)
 
     def _borg(self, args: list, env: dict, timeout: int | None = None) -> subprocess.CompletedProcess:
         if timeout is None:

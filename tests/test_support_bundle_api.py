@@ -80,6 +80,9 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
     status_dir.mkdir(parents=True)
     restore_status_dir.mkdir(parents=True)
     log_dir.mkdir(parents=True)
+    key_dir = root / "secrets" / "borg-keys"
+    key_dir.mkdir(parents=True)
+    (key_dir / "repo-key").write_text("BORG_KEY " + "a" * 64 + "\nPRIVATE-BORG-KEY-DATA\n", encoding="utf-8")
     (scripts_config_dir / "backup.conf").write_text(
         'GLOBAL_SMTP_PASSWORD="supersecret"\nGLOBAL_DATA_DIR="/mnt/user/borg"\n',
         encoding="utf-8",
@@ -142,6 +145,7 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         assert "status/restore-status/restore.state" in names
         assert "status/restore-status/job1.test" in names
         assert any(name.startswith("logs/plugin/") and name.endswith("borg_backup_ui.log") for name in names)
+        assert not any("borg-keys" in name or name.endswith("repo-key") for name in names)
         all_text = "\n".join(
             zf.read(name).decode("utf-8", errors="replace")
             for name in zf.namelist()
@@ -150,6 +154,7 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
     assert "test-version" in all_text
     assert "supersecret" not in all_text
     assert "secret-passphrase" not in all_text
+    assert "PRIVATE-BORG-KEY-DATA" not in all_text
     assert "hunter2" not in all_text
     assert "abc123" not in all_text
     assert "admin@example.test" not in all_text

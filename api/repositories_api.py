@@ -13,6 +13,7 @@ import os
 import re
 import shlex
 import subprocess
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -265,6 +266,7 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "path_raw": path_raw,
             "path_display": str(row.get("path_display") or path_raw).strip(),
             "passphrase_ref": str(row.get("passphrase_ref") or "").strip(),
+            "keyfile_ref": str(row.get("keyfile_ref") or "").strip(),
             "encryption": str(row.get("encryption") or "").strip(),
             "append_only": bool(row.get("append_only", False)),
             "storage_quota": str(row.get("storage_quota") or "").strip(),
@@ -329,7 +331,13 @@ def _storage_by_key(config: dict) -> dict[str, dict[str, Any]]:
     }
 
 
-def _repo_env(storage: dict[str, Any], passphrase_file: Path | None) -> dict[str, str]:
+def _repo_env(
+    storage: dict[str, Any],
+    passphrase_file: Path | None,
+    config: dict | None = None,
+    *,
+    persistent_keys: bool = True,
+) -> dict[str, str]:
     env = dict(os.environ)
     env["LC_ALL"] = "C"
     env["LANG"] = "C"
@@ -340,6 +348,10 @@ def _repo_env(storage: dict[str, Any], passphrase_file: Path | None) -> dict[str
         env["BORG_RSH"] = f"ssh -i {shlex.quote(ssh_key)} -o WarnWeakCrypto=no"
     elif str(storage.get("storage_type") or "").strip().lower() == "ssh":
         env["BORG_RSH"] = "ssh -o WarnWeakCrypto=no"
+    if persistent_keys:
+        from borg_key_store import apply_borg_key_environment
+
+        env = apply_borg_key_environment(env, config or {})
     return env
 
 
@@ -357,6 +369,10 @@ def _raise_borg_command_error(output: str, fallback: str) -> None:
     lowered = safe_output.lower()
     if "failed to create/acquire the lock" in lowered or "lock.exclusive" in lowered:
         raise RepositoryBusyError("Repository is currently in use by another Borg operation.")
+    if "no key file for repository" in lowered or "key file" in lowered and "not found" in lowered:
+        raise RuntimeError(
+            "The Borg keyfile is missing. Import a matching Borg key export for this repository."
+        )
     first = next((line.strip() for line in safe_output.splitlines() if line.strip()), fallback)
     raise RuntimeError(first[:500])
 
@@ -388,14 +404,14 @@ def _repository_access(config: dict, repository: dict[str, Any]):
             cleanup()
 
 
-def _borg_info(storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
+def _borg_info(config: dict, storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
     try:
         proc = subprocess.run(
             ["borg", "info", "--json", repo_path],
             capture_output=True,
             text=True,
             timeout=60,
-            env=_repo_env(storage, passphrase_file),
+            env=_repo_env(storage, passphrase_file, config),
             check=False,
         )
     except FileNotFoundError as exc:
@@ -414,14 +430,91 @@ def _borg_info(storage: dict[str, Any], repo_path: str, passphrase_file: Path | 
     return payload
 
 
-def _borg_list(storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
+def _borg_info_with_default_keys(
+    storage: dict[str, Any], repo_path: str, passphrase_file: Path | None
+) -> dict[str, Any]:
+    """Probe Borg's legacy default key directory during an explicit import."""
+    proc = subprocess.run(
+        ["borg", "info", "--json", repo_path],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=_repo_env(storage, passphrase_file, persistent_keys=False),
+        check=False,
+    )
+    output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+    if proc.returncode != 0:
+        _raise_borg_command_error(output, "borg info failed")
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError("borg info returned invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("borg info returned an invalid response")
+    return payload
+
+
+def _import_exported_repository_key(
+    config: dict,
+    storage: dict[str, Any],
+    repo_path: str,
+    passphrase_file: Path | None,
+    key_data: str,
+) -> None:
+    from borg_key_store import ensure_borg_keys_dir, find_key_file
+
+    encoded = str(key_data or "").strip().encode("utf-8")
+    if not encoded or len(encoded) > 1024 * 1024:
+        raise ValueError("Borg key export is empty or too large")
+    first = encoded.splitlines()[0].decode("utf-8", "replace").strip()
+    if not first.startswith("BORG_KEY "):
+        raise ValueError("Borg key export has an invalid format")
+    repository_id = first[len("BORG_KEY "):].strip().lower()
+    if not repository_id or any(ch not in "0123456789abcdef" for ch in repository_id):
+        raise ValueError("Borg key export has an invalid repository ID")
+    key_dir = ensure_borg_keys_dir(config)
+    existing = find_key_file(key_dir, repository_id)
+    if existing is not None:
+        if existing.read_bytes().strip() != encoded.strip():
+            raise ValueError("A different key for this Borg repository already exists")
+        return
+    temp_path: Path | None = None
+    try:
+        import_dir = _data_root(config) / "config"
+        import_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=import_dir, prefix=".key-import-", delete=False
+        ) as handle:
+            handle.write(encoded + b"\n")
+            temp_path = Path(handle.name)
+        os.chmod(temp_path, 0o600)
+        proc = subprocess.run(
+            ["borg", "key", "import", repo_path, str(temp_path)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=_repo_env(storage, passphrase_file, config),
+            check=False,
+        )
+        output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        if proc.returncode != 0:
+            created = find_key_file(key_dir, repository_id)
+            if created is not None:
+                created.unlink(missing_ok=True)
+            _raise_borg_command_error(output, "Borg key import failed")
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def _borg_list(config: dict, storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
     try:
         proc = subprocess.run(
             ["borg", "list", "--json", repo_path],
             capture_output=True,
             text=True,
             timeout=60,
-            env=_repo_env(storage, passphrase_file),
+            env=_repo_env(storage, passphrase_file, config),
             check=False,
         )
     except FileNotFoundError as exc:
@@ -484,8 +577,8 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     if passphrase_file is not None and not passphrase_file.is_file():
         raise ValueError("Repository passphrase file is missing")
     try:
-        info_payload = _borg_info(storage, repo_path, passphrase_file)
-        archive_payload = _borg_list(storage, repo_path, passphrase_file)
+        info_payload = _borg_info(config, storage, repo_path, passphrase_file)
+        archive_payload = _borg_list(config, storage, repo_path, passphrase_file)
     except RepositoryBusyError:
         _record_repository_info_busy(config, key, _now())
         raise
@@ -681,7 +774,7 @@ def get_repository_archives(config: dict, repository_key: str, limit: int = 100)
     if passphrase_file is not None and not passphrase_file.is_file():
         raise ValueError("Repository passphrase file is missing")
     try:
-        payload = _borg_list(storage, repo_path, passphrase_file)
+        payload = _borg_list(config, storage, repo_path, passphrase_file)
     finally:
         if cleanup:
             cleanup()
@@ -802,8 +895,8 @@ def prepare_repository_lifecycle(config: dict, repository_key: str, mode: str) -
         return {"ok": True, "mode": requested_mode, **context}
 
     with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
-        info_payload = _borg_info(storage, repo_path, passphrase_file)
-        archive_payload = _borg_list(storage, repo_path, passphrase_file)
+        info_payload = _borg_info(config, storage, repo_path, passphrase_file)
+        archive_payload = _borg_list(config, storage, repo_path, passphrase_file)
     fields = _borg_info_fields(info_payload, archive_payload)
     live_stats = fields.get("repository_stats") if isinstance(fields.get("repository_stats"), dict) else {}
     context.update({
@@ -900,8 +993,8 @@ def apply_repository_lifecycle(
 
     try:
         with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
-            info_payload = _borg_info(storage, repo_path, passphrase_file)
-            archive_payload = _borg_list(storage, repo_path, passphrase_file)
+            info_payload = _borg_info(config, storage, repo_path, passphrase_file)
+            archive_payload = _borg_list(config, storage, repo_path, passphrase_file)
             live_fields = _borg_info_fields(info_payload, archive_payload)
             live_id = str(live_fields.get("borg_repository_id") or "").strip()
             live_stats = live_fields.get("repository_stats") if isinstance(live_fields.get("repository_stats"), dict) else {}
@@ -911,7 +1004,7 @@ def apply_repository_lifecycle(
                     "Repository identity or archive count changed; repeat the deletion review",
                     code="repository_identity_changed",
                 )
-            env = _repo_env(storage, passphrase_file)
+            env = _repo_env(storage, passphrase_file, config)
             env["BORG_DELETE_I_KNOW_WHAT_I_AM_DOING"] = "YES"
             timeout_raw = str(config.get("REPOSITORY_DELETE_TIMEOUT_SECONDS") or "3600").strip()
             try:
@@ -942,15 +1035,36 @@ def apply_repository_lifecycle(
 
     removed = _remove_repository_metadata(config, key)
     secret_deleted = _remove_repository_secret(config, removed)
+    from borg_key_store import remove_repository_key
+
+    keyfile_deleted = remove_repository_key(
+        config,
+        str(removed.get("borg_repository_id") or ""),
+        [
+            str(row.get("borg_repository_id") or "")
+            for row in read_repository_store(config).get("repositories", [])
+        ],
+    )
     _write_repository_lifecycle_audit(
         config,
         removed,
         action="delete_repository",
         status="success",
-        details={"archive_count": expected_archives, "secret_deleted": secret_deleted},
+        details={
+            "archive_count": expected_archives,
+            "secret_deleted": secret_deleted,
+            "keyfile_deleted": keyfile_deleted,
+        },
         audit_context=audit_context,
     )
-    return {"ok": True, "mode": mode, "repository_key": key, "repository_deleted": True, "secret_deleted": secret_deleted}
+    return {
+        "ok": True,
+        "mode": mode,
+        "repository_key": key,
+        "repository_deleted": True,
+        "secret_deleted": secret_deleted,
+        "keyfile_deleted": keyfile_deleted,
+    }
 
 
 def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
@@ -999,6 +1113,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
     passphrase_ref = str((existing or {}).get("passphrase_ref") or "").strip()
     passphrase_file: Path | None = None
     passphrase = str(payload.get("passphrase") or "").strip()
+    key_data = str(payload.get("key_data") or "").strip()
     secret_previous: bytes | None = None
     secret_existed = False
 
@@ -1046,7 +1161,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
                 capture_output=True,
                 text=True,
                 timeout=120,
-                env=_repo_env(storage, passphrase_file),
+                env=_repo_env(storage, passphrase_file, config),
                 check=False,
             )
             exit_code = proc.returncode
@@ -1062,12 +1177,34 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
             raise RuntimeError(output.splitlines()[0] if output.splitlines() else f"borg init failed with exit {exit_code}")
         initialized = True
         try:
-            info_fields = _borg_info_fields(_borg_info(storage, repo_path, passphrase_file))
+            info_fields = _borg_info_fields(_borg_info(config, storage, repo_path, passphrase_file))
         except Exception:
             info_fields = {}
     else:
         try:
-            info_fields = _borg_info_fields(_borg_info(storage, repo_path, passphrase_file))
+            if key_data:
+                _import_exported_repository_key(
+                    config, storage, repo_path, passphrase_file, key_data
+                )
+            try:
+                info_payload = _borg_info(config, storage, repo_path, passphrase_file)
+            except Exception as persistent_error:
+                if key_data:
+                    raise
+                try:
+                    legacy_payload = _borg_info_with_default_keys(storage, repo_path, passphrase_file)
+                    legacy_fields = _borg_info_fields(legacy_payload)
+                    from borg_key_store import import_default_key_if_present
+
+                    copied = import_default_key_if_present(
+                        config, str(legacy_fields.get("borg_repository_id") or "")
+                    )
+                    if copied is None:
+                        raise persistent_error
+                    info_payload = _borg_info(config, storage, repo_path, passphrase_file)
+                except Exception:
+                    raise persistent_error
+            info_fields = _borg_info_fields(info_payload)
         except Exception:
             restore_secret()
             raise
@@ -1084,6 +1221,17 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
 
     now = _now()
     existing = existing if isinstance(existing, dict) else {}
+    keyfile_ref = str(existing.get("keyfile_ref") or "").strip()
+    if str(info_fields.get("borg_repository_id") or ""):
+        from borg_key_store import borg_keys_dir, find_key_file, is_keyfile_encryption
+
+        if is_keyfile_encryption(encryption):
+            key_file = find_key_file(
+                borg_keys_dir(config), str(info_fields.get("borg_repository_id") or "")
+            )
+            keyfile_ref = str(key_file) if key_file is not None else ""
+        else:
+            keyfile_ref = ""
     row = {
         **existing,
         "repository_key": repo_key,
@@ -1101,6 +1249,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         "path_raw": repo_path,
         "path_display": repo_path,
         "passphrase_ref": passphrase_ref,
+        "keyfile_ref": keyfile_ref,
         "encryption": encryption,
         "append_only": append_only,
         "storage_quota": storage_quota,

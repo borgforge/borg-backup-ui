@@ -884,16 +884,13 @@ def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "", re
     resolved_path = repository_path(repository, storage)
     passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
 
-    env = dict(os.environ)
-    env["LC_ALL"] = "C"
-    env["LANG"] = "C"
+    from repositories_api import _repo_env
+
+    passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if str(repository.get("encryption") or "").strip().lower() != "none":
-        if not passphrase_ref or not Path(passphrase_ref).is_file():
+        if passphrase_file is None or not passphrase_file.is_file():
             raise ValueError("Repository passphrase file is missing")
-        env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(passphrase_ref)}"
-    ssh_key = str(storage.get("ssh_key_path") or "").strip()
-    if ssh_key:
-        env["BORG_RSH"] = f"ssh -i {shlex.quote(ssh_key)} -o WarnWeakCrypto=no"
+    env = _repo_env(storage, passphrase_file, ui_config)
 
     try:
         result = subprocess.run(

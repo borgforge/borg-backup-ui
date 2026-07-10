@@ -434,6 +434,11 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     env.setdefault("LOCK_FILE", f"{env.get('LOCK_FILE_DIR', '/var/run')}/borg-backup-{type_id}.lock")
     env.setdefault("BACKUP_PATHS", env.get(paths_key, paths_default))
     env.setdefault("STATUS_DIR_OVERRIDE", env.get("STATUS_DIR", "/mnt/user/backup-status"))
+    from borg_key_store import apply_borg_key_environment
+
+    env = apply_borg_key_environment(
+        env, {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    )
 
     repo = env.get("BORG_REPO", "")
     if repo.startswith("ssh://"):
@@ -455,6 +460,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
 
     os.environ["BORG_REPO"] = env["BORG_REPO"]
     os.environ["BORG_CACHE_DIR"] = env["BORG_CACHE_DIR"]
+    os.environ["BORG_KEYS_DIR"] = env["BORG_KEYS_DIR"]
     os.environ["BORG_SCRIPT_DIR"] = str(backup_scripts_dir)
     os.environ["LC_ALL"] = "C"
     os.environ["LANG"] = "C"

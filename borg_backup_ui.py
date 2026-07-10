@@ -1763,7 +1763,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         try:
             from restore_api import get_repo_info, _borg_env
             info = get_repo_info(self.config, job_key)
-            env = _borg_env(info["passphrase_file"])
+            env = _borg_env(self.config, info["passphrase_file"])
         except Exception as exc:
             self.send_error(500, str(exc))
             return
@@ -1940,7 +1940,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if not all([job_key, archive, path]):
             raise ValueError("job, archive, and path are required")
         info = get_repo_info(self.config, job_key)
-        env = _borg_env(info["passphrase_file"])
+        env = _borg_env(self.config, info["passphrase_file"])
         repo_archive = f"{info['repo']}::{archive}"
         source_path = path.lstrip("/")
         check = self._compute_restore_download_check(repo_archive, source_path, env)

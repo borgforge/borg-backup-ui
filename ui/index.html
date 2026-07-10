@@ -1197,7 +1197,7 @@
           <section class="repository-manager-card">
             <h4 data-i18n="storage.repositorySectionIdentity">Name und Pfad</h4>
             <div class="settings-grid repository-manager-form-grid">
-              <div class="form-group" id="repository-manager-encryption-group">
+              <div class="form-group">
                 <label class="form-label" data-i18n="storage.repositoryDisplayName">Anzeigename</label>
                 <input class="form-input" type="text" id="repository-manager-display-name" placeholder="Appdata - USB" data-i18n-placeholder="storage.repositoryDisplayNamePlaceholder">
               </div>
@@ -1212,7 +1212,7 @@
           <section class="repository-manager-card">
             <h4 data-i18n="storage.repositorySectionBorgInit">Borg init Optionen</h4>
             <div class="settings-grid repository-manager-form-grid">
-              <div class="form-group">
+              <div class="form-group" id="repository-manager-encryption-group">
                 <label class="form-label" data-i18n="storage.repositoryEncryption">Verschlüsselung</label>
                 <select class="form-select" id="repository-manager-encryption">
                   <option value="repokey-blake2" data-i18n="storage.encryptionModeRepokeyBlake2">repokey-blake2</option>
@@ -1230,6 +1230,11 @@
                 <label class="form-label" data-i18n="storage.repositoryPassphrase">Passphrase</label>
                 <input class="form-input" type="password" id="repository-manager-passphrase" autocomplete="new-password">
                 <div class="form-hint" data-i18n="storage.repositoryPassphraseHint">Beim Erstellen erforderlich, beim Import optional zum Speichern der Repository-Passphrase.</div>
+              </div>
+              <div class="form-group hidden" id="repository-manager-key-data-group" style="grid-column:1/-1">
+                <label class="form-label" data-i18n="storage.repositoryKeyExport">Borg-Key-Export</label>
+                <textarea class="form-input mono" id="repository-manager-key-data" rows="6" autocomplete="off" spellcheck="false"></textarea>
+                <div class="form-hint" data-i18n="storage.repositoryKeyExportHint">Nur beim Import eines Keyfile-Repositories erforderlich, falls der passende Schlüssel nicht bereits auf diesem System vorhanden ist.</div>
               </div>
               <div class="form-group">
                 <label class="form-label" data-i18n="storage.repositoryStorageQuota">Storage Quota</label>

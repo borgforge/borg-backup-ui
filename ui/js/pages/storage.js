@@ -731,6 +731,7 @@ function repositoryManagerSyncFields() {
   const action = document.getElementById('repository-manager-action')?.value || 'create';
   const encryption = document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2';
   document.getElementById('repository-manager-encryption-group')?.classList.toggle('hidden', action !== 'create');
+  document.getElementById('repository-manager-key-data-group')?.classList.toggle('hidden', action !== 'import');
   document.getElementById('repository-manager-passphrase-group')
     ?.classList.toggle('hidden', action === 'create' && encryption === 'none');
   ['repository-manager-storage-quota', 'repository-manager-append-only', 'repository-manager-make-parent-dirs'].forEach((id) => {
@@ -840,6 +841,7 @@ function openRepositoryManager() {
     'repository-manager-relative-path': '',
     'repository-manager-encryption': 'repokey-blake2',
     'repository-manager-passphrase': '',
+    'repository-manager-key-data': '',
     'repository-manager-storage-quota': '',
   };
   Object.entries(defaults).forEach(([id, value]) => {
@@ -859,6 +861,10 @@ function openRepositoryManager() {
 }
 
 function closeRepositoryManager() {
+  const passphrase = document.getElementById('repository-manager-passphrase');
+  const keyData = document.getElementById('repository-manager-key-data');
+  if (passphrase) passphrase.value = '';
+  if (keyData) keyData.value = '';
   document.getElementById('repository-manager-modal')?.classList.add('hidden');
 }
 
@@ -991,6 +997,7 @@ async function saveRepositoryManager() {
     relative_path: document.getElementById('repository-manager-relative-path')?.value || '',
     encryption: action === 'import' ? 'auto' : (document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2'),
     passphrase: document.getElementById('repository-manager-passphrase')?.value || '',
+    key_data: action === 'import' ? (document.getElementById('repository-manager-key-data')?.value || '') : '',
     storage_quota: action === 'create' ? (document.getElementById('repository-manager-storage-quota')?.value || '') : '',
     append_only: action === 'create' && !!document.getElementById('repository-manager-append-only')?.checked,
     make_parent_dirs: action === 'create' && !!document.getElementById('repository-manager-make-parent-dirs')?.checked,

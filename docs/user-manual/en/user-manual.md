@@ -256,10 +256,13 @@ The repository header uses the **display name** assigned during creation or impo
 3. The wizard validates connectivity and write access. For SMB, the technical mount path is managed automatically.
 4. Select **Create new repository** or **Import existing repository**.
 5. Enter a display name and relative repository path.
-6. For creation, select encryption and passphrase. For import, encryption is detected through `borg info`.
-7. Review the summary and save.
+6. For creation, select encryption and passphrase. Keyfile keys are stored persistently in the protected plugin directory.
+7. For import, encryption is detected through `borg info`. For a keyfile repository, provide a Borg key export previously created with `borg key export` when required; an exact matching key already present on the system is adopted automatically.
+8. Review the summary and save.
 
 > **Warning:** Import does not initialize or modify the repository. Creation explicitly runs `borg init`.
+
+> **Warning:** With `keyfile` and `keyfile-blake2`, recovery requires both the passphrase and the local key file. Use the encrypted jobs/secrets export for system migration and keep an additional independent `borg key export` backup.
 
 ### 4.4 Typical Actions
 

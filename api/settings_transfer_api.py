@@ -88,8 +88,10 @@ def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> 
         "storages": storages,
         "schedules": {k: v for k, v in schedules.items() if not selected or k in selected},
         "passphrase_meta": passphrase_meta,
+        "keyfile_meta": {},
         "settings_payload": read_settings_payload(config),
     }
+    bundle["keyfile_meta"] = _collect_job_key_files(config, bundle, include_content=False)
     text = json.dumps(bundle, indent=2, ensure_ascii=False) + "\n"
     return {
         "bundle": bundle,
@@ -120,6 +122,36 @@ def _collect_job_passphrase_files(bundle: dict) -> dict[str, dict]:
             "sha256": hashlib.sha256(content).hexdigest(),
             "content_b64": base64.b64encode(content).decode("ascii"),
         }
+    return out
+
+
+def _collect_job_key_files(config: dict, bundle: dict, *, include_content: bool) -> dict[str, dict]:
+    from borg_key_store import borg_keys_dir, find_key_file, is_keyfile_encryption
+
+    out: dict[str, dict] = {}
+    repositories = bundle.get("repositories") if isinstance(bundle.get("repositories"), list) else []
+    for repository in repositories:
+        if not isinstance(repository, dict) or not is_keyfile_encryption(repository.get("encryption")):
+            continue
+        repository_key = str(repository.get("repository_key") or "").strip()
+        repository_id = str(repository.get("borg_repository_id") or "").strip().lower()
+        if not repository_key or not repository_id:
+            continue
+        key_file = find_key_file(borg_keys_dir(config), repository_id)
+        if key_file is None:
+            out[repository_key] = {"repository_id": repository_id, "exists": False}
+            continue
+        content = key_file.read_bytes()
+        row = {
+            "repository_id": repository_id,
+            "filename": key_file.name,
+            "exists": True,
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "size": len(content),
+        }
+        if include_content:
+            row["content_b64"] = base64.b64encode(content).decode("ascii")
+        out[repository_key] = row
     return out
 
 
@@ -410,6 +442,10 @@ def _apply_repository_inventory(config: dict, bundle: dict, jobs: list[dict], dr
         storages_by_key.setdefault(key, storage)
 
     for repository in incoming_repositories:
+        repository = dict(repository)
+        # A keyfile path belongs to the source host. Secure imports restore the
+        # key into this host's canonical BORG_KEYS_DIR after inventory import.
+        repository.pop("keyfile_ref", None)
         key = str(repository.get("repository_key") or "").strip()
         if not key:
             raise ValueError("Imported repository has no key")
@@ -541,6 +577,16 @@ def _secrets_dir() -> Path:
     p = Path("/boot/config/borg-backup/secrets")
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _valid_secret_backup_name(name: str) -> bool:
+    value = str(name or "")
+    if value.startswith((".borg-passphrase-", ".smb-", ".ntfy-")) and "/" not in value:
+        return True
+    if value.startswith("borg-keys/"):
+        leaf = value.removeprefix("borg-keys/")
+        return bool(leaf) and "/" not in leaf and leaf not in {".", ".."}
+    return False
 
 
 def _safe_key(value: str) -> str:
@@ -709,15 +755,18 @@ def export_secrets_backup(password: str) -> dict:
     if len(pw) < 8:
         raise ValueError("Password must contain at least 8 characters")
     files = []
-    for p in sorted(_secrets_dir().glob(".*")):
+    candidates = list(_secrets_dir().glob(".*"))
+    candidates.extend(sorted((_secrets_dir() / "borg-keys").glob("*")))
+    for p in sorted(candidates):
         if not p.is_file():
             continue
-        if not (p.name.startswith(".borg-passphrase-") or p.name.startswith(".smb-") or p.name.startswith(".ntfy-")):
+        name = f"borg-keys/{p.name}" if p.parent.name == "borg-keys" else p.name
+        if not _valid_secret_backup_name(name):
             continue
         raw = p.read_bytes()
         files.append(
             {
-                "name": p.name,
+                "name": name,
                 "content_b64": base64.b64encode(raw).decode("ascii"),
                 "mode": int(p.stat().st_mode & 0o777),
                 "mtime": int(p.stat().st_mtime),
@@ -753,7 +802,7 @@ def preview_secrets_backup(password: str, payload_b64: str) -> dict:
         if not isinstance(item, dict):
             continue
         name = str(item.get("name") or "")
-        if not (name.startswith(".borg-passphrase-") or name.startswith(".smb-") or name.startswith(".ntfy-")):
+        if not _valid_secret_backup_name(name):
             continue
         target = td / name
         local_hash = None
@@ -798,7 +847,7 @@ def import_secrets_backup(
         if selected and name not in selected:
             report.append({"name": name, "status": "skipped_unselected"})
             continue
-        if not (name.startswith(".borg-passphrase-") or name.startswith(".smb-") or name.startswith(".ntfy-")):
+        if not _valid_secret_backup_name(name):
             report.append({"name": name, "status": "invalid_name"})
             continue
         target = target_dir / name
@@ -813,6 +862,9 @@ def import_secrets_backup(
                     idx += 1
                 target = target_dir / f"{base}.{idx}"
         content = base64.b64decode(str(item.get("content_b64") or "").encode("ascii"), validate=False)
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if target.parent.name == "borg-keys":
+            os.chmod(target.parent, 0o700)
         target.write_bytes(content)
         os.chmod(target, 0o600)
         written += 1
@@ -831,11 +883,13 @@ def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: lis
     bundle = dict(bundle)
     bundle.pop("settings_payload", None)
     passphrase_files = _collect_job_passphrase_files(bundle)
+    key_files = _collect_job_key_files(config, bundle, include_content=True)
     payload = {
         "format": "bbui-job-bundle-secure-v2",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "bundle": bundle,
         "passphrase_files": passphrase_files,
+        "key_files": key_files,
     }
     encrypted = _openssl_encrypt(json.dumps(payload, ensure_ascii=False).encode("utf-8"), pw)
     return {
@@ -843,6 +897,7 @@ def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: lis
         "payload_b64": base64.b64encode(encrypted).decode("ascii"),
         "job_count": int(plain.get("job_count") or 0),
         "passphrase_count": len(passphrase_files),
+        "keyfile_count": sum(1 for row in key_files.values() if row.get("exists")),
     }
 
 
@@ -858,6 +913,7 @@ def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str)
     out = preview_jobs_bundle(config, bundle)
     out["secure_format"] = payload.get("format")
     out["passphrase_count"] = len(payload.get("passphrase_files") or {})
+    out["keyfile_count"] = len(payload.get("key_files") or {})
     return out
 
 
@@ -883,6 +939,7 @@ def import_jobs_bundle_encrypted(
     if not isinstance(bundle, dict):
         raise ValueError("Invalid bundle")
     passphrase_files = payload.get("passphrase_files") if isinstance(payload.get("passphrase_files"), dict) else {}
+    key_files = payload.get("key_files") if isinstance(payload.get("key_files"), dict) else {}
 
     # Secure jobs import intentionally ignores settings payload.
     bundle = dict(bundle)
@@ -937,6 +994,51 @@ def import_jobs_bundle_encrypted(
             os.chmod(target, 0o600)
             restored += 1
     result["restored_passphrases"] = restored
+    restored_keys = 0
+    if not dry_run and import_passphrases and key_files:
+        from borg_key_store import ensure_borg_keys_dir, find_key_file, repository_id_from_key_file
+        from repositories_api import read_repository_store, write_repository_store
+
+        store = read_repository_store(config)
+        repositories = {
+            str(row.get("repository_key") or "").strip(): row
+            for row in store.get("repositories", [])
+        }
+        changed = False
+        for repository_key, raw_file in key_files.items():
+            key_row = raw_file if isinstance(raw_file, dict) else {}
+            repository = repositories.get(str(repository_key or "").strip())
+            if not repository or not key_row.get("exists"):
+                continue
+            expected_id = str(repository.get("borg_repository_id") or key_row.get("repository_id") or "").strip().lower()
+            if not expected_id or expected_id != str(key_row.get("repository_id") or "").strip().lower():
+                continue
+            try:
+                content = base64.b64decode(str(key_row.get("content_b64") or "").encode("ascii"), validate=False)
+            except Exception:
+                continue
+            if len(content) > 1024 * 1024:
+                continue
+            key_dir = ensure_borg_keys_dir(config)
+            current = find_key_file(key_dir, expected_id)
+            if current is None:
+                target = key_dir / f"bbui-{expected_id}"
+                if target.exists():
+                    continue
+                target.write_bytes(content)
+                os.chmod(target, 0o600)
+                if repository_id_from_key_file(target) != expected_id:
+                    target.unlink(missing_ok=True)
+                    continue
+                current = target
+                restored_keys += 1
+            elif current.read_bytes() != content:
+                continue
+            repository["keyfile_ref"] = str(current)
+            changed = True
+        if changed:
+            write_repository_store(config, {"repositories": list(repositories.values())})
+    result["restored_keyfiles"] = restored_keys
     return result
 
 

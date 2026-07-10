@@ -6,6 +6,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #190
+- Security:
+  - Borg keyfile encryption now uses a persistent, plugin-owned `BORG_KEYS_DIR` with restrictive directory and file permissions across backup, restore, restore tests and repository maintenance.
+  - Added an audited one-time migration that copies only exact repository-ID matches from Borg's legacy default key directory.
+  - Existing keyfile repositories can import a `borg key export`; unrelated or conflicting keyfiles are never overwritten.
+  - Encrypted job and secrets backups now include Borg keyfiles, while normal job exports and support bundles never contain key material.
+  - Permanent repository deletion removes an exact unreferenced persistent keyfile and records the result in the lifecycle audit log.
+
 ### Issue #184
 - Storage:
   - Added repository objects as a dedicated metadata inventory in `config/repositories.json`.

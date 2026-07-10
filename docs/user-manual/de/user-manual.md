@@ -256,10 +256,13 @@ Der Repository-Kopf verwendet den beim Erstellen oder Importieren vergebenen **A
 3. Der Assistent prüft Erreichbarkeit und Schreibzugriff. Bei SMB wird der technische Mount-Pfad automatisch verwaltet.
 4. Wählen Sie **Neues Repository erstellen** oder **Vorhandenes Repository importieren**.
 5. Geben Sie Anzeigename und relativen Repository-Pfad an.
-6. Beim Erstellen wählen Sie Verschlüsselung und Passphrase. Beim Import wird die Verschlüsselung durch `borg info` erkannt.
-7. Prüfen Sie die Zusammenfassung und speichern Sie.
+6. Beim Erstellen wählen Sie Verschlüsselung und Passphrase. Keyfile-Schlüssel werden persistent im geschützten Plugin-Verzeichnis gespeichert.
+7. Beim Import wird die Verschlüsselung durch `borg info` erkannt. Für ein Keyfile-Repository fügen Sie bei Bedarf einen zuvor mit `borg key export` erzeugten Borg-Key-Export ein; ein exakt passender vorhandener Schlüssel wird automatisch übernommen.
+8. Prüfen Sie die Zusammenfassung und speichern Sie.
 
 > **Warnung:** Ein Import initialisiert oder verändert das Repository nicht. Ein Erstellen führt ausdrücklich `borg init` aus.
+
+> **Warnung:** Bei `keyfile` und `keyfile-blake2` benötigen Sie für eine Wiederherstellung sowohl die Passphrase als auch die lokale Schlüsseldatei. Verwenden Sie für einen Systemumzug den verschlüsselten Jobs-/Secrets-Export und bewahren Sie zusätzlich einen unabhängigen `borg key export` auf.
 
 ### 4.4 Typische Aktionen
 

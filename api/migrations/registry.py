@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from . import (
+    borg_keyfiles_v1,
     notification_events_v1,
     repository_objects_v1,
     repository_objects_v2,
@@ -26,6 +27,7 @@ MIGRATIONS = [
     repository_objects_v2,
     repository_objects_v3,
     repository_objects_v4,
+    borg_keyfiles_v1,
     storage_objects_v1,
     storage_objects_v2,
     repository_runtime_v1,
