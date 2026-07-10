@@ -318,8 +318,14 @@ function storageFormatDateTime(value) {
   });
 }
 
-function storageFormatDuration(value) {
+function storageFormatDuration(value, startedAt = '', finishedAt = '') {
   const seconds = Math.max(0, Number(value || 0));
+  const started = startedAt ? new Date(startedAt) : null;
+  const finished = finishedAt ? new Date(finishedAt) : null;
+  if (started && finished && !Number.isNaN(started.getTime()) && !Number.isNaN(finished.getTime()) && finished < started) {
+    return '—';
+  }
+  if (seconds === 0 && started && finished) return storageT('storage.durationLessThanSecond');
   if (seconds < 60) return storageT('storage.durationSeconds', { count: Math.round(seconds) });
   return storageT('storage.durationMinutes', { count: Math.round(seconds / 60) });
 }
@@ -380,7 +386,7 @@ function renderStorageMaintenanceCard(repo, key, { withAction = false, job = nul
     <div class="storage-maintenance-copy">
       <small>${escHtml(storageMaintenanceTitle(key))}</small>
       <strong>${escHtml(running ? storageT('storage.repositoryActionRunning') : storageMaintenanceSummary(key, result))}</strong>
-      <span>${running ? storageT('storage.repositoryPleaseWait') : (result ? `${storageFormatDateTime(result.finished_at)} · ${storageFormatDuration(result.duration_seconds)}` : storageT('storage.repositoryNoResult'))}</span>
+      <span>${running ? storageT('storage.repositoryPleaseWait') : (result ? `${storageFormatDateTime(result.finished_at)} · ${storageFormatDuration(result.duration_seconds, result.started_at, result.finished_at)}` : storageT('storage.repositoryNoResult'))}</span>
       ${resultDetails}
     </div>
     ${withAction ? `<button class="btn btn-secondary btn-sm" data-storage-action="repository-maintenance" data-repository-key="${escHtml(repositoryKey)}" data-repository-action="${escHtml(action)}" data-check-mode="${escHtml(mode)}"${disabled}>${escHtml(running ? storageT('storage.repositoryRunning') : storageT('storage.repositoryStartAction'))}</button>` : ''}
@@ -406,8 +412,7 @@ function renderStorageRepositoryOverview(repo, job) {
       ${storageDetailItem('storage.storageNameLabel', storageName(repo))}
       ${storageDetailItem('storage.jobNameLabel', storageJobName(repo, job))}
       ${storageDetailItem('storage.repositoryEncryption', storageRepositoryEncryption(repo, job))}
-      ${storageDetailItem('storage.repositoryPathLabel', repo.path_display || repo.path_raw || '', 'span-2')}
-      ${storageDetailItem('storage.repositoryRelativePath', repo.relative_path || '', 'span-2')}
+      ${storageDetailItem('storage.repositoryPathLabel', repo.path_display || repo.path_raw || '', 'span-3')}
     </div>
   </div>`;
 }
@@ -435,28 +440,22 @@ function renderStorageRepositoryMaintenance(repo, job) {
   </div>`;
 }
 
-function renderStorageRepositoryActivities(repo) {
-  const results = Object.values(repo?.maintenance_results || {})
-    .filter((row) => row && typeof row === 'object')
-    .sort((a, b) => String(b.finished_at || '').localeCompare(String(a.finished_at || '')));
-  if (!results.length) return `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryNoActivities')}</p></div>`;
-  return `<div class="storage-activity-list">${results.map((result) => `<article><span class="badge ${result.status === 'success' ? 'success' : (result.status === 'warning' ? 'warning' : 'error')}">${escHtml(result.status === 'success' ? storageT('storage.repositoryStatusSuccess') : (result.status === 'warning' ? storageT('storage.repositoryStatusWarning') : storageT('storage.repositoryStatusError')))}</span><div><strong>${escHtml(storageMaintenanceTitle(result.action))}</strong><small>${escHtml(storageMaintenanceSummary(result.action, result))}</small></div><time>${escHtml(storageFormatDateTime(result.finished_at))}</time></article>`).join('')}</div>`;
-}
-
 function renderStorageRepositoryWorkspace(repo, job) {
-  const selected = storageState.selectedTab || 'overview';
+  const selected = ['overview', 'archives', 'maintenance'].includes(storageState.selectedTab)
+    ? storageState.selectedTab
+    : 'overview';
+  storageState.selectedTab = selected;
   const archiveCount = Number(repo?.repository_stats?.archives_count || 0);
   const tabs = [
     ['overview', storageT('storage.repositoryTabOverview')],
     ['archives', `${storageT('storage.repositoryTabArchives')} ${archiveCount ? `<b>${archiveCount}</b>` : ''}`],
     ['maintenance', storageT('storage.repositoryTabMaintenance')],
-    ['activities', storageT('storage.repositoryTabActivities')],
   ];
   const content = selected === 'archives'
     ? renderStorageRepositoryArchives(repo)
     : (selected === 'maintenance'
       ? renderStorageRepositoryMaintenance(repo, job)
-      : (selected === 'activities' ? renderStorageRepositoryActivities(repo) : renderStorageRepositoryOverview(repo, job)));
+      : renderStorageRepositoryOverview(repo, job));
   return `<section class="storage-repository-master-detail ui-panel">
     <nav class="storage-repository-tabs">${tabs.map(([key, label]) => `<button class="${selected === key ? 'is-active' : ''}" data-storage-action="select-repository-tab" data-repository-tab="${key}">${label}</button>`).join('')}</nav>
     <div class="storage-repository-tab-content">${content}</div>

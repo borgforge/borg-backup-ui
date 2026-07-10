@@ -170,9 +170,11 @@ def test_repository_maintenance_persists_structured_prune_and_compact_results(tm
 
     stored = read_repository_store(config)["repositories"][0]["maintenance_results"]
     assert prune_result["status"] == "success"
+    assert prune_result["duration_seconds"] >= 4
     assert prune_result["deleted_archives_count"] == 2
     assert stored["prune"]["deleted_archives"] == ["test-2026-06-01", "test-2026-06-02"]
     assert compact_result["freed_space"] == "12.6 GB"
+    assert compact_result["duration_seconds"] >= 2
     assert stored["compact"]["freed_space"] == "12.6 GB"
 
 

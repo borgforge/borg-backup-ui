@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import json
+import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,7 +140,7 @@ class CheckManager:
             proc,
             str(repository_key),
             mode,
-            datetime.now(),
+            datetime.now(timezone.utc),
             action=action,
             config=config,
             repository=repository,
@@ -252,7 +253,8 @@ class CheckManager:
         finished_at = datetime.now(timezone.utc)
         started_at = state.start_time
         if started_at.tzinfo is None:
-            started_at = started_at.replace(tzinfo=timezone.utc)
+            started_at = started_at.astimezone()
+        started_at = started_at.astimezone(timezone.utc)
         action_key = "verify_data" if state.action == "check" and state.mode == "verify_data" else state.action
         deleted_archives = []
         freed_space = ""
@@ -285,7 +287,7 @@ class CheckManager:
             "status": status,
             "started_at": started_at.isoformat(timespec="seconds").replace("+00:00", "Z"),
             "finished_at": finished_at.isoformat(timespec="seconds").replace("+00:00", "Z"),
-            "duration_seconds": max(0, int((finished_at - started_at).total_seconds())),
+            "duration_seconds": max(0, math.ceil((finished_at - started_at).total_seconds())),
             "exit_code": exit_code,
             "deleted_archives_count": len(deleted_archives),
             "deleted_archives": deleted_archives[:50],

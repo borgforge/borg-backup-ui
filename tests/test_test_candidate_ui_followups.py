@@ -34,7 +34,8 @@ def test_storage_repository_details_focus_on_user_facing_metadata() -> None:
     assert "storage.location" not in details_panel
     assert "storage.repositoryPathLabel" in details_panel
     assert "storage.repositoryEncryption" in details_panel
-    assert "storage.repositoryRelativePath" in details_panel
+    assert "storage.repositoryRelativePath" not in details_panel
+    assert "'span-3'" in details_panel
     assert "storage.repositoryIdLabel" not in details_panel
     assert "storage.storageIdLabel" not in details_panel
     assert "storage.jobIdLabel" not in details_panel

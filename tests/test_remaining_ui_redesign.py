@@ -49,6 +49,10 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
     assert 'id="check-log-panel"' not in html
     assert 'id="check-log-output"' not in html
     assert "window.confirm" not in script
+    assert "renderStorageRepositoryActivities" not in script
+    assert "repositoryTabActivities" not in script
+    assert "storage.repositoryRelativePath', repo.relative_path" not in script
+    assert "storage.repositoryPathLabel', repo.path_display || repo.path_raw || '', 'span-3'" in script
 
 
 def test_repository_information_has_a_background_refresh_loop() -> None:

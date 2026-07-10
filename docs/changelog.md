@@ -44,6 +44,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Repository Manager steps keep their numbered status circles, and the review distinguishes the display name from the path inside the storage target.
   - Running backup jobs are recovered from persistent resource locks when the UI process has lost its in-memory state, including live-log continuation from the active log file.
   - Automatic repository information refreshes are deferred while a backup uses the same repository and are shown as in use instead of as a repository failure.
+  - Repository maintenance durations now use timezone-aware start times instead of collapsing valid runtimes to zero seconds.
+  - The repository overview removes the redundant storage-relative path field, gives the absolute path the remaining row width, and drops the duplicate Activities tab until a real multi-run audit history exists.
 
 ### Issue #180
 - Dashboard:
