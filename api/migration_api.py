@@ -330,7 +330,20 @@ def _migration_reason_from_state(migration_id: str, state: str, details: Dict[st
 
 def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
-    hidden_legacy_ids = {"storage_paths_v1", "restore_history_v1"}
+    hidden_legacy_ids = {
+        "storage_paths_v1",
+        "restore_history_v1",
+        "repository_objects_v1",
+        "repository_objects_v2",
+        "repository_objects_v3",
+        "repository_objects_v4",
+        "storage_objects_v1",
+        "storage_objects_v2",
+        "repository_runtime_v1",
+        "borg_keyfiles_v1",
+        "canonical_storage_profiles_v1",
+        "repository_contract_cleanup_v1",
+    }
     for migration_id in sorted(str(key) for key in migrations.keys()):
         if migration_id in hidden_legacy_ids:
             continue
@@ -363,7 +376,7 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
 
     config_dir = _config_dir(ui_config)
     conf_file = config_dir / "backup.conf"
-    settings_file = config_dir / "settings.json"
+    storage_file = config_dir / "storages.json"
     jobs_dir = config_dir / "jobs"
     migration_state = _read_migration_state(config_dir)
     example_keys = _read_example_keys(config_dir)
@@ -395,12 +408,12 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
             details={"jobs_dir": str(jobs_dir)},
         ),
         _status_item(
-            "setup_settings_json",
-            "Profile data in settings.json",
-            "applied" if settings_file.exists() else "pending",
-            "settings.json exists." if settings_file.exists() else "settings.json is missing.",
+            "setup_storage_inventory",
+            "Canonical storage inventory",
+            "applied" if storage_file.exists() else "pending",
+            "storages.json exists." if storage_file.exists() else "storages.json is missing.",
             category="setup",
-            details={"settings_file": str(settings_file), "profile_count": profile_count},
+            details={"storage_file": str(storage_file), "profile_count": profile_count},
         ),
         _status_item(
             "config_backup_conf_schema",

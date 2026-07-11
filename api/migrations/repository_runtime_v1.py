@@ -285,16 +285,24 @@ def apply(config: dict) -> dict[str, Any]:
     removed_keys = _legacy_conf_keys([line.rstrip("\n") for line in conf_lines])
     next_conf = "".join(line for line in conf_lines if _assignment_key(line) not in removed_keys)
 
+    baseline_backup = str(config.get("_CANONICAL_BASELINE_BACKUP_DIR") or "").strip()
+    owns_backup = not baseline_backup
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    backup_dir = _data_root(config) / "config" / "migration-backups" / f"{MIGRATION_ID}-{timestamp}"
-    backup_dir.mkdir(parents=True, exist_ok=False)
+    backup_dir = (
+        Path(baseline_backup)
+        if baseline_backup
+        else _data_root(config) / "config" / "migration-backups" / f"{MIGRATION_ID}-{timestamp}"
+    )
+    if owns_backup:
+        backup_dir.mkdir(parents=True, exist_ok=False)
     try:
-        for path in job_files:
-            shutil.copy2(path, backup_dir / path.name)
-        if conf.is_file():
-            shutil.copy2(conf, backup_dir / conf.name)
+        if owns_backup:
+            for path in job_files:
+                shutil.copy2(path, backup_dir / path.name)
+            if conf.is_file():
+                shutil.copy2(conf, backup_dir / conf.name)
         repository_file = _repositories_file(config)
-        if repository_file.is_file():
+        if owns_backup and repository_file.is_file():
             shutil.copy2(repository_file, backup_dir / repository_file.name)
 
         for path, payload in prepared.items():
@@ -303,22 +311,27 @@ def apply(config: dict) -> dict[str, Any]:
             _write_atomic(conf, next_conf)
         _write_atomic(repository_file, json.dumps(repository_payload, ensure_ascii=False, indent=2) + "\n")
     except Exception as exc:
-        for path in job_files:
-            source = backup_dir / path.name
-            if source.is_file():
-                shutil.copy2(source, path)
-        conf_backup = backup_dir / conf.name
-        if conf_backup.is_file():
-            shutil.copy2(conf_backup, conf)
-        repository_backup = backup_dir / _repositories_file(config).name
-        if repository_backup.is_file():
-            shutil.copy2(repository_backup, _repositories_file(config))
+        if owns_backup:
+            for path in job_files:
+                source = backup_dir / path.name
+                if source.is_file():
+                    shutil.copy2(source, path)
+            conf_backup = backup_dir / conf.name
+            if conf_backup.is_file():
+                shutil.copy2(conf_backup, conf)
+            repository_backup = backup_dir / _repositories_file(config).name
+            if repository_backup.is_file():
+                shutil.copy2(repository_backup, _repositories_file(config))
         return {
             "migration_id": MIGRATION_ID,
             "introduced_in": INTRODUCED_IN,
             "runner": "central_migration_registry",
             "status": "failed",
-            "details": {"error": str(exc), "rollback": "restored", "backup_dir": str(backup_dir)},
+            "details": {
+                "error": str(exc),
+                "rollback": "restored" if owns_backup else "delegated_to_baseline",
+                "backup_dir": str(backup_dir),
+            },
         }
 
     return {

@@ -6,6 +6,16 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #194
+- Canonical data-model migration and diagnostics:
+  - Replaced the PR #189 repository/storage migration chain with one baseline migration, `canonical_data_model_v1`.
+  - The baseline accepts the published legacy layout, partially migrated test installations and already canonical installations while preserving existing canonical IDs.
+  - Migration phases now create one rollback snapshot, validate all storage/repository/job links and remove `settings.json` only after the final model passes validation.
+  - Migration progress, phase results, affected files, object-ID changes, validation and rollback outcomes are written to the central state and JSONL audit files without secrets.
+  - System Health hides superseded intermediate migration entries and reports the canonical storage inventory instead of requiring `settings.json`.
+  - Support bundles now include sanitized storage/repository inventories plus central migration state and audit details.
+  - Added direct legacy-to-canonical, partial-upgrade, idempotence, rollback and separate-process locking regression coverage.
+
 ### Issue #193
 - Canonical storage runtime cutover:
   - SMB backup, restore, restore-test and mount operations now consume the resolved storage object from `storages.json` instead of `SMB_PROFILES_JSON` or profile arrays in `settings.json`.
@@ -41,7 +51,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #190
 - Security:
   - Borg keyfile encryption now uses a persistent, plugin-owned `BORG_KEYS_DIR` with restrictive directory and file permissions across backup, restore, restore tests and repository maintenance.
-  - Added an audited one-time migration that copies only exact repository-ID matches from Borg's legacy default key directory.
+  - Keyfile encryption was introduced with the canonical model and therefore writes directly to persistent storage; no unnecessary legacy-key migration is registered.
   - Existing keyfile repositories can import a `borg key export`; unrelated or conflicting keyfiles are never overwritten.
   - Encrypted job and secrets backups now include Borg keyfiles, while normal job exports and support bundles never contain key material.
   - Permanent repository deletion removes an exact unreferenced persistent keyfile and records the result in the lifecycle audit log.
@@ -104,7 +114,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Repository and storage inventories now use a shared cross-process lock, restrictive permissions, and durable atomic writes with `fsync` and `os.replace`.
   - Existing malformed inventories stop safely and are reported through API errors and System Health instead of being interpreted as empty data.
   - Job metadata and repository link changes are persisted as a recoverable transaction with rollback on write failures.
-  - `storages.json` is the canonical source for Local, USB, SMB, and SSH profiles; the one-time migration creates rollback backups and removes duplicate profile arrays from `settings.json`.
+  - `storages.json` is the canonical source for Local, USB, SMB, and SSH profiles; the baseline migration creates a rollback backup and removes the obsolete `settings.json` after validation.
   - Settings now provides managed Local Profiles for arbitrary Unraid pools below `/mnt`, while broad collection roots and unsafe paths remain blocked.
   - Effective repository paths are derived from the current storage target and relative repository path.
 

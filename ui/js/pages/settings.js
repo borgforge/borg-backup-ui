@@ -1549,9 +1549,9 @@ function _migrationRegistryText(item, field) {
       title: 'registryJobsDirTitle',
       reason: status === 'applied' ? 'registryJobsDirPresent' : 'registryJobsDirMissing',
     },
-    setup_settings_json: {
-      title: 'registrySettingsTitle',
-      reason: status === 'applied' ? 'registrySettingsPresent' : 'registrySettingsMissing',
+    setup_storage_inventory: {
+      title: 'registryStorageInventoryTitle',
+      reason: status === 'applied' ? 'registryStorageInventoryPresent' : 'registryStorageInventoryMissing',
     },
     config_backup_conf_schema: {
       title: 'registrySchemaTitle',
@@ -1564,6 +1564,10 @@ function _migrationRegistryText(item, field) {
     notification_events_v1: {
       title: 'registryNotificationEventsTitle',
       reason: status === 'applied' ? 'registryNotificationEventsApplied' : (status === 'not_needed' ? 'registryNotificationEventsCurrent' : 'registryNotificationEventsPending'),
+    },
+    canonical_data_model_v1: {
+      title: 'registryCanonicalModelTitle',
+      reason: status === 'applied' ? 'registryCanonicalModelApplied' : (status === 'not_needed' ? 'registryCanonicalModelCurrent' : (status === 'failed' ? 'registryCanonicalModelFailed' : 'registryCanonicalModelPending')),
     },
     borg_keyfiles_v1: {
       title: 'registryBorgKeyfilesTitle',

@@ -95,6 +95,22 @@ def _add_text_file(zf: zipfile.ZipFile, arcname: str, path: Path, *, max_bytes: 
         return False
 
 
+def _add_jsonl_file(zf: zipfile.ZipFile, arcname: str, path: Path, *, max_bytes: int = 262144) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        rows = []
+        for line in _read_text_tail(path, max_bytes=max_bytes).splitlines():
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                rows.append(sanitize_text(line))
+                continue
+            rows.append(json.dumps(sanitize_data(payload), ensure_ascii=False))
+        zf.writestr(arcname, "\n".join(rows) + ("\n" if rows else ""))
+        return True
+    except OSError:
+        return False
 def _safe_json_file(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8", errors="replace"))
@@ -180,6 +196,19 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
         _record_added("config/expanded-conf.sanitized.json")
         _add_json(zf, "config/settings.sanitized.json", settings_payload)
         _record_added("config/settings.sanitized.json")
+        for filename in ("storages.json", "repositories.json", "migration-state.json"):
+            source = root / "config" / filename
+            if source.is_file():
+                arcname = f"config/{source.stem}.sanitized.json"
+                _add_json(zf, arcname, _safe_json_file(source))
+                _record_added(arcname)
+            else:
+                _record_skipped(source, "not_found_or_unreadable")
+        migration_log = root / "config" / "migrations.log.jsonl"
+        if _add_jsonl_file(zf, "config/migrations.log.sanitized.jsonl", migration_log, max_bytes=262144):
+            _record_added("config/migrations.log.sanitized.jsonl")
+        else:
+            _record_skipped(migration_log, "not_found_or_unreadable")
         _add_json(zf, "system/health.json", health)
         _record_added("system/health.json")
 

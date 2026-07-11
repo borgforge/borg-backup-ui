@@ -166,7 +166,8 @@ Da die Anwendung noch nicht öffentlich über Community Apps veröffentlicht ist
 sollte keine dauerhafte Legacy-Parallelwelt aufgebaut werden. Trotzdem dürfen
 vorhandene Tester-Daten nicht verloren gehen.
 
-Die zentrale Migration führt folgende Schritte idempotent aus:
+Die Baseline-Migration `canonical_data_model_v1` führt folgende Schritte
+idempotent aus:
 
 1. Alle Job-Metadaten lesen.
 2. Für jeden eindeutigen Repository-Pfad oder jede eindeutige URI ein
@@ -177,13 +178,15 @@ Die zentrale Migration führt folgende Schritte idempotent aus:
    Job-Metadaten entfernen.
 6. Übergangsfelder aus dem Repository-Inventar entfernen, nachdem Storage- und
    Repository-Objekte vollständig verknüpft sind.
-7. Migration und Cleanup im zentralen Migrationslog protokollieren.
+7. Das Endmodell vollständig validieren.
+8. Erst nach erfolgreicher Validierung die obsolete `settings.json` entfernen.
+9. Migration und Cleanup im zentralen Migrationslog protokollieren.
 
 Beispiel:
 
 ```json
 {
-  "migration_id": "repository_objects_v1",
+  "migration_id": "canonical_data_model_v1",
   "status": "applied",
   "actions": [
     "created repository repo_appdata_usb_7f3c45ab from job appdata_usb",
@@ -192,8 +195,16 @@ Beispiel:
 }
 ```
 
+Unterstützte Ausgangszustände sind der aktuelle Stable-Stand mit Legacy-Jobs,
+teilweise migrierte Testinstallationen und bereits kanonische Installationen.
+Bestehende kanonische Storage- und Repository-IDs bleiben erhalten. Vor der
+ersten Änderung wird unter `config/migration-backups/` ein Lauf-Backup erstellt.
+Schlägt eine Phase oder die Abschlussvalidierung fehl, werden die betroffenen
+Dateien zurückgespielt und der Fehler samt Phase und Rollback-Ergebnis im Audit
+protokolliert.
+
 Wichtig: Die Migration darf keine Borg-Repositories initialisieren, löschen oder
-verändern. Sie erstellt nur UI-Metadaten.
+verändern. Sie erstellt und bereinigt nur UI-Metadaten.
 
 ## 7. Datenablage
 
@@ -207,6 +218,17 @@ gespeichert:
 Storage Targets liegen entsprechend in `storages.json`. Effektive lokale Pfade
 oder SSH-URIs werden zur Laufzeit aus `storage_key` und `relative_path`
 aufgelöst und nicht redundant persistiert.
+
+Allgemeine Anwendungseinstellungen verbleiben in `backup.conf`. Eine separate
+`settings.json` ist nach erfolgreicher Baseline-Migration nicht mehr Bestandteil
+des Datenmodells.
+
+Der kompakte aktuelle Zustand steht in `config/migration-state.json`. Der
+append-only Audit mit Lauf-ID, Phasen, Objektänderungen, Validierung und
+Rollback-Ergebnis steht in `config/migrations.log.jsonl`. Die früheren
+Teil-Migrations-IDs können bei Testinstallationen als historische Einträge
+vorhanden bleiben, steuern aber keine neuen Läufe mehr und werden in der
+normalen Systemzustandsansicht ausgeblendet.
 
 ## 8. API-Vertrag
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 API_ROOT = ROOT / "api"
@@ -11,20 +12,17 @@ for path in (API_ROOT, RUNTIME_LIB):
 import config_api  # noqa: E402
 import schedule_api  # noqa: E402
 import runtime_recovery  # noqa: E402
+from inventory_store import InventoryCorruptError  # noqa: E402
 from status import BackupStatus  # noqa: E402
 
 
-def test_corrupt_settings_json_falls_back_to_empty_payload(tmp_path: Path):
-    settings = tmp_path / "config" / "settings.json"
-    settings.parent.mkdir(parents=True)
-    settings.write_text("{broken-json", encoding="utf-8")
+def test_corrupt_storage_inventory_is_not_silently_treated_as_empty(tmp_path: Path):
+    storages = tmp_path / "config" / "storages.json"
+    storages.parent.mkdir(parents=True)
+    storages.write_text("{broken-json", encoding="utf-8")
 
-    payload = config_api.read_settings_payload({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
-
-    assert payload["schema_version"] == 1
-    assert payload["usb_profiles"] == []
-    assert payload["smb_profiles"] == []
-    assert payload["storage_profiles"] == []
+    with pytest.raises(InventoryCorruptError, match="malformed JSON"):
+        config_api.read_settings_payload({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
 
 
 def test_corrupt_schedules_json_returns_empty_schedule_set(tmp_path: Path):

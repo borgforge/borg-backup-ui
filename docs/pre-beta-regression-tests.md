@@ -21,7 +21,9 @@ pytest -q
 | Borg subprocess handling | Restore download timeout defaults/minimum and bounded stderr collection | `tests/test_restore_download_safety.py` | Confirm a real large download still streams and can be cancelled |
 | Docker/VM runtime recovery | Runtime recovery state creation, stale warning exposure, manual acknowledgement, selected Docker stop/start behavior | `tests/test_runtime_recovery.py`, `tests/test_docker_manager_runtime.py` | On Unraid, run one Docker-selected backup and one VM-selected backup |
 | Secret masking and support bundle safety | Common secret formats, repository test output, support bundle config/jobs/status/log sanitizing | `tests/test_security_utils.py`, `tests/test_support_bundle_api.py` | Inspect a real support bundle before sharing it externally |
-| Corrupt config/status recovery | Corrupt `settings.json`, `schedules.json`, `runtime-recovery.json`, and backup status files degrade safely | `tests/test_corrupt_config_recovery.py` | None required unless a real user reports damaged config files |
+| Corrupt config/status recovery | Corrupt canonical inventories, `schedules.json`, `runtime-recovery.json`, and backup status files degrade safely | `tests/test_corrupt_config_recovery.py`, `tests/test_inventory_consistency.py` | None required unless a real user reports damaged config files |
+| Canonical data-model migration | Stable legacy, partial test and canonical source states; ID preservation; idempotence; rollback; central audit | `tests/test_canonical_data_model_migration.py`, `tests/test_repository_objects.py` | Install the final candidate over one tester's stable installation and inspect System Health |
+| Cross-process inventory safety | Two independent processes serialize repository updates without corrupting JSON or losing unrelated rows | `tests/test_inventory_consistency.py` | None beyond the final tester upgrade |
 | Notifications and reminders | Event routing, ntfy payloads, reminder state cleanup, overdue calculation and sender/diagnostic alignment | `tests/test_notification_events.py`, `tests/test_ntfy_api.py` | Trigger one real ntfy test notification and one overdue-reminder check |
 
 ## Notes

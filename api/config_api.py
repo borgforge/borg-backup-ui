@@ -196,10 +196,6 @@ def _conf_backup_dir(ui_config: dict) -> Path:
     return Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backups"
 
 
-def _settings_file(ui_config: dict) -> Path:
-    return Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "settings.json"
-
-
 def _default_settings_payload() -> Dict[str, Any]:
     return {
         "schema_version": _SETTINGS_SCHEMA_VERSION,

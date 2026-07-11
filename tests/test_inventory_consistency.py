@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 import threading
+import multiprocessing
+import time
 from pathlib import Path
 
 import pytest
@@ -40,6 +42,18 @@ def _repository(key: str) -> dict:
         "relative_path": key,
         "path_raw": f"/mnt/backup/{key}",
     }
+
+
+def _process_repository_update(root: str, key: str, ready, start) -> None:
+    config = {"BACKUP_SCRIPTS_DIR": root}
+    ready.put(key)
+    start.wait(timeout=10)
+
+    def update(store):
+        time.sleep(0.1)
+        return {"repositories": [*store["repositories"], _repository(key)]}
+
+    update_repository_store(config, update)
 
 
 @pytest.mark.parametrize(
@@ -139,6 +153,30 @@ def test_concurrent_repository_updates_do_not_lose_rows(tmp_path: Path) -> None:
     assert errors == []
     assert {row["repository_key"] for row in read_repository_store(config)["repositories"]} == {
         f"repo_{index}" for index in range(8)
+    }
+
+
+def test_separate_process_repository_updates_do_not_corrupt_or_lose_rows(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    write_repository_store(config, {"repositories": []})
+    context = multiprocessing.get_context("spawn")
+    ready = context.Queue()
+    start = context.Event()
+    processes = [
+        context.Process(target=_process_repository_update, args=(str(tmp_path), f"repo_process_{index}", ready, start))
+        for index in range(2)
+    ]
+    for process in processes:
+        process.start()
+    assert {ready.get(timeout=10) for _ in processes} == {"repo_process_0", "repo_process_1"}
+    start.set()
+    for process in processes:
+        process.join(timeout=15)
+        assert process.exitcode == 0
+    payload = read_repository_store(config)
+    assert {row["repository_key"] for row in payload["repositories"]} == {
+        "repo_process_0",
+        "repo_process_1",
     }
 
 

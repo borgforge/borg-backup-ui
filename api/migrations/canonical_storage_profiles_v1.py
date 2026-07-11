@@ -74,14 +74,21 @@ def apply(config: dict) -> dict[str, Any]:
             "status": "not_required",
             "details": {"profile_counts": counts},
         }
+    baseline_backup = str(config.get("_CANONICAL_BASELINE_BACKUP_DIR") or "").strip()
+    owns_backup = not baseline_backup
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    backup_dir = _config_dir(config) / "migration-backups" / f"{MIGRATION_ID}-{timestamp}-{uuid.uuid4().hex[:8]}"
-    backup_dir.mkdir(parents=True, exist_ok=False)
+    backup_dir = (
+        Path(baseline_backup)
+        if baseline_backup
+        else _config_dir(config) / "migration-backups" / f"{MIGRATION_ID}-{timestamp}-{uuid.uuid4().hex[:8]}"
+    )
+    if owns_backup:
+        backup_dir.mkdir(parents=True, exist_ok=False)
     old_settings = settings_path.read_bytes() if settings_path.exists() else None
     old_storages = storage_path.read_bytes() if storage_path.exists() else None
-    if old_settings is not None:
+    if owns_backup and old_settings is not None:
         atomic_write_bytes(backup_dir / "settings.json", old_settings)
-    if old_storages is not None:
+    if owns_backup and old_storages is not None:
         atomic_write_bytes(backup_dir / "storages.json", old_storages)
     updated: dict[str, list[str]] = {}
     try:
@@ -96,14 +103,15 @@ def apply(config: dict) -> dict[str, Any]:
         cleaned = {"schema_version": int(settings.get("schema_version") or 1)}
         atomic_write_bytes(settings_path, (json.dumps(cleaned, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
     except Exception:
-        if old_settings is None:
-            settings_path.unlink(missing_ok=True)
-        else:
-            atomic_write_bytes(settings_path, old_settings)
-        if old_storages is None:
-            storage_path.unlink(missing_ok=True)
-        else:
-            atomic_write_bytes(storage_path, old_storages)
+        if owns_backup:
+            if old_settings is None:
+                settings_path.unlink(missing_ok=True)
+            else:
+                atomic_write_bytes(settings_path, old_settings)
+            if old_storages is None:
+                storage_path.unlink(missing_ok=True)
+            else:
+                atomic_write_bytes(storage_path, old_storages)
         raise
     return {
         "migration_id": MIGRATION_ID,

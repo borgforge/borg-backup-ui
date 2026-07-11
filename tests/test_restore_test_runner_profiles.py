@@ -42,17 +42,6 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
     monkeypatch.setattr(runner, "SCRIPT_DIR", script_dir)
     monkeypatch.setenv("BORG_UI_DATA_ROOT", str(tmp_path / "runtime"))
 
-    (config_dir / "settings.json").write_text(
-        json.dumps({
-            "schema_version": 1,
-            "usb_profiles": [
-                {"key": "usb-5tb", "name": "USB-5TB", "mount_path": "/mnt/disks/WCJ54TRQ"},
-            ],
-            "smb_profiles": [],
-            "storage_profiles": [],
-        }),
-        encoding="utf-8",
-    )
     (jobs_dir / "testjob_usb.json").write_text(
         json.dumps({
             "schema_version": 2,
@@ -119,17 +108,6 @@ def test_restore_runner_discovers_smb_profile_repository(tmp_path, monkeypatch) 
     monkeypatch.setattr(runner, "SCRIPT_DIR", script_dir)
     monkeypatch.setenv("BORG_UI_DATA_ROOT", str(tmp_path / "runtime"))
 
-    (config_dir / "settings.json").write_text(
-        json.dumps({
-            "schema_version": 1,
-            "usb_profiles": [],
-            "smb_profiles": [
-                {"key": "nas-a", "name": "NAS A", "mount_path": "/mnt/remotes/nas-a"},
-            ],
-            "storage_profiles": [],
-        }),
-        encoding="utf-8",
-    )
     (jobs_dir / "photos_smb.json").write_text(
         json.dumps({
             "schema_version": 2,

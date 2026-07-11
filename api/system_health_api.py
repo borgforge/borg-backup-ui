@@ -364,7 +364,6 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
     cifs_supported, cifs_state = _probe_cifs_support()
 
     config_dir = root / "config"
-    settings_json = config_dir / "settings.json"
     api_token_file = config_dir / ".api-token"
     ui_auth_file = config_dir / ".ui-auth.json"
 
@@ -395,8 +394,6 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         secret_candidates.append(api_token_file)
     if ui_auth_file.exists():
         secret_candidates.append(ui_auth_file)
-    if settings_json.exists():
-        secret_candidates.append(settings_json)
 
     bad_perm = []
     for p in secret_candidates:
