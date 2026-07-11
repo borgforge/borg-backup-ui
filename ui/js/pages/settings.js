@@ -304,6 +304,34 @@ function renderSettingsMenu(tabs) {
   }).join('');
 }
 
+function activateSettingsTab(tabKey) {
+  const tabs = getSettingsTabs();
+  const active = tabs.find((tab) => tab.key === tabKey) || tabs[0];
+  if (!active) return;
+  const previousTab = settingsState.activeTab;
+  settingsState.activeTab = active.key;
+  settingsState.profileEditing = '';
+
+  document.querySelectorAll('#settings-content [data-settings-tab]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.settingsTab === active.key);
+  });
+  document.querySelectorAll('#settings-content [data-settings-panel]').forEach((panel) => {
+    panel.classList.toggle('hidden', panel.dataset.settingsPanel !== active.key);
+  });
+
+  const workspaceHeader = document.querySelector('#settings-content .settings-workspace-header');
+  const title = workspaceHeader?.querySelector('h2');
+  const description = workspaceHeader?.querySelector('div > span');
+  if (title) title.textContent = active.label;
+  if (description) description.textContent = active.description;
+
+  const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(active.key);
+  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab);
+  if (SETTINGS_PROFILE_CONFIG[previousTab]) syncSettingsProfileManager(previousTab);
+  if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
+  _updateUnsavedChangesUi();
+}
+
 const SETTINGS_PROFILE_CONFIG = {
   local: {
     rowsId: 'local-profiles-rows',
@@ -3583,9 +3611,7 @@ async function onSettingsContentClick(event) {
       await refreshSettings();
     }
     const tab = tabBtn.dataset.settingsTab || 'general';
-    settingsState.activeTab = tab;
-    settingsState.profileEditing = '';
-    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    activateSettingsTab(tab);
     return;
   }
   const advancedTabBtn = event.target.closest('[data-settings-advanced-tab]');

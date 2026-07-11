@@ -17,6 +17,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Repository and storage inventories reuse immutable in-process snapshots while their on-disk signatures remain unchanged.
   - Settings derives profile job counts from the canonical repository snapshot instead of rescanning every job for each profile type.
   - Static job metadata is cached with filesystem-signature invalidation while live run state and latest backup status remain uncached.
+  - Settings menu switches reuse the existing page DOM instead of rebuilding all hidden panels and reloading backup history on every click.
   - Added regression coverage for the non-blocking capability probe.
 
 ### Issue #190

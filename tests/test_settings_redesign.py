@@ -122,6 +122,13 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert "white-space: nowrap" in css
 
 
+def test_settings_primary_tab_switch_reuses_existing_dom() -> None:
+    script = _read("ui/js/pages/settings.js")
+    assert "function activateSettingsTab(tabKey)" in script
+    assert "panel.dataset.settingsPanel !== active.key" in script
+    assert "activateSettingsTab(tab);" in script
+
+
 def test_settings_menu_translations_live_in_settings_namespace() -> None:
     import json
 
