@@ -9,8 +9,9 @@ and repository model before PR #189 is merged.
 - Tester: ____________________
 - Unraid version: ____________________
 - Source plugin version: `2026.07.05.1531` / ____________________
-- Test Channel candidate: `2026.07.12.0025`
-- Package MD5: `8845126c5a3abbe11fe3814be0ecb74a`
+- Direct-migration candidate: `2026.07.12.0025`
+- Current regression candidate: `2026.07.12.0100`
+- Current package MD5: `10207653e927d7aa5610a6846f586656`
 - Result: [ ] PASS  [ ] FAIL
 - Notes / observed issues: ________________________________________________
 
