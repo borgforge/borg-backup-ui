@@ -80,6 +80,8 @@ def test_job_discovery_cache_reuses_metadata_and_detects_atomic_update(tmp_path:
         return original(*args, **kwargs)
 
     monkeypatch.setattr(jobs_api, "_discover_jobs_uncached", counted)
+    clock = iter((0.0, 0.0, jobs_api._JOB_DISCOVERY_CACHE_TTL_SECONDS + 1.0))
+    monkeypatch.setattr(jobs_api.time, "monotonic", lambda: next(clock))
 
     assert jobs_api.discover_jobs(tmp_path)[0].name == "Flash"
     assert jobs_api.discover_jobs(tmp_path)[0].name == "Flash"

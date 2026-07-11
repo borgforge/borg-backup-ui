@@ -1396,57 +1396,65 @@ def save_job_repository_transaction(
     repo_path = repositories_file(config)
     target = Path(metadata_path)
     previous = Path(previous_metadata_path) if previous_metadata_path else None
-    with inventory_lock(repo_path.parent):
-        old_target = target.read_bytes() if target.exists() else None
-        old_previous = None
-        if previous is not None and previous != target and previous.exists():
-            old_previous = previous.read_bytes()
-        old_repo = repo_path.read_bytes() if repo_path.exists() else None
-        try:
-            link_repository_to_job(
-                config,
-                repository_key,
-                job_key,
-                previous_repository_key=previous_repository_key,
-                previous_job_key=previous_job_key,
-            )
-            atomic_write_json(target, metadata)
+    try:
+        with inventory_lock(repo_path.parent):
+            old_target = target.read_bytes() if target.exists() else None
+            old_previous = None
             if previous is not None and previous != target and previous.exists():
-                previous.unlink()
-        except Exception:
-            if old_repo is None:
-                repo_path.unlink(missing_ok=True)
-            else:
-                atomic_write_bytes(repo_path, old_repo)
-            if old_target is None:
-                target.unlink(missing_ok=True)
-            else:
-                atomic_write_bytes(target, old_target)
-            if previous is not None and previous != target:
-                if old_previous is None:
-                    previous.unlink(missing_ok=True)
+                old_previous = previous.read_bytes()
+            old_repo = repo_path.read_bytes() if repo_path.exists() else None
+            try:
+                link_repository_to_job(
+                    config,
+                    repository_key,
+                    job_key,
+                    previous_repository_key=previous_repository_key,
+                    previous_job_key=previous_job_key,
+                )
+                atomic_write_json(target, metadata)
+                if previous is not None and previous != target and previous.exists():
+                    previous.unlink()
+            except Exception:
+                if old_repo is None:
+                    repo_path.unlink(missing_ok=True)
                 else:
-                    atomic_write_bytes(previous, old_previous)
-            raise
+                    atomic_write_bytes(repo_path, old_repo)
+                if old_target is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    atomic_write_bytes(target, old_target)
+                if previous is not None and previous != target:
+                    if old_previous is None:
+                        previous.unlink(missing_ok=True)
+                    else:
+                        atomic_write_bytes(previous, old_previous)
+                raise
+    finally:
+        from jobs_api import invalidate_job_discovery_cache
+        invalidate_job_discovery_cache()
 
 
 def delete_job_metadata_transaction(config: dict, metadata_paths: list[Path], job_key: str) -> int:
     """Delete job metadata and unlink its repository references with rollback."""
     repo_path = repositories_file(config)
     paths = [Path(path) for path in metadata_paths]
-    with inventory_lock(repo_path.parent):
-        snapshots = {path: path.read_bytes() for path in paths if path.exists()}
-        old_repo = repo_path.read_bytes() if repo_path.exists() else None
-        try:
-            unlink_job_from_repositories(config, job_key)
-            for path in snapshots:
-                path.unlink()
-        except Exception:
-            if old_repo is None:
-                repo_path.unlink(missing_ok=True)
-            else:
-                atomic_write_bytes(repo_path, old_repo)
-            for path, content in snapshots.items():
-                atomic_write_bytes(path, content)
-            raise
+    try:
+        with inventory_lock(repo_path.parent):
+            snapshots = {path: path.read_bytes() for path in paths if path.exists()}
+            old_repo = repo_path.read_bytes() if repo_path.exists() else None
+            try:
+                unlink_job_from_repositories(config, job_key)
+                for path in snapshots:
+                    path.unlink()
+            except Exception:
+                if old_repo is None:
+                    repo_path.unlink(missing_ok=True)
+                else:
+                    atomic_write_bytes(repo_path, old_repo)
+                for path, content in snapshots.items():
+                    atomic_write_bytes(path, content)
+                raise
+    finally:
+        from jobs_api import invalidate_job_discovery_cache
+        invalidate_job_discovery_cache()
     return len(snapshots)
