@@ -156,7 +156,49 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
     assert rows[0]["job_name"] == "Appdata"
     assert rows[0]["storage_key"].startswith("storage_local_")
     assert rows[0]["used_by"] == ["appdata_local"]
+    assert rows[0]["path_raw"] == "/mnt/backup/borg-backup-appdata"
+    assert rows[0]["path_display"] == "/mnt/backup/borg-backup-appdata"
     assert data["storages"][0]["storage_key"] == rows[0]["storage_key"]
+
+
+def test_storage_data_derives_remote_repository_path_from_storage(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Offsite",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "identity": "storagebox-profile:storage-1",
+        "profile_key": "storage-1",
+        "host": "backup.example.test",
+        "port": "23",
+        "user": "backup-user",
+        "base_path": "./backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_appdata_storagebox_test",
+        "display_name": "Appdata Offsite",
+        "backup_type": "appdata",
+        "location": "storagebox",
+        "storage_type": "ssh",
+        "storage_key": "storage_storagebox_test",
+        "relative_path": "borg-backup-appdata",
+        "repository_name": "borg-backup-appdata",
+        "job_name": "Appdata",
+        "encryption": "repokey-blake2",
+        "used_by": ["appdata_storagebox"],
+    }]})
+
+    data = get_repositories_data(config)
+    row = data["groups"]["storagebox"][0]
+
+    expected = "ssh://backup-user@backup.example.test:23/./backup/borg-backup-appdata"
+    assert row["path_raw"] == expected
+    assert row["path_display"] == expected
+    assert row["storage_name"] == "Offsite"
+    persisted = read_repository_store(config)["repositories"][0]
+    assert "path_raw" not in persisted
+    assert "path_display" not in persisted
 
 
 def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch):

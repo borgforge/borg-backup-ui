@@ -337,7 +337,7 @@ def normalize_repositories(rows: Any, *, preserve_legacy: bool = False) -> list[
 
 def build_repository_groups(config: dict) -> dict[str, list[dict[str, Any]]]:
     groups: dict[str, list[dict[str, Any]]] = {"local": [], "usb": [], "smb": [], "storagebox": []}
-    for repo in read_repository_store(config)["repositories"]:
+    for repo in read_repository_store_for_api(config)["repositories"]:
         location = str(repo.get("location") or "").strip().lower()
         if location not in groups:
             groups[location] = []

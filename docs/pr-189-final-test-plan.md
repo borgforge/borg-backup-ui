@@ -16,14 +16,14 @@ and repository model before PR #189 is merged.
 
 ## 1. Preparation
 
-- [ ] Create and download a normal configuration backup.
-- [ ] Download a support bundle before the update.
-- [ ] Record the current job count: ______
-- [ ] Record the current storage-target count: ______
-- [ ] Record the current repository count: ______
-- [ ] Record all job schedules.
-- [ ] Record all Restore Test policies, intervals and levels.
-- [ ] Record the repository assigned to every job.
+- [X] Create and download a normal configuration backup.
+- [X] Download a support bundle before the update.
+- [X] Record the current job count: 11
+- [X] Record the current storage-target count: 3
+- [X] Record the current repository count: 11
+- [X] Record all job schedules.
+- [X] Record all Restore Test policies, intervals and levels.
+- [X] Record the repository assigned to every job.
 
 ## 2. Automated gate
 
@@ -39,22 +39,22 @@ Perform this section on at least one installation that still uses the current
 Stable layout. A system that already ran an intermediate PR #189 migration is
 not sufficient for this particular check.
 
-- [ ] Install Test Channel candidate `2026.07.12.0025` over Stable.
-- [ ] Confirm the application starts and shows the candidate version.
-- [ ] Open **Settings > Advanced > System health and migration**.
-- [ ] Confirm `canonical_data_model_v1` is `applied` or `not applicable`.
-- [ ] Confirm no migration phase is failed or pending.
-- [ ] Confirm no rollback error is shown.
-- [ ] Confirm `settings.json` was removed after successful validation.
-- [ ] Confirm `storages.json` is readable and contains all storage targets.
-- [ ] Confirm `repositories.json` is readable and contains all repositories.
-- [ ] Confirm all job JSON files use schema version 2 and a `repository_key`.
-- [ ] Confirm all previous jobs still exist.
-- [ ] Confirm schedules are unchanged.
-- [ ] Confirm Restore Test policies, intervals and levels are unchanged.
-- [ ] Restart the plugin or Unraid.
-- [ ] Confirm the migration is not applied a second time.
-- [ ] Confirm no duplicate storage targets or repositories were created.
+- [X] Install Test Channel candidate `2026.07.12.0025` over Stable.
+- [X] Confirm the application starts and shows the candidate version.
+- [X] Open **Settings > Advanced > System health and migration**.
+- [X] Confirm `canonical_data_model_v1` is `applied` or `not applicable`.
+- [X] Confirm no migration phase is failed or pending.
+- [X] Confirm no rollback error is shown.
+- [X] Confirm `settings.json` was removed after successful validation.
+- [X] Confirm `storages.json` is readable and contains all storage targets.
+- [X] Confirm `repositories.json` is readable and contains all repositories.
+- [X] Confirm all job JSON files use schema version 2 and a `repository_key`.
+- [X] Confirm all previous jobs still exist.
+- [X] Confirm schedules are unchanged.
+- [X] Confirm Restore Test policies, intervals and levels are unchanged.
+- [X] Restart the plugin or Unraid.
+- [X] Confirm the migration is not applied a second time.
+- [X] Confirm no duplicate storage targets or repositories were created.
 
 ## 4. Storage targets and profiles
 
