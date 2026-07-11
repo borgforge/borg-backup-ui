@@ -568,6 +568,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if m == "GET" and (
             p.startswith("/api/status")
             or p.startswith("/api/system-health")
+            or p.startswith("/api/notification-reminders")
             or p.startswith("/api/jobs")
             or p.startswith("/api/schedules")
             or p.startswith("/api/storage")
@@ -669,6 +670,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 },
                 "/api/status": self._get_status,
                 "/api/system-health": self._get_system_health,
+                "/api/notification-reminders/diagnostics": self._get_notification_reminder_diagnostics,
                 "/api/jobs": self._get_jobs,
                 "/api/jobs/running": self._get_running,
                 "/api/schedules": self._get_schedules,
@@ -1506,6 +1508,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_settings(self) -> dict:
         from config_api import get_settings_data
         return get_settings_data(self.config)
+
+    def _get_notification_reminder_diagnostics(self) -> dict:
+        from notification_reminder_api import get_notification_reminder_diagnostics
+        return get_notification_reminder_diagnostics(self.config)
 
     def _get_settings_basic(self) -> dict:
         from config_api import get_settings_data

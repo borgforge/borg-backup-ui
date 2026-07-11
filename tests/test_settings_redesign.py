@@ -93,6 +93,7 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert "renderSettingsNotificationReminderDiagnostics" in script
     assert "renderSettingsPerRepoPassphrases" in script
     assert "systemHealth?.notification_reminders" in script
+    assert "/api/notification-reminders/diagnostics" in script
     assert "notificationReminderDiagnosticsHint" in script
     assert "backupOverdueDiagnostics" in script
     assert "restoreTestOverdueDiagnostics" in script

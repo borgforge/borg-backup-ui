@@ -200,13 +200,16 @@ def enrich_repository_display_fields(repo: dict[str, Any]) -> dict[str, Any]:
 
 def read_repository_store(config: dict) -> dict[str, Any]:
     path = repositories_file(config)
-    with inventory_lock(path.parent):
-        payload = read_inventory(path, collection_key="repositories", schema_version=SCHEMA_VERSION)
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "updated_at": str(payload.get("updated_at") or ""),
-            "repositories": normalize_repositories(payload["repositories"]),
-        }
+    from inventory_store import read_cached_inventory
+    payload = read_cached_inventory(path)
+    if payload is None:
+        with inventory_lock(path.parent):
+            payload = read_inventory(path, collection_key="repositories", schema_version=SCHEMA_VERSION)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "updated_at": str(payload.get("updated_at") or ""),
+        "repositories": normalize_repositories(payload["repositories"]),
+    }
 
 
 def read_repository_store_for_api(config: dict) -> dict[str, Any]:

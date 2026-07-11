@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import fcntl
 import json
 import os
@@ -27,6 +28,39 @@ class InventoryAccessError(InventoryError):
 _thread_state = threading.local()
 _process_locks: dict[str, threading.RLock] = {}
 _process_locks_guard = threading.Lock()
+_inventory_cache: dict[str, tuple[tuple[int, int, int], dict[str, Any]]] = {}
+_inventory_cache_guard = threading.Lock()
+
+
+def _inventory_signature(path: Path) -> tuple[int, int, int] | None:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return None
+    return (int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ino))
+
+
+def read_cached_inventory(path: Path) -> dict[str, Any] | None:
+    """Return a complete cached snapshot while the inventory file is unchanged."""
+    source = Path(path)
+    signature = _inventory_signature(source)
+    if signature is None:
+        return None
+    with _inventory_cache_guard:
+        cached = _inventory_cache.get(str(source))
+        if cached is None or cached[0] != signature:
+            return None
+        return copy.deepcopy(cached[1])
+
+
+def _cache_inventory(path: Path, payload: dict[str, Any]) -> None:
+    signature = _inventory_signature(Path(path))
+    if signature is None:
+        return
+    with _inventory_cache_guard:
+        _inventory_cache[str(Path(path))] = (signature, copy.deepcopy(payload))
 
 
 def _process_lock(path: Path) -> threading.RLock:
@@ -98,6 +132,7 @@ def read_inventory(path: Path, *, collection_key: str, schema_version: int) -> d
     rows = payload.get(collection_key)
     if not isinstance(rows, list):
         raise InventoryCorruptError(f"Inventory field '{collection_key}' must be a list: {source}")
+    _cache_inventory(source, payload)
     return payload
 
 
@@ -123,6 +158,7 @@ def atomic_write_inventory(path: Path, payload: dict[str, Any]) -> None:
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
+        _cache_inventory(target, payload)
     except OSError as exc:
         raise InventoryAccessError(f"Inventory could not be written atomically: {target}") from exc
     finally:

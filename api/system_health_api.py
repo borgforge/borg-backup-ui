@@ -416,17 +416,6 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "entries": [],
             "error": str(exc),
         }
-    try:
-        from notification_reminder_api import get_notification_reminder_diagnostics
-        notification_reminders = get_notification_reminder_diagnostics(config)
-    except Exception as exc:
-        notification_reminders = {
-            "enabled": False,
-            "error": str(exc),
-            "backup_overdue": {"enabled": False, "channels": [], "items": []},
-            "restore_test_overdue": {"enabled": False, "channels": [], "items": []},
-        }
-
     return {
         "checks": {
             "data_root_ok": root.is_dir(),
@@ -457,7 +446,6 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "migration_registry": migration_registry,
         "job_health": job_health,
         "runtime_recovery": runtime_recovery,
-        "notification_reminders": notification_reminders,
         "secrets_permissions": {
             "ok": secrets_permissions_ok,
             "message": perm_msg,

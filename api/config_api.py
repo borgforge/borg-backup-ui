@@ -892,9 +892,9 @@ def _resolve_storage_profile(ui_config: dict, profile_key: str = "") -> dict:
     return resolve_storage_profile(ui_config, profile_key)
 
 
-def get_storagebox_setup_status(ui_config: dict, profile_key: str = "") -> dict:
+def get_storagebox_setup_status(ui_config: dict, profile_key: str = "", *, probe_auth: bool = True) -> dict:
     from storagebox_api import get_storagebox_setup_status as _get_storagebox_setup_status
-    return _get_storagebox_setup_status(ui_config, profile_key=profile_key)
+    return _get_storagebox_setup_status(ui_config, profile_key=profile_key, probe_auth=probe_auth)
 
 
 def storagebox_key_status(ui_config: dict, profile_key: str = "") -> dict:
@@ -1079,7 +1079,9 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
         "storagebox_setup": {},
     }
     if include_storagebox_setup:
-        data["storagebox_setup"] = get_storagebox_setup_status(ui_config)
+        # Normal settings reads must never wait for a remote SSH probe. Explicit
+        # connection tests remain available through the storage profile actions.
+        data["storagebox_setup"] = get_storagebox_setup_status(ui_config, probe_auth=False)
     ensure_settings_migrated(ui_config)
     from storage_objects_api import settings_profiles_from_storages
     canonical_profiles = settings_profiles_from_storages(ui_config)
@@ -1098,28 +1100,39 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
         }
         for row in canonical_profiles.get("local_profiles", [])
     ]
+    usb_storage_keys = {
+        str(row.get("key") or "").strip().lower(): str(row.get("storage_key") or "")
+        for row in canonical_profiles.get("usb_profiles", [])
+    }
     data["usb_profiles"] = _normalize_usb_profile_rows(canonical_profiles.get("usb_profiles", []))
-    usb_refs = get_usb_profile_job_refs(ui_config)
     data["usb_profiles"] = [
         {
             **row,
-            "jobs_count": len(usb_refs.get(str(row.get("key") or "").strip().lower(), [])),
-            "job_refs": usb_refs.get(str(row.get("key") or "").strip().lower(), [])[:10],
+            "storage_key": usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""),
+            "jobs_count": len(set(refs_by_storage.get(usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), []))),
+            "job_refs": sorted(set(refs_by_storage.get(usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), [])))[:10],
         }
         for row in data["usb_profiles"]
     ]
+    ssh_storage_keys = {
+        str(row.get("key") or "").strip().lower(): str(row.get("storage_key") or "")
+        for row in canonical_profiles.get("storage_profiles", [])
+    }
     data["storage_profiles"] = _normalize_storage_profile_rows(canonical_profiles.get("storage_profiles", []))
-    storage_refs = get_storage_profile_job_refs(ui_config)
     data["storage_profiles"] = [
         {
             **row,
-            "jobs_count": len(storage_refs.get(str(row.get("key") or "").strip().lower(), [])),
-            "job_refs": storage_refs.get(str(row.get("key") or "").strip().lower(), [])[:10],
+            "storage_key": ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""),
+            "jobs_count": len(set(refs_by_storage.get(ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), []))),
+            "job_refs": sorted(set(refs_by_storage.get(ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), [])))[:10],
         }
         for row in data["storage_profiles"]
     ]
     smb_profiles: List[Dict[str, str]] = []
-    smb_refs = get_smb_profile_job_refs(ui_config)
+    smb_storage_keys = {
+        str(row.get("key") or "").strip().lower(): str(row.get("storage_key") or "")
+        for row in canonical_profiles.get("smb_profiles", [])
+    }
     try:
         raw_rows = normalize_smb_profile_rows(
             canonical_profiles.get("smb_profiles", [])
@@ -1128,9 +1141,11 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
         for row in raw_rows:
             pf = str(row.get("password_file", "")).strip()
             key = str(row.get("key", "")).strip()
-            refs = smb_refs.get(key.lower(), [])
+            storage_key = smb_storage_keys.get(key.lower(), "")
+            refs = sorted(set(refs_by_storage.get(storage_key, [])))
             smb_profiles.append({
                 "key": key,
+                "storage_key": storage_key,
                 "name": str(row.get("name", "")).strip(),
                 "server": str(row.get("server", "")).strip(),
                 "share": str(row.get("share", "")).strip(),

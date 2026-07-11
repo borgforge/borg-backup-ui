@@ -60,6 +60,40 @@ def test_dead_resource_lock_is_not_reported_as_running(tmp_path: Path):
     assert is_resource_active(config, "repo:/mnt/backup/appdata") is False
 
 
+def test_job_discovery_cache_reuses_metadata_and_detects_atomic_update(tmp_path: Path, monkeypatch):
+    jobs_dir = tmp_path / "config" / "jobs"
+    jobs_dir.mkdir(parents=True)
+    metadata = jobs_dir / "flash_local.json"
+    payload = {
+        "job_key": "flash_local",
+        "name": "Flash",
+        "backup_type": "flash",
+        "location": "local",
+    }
+    metadata.write_text(json.dumps(payload), encoding="utf-8")
+    jobs_api.invalidate_job_discovery_cache()
+    original = jobs_api._discover_jobs_uncached
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(True)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(jobs_api, "_discover_jobs_uncached", counted)
+
+    assert jobs_api.discover_jobs(tmp_path)[0].name == "Flash"
+    assert jobs_api.discover_jobs(tmp_path)[0].name == "Flash"
+    assert calls == [True]
+
+    payload["name"] = "Updated Flash"
+    replacement = jobs_dir / ".flash_local.json.new"
+    replacement.write_text(json.dumps(payload), encoding="utf-8")
+    replacement.replace(metadata)
+
+    assert jobs_api.discover_jobs(tmp_path)[0].name == "Updated Flash"
+    assert calls == [True, True]
+
+
 def test_runner_resource_lock_records_live_log_path(tmp_path: Path):
     log_file = tmp_path / "backup.log"
     lock_set = ResourceLockSet(

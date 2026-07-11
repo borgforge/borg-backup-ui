@@ -12,6 +12,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - CIFS support is now detected through local kernel and `mount.cifs` capability checks without a three-second request timeout.
   - System Health now loads the canonical repository/storage inventory once per request instead of once per job.
   - Dashboard, sidebar and Settings now share one in-flight System Health request instead of downloading the same diagnostics repeatedly.
+  - Split the large notification-reminder diagnostics from the general System Health response and load it through a dedicated Settings endpoint.
+  - Normal Settings reads no longer run remote SSH authentication or target-detection probes; connection checks remain explicit user actions.
+  - Repository and storage inventories reuse immutable in-process snapshots while their on-disk signatures remain unchanged.
+  - Settings derives profile job counts from the canonical repository snapshot instead of rescanning every job for each profile type.
+  - Static job metadata is cached with filesystem-signature invalidation while live run state and latest backup status remain uncached.
   - Added regression coverage for the non-blocking capability probe.
 
 ### Issue #190

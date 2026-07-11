@@ -246,6 +246,7 @@ def test_system_health_surfaces_corrupt_canonical_inventory(tmp_path: Path) -> N
     assert health["checks"]["canonical_inventories_ok"] is False
     assert health["canonical_inventories"]["errors"][0]["inventory"] == "repositories"
     assert "malformed JSON" in health["canonical_inventories"]["errors"][0]["error"]
+    assert "notification_reminders" not in health
 
 
 def test_cifs_probe_uses_local_capabilities_without_external_process(monkeypatch) -> None:

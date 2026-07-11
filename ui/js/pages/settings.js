@@ -94,11 +94,12 @@ async function refreshSettings() {
   hideEl('settings-message');
   _renderSettingsLoading();
   try {
-    const [res, verRes, healthRes, authRes] = await Promise.all([
+    const [res, verRes, healthRes, authRes, reminderRes] = await Promise.all([
       fetch('/api/settings'),
       fetch('/api/version'),
       window.BBUI.core.fetchSystemHealth(true).catch(() => null),
       fetch('/api/auth/status'),
+      fetch('/api/notification-reminders/diagnostics').catch(() => null),
     ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -110,13 +111,16 @@ async function refreshSettings() {
           .then((uRes) => uRes.ok ? uRes.json() : { users: [] })
           .catch(() => ({ users: [] }))
       : Promise.resolve({ users: [] });
-    if (settingsState.storageboxConnOk === null && data?.storagebox_setup) {
+    if (settingsState.storageboxConnOk === null && data?.storagebox_setup?.auth_checked !== false) {
       settingsState.storageboxConnOk = !!data.storagebox_setup.auth_ok;
       settingsState.storageboxConnMsg = data.storagebox_setup.auth_ok
         ? settingsT('storagebox.sshReachable')
         : settingsT('storagebox.sshFailed');
     }
-    const health = healthRes && typeof healthRes === 'object' ? healthRes : null;
+    const health = healthRes && typeof healthRes === 'object' ? { ...healthRes } : null;
+    if (health && reminderRes?.ok) {
+      health.notification_reminders = await reminderRes.json();
+    }
     settingsState.data = data;
     settingsState.systemHealth = health;
     renderSettings(data, health);

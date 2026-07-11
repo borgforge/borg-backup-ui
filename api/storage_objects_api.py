@@ -172,13 +172,16 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
 
 def read_storage_store(config: dict) -> dict[str, Any]:
     path = storages_file(config)
-    with inventory_lock(path.parent):
-        payload = read_inventory(path, collection_key="storages", schema_version=SCHEMA_VERSION)
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "updated_at": str(payload.get("updated_at") or ""),
-            "storages": normalize_storages(payload["storages"]),
-        }
+    from inventory_store import read_cached_inventory
+    payload = read_cached_inventory(path)
+    if payload is None:
+        with inventory_lock(path.parent):
+            payload = read_inventory(path, collection_key="storages", schema_version=SCHEMA_VERSION)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "updated_at": str(payload.get("updated_at") or ""),
+        "storages": normalize_storages(payload["storages"]),
+    }
 
 
 def write_storage_store(config: dict, store: dict[str, Any]) -> None:

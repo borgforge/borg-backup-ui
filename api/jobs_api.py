@@ -6,6 +6,7 @@ Subprozesse gestartet; deren stdout wird live gepuffert und per SSE ausgeliefert
 """
 
 import json
+import copy
 import os
 import re
 import shutil
@@ -21,6 +22,10 @@ from typing import Dict, Generator, List, Optional
 DEFAULT_DATA_ROOT = Path("/boot/config/borg-backup")
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _RUNTIME_MODES = {"all", "selected", "none"}
+_JOB_DISCOVERY_CACHE_TTL_SECONDS = 5.0
+_job_discovery_cache: dict[str, dict] = {}
+_job_discovery_cache_lock = threading.Lock()
+_job_metadata_migrations: set[str] = set()
 
 
 def _validate_job_key(job_key: str) -> str:
@@ -530,7 +535,7 @@ def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
 
 # ── Job-Erkennung ─────────────────────────────────────────────────────────────
 
-def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
+def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
     """
     Finds backup jobs from canonical JSON metadata.
     """
@@ -616,8 +621,6 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
 
     jobs_by_key: Dict[str, JobInfo] = {}
     root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
-    migrate_jobs_metadata_dir(scripts_dir, root)
-
     # ── Wizard-Metadaten (prioritär) ──────────────────────────────────────────
     meta_dirs = get_jobs_meta_dirs(scripts_dir, root)
     for meta_dir in meta_dirs:
@@ -693,6 +696,65 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
             ))
 
     return list(jobs_by_key.values())
+
+
+def _job_metadata_signature(meta_dir: Path, scripts_dir: Path, *, include_files: bool) -> tuple:
+    def _stat_signature(path: Path) -> tuple[int, int, int]:
+        try:
+            stat = path.stat()
+            return (int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ino))
+        except OSError:
+            return (0, 0, 0)
+
+    signature: list = [_stat_signature(meta_dir), _stat_signature(scripts_dir)]
+    if include_files and meta_dir.is_dir():
+        signature.append(tuple(
+            (path.name, *_stat_signature(path))
+            for path in sorted(meta_dir.glob("*.json"))
+        ))
+    return tuple(signature)
+
+
+def invalidate_job_discovery_cache() -> None:
+    """Invalidate cached static job metadata after an explicit metadata change."""
+    with _job_discovery_cache_lock:
+        _job_discovery_cache.clear()
+
+
+def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
+    """Read static job metadata once while keeping external changes observable."""
+    root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
+    meta_dir = get_jobs_meta_dir(scripts_dir, root)
+    cache_key = f"{scripts_dir.resolve()}::{root.resolve()}"
+    with _job_discovery_cache_lock:
+        if cache_key not in _job_metadata_migrations:
+            migrate_jobs_metadata_dir(scripts_dir, root)
+            _job_metadata_migrations.add(cache_key)
+
+    now = time.monotonic()
+    quick_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=False)
+    with _job_discovery_cache_lock:
+        cached = _job_discovery_cache.get(cache_key)
+        if cached and cached["quick_signature"] == quick_signature and now < cached["expires_at"]:
+            return copy.deepcopy(cached["jobs"])
+
+    full_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=True)
+    with _job_discovery_cache_lock:
+        cached = _job_discovery_cache.get(cache_key)
+        if cached and cached["full_signature"] == full_signature:
+            cached["quick_signature"] = quick_signature
+            cached["expires_at"] = now + _JOB_DISCOVERY_CACHE_TTL_SECONDS
+            return copy.deepcopy(cached["jobs"])
+
+    jobs = _discover_jobs_uncached(scripts_dir, root)
+    with _job_discovery_cache_lock:
+        _job_discovery_cache[cache_key] = {
+            "quick_signature": quick_signature,
+            "full_signature": full_signature,
+            "expires_at": now + _JOB_DISCOVERY_CACHE_TTL_SECONDS,
+            "jobs": copy.deepcopy(jobs),
+        }
+    return jobs
 
 
 def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:

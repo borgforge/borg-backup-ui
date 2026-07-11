@@ -79,6 +79,42 @@ def test_inventory_files_keep_restrictive_permissions(tmp_path: Path) -> None:
     assert storages_file(config).stat().st_mode & 0o777 == 0o600
 
 
+def test_repository_inventory_cache_avoids_reparse_and_detects_external_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _config(tmp_path)
+    path = repositories_file(config)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        '{"schema_version":1,"updated_at":"first","repositories":[]}',
+        encoding="utf-8",
+    )
+    original_reader = repositories_api.read_inventory
+    reads: list[Path] = []
+
+    def counted_reader(source, **kwargs):
+        reads.append(Path(source))
+        return original_reader(source, **kwargs)
+
+    monkeypatch.setattr(repositories_api, "read_inventory", counted_reader)
+
+    assert read_repository_store(config)["updated_at"] == "first"
+    assert read_repository_store(config)["updated_at"] == "first"
+    assert reads == [path]
+
+    path.write_text(
+        '{"schema_version":1,"updated_at":"externally-updated","repositories":[]}',
+        encoding="utf-8",
+    )
+    assert read_repository_store(config)["updated_at"] == "externally-updated"
+    assert reads == [path, path]
+
+    path.write_text('{"broken":', encoding="utf-8")
+    with pytest.raises(InventoryCorruptError, match="malformed JSON"):
+        read_repository_store(config)
+
+
 def test_concurrent_repository_updates_do_not_lose_rows(tmp_path: Path) -> None:
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": []})
