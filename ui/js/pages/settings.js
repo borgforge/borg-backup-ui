@@ -136,9 +136,8 @@ async function refreshSettings() {
     }
     usersRequest.then((uData) => {
       settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
-      if (settingsState.activeTab === 'users' && settingsState.data) {
-        renderSettings(settingsState.data, settingsState.systemHealth);
-      }
+      const usersPanel = document.querySelector('#settings-content [data-settings-panel="users"]');
+      if (usersPanel) usersPanel.innerHTML = renderSettingsUsers();
     });
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
