@@ -598,7 +598,7 @@ function renderSettingsLocalProfiles(rows) {
     <div class="settings-body">
       <div class="text-muted" style="font-size:12px;margin-bottom:10px">${settingsT('profiles.localDescription')}</div>
       <div id="local-profiles-rows" style="display:grid;gap:8px">${content}</div>
-      <input type="hidden" id="local-profiles-json" data-key="LOCAL_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <input type="hidden" id="local-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:flex-end;margin-top:10px">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="local-profile-add">${settingsT('profiles.addLocal')}</button>
       </div>
@@ -691,7 +691,7 @@ function renderSettingsUsbProfiles(rows) {
       <div id="usb-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
-      <input type="hidden" id="usb-profiles-json" data-key="USB_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <input type="hidden" id="usb-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-check">${settingsT('common.checkStatus')}</button>
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-add">${settingsT('profiles.addUsb')}</button>
@@ -816,7 +816,7 @@ function renderSettingsStorageProfiles(rows) {
       <div id="storage-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
-      <input type="hidden" id="storage-profiles-json" data-key="STORAGE_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <input type="hidden" id="storage-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="storage-profile-add">${settingsT('profiles.addStorage')}</button>
       </div>
@@ -949,7 +949,7 @@ function renderSettingsSmbProfiles(rows) {
       <div id="smb-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
-      <input type="hidden" id="smb-profiles-json" data-key="SMB_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <input type="hidden" id="smb-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-check">${settingsT('common.checkStatus')}</button>
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-add">${settingsT('profiles.addSmb')}</button>
@@ -1027,6 +1027,15 @@ function renderSettingsSystemHealth(data) {
     : (Array.isArray(inventories.errors)
       ? inventories.errors.map((row) => `${row.path}: ${row.error}`).join(' | ')
       : settingsT('health.inventoriesFailed'));
+  const assignments = data?.repository_assignments || {};
+  const assignmentProblems = [
+    ...(Array.isArray(assignments.errors) ? assignments.errors : []),
+    ...(Array.isArray(assignments.usage_mismatches) ? assignments.usage_mismatches : []),
+  ];
+  const assignmentDetail = assignments.ok
+    ? settingsT('health.repositoryAssignmentsOk')
+    : (assignmentProblems.map((row) => String(row?.message || row?.job_key || row?.repository_key || '')).filter(Boolean).join(' | ')
+      || settingsT('health.repositoryAssignmentsFailed'));
   const checks = [
     [settingsT('health.dataRoot'), data?.checks?.data_root_ok, data?.paths?.data_root || '—'],
     [settingsT('health.jobsPath'), data?.checks?.jobs_path_ok, data?.paths?.jobs || '—'],
@@ -1035,6 +1044,7 @@ function renderSettingsSystemHealth(data) {
     [settingsT('health.cifsSupport'), data?.checks?.cifs_supported, cifsDetail],
     [settingsT('health.secretPermissions'), data?.checks?.secrets_permissions_ok, permDetail],
     [settingsT('health.canonicalInventories'), data?.checks?.canonical_inventories_ok, inventoryDetail],
+    [settingsT('health.repositoryAssignments'), data?.checks?.repository_assignments_ok, assignmentDetail],
   ];
   const migrationSummary = _buildMigrationSummary(data || {});
   const lastEffectiveTs = _formatHealthTimestamp(migrationSummary.lastEffectiveRun) || settingsT('health.noEffectiveChanges');
@@ -4428,6 +4438,7 @@ async function saveSettings() {
   syncStorageProfilesHiddenInput();
   syncRestoreAllowedRootsHiddenInput({ normalizeInputs: true });
   const updates = {};
+  const profileUpdates = {};
   const activePanel = document.querySelector('#settings-content .settings-tab-panel:not(.hidden)');
   const activeTab = activePanel?.dataset?.settingsPanel || settingsState.activeTab || 'general';
   activePanel?.querySelectorAll('[data-key]').forEach(el => {
@@ -4442,9 +4453,10 @@ async function saveSettings() {
     const key = el.dataset.ntfySecretKey;
     if (key && String(el.value || '').trim()) updates[key] = el.value;
   });
-  if (activeTab === 'usb') updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());
-  if (activeTab === 'smb') updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());
-  if (activeTab === 'storagebox') updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());
+  if (activeTab === 'local') profileUpdates.local = getLocalProfilesFromDom();
+  if (activeTab === 'usb') profileUpdates.usb = getUsbProfilesFromDom();
+  if (activeTab === 'smb') profileUpdates.smb = getSmbProfilesFromDom();
+  if (activeTab === 'storagebox') profileUpdates.storagebox = getStorageProfilesFromDom();
   if (Object.prototype.hasOwnProperty.call(updates, 'GLOBAL_DATA_DIR') && !String(updates.GLOBAL_DATA_DIR || '').trim()) {
     showMsg('settings-message', 'error', settingsT('forms.dataDirRequired'));
     return false;
@@ -4477,6 +4489,7 @@ async function saveSettings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         updates,
+        profile_updates: profileUpdates,
         smb_cleanup_keys: settingsState.smbCleanupKeys || [],
         smb_secret_cleanup_keys: settingsState.smbSecretCleanupKeys || [],
       }),

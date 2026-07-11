@@ -29,6 +29,18 @@ def _jobs_dir(config: dict) -> Path:
     return _data_root(config) / "config" / "jobs"
 
 
+def _read_legacy_settings(config: dict) -> dict[str, Any]:
+    """Read the pre-canonical profile source only inside this migration."""
+    path = _data_root(config) / "config" / "settings.json"
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+
+
 def _job_files(config: dict) -> list[Path]:
     jobs_dir = _jobs_dir(config)
     if not jobs_dir.is_dir():
@@ -151,11 +163,7 @@ def _upsert_repository_for_legacy_job(config: dict, job: dict[str, Any]) -> str:
     repository["repository_key"] = key
 
     from storage_objects_api import repository_relative_path, upsert_storage_for_repository
-    try:
-        from config_api import read_settings_payload
-        settings = read_settings_payload(config)
-    except Exception:
-        settings = None
+    settings = _read_legacy_settings(config)
     storage = upsert_storage_for_repository(config, repository, settings=settings)
     if storage:
         repository["storage_key"] = str(storage.get("storage_key") or repository.get("storage_key") or "")

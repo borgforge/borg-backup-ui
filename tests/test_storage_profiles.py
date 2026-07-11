@@ -201,12 +201,16 @@ def test_settings_save_blocks_new_incomplete_storage_profile(tmp_path: Path, mon
     handler = borg_backup_ui.BackupUIHandler.__new__(borg_backup_ui.BackupUIHandler)
     handler.config = cfg
     handler._read_json_body = lambda: {
-        "updates": {
-            "STORAGE_PROFILES_JSON": (
-                '[{"key":"storage-1","name":"Neues SSH Profil","host":"","port":"23",'
-                '"user":"u123","base_path":"/./backup","target_type":"storagebox"}]'
-            )
-        }
+        "updates": {},
+        "profile_updates": {"storagebox": [{
+            "key": "storage-1",
+            "name": "Neues SSH Profil",
+            "host": "",
+            "port": "23",
+            "user": "u123",
+            "base_path": "/./backup",
+            "target_type": "storagebox",
+        }]},
     }
 
     with pytest.raises(ValueError, match="Storage profile 'storage-1' is incomplete"):

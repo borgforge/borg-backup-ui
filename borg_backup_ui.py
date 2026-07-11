@@ -2248,10 +2248,15 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from storage_objects_api import replace_profile_storages, settings_profiles_from_storages
         body = self._read_json_body()
         updates = body.get("updates", {})
+        profile_updates = body.get("profile_updates", {})
         smb_cleanup_keys = body.get("smb_cleanup_keys", [])
         smb_secret_cleanup_keys = body.get("smb_secret_cleanup_keys", [])
-        if not updates:
-            raise ValueError("updates is required")
+        if not isinstance(updates, dict):
+            raise ValueError("updates must be an object")
+        if not isinstance(profile_updates, dict):
+            raise ValueError("profile_updates must be an object")
+        if not updates and not profile_updates:
+            raise ValueError("updates or profile_updates is required")
         if smb_cleanup_keys is None:
             smb_cleanup_keys = []
         if smb_secret_cleanup_keys is None:
@@ -2271,15 +2276,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         except ValueError:
             prev_smb_rows = []
         smb_removed_keys: set[str] = set()
-        if "LOCAL_PROFILES_JSON" in updates:
-            try:
-                parsed_local = json.loads(str(updates.get("LOCAL_PROFILES_JSON", "[]") or "[]"))
-            except (json.JSONDecodeError, TypeError, ValueError) as exc:
-                raise ValueError("LOCAL_PROFILES_JSON is not valid JSON.") from exc
+        if "local" in profile_updates:
+            parsed_local = profile_updates.get("local")
             if not isinstance(parsed_local, list):
-                raise ValueError("LOCAL_PROFILES_JSON must be a list.")
+                raise ValueError("Local profile updates must be a list.")
             replace_profile_storages(self.config, "local", parsed_local)
-            updates.pop("LOCAL_PROFILES_JSON", None)
         if "GLOBAL_SMTP_PASSWORD" in updates:
             incoming_pw = str(updates.get("GLOBAL_SMTP_PASSWORD", ""))
             existing_pw = str(prev_conf.get("GLOBAL_SMTP_PASSWORD", ""))
@@ -2300,40 +2301,33 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             updates["STATUS_DIR"] = dirs["status"]
             updates["RESTORE_TEST_STATUS_DIR"] = dirs["restore_status"]
             updates["GLOBAL_BORG_CACHE_BASE"] = dirs["cache"]
-        if "SMB_PROFILES_JSON" in updates:
-            normalized_preview = validate_smb_profiles_json(str(updates.get("SMB_PROFILES_JSON", "[]")))
+        if "smb" in profile_updates:
+            raw_smb = profile_updates.get("smb")
+            if not isinstance(raw_smb, list):
+                raise ValueError("SMB profile updates must be a list.")
+            raw_smb_json = json.dumps(raw_smb, ensure_ascii=False)
+            normalized_preview = validate_smb_profiles_json(raw_smb_json)
             validate_smb_profile_usage_before_save(self.config, normalized_preview)
             prev_keys = {str(r.get("key") or "").strip().lower() for r in prev_smb_rows if str(r.get("key") or "").strip()}
             new_keys = {str(r.get("key") or "").strip().lower() for r in normalized_preview if str(r.get("key") or "").strip()}
             smb_removed_keys = {k for k in prev_keys if k not in new_keys}
-            normalized_smb = prepare_smb_profiles_for_save(str(updates.get("SMB_PROFILES_JSON", "[]")))
+            normalized_smb = prepare_smb_profiles_for_save(raw_smb_json)
             replace_profile_storages(self.config, "smb", normalized_smb)
-            updates.pop("SMB_PROFILES_JSON", None)
-        if "USB_PROFILES_JSON" in updates:
-            raw_usb = str(updates.get("USB_PROFILES_JSON", "[]") or "[]")
-            try:
-                parsed_usb = json.loads(raw_usb)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                raise ValueError("USB_PROFILES_JSON is not valid JSON.")
+        if "usb" in profile_updates:
+            parsed_usb = profile_updates.get("usb")
             if not isinstance(parsed_usb, list):
-                raise ValueError("USB_PROFILES_JSON must be a list.")
+                raise ValueError("USB profile updates must be a list.")
             normalized_usb = _normalize_usb_profile_rows(parsed_usb)
             validate_usb_profile_usage_before_save(self.config, normalized_usb)
             replace_profile_storages(self.config, "usb", normalized_usb)
-            updates.pop("USB_PROFILES_JSON", None)
-        if "STORAGE_PROFILES_JSON" in updates:
-            raw_storage = str(updates.get("STORAGE_PROFILES_JSON", "[]") or "[]")
-            try:
-                parsed_storage = json.loads(raw_storage)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                raise ValueError("STORAGE_PROFILES_JSON is not valid JSON.")
+        if "storagebox" in profile_updates:
+            parsed_storage = profile_updates.get("storagebox")
             if not isinstance(parsed_storage, list):
-                raise ValueError("STORAGE_PROFILES_JSON must be a list.")
+                raise ValueError("SSH profile updates must be a list.")
             normalized_storage = _normalize_storage_profile_rows(parsed_storage)
             validate_storage_profiles_complete_before_save(normalized_storage)
             validate_storage_profile_usage_before_save(self.config, normalized_storage)
             replace_profile_storages(self.config, "storagebox", normalized_storage)
-            updates.pop("STORAGE_PROFILES_JSON", None)
         storage_keys = {"STORAGEBOX_HOST", "STORAGEBOX_PORT", "STORAGEBOX_USER", "STORAGEBOX_BASE_PATH"}
         if storage_keys & set(updates.keys()):
             rows = canonical_profiles.get("storage_profiles") if isinstance(canonical_profiles.get("storage_profiles"), list) else []
@@ -3255,6 +3249,18 @@ def main():
         _log(f"Startup-Migrationen: status={startup_mig.get('status')}, applied={startup_mig.get('applied')}, skipped={startup_mig.get('skipped')}, failed={startup_mig.get('failed')}")
     except Exception as exc:
         _log(f"WARNING: Startup migrations skipped: {exc}")
+
+    try:
+        from repositories_api import reconcile_repository_usage
+        repository_usage = reconcile_repository_usage(config)
+        changed = repository_usage.get("reconciled_repository_keys", [])
+        _log(
+            "Repository-Zuordnungen: "
+            f"status={'ok' if repository_usage.get('ok') else 'attention'}, reconciled={len(changed)}, "
+            f"errors={len(repository_usage.get('errors', []))}"
+        )
+    except Exception as exc:
+        _log(f"WARNING: Repository assignments could not be reconciled: {exc}")
 
     lib_found = setup_lib_path(config)
     if not lib_found:

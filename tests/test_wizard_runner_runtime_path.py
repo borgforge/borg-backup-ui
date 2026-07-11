@@ -107,3 +107,46 @@ def test_runtime_repository_resolution_does_not_read_legacy_job_fields():
         source = path.read_text(encoding="utf-8")
         for marker in forbidden:
             assert marker not in source, f"{path.name} still reads legacy job metadata: {marker}"
+        assert "SMB_PROFILES_JSON" not in source, f"{path.name} still depends on legacy SMB profile transport"
+
+
+def test_wizard_runner_mounts_smb_from_resolved_storage_object(tmp_path: Path, monkeypatch) -> None:
+    mount_path = tmp_path / "smb-mount"
+    secret = tmp_path / ".smb-nas.cred"
+    secret.write_text("username=backup\npassword=secret\n", encoding="utf-8")
+    metadata = {
+        "location": "smb",
+        "mount_before_run": True,
+        "unmount_after_run": True,
+        "_resolved_storage": {
+            "storage_key": "storage_smb_nas",
+            "profile_key": "smb-nas",
+            "server": "nas.example.test",
+            "share": "backup",
+            "mount_path": str(mount_path),
+            "username": "backup",
+            "password_file": str(secret),
+            "vers": "3.0",
+        },
+    }
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if command[0] == "findmnt":
+            return type("FindmntResult", (), {"returncode": 1, "stdout": "", "stderr": ""})()
+        return Result()
+
+    monkeypatch.setattr(wizard_runner.subprocess, "run", fake_run)
+
+    session = wizard_runner._ensure_smb_mount({}, metadata)
+
+    assert session.mounted_by_runner is True
+    mount_command = next(command for command in calls if command[0] == "mount")
+    assert mount_command[:5] == ["mount", "-t", "cifs", "//nas.example.test/backup", str(mount_path)]
+    assert all("SMB_PROFILES_JSON" not in str(value) for value in mount_command)

@@ -71,9 +71,9 @@ def validate_smb_profiles_json(raw_value: str) -> List[Dict[str, str]]:
     try:
         decoded = json.loads(str(raw_value or "[]"))
     except (json.JSONDecodeError, TypeError, ValueError):
-        raise ValueError("SMB_PROFILES_JSON is not valid JSON.")
+        raise ValueError("SMB profile data is not valid JSON.")
     if not isinstance(decoded, list):
-        raise ValueError("SMB_PROFILES_JSON must be a list.")
+        raise ValueError("SMB profile data must be a list.")
     normalized = normalize_smb_profile_rows(decoded)
     if len(normalized) != len([x for x in decoded if isinstance(x, dict)]):
         raise ValueError("SMB profiles are incomplete. Required: name, server, share, mount path, username.")

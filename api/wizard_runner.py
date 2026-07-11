@@ -377,14 +377,6 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
         env["STORAGEBOX_PORT"] = str(storage.get("port", "23")).strip() or "23"
         env["STORAGEBOX_USER"] = str(storage.get("user", "")).strip()
         env["STORAGEBOX_BASE_PATH"] = str(storage.get("base_path", "/./backup")).strip() or "/./backup"
-    elif location == "smb":
-        try:
-            from config_api import read_settings_payload
-            payload = read_settings_payload({"BACKUP_SCRIPTS_DIR": str(backup_scripts_dir)})
-            smb_rows = payload.get("smb_profiles") if isinstance(payload.get("smb_profiles"), list) else []
-            env["SMB_PROFILES_JSON"] = json.dumps(smb_rows, ensure_ascii=False)
-        except Exception as exc:
-            raise ValueError(f"SMB profile resolution failed: {exc}")
 
     tu = _type_upper(type_id)
     cache_base = env.get("GLOBAL_BORG_CACHE_BASE", "/mnt/cache/borg-cache")
@@ -470,24 +462,6 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     return env, meta
 
 
-def _parse_smb_profiles(env: dict) -> dict[str, dict]:
-    raw = str(env.get("SMB_PROFILES_JSON", "[]") or "[]")
-    try:
-        rows = json.loads(raw)
-    except (json.JSONDecodeError, TypeError, ValueError):
-        rows = []
-    out: dict[str, dict] = {}
-    if isinstance(rows, list):
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            key = str(row.get("key", "")).strip()
-            if not key:
-                continue
-            out[key] = row
-    return out
-
-
 def _is_smb_mounted(mount_path: str) -> bool:
     if not mount_path:
         return False
@@ -515,22 +489,14 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
         return sess
 
     storage = meta.get("_resolved_storage") if isinstance(meta.get("_resolved_storage"), dict) else {}
-    profile_key = str(storage.get("profile_key") or "").strip()
-    if not profile_key:
-        raise ValueError("SMB storage target has no profile assignment.")
-
-    profiles = _parse_smb_profiles(env)
-    profile = profiles.get(profile_key)
-    if not isinstance(profile, dict):
-        raise ValueError(f"SMB profile not found: {profile_key}")
-
-    server = str(profile.get("server", "")).strip()
-    share = str(profile.get("share", "")).strip().lstrip("/")
-    mount_path = str(profile.get("mount_path", "")).strip()
-    username = str(profile.get("username", "")).strip()
-    password_file = str(profile.get("password_file", "")).strip()
+    profile_key = str(storage.get("profile_key") or storage.get("storage_key") or "").strip()
+    server = str(storage.get("server", "")).strip()
+    share = str(storage.get("share", "")).strip().lstrip("/")
+    mount_path = str(storage.get("mount_path") or storage.get("base_path") or "").strip()
+    username = str(storage.get("username", "")).strip()
+    password_file = str(storage.get("password_file", "")).strip()
     if not server or not share or not mount_path or not username or not password_file:
-        raise ValueError(f"SMB profile is incomplete: {profile_key}")
+        raise ValueError(f"SMB storage target is incomplete: {profile_key}")
 
     mp = Path(mount_path)
     mp.mkdir(parents=True, exist_ok=True)
@@ -545,21 +511,21 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
 
     src = f"//{server}/{share}"
     opts = [f"credentials={password_file}", "iocharset=utf8"]
-    vers = str(profile.get("vers", "")).strip() or "3.0"
+    vers = str(storage.get("vers", "")).strip() or "3.0"
     opts.append(f"vers={vers}")
-    sec = str(profile.get("sec", "")).strip()
+    sec = str(storage.get("sec", "")).strip()
     if sec:
         opts.append(f"sec={sec}")
-    uid = str(profile.get("uid", "")).strip()
+    uid = str(storage.get("uid", "")).strip()
     if uid:
         opts.append(f"uid={uid}")
-    gid = str(profile.get("gid", "")).strip()
+    gid = str(storage.get("gid", "")).strip()
     if gid:
         opts.append(f"gid={gid}")
-    file_mode = str(profile.get("file_mode", "")).strip()
+    file_mode = str(storage.get("file_mode", "")).strip()
     if file_mode:
         opts.append(f"file_mode={file_mode}")
-    dir_mode = str(profile.get("dir_mode", "")).strip()
+    dir_mode = str(storage.get("dir_mode", "")).strip()
     if dir_mode:
         opts.append(f"dir_mode={dir_mode}")
 

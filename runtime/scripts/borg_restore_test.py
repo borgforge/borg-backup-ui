@@ -160,6 +160,7 @@ def discover_repos(conf: dict) -> list:
             "passphrase_file": str(context.get("passphrase_ref") or ""),
             "usb_profile_key": profile_key if location == "usb" else "",
             "smb_profile_key": profile_key if location == "smb" else "",
+            "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
             "mount_before_run": bool(raw.get("mount_before_run", True)),
             "unmount_after_run": bool(raw.get("unmount_after_run", True)),
         })
@@ -297,22 +298,6 @@ class RestoreTest:
             return p.read_text(encoding="utf-8").strip()
         raise FileNotFoundError(f"Passphrase file not found: {pp_file}")
 
-    def _parse_smb_profiles(self) -> dict:
-        raw = str(self.conf.get("SMB_PROFILES_JSON", "[]") or "[]")
-        try:
-            rows = json.loads(raw)
-        except Exception:
-            rows = []
-        out = {}
-        if isinstance(rows, list):
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                key = str(row.get("key", "")).strip().lower()
-                if key:
-                    out[key] = row
-        return out
-
     @staticmethod
     def _is_smb_mounted(mount_path: str) -> bool:
         if not mount_path:
@@ -338,14 +323,11 @@ class RestoreTest:
         key = str(repo.get("smb_profile_key") or "").strip().lower()
         if not key:
             return False, "SMB profile is missing from the job"
-        profiles = self._parse_smb_profiles()
-        profile = profiles.get(key)
-        if not isinstance(profile, dict):
-            return False, f"SMB profile not found: {key}"
+        profile = repo.get("storage") if isinstance(repo.get("storage"), dict) else {}
 
         server = str(profile.get("server", "")).strip()
         share = str(profile.get("share", "")).strip().lstrip("/")
-        mount_path = str(profile.get("mount_path", "")).strip()
+        mount_path = str(profile.get("mount_path") or profile.get("base_path") or "").strip()
         vers = str(profile.get("vers", "")).strip() or "3.0"
         sec = str(profile.get("sec", "")).strip()
         if not server or not share or not mount_path:
@@ -380,7 +362,8 @@ class RestoreTest:
             return
         if not bool(repo.get("unmount_after_run", True)):
             return
-        mount_path = str(repo.get("path", "")).strip()
+        storage = repo.get("storage") if isinstance(repo.get("storage"), dict) else {}
+        mount_path = str(storage.get("mount_path") or storage.get("base_path") or "").strip()
         if not mount_path:
             return
         try:

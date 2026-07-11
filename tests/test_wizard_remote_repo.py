@@ -194,3 +194,33 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
 
     assert loaded["repo_path"] == "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms"
     assert loaded["source_paths"] == "/mnt/user/domains"
+
+
+def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypatch):
+    data_root = tmp_path / "borg-backup"
+    scripts_dir = data_root / "scripts"
+    jobs_dir = data_root / "config" / "jobs"
+    scripts_dir.mkdir(parents=True)
+    jobs_dir.mkdir(parents=True)
+    (jobs_dir / "photos_smb.json").write_text(json.dumps({
+        "schema_version": 2,
+        "job_key": "photos_smb",
+        "backup_type": "photos",
+        "location": "smb",
+        "name": "Photos",
+        "enabled": True,
+        "runner": "scriptless-wizard-runner",
+        "repository_key": "repo_missing",
+        "paths": {"default": "/mnt/user/photos"},
+    }), encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    write_storage_store(config, {"storages": []})
+    write_repository_store(config, {"repositories": []})
+    monkeypatch.setattr("config_api.read_expanded_conf", lambda _cfg: {})
+
+    loaded = load_job_for_wizard("photos_smb", scripts_dir, config)
+
+    assert loaded["repository_key"] == "repo_missing"
+    assert loaded["repo_path"] == ""
+    assert "Assigned repository was not found" in loaded["repository_assignment_error"]
+    assert loaded["source_paths"] == "/mnt/user/photos"

@@ -92,7 +92,10 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
 
     repos = runner.discover_repos({})
 
-    assert repos == [{
+    assert [{key: row[key] for key in (
+        "job_key", "type", "location", "path", "passphrase_file", "usb_profile_key",
+        "smb_profile_key", "mount_before_run", "unmount_after_run",
+    )} for row in repos] == [{
         "job_key": "testjob_usb",
         "type": "testjob",
         "location": "usb",
@@ -103,6 +106,7 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
         "mount_before_run": True,
         "unmount_after_run": True,
     }]
+    assert repos[0]["storage"]["storage_key"] == "storage_usb_test"
 
 
 def test_restore_runner_discovers_smb_profile_repository(tmp_path, monkeypatch) -> None:

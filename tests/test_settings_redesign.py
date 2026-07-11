@@ -233,9 +233,10 @@ def test_profile_pages_keep_local_save_and_block_in_use_deletes() -> None:
 def test_profile_save_uses_live_dom_payload_and_dynamic_empty_state() -> None:
     script = _read("ui/js/pages/settings.js")
 
-    assert "if (activeTab === 'usb') updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());" in script
-    assert "if (activeTab === 'smb') updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());" in script
-    assert "if (activeTab === 'storagebox') updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());" in script
+    assert "if (activeTab === 'usb') profileUpdates.usb = getUsbProfilesFromDom();" in script
+    assert "if (activeTab === 'smb') profileUpdates.smb = getSmbProfilesFromDom();" in script
+    assert "if (activeTab === 'storagebox') profileUpdates.storagebox = getStorageProfilesFromDom();" in script
+    assert "profile_updates: profileUpdates" in script
     assert "function updateUsbProfilesEmptyState()" in script
     assert 'id="usb-profiles-empty-state"' in script
     assert "empty.classList.toggle('hidden', getUsbProfilesFromDom().length > 0);" in script
@@ -265,5 +266,4 @@ def test_editable_backup_conf_keys_are_part_of_runtime_schema() -> None:
     literal_keys = set(re.findall(r"data-key=[\"']([A-Z][A-Z0-9_]*)[\"']", script))
     literal_keys.update(re.findall(r"f(?:text|num|mono|pwd)\('([A-Z][A-Z0-9_]*)'", script))
 
-    settings_json_keys = {"LOCAL_PROFILES_JSON", "USB_PROFILES_JSON", "SMB_PROFILES_JSON", "STORAGE_PROFILES_JSON"}
-    assert literal_keys - settings_json_keys <= schema_keys
+    assert literal_keys <= schema_keys

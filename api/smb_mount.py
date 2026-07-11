@@ -24,21 +24,6 @@ class SmbMountGuard:
             pass
 
 
-def _parse_smb_profiles(config: dict) -> dict[str, dict]:
-    from config_api import read_settings_payload
-
-    payload = read_settings_payload(config)
-    rows = payload.get("smb_profiles") if isinstance(payload.get("smb_profiles"), list) else []
-    out: dict[str, dict] = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        key = str(row.get("key", "")).strip()
-        if key:
-            out[key] = row
-    return out
-
-
 def _is_smb_mounted(mount_path: str) -> bool:
     if not mount_path:
         return False
@@ -71,6 +56,7 @@ def _job_smb_meta(config: dict, job_key: str) -> Optional[dict]:
         return None
     return {
         "smb_profile_key": smb_key,
+        "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
         "mount_before_run": bool(raw.get("mount_before_run", True)),
         "unmount_after_run": bool(raw.get("unmount_after_run", True)),
     }
@@ -98,11 +84,8 @@ def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
     if not bool(meta.get("mount_before_run", True)):
         return guard
 
-    profiles = _parse_smb_profiles(config)
     profile_key = str(meta.get("smb_profile_key") or "").strip()
-    profile = profiles.get(profile_key)
-    if not isinstance(profile, dict):
-        raise ValueError(f"SMB profile not found: {profile_key}")
+    profile = meta.get("storage") if isinstance(meta.get("storage"), dict) else {}
 
     server = str(profile.get("server", "")).strip()
     share = str(profile.get("share", "")).strip().lstrip("/")

@@ -332,6 +332,15 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
     except Exception as exc:
         inventory_errors.append({"inventory": "storages", "path": str(storages_inventory_file), "error": str(exc)})
     inventories_ok = not inventory_errors
+    try:
+        from repositories_api import repository_assignment_report
+        repository_assignments = repository_assignment_report(config)
+    except Exception as exc:
+        repository_assignments = {
+            "ok": False,
+            "errors": [{"code": "assignment_report_failed", "message": str(exc)}],
+            "usage_mismatches": [],
+        }
 
     migration = _read_migration_state(migration_file)
     migration_log = _read_migration_log(migration_log_file)
@@ -428,6 +437,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "cifs_state": cifs_state,
             "secrets_permissions_ok": secrets_permissions_ok,
             "canonical_inventories_ok": inventories_ok,
+            "repository_assignments_ok": bool(repository_assignments.get("ok", False)),
         },
         "paths": {
             "data_root": str(root),
@@ -456,4 +466,5 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "ok": inventories_ok,
             "errors": inventory_errors,
         },
+        "repository_assignments": repository_assignments,
     }

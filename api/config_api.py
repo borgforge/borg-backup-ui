@@ -105,8 +105,6 @@ _DEFAULTS: Dict[str, str] = {
     "NTFY_TIMEOUT_SECONDS": "15",
     "BORG_SSH_KEY": "/root/.ssh/id_rsa",
     "USB_MOUNT_PATH": "/mnt/disks/USB",
-    "USB_PROFILES_JSON": "[]",
-    "SMB_PROFILES_JSON": "[]",
     "STORAGEBOX_HOST": "",
     "STORAGEBOX_PORT": "23",
     "STORAGEBOX_USER": "",
@@ -432,21 +430,6 @@ def read_expanded_conf(ui_config: dict) -> dict:
         merged.update(load_config(conf_file))
     except ImportError:
         pass
-    payload = ensure_settings_migrated(ui_config)
-    merged["USB_PROFILES_JSON"] = json.dumps(payload.get("usb_profiles", []), ensure_ascii=False)
-    merged["SMB_PROFILES_JSON"] = json.dumps(payload.get("smb_profiles", []), ensure_ascii=False)
-    storage_rows = _normalize_storage_profile_rows(
-        payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []
-    )
-    if storage_rows:
-        active = storage_rows[0]
-        merged["STORAGEBOX_HOST"] = str(active.get("host", "")).strip()
-        merged["STORAGEBOX_PORT"] = str(active.get("port", "23")).strip() or "23"
-        merged["STORAGEBOX_USER"] = str(active.get("user", "")).strip()
-        merged["STORAGEBOX_BASE_PATH"] = _normalize_storage_base_path(str(active.get("base_path", "/./backup")))
-        active_key = str(active.get("ssh_key_path", "")).strip()
-        if active_key:
-            merged["BORG_SSH_KEY"] = active_key
     return merged
 
 
@@ -484,38 +467,29 @@ def read_raw_conf(ui_config: dict) -> dict:
 
 
 def read_settings_payload(ui_config: dict) -> Dict[str, Any]:
-    sf = _settings_file(ui_config)
-    if not sf.exists():
-        return _default_settings_payload()
-    try:
-        raw = json.loads(sf.read_text(encoding="utf-8"))
-    except Exception:
-        return _default_settings_payload()
-    if not isinstance(raw, dict):
-        return _default_settings_payload()
-    payload = _default_settings_payload()
-    payload["schema_version"] = int(raw.get("schema_version", _SETTINGS_SCHEMA_VERSION))
-    payload["usb_profiles"] = _normalize_usb_profile_rows(raw.get("usb_profiles") if isinstance(raw.get("usb_profiles"), list) else [])
-    smb_rows = raw.get("smb_profiles") if isinstance(raw.get("smb_profiles"), list) else []
-    payload["smb_profiles"] = normalize_smb_profile_rows(smb_rows)
-    payload["storage_profiles"] = _normalize_storage_profile_rows(
-        raw.get("storage_profiles") if isinstance(raw.get("storage_profiles"), list) else []
-    )
-    return payload
+    """Return the legacy-shaped UI view from the canonical storage inventory."""
+    from storage_objects_api import settings_profiles_from_storages
+
+    canonical = settings_profiles_from_storages(ui_config)
+    return {
+        "schema_version": _SETTINGS_SCHEMA_VERSION,
+        "usb_profiles": _normalize_usb_profile_rows(canonical.get("usb_profiles", [])),
+        "smb_profiles": normalize_smb_profile_rows(canonical.get("smb_profiles", [])),
+        "storage_profiles": _normalize_storage_profile_rows(canonical.get("storage_profiles", [])),
+    }
 
 
 def write_settings_payload(ui_config: dict, payload: Dict[str, Any]) -> None:
-    sf = _settings_file(ui_config)
-    sf.parent.mkdir(parents=True, exist_ok=True)
-    tmp = sf.with_suffix(".json.tmp")
-    data = {
-        "schema_version": _SETTINGS_SCHEMA_VERSION,
-        "usb_profiles": _normalize_usb_profile_rows(payload.get("usb_profiles") if isinstance(payload.get("usb_profiles"), list) else []),
-        "smb_profiles": normalize_smb_profile_rows(payload.get("smb_profiles") if isinstance(payload.get("smb_profiles"), list) else []),
-        "storage_profiles": _normalize_storage_profile_rows(payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []),
-    }
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(sf)
+    """Persist a legacy-shaped transfer payload into the canonical inventory."""
+    from storage_objects_api import replace_all_profile_storages, settings_profiles_from_storages
+
+    current = settings_profiles_from_storages(ui_config)
+    replace_all_profile_storages(ui_config, {
+        "local_profiles": current.get("local_profiles", []),
+        "usb_profiles": _normalize_usb_profile_rows(payload.get("usb_profiles", [])),
+        "smb_profiles": normalize_smb_profile_rows(payload.get("smb_profiles", [])),
+        "storage_profiles": _normalize_storage_profile_rows(payload.get("storage_profiles", [])),
+    })
 
 
 def _strip_profile_keys_from_conf(ui_config: dict) -> bool:
@@ -543,54 +517,9 @@ def _strip_profile_keys_from_conf(ui_config: dict) -> bool:
 
 
 def ensure_settings_migrated(ui_config: dict) -> Dict[str, Any]:
-    sf = _settings_file(ui_config)
-    if sf.exists():
-        payload = read_settings_payload(ui_config)
-        # enforce no legacy profile keys in backup.conf after migration
-        _strip_profile_keys_from_conf(ui_config)
-        return payload
-
-    conf = read_raw_conf(ui_config)
-    usb_rows: List[Dict[str, str]] = []
-    smb_rows: List[Dict[str, str]] = []
-    storage_rows: List[Dict[str, str]] = []
-    try:
-        decoded = json.loads(str(conf.get("USB_PROFILES_JSON", "[]") or "[]"))
-        if isinstance(decoded, list):
-            usb_rows = _normalize_usb_profile_rows(decoded)
-    except Exception:
-        usb_rows = []
-    try:
-        smb_rows = validate_smb_profiles_json(str(conf.get("SMB_PROFILES_JSON", "[]")))
-    except Exception:
-        smb_rows = []
-    try:
-        host = str(conf.get("STORAGEBOX_HOST", "")).strip()
-        user = str(conf.get("STORAGEBOX_USER", "")).strip()
-        if host and user:
-            storage_rows = _normalize_storage_profile_rows([{
-                "key": "storage-1",
-                "name": "Storagebox",
-                "host": host,
-                "port": str(conf.get("STORAGEBOX_PORT", "23")).strip() or "23",
-                "user": user,
-                "base_path": str(conf.get("STORAGEBOX_BASE_PATH", "/./backup")).strip() or "/./backup",
-                "target_type": "storagebox",
-                "ssh_key_path": str(conf.get("BORG_SSH_KEY", "")).strip(),
-            }])
-    except Exception:
-        storage_rows = []
-
-    payload = {
-        "schema_version": _SETTINGS_SCHEMA_VERSION,
-        "usb_profiles": usb_rows,
-        "smb_profiles": smb_rows,
-        "storage_profiles": storage_rows,
-    }
-    write_settings_payload(ui_config, payload)
+    """Compatibility facade after startup migrations have populated storages.json."""
     _strip_profile_keys_from_conf(ui_config)
-    out = read_settings_payload(ui_config)
-    return out
+    return read_settings_payload(ui_config)
 
 
 def _iter_conf_assignment_keys(lines: List[str]) -> List[str]:
@@ -1423,15 +1352,6 @@ def validate_runtime_config(ui_config: dict) -> dict:
             "key": "STORAGEBOX_PORT",
             "message": "STORAGEBOX_PORT is outside 1..65535.",
             "message_code": "config_storagebox_port",
-        })
-
-    try:
-        validate_smb_profiles_json(conf.get("SMB_PROFILES_JSON", "[]"))
-    except ValueError as exc:
-        warnings.append({
-            "key": "SMB_PROFILES_JSON",
-            "message": str(exc),
-            "message_code": "config_smb_profiles",
         })
 
     rt_level = str(conf.get("RESTORE_TEST_LEVEL", "2")).strip()

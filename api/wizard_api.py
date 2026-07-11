@@ -299,18 +299,26 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         except (json.JSONDecodeError, OSError, UnicodeDecodeError, TypeError, ValueError):
             continue
 
-    from repository_context import resolve_job_repository_context
+    from repository_context import RepositoryContextError, resolve_job_repository_context
     if not meta:
         raise ValueError(f"Wizard metadata is missing: {job_key}")
-    repository_context = resolve_job_repository_context(
-        ui_config,
-        job_key,
-        job=meta,
-        require_passphrase_file=False,
-    )
-    storage = repository_context["storage"]
-    profile_key = str(storage.get("profile_key") or "").strip()
-    repo_path = str(repository_context["repository_path"])
+    assignment_error = ""
+    try:
+        repository_context = resolve_job_repository_context(
+            ui_config,
+            job_key,
+            job=meta,
+            require_passphrase_file=False,
+        )
+        storage = repository_context["storage"]
+        profile_key = str(storage.get("profile_key") or "").strip()
+        repo_path = str(repository_context["repository_path"])
+    except RepositoryContextError as exc:
+        repository_context = {}
+        storage = {}
+        profile_key = ""
+        repo_path = ""
+        assignment_error = str(exc)
     source_paths = meta_paths_default or conf.get(paths_key) or ""
     compression = meta_compression or conf.get(f"COMPRESSION_{_type_upper(type_id)}", "lz4")
 
@@ -331,13 +339,14 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "source_paths": source_paths or "",
         "repo_path": repo_path or "",
         "repository_key": meta_repository_key,
+        "repository_assignment_error": assignment_error,
         "usb_profile_key": profile_key if location == "usb" else "",
         "smb_profile_key": profile_key if location == "smb" else "",
         "storage_profile_key": profile_key if location == "storagebox" else "",
         "mount_before_run": meta_mount_before_run,
         "unmount_after_run": meta_unmount_after_run,
         "compression": compression,
-        "encryption": str(repository_context["encryption"]),
+        "encryption": str(repository_context.get("encryption") or ""),
         "passphrase": "",
         "keep_daily": meta_keep_daily or conf.get(f"RETENTION_{_type_upper(type_id)}_DAILY", "7"),
         "keep_weekly": meta_keep_weekly or conf.get(f"RETENTION_{_type_upper(type_id)}_WEEKLY", "4"),

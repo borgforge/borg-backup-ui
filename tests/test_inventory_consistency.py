@@ -279,3 +279,57 @@ def test_job_delete_transaction_rolls_back_when_metadata_delete_fails(
     restored = read_repository_store(config)["repositories"][0]
     assert restored["used_by"] == ["appdata_local"]
     assert restored["source_job_keys"] == ["appdata_local"]
+
+
+def test_repository_usage_is_rebuilt_from_authoritative_job_assignments(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        **_repository("repo_target"),
+        "used_by": ["stale_job"],
+        "source_job_keys": ["stale_job"],
+    }]})
+    metadata_path = tmp_path / "config" / "jobs" / "appdata_local.json"
+    metadata_path.parent.mkdir(parents=True)
+    metadata_path.write_text(
+        '{"schema_version":2,"job_key":"appdata_local","repository_key":"repo_target"}\n',
+        encoding="utf-8",
+    )
+
+    before = repositories_api.repository_assignment_report(config)
+    assert before["ok"] is False
+    assert before["usage_mismatches"][0]["expected_job_keys"] == ["appdata_local"]
+
+    after = repositories_api.reconcile_repository_usage(config)
+    assert after["ok"] is True
+    assert after["reconciled_repository_keys"] == ["repo_target"]
+    repository = read_repository_store(config)["repositories"][0]
+    assert repository["used_by"] == ["appdata_local"]
+    assert repository["source_job_keys"] == ["appdata_local"]
+
+
+def test_repository_assignment_report_guides_job_wizard_repair(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    write_storage_store(config, {"storages": []})
+    write_repository_store(config, {"repositories": []})
+    metadata_path = tmp_path / "config" / "jobs" / "photos_smb.json"
+    metadata_path.parent.mkdir(parents=True)
+    metadata_path.write_text(
+        '{"schema_version":2,"job_key":"photos_smb","repository_key":"repo_missing"}\n',
+        encoding="utf-8",
+    )
+
+    report = repositories_api.repository_assignment_report(config)
+
+    assert report["ok"] is False
+    error = report["errors"][0]
+    assert error["code"] == "job_repository_not_found"
+    assert error["job_key"] == "photos_smb"
+    assert "Job Wizard" in error["message"]

@@ -6,6 +6,15 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #193
+- Canonical storage runtime cutover:
+  - SMB backup, restore, restore-test and mount operations now consume the resolved storage object from `storages.json` instead of `SMB_PROFILES_JSON` or profile arrays in `settings.json`.
+  - Settings profile changes use a structured API payload and persist directly to the canonical storage inventory.
+  - The legacy-shaped settings reader is now only a derived compatibility view over `storages.json`; legacy input remains confined to audited startup migrations.
+  - Repository usage lists are reconciled from authoritative job `repository_key` assignments after startup migrations.
+  - System Health reports missing repositories, missing storage targets and inconsistent usage metadata with a repair path through the Job Wizard.
+  - Jobs with a broken repository assignment can still be opened in the Wizard, corrected and saved without manual JSON editing.
+
 ### Issue #192
 - Repository model cleanup:
   - Repository tests now accept only the canonical `repository_key`; direct repository paths and config keys are no longer public request parameters.

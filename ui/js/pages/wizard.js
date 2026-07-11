@@ -443,6 +443,12 @@ function _wizardFillFromJob(job) {
   document.getElementById('wiz-keep-yearly').value = job.keep_yearly || '3';
   wizardUpdateIconPreview();
   wizardAutoFill();
+  if (job.repository_assignment_error) {
+    _wizardShowError(2, wizardT('wizard.repositoryAssignmentRepair', {
+      job: job.job_name || job.job_key || '',
+      message: job.repository_assignment_error,
+    }));
+  }
 }
 
 async function openWizardForJob(jobKey, mode = 'edit') {

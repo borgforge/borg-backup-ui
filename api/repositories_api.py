@@ -350,6 +350,102 @@ def build_repository_groups(config: dict) -> dict[str, list[dict[str, Any]]]:
     return groups
 
 
+def repository_assignment_report(config: dict) -> dict[str, Any]:
+    """Compare authoritative job assignments with canonical inventories."""
+    from repository_context import jobs_dir
+    from storage_objects_api import read_storage_store
+
+    repositories = read_repository_store(config).get("repositories", [])
+    repo_by_key = {str(row.get("repository_key") or "").strip(): row for row in repositories}
+    storage_keys = {
+        str(row.get("storage_key") or "").strip()
+        for row in read_storage_store(config).get("storages", [])
+        if str(row.get("storage_key") or "").strip()
+    }
+    actual: dict[str, list[str]] = {key: [] for key in repo_by_key}
+    errors: list[dict[str, Any]] = []
+    directory = jobs_dir(config)
+    for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+        try:
+            job = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            errors.append({"code": "job_metadata_unreadable", "job_key": path.stem, "message": str(exc)})
+            continue
+        if not isinstance(job, dict):
+            continue
+        job_key = str(job.get("job_key") or path.stem).strip()
+        repository_key = str(job.get("repository_key") or "").strip()
+        if not repository_key:
+            errors.append({
+                "code": "job_repository_missing",
+                "job_key": job_key,
+                "message": "The job has no repository assignment. Open it in the Job Wizard and save a repository.",
+            })
+            continue
+        repository = repo_by_key.get(repository_key)
+        if not isinstance(repository, dict):
+            errors.append({
+                "code": "job_repository_not_found",
+                "job_key": job_key,
+                "repository_key": repository_key,
+                "message": "The assigned repository does not exist. Open the job in the Job Wizard and select a valid repository.",
+            })
+            continue
+        actual.setdefault(repository_key, []).append(job_key)
+
+    mismatches: list[dict[str, Any]] = []
+    for repository_key, repository in repo_by_key.items():
+        storage_key = str(repository.get("storage_key") or "").strip()
+        if not storage_key or storage_key not in storage_keys:
+            errors.append({
+                "code": "repository_storage_not_found",
+                "repository_key": repository_key,
+                "storage_key": storage_key,
+                "message": "The repository references a missing storage target.",
+            })
+        expected = sorted(set(actual.get(repository_key, [])))
+        stored_used_by = sorted({str(value).strip() for value in repository.get("used_by", []) if str(value).strip()})
+        stored_source = sorted({str(value).strip() for value in repository.get("source_job_keys", []) if str(value).strip()})
+        if stored_used_by != expected or stored_source != expected:
+            mismatches.append({
+                "repository_key": repository_key,
+                "message": "Repository usage metadata differs from the authoritative job assignments.",
+                "expected_job_keys": expected,
+                "stored_used_by": stored_used_by,
+                "stored_source_job_keys": stored_source,
+            })
+    return {
+        "ok": not errors and not mismatches,
+        "errors": errors,
+        "usage_mismatches": mismatches,
+        "assignments": actual,
+    }
+
+
+def reconcile_repository_usage(config: dict) -> dict[str, Any]:
+    """Safely rebuild redundant repository usage lists from job metadata."""
+    path = repositories_file(config)
+    with inventory_lock(path.parent):
+        report = repository_assignment_report(config)
+        assignments = report.get("assignments") if isinstance(report.get("assignments"), dict) else {}
+        current = read_repository_store(config)
+        changed: list[str] = []
+        rows = []
+        for repository in current.get("repositories", []):
+            key = str(repository.get("repository_key") or "").strip()
+            expected = sorted({str(value).strip() for value in assignments.get(key, []) if str(value).strip()})
+            used_by = sorted({str(value).strip() for value in repository.get("used_by", []) if str(value).strip()})
+            source_jobs = sorted({str(value).strip() for value in repository.get("source_job_keys", []) if str(value).strip()})
+            if used_by != expected or source_jobs != expected:
+                repository = {**repository, "used_by": expected, "source_job_keys": expected, "updated_at": _now()}
+                changed.append(key)
+            rows.append(repository)
+        if changed:
+            write_repository_store(config, {"repositories": rows})
+        final_report = repository_assignment_report(config)
+        return {**final_report, "reconciled_repository_keys": changed}
+
+
 def _secret_path_for_repository(config: dict, repository_key: str) -> Path:
     return _data_root(config) / "secrets" / f".borg-passphrase-{repository_key}"
 
