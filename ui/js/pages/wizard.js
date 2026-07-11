@@ -272,7 +272,7 @@ function wizardSelectedStorage() {
 }
 
 function wizardRepositoryPath(repo) {
-  return String(repo?.path_raw || repo?.repo_uri || repo?.repo_path || repo?.path_display || '').trim();
+  return String(repo?.path_raw || '').trim();
 }
 
 function wizardRepositoryLabel(repo) {
@@ -634,7 +634,6 @@ function _wizardCollectParams() {
     },
     source_paths: rawPaths,
     repository_key: (document.getElementById('wiz-repository-key')?.value || wizardState.selectedRepositoryKey || '').trim(),
-    repo_path: wizardRepositoryPath(repository),
     compression:  document.getElementById('wiz-compression').value,
     encryption: String(repository?.encryption || '').trim(),
     passphrase: '',
@@ -836,7 +835,6 @@ function _wizardValidate(step) {
     if (!p.source_paths) { _wizardShowError(2, wizardT('wizard.validationSource')); return false; }
     if (!p.storage_key) { _wizardShowError(2, wizardT('wizard.validationStorageTarget')); return false; }
     if (!p.repository_key) { _wizardShowError(2, wizardT('wizard.validationRepositorySelect')); return false; }
-    if (!p.repo_path) { _wizardShowError(2, wizardT('wizard.validationRepository')); return false; }
   }
   if (step === 3) {
     if (p.docker_control.mode === 'selected' && !p.docker_control.selected.length) {

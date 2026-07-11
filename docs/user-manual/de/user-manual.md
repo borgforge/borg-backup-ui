@@ -709,7 +709,7 @@ Typische Aktionen:
 2. Zugangsdaten eintragen.
 3. Speichern.
 4. Status prüfen.
-5. Auf der Storage-Seite Repository testen.
+5. Repository unter **Repositories** öffnen und die Informationen aktualisieren.
 
 ### 9.7 SSH-Profile
 
@@ -735,7 +735,7 @@ Funktionen:
 - Verbindung testen
 - Profil speichern
 
-> **Hinweis:** Für Hetzner Storage Box ist ein relativer Basispfad wie `./backup` typisch. Prüfen Sie die erzeugte Repository-URI in Job-Vorschau und Storage-Test.
+> **Hinweis:** Für Hetzner Storage Box ist ein relativer Basispfad wie `./backup` typisch. Prüfen Sie den aufgelösten Repository-Pfad auf der Seite **Repositories**.
 
 ### 9.8 Import / Export
 
@@ -820,9 +820,9 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 2. Klicken Sie auf **Neuer Job**.
 3. Tragen Sie Name, Typ-ID, Icon und Standort ein.
 4. Wählen Sie Quellpfade.
-5. Wählen oder definieren Sie das Repository-Ziel.
+5. Wählen Sie zuerst das Speicherziel und danach ein vorhandenes Repository.
 6. Konfigurieren Sie Docker- oder VM-Steuerung, wenn nötig.
-7. Setzen Sie Kompression, Retention und Passphrase.
+7. Setzen Sie Kompression und Retention. Verschlüsselung und Passphrase gehören zum Repository.
 8. Aktivieren Sie optional einen Zeitplan.
 9. Prüfen Sie die Flow-Vorschau.
 10. Speichern Sie den Job.
@@ -830,11 +830,11 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 
 ### 11.2 Repository prüfen
 
-1. Öffnen Sie **Storage**.
-2. Wählen Sie den Standort.
-3. Starten Sie den Repository-Test.
-4. Lesen Sie Details bei Fehlern.
-5. Prüfen Sie Passphrase, Profil, Mount oder SSH-Verbindung.
+1. Öffnen Sie **Repositories**.
+2. Wählen Sie Speicherziel und Repository.
+3. Aktualisieren Sie die Repository-Informationen.
+4. Öffnen Sie bei Bedarf **Wartung** und starten Sie die passende Prüfung.
+5. Prüfen Sie bei Fehlern Passphrase, Profil, Mount oder SSH-Verbindung.
 
 ### 11.3 Dateien wiederherstellen
 
@@ -898,7 +898,7 @@ Empfohlene Reihenfolge:
 1. **Dashboard** für Überblick.
 2. **History** für konkreten Lauf.
 3. Logdatei aus History öffnen.
-4. **Storage** für Repository-Test.
+4. **Repositories** für Repository-Informationen und Wartungsstatus.
 5. **Einstellungen > Systemstatus und Migration** für Konfigurationsprobleme.
 6. Support-Paket erstellen, falls der Fehler weitergegeben werden soll.
 

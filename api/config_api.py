@@ -687,8 +687,8 @@ def sync_backup_conf_schema(ui_config: dict) -> dict:
 
     # Keep legacy keys active (for compatibility), but grouped and marked.
     deprecated_reasons = {
-        "BORG_PASSPHRASE_FILE_LOCAL": "deprecated: per-job passphrase path in job JSON is authoritative",
-        "BORG_PASSPHRASE_FILE_STORAGEBOX": "deprecated: per-job passphrase path in job JSON is authoritative",
+        "BORG_PASSPHRASE_FILE_LOCAL": "deprecated: repository inventory owns the passphrase reference",
+        "BORG_PASSPHRASE_FILE_STORAGEBOX": "deprecated: repository inventory owns the passphrase reference",
         "GLOBAL_DOCKER_STOP_TIMEOUT": "deprecated: use DOCKER_STOP_TIMEOUT",
         "GLOBAL_DOCKER_STOP_WAIT": "deprecated: use DOCKER_STOP_WAIT",
         "GLOBAL_DOCKER_START_WAIT": "deprecated: use DOCKER_START_WAIT",
@@ -850,7 +850,7 @@ def get_repositories_data(ui_config: dict) -> dict:
     }
 
 
-def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "", repository_key: str = "") -> dict:
+def test_repository(ui_config: dict, repository_key: str) -> dict:
     """Run borg info for one canonical repository object."""
     from repository_context import repository_by_key, repository_path, storage_by_key
 

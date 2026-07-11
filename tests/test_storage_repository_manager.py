@@ -138,10 +138,19 @@ def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: P
 
 def test_repository_maintenance_persists_structured_prune_and_compact_results(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
     repository = {
         "repository_key": "repo_test",
         "display_name": "Test",
-        "path_raw": "/mnt/backup/test",
+        "storage_key": "storage_local_test",
+        "relative_path": "test",
     }
     write_repository_store(config, {"repositories": [repository]})
 
@@ -185,10 +194,19 @@ def test_repository_maintenance_persists_structured_prune_and_compact_results(tm
 
 def test_repository_maintenance_masks_error_details(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
     repository = {
         "repository_key": "repo_test",
         "display_name": "Test",
-        "path_raw": "/mnt/backup/test",
+        "storage_key": "storage_local_test",
+        "relative_path": "test",
     }
     write_repository_store(config, {"repositories": [repository]})
 

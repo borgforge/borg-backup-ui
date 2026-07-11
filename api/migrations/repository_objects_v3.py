@@ -101,7 +101,7 @@ def apply(config: dict) -> dict[str, Any]:
 
     updated_jobs: list[str] = []
     if key_map:
-        write_repository_store(config, {"repositories": updated_repos})
+        write_repository_store(config, {"repositories": updated_repos}, preserve_legacy=True)
         for path in _job_files(config):
             job = _read_job(path)
             if not job:

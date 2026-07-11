@@ -21,8 +21,8 @@ Dieses Kapitel sammelt typische Fehlerbilder und die ersten sinnvollen Prüfschr
 
 ## Repository nicht erreichbar
 
-- Storage-Seite öffnen.
-- Passenden Repo-Test ausführen.
+- **Repositories** öffnen.
+- Repository auswählen und Informationen aktualisieren.
 - Bei SMB vorher mounten.
 - Bei SSH Profiltest und Repository-URI prüfen.
 
@@ -30,7 +30,7 @@ Dieses Kapitel sammelt typische Fehlerbilder und die ersten sinnvollen Prüfschr
 
 - CIFS-Unterstützung im Systemstatus prüfen.
 - SMB-Profil speichern und testen.
-- Mount-Status in Storage prüfen.
+- Mount-Status des SMB-Profils prüfen.
 - Credentials und Share-Namen kontrollieren.
 
 ## SSH-Probleme
@@ -42,7 +42,7 @@ Dieses Kapitel sammelt typische Fehlerbilder und die ersten sinnvollen Prüfschr
 
 ## Restore-Probleme
 
-- Repository-Test ausführen.
+- Repository-Informationen aktualisieren und Wartungsstatus prüfen.
 - Passphrase prüfen.
 - Erlaubtes Restore-Ziel verwenden.
 - Freien Speicher am Ziel prüfen.

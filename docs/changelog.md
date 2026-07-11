@@ -6,6 +6,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #192
+- Repository model cleanup:
+  - Repository tests now accept only the canonical `repository_key`; direct repository paths and config keys are no longer public request parameters.
+  - Persisted repository objects now contain only `storage_key` plus `relative_path`; effective local paths and SSH URIs are derived for API responses at runtime.
+  - Added an audited, idempotent cleanup migration for repository inventories that already completed the earlier model migrations.
+  - Removed stale help and manual instructions that described jobs as owners of repository paths, encryption or passphrases.
+  - Added regression checks for canonical persistence, runtime job metadata access, translation parity and responsive Repository/Wizard layouts.
+
 ### Issue #191
 - Performance:
   - Removed the blocking `modinfo cifs` subprocess from every System Health API request.

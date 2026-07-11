@@ -12,11 +12,9 @@
 > Job-Wizard akzeptiert für neue und bearbeitete Jobs keinen freien
 > Repository-Pfad mehr.
 
-Diese Designstudie beschreibt, wie die Repository-Objekte aus #184 und der
-Storage-/Repository-Wizard aus #187 in die bestehende Oberfläche integriert
-werden könnten.
-
-Die Studie ist bewusst **keine Implementierung**. Sie soll klären:
+Diese Designstudie dokumentiert die Entscheidungsgrundlage für die mit #184 und
+#187 umgesetzten Repository-Objekte und den Repository-Wizard. Die Varianten
+bleiben als Begründung der gewählten Lösung erhalten:
 
 - Wo Repositorys in der UI sichtbar werden.
 - Wie Storage und Repository fachlich getrennt werden.
@@ -37,9 +35,8 @@ sollte aber nicht der primäre Ort zum Einrichten von Repositorys werden.
 
 ### 2.2 Storage
 
-Storage ist heute die logischste Stelle für Repository-Objekte, weil die Seite
-bereits "Borg Repositories verwalten" als Seitentitel nutzt und technische
-Repository-Prüfungen bündelt.
+Die frühere Storage-Seite war die Ausgangsbasis. Sie wurde zur eigenständigen
+Seite **Repositories** mit Master-Detail-Ansicht weiterentwickelt.
 
 ![Aktuelle Storage-Seite](assets/issue-184-187/current-storage.png)
 
@@ -63,16 +60,10 @@ weiterverwenden.
 
 ### 3.1 Hauptentscheidung
 
-Repositorys sollten nicht als vollständig neue Hauptnavigation eingeführt
-werden, solange Storage bereits eine passende fachliche Heimat bietet.
-
-Empfehlung:
-
-- Menüpunkt bleibt **Storage**.
-- Innerhalb von Storage gibt es einen klaren Bereich **Repositories**.
-- Optional später: Subtabs `Repositorys`, `Storage-Ziele`, `Prüfungen`.
-
-Das reduziert Menü-Komplexität und passt zu der bisherigen UI.
+Umgesetzt wurde ein eigener Menüpunkt **Repositories**. Storage Targets bleiben
+als Profile in den Einstellungen; Repository-Informationen, Archive, Wartung
+und Verwaltung liegen auf der Repository-Seite. Damit sind Zielzugang und
+Borg-Repository fachlich klar getrennt.
 
 ### 3.2 Neue fachliche Ebenen
 

@@ -109,7 +109,7 @@ def apply(config: dict) -> dict[str, Any]:
         updated_rows.append(repo)
 
     if updated_repositories:
-        write_repository_store(config, {"repositories": updated_rows})
+        write_repository_store(config, {"repositories": updated_rows}, preserve_legacy=True)
 
     return {
         "migration_id": MIGRATION_ID,

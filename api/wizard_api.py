@@ -238,7 +238,7 @@ def _repository_path(repo: Optional[dict], ui_config: Optional[dict] = None) -> 
             return repository_path(repo, storage)
         except Exception:
             return ""
-    return str(repo.get("path_raw") or repo.get("repo_uri") or repo.get("repo_path") or repo.get("path_display") or "").strip()
+    return str(repo.get("path_raw") or "").strip()
 
 
 def _repository_encryption(repo: Optional[dict], fallback: str = "repokey-blake2") -> str:
@@ -354,7 +354,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     location = params.get("location", "local")
     source_paths = [p for p in params.get("source_paths", "").split() if p]
     selected_repo = _repository_from_params(params, ui_config)
-    repo_path = _repository_path(selected_repo, ui_config) or params.get("repo_path", "").strip()
+    repo_path = _repository_path(selected_repo, ui_config)
     encryption = _repository_encryption(selected_repo, params.get("encryption", "repokey-blake2"))
     docker_control = _runtime_control_from_params(params, "docker")
     vm_control = _runtime_control_from_params(params, "vm")

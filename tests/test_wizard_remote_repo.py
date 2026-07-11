@@ -18,13 +18,12 @@ from storage_objects_api import write_storage_store
 from wizard_api import generate_flow_preview, load_job_for_wizard, save_job
 
 
-def _storagebox_params(repo: str = "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash") -> dict:
+def _storagebox_params() -> dict:
     return {
         "type_id": "flash",
         "job_name": "Flash",
         "location": "storagebox",
         "storage_profile_key": "storage-1",
-        "repo_path": repo,
         "source_paths": "/boot",
         "encryption": "none",
     }
@@ -45,12 +44,35 @@ def test_wizard_preview_does_not_initialize_unmanaged_storagebox_repository():
     assert flow["remote_repo"]["needs_init_confirm"] is False
 
 
-def test_wizard_preview_does_not_rebuild_repository_from_profile():
-    params = _storagebox_params("ssh://u123@u123.your-storagebox.de:23./backup/borg-backup-flash")
+def test_wizard_preview_resolves_only_the_selected_repository_object(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Storagebox",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "identity": "storagebox-profile:storage-1",
+        "profile_key": "storage-1",
+        "host": "u123.your-storagebox.de",
+        "port": "23",
+        "user": "u123",
+        "base_path": "./backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_flash_storagebox_test",
+        "display_name": "Flash Storagebox",
+        "storage_key": "storage_storagebox_test",
+        "relative_path": "borg-backup-flash",
+        "encryption": "none",
+    }]})
+    params = _storagebox_params()
+    params["repository_key"] = "repo_flash_storagebox_test"
 
-    flow = generate_flow_preview(params, {}, Path("/tmp/scripts"))
+    flow = generate_flow_preview(params, config, Path("/tmp/scripts"))
 
-    assert flow["summary"]["repo"] == params["repo_path"]
+    assert flow["summary"]["repo"] == (
+        "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash"
+    )
 
 
 def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypatch):
@@ -97,10 +119,7 @@ def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
         "location": "storagebox",
         "storage_type": "ssh",
         "storage_key": "storage_storagebox_test",
-        "storage_profile_key": "storage-1",
-        "repo_uri": _storagebox_params()["repo_path"],
-        "path_raw": _storagebox_params()["repo_path"],
-        "path_display": _storagebox_params()["repo_path"],
+        "relative_path": "borg-backup-flash",
         "encryption": "none",
     }]})
     params = _storagebox_params()
@@ -157,7 +176,6 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
         "display_name": "VMs",
         "storage_key": "storage_local_test",
         "relative_path": "borg-backup-vms",
-        "path_raw": "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms",
         "encryption": "none",
     }]})
 

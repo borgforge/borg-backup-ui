@@ -23,10 +23,12 @@ Schritte:
 1. Profil anlegen.
 2. Speichern.
 3. Profilstatus prüfen.
-4. In **Storage > SMB** mounten.
-5. Danach Repository-Test ausführen.
+4. Verwalteten Mount-Status prüfen.
+5. Danach das Repository unter **Repositories** öffnen und Informationen oder
+   Wartungsprüfung aktualisieren.
 
-Der reine Job-Check prüft nur Profilreferenz und Pfad-Plausibilität. Ob das Repository erreichbar ist, wird über den Storage-Test geprüft.
+Der reine Job-Check prüft nur Repository-Zuordnung und Quellpfad-Plausibilität.
+Ob das Repository erreichbar ist, wird auf der Seite **Repositories** geprüft.
 
 ## SSH-Profile
 
@@ -55,6 +57,7 @@ Ein Profil ist einsatzbereit, wenn es gespeichert ist, der Profiltest erfolgreic
 ## Fehlerbilder
 
 - **Profil kann nicht gelöscht werden**: Es wird noch von Jobs verwendet.
-- **SMB nicht gemountet**: Erst mounten, dann Repo testen.
+- **SMB nicht gemountet**: Profilstatus und verwalteten Mount prüfen, danach
+  Repository-Informationen aktualisieren.
 - **SSH-Key falsch**: Key-Pfad und Berechtigungen prüfen.
 - **Basispfad falsch**: Bei Storagebox `./backup` statt `backup` oder fehlerhafter URI-Fragmente verwenden.

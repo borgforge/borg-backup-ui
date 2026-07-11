@@ -15,6 +15,7 @@ from . import (
     repository_objects_v2,
     repository_objects_v3,
     repository_objects_v4,
+    repository_contract_cleanup_v1,
     repository_runtime_v1,
     restore_history_v1,
     storage_objects_v1,
@@ -33,6 +34,7 @@ MIGRATIONS = [
     repository_runtime_v1,
     borg_keyfiles_v1,
     canonical_storage_profiles_v1,
+    repository_contract_cleanup_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}

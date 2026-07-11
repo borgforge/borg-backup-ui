@@ -135,7 +135,7 @@ def apply(config: dict) -> dict[str, Any]:
         updated.append(enriched)
 
     if changed:
-        write_repository_store(config, {"repositories": updated})
+        write_repository_store(config, {"repositories": updated}, preserve_legacy=True)
 
     return {
         "migration_id": MIGRATION_ID,

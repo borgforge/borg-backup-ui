@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+import inspect
 import json
 import os
 import subprocess
@@ -84,7 +85,7 @@ def test_repository_objects_migration_links_existing_jobs(tmp_path: Path):
     assert store["repositories"][0]["storage_name"] == "Local"
     assert store["repositories"][0]["storage_key"].startswith("storage_local_")
     assert store["repositories"][0]["relative_path"] == "borg-backup-appdata"
-    assert store["repositories"][0]["path_raw"] == "/mnt/backup/borg-backup-appdata"
+    assert "path_raw" not in store["repositories"][0]
     assert store["repositories"][0]["used_by"] == ["appdata_local"]
     assert "repo_conf_key" not in store["repositories"][0]
     assert "storage_profile_key" not in store["repositories"][0]
@@ -94,6 +95,38 @@ def test_repository_objects_migration_links_existing_jobs(tmp_path: Path):
     assert len(storages) == 1
     assert storages[0]["storage_key"] == store["repositories"][0]["storage_key"]
     assert storages[0]["base_path"] == "/mnt/backup"
+
+
+def test_repository_contract_cleanup_removes_transitional_fields_once(tmp_path: Path):
+    from migrations import repository_contract_cleanup_v1
+
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "repositories.json").write_text(json.dumps({
+        "schema_version": 1,
+        "repositories": [{
+            "repository_key": "repo_flash_local",
+            "display_name": "Flash",
+            "storage_key": "storage_local_test",
+            "relative_path": "borg-backup-flash",
+            "path_raw": "/mnt/backup/borg-backup-flash",
+            "repo_path": "/mnt/backup/borg-backup-flash",
+            "repo_conf_key": "REPO_FLASH_LOCAL",
+            "encryption": "none",
+        }],
+    }), encoding="utf-8")
+
+    result = repository_contract_cleanup_v1.apply(config)
+    second = repository_contract_cleanup_v1.apply(config)
+    row = json.loads((config_dir / "repositories.json").read_text(encoding="utf-8"))["repositories"][0]
+
+    assert result["status"] == "applied"
+    assert result["details"]["removed_fields"] == 3
+    assert second["status"] == "not_required"
+    assert not repository_contract_cleanup_v1.LEGACY_FIELDS.intersection(row)
+    assert row["storage_key"] == "storage_local_test"
+    assert row["relative_path"] == "borg-backup-flash"
 
 
 def test_repository_objects_migration_is_idempotent(tmp_path: Path):
@@ -611,11 +644,22 @@ def test_repository_test_uses_repository_object_passphrase(tmp_path: Path, monke
 
     monkeypatch.setattr(config_api.subprocess, "run", fake_run)
 
-    result = config_api.test_repository("", config, repository_key="repo_test")
+    result = config_api.test_repository(config, "repo_test")
 
     assert result["success"] is True
     assert captured["cmd"] == ["borg", "info", "--json", "/mnt/backup/borg-backup-test"]
     assert captured["env"]["BORG_PASSCOMMAND"].endswith(str(secret))
+
+
+def test_repository_test_contract_requires_only_repository_key():
+    assert list(inspect.signature(config_api.test_repository).parameters) == [
+        "ui_config",
+        "repository_key",
+    ]
+    handler = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
+    assert 'body.get("repo_path")' not in handler
+    assert 'body.get("repo_conf_key")' not in handler
+    assert 'raise ValueError("repository_key is required")' in handler
 
 
 def test_repository_objects_v3_migrates_legacy_repository_keys(tmp_path: Path):
@@ -882,7 +926,8 @@ def test_repository_manager_import_can_store_passphrase_without_borg_init(tmp_pa
     assert repo["initialized"] is True
     assert "storage_profile_key" not in repo
     assert read_storage_store(config)["storages"][0]["profile_key"] == "storage-1"
-    assert repo["repo_uri"] == "ssh://u1@example.test:23/./backup/borg-backup-flash"
+    assert repo["path_raw"] == "ssh://u1@example.test:23/./backup/borg-backup-flash"
+    assert "repo_uri" not in repo
     secret = Path(repo["passphrase_ref"])
     assert secret.is_file()
     assert secret.read_text(encoding="utf-8") == "import-secret"

@@ -27,6 +27,10 @@ LEGACY_REPOSITORY_FIELDS = {
     "smb_profile_key",
     "repo_conf_key",
     "conf_key",
+    "repo_path",
+    "repo_uri",
+    "path_raw",
+    "path_display",
 }
 
 

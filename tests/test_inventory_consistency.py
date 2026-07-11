@@ -196,6 +196,44 @@ def test_repository_path_is_derived_from_current_storage_target(tmp_path: Path) 
     assert current["storage_name"] == "Moved Pool"
 
 
+def test_repository_inventory_persists_only_canonical_path_contract(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_pool",
+        "display_name": "Pool",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        **_repository("repo_target"),
+        "storage_key": "storage_pool",
+        "relative_path": "borg-backup-target",
+        "repo_path": "/mnt/legacy/borg-backup-target",
+        "repo_uri": "ssh://legacy.invalid/./borg-backup-target",
+        "path_raw": "/mnt/legacy/borg-backup-target",
+        "path_display": "/mnt/legacy/borg-backup-target",
+        "repo_conf_key": "REPO_TARGET",
+        "usb_profile_key": "usb-legacy",
+    }]})
+
+    persisted = read_repository_store(config)["repositories"][0]
+    for legacy_field in (
+        "repo_path",
+        "repo_uri",
+        "path_raw",
+        "path_display",
+        "repo_conf_key",
+        "usb_profile_key",
+    ):
+        assert legacy_field not in persisted
+    assert persisted["storage_key"] == "storage_pool"
+    assert persisted["relative_path"] == "borg-backup-target"
+    api_row = read_repository_store_for_api(config)["repositories"][0]
+    assert api_row["path_raw"] == "/mnt/backup/borg-backup-target"
+
+
 def test_multi_profile_update_rolls_back_on_later_validation_error(tmp_path: Path) -> None:
     config = _config(tmp_path)
     write_storage_store(config, {"storages": [{

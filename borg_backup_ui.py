@@ -2099,12 +2099,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_test_repo(self) -> dict:
         from config_api import test_repository
         body = self._read_json_body()
-        repo_path = body.get("repo_path", "")
-        repo_conf_key = str(body.get("repo_conf_key", "")).strip()
         repository_key = str(body.get("repository_key", "")).strip()
-        if not repo_path and not repository_key:
-            raise ValueError("repo_path or repository_key is required")
-        return test_repository(repo_path, self.config, repo_conf_key=repo_conf_key, repository_key=repository_key)
+        if not repository_key:
+            raise ValueError("repository_key is required")
+        return test_repository(self.config, repository_key)
 
     def _post_storage_smb_action(self) -> dict:
         from config_api import run_smb_profile_action

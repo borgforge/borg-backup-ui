@@ -176,7 +176,7 @@ def _upsert_repository_for_legacy_job(config: dict, job: dict[str, Any]) -> str:
     ))
     write_repository_store(config, {"repositories": [
         row for row in rows if str(row.get("repository_key") or "") != key
-    ] + [repository]})
+    ] + [repository]}, preserve_legacy=True)
     return key
 
 

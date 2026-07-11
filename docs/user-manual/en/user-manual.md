@@ -709,7 +709,7 @@ Typical actions:
 2. Enter credentials.
 3. Save.
 4. Check status.
-5. Test the repository on the Storage page.
+5. Open the repository under **Repositories** and refresh its information.
 
 ### 9.7 SSH Profiles
 
@@ -735,7 +735,7 @@ Functions:
 - test connection
 - save profile
 
-> **Note:** For Hetzner Storage Box, a relative base path such as `./backup` is typical. Check the generated repository URI in the job preview and Storage test.
+> **Note:** For Hetzner Storage Box, a relative base path such as `./backup` is typical. Check the resolved repository path on the **Repositories** page.
 
 ### 9.8 Import / Export
 
@@ -820,9 +820,9 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 2. Click **New job**.
 3. Enter name, type ID, icon, and location.
 4. Select source paths.
-5. Select or define the repository target.
+5. Select the storage target first and then an existing repository.
 6. Configure Docker or VM control if needed.
-7. Set compression, retention, and passphrase.
+7. Set compression and retention. Encryption and passphrase belong to the repository.
 8. Optionally enable a schedule.
 9. Review the flow preview.
 10. Save the job.
@@ -830,11 +830,11 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 
 ### 11.2 Check a Repository
 
-1. Open **Storage**.
-2. Select the location.
-3. Start the repository test.
-4. Read details for failures.
-5. Check passphrase, profile, mount, or SSH connection.
+1. Open **Repositories**.
+2. Select the storage target and repository.
+3. Refresh the repository information.
+4. Open **Maintenance** and start the required check if needed.
+5. Check passphrase, profile, mount, or SSH connection when an error occurs.
 
 ### 11.3 Restore Files
 
@@ -898,7 +898,7 @@ Recommended order:
 1. **Dashboard** for overview.
 2. **History** for the concrete run.
 3. Open the log file from History.
-4. **Storage** for repository test.
+4. **Repositories** for repository information and maintenance status.
 5. **Settings > System status and migration** for configuration problems.
 6. Create a support bundle if the error needs to be shared.
 

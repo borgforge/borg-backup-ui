@@ -175,7 +175,7 @@ def _storage_name_from_location(location: str) -> str:
 
 def enrich_repository_display_fields(repo: dict[str, Any]) -> dict[str, Any]:
     row = dict(repo or {})
-    path_raw = str(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path") or "").strip()
+    path_raw = str(row.get("path_raw") or row.get("relative_path") or "").strip()
     display_name = str(row.get("display_name") or "").strip()
     job_name = str(row.get("job_name") or "").strip()
     if not job_name:
@@ -208,7 +208,7 @@ def read_repository_store(config: dict) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "updated_at": str(payload.get("updated_at") or ""),
-        "repositories": normalize_repositories(payload["repositories"]),
+        "repositories": normalize_repositories(payload["repositories"], preserve_legacy=True),
     }
 
 
@@ -228,8 +228,6 @@ def read_repository_store_for_api(config: dict) -> dict[str, Any]:
             effective = effective_repository_path(storage, relative)
             row = {
                 **row,
-                "repo_path": "" if effective.startswith("ssh://") else effective,
-                "repo_uri": effective if effective.startswith("ssh://") else "",
                 "path_raw": effective,
                 "path_display": effective,
                 "storage_name": str(storage.get("display_name") or row.get("storage_name") or ""),
@@ -238,12 +236,15 @@ def read_repository_store_for_api(config: dict) -> dict[str, Any]:
     return {**store, "repositories": derived}
 
 
-def write_repository_store(config: dict, store: dict[str, Any]) -> None:
+def write_repository_store(config: dict, store: dict[str, Any], *, preserve_legacy: bool = False) -> None:
     path = repositories_file(config)
     payload = {
         "schema_version": SCHEMA_VERSION,
         "updated_at": _now(),
-        "repositories": normalize_repositories(store.get("repositories") if isinstance(store, dict) else []),
+        "repositories": normalize_repositories(
+            store.get("repositories") if isinstance(store, dict) else [],
+            preserve_legacy=preserve_legacy,
+        ),
     }
     with inventory_lock(path.parent):
         atomic_write_inventory(path, payload)
@@ -263,15 +264,17 @@ def update_repository_store(
         return read_repository_store(config)
 
 
-def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
+def normalize_repositories(rows: Any, *, preserve_legacy: bool = False) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict):
             continue
         key = _slug(str(row.get("repository_key") or row.get("key") or ""), "")
-        path_raw = str(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path") or "").strip()
-        if not key or not path_raw or key in seen:
+        legacy_path = str(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path") or "").strip()
+        relative_path = str(row.get("relative_path") or repository_name_from_path(legacy_path)).strip()
+        storage_key = str(row.get("storage_key") or "").strip()
+        if not key or not storage_key or not relative_path or key in seen:
             continue
         seen.add(key)
         location = str(row.get("location") or row.get("storage_type") or "").strip().lower()
@@ -279,27 +282,17 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
         source_job_keys = [str(item).strip() for item in source_job_keys if str(item).strip()]
         used_by = row.get("used_by") if isinstance(row.get("used_by"), list) else source_job_keys
         used_by = [str(item).strip() for item in used_by if str(item).strip()]
-        repo_uri = str(row.get("repo_uri") or "").strip()
-        repo_path = str(row.get("repo_path") or "").strip()
-        if "://" in path_raw and not repo_uri:
-            repo_uri = path_raw
-        if "://" not in path_raw and not repo_path:
-            repo_path = path_raw
         normalized = enrich_repository_display_fields({
             "repository_key": key,
             "display_name": str(row.get("display_name") or key).strip() or key,
             "backup_type": str(row.get("backup_type") or "").strip().lower(),
             "location": location,
             "storage_type": str(row.get("storage_type") or location).strip().lower(),
-            "storage_key": str(row.get("storage_key") or location).strip(),
+            "storage_key": storage_key,
             "storage_name": str(row.get("storage_name") or "").strip(),
-            "relative_path": str(row.get("relative_path") or repository_name_from_path(path_raw)).strip(),
+            "relative_path": relative_path,
             "repository_name": str(row.get("repository_name") or "").strip(),
             "job_name": str(row.get("job_name") or "").strip(),
-            "repo_path": repo_path,
-            "repo_uri": repo_uri,
-            "path_raw": path_raw,
-            "path_display": str(row.get("path_display") or path_raw).strip(),
             "passphrase_ref": str(row.get("passphrase_ref") or "").strip(),
             "keyfile_ref": str(row.get("keyfile_ref") or "").strip(),
             "encryption": str(row.get("encryption") or "").strip(),
@@ -324,15 +317,19 @@ def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
             "source_job_keys": source_job_keys,
             "used_by": used_by,
         })
-        for legacy_field in (
-            "storage_profile_key",
-            "usb_profile_key",
-            "smb_profile_key",
-            "repo_conf_key",
-        ):
-            if legacy_field in row or (legacy_field == "repo_conf_key" and "conf_key" in row):
-                source_field = "conf_key" if legacy_field == "repo_conf_key" and legacy_field not in row else legacy_field
-                normalized[legacy_field] = str(row.get(source_field) or "").strip()
+        if preserve_legacy:
+            for legacy_field in (
+                "repo_path",
+                "repo_uri",
+                "path_raw",
+                "path_display",
+                "storage_profile_key",
+                "usb_profile_key",
+                "smb_profile_key",
+                "repo_conf_key",
+            ):
+                if legacy_field in row:
+                    normalized[legacy_field] = str(row.get(legacy_field) or "").strip()
         out.append(normalized)
     out.sort(key=lambda item: (str(item.get("location") or ""), str(item.get("display_name") or "")))
     return out
@@ -715,6 +712,11 @@ def refresh_due_repository_info(
         current = current.replace(tzinfo=timezone.utc)
     current = current.astimezone(timezone.utc)
     repositories = read_repository_store(config)["repositories"]
+    from storage_objects_api import read_storage_store
+    storages = {
+        str(row.get("storage_key") or ""): row
+        for row in read_storage_store(config).get("storages", [])
+    }
     from jobs_api import active_resource_locks
     active_resources = {
         str(row.get("resource") or "").strip()
@@ -728,7 +730,8 @@ def refresh_due_repository_info(
         and (
             (
                 str(row.get("last_info_refresh_status") or "").strip().lower() == "error"
-                and f"repo:{str(row.get('path_raw') or row.get('repo_uri') or row.get('repo_path') or '').strip()}" in active_resources
+                and str(row.get("storage_key") or "") in storages
+                and f"repo:{effective_repository_path(storages[str(row.get('storage_key') or '')], str(row.get('relative_path') or ''))}" in active_resources
             )
             or _repository_info_is_due(
                 row,
@@ -1124,7 +1127,11 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
     repo_key = repository_key_for(seed, repo_path)
     store = read_repository_store(config)
     rows = store["repositories"]
-    existing = next((row for row in rows if _repo_identity(row.get("path_raw") or "") == _repo_identity(repo_path)), None)
+    existing = next((
+        row for row in rows
+        if str(row.get("storage_key") or "") == storage_key
+        and str(row.get("relative_path") or "").rstrip("/") == relative_path.rstrip("/")
+    ), None)
 
     passphrase_ref = str((existing or {}).get("passphrase_ref") or "").strip()
     passphrase_file: Path | None = None
@@ -1260,10 +1267,6 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         "storage_key": storage_key,
         "storage_name": str(storage.get("display_name") or "").strip(),
         "relative_path": relative_path,
-        "repo_path": "" if repo_path.startswith("ssh://") else repo_path,
-        "repo_uri": repo_path if repo_path.startswith("ssh://") else "",
-        "path_raw": repo_path,
-        "path_display": repo_path,
         "passphrase_ref": passphrase_ref,
         "keyfile_ref": keyfile_ref,
         "encryption": encryption,
@@ -1287,10 +1290,14 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
     next_rows = [item for item in rows if str(item.get("repository_key") or "") != repo_key]
     next_rows.append(row)
     write_repository_store(config, {"repositories": next_rows})
+    stored = next(
+        item for item in read_repository_store_for_api(config)["repositories"]
+        if str(item.get("repository_key") or "") == repo_key
+    )
     return {
         "ok": True,
         "action": action,
-        "repository": enrich_repository_display_fields(row),
+        "repository": stored,
         "exit_code": exit_code,
         "output": output,
     }

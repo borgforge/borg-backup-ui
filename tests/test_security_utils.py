@@ -78,7 +78,7 @@ def test_repository_test_output_is_sanitized(monkeypatch, tmp_path: Path):
         "encryption": "none",
     }]})
 
-    result = config_api.test_repository("", config, repository_key="repo_test")
+    result = config_api.test_repository(config, "repo_test")
 
     assert result["success"] is False
     assert "Bearer abc" not in result["output"]

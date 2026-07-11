@@ -474,9 +474,15 @@ def _apply_repository_inventory(config: dict, bundle: dict, jobs: list[dict], dr
         if storage_key not in storages_by_key:
             raise ValueError(f"Imported repository references an unknown storage target: {storage_key}")
         existing = repositories_by_key.get(key)
-        incoming_path = str(repository.get("path_raw") or repository.get("repo_uri") or repository.get("repo_path") or "").rstrip("/")
-        existing_path = str((existing or {}).get("path_raw") or (existing or {}).get("repo_uri") or (existing or {}).get("repo_path") or "").rstrip("/")
-        if existing and existing_path != incoming_path:
+        incoming_identity = (
+            storage_key,
+            str(repository.get("relative_path") or "").rstrip("/"),
+        )
+        existing_identity = (
+            str((existing or {}).get("storage_key") or ""),
+            str((existing or {}).get("relative_path") or "").rstrip("/"),
+        )
+        if existing and existing_identity != incoming_identity:
             raise ValueError(f"Repository key conflict: {key}")
         repositories_by_key.setdefault(key, repository)
 

@@ -93,7 +93,7 @@ function storageRepositoryTitle(repo, job) {
 function storageRepositoryName(repo) {
   const explicit = String(repo?.repository_name || '').trim();
   if (explicit) return explicit;
-  const path = String(repo?.path_display || repo?.path_raw || repo?.repo_uri || repo?.repo_path || '').trim().replace(/\/+$/, '');
+  const path = String(repo?.path_display || repo?.path_raw || '').trim().replace(/\/+$/, '');
   if (!path) return String(repo?.repository_key || repo?.conf_key || '').trim();
   const pathOnly = path.includes('://') ? path.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, '') : path;
   const leaf = (pathOnly.split('/').filter(Boolean).pop() || path).trim();
