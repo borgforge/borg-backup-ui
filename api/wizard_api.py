@@ -504,24 +504,18 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     repo_config = ui_config or {
         "BACKUP_SCRIPTS_DIR": str(data_root or (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)),
     }
-    from repositories_api import link_repository_to_job
-    link_repository_to_job(
+    from repositories_api import save_job_repository_transaction
+    previous_meta_path = jobs_meta_dir / f"{existing_job_key}.json" if existing_job_key else None
+    save_job_repository_transaction(
         repo_config,
+        meta_path,
+        metadata,
         selected_repository_key,
         job_key,
         previous_repository_key=str(existing.get("repository_key") or ""),
         previous_job_key=existing_job_key or job_key,
+        previous_metadata_path=previous_meta_path,
     )
-
-    meta_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-
-    if existing_job_key and existing_job_key != job_key:
-        old_meta = jobs_meta_dir / f"{existing_job_key}.json"
-        if old_meta.exists():
-            try:
-                old_meta.unlink()
-            except OSError:
-                pass
 
     return {
         "filename": "",

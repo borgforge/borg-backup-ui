@@ -139,9 +139,8 @@ def validate_storage_profiles_complete_before_save(next_rows: List[Dict[str, str
 
 
 def resolve_storage_profile(ui_config: dict, profile_key: str = "") -> dict:
-    from config_api import ensure_settings_migrated
-
-    settings_payload = ensure_settings_migrated(ui_config)
+    from storage_objects_api import settings_profiles_from_storages
+    settings_payload = settings_profiles_from_storages(ui_config)
     rows = normalize_storage_profile_rows(
         settings_payload.get("storage_profiles") if isinstance(settings_payload.get("storage_profiles"), list) else []
     )

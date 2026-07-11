@@ -44,7 +44,7 @@ def test_create_local_storage_target_is_stable_and_testable(tmp_path: Path, monk
     assert len(read_storage_store(config)["storages"]) == 1
 
 
-def test_create_usb_storage_target_updates_settings_and_inventory(tmp_path: Path, monkeypatch):
+def test_create_usb_storage_target_updates_canonical_inventory_only(tmp_path: Path, monkeypatch):
     mount = tmp_path / "usb"
     mount.mkdir()
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
@@ -56,10 +56,10 @@ def test_create_usb_storage_target_updates_settings_and_inventory(tmp_path: Path
         "mount_path": str(mount),
     })
 
-    settings = json.loads((tmp_path / "config" / "settings.json").read_text(encoding="utf-8"))
     assert result["storage"]["display_name"] == "USB archive"
     assert result["storage"]["profile_key"].startswith("usb-")
-    assert settings["usb_profiles"][0]["mount_path"] == str(mount)
+    assert result["storage"]["mount_path"] == str(mount)
+    assert not (tmp_path / "config" / "settings.json").exists()
 
 
 def test_repository_maintenance_commands_use_repository_and_job_retention(tmp_path: Path):

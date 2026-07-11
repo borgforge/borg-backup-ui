@@ -16,9 +16,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from config_api import get_smb_profile_job_refs, read_settings_payload, write_settings_payload
+from config_api import get_smb_profile_job_refs
 from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
 from schedule_api import get_schedules, write_schedules
+
+
+def _canonical_profile_payload(config: dict) -> dict:
+    from storage_objects_api import settings_profiles_from_storages
+    profiles = settings_profiles_from_storages(config)
+    return {
+        "schema_version": 1,
+        "local_profiles": profiles.get("local_profiles", []),
+        "usb_profiles": profiles.get("usb_profiles", []),
+        "smb_profiles": profiles.get("smb_profiles", []),
+        "storage_profiles": profiles.get("storage_profiles", []),
+    }
+
+
+def _write_canonical_profile_payload(config: dict, payload: dict) -> None:
+    from storage_objects_api import replace_all_profile_storages
+    replace_all_profile_storages(config, payload)
 
 
 def _jobs_dir(config: dict) -> Path:
@@ -89,7 +106,7 @@ def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> 
         "schedules": {k: v for k, v in schedules.items() if not selected or k in selected},
         "passphrase_meta": passphrase_meta,
         "keyfile_meta": {},
-        "settings_payload": read_settings_payload(config),
+        "settings_payload": _canonical_profile_payload(config),
     }
     bundle["keyfile_meta"] = _collect_job_key_files(config, bundle, include_content=False)
     text = json.dumps(bundle, indent=2, ensure_ascii=False) + "\n"
@@ -246,24 +263,21 @@ def preview_jobs_bundle(config: dict, bundle: dict) -> dict:
     }
 
 
-def _settings_file(config: dict) -> Path:
-    base = Path(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup"))
-    return base / "config" / "settings.json"
-
-
 def _backup_settings_snapshot(config: dict, reason: str = "Settings-Import") -> str | None:
-    sf = _settings_file(config)
-    if not sf.exists():
+    from storage_objects_api import storages_file
+    source = storages_file(config)
+    if not source.exists():
         return None
-    bdir = sf.parent / "backups"
+    bdir = source.parent / "backups"
     bdir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    dst = bdir / f"settings.json.{ts}.bak"
-    dst.write_text(sf.read_text(encoding="utf-8"), encoding="utf-8")
+    dst = bdir / f"storages.json.{ts}.bak"
+    dst.write_bytes(source.read_bytes())
+    os.chmod(dst, 0o600)
     meta = {
         "reason": reason,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "source": str(sf),
+        "source": str(source),
     }
     (bdir / f"{dst.name}.meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return str(dst)
@@ -282,7 +296,7 @@ def _normalize_profiles_by_key(rows: list[dict], kind: str) -> dict[str, dict]:
 
 
 def _preview_settings_payload(config: dict, incoming_payload: dict | None) -> dict:
-    current = read_settings_payload(config)
+    current = _canonical_profile_payload(config)
     incoming = incoming_payload if isinstance(incoming_payload, dict) else {}
     cur_usb = _normalize_profiles_by_key(current.get("usb_profiles") if isinstance(current.get("usb_profiles"), list) else [], "usb")
     cur_smb = _normalize_profiles_by_key(current.get("smb_profiles") if isinstance(current.get("smb_profiles"), list) else [], "smb")
@@ -338,7 +352,7 @@ def _apply_settings_payload(
     if not isinstance(incoming_payload, dict):
         return False, {"mode": settings_mode, "applied": 0, "conflicts": 0}, None
 
-    current = read_settings_payload(config)
+    current = _canonical_profile_payload(config)
     per_mode = per_profile_mode if isinstance(per_profile_mode, dict) else {}
     in_usb = _normalize_profiles_by_key(incoming_payload.get("usb_profiles") if isinstance(incoming_payload.get("usb_profiles"), list) else [], "usb")
     in_smb = _normalize_profiles_by_key(incoming_payload.get("smb_profiles") if isinstance(incoming_payload.get("smb_profiles"), list) else [], "smb")
@@ -349,7 +363,13 @@ def _apply_settings_payload(
 
     if settings_mode == "replace":
         backup_path = _backup_settings_snapshot(config, reason="Settings-Import replace")
-        write_settings_payload(config, incoming_payload)
+        replace_payload = {
+            **incoming_payload,
+            "local_profiles": incoming_payload.get("local_profiles")
+            if isinstance(incoming_payload.get("local_profiles"), list)
+            else current.get("local_profiles", []),
+        }
+        _write_canonical_profile_payload(config, replace_payload)
         return True, {"mode": "replace", "applied": len(in_usb) + len(in_smb) + len(in_storage), "conflicts": 0}, backup_path
 
     # merge
@@ -394,13 +414,14 @@ def _apply_settings_payload(
     next_storage = merge_rows(cur_storage, in_storage, "storage")
     next_payload = {
         "schema_version": current.get("schema_version", incoming_payload.get("schema_version", 1)),
+        "local_profiles": current.get("local_profiles", []),
         "usb_profiles": list(next_usb.values()),
         "smb_profiles": list(next_smb.values()),
         "storage_profiles": list(next_storage.values()),
     }
     if next_payload != current:
         backup_path = _backup_settings_snapshot(config, reason="Settings-Import merge")
-        write_settings_payload(config, next_payload)
+        _write_canonical_profile_payload(config, next_payload)
         return True, {"mode": "merge", "applied": applied, "conflicts": conflicts}, backup_path
     return False, {"mode": "merge", "applied": applied, "conflicts": conflicts}, None
 
@@ -1046,7 +1067,7 @@ def export_profile_secrets_backup(config: dict, password: str) -> dict:
     pw = str(password or "")
     if len(pw) < 8:
         raise ValueError("Password must contain at least 8 characters")
-    settings_payload = read_settings_payload(config)
+    settings_payload = _canonical_profile_payload(config)
     entries = _collect_profile_secrets(settings_payload)
     payload = {
         "format": "bbui-profile-secrets-v1",
@@ -1094,7 +1115,7 @@ def preview_profile_secrets_backup(config: dict, password: str, payload_b64: str
         raise ValueError("Invalid profile secrets format")
     manifest = payload.get("manifest") if isinstance(payload.get("manifest"), list) else []
     incoming_settings_payload = payload.get("settings_payload") if isinstance(payload.get("settings_payload"), dict) else None
-    settings_payload = read_settings_payload(config)
+    settings_payload = _canonical_profile_payload(config)
     smb_map, storage_map = _profile_maps(settings_payload)
     smb_keys = set(smb_map.keys())
     storage_keys = set(storage_map.keys())
@@ -1177,7 +1198,7 @@ def import_profile_secrets_backup(
         per_profile_mode=per_profile_mode if isinstance(per_profile_mode, dict) else None,
     )
 
-    settings_payload = read_settings_payload(config)
+    settings_payload = _canonical_profile_payload(config)
     smb_map, storage_map = _profile_maps(settings_payload)
     smb_keys = set(smb_map.keys())
     storage_keys = set(storage_map.keys())

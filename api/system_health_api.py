@@ -281,6 +281,21 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
     secrets_dir = root / "secrets"
     migration_file = root / "config" / "migration-state.json"
     migration_log_file = root / "config" / "migrations.log.jsonl"
+    repositories_inventory_file = root / "config" / "repositories.json"
+    storages_inventory_file = root / "config" / "storages.json"
+
+    inventory_errors: list[dict[str, str]] = []
+    try:
+        from repositories_api import read_repository_store
+        read_repository_store(config)
+    except Exception as exc:
+        inventory_errors.append({"inventory": "repositories", "path": str(repositories_inventory_file), "error": str(exc)})
+    try:
+        from storage_objects_api import read_storage_store
+        read_storage_store(config)
+    except Exception as exc:
+        inventory_errors.append({"inventory": "storages", "path": str(storages_inventory_file), "error": str(exc)})
+    inventories_ok = not inventory_errors
 
     migration = _read_migration_state(migration_file)
     migration_log = _read_migration_log(migration_log_file)
@@ -417,6 +432,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "cifs_supported": bool(cifs_supported),
             "cifs_state": cifs_state,
             "secrets_permissions_ok": secrets_permissions_ok,
+            "canonical_inventories_ok": inventories_ok,
         },
         "paths": {
             "data_root": str(root),
@@ -424,6 +440,8 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "secrets": str(secrets_dir),
             "migration_state_file": str(migration_file),
             "migration_log_file": str(migration_log_file),
+            "repositories_inventory_file": str(repositories_inventory_file),
+            "storages_inventory_file": str(storages_inventory_file),
             "mount_bin": str(mount_bin or ""),
             "umount_bin": str(umount_bin or ""),
         },
@@ -439,5 +457,9 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "message": perm_msg,
             "bad_files": bad_perm,
             "checked_files_count": len(secret_candidates),
+        },
+        "canonical_inventories": {
+            "ok": inventories_ok,
+            "errors": inventory_errors,
         },
     }

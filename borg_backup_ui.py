@@ -1333,19 +1333,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     pass
 
         # Metadatei des Jobs löschen (Wizard-First)
-        deleted_metadata = False
-        for jobs_meta_dir in jobs_meta_dirs:
-            meta_file = jobs_meta_dir / f"{job_key}.json"
-            if not meta_file.exists():
-                continue
-            try:
-                meta_file.unlink()
-                deleted_metadata = True
-            except OSError:
-                pass
-        if deleted_metadata:
-            from repositories_api import unlink_job_from_repositories
-            unlink_job_from_repositories(self.config, job_key)
+        metadata_paths = [jobs_meta_dir / f"{job_key}.json" for jobs_meta_dir in jobs_meta_dirs]
+        from repositories_api import delete_job_metadata_transaction
+        deleted_metadata = bool(delete_job_metadata_transaction(self.config, metadata_paths, job_key))
 
         delete_artifacts = bool(body.get("delete_artifacts", False))
 
@@ -1434,8 +1424,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_repositories_data(self.config)
 
     def _get_repositories(self) -> dict:
-        from repositories_api import read_repository_store
-        return read_repository_store(self.config)
+        from repositories_api import read_repository_store_for_api
+        return read_repository_store_for_api(self.config)
 
     def _post_repository(self) -> dict:
         from repositories_api import create_or_import_repository
@@ -2239,8 +2229,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             derive_data_dirs,
             ensure_data_dirs,
             read_expanded_conf,
-            read_settings_payload,
-            write_settings_payload,
             _normalize_usb_profile_rows,
             _normalize_storage_profile_rows,
             validate_usb_profile_usage_before_save,
@@ -2253,6 +2241,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cleanup_removed_smb_secrets,
         )
         from ntfy_api import prepare_ntfy_updates_for_save
+        from storage_objects_api import replace_profile_storages, settings_profiles_from_storages
         body = self._read_json_body()
         updates = body.get("updates", {})
         smb_cleanup_keys = body.get("smb_cleanup_keys", [])
@@ -2270,15 +2259,23 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         prev_conf = read_expanded_conf(self.config)
         prev_data_dir = str(prev_conf.get("GLOBAL_DATA_DIR", "")).strip()
         prev_smb_rows = []
-        settings_payload = read_settings_payload(self.config)
+        canonical_profiles = settings_profiles_from_storages(self.config)
         try:
             prev_smb_rows = validate_smb_profiles_json(
-                json.dumps(settings_payload.get("smb_profiles", []), ensure_ascii=False)
+                json.dumps(canonical_profiles.get("smb_profiles", []), ensure_ascii=False)
             )
         except ValueError:
             prev_smb_rows = []
         smb_removed_keys: set[str] = set()
-        settings_changed = False
+        if "LOCAL_PROFILES_JSON" in updates:
+            try:
+                parsed_local = json.loads(str(updates.get("LOCAL_PROFILES_JSON", "[]") or "[]"))
+            except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                raise ValueError("LOCAL_PROFILES_JSON is not valid JSON.") from exc
+            if not isinstance(parsed_local, list):
+                raise ValueError("LOCAL_PROFILES_JSON must be a list.")
+            replace_profile_storages(self.config, "local", parsed_local)
+            updates.pop("LOCAL_PROFILES_JSON", None)
         if "GLOBAL_SMTP_PASSWORD" in updates:
             incoming_pw = str(updates.get("GLOBAL_SMTP_PASSWORD", ""))
             existing_pw = str(prev_conf.get("GLOBAL_SMTP_PASSWORD", ""))
@@ -2306,9 +2303,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             new_keys = {str(r.get("key") or "").strip().lower() for r in normalized_preview if str(r.get("key") or "").strip()}
             smb_removed_keys = {k for k in prev_keys if k not in new_keys}
             normalized_smb = prepare_smb_profiles_for_save(str(updates.get("SMB_PROFILES_JSON", "[]")))
-            settings_payload["smb_profiles"] = normalized_smb
+            replace_profile_storages(self.config, "smb", normalized_smb)
             updates.pop("SMB_PROFILES_JSON", None)
-            settings_changed = True
         if "USB_PROFILES_JSON" in updates:
             raw_usb = str(updates.get("USB_PROFILES_JSON", "[]") or "[]")
             try:
@@ -2319,9 +2315,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 raise ValueError("USB_PROFILES_JSON must be a list.")
             normalized_usb = _normalize_usb_profile_rows(parsed_usb)
             validate_usb_profile_usage_before_save(self.config, normalized_usb)
-            settings_payload["usb_profiles"] = normalized_usb
+            replace_profile_storages(self.config, "usb", normalized_usb)
             updates.pop("USB_PROFILES_JSON", None)
-            settings_changed = True
         if "STORAGE_PROFILES_JSON" in updates:
             raw_storage = str(updates.get("STORAGE_PROFILES_JSON", "[]") or "[]")
             try:
@@ -2333,12 +2328,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             normalized_storage = _normalize_storage_profile_rows(parsed_storage)
             validate_storage_profiles_complete_before_save(normalized_storage)
             validate_storage_profile_usage_before_save(self.config, normalized_storage)
-            settings_payload["storage_profiles"] = normalized_storage
+            replace_profile_storages(self.config, "storagebox", normalized_storage)
             updates.pop("STORAGE_PROFILES_JSON", None)
-            settings_changed = True
         storage_keys = {"STORAGEBOX_HOST", "STORAGEBOX_PORT", "STORAGEBOX_USER", "STORAGEBOX_BASE_PATH"}
         if storage_keys & set(updates.keys()):
-            rows = settings_payload.get("storage_profiles") if isinstance(settings_payload.get("storage_profiles"), list) else []
+            rows = canonical_profiles.get("storage_profiles") if isinstance(canonical_profiles.get("storage_profiles"), list) else []
             normalized_rows = []
             normalized_rows = _normalize_storage_profile_rows(rows)
             active = normalized_rows[0] if normalized_rows else {
@@ -2358,12 +2352,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 active["user"] = str(updates.get("STORAGEBOX_USER", "")).strip()
             if "STORAGEBOX_BASE_PATH" in updates:
                 active["base_path"] = str(updates.get("STORAGEBOX_BASE_PATH", "/./backup")).strip() or "/./backup"
-            settings_payload["storage_profiles"] = _normalize_storage_profile_rows([active] + [r for r in normalized_rows[1:] if isinstance(r, dict)])
-            validate_storage_profiles_complete_before_save(settings_payload["storage_profiles"])
-            validate_storage_profile_usage_before_save(self.config, settings_payload["storage_profiles"])
-            settings_changed = True
-        if settings_changed:
-            write_settings_payload(self.config, settings_payload)
+            next_storage_profiles = _normalize_storage_profile_rows([active] + [r for r in normalized_rows[1:] if isinstance(r, dict)])
+            validate_storage_profiles_complete_before_save(next_storage_profiles)
+            replace_profile_storages(self.config, "storagebox", next_storage_profiles)
         write_conf(self.config, updates, snapshot_reason="Manual change")
         created_paths = None
         if data_dir is not None:
@@ -3029,7 +3020,10 @@ btn.addEventListener('click',doSetup);
         except ApiConflictError as exc:
             self._send_api_error(409, exc.code, str(exc), request_id=request_id)
         except Exception as exc:
-            self._send_api_error(500, "internal_error", str(exc), request_id=request_id)
+            if exc.__class__.__module__.endswith("inventory_store"):
+                self._send_api_error(503, "inventory_unavailable", str(exc), request_id=request_id)
+            else:
+                self._send_api_error(500, "internal_error", str(exc), request_id=request_id)
         finally:
             self._current_request_id = ""
             self._last_json_body = {}

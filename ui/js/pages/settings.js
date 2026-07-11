@@ -8,7 +8,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   dirty: false,
   activeTab: 'general',
   advancedTab: 'reminders',
-  profileSelection: { usb: '', smb: '', storagebox: '' },
+  profileSelection: { local: '', usb: '', smb: '', storagebox: '' },
   profileEditing: '',
   storageboxPubVisible: false,
   storageboxConnOk: null,
@@ -63,6 +63,7 @@ function getSettingsTabs() {
   { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: settingsMenuIcon('users') },
   { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: settingsMenuIcon('backup') },
   { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: settingsMenuIcon('restore') },
+  { key: 'local', label: settingsT('tabs.localProfiles'), group: 'storage', description: settingsT('menu.localDescription'), icon: locationIcon('local') },
   { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: locationIcon('usb') },
   { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: locationIcon('smb') },
   { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: locationIcon('storagebox') },
@@ -203,7 +204,7 @@ function renderSettings(data, systemHealth) {
   const tabs = getSettingsTabs();
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
   if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
-  const profileTab = ['usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
+  const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
   const saveBtn = document.getElementById('settings-save-btn');
   if (saveBtn) saveBtn.classList.toggle('hidden', profileTab);
   el.innerHTML = `
@@ -228,6 +229,9 @@ function renderSettings(data, systemHealth) {
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'usb' ? '' : 'hidden'}" data-settings-panel="usb">
       ${renderSettingsUsbProfiles(data.usb_profiles || [])}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'local' ? '' : 'hidden'}" data-settings-panel="local">
+      ${renderSettingsLocalProfiles(data.local_profiles || [])}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'smb' ? '' : 'hidden'}" data-settings-panel="smb">
       ${renderSettingsSmbProfiles(data.smb_profiles || [])}
@@ -297,6 +301,17 @@ function renderSettingsMenu(tabs) {
 }
 
 const SETTINGS_PROFILE_CONFIG = {
+  local: {
+    rowsId: 'local-profiles-rows',
+    rowSelector: '.local-profile-row',
+    nameSelector: '[data-local-profile-name]',
+    endpointSelector: '[data-local-profile-path]',
+    icon: locationIcon('local'),
+    fields: [
+      ['[data-local-profile-name]', 'profiles.name'],
+      ['[data-local-profile-path]', 'profiles.basePath'],
+    ],
+  },
   usb: {
     rowsId: 'usb-profiles-rows',
     rowSelector: '.usb-profile-row',
@@ -421,7 +436,7 @@ function syncSettingsProfileManager(type, selectLast = false) {
     const key = row.dataset.profileUiKey || '';
     const name = row.querySelector(config.nameSelector)?.value || key || settingsT('menu.newProfile');
     const endpoint = row.querySelector(config.endpointSelector)?.value || settingsT('common.notChecked');
-    const jobsCount = Number(row.dataset.usbJobsCount || row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
+    const jobsCount = Number(row.dataset.localJobsCount || row.dataset.usbJobsCount || row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
     const inUse = jobsCount > 0 ? `<em class="settings-profile-usage">${settingsT('profiles.inUseShort', { count: jobsCount })}</em>` : '';
     return `<button type="button" class="settings-profile-list-item ${key === selectedKey ? 'active' : ''}" data-profile-ui-key="${escHtml(key)}">
       <span class="settings-profile-symbol ${type}">${config.icon}</span>
@@ -461,12 +476,12 @@ async function blockProfileRemovalIfInUse(row, type) {
   const jobsCount = Number(row?.dataset?.[`${type}JobsCount`] || 0);
   if (jobsCount <= 0) return false;
   const refs = String(row?.dataset?.[`${type}JobRefs`] || '').trim();
-  const titleKey = type === 'usb'
-    ? 'profiles.cannotRemoveUsb'
-    : (type === 'smb' ? 'profiles.cannotRemoveSmb' : 'profiles.cannotRemoveStorage');
-  const msgId = type === 'usb'
-    ? 'usb-profiles-msg'
-    : (type === 'smb' ? 'smb-profiles-msg' : 'storage-profiles-msg');
+  const titleKey = type === 'local'
+    ? 'profiles.cannotRemoveLocal'
+    : (type === 'usb' ? 'profiles.cannotRemoveUsb' : (type === 'smb' ? 'profiles.cannotRemoveSmb' : 'profiles.cannotRemoveStorage'));
+  const msgId = type === 'local'
+    ? 'local-profiles-msg'
+    : (type === 'usb' ? 'usb-profiles-msg' : (type === 'smb' ? 'smb-profiles-msg' : 'storage-profiles-msg'));
   await _openSettingsDialog({
     title: settingsT(titleKey),
     message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
@@ -486,6 +501,78 @@ function decorateSettingsProfileFields(row, fields) {
     control.parentNode.insertBefore(wrapper, control);
     wrapper.appendChild(control);
   });
+}
+
+function normalizeLocalProfileRows(rows) {
+  const out = [];
+  const seen = new Set();
+  (rows || []).forEach((row) => {
+    const name = String(row?.name || '').trim();
+    const base_path = String(row?.base_path || '').trim().replace(/\/+$/, '');
+    const storage_key = String(row?.storage_key || row?.key || '').trim();
+    if (!name || !base_path || seen.has(base_path)) return;
+    seen.add(base_path);
+    out.push({
+      key: storage_key,
+      storage_key,
+      name,
+      base_path,
+      jobs_count: Number(row?.jobs_count || 0),
+      job_refs: Array.isArray(row?.job_refs) ? row.job_refs.map(String).filter(Boolean) : [],
+    });
+  });
+  return out;
+}
+
+function getLocalProfilesFromDom() {
+  return normalizeLocalProfileRows([...document.querySelectorAll('#local-profiles-rows .local-profile-row')].map((row) => ({
+    storage_key: row.dataset.storageKey || '',
+    name: row.querySelector('[data-local-profile-name]')?.value || '',
+    base_path: row.querySelector('[data-local-profile-path]')?.value || '',
+  })));
+}
+
+function syncLocalProfilesHiddenInput() {
+  const hidden = document.getElementById('local-profiles-json');
+  if (hidden) hidden.value = JSON.stringify(getLocalProfilesFromDom());
+}
+
+function onLocalProfileInputChanged() {
+  syncLocalProfilesHiddenInput();
+  markSettingsDirty();
+}
+
+function addLocalProfileRow(row = {}) {
+  const box = document.getElementById('local-profiles-rows');
+  if (!box) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'local-profile-row';
+  wrap.dataset.storageKey = String(row.storage_key || '');
+  wrap.innerHTML = `
+    <input class="form-input" type="text" data-local-profile-name placeholder="Backup Pool" value="${escHtml(row.name || '')}" oninput="onLocalProfileInputChanged()">
+    <input class="form-input mono" type="text" data-local-profile-path placeholder="/mnt/backup" value="${escHtml(row.base_path || '')}" oninput="onLocalProfileInputChanged()">
+    <button type="button" class="btn btn-danger btn-sm" data-settings-action="local-profile-remove">${settingsT('common.remove')}</button>`;
+  box.appendChild(wrap);
+}
+
+function renderSettingsLocalProfiles(rows) {
+  const normalized = normalizeLocalProfileRows(rows);
+  const content = normalized.map((row) => `
+    <div class="local-profile-row" data-profile-key="${escHtml(row.storage_key)}" data-storage-key="${escHtml(row.storage_key)}" data-local-jobs-count="${row.jobs_count}" data-local-job-refs="${escHtml(row.job_refs.join(', '))}">
+      <input class="form-input" type="text" data-local-profile-name value="${escHtml(row.name)}" oninput="onLocalProfileInputChanged()">
+      <input class="form-input mono" type="text" data-local-profile-path value="${escHtml(row.base_path)}" oninput="onLocalProfileInputChanged()">
+      <button type="button" class="btn btn-danger btn-sm" data-settings-action="local-profile-remove">${settingsT('common.remove')}</button>
+    </div>`).join('');
+  return settingsCard(settingsT('profiles.localTitle'), locationIcon('local'), `
+    <div class="settings-body">
+      <div class="text-muted" style="font-size:12px;margin-bottom:10px">${settingsT('profiles.localDescription')}</div>
+      <div id="local-profiles-rows" style="display:grid;gap:8px">${content}</div>
+      <input type="hidden" id="local-profiles-json" data-key="LOCAL_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="local-profile-add">${settingsT('profiles.addLocal')}</button>
+      </div>
+      <div id="local-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
+    </div>`);
 }
 
 function normalizeUsbProfileRows(rows) {
@@ -903,6 +990,12 @@ function renderSettingsSystemHealth(data) {
     : ((Array.isArray(perms.bad_files) && perms.bad_files.length)
       ? perms.bad_files.map((f) => `${f.path} (${f.mode})`).join(' | ')
       : settingsT('health.checkPermissions'));
+  const inventories = data?.canonical_inventories || {};
+  const inventoryDetail = inventories.ok
+    ? settingsT('health.inventoriesOk')
+    : (Array.isArray(inventories.errors)
+      ? inventories.errors.map((row) => `${row.path}: ${row.error}`).join(' | ')
+      : settingsT('health.inventoriesFailed'));
   const checks = [
     [settingsT('health.dataRoot'), data?.checks?.data_root_ok, data?.paths?.data_root || '—'],
     [settingsT('health.jobsPath'), data?.checks?.jobs_path_ok, data?.paths?.jobs || '—'],
@@ -910,6 +1003,7 @@ function renderSettingsSystemHealth(data) {
     [settingsT('health.mountAvailable'), data?.checks?.mount_bin_ok, `${data?.paths?.mount_bin || '—'} | ${data?.paths?.umount_bin || '—'}`],
     [settingsT('health.cifsSupport'), data?.checks?.cifs_supported, cifsDetail],
     [settingsT('health.secretPermissions'), data?.checks?.secrets_permissions_ok, permDetail],
+    [settingsT('health.canonicalInventories'), data?.checks?.canonical_inventories_ok, inventoryDetail],
   ];
   const migrationSummary = _buildMigrationSummary(data || {});
   const lastEffectiveTs = _formatHealthTimestamp(migrationSummary.lastEffectiveRun) || settingsT('health.noEffectiveChanges');
@@ -1433,6 +1527,10 @@ function _migrationRegistryText(item, field) {
     borg_keyfiles_v1: {
       title: 'registryBorgKeyfilesTitle',
       reason: status === 'applied' ? 'registryBorgKeyfilesApplied' : (status === 'not_needed' ? 'registryBorgKeyfilesCurrent' : 'registryBorgKeyfilesPending'),
+    },
+    canonical_storage_profiles_v1: {
+      title: 'registryCanonicalStoragesTitle',
+      reason: status === 'applied' ? 'registryCanonicalStoragesApplied' : (status === 'not_needed' ? 'registryCanonicalStoragesCurrent' : 'registryCanonicalStoragesPending'),
     },
   };
   const key = keys[id]?.[field];
@@ -3549,6 +3647,21 @@ async function onSettingsContentClick(event) {
   if (action === 'storagebox-key-public') return storageboxKeyPublic();
   if (action === 'storagebox-key-deploy') return storageboxKeyDeploy();
   if (action === 'storagebox-test') return storageboxTest();
+  if (action === 'local-profile-add') {
+    addLocalProfileRow();
+    onLocalProfileInputChanged();
+    settingsState.profileEditing = 'local';
+    syncSettingsProfileManager('local', true);
+    return;
+  }
+  if (action === 'local-profile-remove') {
+    const row = event.target.closest('.local-profile-row');
+    if (await blockProfileRemovalIfInUse(row, 'local')) return;
+    row?.remove();
+    onLocalProfileInputChanged();
+    syncSettingsProfileManager('local');
+    return;
+  }
   if (action === 'usb-profile-add') {
     addUsbProfileRow();
     onUsbProfileInputChanged();

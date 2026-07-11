@@ -35,6 +35,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Storage:
   - Source-path suggestions support keyboard drill-down: Up/Down selects, Right opens the selected directory, and Enter adds the final source path.
   - Job source-path autocomplete now browses safely below `/mnt`, debounces input and prevents stale requests from clearing newer suggestions.
+
   - Repository paths can be typed naturally with internal hyphens; live input no longer removes a trailing hyphen before the next character is entered.
   - Added a three-step repository manager that selects or creates and tests Local, USB, SMB, and SSH/Storagebox targets before repository setup.
   - SMB targets receive a managed mount path; users no longer have to invent a technical temporary mount path.
@@ -65,6 +66,15 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - Added a separate Repository Management tab with a non-destructive inventory removal and a guarded permanent Borg repository deletion.
   - Permanent deletion requires no linked jobs or running operations, revalidates repository ID/path/archive count, requires display-name plus `DELETE` confirmation, and records an audit entry.
   - Repository lifecycle audit entries now record the authenticated actor, role, authentication method and request ID; the general API log also identifies the repository action and outcome without exposing secrets.
+
+### Issue #191
+- Canonical inventory consistency:
+  - Repository and storage inventories now use a shared cross-process lock, restrictive permissions, and durable atomic writes with `fsync` and `os.replace`.
+  - Existing malformed inventories stop safely and are reported through API errors and System Health instead of being interpreted as empty data.
+  - Job metadata and repository link changes are persisted as a recoverable transaction with rollback on write failures.
+  - `storages.json` is the canonical source for Local, USB, SMB, and SSH profiles; the one-time migration creates rollback backups and removes duplicate profile arrays from `settings.json`.
+  - Settings now provides managed Local Profiles for arbitrary Unraid pools below `/mnt`, while broad collection roots and unsafe paths remain blocked.
+  - Effective repository paths are derived from the current storage target and relative repository path.
 
 ### Issue #180
 - Dashboard:

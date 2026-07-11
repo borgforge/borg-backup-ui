@@ -90,11 +90,10 @@ def test_storage_repo_uri_builder_normalizes_relative_base_path():
     assert build_storage_repo_uri(profile, "flash") == "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash"
 
 
-def test_resolve_storage_profile_returns_requested_profile(tmp_path: Path, monkeypatch):
-    import config_api
+def test_resolve_storage_profile_returns_requested_canonical_profile(tmp_path: Path):
+    from storage_objects_api import replace_profile_storages
 
-    settings = {
-        "storage_profiles": [
+    profiles = [
             {
                 "key": "storage-a",
                 "name": "Storage A",
@@ -112,11 +111,9 @@ def test_resolve_storage_profile_returns_requested_profile(tmp_path: Path, monke
                 "base_path": "volume1/backup-b",
             },
         ]
-    }
-
-    monkeypatch.setattr(config_api, "ensure_settings_migrated", lambda _cfg: settings)
-
-    row = resolve_storage_profile({"BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts")}, "storage-b")
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts")}
+    replace_profile_storages(config, "storagebox", profiles)
+    row = resolve_storage_profile(config, "storage-b")
 
     assert row["key"] == "storage-b"
     assert row["host"] == "b.example.test"

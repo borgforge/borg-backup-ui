@@ -13,8 +13,10 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit
+
+from inventory_store import atomic_write_bytes, atomic_write_inventory, inventory_lock, read_inventory
 
 
 SCHEMA_VERSION = 1
@@ -42,16 +44,6 @@ def storage_key_for(storage_type: str, identity: str) -> str:
     clean_type = "".join(ch if ch.isalnum() else "_" for ch in str(storage_type or "").strip().lower()).strip("_")
     clean_type = clean_type or "storage"
     return f"storage_{clean_type}_{_hash_suffix(identity)}"
-
-
-def _read_json_file(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return {}
 
 
 def _normalize_path(path: str) -> str:
@@ -163,6 +155,10 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
             "user": str(row.get("user") or "").strip(),
             "server": str(row.get("server") or "").strip(),
             "share": str(row.get("share") or "").strip(),
+            "username": str(row.get("username") or "").strip(),
+            "password_file": str(row.get("password_file") or "").strip(),
+            "vers": str(row.get("vers") or "3.0").strip() or "3.0",
+            "sec": str(row.get("sec") or "").strip(),
             "target_type": str(row.get("target_type") or "").strip(),
             "ssh_key_path": str(row.get("ssh_key_path") or "").strip(),
             "created_by": str(row.get("created_by") or "migration").strip(),
@@ -175,24 +171,39 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
 
 
 def read_storage_store(config: dict) -> dict[str, Any]:
-    payload = _read_json_file(storages_file(config))
-    rows = payload.get("storages") if isinstance(payload.get("storages"), list) else []
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "updated_at": str(payload.get("updated_at") or ""),
-        "storages": normalize_storages(rows),
-    }
+    path = storages_file(config)
+    with inventory_lock(path.parent):
+        payload = read_inventory(path, collection_key="storages", schema_version=SCHEMA_VERSION)
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "updated_at": str(payload.get("updated_at") or ""),
+            "storages": normalize_storages(payload["storages"]),
+        }
 
 
 def write_storage_store(config: dict, store: dict[str, Any]) -> None:
     path = storages_file(config)
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema_version": SCHEMA_VERSION,
         "updated_at": _now(),
         "storages": normalize_storages(store.get("storages") if isinstance(store, dict) else []),
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    with inventory_lock(path.parent):
+        atomic_write_inventory(path, payload)
+
+
+def update_storage_store(
+    config: dict,
+    updater: Callable[[dict[str, Any]], dict[str, Any] | None],
+) -> dict[str, Any]:
+    """Run one storage read-modify-write operation under the shared lock."""
+    path = storages_file(config)
+    with inventory_lock(path.parent):
+        current = read_storage_store(config)
+        updated = updater(current)
+        result = updated if isinstance(updated, dict) else current
+        write_storage_store(config, result)
+        return read_storage_store(config)
 
 
 def _profile_key(value: str, prefix: str, existing: set[str]) -> str:
@@ -212,16 +223,189 @@ def _safe_local_storage_path(value: str, *, field: str) -> str:
     path = Path(raw)
     if not path.is_absolute():
         raise ValueError(f"{field} must be an absolute path")
-    blocked = {"/", "/mnt", "/boot", "/etc", "/usr", "/var"}
+    blocked = {"/", "/mnt", "/mnt/disks", "/mnt/remotes", "/boot", "/etc", "/usr", "/var"}
     if raw in blocked or not raw.startswith("/mnt/"):
         raise ValueError(f"{field} must be a dedicated directory below /mnt")
     if any(part in {".", ".."} for part in path.parts):
         raise ValueError(f"{field} contains unsafe path segments")
+    resolved = Path(os.path.realpath(raw))
+    if not str(resolved).startswith("/mnt/"):
+        raise ValueError(f"{field} resolves outside /mnt")
     return raw
 
 
-def create_storage_target(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
-    """Create one storage target and persist profile-backed targets in settings.json."""
+def settings_profiles_from_storages(config: dict) -> dict[str, list[dict[str, Any]]]:
+    """Build the Settings UI profile view from the canonical storage inventory."""
+    result: dict[str, list[dict[str, Any]]] = {
+        "local_profiles": [],
+        "usb_profiles": [],
+        "smb_profiles": [],
+        "storage_profiles": [],
+    }
+    for row in read_storage_store(config).get("storages", []):
+        location = str(row.get("location") or row.get("storage_type") or "").lower()
+        common = {
+            "key": str(row.get("profile_key") or row.get("storage_key") or ""),
+            "storage_key": str(row.get("storage_key") or ""),
+            "name": str(row.get("display_name") or ""),
+        }
+        if location == "local":
+            result["local_profiles"].append({**common, "base_path": str(row.get("base_path") or "")})
+        elif location == "usb":
+            result["usb_profiles"].append({**common, "mount_path": str(row.get("mount_path") or row.get("base_path") or "")})
+        elif location == "smb":
+            result["smb_profiles"].append({
+                **common,
+                "server": str(row.get("server") or ""),
+                "share": str(row.get("share") or ""),
+                "mount_path": str(row.get("mount_path") or row.get("base_path") or ""),
+                "username": str(row.get("username") or ""),
+                "password_file": str(row.get("password_file") or ""),
+                "vers": str(row.get("vers") or "3.0"),
+                "sec": str(row.get("sec") or ""),
+            })
+        elif location == "storagebox" or str(row.get("storage_type") or "") == "ssh":
+            result["storage_profiles"].append({
+                **common,
+                "host": str(row.get("host") or ""),
+                "port": str(row.get("port") or "23"),
+                "user": str(row.get("user") or ""),
+                "base_path": str(row.get("base_path") or ""),
+                "target_type": str(row.get("target_type") or "storagebox"),
+                "ssh_key_path": str(row.get("ssh_key_path") or ""),
+            })
+    return result
+
+
+def _replace_profile_storages_locked(config: dict, location: str, profiles: list[dict[str, Any]]) -> list[str]:
+    """Replace one profile type directly in storages.json without a dual-write source."""
+    target_location = str(location or "").strip().lower()
+    if target_location not in {"local", "usb", "smb", "storagebox"}:
+        raise ValueError("Unsupported storage profile type")
+    from repositories_api import read_repository_store
+    referenced = {
+        str(row.get("storage_key") or "")
+        for row in read_repository_store(config).get("repositories", [])
+        if str(row.get("storage_key") or "")
+    }
+    current = read_storage_store(config)
+    existing_rows = current.get("storages", [])
+    existing_by_key = {str(row.get("storage_key") or ""): row for row in existing_rows}
+    replacements: list[dict[str, Any]] = []
+    seen_profile_keys: set[str] = set()
+    now = _now()
+    for raw in profiles if isinstance(profiles, list) else []:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or raw.get("display_name") or "").strip()
+        if not name:
+            raise ValueError("Storage profile display name is required")
+        if target_location == "local":
+            base_path = _safe_local_storage_path(raw.get("base_path", ""), field="Local storage path")
+            identity = f"local:{base_path}"
+            key = str(raw.get("storage_key") or "").strip() or storage_key_for("local", identity)
+            profile_key = ""
+            values = {"base_path": base_path, "mount_path": ""}
+            storage_type = "local"
+        else:
+            profile_key = str(raw.get("key") or raw.get("profile_key") or "").strip().lower()
+            if not profile_key:
+                raise ValueError("Storage profile key is required")
+            if profile_key in seen_profile_keys:
+                raise ValueError("Storage profile keys must be unique")
+            seen_profile_keys.add(profile_key)
+            identity_prefix = "storagebox" if target_location == "storagebox" else target_location
+            identity = f"{identity_prefix}-profile:{profile_key}"
+            key = str(raw.get("storage_key") or "").strip() or storage_key_for(identity_prefix, identity)
+            storage_type = "ssh" if target_location == "storagebox" else target_location
+            if target_location == "usb":
+                mount_path = _safe_local_storage_path(raw.get("mount_path", ""), field="USB mount path")
+                values = {"base_path": mount_path, "mount_path": mount_path}
+            elif target_location == "smb":
+                mount_path = _safe_local_storage_path(raw.get("mount_path", ""), field="SMB mount path")
+                values = {
+                    "base_path": mount_path,
+                    "mount_path": mount_path,
+                    "server": str(raw.get("server") or "").strip(),
+                    "share": str(raw.get("share") or "").strip(),
+                    "username": str(raw.get("username") or "").strip(),
+                    "password_file": str(raw.get("password_file") or "").strip(),
+                    "vers": str(raw.get("vers") or "3.0").strip() or "3.0",
+                    "sec": str(raw.get("sec") or "").strip(),
+                }
+                if not values["server"] or not values["share"] or not values["username"]:
+                    raise ValueError("SMB server, share and username are required")
+            else:
+                values = {
+                    "base_path": str(raw.get("base_path") or "").strip(),
+                    "host": str(raw.get("host") or "").strip(),
+                    "port": str(raw.get("port") or "23").strip() or "23",
+                    "user": str(raw.get("user") or "").strip(),
+                    "target_type": str(raw.get("target_type") or "storagebox").strip(),
+                    "ssh_key_path": str(raw.get("ssh_key_path") or "").strip(),
+                }
+                if not values["base_path"] or not values["host"] or not values["user"]:
+                    raise ValueError("SSH host, user and base path are required")
+        previous = existing_by_key.get(key, {})
+        replacements.append({
+            **previous,
+            "storage_key": key,
+            "display_name": name,
+            "storage_type": storage_type,
+            "location": target_location,
+            "identity": identity,
+            "profile_key": profile_key,
+            **values,
+            "created_by": str(previous.get("created_by") or "settings"),
+            "created_at": str(previous.get("created_at") or now),
+            "updated_at": now,
+            "source": "settings",
+        })
+    replacement_keys = {str(row.get("storage_key") or "") for row in replacements}
+    removed = [
+        row for row in existing_rows
+        if str(row.get("location") or row.get("storage_type") or "").lower() == target_location
+        and str(row.get("storage_key") or "") not in replacement_keys
+    ]
+    blocked = [str(row.get("display_name") or row.get("storage_key") or "") for row in removed if str(row.get("storage_key") or "") in referenced]
+    if blocked:
+        raise ValueError(f"Storage profiles are still used by repositories: {', '.join(blocked)}")
+    kept = [
+        row for row in existing_rows
+        if str(row.get("location") or row.get("storage_type") or "").lower() != target_location
+    ]
+    write_storage_store(config, {"storages": [*kept, *replacements]})
+    return sorted(replacement_keys)
+
+
+def replace_profile_storages(config: dict, location: str, profiles: list[dict[str, Any]]) -> list[str]:
+    path = storages_file(config)
+    with inventory_lock(path.parent):
+        return _replace_profile_storages_locked(config, location, profiles)
+
+
+def replace_all_profile_storages(config: dict, payload: dict[str, Any]) -> dict[str, list[str]]:
+    """Replace all profile collections as one recoverable storage transaction."""
+    path = storages_file(config)
+    with inventory_lock(path.parent):
+        previous = path.read_bytes() if path.exists() else None
+        changed: dict[str, list[str]] = {}
+        try:
+            changed["local"] = _replace_profile_storages_locked(config, "local", payload.get("local_profiles", []))
+            changed["usb"] = _replace_profile_storages_locked(config, "usb", payload.get("usb_profiles", []))
+            changed["smb"] = _replace_profile_storages_locked(config, "smb", payload.get("smb_profiles", []))
+            changed["storagebox"] = _replace_profile_storages_locked(config, "storagebox", payload.get("storage_profiles", []))
+        except Exception:
+            if previous is None:
+                path.unlink(missing_ok=True)
+            else:
+                atomic_write_bytes(path, previous)
+            raise
+        return changed
+
+
+def _create_storage_target_locked(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+    """Create one storage target directly in the canonical inventory."""
     if not isinstance(payload, dict):
         raise ValueError("Invalid storage target payload")
     location = str(payload.get("storage_type") or payload.get("location") or "").strip().lower()
@@ -233,9 +417,7 @@ def create_storage_target(config: dict, payload: dict[str, Any]) -> dict[str, An
     if not display_name:
         raise ValueError("Storage target display name is required")
 
-    from config_api import read_settings_payload, write_settings_payload
-
-    settings = read_settings_payload(config)
+    settings = settings_profiles_from_storages(config)
     store = read_storage_store(config)
     storages = store.get("storages", [])
 
@@ -301,8 +483,7 @@ def create_storage_target(config: dict, payload: dict[str, Any]) -> dict[str, An
         }
         from smb_profiles_api import prepare_smb_profiles_for_save
         profiles = prepare_smb_profiles_for_save(json.dumps([*profiles, profile], ensure_ascii=False))
-        settings[profile_field] = profiles
-        write_settings_payload(config, settings)
+        replace_profile_storages(config, "smb", profiles)
         storage_key = storage_key_for("smb", f"smb-profile:{key}")
         storage = next((row for row in read_storage_store(config)["storages"] if row["storage_key"] == storage_key), None)
         return {"ok": True, "created": True, "storage": storage, "managed_mount_path": mount_path}
@@ -333,14 +514,19 @@ def create_storage_target(config: dict, payload: dict[str, Any]) -> dict[str, An
             "ssh_key_path": ssh_key_path,
         }
 
-    settings[profile_field] = [*profiles, profile]
-    write_settings_payload(config, settings)
+    replace_profile_storages(config, location, [*profiles, profile])
     storage_type = "storagebox" if location == "storagebox" else location
     storage_key = storage_key_for(storage_type, f"{storage_type}-profile:{key}")
     storage = next((row for row in read_storage_store(config)["storages"] if row["storage_key"] == storage_key), None)
     if not storage:
         raise RuntimeError("Storage target inventory was not updated")
     return {"ok": True, "created": True, "storage": storage}
+
+
+def create_storage_target(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+    path = storages_file(config)
+    with inventory_lock(path.parent):
+        return _create_storage_target_locked(config, payload)
 
 
 def test_storage_target(config: dict, storage_key: str) -> dict[str, Any]:

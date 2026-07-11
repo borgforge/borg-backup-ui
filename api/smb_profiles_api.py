@@ -122,10 +122,8 @@ def get_smb_profile_job_refs(ui_config: dict) -> Dict[str, List[str]]:
 
 
 def get_smb_profiles_with_status(ui_config: dict) -> List[Dict[str, Any]]:
-    from config_api import read_expanded_conf
-
-    conf = read_expanded_conf(ui_config)
-    rows = validate_smb_profiles_json(conf.get("SMB_PROFILES_JSON", "[]"))
+    from storage_objects_api import settings_profiles_from_storages
+    rows = validate_smb_profiles_json(json.dumps(settings_profiles_from_storages(ui_config).get("smb_profiles", [])))
     refs = get_smb_profile_job_refs(ui_config)
     out: List[Dict[str, Any]] = []
     for row in rows:

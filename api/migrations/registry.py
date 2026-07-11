@@ -9,6 +9,7 @@ from typing import Any
 
 from . import (
     borg_keyfiles_v1,
+    canonical_storage_profiles_v1,
     notification_events_v1,
     repository_objects_v1,
     repository_objects_v2,
@@ -31,6 +32,7 @@ MIGRATIONS = [
     storage_objects_v2,
     repository_runtime_v1,
     borg_keyfiles_v1,
+    canonical_storage_profiles_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}

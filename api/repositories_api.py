@@ -17,8 +17,10 @@ import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
+
+from inventory_store import atomic_write_bytes, atomic_write_inventory, atomic_write_json, inventory_lock, read_inventory
 
 
 SCHEMA_VERSION = 1
@@ -196,36 +198,66 @@ def enrich_repository_display_fields(repo: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def _read_json_file(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return {}
-
-
 def read_repository_store(config: dict) -> dict[str, Any]:
-    payload = _read_json_file(repositories_file(config))
-    rows = payload.get("repositories") if isinstance(payload.get("repositories"), list) else []
-    normalized = normalize_repositories(rows)
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "updated_at": str(payload.get("updated_at") or ""),
-        "repositories": normalized,
+    path = repositories_file(config)
+    with inventory_lock(path.parent):
+        payload = read_inventory(path, collection_key="repositories", schema_version=SCHEMA_VERSION)
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "updated_at": str(payload.get("updated_at") or ""),
+            "repositories": normalize_repositories(payload["repositories"]),
+        }
+
+
+def read_repository_store_for_api(config: dict) -> dict[str, Any]:
+    """Return repository metadata with all path fields derived from current storages."""
+    store = read_repository_store(config)
+    from storage_objects_api import read_storage_store
+    storages = {
+        str(row.get("storage_key") or ""): row
+        for row in read_storage_store(config).get("storages", [])
     }
+    derived = []
+    for row in store["repositories"]:
+        storage = storages.get(str(row.get("storage_key") or ""))
+        relative = str(row.get("relative_path") or "").strip()
+        if storage and relative:
+            effective = effective_repository_path(storage, relative)
+            row = {
+                **row,
+                "repo_path": "" if effective.startswith("ssh://") else effective,
+                "repo_uri": effective if effective.startswith("ssh://") else "",
+                "path_raw": effective,
+                "path_display": effective,
+                "storage_name": str(storage.get("display_name") or row.get("storage_name") or ""),
+            }
+        derived.append(row)
+    return {**store, "repositories": derived}
 
 
 def write_repository_store(config: dict, store: dict[str, Any]) -> None:
     path = repositories_file(config)
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema_version": SCHEMA_VERSION,
         "updated_at": _now(),
         "repositories": normalize_repositories(store.get("repositories") if isinstance(store, dict) else []),
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    with inventory_lock(path.parent):
+        atomic_write_inventory(path, payload)
+
+
+def update_repository_store(
+    config: dict,
+    updater: Callable[[dict[str, Any]], dict[str, Any] | None],
+) -> dict[str, Any]:
+    """Run one repository read-modify-write operation under the shared lock."""
+    path = repositories_file(config)
+    with inventory_lock(path.parent):
+        current = read_repository_store(config)
+        updated = updater(current)
+        result = updated if isinstance(updated, dict) else current
+        write_repository_store(config, result)
+        return read_repository_store(config)
 
 
 def normalize_repositories(rows: Any) -> list[dict[str, Any]]:
@@ -587,27 +619,26 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
             cleanup()
     fields = _borg_info_fields(info_payload, archive_payload)
     refreshed_at = _now()
-    latest_store = read_repository_store(config)
-    latest_rows = latest_store["repositories"]
-    latest_repository = next(
-        (row for row in latest_rows if str(row.get("repository_key") or "") == key),
-        None,
-    )
-    if not latest_repository:
-        raise ValueError("Repository was removed while its information was refreshed")
-    updated = {
-        **latest_repository,
-        **{field: value for field, value in fields.items() if value not in ("", None, {})},
-        "last_test_status": "ok",
-        "last_seen_at": refreshed_at,
-        "last_info_refresh_at": refreshed_at,
-        "last_info_refresh_status": "success",
-        "last_info_refresh_error": "",
-        "updated_at": refreshed_at,
-    }
-    write_repository_store(config, {
-        "repositories": [updated if str(row.get("repository_key") or "") == key else row for row in latest_rows],
-    })
+    result_holder: dict[str, Any] = {}
+    def apply_refresh(latest_store: dict[str, Any]) -> dict[str, Any]:
+        latest_rows = latest_store["repositories"]
+        latest_repository = next((row for row in latest_rows if str(row.get("repository_key") or "") == key), None)
+        if not latest_repository:
+            raise ValueError("Repository was removed while its information was refreshed")
+        updated_row = {
+            **latest_repository,
+            **{field: value for field, value in fields.items() if value not in ("", None, {})},
+            "last_test_status": "ok",
+            "last_seen_at": refreshed_at,
+            "last_info_refresh_at": refreshed_at,
+            "last_info_refresh_status": "success",
+            "last_info_refresh_error": "",
+            "updated_at": refreshed_at,
+        }
+        result_holder["repository"] = updated_row
+        return {"repositories": [updated_row if str(row.get("repository_key") or "") == key else row for row in latest_rows]}
+    update_repository_store(config, apply_refresh)
+    updated = result_holder["repository"]
     return {"ok": True, "repository": enrich_repository_display_fields(updated)}
 
 
@@ -645,45 +676,27 @@ def _repository_info_is_due(
 
 
 def _record_repository_info_error(config: dict, repository_key: str, message: str, checked_at: str) -> None:
-    store = read_repository_store(config)
-    rows = store["repositories"]
-    found = False
-    next_rows = []
-    for row in rows:
-        if str(row.get("repository_key") or "") != repository_key:
-            next_rows.append(row)
-            continue
-        found = True
-        next_rows.append({
+    def apply_error(store: dict[str, Any]) -> dict[str, Any]:
+        return {"repositories": [{
             **row,
             "last_info_refresh_at": checked_at,
             "last_info_refresh_status": "error",
             "last_info_refresh_error": _mask_repo_output(str(message or "Repository information refresh failed"))[:500],
             "updated_at": checked_at,
-        })
-    if found:
-        write_repository_store(config, {"repositories": next_rows})
+        } if str(row.get("repository_key") or "") == repository_key else row for row in store["repositories"]]}
+    update_repository_store(config, apply_error)
 
 
 def _record_repository_info_busy(config: dict, repository_key: str, checked_at: str) -> None:
-    store = read_repository_store(config)
-    rows = store["repositories"]
-    found = False
-    next_rows = []
-    for row in rows:
-        if str(row.get("repository_key") or "") != repository_key:
-            next_rows.append(row)
-            continue
-        found = True
-        next_rows.append({
+    def apply_busy(store: dict[str, Any]) -> dict[str, Any]:
+        return {"repositories": [{
             **row,
             "last_info_refresh_at": checked_at,
             "last_info_refresh_status": "busy",
             "last_info_refresh_error": "Repository information refresh was deferred because the repository is in use.",
             "updated_at": checked_at,
-        })
-    if found:
-        write_repository_store(config, {"repositories": next_rows})
+        } if str(row.get("repository_key") or "") == repository_key else row for row in store["repositories"]]}
+    update_repository_store(config, apply_busy)
 
 
 def refresh_due_repository_info(
@@ -1280,7 +1293,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
     }
 
 
-def link_repository_to_job(
+def _link_repository_to_job_locked(
     config: dict,
     repository_key: str,
     job_key: str,
@@ -1315,7 +1328,26 @@ def link_repository_to_job(
     write_repository_store(config, {"repositories": next_rows})
 
 
-def unlink_job_from_repositories(config: dict, job_key: str) -> None:
+def link_repository_to_job(
+    config: dict,
+    repository_key: str,
+    job_key: str,
+    *,
+    previous_repository_key: str = "",
+    previous_job_key: str = "",
+) -> None:
+    path = repositories_file(config)
+    with inventory_lock(path.parent):
+        _link_repository_to_job_locked(
+            config,
+            repository_key,
+            job_key,
+            previous_repository_key=previous_repository_key,
+            previous_job_key=previous_job_key,
+        )
+
+
+def _unlink_job_from_repositories_locked(config: dict, job_key: str) -> None:
     current_job = str(job_key or "").strip()
     if not current_job:
         return
@@ -1338,3 +1370,80 @@ def unlink_job_from_repositories(config: dict, job_key: str) -> None:
         next_rows.append(row)
     if changed:
         write_repository_store(config, {"repositories": next_rows})
+
+
+def unlink_job_from_repositories(config: dict, job_key: str) -> None:
+    path = repositories_file(config)
+    with inventory_lock(path.parent):
+        _unlink_job_from_repositories_locked(config, job_key)
+
+
+def save_job_repository_transaction(
+    config: dict,
+    metadata_path: Path,
+    metadata: dict[str, Any],
+    repository_key: str,
+    job_key: str,
+    *,
+    previous_repository_key: str = "",
+    previous_job_key: str = "",
+    previous_metadata_path: Path | None = None,
+) -> None:
+    """Persist job metadata and both repository link lists as one recoverable unit."""
+    repo_path = repositories_file(config)
+    target = Path(metadata_path)
+    previous = Path(previous_metadata_path) if previous_metadata_path else None
+    with inventory_lock(repo_path.parent):
+        old_target = target.read_bytes() if target.exists() else None
+        old_previous = None
+        if previous is not None and previous != target and previous.exists():
+            old_previous = previous.read_bytes()
+        old_repo = repo_path.read_bytes() if repo_path.exists() else None
+        try:
+            link_repository_to_job(
+                config,
+                repository_key,
+                job_key,
+                previous_repository_key=previous_repository_key,
+                previous_job_key=previous_job_key,
+            )
+            atomic_write_json(target, metadata)
+            if previous is not None and previous != target and previous.exists():
+                previous.unlink()
+        except Exception:
+            if old_repo is None:
+                repo_path.unlink(missing_ok=True)
+            else:
+                atomic_write_bytes(repo_path, old_repo)
+            if old_target is None:
+                target.unlink(missing_ok=True)
+            else:
+                atomic_write_bytes(target, old_target)
+            if previous is not None and previous != target:
+                if old_previous is None:
+                    previous.unlink(missing_ok=True)
+                else:
+                    atomic_write_bytes(previous, old_previous)
+            raise
+
+
+def delete_job_metadata_transaction(config: dict, metadata_paths: list[Path], job_key: str) -> int:
+    """Delete job metadata and unlink its repository references with rollback."""
+    repo_path = repositories_file(config)
+    paths = [Path(path) for path in metadata_paths]
+    with inventory_lock(repo_path.parent):
+        snapshots = {path: path.read_bytes() for path in paths if path.exists()}
+        old_repo = repo_path.read_bytes() if repo_path.exists() else None
+        try:
+            unlink_job_from_repositories(config, job_key)
+            for path in snapshots:
+                path.unlink()
+        except Exception:
+            if old_repo is None:
+                repo_path.unlink(missing_ok=True)
+            else:
+                atomic_write_bytes(repo_path, old_repo)
+            for path, content in snapshots.items():
+                atomic_write_bytes(path, content)
+            raise
+    return len(snapshots)

@@ -59,7 +59,7 @@ def test_profile_pages_use_master_detail_and_explicit_edit_mode() -> None:
 
 def test_profile_pages_hide_global_save_and_keep_local_actions() -> None:
     script = _read("ui/js/pages/settings.js")
-    assert "const profileTab = ['usb', 'smb', 'storagebox'].includes" in script
+    assert "const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes" in script
     assert "saveBtn.classList.toggle('hidden', profileTab)" in script
     assert "const saved = await saveSettings();" in script
     for action in (
@@ -256,5 +256,5 @@ def test_editable_backup_conf_keys_are_part_of_runtime_schema() -> None:
     literal_keys = set(re.findall(r"data-key=[\"']([A-Z][A-Z0-9_]*)[\"']", script))
     literal_keys.update(re.findall(r"f(?:text|num|mono|pwd)\('([A-Z][A-Z0-9_]*)'", script))
 
-    settings_json_keys = {"USB_PROFILES_JSON", "SMB_PROFILES_JSON", "STORAGE_PROFILES_JSON"}
+    settings_json_keys = {"LOCAL_PROFILES_JSON", "USB_PROFILES_JSON", "SMB_PROFILES_JSON", "STORAGE_PROFILES_JSON"}
     assert literal_keys - settings_json_keys <= schema_keys

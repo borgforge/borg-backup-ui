@@ -205,6 +205,7 @@ def _settings_file(ui_config: dict) -> Path:
 def _default_settings_payload() -> Dict[str, Any]:
     return {
         "schema_version": _SETTINGS_SCHEMA_VERSION,
+        "local_profiles": [],
         "usb_profiles": [],
         "smb_profiles": [],
         "storage_profiles": [],
@@ -515,11 +516,6 @@ def write_settings_payload(ui_config: dict, payload: Dict[str, Any]) -> None:
     }
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(sf)
-    try:
-        from storage_objects_api import upsert_storages_from_settings
-        upsert_storages_from_settings(ui_config, data)
-    except Exception as exc:
-        logger.warning("Storage object sync after settings save failed: %s", exc)
 
 
 def _strip_profile_keys_from_conf(ui_config: dict) -> bool:
@@ -550,24 +546,6 @@ def ensure_settings_migrated(ui_config: dict) -> Dict[str, Any]:
     sf = _settings_file(ui_config)
     if sf.exists():
         payload = read_settings_payload(ui_config)
-        storage_rows = payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []
-        if not storage_rows:
-            conf = read_raw_conf(ui_config)
-            host = str(conf.get("STORAGEBOX_HOST", "")).strip()
-            user = str(conf.get("STORAGEBOX_USER", "")).strip()
-            if host and user:
-                payload["storage_profiles"] = _normalize_storage_profile_rows([{
-                    "key": "storage-1",
-                    "name": "Storagebox",
-                    "host": host,
-                    "port": str(conf.get("STORAGEBOX_PORT", "23")).strip() or "23",
-                    "user": user,
-                    "base_path": str(conf.get("STORAGEBOX_BASE_PATH", "/./backup")).strip() or "/./backup",
-                    "target_type": "storagebox",
-                    "ssh_key_path": str(conf.get("BORG_SSH_KEY", "")).strip(),
-                }])
-                write_settings_payload(ui_config, payload)
-                payload = read_settings_payload(ui_config)
         # enforce no legacy profile keys in backup.conf after migration
         _strip_profile_keys_from_conf(ui_config)
         return payload
@@ -1102,10 +1080,25 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
     }
     if include_storagebox_setup:
         data["storagebox_setup"] = get_storagebox_setup_status(ui_config)
-    settings_payload = ensure_settings_migrated(ui_config)
-    data["usb_profiles"] = _normalize_usb_profile_rows(
-        settings_payload.get("usb_profiles") if isinstance(settings_payload.get("usb_profiles"), list) else []
-    )
+    ensure_settings_migrated(ui_config)
+    from storage_objects_api import settings_profiles_from_storages
+    canonical_profiles = settings_profiles_from_storages(ui_config)
+    from repositories_api import read_repository_store
+    repository_rows = read_repository_store(ui_config).get("repositories", [])
+    refs_by_storage: Dict[str, List[str]] = {}
+    for repository in repository_rows:
+        storage_key = str(repository.get("storage_key") or "")
+        refs = [str(value) for value in repository.get("used_by", []) if str(value)]
+        refs_by_storage.setdefault(storage_key, []).extend(refs)
+    data["local_profiles"] = [
+        {
+            **row,
+            "jobs_count": len(set(refs_by_storage.get(str(row.get("storage_key") or ""), []))),
+            "job_refs": sorted(set(refs_by_storage.get(str(row.get("storage_key") or ""), [])))[:10],
+        }
+        for row in canonical_profiles.get("local_profiles", [])
+    ]
+    data["usb_profiles"] = _normalize_usb_profile_rows(canonical_profiles.get("usb_profiles", []))
     usb_refs = get_usb_profile_job_refs(ui_config)
     data["usb_profiles"] = [
         {
@@ -1115,9 +1108,7 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
         }
         for row in data["usb_profiles"]
     ]
-    data["storage_profiles"] = _normalize_storage_profile_rows(
-        settings_payload.get("storage_profiles") if isinstance(settings_payload.get("storage_profiles"), list) else []
-    )
+    data["storage_profiles"] = _normalize_storage_profile_rows(canonical_profiles.get("storage_profiles", []))
     storage_refs = get_storage_profile_job_refs(ui_config)
     data["storage_profiles"] = [
         {
@@ -1131,7 +1122,7 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
     smb_refs = get_smb_profile_job_refs(ui_config)
     try:
         raw_rows = normalize_smb_profile_rows(
-            settings_payload.get("smb_profiles") if isinstance(settings_payload.get("smb_profiles"), list) else []
+            canonical_profiles.get("smb_profiles", [])
         )
         smb_profiles = []
         for row in raw_rows:
