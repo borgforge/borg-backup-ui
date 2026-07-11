@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #191
+- Performance:
+  - Removed the blocking `modinfo cifs` subprocess from every System Health API request.
+  - CIFS support is now detected through local kernel and `mount.cifs` capability checks without a three-second request timeout.
+  - Added regression coverage for the non-blocking capability probe.
+
 ### Issue #190
 - Security:
   - Borg keyfile encryption now uses a persistent, plugin-owned `BORG_KEYS_DIR` with restrictive directory and file permissions across backup, restore, restore tests and repository maintenance.

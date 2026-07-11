@@ -9,7 +9,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from system_health_api import _build_migration_summary, _collect_job_health, _last_migration_successful, _read_migration_state, get_system_health_data
+from system_health_api import _build_migration_summary, _collect_job_health, _last_migration_successful, _probe_cifs_support, _read_migration_state, get_system_health_data
 
 
 def test_migration_summary_without_run():
@@ -246,3 +246,12 @@ def test_system_health_surfaces_corrupt_canonical_inventory(tmp_path: Path) -> N
     assert health["checks"]["canonical_inventories_ok"] is False
     assert health["canonical_inventories"]["errors"][0]["inventory"] == "repositories"
     assert "malformed JSON" in health["canonical_inventories"]["errors"][0]["error"]
+
+
+def test_cifs_probe_uses_local_capabilities_without_external_process(monkeypatch) -> None:
+    monkeypatch.setattr("system_health_api.shutil.which", lambda name: "/sbin/mount.cifs" if name == "mount.cifs" else None)
+
+    supported, state = _probe_cifs_support()
+
+    assert supported is True
+    assert state in {"loaded", "available"}

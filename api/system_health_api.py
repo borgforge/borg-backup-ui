@@ -4,7 +4,6 @@ api/system_health_api.py – kleiner Systemzustand fuer Migration/Verzeichnislay
 
 import json
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -274,6 +273,27 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
     }
 
 
+def _probe_cifs_support() -> tuple[bool, str]:
+    """Inspect local CIFS capability without starting a blocking process."""
+    try:
+        filesystems = Path("/proc/filesystems").read_text(encoding="utf-8", errors="replace")
+        if any("cifs" in line for line in filesystems.splitlines()):
+            return True, "loaded"
+    except Exception:
+        pass
+    try:
+        modules = Path("/proc/modules").read_text(encoding="utf-8", errors="replace")
+        if any(line.startswith("cifs ") for line in modules.splitlines()):
+            return True, "loaded"
+    except Exception:
+        pass
+    if Path("/sys/module/cifs").exists():
+        return True, "loaded"
+    if shutil.which("mount.cifs"):
+        return True, "available"
+    return False, "missing"
+
+
 def get_system_health_data(config: dict) -> Dict[str, Any]:
     base = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
     root = base.parent if base.name == "scripts" else base
@@ -316,37 +336,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
     last_effective_ts = str(last_effective.get("timestamp", "") or "").strip()
     mount_bin = shutil.which("mount")
     umount_bin = shutil.which("umount")
-    cifs_supported = False
-    cifs_state = "missing"
-    try:
-        filesystems = Path("/proc/filesystems").read_text(encoding="utf-8", errors="replace")
-        if any("cifs" in line for line in filesystems.splitlines()):
-            cifs_supported = True
-            cifs_state = "loaded"
-    except Exception:
-        pass
-    if not cifs_supported:
-        try:
-            modules = Path("/proc/modules").read_text(encoding="utf-8", errors="replace")
-            if any(line.startswith("cifs ") for line in modules.splitlines()):
-                cifs_supported = True
-                cifs_state = "loaded"
-        except Exception:
-            pass
-    if not cifs_supported:
-        try:
-            probe = subprocess.run(
-                ["modinfo", "cifs"],
-                capture_output=True,
-                text=True,
-                timeout=3,
-                check=False,
-            )
-            if probe.returncode == 0:
-                cifs_supported = True
-                cifs_state = "available"
-        except Exception:
-            pass
+    cifs_supported, cifs_state = _probe_cifs_support()
 
     config_dir = root / "config"
     settings_json = config_dir / "settings.json"
