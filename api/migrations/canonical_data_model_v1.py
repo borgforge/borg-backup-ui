@@ -12,7 +12,7 @@ from typing import Any
 from inventory_store import atomic_write_bytes, inventory_lock
 from repository_context import LEGACY_JOB_REPOSITORY_FIELDS, resolve_job_repository_context
 from repositories_api import read_repository_store, repositories_file
-from storage_objects_api import read_storage_store, storages_file
+from storage_objects_api import _safe_local_storage_path, read_storage_store, storages_file
 
 from . import (
     canonical_storage_profiles_v1,
@@ -230,6 +230,13 @@ def _validate(config: dict) -> dict[str, Any]:
     repository_keys = {str(row.get("repository_key") or "") for row in repositories}
     if "" in storage_keys or len(storage_keys) != len(storages):
         raise ValueError("Storage IDs are missing or duplicated")
+    for storage in storages:
+        storage_key = str(storage.get("storage_key") or "")
+        storage_type = str(storage.get("storage_type") or "").strip().lower()
+        if storage_type not in {"local", "usb", "smb"}:
+            continue
+        path = str(storage.get("mount_path") or storage.get("base_path") or "")
+        _safe_local_storage_path(path, field=f"Storage '{storage_key}' path")
     if "" in repository_keys or len(repository_keys) != len(repositories):
         raise ValueError("Repository IDs are missing or duplicated")
     for repository in repositories:

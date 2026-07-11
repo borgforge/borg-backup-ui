@@ -360,7 +360,7 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
             _migration_reason_from_state(migration_id, state, details),
             category="migration",
             details={
-                **row,
+                **details,
                 "state": state,
                 "checked_at": checked_at,
                 "updated_keys": details.get("updated_keys") if isinstance(details.get("updated_keys"), list) else [],

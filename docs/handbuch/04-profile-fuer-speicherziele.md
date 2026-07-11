@@ -4,6 +4,18 @@
 
 Dieses Kapitel beschreibt USB-, SMB- und SSH-Profile als Grundlage für wiederverwendbare Backup-Ziele.
 
+## Lokale Profile
+
+Lokale Profile werden unter **Einstellungen > Lokale Profile** gepflegt. Der
+Pfad muss ein konkretes Verzeichnis unter `/mnt` bezeichnen, beispielsweise
+`/mnt/backup`, `/mnt/cache/repositories`, `/mnt/disks/USB-A` oder
+`/mnt/remotes/NAS-A`.
+
+Nicht erlaubt sind die zu breiten Wurzeln `/mnt`, `/mnt/disks` und
+`/mnt/remotes`, Systempfade sowie leere oder unsichere Pfadsegmente. Eine
+Eingabe wie `/mnt//backup`, `/mnt/./backup` oder `/mnt/../etc` wird deshalb
+vor dem Speichern mit einer konkreten Fehlermeldung abgelehnt.
+
 ## USB-Profile
 
 USB-Profile beschreiben wechselbare lokale Ziele. Sie werden in **Einstellungen > USB-Profile** gepflegt und danach im Job-Wizard ausgewählt.

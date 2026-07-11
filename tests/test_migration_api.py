@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -216,6 +217,42 @@ def test_registry_hides_obsolete_storage_paths_migration_state(tmp_path: Path):
 
     assert "storage_paths_v1" not in items
     assert "notification_events_v1" in items
+
+
+def test_registry_exposes_failed_canonical_migration_with_details(tmp_path: Path):
+    cfg = _write_conf_tree(
+        tmp_path,
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+    )
+    state_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
+    state_file.write_text(
+        json.dumps({
+            "schema_version": 2,
+            "migrations": {
+                "canonical_data_model_v1": {
+                    "state": "failed",
+                    "checked_at": "2026-07-12T09:00:00",
+                    "details": {
+                        "runner": "central_migration_registry",
+                        "introduced_in": "2026.07.11.1700",
+                        "failed_phase": "validation",
+                        "error": "Storage path contains empty path segments",
+                        "rollback_status": "completed",
+                    },
+                },
+            },
+        }, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    registry = get_migration_registry_status(cfg)
+    item = _items_by_id(registry)["canonical_data_model_v1"]
+
+    assert item["status"] == "failed"
+    assert item["details"]["failed_phase"] == "validation"
+    assert item["details"]["rollback_status"] == "completed"
+    assert registry["summary"]["failed"] == 1
 
 
 def test_registry_does_not_count_not_needed_cleanup_as_planned(tmp_path: Path):

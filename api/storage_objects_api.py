@@ -222,14 +222,20 @@ def _profile_key(value: str, prefix: str, existing: set[str]) -> str:
 
 
 def _safe_local_storage_path(value: str, *, field: str) -> str:
-    raw = str(value or "").strip().rstrip("/") or "/"
+    submitted = str(value or "").strip()
+    if not submitted:
+        raise ValueError(f"{field} must not be empty")
+    if "//" in submitted:
+        raise ValueError(f"{field} contains empty path segments")
+    raw = submitted.rstrip("/") or "/"
     path = Path(raw)
     if not path.is_absolute():
         raise ValueError(f"{field} must be an absolute path")
     blocked = {"/", "/mnt", "/mnt/disks", "/mnt/remotes", "/boot", "/etc", "/usr", "/var"}
     if raw in blocked or not raw.startswith("/mnt/"):
         raise ValueError(f"{field} must be a dedicated directory below /mnt")
-    if any(part in {".", ".."} for part in path.parts):
+    segments = raw.split("/")[1:]
+    if any(part in {"", ".", ".."} for part in segments):
         raise ValueError(f"{field} contains unsafe path segments")
     resolved = Path(os.path.realpath(raw))
     if not str(resolved).startswith("/mnt/"):

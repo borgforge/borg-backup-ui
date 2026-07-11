@@ -230,6 +230,11 @@ Best practices:
 
 The **Repositories** page uses a master-detail workspace. Borg repositories are grouped by their exact storage target on the left, while the selected repository remains visible in the workspace on the right. **Add repository** guides users through storage-target setup and repository creation or import.
 
+Local storage targets are created under **Settings > Local Profiles**. A
+concrete directory below `/mnt`, such as `/mnt/backup` or `/mnt/disks/USB-A`,
+is allowed. Broad roots, system paths, and malformed input containing empty,
+`.` or `..` segments are rejected before saving.
+
 ### 4.1 Purpose of the Page
 
 The page separates storage targets, Borg repositories, and backup jobs. A storage target describes the physical or remote location. A repository contains Borg archives. A job selects an existing repository and defines sources, schedule, compression, and retention.

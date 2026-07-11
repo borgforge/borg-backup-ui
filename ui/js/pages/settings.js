@@ -555,6 +555,37 @@ function normalizeLocalProfileRows(rows) {
   return out;
 }
 
+function normalizeCanonicalStoragePath(value) {
+  const submitted = String(value || '').trim();
+  if (!submitted || submitted.includes('//')) return '';
+  const normalized = submitted.replace(/\/$/, '');
+  const blocked = new Set(['/', '/mnt', '/mnt/disks', '/mnt/remotes', '/boot', '/etc', '/usr', '/var']);
+  if (!normalized.startsWith('/mnt/') || blocked.has(normalized)) return '';
+  const segments = normalized.slice(1).split('/');
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return '';
+  return normalized;
+}
+
+function validateLocalProfilesForSave() {
+  const rows = [...document.querySelectorAll('#local-profiles-rows .local-profile-row')];
+  for (const row of rows) {
+    const input = row.querySelector('[data-local-profile-path]');
+    const submitted = String(input?.value || '').trim();
+    const normalized = normalizeCanonicalStoragePath(submitted);
+    input?.classList.toggle('input-error', !normalized);
+    if (!normalized) {
+      showMsg('local-profiles-msg', 'error', settingsT('profiles.invalidLocalPath', {
+        path: submitted || settingsT('common.none'),
+      }));
+      input?.focus();
+      return false;
+    }
+    if (input) input.value = normalized;
+  }
+  hideEl('local-profiles-msg');
+  return true;
+}
+
 function getLocalProfilesFromDom() {
   return normalizeLocalProfileRows([...document.querySelectorAll('#local-profiles-rows .local-profile-row')].map((row) => ({
     storage_key: row.dataset.storageKey || '',
@@ -1596,6 +1627,9 @@ function _renderMigrationRegistryItem(item) {
   const updatedKeys = Array.isArray(details.updated_keys) ? details.updated_keys.map((key) => String(key || '').trim()).filter(Boolean) : [];
   const checkedAt = String(details.checked_at || '').trim();
   const introducedIn = String(details.introduced_in || '').trim();
+  const failedPhase = String(details.failed_phase || '').trim();
+  const failureReason = String(details.error || '').trim();
+  const rollbackStatus = String(details.rollback_status || '').trim();
   const plan = details?.dry_run_plan && typeof details.dry_run_plan === 'object' ? details.dry_run_plan : null;
   const planCandidateCount = Number(plan?.candidate_count || 0);
   const planText = plan && planCandidateCount > 0
@@ -1615,6 +1649,9 @@ function _renderMigrationRegistryItem(item) {
       ${planText ? `<div class="migration-registry-plan">${escHtml(planText)}</div>` : ''}
       ${candidates.length ? `<div class="migration-registry-id">Deprecated: ${candidates.map((row) => escHtml(String(row?.key || ''))).filter(Boolean).join(', ')}</div>` : ''}
       ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map(escHtml).join(', ')}</div>` : ''}
+      ${failedPhase ? `<div class="migration-registry-id">${escHtml(settingsT('health.failedPhase'))}: ${escHtml(failedPhase)}</div>` : ''}
+      ${failureReason ? `<div class="migration-registry-id">${escHtml(settingsT('health.failureReason'))}: ${escHtml(failureReason)}</div>` : ''}
+      ${rollbackStatus ? `<div class="migration-registry-id">${escHtml(settingsT('health.rollbackStatus'))}: ${escHtml(settingsT(`health.rollback_${rollbackStatus}`))}</div>` : ''}
       ${checkedAt ? `<div class="migration-registry-id">${escHtml(settingsT('health.checkedAt'))}: ${escHtml(_formatHealthTimestamp(checkedAt) || checkedAt)}</div>` : ''}
       ${introducedIn ? `<div class="migration-registry-id">${escHtml(settingsT('health.introducedIn'))}: ${escHtml(introducedIn)}</div>` : ''}
     </div>
@@ -4445,6 +4482,7 @@ async function saveSettings() {
   const profileUpdates = {};
   const activePanel = document.querySelector('#settings-content .settings-tab-panel:not(.hidden)');
   const activeTab = activePanel?.dataset?.settingsPanel || settingsState.activeTab || 'general';
+  if (activeTab === 'local' && !validateLocalProfilesForSave()) return false;
   activePanel?.querySelectorAll('[data-key]').forEach(el => {
     const key = el.dataset.key;
     if (el.type === 'checkbox') {

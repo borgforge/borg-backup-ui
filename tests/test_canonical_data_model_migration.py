@@ -295,6 +295,25 @@ def test_failed_validation_rolls_back_all_modified_files(tmp_path: Path, monkeyp
     assert "test-secret" not in json.dumps(failed)
 
 
+def test_malformed_canonical_storage_path_fails_migration_and_rolls_back(tmp_path: Path):
+    _write_canonical_model(tmp_path, settings=True)
+    storage_path = tmp_path / "config" / "storages.json"
+    settings_path = tmp_path / "config" / "settings.json"
+    payload = json.loads(storage_path.read_text(encoding="utf-8"))
+    payload["storages"][0]["base_path"] = "/mnt//backup"
+    storage_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    storage_before = storage_path.read_bytes()
+
+    result = canonical_data_model_v1.apply(_config(tmp_path))
+
+    assert result["status"] == "failed"
+    assert result["details"]["failed_phase"] == "validation"
+    assert result["details"]["rollback_status"] == "completed"
+    assert "contains empty path segments" in result["details"]["error"]
+    assert storage_path.read_bytes() == storage_before
+    assert settings_path.exists()
+
+
 def test_malformed_legacy_settings_is_audited_and_rolled_back_without_startup_crash(tmp_path: Path):
     _write_legacy_job(tmp_path)
     (tmp_path / "config" / "settings.json").write_text("{broken", encoding="utf-8")

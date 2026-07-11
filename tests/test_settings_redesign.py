@@ -74,6 +74,32 @@ def test_profile_pages_hide_global_save_and_keep_local_actions() -> None:
         assert action in script
 
 
+def test_local_profile_paths_are_validated_before_save_in_both_languages() -> None:
+    import json
+
+    script = _read("ui/js/pages/settings.js")
+    german = json.loads(_read("ui/i18n/de.json"))
+    english = json.loads(_read("ui/i18n/en.json"))
+
+    assert "function normalizeCanonicalStoragePath(value)" in script
+    assert "submitted.includes('//')" in script
+    assert "segment === '.' || segment === '..'" in script
+    assert "classList.toggle('input-error', !normalized)" in script
+    assert "activeTab === 'local' && !validateLocalProfilesForSave()" in script
+    assert german["settings"]["profiles"]["invalidLocalPath"]
+    assert english["settings"]["profiles"]["invalidLocalPath"]
+    for payload in (german, english):
+        health = payload["settings"]["health"]
+        assert health["registryCanonicalModelTitle"]
+        assert health["registryCanonicalModelFailed"]
+        assert health["registryStorageInventoryTitle"]
+        assert health["failedPhase"]
+        assert health["failureReason"]
+        assert health["rollbackStatus"]
+    assert "details.failed_phase" in script
+    assert "details.rollback_status" in script
+
+
 def test_settings_layout_is_sticky_and_responsive() -> None:
     css = _read("ui/settings-redesign.css")
     assert ".settings-page-header" in css

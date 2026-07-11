@@ -230,6 +230,11 @@ Best Practices:
 
 Die Seite **Repositories** verwendet eine Master-Detail-Ansicht. Links werden Borg-Repositorys nach dem exakten Speicherziel gruppiert; rechts bleibt der Arbeitsbereich des ausgewählten Repositorys sichtbar. Über **Repository hinzufügen** können Speicherziele geführt eingerichtet sowie Repositorys erstellt oder importiert werden.
 
+Lokale Speicherziele werden unter **Einstellungen > Lokale Profile** angelegt.
+Zulässig sind konkrete Verzeichnisse unter `/mnt`, etwa `/mnt/backup` oder
+`/mnt/disks/USB-A`. Zu breite Wurzeln, Systempfade und fehlerhafte Eingaben mit
+leeren, `.`- oder `..`-Segmenten werden vor dem Speichern abgelehnt.
+
 ### 4.1 Zweck der Seite
 
 Die Seite trennt Speicherziele, Borg-Repositorys und Backup-Jobs. Ein Speicherziel beschreibt den physischen oder entfernten Ort. Ein Repository enthält Borg-Archive. Ein Job wählt ein vorhandenes Repository und bestimmt Quellen, Zeitplan, Kompression und Aufbewahrung.

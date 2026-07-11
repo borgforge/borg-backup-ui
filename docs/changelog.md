@@ -10,6 +10,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Job Wizard repository selection:
   - Repository options now show the human-readable repository name with its effective repository path instead of three unlabeled values.
   - Redundant confirmation lines below valid storage and repository selections were removed; both areas remain available for missing-selection warnings.
+- Canonical storage validation and migration diagnostics:
+  - Local storage profiles reject broad, unsafe or malformed paths such as `/mnt//backup` before saving instead of silently dropping or normalizing the entry.
+  - The canonical baseline migration validates Local, USB and SMB paths and rolls back with an audited error when malformed legacy input is encountered.
+  - German and English System Health terminology and operator documentation describe the canonical inventories and recovery path consistently.
 
 ### Issue #194
 - Canonical data-model migration and diagnostics:

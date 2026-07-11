@@ -49,6 +49,12 @@ transformation phases:
 8. Remove `settings.json`.
 9. Validate every storage, repository and job relationship.
 
+Local, USB and SMB filesystem targets are validated without silently repairing
+malformed input. They must name a dedicated directory below `/mnt`. Collection
+roots such as `/mnt`, `/mnt/disks` and `/mnt/remotes`, unsafe `.` or `..`
+segments, and empty segments such as `/mnt//backup` are rejected. A single
+trailing slash is normalized before the canonical value is stored.
+
 No legacy Borg keyfile migration is registered: keyfile encryption was first
 introduced inside PR #189, so the three existing tester installations have no
 pre-PR keyfiles to import. Newly created keyfile repositories already write to
