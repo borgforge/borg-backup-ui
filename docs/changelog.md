@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #195
+- Job Wizard repository selection:
+  - Repository options now show the human-readable repository name with its effective repository path instead of three unlabeled values.
+  - Redundant confirmation lines below valid storage and repository selections were removed; both areas remain available for missing-selection warnings.
+
 ### Issue #194
 - Canonical data-model migration and diagnostics:
   - Replaced the PR #189 repository/storage migration chain with one baseline migration, `canonical_data_model_v1`.

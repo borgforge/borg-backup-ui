@@ -277,9 +277,8 @@ function wizardRepositoryPath(repo) {
 
 function wizardRepositoryLabel(repo) {
   const name = String(repo?.display_name || repo?.repository_name || repo?.repository_key || '').trim();
-  const storage = String(repo?.storage_name || '').trim();
-  const repoName = String(repo?.repository_name || '').trim();
-  return [name, storage, repoName].filter(Boolean).join(' — ');
+  const path = wizardRepositoryPath(repo);
+  return path ? `${name} (${path})` : name;
 }
 
 function wizardRepositoryMatchesSelection(repo, location) {
@@ -316,16 +315,12 @@ function wizardApplySelectedRepository() {
   const hintEl = document.getElementById('wiz-repository-hint');
   if (hintEl) {
     if (repo) {
-      const encryption = String(repo.encryption || '-').trim() || '-';
-      const name = String(repo.repository_name || repo.display_name || '').trim();
-      const path = wizardRepositoryPath(repo);
-      hintEl.textContent = wizardT('wizard.repositorySelectedHint', {
-        name: [name || String(repo.repository_key || ''), path].filter(Boolean).join(' · '),
-        encryption,
-      });
+      hintEl.textContent = '';
+      hintEl.hidden = true;
       hintEl.classList.remove('status-message', 'warning-state');
       hintEl.classList.add('form-hint');
     } else {
+      hintEl.hidden = false;
       hintEl.textContent = wizardT('wizard.noRepositorySelectedHint');
       hintEl.classList.remove('form-hint');
       hintEl.classList.add('status-message', 'warning-state');
@@ -546,9 +541,8 @@ function wizardAutoFill() {
   const storage = wizardSelectedStorage();
   const hint = document.getElementById('wiz-storage-target-hint');
   if (hint) {
-    hint.textContent = storage
-      ? wizardT('wizard.storageTargetSelectedHint', { name: wizardStorageLabel(storage) })
-      : wizardT('wizard.noStorageTargetSelectedHint');
+    hint.textContent = storage ? '' : wizardT('wizard.noStorageTargetSelectedHint');
+    hint.hidden = !!storage;
     hint.classList.toggle('warning-state', !storage);
   }
   // If icon not explicitly chosen, keep "auto" (empty) and let rendering

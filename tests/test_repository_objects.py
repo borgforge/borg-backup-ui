@@ -649,6 +649,21 @@ def test_repository_test_contract_requires_only_repository_key():
     assert 'raise ValueError("repository_key is required")' in handler
 
 
+def test_job_wizard_repository_choice_uses_readable_labels():
+    source = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
+    german = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
+    english = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
+
+    assert "`${name} (${path})`" in source
+    assert "[name, storage, repoName].filter(Boolean).join(' — ')" not in source
+    assert "repositorySelectedHint" not in german["wizard"]
+    assert "repositorySelectedHint" not in english["wizard"]
+    assert "storageTargetSelectedHint" not in german["wizard"]
+    assert "storageTargetSelectedHint" not in english["wizard"]
+    assert "hintEl.hidden = true" in source
+    assert "hint.hidden = !!storage" in source
+
+
 def test_repository_objects_v3_migrates_legacy_repository_keys(tmp_path: Path):
     job_file = _write_job(tmp_path, "flash_local", "/mnt/backup/borg-backup-flash")
     job = json.loads(job_file.read_text(encoding="utf-8"))
