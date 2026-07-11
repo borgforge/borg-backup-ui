@@ -10,6 +10,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Performance:
   - Removed the blocking `modinfo cifs` subprocess from every System Health API request.
   - CIFS support is now detected through local kernel and `mount.cifs` capability checks without a three-second request timeout.
+  - System Health now loads the canonical repository/storage inventory once per request instead of once per job.
+  - Dashboard, sidebar and Settings now share one in-flight System Health request instead of downloading the same diagnostics repeatedly.
   - Added regression coverage for the non-blocking capability probe.
 
 ### Issue #190

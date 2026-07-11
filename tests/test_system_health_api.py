@@ -255,3 +255,38 @@ def test_cifs_probe_uses_local_capabilities_without_external_process(monkeypatch
 
     assert supported is True
     assert state in {"loaded", "available"}
+
+
+def test_collect_job_health_loads_canonical_inventory_once_for_all_jobs(tmp_path, monkeypatch) -> None:
+    import repository_context
+
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for job_key in ("flash_local", "appdata_local", "photos_local"):
+        (jobs_dir / f"{job_key}.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "job_key": job_key,
+                "name": job_key,
+                "location": "local",
+                "repository_key": f"repo_{job_key}",
+                "paths": {"default": str(source_dir)},
+            }) + "\n",
+            encoding="utf-8",
+        )
+
+    loads = []
+    inventory = {"repositories": {}, "storages": {}}
+    monkeypatch.setattr(repository_context, "load_repository_inventory", lambda _config: loads.append(True) or inventory)
+    monkeypatch.setattr(
+        repository_context,
+        "resolve_job_repository_context",
+        lambda _config, _job_key, *, job, inventory: {"location": job["location"]},
+    )
+
+    health = _collect_job_health({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, jobs_dir)
+
+    assert health["summary"] == {"total": 3, "ok": 3, "failed": 0, "warnings": 0}
+    assert loads == [True]

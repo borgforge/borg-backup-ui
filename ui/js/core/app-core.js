@@ -16,7 +16,7 @@ let schedulesData = {}; // job_key → { cron, enabled }
 let globalDataDirReady = true;
 let setupRequired = false;
 let setupStatusCache = { ts: 0, data: null };
-let sidebarHealthCache = { ts: 0, data: null };
+let systemHealthCache = { ts: 0, data: null, promise: null };
 const coreActions = Object.create(null);
 
 function isStaleDate(dateStr) {
@@ -141,6 +141,27 @@ function _setSidebarSystemHealth(tone, text, title = '') {
   if (label) label.textContent = text;
 }
 
+async function fetchSystemHealthData(force = false) {
+  const now = Date.now();
+  if (!force && systemHealthCache.data && (now - systemHealthCache.ts) <= 5_000) {
+    return systemHealthCache.data;
+  }
+  if (systemHealthCache.promise) return systemHealthCache.promise;
+  const request = fetch('/api/system-health', { credentials: 'include' })
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      systemHealthCache = { ts: Date.now(), data, promise: null };
+      return data;
+    })
+    .catch((error) => {
+      systemHealthCache.promise = null;
+      throw error;
+    });
+  systemHealthCache.promise = request;
+  return request;
+}
+
 function _sidebarTranslation(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
 }
@@ -149,14 +170,7 @@ async function updateSidebarSystemHealth(force = false) {
   const el = document.getElementById('sidebar-system-health');
   if (!el || state.currentRole !== 'admin') return;
   try {
-    const now = Date.now();
-    let data = sidebarHealthCache.data;
-    if (force || !data || (now - sidebarHealthCache.ts) > 30_000) {
-      const res = await fetch('/api/system-health', { credentials: 'include' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      data = await res.json();
-      sidebarHealthCache = { ts: now, data };
-    }
+    const data = await fetchSystemHealthData(force);
     const count = _systemHealthAttentionCount(data);
     if (count > 0) {
       _setSidebarSystemHealth(
@@ -310,6 +324,7 @@ window.BBUI.core.updateDataDirWarning = updateDataDirWarning;
 window.BBUI.core.applySetupNavLock = applySetupNavLock;
 window.BBUI.core.applyDataDirActionGates = applyDataDirActionGates;
 window.BBUI.core.invalidateSetupStatusCache = invalidateSetupStatusCache;
+window.BBUI.core.fetchSystemHealth = fetchSystemHealthData;
 window.BBUI.core.updateSidebarSystemHealth = updateSidebarSystemHealth;
 
 window.addEventListener('bbui:language-changed', () => {

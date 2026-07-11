@@ -198,6 +198,14 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
     else:
         job_files = []
 
+    repository_inventory = None
+    repository_inventory_error = ""
+    try:
+        from repository_context import load_repository_inventory
+        repository_inventory = load_repository_inventory(config)
+    except Exception as exc:
+        repository_inventory_error = str(exc)
+
     for meta_file in job_files:
         try:
             raw = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -225,12 +233,20 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             error_details.append({"code": code, "params": params})
 
         repository_context = None
-        try:
-            from repository_context import resolve_job_repository_context
-            repository_context = resolve_job_repository_context(config, job_key, job=raw)
-            location = str(repository_context.get("location") or location)
-        except Exception as exc:
-            add_error("repository_context_invalid", str(exc))
+        if repository_inventory_error:
+            add_error("repository_context_invalid", repository_inventory_error)
+        else:
+            try:
+                from repository_context import resolve_job_repository_context
+                repository_context = resolve_job_repository_context(
+                    config,
+                    job_key,
+                    job=raw,
+                    inventory=repository_inventory,
+                )
+                location = str(repository_context.get("location") or location)
+            except Exception as exc:
+                add_error("repository_context_invalid", str(exc))
 
         paths_cfg = raw.get("paths") if isinstance(raw.get("paths"), dict) else {}
         source_paths = _split_job_paths(paths_cfg.get("default"))

@@ -34,9 +34,11 @@ async function fetchJobsList() {
 }
 
 async function fetchSystemHealth() {
-  const res = await fetch('/api/system-health');
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await window.BBUI.core.fetchSystemHealth(false);
+  } catch {
+    return null;
+  }
 }
 
 async function refreshStatus() {

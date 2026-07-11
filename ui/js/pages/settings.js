@@ -97,7 +97,7 @@ async function refreshSettings() {
     const [res, verRes, healthRes, authRes] = await Promise.all([
       fetch('/api/settings'),
       fetch('/api/version'),
-      fetch('/api/system-health'),
+      window.BBUI.core.fetchSystemHealth(true).catch(() => null),
       fetch('/api/auth/status'),
     ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -116,7 +116,7 @@ async function refreshSettings() {
         ? settingsT('storagebox.sshReachable')
         : settingsT('storagebox.sshFailed');
     }
-    const health = healthRes.ok ? await healthRes.json() : null;
+    const health = healthRes && typeof healthRes === 'object' ? healthRes : null;
     settingsState.data = data;
     settingsState.systemHealth = health;
     renderSettings(data, health);
