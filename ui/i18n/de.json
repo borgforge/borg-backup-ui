@@ -1404,6 +1404,7 @@
       "sshDescription": "Remote-Ziele und Schlüssel",
       "transferDescription": "Transfer und Config-Backups",
       "advancedDescription": "Passphrasen und technische Daten",
+      "factoryResetDescription": "Anwendung vollständig zurücksetzen",
       "healthOk": "Systemzustand OK",
       "healthAttention": "Systemzustand prüfen",
       "healthHint": "Status und Migration",
@@ -2151,7 +2152,8 @@
       "smbProfiles": "SMB-Profile",
       "sshProfiles": "SSH-Profile",
       "transfer": "Import / Export",
-      "advanced": "Erweitert"
+      "advanced": "Erweitert",
+      "factoryReset": "Werkseinstellungen"
     }
   }
 }

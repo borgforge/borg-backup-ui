@@ -69,6 +69,7 @@ function getSettingsTabs() {
   { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: locationIcon('storagebox') },
   { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: settingsMenuIcon('transfer') },
   { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: settingsMenuIcon('advanced') },
+  { key: 'factory-reset', label: settingsT('tabs.factoryReset'), group: 'maintenance', description: settingsT('menu.factoryResetDescription'), icon: settingsMenuIcon('factory-reset') },
   ];
   const auth = settingsState.authStatus || {};
   const isAdmin = String(auth.current_role || '').toLowerCase() === 'admin';
@@ -86,6 +87,7 @@ function settingsMenuIcon(key) {
     restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
     transfer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h13l-3-3M17 17H4l3 3"/><path d="M20 7l-3 3M4 17l3-3"/></svg>',
     advanced: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h7M15 18h5"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="13" cy="18" r="2"/></svg>',
+    'factory-reset': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>',
   };
   return icons[key] || icons.general;
 }
@@ -208,8 +210,9 @@ function renderSettings(data, systemHealth) {
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
   if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
+  const hideGlobalSave = profileTab || settingsState.activeTab === 'factory-reset';
   const saveBtn = document.getElementById('settings-save-btn');
-  if (saveBtn) saveBtn.classList.toggle('hidden', profileTab);
+  if (saveBtn) saveBtn.classList.toggle('hidden', hideGlobalSave);
   el.innerHTML = `
     <div class="settings-redesign-layout">
       <aside class="settings-side-menu">
@@ -253,10 +256,12 @@ function renderSettings(data, systemHealth) {
     <div class="settings-tab-panel ${settingsState.activeTab === 'transfer' ? '' : 'hidden'}" data-settings-panel="transfer">
       ${renderSettingsTransferTools()}
       ${renderSettingsConfigBackups()}
-      ${renderSettingsFactoryReset()}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'advanced' ? '' : 'hidden'}" data-settings-panel="advanced">
       ${renderSettingsAdvancedTabs(data, systemHealth)}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'factory-reset' ? '' : 'hidden'}" data-settings-panel="factory-reset">
+      ${renderSettingsFactoryReset()}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'users' ? '' : 'hidden'}" data-settings-panel="users">
       ${renderSettingsUsers()}

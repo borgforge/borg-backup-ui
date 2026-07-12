@@ -12,7 +12,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Existing jobs remain unchanged with an empty exclusion list; edit, preview and runtime logs show the configured exclusions.
 
 ### Issue #198
-- Added a guarded factory reset under Settings > Import / Export.
+- Added a guarded factory reset as the final entry under Settings > Maintenance.
 - Reset requires four risk acknowledgements, the exact server name, the current administrator password and the phrase `FACTORY RESET`.
 - Running jobs, restores, restore tests and repository maintenance block reset; managed repositories inside a deletion root also block reset.
 - Application configuration and operational data are removed, schedules are cleared and the initial directory layout is recreated without deleting Borg repositories or plugin installation files.

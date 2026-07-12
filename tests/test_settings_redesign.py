@@ -16,7 +16,7 @@ def test_settings_redesign_styles_load_after_shared_surfaces() -> None:
     )
 
 
-def test_settings_keeps_all_nine_areas_in_grouped_side_menu() -> None:
+def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
     script = _read("ui/js/pages/settings.js")
     for key in (
         "general",
@@ -28,12 +28,28 @@ def test_settings_keeps_all_nine_areas_in_grouped_side_menu() -> None:
         "storagebox",
         "transfer",
         "advanced",
+        "factory-reset",
     ):
         assert f"key: '{key}'" in script
     for group in ("system", "operations", "storage", "maintenance"):
         assert f"group: '{group}'" in script
     assert "function renderSettingsMenu(tabs)" in script
     assert 'class="settings-redesign-layout"' in script
+
+
+def test_factory_reset_is_the_last_maintenance_area() -> None:
+    script = _read("ui/js/pages/settings.js")
+    transfer = "{ key: 'transfer'"
+    advanced = "{ key: 'advanced'"
+    factory_reset = "{ key: 'factory-reset'"
+
+    assert script.index(transfer) < script.index(advanced) < script.index(factory_reset)
+    assert 'data-settings-panel="factory-reset"' in script
+    transfer_panel = script.split('data-settings-panel="transfer"', 1)[1].split(
+        'data-settings-panel="advanced"', 1
+    )[0]
+    assert "renderSettingsFactoryReset()" not in transfer_panel
+    assert "const hideGlobalSave = profileTab || settingsState.activeTab === 'factory-reset';" in script
 
 
 def test_profile_pages_use_master_detail_and_explicit_edit_mode() -> None:
@@ -60,7 +76,7 @@ def test_profile_pages_use_master_detail_and_explicit_edit_mode() -> None:
 def test_profile_pages_hide_global_save_and_keep_local_actions() -> None:
     script = _read("ui/js/pages/settings.js")
     assert "const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes" in script
-    assert "saveBtn.classList.toggle('hidden', profileTab)" in script
+    assert "saveBtn.classList.toggle('hidden', hideGlobalSave)" in script
     assert "const saved = await saveSettings();" in script
     for action in (
         "usb-profile-check",

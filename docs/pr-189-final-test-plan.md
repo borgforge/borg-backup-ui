@@ -137,6 +137,8 @@ Optional disposable-repository test:
 Perform this test only after backing up `/boot/config/borg-backup` and use a
 disposable test installation.
 
+- [ ] Confirm **Settings > Factory Reset** is the final entry in the Maintenance sidebar group.
+- [ ] Confirm the global Settings save button is hidden on the Factory Reset page.
 - [ ] Confirm reset is blocked while a backup job is running.
 - [ ] Confirm reset is blocked while a Restore Test or restore is running.
 - [ ] Confirm reset is blocked when a managed repository is located inside the configured operational data directory.

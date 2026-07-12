@@ -145,6 +145,7 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - Setup-Checks beschreiben vorhandene Strukturen und sind nicht automatisch eine Migration.
 - Cleanup-Kandidaten sind Hinweise auf alte oder nicht mehr benötigte Konfigurationseinträge.
 - Cleanup-Aktionen erstellen vorher ein Backup und müssen bewusst gestartet werden.
+- **Einstellungen > Werkseinstellungen** ist der letzte Wartungseintrag und setzt die Anwendung nach mehrfacher Sicherheitsbestätigung auf den Erstinstallationszustand zurück. Borg-Repositories werden nicht gelöscht.
 
 ## Häufige Probleme
 

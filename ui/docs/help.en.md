@@ -145,6 +145,7 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 - Setup checks describe existing structures and are not automatically migrations.
 - Cleanup candidates indicate old or unused configuration entries.
 - Cleanup actions create a backup first and must be started explicitly.
+- **Settings > Factory Reset** is the final maintenance entry and returns the application to its first-install state after multiple safety confirmations. Borg repositories are not deleted.
 
 ## Common problems
 

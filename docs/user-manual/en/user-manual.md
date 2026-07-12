@@ -776,7 +776,17 @@ Subsections:
 
 Reminder diagnostics show when a run was expected, when it becomes overdue, when it was last sent, and when the next reminder is allowed. This view does not send notifications; it is diagnostic only.
 
-### 9.10 System Status and Migration
+### 9.10 Factory Reset
+
+**Factory Reset** is the final entry in the **Maintenance** group. It removes the application configuration and configured operational data, then restarts Borg Backup UI at the administrator first-setup page.
+
+Before resetting, the application checks for running backups, restores, restore tests, and repository maintenance. Managed Borg repositories inside a directory scheduled for deletion block the operation. External Borg repositories and the plugin installation are not deleted.
+
+Approval requires every risk acknowledgment, the server name, the current administrator password, and the confirmation text `FACTORY RESET`.
+
+> **Warning:** Users, jobs, schedules, storage targets, repository assignments, secrets, Borg keyfiles, logs, status, and history data are permanently removed. Back up `/boot/config/borg-backup` first.
+
+### 9.11 System Status and Migration
 
 ![Settings - System Status and Migration](../assets/en/settings-system-health.png)
 

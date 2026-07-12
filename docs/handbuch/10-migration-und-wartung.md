@@ -35,6 +35,22 @@ Eine Cleanup-Aktion sollte:
 - bewusst vom Benutzer gestartet werden,
 - nachher im Systemstatus nachvollziehbar sein.
 
+## Werkseinstellungen
+
+**Einstellungen > Werkseinstellungen** ist der letzte Eintrag in der Gruppe
+**Wartung**. Der Vorgang entfernt die Anwendungskonfiguration sowie die
+konfigurierten Betriebs-, Log-, Status- und Verlaufsdaten und startet danach
+die Admin-Erstkonfiguration.
+
+Die Plugin-Installation und externe Borg-Repositories bleiben erhalten. Ein
+Reset wird blockiert, wenn ein verwaltetes Repository innerhalb eines zu
+löschenden Verzeichnisses liegt oder gerade ein Backup, Restore, Restore-Test
+oder eine Repository-Wartung ausgeführt wird.
+
+Vor dem Reset `/boot/config/borg-backup` sichern. Die Freigabe erfordert alle
+Risikobestätigungen, den Servernamen, das aktuelle Admin-Passwort und den
+Bestätigungstext `FACTORY RESET`.
+
 ## Ergebnis prüfen
 
 Der Migrationsbereich ist gesund, wenn der letzte Lauf erfolgreich war, keine fehlerhaften Migrationen offen sind und Wartungspunkte verständlich beschrieben werden.
