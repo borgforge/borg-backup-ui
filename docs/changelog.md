@@ -6,6 +6,22 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #199
+- Backup jobs can define multiple concrete file or directory exclusion paths in the Job Wizard.
+- Exclusions must exist below a selected source root and are passed to Borg as safe path-prefix patterns.
+- Existing jobs remain unchanged with an empty exclusion list; edit, preview and runtime logs show the configured exclusions.
+
+### Issue #198
+- Added a guarded factory reset under Settings > Import / Export.
+- Reset requires four risk acknowledgements, the exact server name, the current administrator password and the phrase `FACTORY RESET`.
+- Running jobs, restores, restore tests and repository maintenance block reset; managed repositories inside a deletion root also block reset.
+- Application configuration and operational data are removed, schedules are cleared and the initial directory layout is recreated without deleting Borg repositories or plugin installation files.
+- Reset execution is recorded in a protected JSONL audit log without secrets.
+
+### Issue #197
+- Test-channel manifests now open the existing Borg Backup UI control panel below Unraid Settings when the plugin icon is selected.
+- Stable promotion copies the tested Settings launch target into the separate release PR.
+
 ### Issue #195
 - Job Wizard repository selection:
   - Repository options now show the human-readable repository name with its effective repository path instead of three unlabeled values.

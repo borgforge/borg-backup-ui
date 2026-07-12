@@ -18,6 +18,12 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   sourceSuggestTimer: null,
   sourceSuggestController: null,
   sourceSuggestRequest: 0,
+  excludePaths: [],
+  excludeSuggest: [],
+  excludeSuggestIndex: -1,
+  excludeSuggestTimer: null,
+  excludeSuggestController: null,
+  excludeSuggestRequest: 0,
   scrollHintBound: false,
   remoteRepoStatus: null,
   dockerContainers: [],
@@ -377,6 +383,13 @@ function openWizard() {
   wizardState.sourceSuggest = [];
   wizardState.sourceSuggestIndex = -1;
   wizardRenderSourcePaths();
+  document.getElementById('wiz-exclude-paths').value = '';
+  document.getElementById('wiz-exclude-path-input').value = '';
+  wizardCancelExcludeSuggestRequest();
+  wizardState.excludePaths = [];
+  wizardState.excludeSuggest = [];
+  wizardState.excludeSuggestIndex = -1;
+  wizardRenderExcludePaths();
   document.getElementById('wiz-compression').value = 'lz4';
   document.getElementById('wiz-keep-daily').value = '7';
   document.getElementById('wiz-keep-weekly').value = '4';
@@ -424,6 +437,8 @@ function _wizardFillFromJob(job) {
   document.getElementById('wiz-source-paths').value = parsedPaths.join('\n');
   wizardState.sourcePaths = parsedPaths;
   wizardRenderSourcePaths();
+  wizardState.excludePaths = _wizardUniqueList(job.exclude_paths || []);
+  wizardRenderExcludePaths();
   wizardState.selectedRepositoryKey = String(job.repository_key || '').trim();
   const smbMountBefore = document.getElementById('wiz-smb-mount-before-run');
   const smbUnmountAfter = document.getElementById('wiz-smb-unmount-after-run');
@@ -629,6 +644,7 @@ function _wizardCollectParams() {
       ack_domains_risk: !!document.getElementById('wiz-ack-domains-risk')?.checked,
     },
     source_paths: rawPaths,
+    exclude_paths: _wizardUniqueList(wizardState.excludePaths || []),
     repository_key: (document.getElementById('wiz-repository-key')?.value || wizardState.selectedRepositoryKey || '').trim(),
     compression:  document.getElementById('wiz-compression').value,
     encryption: String(repository?.encryption || '').trim(),
@@ -664,6 +680,131 @@ function wizardRenderSourcePaths() {
       <button type="button" class="wizard-path-chip-del" data-wiz-src-del="${idx}" title="${wizardT('wizard.removeSource')}" aria-label="${wizardT('wizard.removeSource')}">×</button>
     </div>
   `).join('');
+}
+
+function wizardRenderExcludePaths() {
+  const hidden = document.getElementById('wiz-exclude-paths');
+  if (hidden) hidden.value = (wizardState.excludePaths || []).join('\n');
+  const list = document.getElementById('wiz-exclude-path-list');
+  if (!list) return;
+  const items = wizardState.excludePaths || [];
+  list.innerHTML = items.length ? items.map((path, index) => `
+    <div class="wizard-path-chip">
+      <span class="wizard-path-chip-text">${escHtml(path)}</span>
+      <button type="button" class="wizard-path-chip-del" data-wiz-exclude-del="${index}" title="${wizardT('wizard.removeExclude')}" aria-label="${wizardT('wizard.removeExclude')}">×</button>
+    </div>`).join('') : `<div class="form-hint">${wizardT('wizard.noExcludePaths')}</div>`;
+}
+
+function wizardCancelExcludeSuggestRequest() {
+  if (wizardState.excludeSuggestTimer) clearTimeout(wizardState.excludeSuggestTimer);
+  wizardState.excludeSuggestTimer = null;
+  if (wizardState.excludeSuggestController) wizardState.excludeSuggestController.abort();
+  wizardState.excludeSuggestController = null;
+  wizardState.excludeSuggestRequest += 1;
+}
+
+function wizardHideExcludeSuggest() {
+  const box = document.getElementById('wiz-exclude-path-suggest');
+  if (box) {
+    box.classList.add('hidden');
+    box.innerHTML = '';
+  }
+  wizardState.excludeSuggest = [];
+  wizardState.excludeSuggestIndex = -1;
+}
+
+function wizardRenderExcludeSuggest() {
+  const box = document.getElementById('wiz-exclude-path-suggest');
+  const rows = wizardState.excludeSuggest || [];
+  if (!box || !rows.length) return wizardHideExcludeSuggest();
+  box.innerHTML = rows.map((row, index) => `<button type="button" class="wizard-suggest-item ${index === wizardState.excludeSuggestIndex ? 'active' : ''}" data-wiz-exclude-sel="${index}">${escHtml(row.path || '')}</button>`).join('');
+  box.classList.remove('hidden');
+}
+
+function wizardExcludePathInputChanged() {
+  const input = document.getElementById('wiz-exclude-path-input');
+  const prefix = String(input?.value || '').trim();
+  wizardCancelExcludeSuggestRequest();
+  if (!prefix.startsWith('/mnt')) return wizardHideExcludeSuggest();
+  const requestId = wizardState.excludeSuggestRequest;
+  wizardState.excludeSuggestTimer = setTimeout(async () => {
+    const controller = new AbortController();
+    wizardState.excludeSuggestController = controller;
+    try {
+      const res = await fetch(`/api/wizard/source-dirs?prefix=${encodeURIComponent(prefix)}&limit=100`, { signal: controller.signal });
+      const data = await res.json();
+      if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
+      if (requestId !== wizardState.excludeSuggestRequest) return;
+      wizardState.excludeSuggest = Array.isArray(data?.dirs) ? data.dirs : [];
+      wizardState.excludeSuggestIndex = wizardState.excludeSuggest.length ? 0 : -1;
+      wizardRenderExcludeSuggest();
+    } catch (error) {
+      if (error?.name !== 'AbortError') wizardHideExcludeSuggest();
+    }
+  }, 180);
+}
+
+function wizardExcludeBelowSource(path) {
+  const candidate = String(path || '').replace(/\/+$/, '');
+  return (wizardState.sourcePaths || []).some((source) => candidate.startsWith(String(source || '').replace(/\/+$/, '') + '/'));
+}
+
+function wizardAddExcludePath(value) {
+  const path = String(value || '').trim().replace(/\/+$/, '');
+  if (!path || !wizardIsAllowedSourcePath(path)) {
+    _wizardShowError(2, wizardT('wizard.validationExcludeAbsolute'));
+    return false;
+  }
+  if (!wizardExcludeBelowSource(path)) {
+    _wizardShowError(2, wizardT('wizard.validationExcludeBelowSource'));
+    return false;
+  }
+  wizardClearError(2);
+  if (!(wizardState.excludePaths || []).includes(path)) wizardState.excludePaths.push(path);
+  document.getElementById('wiz-exclude-path-input').value = '';
+  wizardCancelExcludeSuggestRequest();
+  wizardHideExcludeSuggest();
+  wizardRenderExcludePaths();
+  return true;
+}
+
+function wizardExcludePathKeydown(event) {
+  const rows = wizardState.excludeSuggest || [];
+  if (event.key === 'ArrowDown' && rows.length) {
+    event.preventDefault();
+    wizardState.excludeSuggestIndex = (wizardState.excludeSuggestIndex + 1) % rows.length;
+    return wizardRenderExcludeSuggest();
+  }
+  if (event.key === 'ArrowUp' && rows.length) {
+    event.preventDefault();
+    wizardState.excludeSuggestIndex = (wizardState.excludeSuggestIndex - 1 + rows.length) % rows.length;
+    return wizardRenderExcludeSuggest();
+  }
+  if (event.key === 'ArrowRight' && rows.length) {
+    const selected = rows[wizardState.excludeSuggestIndex]?.path;
+    if (selected) {
+      event.preventDefault();
+      document.getElementById('wiz-exclude-path-input').value = selected;
+      wizardHideExcludeSuggest();
+      wizardExcludePathInputChanged();
+    }
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    wizardAddExcludePath(rows[wizardState.excludeSuggestIndex]?.path || event.target.value);
+  }
+}
+
+function wizardExcludePathsClick(event) {
+  const remove = event.target.closest('[data-wiz-exclude-del]');
+  if (remove) {
+    const index = Number(remove.dataset.wizExcludeDel);
+    if (index >= 0) wizardState.excludePaths.splice(index, 1);
+    return wizardRenderExcludePaths();
+  }
+  const select = event.target.closest('[data-wiz-exclude-sel]');
+  if (select) wizardAddExcludePath(wizardState.excludeSuggest[Number(select.dataset.wizExcludeSel)]?.path);
 }
 
 function wizardHideSourceSuggest() {
@@ -930,6 +1071,9 @@ async function _wizardPreview() {
     }
     lines.push(wizardT('wizard.previewEncryption', { value: summary.encryption || '-' }));
     lines.push(wizardT('wizard.previewSources', { value: summary.sources_count ?? '-' }));
+    lines.push(wizardT('wizard.previewExclusions', {
+      value: Array.isArray(summary.exclude_paths) && summary.exclude_paths.length ? summary.exclude_paths.join(', ') : wizardT('wizard.none'),
+    }));
     lines.push(wizardT('wizard.previewFeatures', {
       docker: wizardT(summary.docker ? 'wizard.yes' : 'wizard.no'),
       vm: wizardT(summary.vm ? 'wizard.yes' : 'wizard.no'),
@@ -1082,6 +1226,7 @@ window.addEventListener?.('bbui:language-changed', () => {
   }
   wizardSetStorageOptions();
   wizardRenderSourcePaths();
+  wizardRenderExcludePaths();
   wizardUpdateIconPreview();
   wizardAutoFill();
   wizardRenderRuntimeControls();

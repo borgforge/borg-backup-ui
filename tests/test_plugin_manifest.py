@@ -32,7 +32,16 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     assert "require_pkg_entry" in script
     assert 'require_pkg_entry "boot/config/plugins/${NAME}/borg_backup_ui.py"' in script
     assert 'require_pkg_entry "boot/config/plugins/${NAME}/api/config_api.py"' in script
+    assert 'require_pkg_entry "boot/config/plugins/${NAME}/api/factory_reset_worker.py"' in script
     assert 'require_pkg_entry "boot/config/plugins/${NAME}/ui/index.html"' in script
     assert 'require_pkg_entry "boot/config/plugins/${NAME}/runtime/config/backup.conf.example"' in script
     assert 'require_pkg_entry "etc/rc.d/rc.borg_backup_ui"' in script
     assert "ET.parse(sys.argv[1])" in script
+    assert 'launch="Settings/borg-backup-ui"' in script
+
+
+def test_release_promotion_copies_tested_settings_launch_target() -> None:
+    script = (ROOT / "plugin" / "promote-release.sh").read_text(encoding="utf-8")
+
+    assert "Test manifest does not define the tested Unraid launch target" in script
+    assert "launch_target" in script

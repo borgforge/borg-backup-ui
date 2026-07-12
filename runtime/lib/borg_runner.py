@@ -280,6 +280,7 @@ class BorgRunner:
         paths: List[Path],
         archive_prefix: str,
         extra_env: Optional[Dict[str, str]] = None,
+        exclude_paths: Optional[List[Path]] = None,
     ) -> int:
         """
         Erstellt ein neues Borg-Archiv.
@@ -302,6 +303,13 @@ class BorgRunner:
 
         archive = f"{repo}::{archive_prefix}-{{now:%Y-%m-%d_%H-%M-%S}}"
 
+        exclusions = [Path(path) for path in (exclude_paths or [])]
+        exclude_args: List[str] = []
+        for path in exclusions:
+            archive_path = str(path).strip().lstrip("/").rstrip("/")
+            if archive_path:
+                exclude_args.extend(["--exclude", f"pp:{archive_path}"])
+
         cmd = [
             "borg", "create",
             "--stats",
@@ -309,12 +317,14 @@ class BorgRunner:
             f"--compression={self.config.compression}",
             f"--checkpoint-interval={self.config.checkpoint_interval}",
             "--files-cache=ctime,size",
+            *exclude_args,
             archive,
         ] + [str(p) for p in paths]
 
         _log_section("PHASE 3: BORG BACKUP (CREATE)")
         logger.info("Repository: %s", repo)
         logger.info("Backup paths: %s", " ".join(str(p) for p in paths))
+        logger.info("Excluded paths: %s", ", ".join(str(p) for p in exclusions) or "none")
         logger.info("Performance: Compression=%s", self.config.compression)
         logger.info("Cache: %s", os.environ.get("BORG_CACHE_DIR", ""))
         logger.info("")

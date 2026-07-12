@@ -116,6 +116,40 @@ Optional disposable-repository test:
 - [X] Right Arrow opens the selected directory and loads its children.
 - [X] Enter adds the final source path.
 
+### Source exclusions (Issue #199)
+
+- [ ] Add one existing directory below a selected source as an exclusion.
+- [ ] Add one existing file below a selected source as an exclusion.
+- [ ] Confirm an exclusion outside every selected source is rejected.
+- [ ] Save and reopen the job; confirm all exclusions remain selected.
+- [ ] Run the job and confirm the exclusions are listed in the live log.
+- [ ] Browse the created archive and confirm the excluded file and directory are absent.
+
+## 6a. Unraid plugin entry (Issue #197)
+
+- [ ] Open the Unraid Plugins page and select the Borg Backup UI icon.
+- [ ] Confirm the existing control panel opens below Unraid Settings.
+- [ ] Confirm Start, Stop, Restart, port and bind controls remain available.
+- [ ] Confirm `Open Borg Backup UI` opens the application.
+
+## 6b. Guarded factory reset (Issue #198)
+
+Perform this test only after backing up `/boot/config/borg-backup` and use a
+disposable test installation.
+
+- [ ] Confirm reset is blocked while a backup job is running.
+- [ ] Confirm reset is blocked while a Restore Test or restore is running.
+- [ ] Confirm reset is blocked when a managed repository is located inside the configured operational data directory.
+- [ ] Confirm incomplete risk checkboxes are rejected.
+- [ ] Confirm a wrong server name, wrong admin password or wrong phrase is rejected.
+- [ ] Complete the reset with all confirmations.
+- [ ] Confirm the plugin installation, port and bind configuration remain installed.
+- [ ] Confirm job and weekly-report crontab blocks were removed.
+- [ ] Confirm configuration and operational directories were initialized again.
+- [ ] Confirm the Admin first-setup page opens after restart.
+- [ ] Confirm external Borg repositories still exist and can be imported again.
+- [ ] Confirm `factory-reset.log.jsonl` contains a secret-free audit entry.
+
 ## 7. Backup runtime
 
 - [X] Start one small local or USB backup.
@@ -157,7 +191,7 @@ For a Docker/VM job where applicable:
 - [X] Download a new support bundle after the test.
 - [X] Confirm sanitized `storages.json` is included.
 - [X] Confirm sanitized `repositories.json` is included.
-- [ ] Confirm no synthesized `settings.sanitized.json` is included.
+- [X] Confirm no synthesized `settings.sanitized.json` is included.
 - [X] Confirm `migration-state.json` is included.
 - [X] Confirm `migrations.log.jsonl` is included.
 - [X] Confirm migration status, failed phase and rollback details are understandable.

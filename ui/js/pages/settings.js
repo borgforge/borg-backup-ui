@@ -253,6 +253,7 @@ function renderSettings(data, systemHealth) {
     <div class="settings-tab-panel ${settingsState.activeTab === 'transfer' ? '' : 'hidden'}" data-settings-panel="transfer">
       ${renderSettingsTransferTools()}
       ${renderSettingsConfigBackups()}
+      ${renderSettingsFactoryReset()}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'advanced' ? '' : 'hidden'}" data-settings-panel="advanced">
       ${renderSettingsAdvancedTabs(data, systemHealth)}
@@ -1929,6 +1930,20 @@ function renderSettingsTransferTools() {
     </div>`);
 }
 
+function renderSettingsFactoryReset() {
+  return settingsCard(settingsT('transfer.factoryResetTitle'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>`,
+    `<div class="settings-body">
+      <div class="status-message error" style="margin:0 0 12px 0">
+        <strong>${settingsT('transfer.factoryResetWarningTitle')}</strong><br>
+        ${settingsT('transfer.factoryResetWarning')}
+      </div>
+      <p class="text-muted" style="font-size:12px;margin:0 0 12px 0">${settingsT('transfer.factoryResetRepositories')}</p>
+      <button class="btn btn-danger" data-settings-action="factory-reset-start">${settingsT('transfer.factoryResetButton')}</button>
+      <div id="settings-factory-reset-msg" class="status-message hidden" style="margin-top:10px"></div>
+    </div>`);
+}
+
 function renderJobsImportPreview(d) {
   const rows = Array.isArray(d?.jobs) ? d.jobs : [];
   const sp = d?.settings_preview || null;
@@ -2328,6 +2343,80 @@ async function exportSupportBundle() {
     showMsg('settings-transfer-msg', 'success', settingsT('transfer.supportCreated', { count: data.file_count || 0 }));
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.supportFailed', { message: err.message }));
+  }
+}
+
+async function startFactoryReset() {
+  const messageId = 'settings-factory-reset-msg';
+  hideEl(messageId);
+  try {
+    const statusRes = await fetch('/api/settings/factory-reset/status', { credentials: 'include' });
+    const status = await statusRes.json();
+    if (!statusRes.ok) throw new Error(apiErrorMessage(status, statusRes.status));
+    const operationBlockers = Array.isArray(status.operation_blockers) ? status.operation_blockers : [];
+    const repositoryBlockers = Array.isArray(status.repository_blockers) ? status.repository_blockers : [];
+    if (!status.allowed) {
+      const rows = [
+        ...operationBlockers.map((row) => `${row.type}: ${row.name}`),
+        ...repositoryBlockers.map((row) => `${row.display_name}: ${row.path}`),
+      ];
+      throw new Error(`${settingsT('transfer.factoryResetBlocked')} ${rows.join(', ')}`.trim());
+    }
+    const server = String(status.server_name || '');
+    const configRoot = String(status.configuration_root || '');
+    const dataRoot = String(status.operational_data_root || '');
+    const confirmation = await _openSettingsDialog({
+      title: settingsT('transfer.factoryResetTitle'),
+      html: `
+        <div class="modal-info-item danger">${settingsT('transfer.factoryResetDialogWarning')}</div>
+        <div class="modal-info-item" style="margin-top:8px"><strong>${settingsT('transfer.factoryResetDeletePaths')}</strong><br><code>${escHtml(configRoot)}</code>${dataRoot ? `<br><code>${escHtml(dataRoot)}</code>` : ''}</div>
+        <label class="form-checkbox-row" style="margin-top:12px"><input type="checkbox" id="factory-reset-ack-configuration"> ${settingsT('transfer.factoryResetAckConfiguration')}</label>
+        <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-data"> ${settingsT('transfer.factoryResetAckData')}</label>
+        <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-secrets"> ${settingsT('transfer.factoryResetAckSecrets')}</label>
+        <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-repositories"> ${settingsT('transfer.factoryResetAckRepositories')}</label>
+        <div class="form-group" style="margin-top:12px"><label class="form-label">${settingsT('transfer.factoryResetServerName', { name: server })}</label><input class="form-input" id="factory-reset-server-name" autocomplete="off"></div>
+        <div class="form-group"><label class="form-label">${settingsT('transfer.factoryResetPassword')}</label><input class="form-input" type="password" id="factory-reset-password" autocomplete="current-password"></div>`,
+      input: {
+        label: settingsT('transfer.factoryResetPhrase', { phrase: status.confirmation_phrase || 'FACTORY RESET' }),
+        placeholder: status.confirmation_phrase || 'FACTORY RESET',
+        validate: (value) => String(value || '').trim() === String(status.confirmation_phrase || 'FACTORY RESET'),
+      },
+      confirmText: settingsT('transfer.factoryResetConfirm'),
+      confirmClass: 'btn-danger',
+      resolveValue: ({ modal, input }) => ({
+        confirmation_phrase: String(input.value || '').trim(),
+        server_name: String(modal.querySelector('#factory-reset-server-name')?.value || '').trim(),
+        current_password: String(modal.querySelector('#factory-reset-password')?.value || ''),
+        ack_configuration: !!modal.querySelector('#factory-reset-ack-configuration')?.checked,
+        ack_operational_data: !!modal.querySelector('#factory-reset-ack-data')?.checked,
+        ack_secrets: !!modal.querySelector('#factory-reset-ack-secrets')?.checked,
+        ack_repositories_preserved: !!modal.querySelector('#factory-reset-ack-repositories')?.checked,
+      }),
+    });
+    if (!confirmation) return;
+    const resetRes = await fetch('/api/settings/factory-reset', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(confirmation),
+    });
+    const result = await resetRes.json();
+    if (!resetRes.ok) throw new Error(apiErrorMessage(result, resetRes.status));
+    showMsg(messageId, 'success', settingsT('transfer.factoryResetScheduled'));
+    const waitForRestart = async (remaining = 30) => {
+      try {
+        const response = await fetch('/api/auth/status', { credentials: 'include', cache: 'no-store' });
+        const state = await response.json();
+        if (response.ok && state.bootstrap_required) {
+          window.location.href = '/setup-admin';
+          return;
+        }
+      } catch (_) { /* service is expected to be temporarily unavailable */ }
+      if (remaining > 0) setTimeout(() => waitForRestart(remaining - 1), 2000);
+    };
+    setTimeout(() => waitForRestart(), 3000);
+  } catch (err) {
+    showMsg(messageId, 'error', settingsT('transfer.factoryResetFailed', { message: err.message }));
   }
 }
 
@@ -3689,6 +3778,7 @@ async function onSettingsContentClick(event) {
   if (action === 'import-profile-secrets-select-file') return importProfileSecretsPreviewSelectFile();
   if (action === 'import-profile-secrets-apply') return importProfileSecretsApplySelected();
   if (action === 'export-support-bundle') return exportSupportBundle();
+  if (action === 'factory-reset-start') return startFactoryReset();
   if (action === 'runtime-recovery-ack') return acknowledgeRuntimeRecoveryEntry(el);
   if (action === 'legacy-cleanup-apply') return applyLegacyCleanupFromSettings(el);
   if (action === 'diff-config-backup') return diffSettingsConfigBackup(el.dataset.backupName || '');

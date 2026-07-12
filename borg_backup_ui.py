@@ -681,6 +681,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/settings/basic": self._get_settings_basic,
                 "/api/setup-status": self._get_setup_status,
                 "/api/settings/backup-history": self._get_settings_backup_history,
+                "/api/settings/factory-reset/status": self._get_factory_reset_status,
                 "/api/settings/jobs-export": lambda: self._get_settings_jobs_export(parsed.query),
                 "/api/history": lambda: self._get_history(parsed.query),
                 "/api/restore-tests": self._get_restore_tests,
@@ -747,6 +748,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/settings/profile-secrets-preview": self._post_settings_profile_secrets_preview,
             "/api/settings/profile-secrets-import": self._post_settings_profile_secrets_import,
             "/api/settings/support-bundle": self._post_settings_support_bundle,
+            "/api/settings/factory-reset": self._post_factory_reset,
             "/api/settings/legacy-cleanup-apply": self._post_settings_legacy_cleanup_apply,
             "/api/system-health/runtime-recovery/ack": self._post_runtime_recovery_ack,
             "/api/settings/usb-profiles-status": self._post_settings_usb_profiles_status,
@@ -814,6 +816,46 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_status(self) -> dict:
         from status_api import get_status_data
         return get_status_data(self.config)
+
+    def _get_factory_reset_status(self) -> dict:
+        from factory_reset_api import factory_reset_status
+
+        return factory_reset_status(self.config)
+
+    def _post_factory_reset(self) -> dict:
+        from factory_reset_api import (
+            FactoryResetBlocked,
+            schedule_factory_reset,
+            validate_factory_reset_request,
+        )
+
+        body = self._read_json_body()
+        session = self._get_current_session_meta() or {}
+        username = _normalize_username(session.get("username", ""))
+        role = str(session.get("role", "")).strip().lower()
+        if role != "admin" or not username:
+            raise PermissionError("An authenticated administrator is required")
+        password = str(body.get("current_password") or "")
+        if not password or not self._verify_user_credentials(username, password):
+            self._security_audit("factory_reset", "failed", target=username, detail="invalid_current_password")
+            raise PermissionError("The current administrator password is invalid")
+        try:
+            status = validate_factory_reset_request(self.config, body)
+        except FactoryResetBlocked as exc:
+            self._security_audit("factory_reset", "blocked", target=username, detail=str(exc))
+            raise ApiConflictError(str(exc), "factory_reset_blocked") from exc
+        try:
+            result = schedule_factory_reset(
+                self.config,
+                status,
+                actor=username,
+                request_id=str(getattr(self, "_current_request_id", "") or ""),
+                script_dir=SCRIPT_DIR,
+            )
+        except FactoryResetBlocked as exc:
+            raise ApiConflictError(str(exc), "factory_reset_pending") from exc
+        self._security_audit("factory_reset", "scheduled", target=username)
+        return result
 
     def _get_auth_status(self) -> dict:
         mode = self._auth_mode()

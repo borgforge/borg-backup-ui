@@ -206,6 +206,17 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
             _record_added("config/migrations.log.sanitized.jsonl")
         else:
             _record_skipped(migration_log, "not_found_or_unreadable")
+        factory_reset_log = Path(__file__).resolve().parents[1] / "factory-reset.log.jsonl"
+        if factory_reset_log.is_file():
+            if _add_jsonl_file(
+                zf,
+                "config/factory-reset.sanitized.jsonl",
+                factory_reset_log,
+                max_bytes=65536,
+            ):
+                _record_added("config/factory-reset.sanitized.jsonl")
+            else:
+                _record_skipped(factory_reset_log, "unreadable")
         _add_json(zf, "system/health.json", health)
         _record_added("system/health.json")
 

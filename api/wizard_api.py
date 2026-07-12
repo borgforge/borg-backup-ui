@@ -6,6 +6,7 @@ scriptless wizard runner.
 """
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,6 +84,40 @@ def _split_selected(raw) -> list[str]:
         seen.add(name)
         out.append(name)
     return out
+
+
+def _exclude_paths(raw) -> list[str]:
+    """Normalize concrete exclusion paths without accepting Borg patterns."""
+    values = raw if isinstance(raw, list) else (raw.splitlines() if isinstance(raw, str) else [])
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        if "\x00" in text or "\n" in text or "\r" in text:
+            raise ValueError("Exclusion paths must not contain control characters")
+        if not text.startswith("/"):
+            raise ValueError(f"Exclusion path must be absolute: {text}")
+        normalized = os.path.normpath(text)
+        if normalized == "/" or normalized in seen:
+            if normalized == "/":
+                raise ValueError("The filesystem root cannot be excluded")
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def _validate_exclude_paths(raw, source_paths: list[str]) -> list[str]:
+    excludes = _exclude_paths(raw)
+    normalized_sources = [os.path.normpath(str(path)) for path in source_paths]
+    for exclude in excludes:
+        if not Path(exclude).exists():
+            raise ValueError(f"Exclusion path does not exist: {exclude}")
+        if not any(exclude.startswith(source.rstrip("/") + "/") for source in normalized_sources):
+            raise ValueError(f"Exclusion path must be below a selected source path: {exclude}")
+    return excludes
 
 
 def _runtime_control_from_params(params: dict, kind: str, existing: Optional[dict] = None) -> dict:
@@ -185,6 +220,7 @@ def validate_params(
             raise ValueError(f"Source path does not exist: {src}")
         if not p.is_dir():
             raise ValueError(f"Source path is not a directory: {src}")
+    params["exclude_paths"] = _validate_exclude_paths(params.get("exclude_paths", []), raw_sources)
 
     docker_control = _runtime_control_from_params(params, "docker")
     vm_control = _runtime_control_from_params(params, "vm")
@@ -262,6 +298,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
 
     # Prefer explicit wizard metadata values if available.
     meta_paths_default = ""
+    meta_exclude_paths: list[str] = []
     meta_compression = ""
     meta_keep_daily = ""
     meta_keep_weekly = ""
@@ -281,6 +318,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
             meta = json.loads(meta_file.read_text(encoding="utf-8"))
             if isinstance(meta.get("paths"), dict):
                 meta_paths_default = str(meta["paths"].get("default") or "").strip()
+            meta_exclude_paths = _exclude_paths(meta.get("exclude_paths", []))
             meta_compression = str(meta.get("compression") or "").strip()
             meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
             meta_keep_daily = str(meta_ret.get("daily") or "").strip()
@@ -330,6 +368,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "docker_control": meta_docker_control,
         "vm_control": meta_vm_control,
         "source_paths": source_paths or "",
+        "exclude_paths": meta_exclude_paths,
         "repo_path": repo_path or "",
         "repository_key": meta_repository_key,
         "repository_assignment_error": assignment_error,
@@ -352,6 +391,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     type_id = params["type_id"].strip()
     location = params.get("location", "local")
     source_paths = [p for p in params.get("source_paths", "").split() if p]
+    exclude_paths = _exclude_paths(params.get("exclude_paths", []))
     selected_repo = _repository_from_params(params, ui_config)
     repo_path = _repository_path(selected_repo, ui_config)
     encryption = _repository_encryption(selected_repo, params.get("encryption", "repokey-blake2"))
@@ -379,7 +419,12 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             add_step("vmStop", f"Shut down selected VMs ({len(vm_control['selected'])})")
         else:
             add_step("vmStop", "Shut down all VMs")
-    add_step("borgCreate", f"Borg create ({len(source_paths)} source(s))", count=len(source_paths))
+    add_step(
+        "borgCreate",
+        f"Borg create ({len(source_paths)} source(s), {len(exclude_paths)} exclusion(s))",
+        count=len(source_paths),
+        exclusions=len(exclude_paths),
+    )
     add_step("borgMaintenance", "Borg maintenance (prune -> compact -> check)")
     add_step("statusNotification", "Write status and notification")
     if use_vm:
@@ -404,6 +449,8 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "repository_name": str((selected_repo or {}).get("repository_name") or "").strip(),
             "encryption": encryption,
             "sources_count": len(source_paths),
+            "exclusions_count": len(exclude_paths),
+            "exclude_paths": exclude_paths,
             "docker": use_docker,
             "vm": use_vm,
             "docker_mode": docker_control["mode"],
@@ -480,6 +527,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
             "conf_key": f"BACKUP_PATHS_{type_upper}",
             "default": params.get("source_paths", "").strip(),
         },
+        "exclude_paths": _exclude_paths(params.get("exclude_paths", [])),
         "features": {
             "docker": docker_control["mode"] != "none",
             "vm": vm_control["mode"] != "none",

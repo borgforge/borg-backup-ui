@@ -261,6 +261,10 @@
     document.getElementById('wiz-source-path-input')?.addEventListener('keydown', wizardSourcePathKeydown);
     document.getElementById('wiz-source-path-list')?.addEventListener('click', wizardSourcePathsClick);
     document.getElementById('wiz-source-path-suggest')?.addEventListener('click', wizardSourcePathsClick);
+    document.getElementById('wiz-exclude-path-input')?.addEventListener('input', wizardExcludePathInputChanged);
+    document.getElementById('wiz-exclude-path-input')?.addEventListener('keydown', wizardExcludePathKeydown);
+    document.getElementById('wiz-exclude-path-list')?.addEventListener('click', wizardExcludePathsClick);
+    document.getElementById('wiz-exclude-path-suggest')?.addEventListener('click', wizardExcludePathsClick);
     document.getElementById('wiz-description-help-btn')?.addEventListener('click', openWizardDescriptionHelp);
     document.getElementById('wizard-help-close-btn')?.addEventListener('click', closeWizardDescriptionHelp);
     document.getElementById('wizard-help-ok-btn')?.addEventListener('click', closeWizardDescriptionHelp);

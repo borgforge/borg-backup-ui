@@ -90,7 +90,7 @@ def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypa
         "statusNotification",
         "resourceLocksRelease",
     ]
-    assert flow["step_codes"][2]["params"] == {"count": 2}
+    assert flow["step_codes"][2]["params"] == {"count": 2, "exclusions": 0}
     fallback = "\n".join(flow["steps"])
     assert "Pfade" not in fallback
     assert "Quelle(n)" not in fallback

@@ -387,6 +387,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     paths_cfg = meta.get("paths") if isinstance(meta.get("paths"), dict) else {}
     paths_key = str(paths_cfg.get("conf_key") or f"BACKUP_PATHS_{tu}")
     paths_default = str(paths_cfg.get("default") or "")
+    exclude_paths = meta.get("exclude_paths") if isinstance(meta.get("exclude_paths"), list) else []
 
     meta_compression = str(meta.get("compression") or "").strip()
     meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
@@ -425,6 +426,10 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     env.setdefault("BORG_KEEP_YEARLY", meta_keep_yearly or env.get(f"RETENTION_{tu}_YEARLY", "3"))
     env.setdefault("LOCK_FILE", f"{env.get('LOCK_FILE_DIR', '/var/run')}/borg-backup-{type_id}.lock")
     env.setdefault("BACKUP_PATHS", env.get(paths_key, paths_default))
+    env["BACKUP_EXCLUDE_PATHS_JSON"] = json.dumps(
+        [str(path).strip() for path in exclude_paths if str(path).strip()],
+        ensure_ascii=False,
+    )
     env.setdefault("STATUS_DIR_OVERRIDE", env.get("STATUS_DIR", "/mnt/user/backup-status"))
     from borg_key_store import apply_borg_key_environment
 
@@ -680,7 +685,11 @@ def main() -> int:
                 job.shutdown_vms(selected)
 
             runner = BorgRunner(borg_config)
-            create_exit = runner.create(job_config.backup_paths, archive_prefix)
+            create_exit = runner.create(
+                job_config.backup_paths,
+                archive_prefix,
+                exclude_paths=job_config.exclude_paths,
+            )
             if create_exit >= 2:
                 job.set_result(create_exit, final_msg=f"borg create failed (exit {create_exit})")
                 return create_exit
