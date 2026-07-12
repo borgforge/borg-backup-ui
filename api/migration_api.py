@@ -1,9 +1,4 @@
-"""
-api/migration_api.py - read-only migration registry for the legacy plugin.
-
-The registry is intentionally conservative: it reports migration status and
-cleanup candidates, but does not modify config files or move data.
-"""
+"""Migration status, diagnostics and explicit configuration cleanup actions."""
 from __future__ import annotations
 
 import json
@@ -372,7 +367,7 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
 
 
 def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
-    from config_api import read_settings_payload
+    from storage_objects_api import read_storage_store
 
     config_dir = _config_dir(ui_config)
     conf_file = config_dir / "backup.conf"
@@ -386,15 +381,9 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
     cleanup_plan = build_legacy_cleanup_plan(ui_config, mode="comment_out")
 
     try:
-        settings_payload = read_settings_payload(ui_config)
+        profile_count = len(read_storage_store(ui_config).get("storages", []))
     except Exception:
-        settings_payload = {}
-    profile_count = 0
-    if isinstance(settings_payload, dict):
-        for key in ("usb_profiles", "smb_profiles", "storage_profiles"):
-            rows = settings_payload.get(key)
-            if isinstance(rows, list):
-                profile_count += len(rows)
+        profile_count = 0
 
     migrations = migration_state.get("migrations") if isinstance(migration_state.get("migrations"), dict) else {}
 

@@ -173,12 +173,9 @@ def validate_params(
         raise ValueError("Selected repository does not belong to the selected storage target")
     params["storage_key"] = selected_storage_key
     profile_key = str(selected_storage.get("profile_key") or "").strip()
-    params["usb_profile_key"] = profile_key if location == "usb" else ""
-    params["smb_profile_key"] = profile_key if location == "smb" else ""
-    params["storage_profile_key"] = profile_key if location == "storagebox" else ""
-    if location == "smb" and not str(params.get("smb_profile_key", "")).strip():
+    if location == "smb" and not profile_key:
         raise ValueError("SMB profile is missing")
-    if location == "storagebox" and not str(params.get("storage_profile_key", "")).strip():
+    if location == "storagebox" and not profile_key:
         raise ValueError("Storage profile is missing")
 
     raw_sources = [p.strip() for p in str(params.get("source_paths", "")).split() if p.strip()]
@@ -310,13 +307,9 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
             job=meta,
             require_passphrase_file=False,
         )
-        storage = repository_context["storage"]
-        profile_key = str(storage.get("profile_key") or "").strip()
         repo_path = str(repository_context["repository_path"])
     except RepositoryContextError as exc:
         repository_context = {}
-        storage = {}
-        profile_key = ""
         repo_path = ""
         assignment_error = str(exc)
     source_paths = meta_paths_default or conf.get(paths_key) or ""
@@ -340,9 +333,6 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "repo_path": repo_path or "",
         "repository_key": meta_repository_key,
         "repository_assignment_error": assignment_error,
-        "usb_profile_key": profile_key if location == "usb" else "",
-        "smb_profile_key": profile_key if location == "smb" else "",
-        "storage_profile_key": profile_key if location == "storagebox" else "",
         "mount_before_run": meta_mount_before_run,
         "unmount_after_run": meta_unmount_after_run,
         "compression": compression,

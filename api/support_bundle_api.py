@@ -171,14 +171,13 @@ def _arc_safe_path(prefix: str, path: Path) -> str:
 
 
 def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
-    from config_api import get_conf_file, read_expanded_conf, read_settings_payload
+    from config_api import get_conf_file, read_expanded_conf
     from system_health_api import get_system_health_data
 
     created_at = datetime.now().isoformat(timespec="seconds")
     root = _root_from_config(config)
     scripts_dir = Path(str(config.get("BACKUP_SCRIPTS_DIR", root / "scripts")))
     expanded = read_expanded_conf(config)
-    settings_payload = read_settings_payload(config)
     health = get_system_health_data(config)
 
     files: List[str] = []
@@ -194,8 +193,6 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         _add_json(zf, "config/expanded-conf.sanitized.json", expanded)
         _record_added("config/expanded-conf.sanitized.json")
-        _add_json(zf, "config/settings.sanitized.json", settings_payload)
-        _record_added("config/settings.sanitized.json")
         for filename in ("storages.json", "repositories.json", "migration-state.json"):
             source = root / "config" / filename
             if source.is_file():

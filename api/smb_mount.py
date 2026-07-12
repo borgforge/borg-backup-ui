@@ -55,7 +55,7 @@ def _job_smb_meta(config: dict, job_key: str) -> Optional[dict]:
     if not smb_key:
         return None
     return {
-        "smb_profile_key": smb_key,
+        "profile_key": smb_key,
         "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
         "mount_before_run": bool(raw.get("mount_before_run", True)),
         "unmount_after_run": bool(raw.get("unmount_after_run", True)),
@@ -84,7 +84,7 @@ def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
     if not bool(meta.get("mount_before_run", True)):
         return guard
 
-    profile_key = str(meta.get("smb_profile_key") or "").strip()
+    profile_key = str(meta.get("profile_key") or "").strip()
     profile = meta.get("storage") if isinstance(meta.get("storage"), dict) else {}
 
     server = str(profile.get("server", "")).strip()

@@ -148,12 +148,6 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         "RESTORE_TEST_STATUS_DIR": str(restore_status_dir),
         "PLUGIN_LOG_FILE": str(plugin_log),
     })
-    monkeypatch.setattr(config_api, "read_settings_payload", lambda _cfg: {
-        "schema_version": 1,
-        "smb_profiles": [],
-        "storage_profiles": [],
-        "usb_profiles": [],
-    })
     monkeypatch.setattr(system_health_api, "get_system_health_data", lambda _cfg: {"checks": {"ok": True}})
 
     bundle = create_support_bundle({"BACKUP_SCRIPTS_DIR": str(scripts)}, app_version="test-version")
@@ -164,6 +158,7 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         assert "manifest.json" in names
         assert "support/sanitizing-report.json" in names
         assert "config/backup.conf.sanitized.txt" in names
+        assert "config/settings.sanitized.json" not in names
         assert "config/storages.sanitized.json" in names
         assert "config/repositories.sanitized.json" in names
         assert "config/migration-state.sanitized.json" in names

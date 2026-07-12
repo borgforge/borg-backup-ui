@@ -47,7 +47,7 @@ def _legacy_storage_key(repo: dict[str, Any]) -> bool:
 
 
 def detect(config: dict) -> dict[str, Any]:
-    repo_store = read_repository_store(config)
+    repo_store = read_repository_store(config, preserve_legacy=True)
     repositories = repo_store.get("repositories") if isinstance(repo_store.get("repositories"), list) else []
     storage_store = read_storage_store(config)
     storages = storage_store.get("storages") if isinstance(storage_store.get("storages"), list) else []
@@ -72,7 +72,7 @@ def detect(config: dict) -> dict[str, Any]:
 
 def apply(config: dict) -> dict[str, Any]:
     settings = _read_settings(config)
-    repo_store = read_repository_store(config)
+    repo_store = read_repository_store(config, preserve_legacy=True)
     repositories = repo_store.get("repositories") if isinstance(repo_store.get("repositories"), list) else []
     storage_store = read_storage_store(config)
     by_key = {

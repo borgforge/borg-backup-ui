@@ -158,8 +158,7 @@ def discover_repos(conf: dict) -> list:
             "location": location,
             "path": repo_path,
             "passphrase_file": str(context.get("passphrase_ref") or ""),
-            "usb_profile_key": profile_key if location == "usb" else "",
-            "smb_profile_key": profile_key if location == "smb" else "",
+            "profile_key": profile_key,
             "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
             "mount_before_run": bool(raw.get("mount_before_run", True)),
             "unmount_after_run": bool(raw.get("unmount_after_run", True)),
@@ -320,7 +319,7 @@ class RestoreTest:
         if not bool(repo.get("mount_before_run", True)):
             return False, ""
 
-        key = str(repo.get("smb_profile_key") or "").strip().lower()
+        key = str(repo.get("profile_key") or "").strip().lower()
         if not key:
             return False, "SMB profile is missing from the job"
         profile = repo.get("storage") if isinstance(repo.get("storage"), dict) else {}

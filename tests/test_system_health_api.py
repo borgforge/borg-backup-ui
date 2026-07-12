@@ -212,18 +212,6 @@ def test_collect_job_health_rejects_job_without_repository_assignment(tmp_path, 
         }) + "\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(config_api, "read_settings_payload", lambda _cfg: {
-        "storage_profiles": [{
-            "key": "storage-1",
-            "name": "Storagebox",
-            "host": "u123.your-storagebox.de",
-            "port": "23",
-            "user": "u123",
-            "base_path": "./backup",
-            "target_type": "storagebox",
-        }]
-    })
-
     health = _collect_job_health({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, jobs_dir)
 
     assert health["summary"]["failed"] == 1

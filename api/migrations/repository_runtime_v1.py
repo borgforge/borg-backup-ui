@@ -207,7 +207,7 @@ def _canonical_repositories(config: dict) -> tuple[dict[str, Any], list[str]]:
     from repositories_api import read_repository_store
     from repository_context import repository_path, storage_by_key
 
-    store = read_repository_store(config)
+    store = read_repository_store(config, preserve_legacy=True)
     cleaned_rows: list[dict[str, Any]] = []
     cleaned_keys: list[str] = []
     for repository in store.get("repositories", []):

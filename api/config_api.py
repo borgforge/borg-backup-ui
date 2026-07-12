@@ -136,7 +136,6 @@ _DEFAULTS: Dict[str, str] = {
     "WEEKLY_REPORT_RECIPIENT": "",
 }
 
-_SETTINGS_SCHEMA_VERSION = 1
 
 
 # ── Pfad-Hilfsfunktionen ─────────────────────────────────────────────────────
@@ -194,16 +193,6 @@ def conf_exists(ui_config: dict) -> bool:
 
 def _conf_backup_dir(ui_config: dict) -> Path:
     return Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backups"
-
-
-def _default_settings_payload() -> Dict[str, Any]:
-    return {
-        "schema_version": _SETTINGS_SCHEMA_VERSION,
-        "local_profiles": [],
-        "usb_profiles": [],
-        "smb_profiles": [],
-        "storage_profiles": [],
-    }
 
 
 def backup_conf_snapshot(ui_config: dict, keep: int = 10, reason: str = "") -> Optional[Path]:
@@ -460,62 +449,6 @@ def read_raw_conf(ui_config: dict) -> dict:
         if key:
             result[key] = value
     return result
-
-
-def read_settings_payload(ui_config: dict) -> Dict[str, Any]:
-    """Return the legacy-shaped UI view from the canonical storage inventory."""
-    from storage_objects_api import settings_profiles_from_storages
-
-    canonical = settings_profiles_from_storages(ui_config)
-    return {
-        "schema_version": _SETTINGS_SCHEMA_VERSION,
-        "usb_profiles": _normalize_usb_profile_rows(canonical.get("usb_profiles", [])),
-        "smb_profiles": normalize_smb_profile_rows(canonical.get("smb_profiles", [])),
-        "storage_profiles": _normalize_storage_profile_rows(canonical.get("storage_profiles", [])),
-    }
-
-
-def write_settings_payload(ui_config: dict, payload: Dict[str, Any]) -> None:
-    """Persist a legacy-shaped transfer payload into the canonical inventory."""
-    from storage_objects_api import replace_all_profile_storages, settings_profiles_from_storages
-
-    current = settings_profiles_from_storages(ui_config)
-    replace_all_profile_storages(ui_config, {
-        "local_profiles": current.get("local_profiles", []),
-        "usb_profiles": _normalize_usb_profile_rows(payload.get("usb_profiles", [])),
-        "smb_profiles": normalize_smb_profile_rows(payload.get("smb_profiles", [])),
-        "storage_profiles": _normalize_storage_profile_rows(payload.get("storage_profiles", [])),
-    })
-
-
-def _strip_profile_keys_from_conf(ui_config: dict) -> bool:
-    conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
-    if not conf_file.exists():
-        return False
-    old = conf_file.read_text(encoding="utf-8")
-    lines = old.splitlines(keepends=True)
-    drop = {"USB_PROFILES_JSON", "SMB_PROFILES_JSON"}
-    out: List[str] = []
-    changed = False
-    for line in lines:
-        stripped = line.strip()
-        clean = stripped.removeprefix("readonly ")
-        if "=" in clean:
-            key = clean.split("=", 1)[0].strip()
-            if key in drop:
-                changed = True
-                continue
-        out.append(line)
-    if changed:
-        backup_conf_snapshot(ui_config, keep=10, reason="Migration")
-        conf_file.write_text("".join(out), encoding="utf-8")
-    return changed
-
-
-def ensure_settings_migrated(ui_config: dict) -> Dict[str, Any]:
-    """Compatibility facade after startup migrations have populated storages.json."""
-    _strip_profile_keys_from_conf(ui_config)
-    return read_settings_payload(ui_config)
 
 
 def _iter_conf_assignment_keys(lines: List[str]) -> List[str]:
@@ -1007,7 +940,6 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
         # Normal settings reads must never wait for a remote SSH probe. Explicit
         # connection tests remain available through the storage profile actions.
         data["storagebox_setup"] = get_storagebox_setup_status(ui_config, probe_auth=False)
-    ensure_settings_migrated(ui_config)
     from storage_objects_api import settings_profiles_from_storages
     canonical_profiles = settings_profiles_from_storages(ui_config)
     from repositories_api import read_repository_store
@@ -1135,140 +1067,6 @@ def ensure_data_dirs(global_data_dir: str) -> dict:
     probe.write_text("ok\n", encoding="utf-8")
     probe.unlink(missing_ok=True)
     return {"ok": True, "paths": paths, "created": created}
-
-
-def migrate_storage_paths_from_global_data_dir(ui_config: dict) -> dict:
-    """
-    Enforce canonical runtime paths derived from GLOBAL_DATA_DIR and persist them to backup.conf.
-    The durable migration state is stored in config/migration-state.json by the startup flow.
-    """
-    conf_raw = read_raw_conf(ui_config)
-    conf = read_expanded_conf(ui_config)
-    data_dir = str(conf_raw.get("GLOBAL_DATA_DIR", "")).strip() or str(conf.get("GLOBAL_DATA_DIR", "")).strip()
-    if not data_dir:
-        return {"changed": False, "reason": "GLOBAL_DATA_DIR is not set", "migrated_files": []}
-    if data_dir == "/mnt/user" or data_dir.startswith("/mnt/user/"):
-        if not _is_unraid_array_started():
-            return {
-                "changed": False,
-                "reason": "array_not_started",
-                "details": "Storage path migration skipped: the Unraid array has not started yet",
-                "migrated_files": [],
-            }
-
-    dirs = derive_data_dirs(data_dir)
-    ensure_data_dirs(data_dir)
-    updates: Dict[str, str] = {
-        "GLOBAL_LOG_DIR": dirs["logs"],
-        "STATUS_DIR": dirs["status"],
-        "RESTORE_TEST_STATUS_DIR": dirs["restore_status"],
-        "GLOBAL_BORG_CACHE_BASE": dirs["cache"],
-    }
-
-    # Move known legacy data only when target child does not already exist.
-    legacy_sources = {
-        "logs": [str(conf_raw.get("GLOBAL_LOG_DIR", "")).strip(), str(conf.get("GLOBAL_LOG_DIR", "")).strip(), "/mnt/user/borg-backup_ui/logs"],
-        "status": [str(conf_raw.get("STATUS_DIR", "")).strip(), str(conf.get("STATUS_DIR", "")).strip(), "/mnt/user/borg-backup_ui/status", "/mnt/user/backup-status"],
-        "restore_status": [str(conf_raw.get("RESTORE_TEST_STATUS_DIR", "")).strip(), str(conf.get("RESTORE_TEST_STATUS_DIR", "")).strip(), "/mnt/user/borg-backup_ui/restore-status"],
-        "cache": [str(conf_raw.get("GLOBAL_BORG_CACHE_BASE", "")).strip(), str(conf.get("GLOBAL_BORG_CACHE_BASE", "")).strip(), "/mnt/cache/borg-cache", "/mnt/user/borg-cache"],
-    }
-    migrated_files: List[Dict[str, str]] = []
-    migration_errors: List[Dict[str, str]] = []
-    settings_changed = False
-
-    def _safe_move_tree(src: Path, dst: Path) -> None:
-        if not src.exists():
-            return
-        try:
-            if src.resolve() == dst.resolve():
-                return
-        except OSError:
-            return
-        dst.mkdir(parents=True, exist_ok=True)
-        for child in src.iterdir():
-            target = dst / child.name
-            if target.exists():
-                continue
-            try:
-                # Cross-device-safe move (e.g. /mnt/cache -> /mnt/user).
-                shutil.move(str(child), str(target))
-                migrated_files.append({"from": str(child), "to": str(target)})
-            except Exception as exc:
-                migration_errors.append({"from": str(child), "to": str(target), "reason": str(exc)})
-
-    for key, candidates in legacy_sources.items():
-        dst = Path(dirs[key])
-        for raw in candidates:
-            src_s = str(raw or "").strip()
-            if not src_s:
-                continue
-            src = Path(src_s)
-            if src.exists():
-                _safe_move_tree(src, dst)
-
-    # Normalize SMB mountpoints into <GLOBAL_DATA_DIR>/remotes/<profile-or-leaf>
-    try:
-        settings_payload = read_settings_payload(ui_config)
-        smb_rows = validate_smb_profiles_json(
-            json.dumps(settings_payload.get("smb_profiles", []), ensure_ascii=False)
-        )
-        normalized_rows: List[Dict[str, str]] = []
-        for row in smb_rows:
-            mpath = str(row.get("mount_path", "")).strip()
-            key = str(row.get("key", "")).strip() or "smb"
-            target_leaf = Path(mpath).name if mpath else key
-            desired_mount = str(Path(dirs["remotes"]) / target_leaf)
-            if mpath.startswith("/mnt/remotes/") or mpath == "/mnt/remotes":
-                row["mount_path"] = desired_mount
-                settings_changed = True
-            normalized_rows.append(row)
-        if settings_changed:
-            settings_payload["smb_profiles"] = normalized_rows
-            write_settings_payload(ui_config, settings_payload)
-    except Exception:
-        pass
-
-    changed = write_conf(ui_config, updates, snapshot_reason="Migration")
-    # Safety net: verify persisted values and force-write if needed.
-    persisted = read_raw_conf(ui_config)
-    needs_force = any(str(persisted.get(k, "")).strip() != str(v).strip() for k, v in updates.items())
-    forced = False
-    if needs_force:
-        conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
-        if conf_file.exists():
-            old_content = conf_file.read_text(encoding="utf-8")
-            lines = old_content.splitlines(keepends=True)
-            out: List[str] = []
-            seen: set[str] = set()
-            for line in lines:
-                stripped = line.strip()
-                clean = stripped.removeprefix("readonly ").strip()
-                if not clean or clean.startswith("#") or "=" not in clean:
-                    out.append(line)
-                    continue
-                key = clean.split("=", 1)[0].strip()
-                if key in updates:
-                    out.append(f"{key}={_quote_conf_value(str(updates[key]))}\n")
-                    seen.add(key)
-                else:
-                    out.append(line)
-            for key, val in updates.items():
-                if key not in seen:
-                    out.append(f"{key}={_quote_conf_value(str(val))}\n")
-            new_content = "".join(out)
-            if new_content != old_content:
-                backup_conf_snapshot(ui_config, keep=10, reason="Migration")
-                conf_file.write_text(new_content, encoding="utf-8")
-                forced = True
-    return {
-        "changed": bool(changed or settings_changed or forced),
-        "reason": "ok",
-        "migrated_files": migrated_files,
-        "migration_errors": migration_errors,
-        "paths": dirs,
-        "settings_changed": settings_changed,
-        "forced_conf_write": forced,
-    }
 
 
 def _as_int(v: str, default: int = 0) -> int:

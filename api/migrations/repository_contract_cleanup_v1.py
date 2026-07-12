@@ -61,7 +61,7 @@ def apply(config: dict) -> dict[str, Any]:
             "status": "not_required",
             "details": detected,
         }
-    store = read_repository_store(config)
+    store = read_repository_store(config, preserve_legacy=True)
     write_repository_store(config, store)
     remaining = detect(config)
     if remaining["required"]:

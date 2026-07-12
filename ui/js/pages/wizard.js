@@ -604,7 +604,6 @@ function _wizardCollectParams() {
   const rawPaths = (wizardState.sourcePaths || []).map((s) => String(s || '').trim()).filter(Boolean).join(' ');
   const storage = wizardSelectedStorage();
   const repository = wizardSelectedRepository();
-  const profileKey = String(storage?.profile_key || '').trim();
   const dockerMode = _wizardRuntimeMode('docker');
   const vmMode = _wizardRuntimeMode('vm');
   return {
@@ -615,9 +614,6 @@ function _wizardCollectParams() {
     description:  (document.getElementById('wiz-description').value || '').trim(),
     location:     document.getElementById('wiz-location').value,
     storage_key: String(storage?.storage_key || '').trim(),
-    storage_profile_key: storage?.location === 'storagebox' ? profileKey : '',
-    usb_profile_key: storage?.location === 'usb' ? profileKey : '',
-    smb_profile_key: storage?.location === 'smb' ? profileKey : '',
     mount_before_run: !!document.getElementById('wiz-smb-mount-before-run')?.checked,
     unmount_after_run: !!document.getElementById('wiz-smb-unmount-after-run')?.checked,
     use_docker:   dockerMode !== 'none',

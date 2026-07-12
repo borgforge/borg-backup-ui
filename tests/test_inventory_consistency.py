@@ -272,6 +272,31 @@ def test_repository_inventory_persists_only_canonical_path_contract(tmp_path: Pa
     assert api_row["path_raw"] == "/mnt/backup/borg-backup-target"
 
 
+def test_runtime_repository_reads_hide_transitional_fields(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    inventory_store.atomic_write_json(repositories_file(config), {
+        "schema_version": 1,
+        "repositories": [{
+            **_repository("repo_target"),
+            "relative_path": "repo_target",
+            "repo_path": "/mnt/legacy/repo_target",
+            "path_display": "/mnt/legacy/repo_target",
+            "repo_conf_key": "REPO_TARGET",
+            "smb_profile_key": "smb-legacy",
+        }],
+    })
+
+    runtime_row = read_repository_store(config)["repositories"][0]
+    migration_row = read_repository_store(config, preserve_legacy=True)["repositories"][0]
+
+    for field in ("repo_path", "path_raw", "path_display", "repo_conf_key", "smb_profile_key"):
+        assert field not in runtime_row
+    assert migration_row["repo_path"] == "/mnt/legacy/repo_target"
+    assert migration_row["path_display"] == "/mnt/legacy/repo_target"
+    assert migration_row["repo_conf_key"] == "REPO_TARGET"
+    assert migration_row["smb_profile_key"] == "smb-legacy"
+
+
 def test_multi_profile_update_rolls_back_on_later_validation_error(tmp_path: Path) -> None:
     config = _config(tmp_path)
     write_storage_store(config, {"storages": [{

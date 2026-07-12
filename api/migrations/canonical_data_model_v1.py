@@ -225,7 +225,7 @@ def _validate(config: dict) -> dict[str, Any]:
     if _settings_file(config).exists():
         raise ValueError("Legacy settings.json still exists")
     storages = read_storage_store(config).get("storages", [])
-    repositories = read_repository_store(config).get("repositories", [])
+    repositories = read_repository_store(config, preserve_legacy=True).get("repositories", [])
     storage_keys = {str(row.get("storage_key") or "") for row in storages}
     repository_keys = {str(row.get("repository_key") or "") for row in repositories}
     if "" in storage_keys or len(storage_keys) != len(storages):
@@ -269,7 +269,7 @@ def _validate(config: dict) -> dict[str, Any]:
 
 def _object_snapshot(config: dict) -> dict[str, dict[str, str]]:
     storages = read_storage_store(config).get("storages", []) if storages_file(config).is_file() else []
-    repositories = read_repository_store(config).get("repositories", []) if repositories_file(config).is_file() else []
+    repositories = read_repository_store(config, preserve_legacy=True).get("repositories", []) if repositories_file(config).is_file() else []
     jobs: dict[str, str] = {}
     for path in _job_files(config):
         try:

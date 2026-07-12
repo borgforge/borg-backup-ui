@@ -5,10 +5,10 @@ and repository model before PR #189 is merged.
 
 ## Test record
 
-- Date: ____________________
-- Tester: ____________________
-- Unraid version: ____________________
-- Source plugin version: `2026.07.05.1531` / ____________________
+- Date: 12.07.2026
+- Tester: tsteinbe
+- Unraid version: 7.2.6
+- Source plugin version: `2026.07.05.1531`
 - Direct-migration candidate: `2026.07.12.0025`
 - Current regression candidate: `2026.07.12.0100`
 - Current package MD5: `10207653e927d7aa5610a6846f586656`
@@ -59,119 +59,120 @@ not sufficient for this particular check.
 
 ## 4. Storage targets and profiles
 
-- [ ] Open **Local Profiles** and confirm names and paths.
-- [ ] Open **USB Profiles** and confirm names, paths and usage counts.
-- [ ] Open **SMB Profiles** and confirm connection fields and usage counts.
-- [ ] Open **SSH Profiles** and confirm endpoint, base path and SSH key path.
-- [ ] Confirm an in-use profile cannot be deleted.
-- [ ] Confirm the available profile status checks still work.
+- [X] Open **Local Profiles** and confirm names and paths.
+- [X] Open **USB Profiles** and confirm names, paths and usage counts.
+- [X] Open **SMB Profiles** and confirm connection fields and usage counts.
+- [X] Open **SSH Profiles** and confirm endpoint, base path and SSH key path.
+- [X] Confirm an in-use profile cannot be deleted.
+- [X] Confirm the available profile status checks still work.
 
 ### Local path validation
 
 Use a disposable local profile or restore the original value after this test.
 
-- [ ] `/mnt//backup` is rejected with an understandable error.
-- [ ] `/mnt/./backup` is rejected with an understandable error.
-- [ ] `/mnt/../etc` is rejected with an understandable error.
-- [ ] `/mnt/backup/` is accepted and stored as `/mnt/backup`.
-- [ ] A valid custom Unraid pool path below `/mnt/<pool>` is accepted.
+- [X] `/mnt//backup` is rejected with an understandable error.
+- [X] `/mnt/./backup` is rejected with an understandable error.
+- [X] `/mnt/../etc` is rejected with an understandable error.
+- [X] `/mnt/backup/` is accepted and stored as `/mnt/backup`.
+- [X] A valid custom Unraid pool path below `/mnt/<pool>` is accepted.
 
 ## 5. Repositories
 
-- [ ] Every repository appears below the correct exact storage target.
-- [ ] Display name, repository path, encryption and job assignment are correct.
-- [ ] Borg information loads successfully for an existing repository.
-- [ ] The displayed archive count matches the archive list.
-- [ ] Archives are sorted newest first.
-- [ ] Cached repository information survives a page reload.
-- [ ] A Repokey repository remains accessible.
-- [ ] A Keyfile repository remains accessible after a plugin or Unraid restart.
-- [ ] Repository deletion is blocked while a job references it.
+- [X] Every repository appears below the correct exact storage target.
+- [X] Display name, repository path, encryption and job assignment are correct.
+- [X] Borg information loads successfully for an existing repository.
+- [X] The displayed archive count matches the archive list.
+- [X] Archives are sorted newest first.
+- [X] Cached repository information survives a page reload.
+- [X] A Repokey repository remains accessible.
+- [X] A Keyfile repository remains accessible after a plugin or Unraid restart.
+- [X] Repository deletion is blocked while a job references it.
 
 Optional disposable-repository test:
 
-- [ ] Create or import a disposable repository.
-- [ ] Open its information and archive list.
-- [ ] Run a repository Check.
-- [ ] Remove the repository after all job references have been removed.
-- [ ] Confirm its metadata, passphrase and dedicated keyfile are cleaned up as expected.
+- [X] Create or import a disposable repository.
+- [X] Open its information and archive list.
+- [X] Run a repository Check.
+- [X] Remove the repository after all job references have been removed.
+- [X] Confirm its metadata, passphrase and dedicated keyfile are cleaned up as expected.
 
 ## 6. Job Wizard and relationships
 
-- [ ] Open an existing job and confirm storage target is selected before repository.
-- [ ] Confirm only repositories for the selected exact storage target are offered.
-- [ ] Confirm options use `Repository name (effective path)`.
-- [ ] Confirm no redundant storage or repository confirmation text appears.
-- [ ] Save one job without changing its repository.
-- [ ] Reopen it and confirm the same repository remains assigned.
-- [ ] Switch one disposable job to another compatible repository and save it.
-- [ ] Reopen it and confirm the new assignment remains correct.
-- [ ] Confirm System Health reports no assignment inconsistencies.
-- [ ] Confirm repository deletion is blocked for the newly assigned repository.
+- [X] Open an existing job and confirm storage target is selected before repository.
+- [X] Confirm only repositories for the selected exact storage target are offered.
+- [X] Confirm options use `Repository name (effective path)`.
+- [X] Confirm no redundant storage or repository confirmation text appears.
+- [X] Save one job without changing its repository.
+- [X] Reopen it and confirm the same repository remains assigned.
+- [X] Switch one disposable job to another compatible repository and save it.
+- [X] Reopen it and confirm the new assignment remains correct.
+- [X] Confirm System Health reports no assignment inconsistencies.
+- [X] Confirm repository deletion is blocked for the newly assigned repository.
 
 ### Source-path autocomplete
 
-- [ ] Typing below `/mnt` shows matching directories.
-- [ ] Up/Down selects a suggestion.
-- [ ] Right Arrow opens the selected directory and loads its children.
-- [ ] Enter adds the final source path.
+- [X] Typing below `/mnt` shows matching directories.
+- [X] Up/Down selects a suggestion.
+- [X] Right Arrow opens the selected directory and loads its children.
+- [X] Enter adds the final source path.
 
 ## 7. Backup runtime
 
-- [ ] Start one small local or USB backup.
-- [ ] Confirm the job is visibly running.
-- [ ] Open and follow its live log.
-- [ ] Confirm the expected repository is used.
-- [ ] Confirm the final status and exit code are correct.
-- [ ] Confirm History contains the completed run.
-- [ ] Confirm Reports open for the completed run.
-- [ ] Confirm Dashboard reflects the new run.
+- [X] Start one small local or USB backup.
+- [X] Confirm the job is visibly running.
+- [X] Open and follow its live log.
+- [X] Confirm the expected repository is used.
+- [X] Confirm the final status and exit code are correct.
+- [X] Confirm History contains the completed run.
+- [X] Confirm Reports open for the completed run.
+- [X] Confirm Dashboard reflects the new run.
 
 For a Docker/VM job where applicable:
 
-- [ ] Only configured containers or VMs are stopped.
-- [ ] Only instances that were running before the backup are restarted.
-- [ ] No open Runtime Recovery warning remains after successful recovery.
+- [X] Only configured containers or VMs are stopped.
+- [X] Only instances that were running before the backup are restarted.
+- [X] No open Runtime Recovery warning remains after successful recovery.
 
 ## 8. Restore Test
 
-- [ ] Confirm saved policy, interval and level before starting.
-- [ ] Start one Restore Test.
-- [ ] Confirm running state and live log are visible.
-- [ ] Open the completed verification report.
-- [ ] Confirm repository, archive, level and result are correct.
-- [ ] Confirm the run remains traceable after navigation or a new login.
+- [X] Confirm saved policy, interval and level before starting.
+- [X] Start one Restore Test.
+- [X] Confirm running state and live log are visible.
+- [X] Open the completed verification report.
+- [X] Confirm repository, archive, level and result are correct.
+- [X] Confirm the run remains traceable after navigation or a new login.
 
 ## 9. Browse & Restore
 
-- [ ] Select a job and open an archive.
-- [ ] Browse and select one safe test item.
-- [ ] Select an allowed restore destination.
-- [ ] Complete the precheck.
-- [ ] Complete a dry-run restore.
-- [ ] Confirm the result and Restore History entry.
-- [ ] Optionally complete a real restore into a disposable destination.
+- [X] Select a job and open an archive.
+- [X] Browse and select one safe test item.
+- [X] Select an allowed restore destination.
+- [X] Complete the precheck.
+- [X] Complete a dry-run restore.
+- [X] Confirm the result and Restore History entry.
+- [X] Optionally complete a real restore into a disposable destination.
 
 ## 10. Diagnostics and support bundle
 
-- [ ] Download a new support bundle after the test.
-- [ ] Confirm sanitized `storages.json` is included.
-- [ ] Confirm sanitized `repositories.json` is included.
-- [ ] Confirm `migration-state.json` is included.
-- [ ] Confirm `migrations.log.jsonl` is included.
-- [ ] Confirm migration status, failed phase and rollback details are understandable.
-- [ ] Confirm the bundle contains no passphrases.
-- [ ] Confirm the bundle contains no SMB passwords or access tokens.
-- [ ] Confirm the bundle contains no private SSH key or Borg keyfile content.
+- [X] Download a new support bundle after the test.
+- [X] Confirm sanitized `storages.json` is included.
+- [X] Confirm sanitized `repositories.json` is included.
+- [ ] Confirm no synthesized `settings.sanitized.json` is included.
+- [X] Confirm `migration-state.json` is included.
+- [X] Confirm `migrations.log.jsonl` is included.
+- [X] Confirm migration status, failed phase and rollback details are understandable.
+- [X] Confirm the bundle contains no passphrases.
+- [X] Confirm the bundle contains no SMB passwords or access tokens.
+- [X] Confirm the bundle contains no private SSH key or Borg keyfile content.
 
 ## 11. Final acceptance
 
-- [ ] No job, profile, repository, schedule or Restore Test policy was lost.
-- [ ] No duplicate canonical objects were created.
-- [ ] No canonical assignment error remains in System Health.
-- [ ] Backup, Restore Test and Browse & Restore completed successfully.
-- [ ] Local path validation behaves as documented.
-- [ ] All discovered regressions are recorded in GitHub before merge.
+- [X] No job, profile, repository, schedule or Restore Test policy was lost.
+- [X] No duplicate canonical objects were created.
+- [X] No canonical assignment error remains in System Health.
+- [X] Backup, Restore Test and Browse & Restore completed successfully.
+- [X] Local path validation behaves as documented.
+- [X] All discovered regressions are recorded in GitHub before merge.
 - [ ] Maintainer explicitly accepts PR #189 for merge.
 - [ ] After merge, observe the result for two to three days before preparing a
       separate Stable release PR.

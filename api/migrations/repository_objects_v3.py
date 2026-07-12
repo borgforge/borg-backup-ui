@@ -63,7 +63,7 @@ def _expected_key(repo: dict[str, Any]) -> str:
 
 
 def detect(config: dict) -> dict[str, Any]:
-    repositories = read_repository_store(config).get("repositories") or []
+    repositories = read_repository_store(config, preserve_legacy=True).get("repositories") or []
     changes = []
     for repo in repositories:
         if not isinstance(repo, dict):
@@ -84,7 +84,7 @@ def detect(config: dict) -> dict[str, Any]:
 
 
 def apply(config: dict) -> dict[str, Any]:
-    store = read_repository_store(config)
+    store = read_repository_store(config, preserve_legacy=True)
     repositories = store.get("repositories") if isinstance(store.get("repositories"), list) else []
     key_map: dict[str, str] = {}
     updated_repos: list[dict[str, Any]] = []

@@ -15,6 +15,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - The canonical baseline migration validates Local, USB and SMB paths and rolls back with an audited error when malformed legacy input is encountered.
   - German and English System Health terminology and operator documentation describe the canonical inventories and recovery path consistently.
   - Repository workspace responses now derive the complete Local, USB, SMB or SSH path from the canonical storage target and relative repository path, so headers and details no longer show an empty repository path.
+  - Support bundles no longer synthesize a misleading `settings.sanitized.json`; canonical storage and repository inventories are included directly.
+  - Removed unused `settings.json` compatibility facades and the obsolete unregistered storage-path migration from normal runtime code.
+  - Transitional repository path and profile fields are readable only by the baseline migration phases; normal runtime inventory reads enforce the canonical repository contract.
+  - Job Wizard, Restore Test and SMB mount requests no longer transport location-specific profile keys; the selected canonical storage target supplies its profile identity.
 
 ### Issue #194
 - Canonical data-model migration and diagnostics:

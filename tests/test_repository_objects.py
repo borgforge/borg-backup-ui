@@ -436,7 +436,7 @@ def test_repository_info_counts_archives_from_borg_list(tmp_path: Path, monkeypa
         "repository_name": "borg-backup-flash",
         "storage_key": "storage_local_test",
         "location": "local",
-        "path_raw": "/mnt/backup/borg-backup-flash",
+        "relative_path": "borg-backup-flash",
     }]})
     monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
         "repository": {"id": "flash-repo"},
@@ -469,7 +469,7 @@ def test_due_repository_info_uses_24_hour_cache(tmp_path: Path, monkeypatch):
         "repository_key": "repo_flash",
         "display_name": "Flash",
         "storage_key": "storage_local_test",
-        "path_raw": "/mnt/backup/borg-backup-flash",
+        "relative_path": "borg-backup-flash",
     }]})
     monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
         "repository": {"id": "flash-repo"},
@@ -501,7 +501,7 @@ def test_failed_repository_info_refresh_is_masked_and_retried_hourly(tmp_path: P
         "repository_key": "repo_flash",
         "display_name": "Flash",
         "storage_key": "storage_local_test",
-        "path_raw": "/mnt/backup/borg-backup-flash",
+        "relative_path": "borg-backup-flash",
     }]})
     monkeypatch.setattr(
         repositories_api,
@@ -539,7 +539,7 @@ def test_repository_info_refresh_is_deferred_while_backup_uses_repository(tmp_pa
         "repository_key": "repo_appdata",
         "display_name": "Appdata",
         "storage_key": "storage_local_test",
-        "path_raw": "/mnt/backup/borg-backup-appdata",
+        "relative_path": "borg-backup-appdata",
         "repository_stats": {"total_size": 100},
         "last_info_refresh_status": "error",
         "last_info_refresh_at": datetime.now(timezone.utc).isoformat(),
@@ -581,7 +581,7 @@ def test_repository_archives_are_loaded_by_repository_key(tmp_path: Path, monkey
         "repository_key": "repo_flash",
         "display_name": "Flash",
         "storage_key": "storage_local_test",
-        "path_raw": "/mnt/backup/borg-backup-flash",
+        "relative_path": "borg-backup-flash",
     }]})
     monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {
         "archives": [
@@ -617,7 +617,7 @@ def test_repository_archives_unmounts_smb_only_when_api_mounted_it(tmp_path: Pat
         "display_name": "SMB Test",
         "storage_key": "storage_smb_test",
         "location": "smb",
-        "path_raw": "/mnt/borg-backup-ui/smb/smb-1/borg-test",
+        "relative_path": "borg-test",
     }]})
     calls = []
 

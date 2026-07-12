@@ -3071,13 +3071,7 @@ btn.addEventListener('click',doSetup);
         )
         profile_key_raw = (
             body.get("profile_key")
-            or body.get("smb_profile_key")
-            or body.get("storage_profile_key")
-            or body.get("usb_profile_key")
             or (qs.get("profile_key") or [""])[0]
-            or (qs.get("smb_profile_key") or [""])[0]
-            or (qs.get("storage_profile_key") or [""])[0]
-            or (qs.get("usb_profile_key") or [""])[0]
             or ""
         )
         location_raw = body.get("location") or (qs.get("location") or [""])[0] or ""

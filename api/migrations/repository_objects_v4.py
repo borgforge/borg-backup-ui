@@ -70,7 +70,7 @@ def _job_encryption(repo: dict[str, Any], jobs: dict[str, dict[str, Any]]) -> st
 def _missing_encryption_repositories(config: dict) -> list[str]:
     jobs = _jobs_by_key(config)
     missing = []
-    for repo in read_repository_store(config).get("repositories", []):
+    for repo in read_repository_store(config, preserve_legacy=True).get("repositories", []):
         if not isinstance(repo, dict):
             continue
         if str(repo.get("encryption") or "").strip():
@@ -93,7 +93,7 @@ def detect(config: dict) -> dict[str, Any]:
 
 
 def apply(config: dict) -> dict[str, Any]:
-    store = read_repository_store(config)
+    store = read_repository_store(config, preserve_legacy=True)
     jobs = _jobs_by_key(config)
     updated_repositories: list[str] = []
     updated_rows: list[dict[str, Any]] = []

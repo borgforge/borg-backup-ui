@@ -82,16 +82,15 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
     repos = runner.discover_repos({})
 
     assert [{key: row[key] for key in (
-        "job_key", "type", "location", "path", "passphrase_file", "usb_profile_key",
-        "smb_profile_key", "mount_before_run", "unmount_after_run",
+        "job_key", "type", "location", "path", "passphrase_file", "profile_key",
+        "mount_before_run", "unmount_after_run",
     )} for row in repos] == [{
         "job_key": "testjob_usb",
         "type": "testjob",
         "location": "usb",
         "path": "/mnt/disks/WCJ54TRQ/borg-backup-testjob",
         "passphrase_file": "",
-        "usb_profile_key": "usb-5tb",
-        "smb_profile_key": "",
+        "profile_key": "usb-5tb",
         "mount_before_run": True,
         "unmount_after_run": True,
     }]
@@ -148,4 +147,4 @@ def test_restore_runner_discovers_smb_profile_repository(tmp_path, monkeypatch) 
     repos = runner.discover_repos({})
 
     assert repos[0]["path"] == "/mnt/remotes/nas-a/borg-backup-photos"
-    assert repos[0]["smb_profile_key"] == "nas-a"
+    assert repos[0]["profile_key"] == "nas-a"

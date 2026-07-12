@@ -173,8 +173,6 @@ def test_storagebox_legacy_update_blocks_incomplete_referenced_profile(tmp_path:
     cfg = _write_storagebox_reference(data_root)
 
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {"GLOBAL_DATA_DIR": "/mnt/user/backups"})
-    monkeypatch.setattr(config_api, "read_settings_payload", lambda _cfg: settings)
-    monkeypatch.setattr(config_api, "write_settings_payload", lambda _cfg, payload: None)
     monkeypatch.setattr(config_api, "write_conf", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(borg_backup_ui, "_apply_runtime_dirs_from_conf", lambda _cfg: None)
 
@@ -193,8 +191,6 @@ def test_settings_save_blocks_new_incomplete_storage_profile(tmp_path: Path, mon
     cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts")}
 
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {"GLOBAL_DATA_DIR": "/mnt/user/backups"})
-    monkeypatch.setattr(config_api, "read_settings_payload", lambda _cfg: {"storage_profiles": []})
-    monkeypatch.setattr(config_api, "write_settings_payload", lambda _cfg, payload: None)
     monkeypatch.setattr(config_api, "write_conf", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(borg_backup_ui, "_apply_runtime_dirs_from_conf", lambda _cfg: None)
 

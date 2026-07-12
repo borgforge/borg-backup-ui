@@ -198,7 +198,7 @@ def enrich_repository_display_fields(repo: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def read_repository_store(config: dict) -> dict[str, Any]:
+def read_repository_store(config: dict, *, preserve_legacy: bool = False) -> dict[str, Any]:
     path = repositories_file(config)
     from inventory_store import read_cached_inventory
     payload = read_cached_inventory(path)
@@ -208,7 +208,7 @@ def read_repository_store(config: dict) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "updated_at": str(payload.get("updated_at") or ""),
-        "repositories": normalize_repositories(payload["repositories"], preserve_legacy=True),
+        "repositories": normalize_repositories(payload["repositories"], preserve_legacy=preserve_legacy),
     }
 
 
@@ -271,7 +271,11 @@ def normalize_repositories(rows: Any, *, preserve_legacy: bool = False) -> list[
         if not isinstance(row, dict):
             continue
         key = _slug(str(row.get("repository_key") or row.get("key") or ""), "")
-        legacy_path = str(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path") or "").strip()
+        legacy_path = (
+            str(row.get("path_raw") or row.get("repo_uri") or row.get("repo_path") or "").strip()
+            if preserve_legacy
+            else ""
+        )
         relative_path = str(row.get("relative_path") or repository_name_from_path(legacy_path)).strip()
         storage_key = str(row.get("storage_key") or "").strip()
         if not key or not storage_key or not relative_path or key in seen:

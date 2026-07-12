@@ -149,7 +149,7 @@ def _upsert_repository_for_legacy_job(config: dict, job: dict[str, Any]) -> str:
     repository = _repository_from_legacy_job(job)
     if not repository:
         return ""
-    store = read_repository_store(config)
+    store = read_repository_store(config, preserve_legacy=True)
     rows = store.get("repositories", [])
     identity = _identity(repository.get("path_raw"))
     existing = next(
@@ -193,7 +193,7 @@ def detect(config: dict) -> dict[str, Any]:
     jobs = [job for path in files if (job := _read_job(path))]
     candidates = [job for job in jobs if _has_repository_payload(job)]
     missing_links = [str(job.get("job_key") or "") for job in candidates if _job_needs_link(job)]
-    repo_count = len(read_repository_store(config).get("repositories") or [])
+    repo_count = len(read_repository_store(config, preserve_legacy=True).get("repositories") or [])
     required = bool(candidates and (repo_count == 0 or missing_links))
     return {
         "migration_id": MIGRATION_ID,

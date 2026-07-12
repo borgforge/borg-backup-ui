@@ -129,7 +129,7 @@ def apply(config: dict) -> dict[str, Any]:
         for row in read_storage_store(config).get("storages", [])
         if str(row.get("storage_key") or "").strip()
     }
-    repo_store = read_repository_store(config)
+    repo_store = read_repository_store(config, preserve_legacy=True)
     updated_repos = []
     updated_repo_keys = []
     for repo in repo_store.get("repositories", []):

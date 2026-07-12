@@ -13,6 +13,7 @@ import config_api  # noqa: E402
 import schedule_api  # noqa: E402
 import runtime_recovery  # noqa: E402
 from inventory_store import InventoryCorruptError  # noqa: E402
+from storage_objects_api import read_storage_store  # noqa: E402
 from status import BackupStatus  # noqa: E402
 
 
@@ -22,7 +23,7 @@ def test_corrupt_storage_inventory_is_not_silently_treated_as_empty(tmp_path: Pa
     storages.write_text("{broken-json", encoding="utf-8")
 
     with pytest.raises(InventoryCorruptError, match="malformed JSON"):
-        config_api.read_settings_payload({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+        read_storage_store({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
 
 
 def test_corrupt_schedules_json_returns_empty_schedule_set(tmp_path: Path):
