@@ -107,6 +107,26 @@ def test_wizard_source_autocomplete_cancels_stale_requests() -> None:
     assert "→ open directory" in english
 
 
+def test_wizard_sources_and_target_use_compact_two_column_layout() -> None:
+    html = _read("ui/index.html")
+    script = _read("ui/js/pages/wizard.js")
+    css = _read("ui/style.css")
+
+    step = html.split('id="wizard-step-2"', 1)[1].split('id="wizard-step-3"', 1)[0]
+    assert 'class="wizard-step2-layout"' in step
+    assert step.index('id="wizard-step2-sources-title"') < step.index('id="wizard-step2-target-title"')
+    assert 'class="wizard-path-control"' in step
+    assert 'wizard-step2-path-list' in step
+    assert "wizard-step-scroll-hint" not in step
+    assert "wizardUpdateStep2ScrollHint" not in script
+    assert "wizardEnsureScrollHintBinding" not in script
+    assert ".wizard-step2-layout" in css
+    assert "grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr)" in css
+    assert ".wizard-path-suggest.hidden" in css
+    assert "display: none !important" in css
+    assert "@media (max-width: 700px)" in css
+
+
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:
     script = _read("ui/js/pages/restore-tests.js")
     css = _read("ui/restore-tests-redesign.css")

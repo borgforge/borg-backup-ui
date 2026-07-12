@@ -24,7 +24,6 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   excludeSuggestTimer: null,
   excludeSuggestController: null,
   excludeSuggestRequest: 0,
-  scrollHintBound: false,
   remoteRepoStatus: null,
   dockerContainers: [],
   vms: [],
@@ -44,28 +43,6 @@ function wizardApiErrorMessage(payload, status = 0) {
     if (value && value !== String(data.code || '').trim()) return value;
   }
   return apiErrorMessage(payload, status);
-}
-
-function wizardUpdateStep2ScrollHint() {
-  const modal = document.getElementById('wizard-modal');
-  const body = modal?.querySelector('.wizard-body');
-  const hint = modal?.querySelector('#wizard-step-2 .wizard-step-scroll-hint');
-  const step2Visible = !document.getElementById('wizard-step-2')?.classList.contains('hidden');
-  if (!body || !hint || !step2Visible) {
-    if (hint) hint.classList.add('hidden');
-    return;
-  }
-  const remaining = body.scrollHeight - (body.scrollTop + body.clientHeight);
-  hint.classList.toggle('hidden', remaining <= 2);
-}
-
-function wizardEnsureScrollHintBinding() {
-  if (wizardState.scrollHintBound) return;
-  const modal = document.getElementById('wizard-modal');
-  const body = modal?.querySelector('.wizard-body');
-  if (!body) return;
-  body.addEventListener('scroll', wizardUpdateStep2ScrollHint);
-  wizardState.scrollHintBound = true;
 }
 
 function _wizardUniqueList(values) {
@@ -346,7 +323,6 @@ function _setWizardFormDisabled(disabled) {
 }
 
 function openWizard() {
-  wizardEnsureScrollHintBinding();
   wizardBindRuntimeControls();
   wizardState.mode = 'create';
   wizardState.existingJobKey = '';
@@ -523,7 +499,6 @@ function _renderWizardStep(n) {
   nextBtn.classList.toggle('hidden', n === 9);
   saveBtn.classList.toggle('hidden', n !== 9);
   wizardState.step = n;
-  requestAnimationFrame(wizardUpdateStep2ScrollHint);
 }
 
 function _wizardStepEnabled(step) {

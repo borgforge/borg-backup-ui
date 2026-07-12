@@ -157,7 +157,7 @@ Important fields:
 
 #### Step 2: Sources & Target
 
-This step selects source paths, storage type, the exact storage target, and an existing repository. The repository list only shows repositories belonging to the selected storage target. Repository paths are no longer entered freely in a job.
+The compact view shows **Sources and exclusions** on the left and the **Backup target** on the right. This step selects source paths, optional exclusion paths, storage type, the exact storage target, an existing repository, and job compression. The repository list only shows repositories belonging to the selected storage target. Repository paths are no longer entered freely in a job.
 
 Typical source paths:
 
@@ -167,6 +167,8 @@ Typical source paths:
 - `/mnt/user/photos/`
 
 > **Note:** Source paths must exist on the Unraid system and must be readable by the backup process.
+
+Exclusion paths are concrete files or directories below a selected source path. They are omitted from the Borg archive. With many entries, only the path lists scroll inside their section.
 
 #### Docker and VM Steps
 

@@ -1419,69 +1419,82 @@
       <!-- Step 2: Quellen & Ziel -->
       <div id="wizard-step-2" class="wizard-step-body hidden">
         <div id="wizard-error-2" class="status-message error hidden"></div>
-        <div class="settings-body">
-          <div class="form-group">
-            <label class="form-label"><span data-i18n="wizard.sourcePaths">Quellpfade</span> <span class="form-hint" data-i18n="wizard.sourcePathsHint">(ab /mnt: ↑/↓ auswählen, → Verzeichnis öffnen, Enter übernehmen)</span></label>
-            <input class="form-input mono" type="text" id="wiz-source-path-input" placeholder="/mnt/user/...">
-            <div id="wiz-source-path-suggest" class="wizard-path-suggest hidden"></div>
-            <div id="wiz-source-path-list" class="wizard-path-list"></div>
-            <textarea class="form-input path-list-input hidden" id="wiz-source-paths" rows="4"
-              placeholder="/mnt/user/data/&#10;/mnt/user/documents/"></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label"><span data-i18n="wizard.excludePaths">Ausschlusspfade</span> <span class="form-hint" data-i18n="wizard.excludePathsHint">(optional, muss unter einem Quellpfad liegen)</span></label>
-            <input class="form-input mono" type="text" id="wiz-exclude-path-input" placeholder="/mnt/user/appdata/cache/">
-            <div id="wiz-exclude-path-suggest" class="wizard-path-suggest hidden"></div>
-            <div id="wiz-exclude-path-list" class="wizard-path-list"></div>
-            <textarea class="form-input path-list-input hidden" id="wiz-exclude-paths" rows="4"></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="wizard.storageType">Speichertyp</label>
-            <select class="form-select" id="wiz-location">
-              <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
-              <option value="usb">USB</option>
-              <option value="smb">SMB</option>
-              <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="wizard.storageTarget">Speicherziel</label>
-            <select class="form-select" id="wiz-storage-key"></select>
-            <div id="wiz-storage-target-hint" class="form-hint" style="margin-top:6px"></div>
-          </div>
-          <div class="form-group hidden" id="wiz-smb-mount-options-group">
-            <label class="form-label" data-i18n="wizard.smbMountOptions">SMB-Mount-Optionen</label>
-            <label class="form-checkbox-row">
-              <input type="checkbox" id="wiz-smb-mount-before-run" checked>
-              <span data-i18n="wizard.mountBefore">SMB vor dem Backup mounten</span>
-            </label>
-            <label class="form-checkbox-row" style="margin-top:6px">
-              <input type="checkbox" id="wiz-smb-unmount-after-run" checked>
-              <span data-i18n="wizard.unmountAfter">SMB nach dem Backup unmounten</span>
-            </label>
-          </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="wizard.repositorySelect">Repository</label>
-            <select class="form-select" id="wiz-repository-key"></select>
-            <div id="wiz-repository-hint" class="form-hint" style="margin-top:6px"></div>
-          </div>
-          <div class="form-group">
-            <label class="form-label"><span data-i18n="wizard.compression">Kompression</span> <span class="form-hint" data-i18n="wizard.compressionJobHint">Backup-Job / Archiv</span></label>
-            <select class="form-select" id="wiz-compression">
-              <option value="lz4" data-i18n="wizard.compressionLz4">lz4 (schnell, Standard)</option>
-              <option value="zstd,1">zstd,1</option>
-              <option value="zstd,3">zstd,3</option>
-              <option value="zstd,6">zstd,6</option>
-              <option value="zstd,9">zstd,9</option>
-              <option value="none" data-i18n="wizard.compressionNone">none (keine Kompression)</option>
-            </select>
-          </div>
-        </div>
-        <div class="wizard-step-scroll-hint">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <polyline points="7 10 12 15 17 10"></polyline>
-          </svg>
-          <span data-i18n="wizard.moreSettingsBelow">Weitere Einstellungen unten</span>
+        <div class="wizard-step2-layout">
+          <section class="wizard-step2-panel" aria-labelledby="wizard-step2-sources-title">
+            <header class="wizard-step2-panel-header">
+              <strong id="wizard-step2-sources-title" data-i18n="wizard.sourcesSection">Quellen und Ausschlüsse</strong>
+              <span data-i18n="wizard.sourcesSectionHint">Daten auswählen und optionale Unterpfade auslassen.</span>
+            </header>
+            <div class="form-group">
+              <label class="form-label"><span data-i18n="wizard.sourcePaths">Quellpfade</span> <span class="form-hint" data-i18n="wizard.sourcePathsHint">(ab /mnt: ↑/↓ auswählen, → Verzeichnis öffnen, Enter übernehmen)</span></label>
+              <div class="wizard-path-control">
+                <input class="form-input mono" type="text" id="wiz-source-path-input" placeholder="/mnt/user/...">
+                <div id="wiz-source-path-suggest" class="wizard-path-suggest hidden"></div>
+              </div>
+              <div id="wiz-source-path-list" class="wizard-path-list wizard-step2-path-list"></div>
+              <textarea class="form-input path-list-input hidden" id="wiz-source-paths" rows="4"
+                placeholder="/mnt/user/data/&#10;/mnt/user/documents/"></textarea>
+            </div>
+            <div class="wizard-step2-divider"></div>
+            <div class="form-group">
+              <label class="form-label"><span data-i18n="wizard.excludePaths">Ausschlusspfade</span> <span class="form-hint" data-i18n="wizard.excludePathsHint">(optional, muss unter einem Quellpfad liegen)</span></label>
+              <div class="wizard-path-control">
+                <input class="form-input mono" type="text" id="wiz-exclude-path-input" placeholder="/mnt/user/appdata/cache/">
+                <div id="wiz-exclude-path-suggest" class="wizard-path-suggest hidden"></div>
+              </div>
+              <div id="wiz-exclude-path-list" class="wizard-path-list wizard-step2-path-list"></div>
+              <textarea class="form-input path-list-input hidden" id="wiz-exclude-paths" rows="4"></textarea>
+            </div>
+          </section>
+          <section class="wizard-step2-panel" aria-labelledby="wizard-step2-target-title">
+            <header class="wizard-step2-panel-header">
+              <strong id="wizard-step2-target-title" data-i18n="wizard.targetSection">Backup-Ziel</strong>
+              <span data-i18n="wizard.targetSectionHint">Speicherziel und vorhandenes Repository festlegen.</span>
+            </header>
+            <div class="form-group">
+              <label class="form-label" data-i18n="wizard.storageType">Speichertyp</label>
+              <select class="form-select" id="wiz-location">
+                <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
+                <option value="usb">USB</option>
+                <option value="smb">SMB</option>
+                <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" data-i18n="wizard.storageTarget">Speicherziel</label>
+              <select class="form-select" id="wiz-storage-key"></select>
+              <div id="wiz-storage-target-hint" class="form-hint wizard-step2-field-hint"></div>
+            </div>
+            <div class="form-group hidden" id="wiz-smb-mount-options-group">
+              <label class="form-label" data-i18n="wizard.smbMountOptions">SMB-Mount-Optionen</label>
+              <div class="wizard-step2-checkboxes">
+                <label class="form-checkbox-row">
+                  <input type="checkbox" id="wiz-smb-mount-before-run" checked>
+                  <span data-i18n="wizard.mountBefore">SMB vor dem Backup mounten</span>
+                </label>
+                <label class="form-checkbox-row">
+                  <input type="checkbox" id="wiz-smb-unmount-after-run" checked>
+                  <span data-i18n="wizard.unmountAfter">SMB nach dem Backup unmounten</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" data-i18n="wizard.repositorySelect">Repository</label>
+              <select class="form-select" id="wiz-repository-key"></select>
+              <div id="wiz-repository-hint" class="form-hint wizard-step2-field-hint"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span data-i18n="wizard.compression">Kompression</span> <span class="form-hint" data-i18n="wizard.compressionJobHint">Backup-Job / Archiv</span></label>
+              <select class="form-select" id="wiz-compression">
+                <option value="lz4" data-i18n="wizard.compressionLz4">lz4 (schnell, Standard)</option>
+                <option value="zstd,1">zstd,1</option>
+                <option value="zstd,3">zstd,3</option>
+                <option value="zstd,6">zstd,6</option>
+                <option value="zstd,9">zstd,9</option>
+                <option value="none" data-i18n="wizard.compressionNone">none (keine Kompression)</option>
+              </select>
+            </div>
+          </section>
         </div>
       </div>
 

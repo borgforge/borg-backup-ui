@@ -98,6 +98,10 @@ Optional disposable-repository test:
 
 ## 6. Job Wizard and relationships
 
+- [ ] Confirm step 2 shows Sources/Exclusions and Backup Target side by side without scrolling at normal desktop width.
+- [ ] Confirm autocomplete suggestions overlay the form without shifting the remaining fields.
+- [ ] Confirm long source and exclusion selections scroll only inside their path lists.
+- [ ] Confirm step 2 falls back to one readable column on a narrow/mobile viewport.
 - [X] Open an existing job and confirm storage target is selected before repository.
 - [X] Confirm only repositories for the selected exact storage target are offered.
 - [X] Confirm options use `Repository name (effective path)`.

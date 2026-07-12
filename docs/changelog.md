@@ -10,6 +10,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Backup jobs can define multiple concrete file or directory exclusion paths in the Job Wizard.
 - Exclusions must exist below a selected source root and are passed to Borg as safe path-prefix patterns.
 - Existing jobs remain unchanged with an empty exclusion list; edit, preview and runtime logs show the configured exclusions.
+- Job Wizard step 2 now presents sources/exclusions and backup target side by side without reserving space for hidden autocomplete results.
 
 ### Issue #198
 - Added a guarded factory reset as the final entry under Settings > Maintenance.
