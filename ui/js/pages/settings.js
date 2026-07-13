@@ -8,7 +8,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   dirty: false,
   activeTab: 'general',
   advancedTab: 'reminders',
-  profileSelection: { usb: '', smb: '', storagebox: '' },
+  profileSelection: { local: '', usb: '', smb: '', storagebox: '' },
   profileEditing: '',
   storageboxPubVisible: false,
   storageboxConnOk: null,
@@ -63,11 +63,13 @@ function getSettingsTabs() {
   { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: settingsMenuIcon('users') },
   { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: settingsMenuIcon('backup') },
   { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: settingsMenuIcon('restore') },
+  { key: 'local', label: settingsT('tabs.localProfiles'), group: 'storage', description: settingsT('menu.localDescription'), icon: locationIcon('local') },
   { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: locationIcon('usb') },
   { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: locationIcon('smb') },
   { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: locationIcon('storagebox') },
   { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: settingsMenuIcon('transfer') },
   { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: settingsMenuIcon('advanced') },
+  { key: 'factory-reset', label: settingsT('tabs.factoryReset'), group: 'maintenance', description: settingsT('menu.factoryResetDescription'), icon: settingsMenuIcon('factory-reset') },
   ];
   const auth = settingsState.authStatus || {};
   const isAdmin = String(auth.current_role || '').toLowerCase() === 'admin';
@@ -85,6 +87,7 @@ function settingsMenuIcon(key) {
     restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
     transfer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h13l-3-3M17 17H4l3 3"/><path d="M20 7l-3 3M4 17l3-3"/></svg>',
     advanced: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h7M15 18h5"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="13" cy="18" r="2"/></svg>',
+    'factory-reset': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>',
   };
   return icons[key] || icons.general;
 }
@@ -93,11 +96,12 @@ async function refreshSettings() {
   hideEl('settings-message');
   _renderSettingsLoading();
   try {
-    const [res, verRes, healthRes, authRes] = await Promise.all([
+    const [res, verRes, healthRes, authRes, reminderRes] = await Promise.all([
       fetch('/api/settings'),
       fetch('/api/version'),
-      fetch('/api/system-health'),
+      window.BBUI.core.fetchSystemHealth(true).catch(() => null),
       fetch('/api/auth/status'),
+      fetch('/api/notification-reminders/diagnostics').catch(() => null),
     ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -109,13 +113,16 @@ async function refreshSettings() {
           .then((uRes) => uRes.ok ? uRes.json() : { users: [] })
           .catch(() => ({ users: [] }))
       : Promise.resolve({ users: [] });
-    if (settingsState.storageboxConnOk === null && data?.storagebox_setup) {
+    if (settingsState.storageboxConnOk === null && data?.storagebox_setup?.auth_checked !== false) {
       settingsState.storageboxConnOk = !!data.storagebox_setup.auth_ok;
       settingsState.storageboxConnMsg = data.storagebox_setup.auth_ok
         ? settingsT('storagebox.sshReachable')
         : settingsT('storagebox.sshFailed');
     }
-    const health = healthRes.ok ? await healthRes.json() : null;
+    const health = healthRes && typeof healthRes === 'object' ? { ...healthRes } : null;
+    if (health && reminderRes?.ok) {
+      health.notification_reminders = await reminderRes.json();
+    }
     settingsState.data = data;
     settingsState.systemHealth = health;
     renderSettings(data, health);
@@ -131,9 +138,8 @@ async function refreshSettings() {
     }
     usersRequest.then((uData) => {
       settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
-      if (settingsState.activeTab === 'users' && settingsState.data) {
-        renderSettings(settingsState.data, settingsState.systemHealth);
-      }
+      const usersPanel = document.querySelector('#settings-content [data-settings-panel="users"]');
+      if (usersPanel) usersPanel.innerHTML = renderSettingsUsers();
     });
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
@@ -203,9 +209,10 @@ function renderSettings(data, systemHealth) {
   const tabs = getSettingsTabs();
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
   if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
-  const profileTab = ['usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
+  const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
+  const hideGlobalSave = profileTab || settingsState.activeTab === 'factory-reset';
   const saveBtn = document.getElementById('settings-save-btn');
-  if (saveBtn) saveBtn.classList.toggle('hidden', profileTab);
+  if (saveBtn) saveBtn.classList.toggle('hidden', hideGlobalSave);
   el.innerHTML = `
     <div class="settings-redesign-layout">
       <aside class="settings-side-menu">
@@ -229,6 +236,9 @@ function renderSettings(data, systemHealth) {
     <div class="settings-tab-panel ${settingsState.activeTab === 'usb' ? '' : 'hidden'}" data-settings-panel="usb">
       ${renderSettingsUsbProfiles(data.usb_profiles || [])}
     </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'local' ? '' : 'hidden'}" data-settings-panel="local">
+      ${renderSettingsLocalProfiles(data.local_profiles || [])}
+    </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'smb' ? '' : 'hidden'}" data-settings-panel="smb">
       ${renderSettingsSmbProfiles(data.smb_profiles || [])}
     </div>
@@ -249,6 +259,9 @@ function renderSettings(data, systemHealth) {
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'advanced' ? '' : 'hidden'}" data-settings-panel="advanced">
       ${renderSettingsAdvancedTabs(data, systemHealth)}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'factory-reset' ? '' : 'hidden'}" data-settings-panel="factory-reset">
+      ${renderSettingsFactoryReset()}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'users' ? '' : 'hidden'}" data-settings-panel="users">
       ${renderSettingsUsers()}
@@ -296,7 +309,46 @@ function renderSettingsMenu(tabs) {
   }).join('');
 }
 
+function activateSettingsTab(tabKey) {
+  const tabs = getSettingsTabs();
+  const active = tabs.find((tab) => tab.key === tabKey) || tabs[0];
+  if (!active) return;
+  const previousTab = settingsState.activeTab;
+  settingsState.activeTab = active.key;
+  settingsState.profileEditing = '';
+
+  document.querySelectorAll('#settings-content [data-settings-tab]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.settingsTab === active.key);
+  });
+  document.querySelectorAll('#settings-content [data-settings-panel]').forEach((panel) => {
+    panel.classList.toggle('hidden', panel.dataset.settingsPanel !== active.key);
+  });
+
+  const workspaceHeader = document.querySelector('#settings-content .settings-workspace-header');
+  const title = workspaceHeader?.querySelector('h2');
+  const description = workspaceHeader?.querySelector('div > span');
+  if (title) title.textContent = active.label;
+  if (description) description.textContent = active.description;
+
+  const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(active.key);
+  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab);
+  if (SETTINGS_PROFILE_CONFIG[previousTab]) syncSettingsProfileManager(previousTab);
+  if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
+  _updateUnsavedChangesUi();
+}
+
 const SETTINGS_PROFILE_CONFIG = {
+  local: {
+    rowsId: 'local-profiles-rows',
+    rowSelector: '.local-profile-row',
+    nameSelector: '[data-local-profile-name]',
+    endpointSelector: '[data-local-profile-path]',
+    icon: locationIcon('local'),
+    fields: [
+      ['[data-local-profile-name]', 'profiles.name'],
+      ['[data-local-profile-path]', 'profiles.basePath'],
+    ],
+  },
   usb: {
     rowsId: 'usb-profiles-rows',
     rowSelector: '.usb-profile-row',
@@ -421,7 +473,7 @@ function syncSettingsProfileManager(type, selectLast = false) {
     const key = row.dataset.profileUiKey || '';
     const name = row.querySelector(config.nameSelector)?.value || key || settingsT('menu.newProfile');
     const endpoint = row.querySelector(config.endpointSelector)?.value || settingsT('common.notChecked');
-    const jobsCount = Number(row.dataset.usbJobsCount || row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
+    const jobsCount = Number(row.dataset.localJobsCount || row.dataset.usbJobsCount || row.dataset.smbJobsCount || row.dataset.storageJobsCount || 0);
     const inUse = jobsCount > 0 ? `<em class="settings-profile-usage">${settingsT('profiles.inUseShort', { count: jobsCount })}</em>` : '';
     return `<button type="button" class="settings-profile-list-item ${key === selectedKey ? 'active' : ''}" data-profile-ui-key="${escHtml(key)}">
       <span class="settings-profile-symbol ${type}">${config.icon}</span>
@@ -461,12 +513,12 @@ async function blockProfileRemovalIfInUse(row, type) {
   const jobsCount = Number(row?.dataset?.[`${type}JobsCount`] || 0);
   if (jobsCount <= 0) return false;
   const refs = String(row?.dataset?.[`${type}JobRefs`] || '').trim();
-  const titleKey = type === 'usb'
-    ? 'profiles.cannotRemoveUsb'
-    : (type === 'smb' ? 'profiles.cannotRemoveSmb' : 'profiles.cannotRemoveStorage');
-  const msgId = type === 'usb'
-    ? 'usb-profiles-msg'
-    : (type === 'smb' ? 'smb-profiles-msg' : 'storage-profiles-msg');
+  const titleKey = type === 'local'
+    ? 'profiles.cannotRemoveLocal'
+    : (type === 'usb' ? 'profiles.cannotRemoveUsb' : (type === 'smb' ? 'profiles.cannotRemoveSmb' : 'profiles.cannotRemoveStorage'));
+  const msgId = type === 'local'
+    ? 'local-profiles-msg'
+    : (type === 'usb' ? 'usb-profiles-msg' : (type === 'smb' ? 'smb-profiles-msg' : 'storage-profiles-msg'));
   await _openSettingsDialog({
     title: settingsT(titleKey),
     message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
@@ -486,6 +538,109 @@ function decorateSettingsProfileFields(row, fields) {
     control.parentNode.insertBefore(wrapper, control);
     wrapper.appendChild(control);
   });
+}
+
+function normalizeLocalProfileRows(rows) {
+  const out = [];
+  const seen = new Set();
+  (rows || []).forEach((row) => {
+    const name = String(row?.name || '').trim();
+    const base_path = String(row?.base_path || '').trim().replace(/\/+$/, '');
+    const storage_key = String(row?.storage_key || row?.key || '').trim();
+    if (!name || !base_path || seen.has(base_path)) return;
+    seen.add(base_path);
+    out.push({
+      key: storage_key,
+      storage_key,
+      name,
+      base_path,
+      jobs_count: Number(row?.jobs_count || 0),
+      job_refs: Array.isArray(row?.job_refs) ? row.job_refs.map(String).filter(Boolean) : [],
+    });
+  });
+  return out;
+}
+
+function normalizeCanonicalStoragePath(value) {
+  const submitted = String(value || '').trim();
+  if (!submitted || submitted.includes('//')) return '';
+  const normalized = submitted.replace(/\/$/, '');
+  const blocked = new Set(['/', '/mnt', '/mnt/disks', '/mnt/remotes', '/boot', '/etc', '/usr', '/var']);
+  if (!normalized.startsWith('/mnt/') || blocked.has(normalized)) return '';
+  const segments = normalized.slice(1).split('/');
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return '';
+  return normalized;
+}
+
+function validateLocalProfilesForSave() {
+  const rows = [...document.querySelectorAll('#local-profiles-rows .local-profile-row')];
+  for (const row of rows) {
+    const input = row.querySelector('[data-local-profile-path]');
+    const submitted = String(input?.value || '').trim();
+    const normalized = normalizeCanonicalStoragePath(submitted);
+    input?.classList.toggle('input-error', !normalized);
+    if (!normalized) {
+      showMsg('local-profiles-msg', 'error', settingsT('profiles.invalidLocalPath', {
+        path: submitted || settingsT('common.none'),
+      }));
+      input?.focus();
+      return false;
+    }
+    if (input) input.value = normalized;
+  }
+  hideEl('local-profiles-msg');
+  return true;
+}
+
+function getLocalProfilesFromDom() {
+  return normalizeLocalProfileRows([...document.querySelectorAll('#local-profiles-rows .local-profile-row')].map((row) => ({
+    storage_key: row.dataset.storageKey || '',
+    name: row.querySelector('[data-local-profile-name]')?.value || '',
+    base_path: row.querySelector('[data-local-profile-path]')?.value || '',
+  })));
+}
+
+function syncLocalProfilesHiddenInput() {
+  const hidden = document.getElementById('local-profiles-json');
+  if (hidden) hidden.value = JSON.stringify(getLocalProfilesFromDom());
+}
+
+function onLocalProfileInputChanged() {
+  syncLocalProfilesHiddenInput();
+  markSettingsDirty();
+}
+
+function addLocalProfileRow(row = {}) {
+  const box = document.getElementById('local-profiles-rows');
+  if (!box) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'local-profile-row';
+  wrap.dataset.storageKey = String(row.storage_key || '');
+  wrap.innerHTML = `
+    <input class="form-input" type="text" data-local-profile-name placeholder="Backup Pool" value="${escHtml(row.name || '')}" oninput="onLocalProfileInputChanged()">
+    <input class="form-input mono" type="text" data-local-profile-path placeholder="/mnt/backup" value="${escHtml(row.base_path || '')}" oninput="onLocalProfileInputChanged()">
+    <button type="button" class="btn btn-danger btn-sm" data-settings-action="local-profile-remove">${settingsT('common.remove')}</button>`;
+  box.appendChild(wrap);
+}
+
+function renderSettingsLocalProfiles(rows) {
+  const normalized = normalizeLocalProfileRows(rows);
+  const content = normalized.map((row) => `
+    <div class="local-profile-row" data-profile-key="${escHtml(row.storage_key)}" data-storage-key="${escHtml(row.storage_key)}" data-local-jobs-count="${row.jobs_count}" data-local-job-refs="${escHtml(row.job_refs.join(', '))}">
+      <input class="form-input" type="text" data-local-profile-name value="${escHtml(row.name)}" oninput="onLocalProfileInputChanged()">
+      <input class="form-input mono" type="text" data-local-profile-path value="${escHtml(row.base_path)}" oninput="onLocalProfileInputChanged()">
+      <button type="button" class="btn btn-danger btn-sm" data-settings-action="local-profile-remove">${settingsT('common.remove')}</button>
+    </div>`).join('');
+  return settingsCard(settingsT('profiles.localTitle'), locationIcon('local'), `
+    <div class="settings-body">
+      <div class="text-muted" style="font-size:12px;margin-bottom:10px">${settingsT('profiles.localDescription')}</div>
+      <div id="local-profiles-rows" style="display:grid;gap:8px">${content}</div>
+      <input type="hidden" id="local-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="local-profile-add">${settingsT('profiles.addLocal')}</button>
+      </div>
+      <div id="local-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
+    </div>`);
 }
 
 function normalizeUsbProfileRows(rows) {
@@ -573,7 +728,7 @@ function renderSettingsUsbProfiles(rows) {
       <div id="usb-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
-      <input type="hidden" id="usb-profiles-json" data-key="USB_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <input type="hidden" id="usb-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-check">${settingsT('common.checkStatus')}</button>
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="usb-profile-add">${settingsT('profiles.addUsb')}</button>
@@ -698,7 +853,7 @@ function renderSettingsStorageProfiles(rows) {
       <div id="storage-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
-      <input type="hidden" id="storage-profiles-json" data-key="STORAGE_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <input type="hidden" id="storage-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="storage-profile-add">${settingsT('profiles.addStorage')}</button>
       </div>
@@ -831,7 +986,7 @@ function renderSettingsSmbProfiles(rows) {
       <div id="smb-profiles-rows" style="display:grid;gap:8px">
         ${content}
       </div>
-      <input type="hidden" id="smb-profiles-json" data-key="SMB_PROFILES_JSON" value='${escHtml(JSON.stringify(normalized))}'>
+      <input type="hidden" id="smb-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-check">${settingsT('common.checkStatus')}</button>
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-add">${settingsT('profiles.addSmb')}</button>
@@ -903,6 +1058,21 @@ function renderSettingsSystemHealth(data) {
     : ((Array.isArray(perms.bad_files) && perms.bad_files.length)
       ? perms.bad_files.map((f) => `${f.path} (${f.mode})`).join(' | ')
       : settingsT('health.checkPermissions'));
+  const inventories = data?.canonical_inventories || {};
+  const inventoryDetail = inventories.ok
+    ? settingsT('health.inventoriesOk')
+    : (Array.isArray(inventories.errors)
+      ? inventories.errors.map((row) => `${row.path}: ${row.error}`).join(' | ')
+      : settingsT('health.inventoriesFailed'));
+  const assignments = data?.repository_assignments || {};
+  const assignmentProblems = [
+    ...(Array.isArray(assignments.errors) ? assignments.errors : []),
+    ...(Array.isArray(assignments.usage_mismatches) ? assignments.usage_mismatches : []),
+  ];
+  const assignmentDetail = assignments.ok
+    ? settingsT('health.repositoryAssignmentsOk')
+    : (assignmentProblems.map((row) => String(row?.message || row?.job_key || row?.repository_key || '')).filter(Boolean).join(' | ')
+      || settingsT('health.repositoryAssignmentsFailed'));
   const checks = [
     [settingsT('health.dataRoot'), data?.checks?.data_root_ok, data?.paths?.data_root || '—'],
     [settingsT('health.jobsPath'), data?.checks?.jobs_path_ok, data?.paths?.jobs || '—'],
@@ -910,6 +1080,8 @@ function renderSettingsSystemHealth(data) {
     [settingsT('health.mountAvailable'), data?.checks?.mount_bin_ok, `${data?.paths?.mount_bin || '—'} | ${data?.paths?.umount_bin || '—'}`],
     [settingsT('health.cifsSupport'), data?.checks?.cifs_supported, cifsDetail],
     [settingsT('health.secretPermissions'), data?.checks?.secrets_permissions_ok, permDetail],
+    [settingsT('health.canonicalInventories'), data?.checks?.canonical_inventories_ok, inventoryDetail],
+    [settingsT('health.repositoryAssignments'), data?.checks?.repository_assignments_ok, assignmentDetail],
   ];
   const migrationSummary = _buildMigrationSummary(data || {});
   const lastEffectiveTs = _formatHealthTimestamp(migrationSummary.lastEffectiveRun) || settingsT('health.noEffectiveChanges');
@@ -1414,9 +1586,9 @@ function _migrationRegistryText(item, field) {
       title: 'registryJobsDirTitle',
       reason: status === 'applied' ? 'registryJobsDirPresent' : 'registryJobsDirMissing',
     },
-    setup_settings_json: {
-      title: 'registrySettingsTitle',
-      reason: status === 'applied' ? 'registrySettingsPresent' : 'registrySettingsMissing',
+    setup_storage_inventory: {
+      title: 'registryStorageInventoryTitle',
+      reason: status === 'applied' ? 'registryStorageInventoryPresent' : 'registryStorageInventoryMissing',
     },
     config_backup_conf_schema: {
       title: 'registrySchemaTitle',
@@ -1429,6 +1601,18 @@ function _migrationRegistryText(item, field) {
     notification_events_v1: {
       title: 'registryNotificationEventsTitle',
       reason: status === 'applied' ? 'registryNotificationEventsApplied' : (status === 'not_needed' ? 'registryNotificationEventsCurrent' : 'registryNotificationEventsPending'),
+    },
+    canonical_data_model_v1: {
+      title: 'registryCanonicalModelTitle',
+      reason: status === 'applied' ? 'registryCanonicalModelApplied' : (status === 'not_needed' ? 'registryCanonicalModelCurrent' : (status === 'failed' ? 'registryCanonicalModelFailed' : 'registryCanonicalModelPending')),
+    },
+    borg_keyfiles_v1: {
+      title: 'registryBorgKeyfilesTitle',
+      reason: status === 'applied' ? 'registryBorgKeyfilesApplied' : (status === 'not_needed' ? 'registryBorgKeyfilesCurrent' : 'registryBorgKeyfilesPending'),
+    },
+    canonical_storage_profiles_v1: {
+      title: 'registryCanonicalStoragesTitle',
+      reason: status === 'applied' ? 'registryCanonicalStoragesApplied' : (status === 'not_needed' ? 'registryCanonicalStoragesCurrent' : 'registryCanonicalStoragesPending'),
     },
   };
   const key = keys[id]?.[field];
@@ -1449,6 +1633,9 @@ function _renderMigrationRegistryItem(item) {
   const updatedKeys = Array.isArray(details.updated_keys) ? details.updated_keys.map((key) => String(key || '').trim()).filter(Boolean) : [];
   const checkedAt = String(details.checked_at || '').trim();
   const introducedIn = String(details.introduced_in || '').trim();
+  const failedPhase = String(details.failed_phase || '').trim();
+  const failureReason = String(details.error || '').trim();
+  const rollbackStatus = String(details.rollback_status || '').trim();
   const plan = details?.dry_run_plan && typeof details.dry_run_plan === 'object' ? details.dry_run_plan : null;
   const planCandidateCount = Number(plan?.candidate_count || 0);
   const planText = plan && planCandidateCount > 0
@@ -1468,6 +1655,9 @@ function _renderMigrationRegistryItem(item) {
       ${planText ? `<div class="migration-registry-plan">${escHtml(planText)}</div>` : ''}
       ${candidates.length ? `<div class="migration-registry-id">Deprecated: ${candidates.map((row) => escHtml(String(row?.key || ''))).filter(Boolean).join(', ')}</div>` : ''}
       ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map(escHtml).join(', ')}</div>` : ''}
+      ${failedPhase ? `<div class="migration-registry-id">${escHtml(settingsT('health.failedPhase'))}: ${escHtml(failedPhase)}</div>` : ''}
+      ${failureReason ? `<div class="migration-registry-id">${escHtml(settingsT('health.failureReason'))}: ${escHtml(failureReason)}</div>` : ''}
+      ${rollbackStatus ? `<div class="migration-registry-id">${escHtml(settingsT('health.rollbackStatus'))}: ${escHtml(settingsT(`health.rollback_${rollbackStatus}`))}</div>` : ''}
       ${checkedAt ? `<div class="migration-registry-id">${escHtml(settingsT('health.checkedAt'))}: ${escHtml(_formatHealthTimestamp(checkedAt) || checkedAt)}</div>` : ''}
       ${introducedIn ? `<div class="migration-registry-id">${escHtml(settingsT('health.introducedIn'))}: ${escHtml(introducedIn)}</div>` : ''}
     </div>
@@ -1745,6 +1935,20 @@ function renderSettingsTransferTools() {
     </div>`);
 }
 
+function renderSettingsFactoryReset() {
+  return settingsCard(settingsT('transfer.factoryResetTitle'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>`,
+    `<div class="settings-body">
+      <div class="status-message error" style="margin:0 0 12px 0">
+        <strong>${settingsT('transfer.factoryResetWarningTitle')}</strong><br>
+        ${settingsT('transfer.factoryResetWarning')}
+      </div>
+      <p class="text-muted" style="font-size:12px;margin:0 0 12px 0">${settingsT('transfer.factoryResetRepositories')}</p>
+      <button class="btn btn-danger" data-settings-action="factory-reset-start">${settingsT('transfer.factoryResetButton')}</button>
+      <div id="settings-factory-reset-msg" class="status-message hidden" style="margin-top:10px"></div>
+    </div>`);
+}
+
 function renderJobsImportPreview(d) {
   const rows = Array.isArray(d?.jobs) ? d.jobs : [];
   const sp = d?.settings_preview || null;
@@ -1788,7 +1992,7 @@ function renderJobsImportPreview(d) {
   ` : '';
   return `
     ${settingsBlock}
-    <div class="text-muted" style="font-size:12px;margin-bottom:8px">${settingsT('transfer.jobsPreviewTitle', { count: rows.length })}${Number(d?.passphrase_count || 0) ? ` · ${settingsT('transfer.passphrasesInPackage', { count: Number(d.passphrase_count) })}` : ''}</div>
+    <div class="text-muted" style="font-size:12px;margin-bottom:8px">${settingsT('transfer.jobsPreviewTitle', { count: rows.length })}${Number(d?.passphrase_count || 0) ? ` · ${settingsT('transfer.passphrasesInPackage', { count: Number(d.passphrase_count) })}` : ''}${Number(d?.keyfile_count || 0) ? ` · ${settingsT('transfer.keyfilesInPackage', { count: Number(d.keyfile_count) })}` : ''}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
       ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.new', { count: stats.new })} · ${settingsT('transfer.existing', { count: stats.exists })} · ${settingsT('transfer.invalid', { count: stats.invalid })}${stats.other ? ` · ${settingsT('transfer.other', { count: stats.other })}` : ''}
     </div>
@@ -2113,7 +2317,7 @@ async function exportJobsBundleSecure() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showMsg('settings-transfer-msg', 'success', settingsT('transfer.secureJobsCreated', { jobs: data.job_count || 0, passphrases: data.passphrase_count || 0 }));
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.secureJobsCreated', { jobs: data.job_count || 0, passphrases: data.passphrase_count || 0, keyfiles: data.keyfile_count || 0 }));
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.secureJobsFailed', { message: err.message }));
   }
@@ -2144,6 +2348,96 @@ async function exportSupportBundle() {
     showMsg('settings-transfer-msg', 'success', settingsT('transfer.supportCreated', { count: data.file_count || 0 }));
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.supportFailed', { message: err.message }));
+  }
+}
+
+function factoryResetOperationBlockerMessage(row) {
+  const name = String(row?.name || '').trim();
+  const key = {
+    backup: 'factoryResetBlockerBackup',
+    job: 'factoryResetBlockerBackup',
+    restore_test: 'factoryResetBlockerRestoreTest',
+    repository_maintenance: 'factoryResetBlockerMaintenance',
+    restore: 'factoryResetBlockerRestore',
+  }[String(row?.type || '').trim()] || 'factoryResetBlockerOperation';
+  return settingsT(`transfer.${key}`, { name });
+}
+
+async function startFactoryReset() {
+  const messageId = 'settings-factory-reset-msg';
+  hideEl(messageId);
+  try {
+    const statusRes = await fetch('/api/settings/factory-reset/status', { credentials: 'include' });
+    const status = await statusRes.json();
+    if (!statusRes.ok) throw new Error(apiErrorMessage(status, statusRes.status));
+    const operationBlockers = Array.isArray(status.operation_blockers) ? status.operation_blockers : [];
+    const repositoryBlockers = Array.isArray(status.repository_blockers) ? status.repository_blockers : [];
+    if (!status.allowed) {
+      const rows = [
+        ...operationBlockers.map(factoryResetOperationBlockerMessage),
+        ...repositoryBlockers.map((row) => settingsT('transfer.factoryResetBlockerRepository', {
+          name: String(row?.display_name || '').trim(),
+          path: String(row?.path || '').trim(),
+        })),
+      ];
+      showMsg(messageId, 'error', `${settingsT('transfer.factoryResetBlocked')} ${rows.join(' ')}`.trim());
+      return;
+    }
+    const server = String(status.server_name || '');
+    const configRoot = String(status.configuration_root || '');
+    const dataRoot = String(status.operational_data_root || '');
+    const confirmation = await _openSettingsDialog({
+      title: settingsT('transfer.factoryResetTitle'),
+      html: `
+        <div class="modal-info-item danger">${settingsT('transfer.factoryResetDialogWarning')}</div>
+        <div class="modal-info-item" style="margin-top:8px"><strong>${settingsT('transfer.factoryResetDeletePaths')}</strong><br><code>${escHtml(configRoot)}</code>${dataRoot ? `<br><code>${escHtml(dataRoot)}</code>` : ''}</div>
+        <label class="form-checkbox-row" style="margin-top:12px"><input type="checkbox" id="factory-reset-ack-configuration"> ${settingsT('transfer.factoryResetAckConfiguration')}</label>
+        <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-data"> ${settingsT('transfer.factoryResetAckData')}</label>
+        <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-secrets"> ${settingsT('transfer.factoryResetAckSecrets')}</label>
+        <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-repositories"> ${settingsT('transfer.factoryResetAckRepositories')}</label>
+        <div class="form-group" style="margin-top:12px"><label class="form-label">${settingsT('transfer.factoryResetServerName', { name: server })}</label><input class="form-input" id="factory-reset-server-name" autocomplete="off"></div>
+        <div class="form-group"><label class="form-label">${settingsT('transfer.factoryResetPassword')}</label><input class="form-input" type="password" id="factory-reset-password" autocomplete="current-password"></div>`,
+      input: {
+        label: settingsT('transfer.factoryResetPhrase', { phrase: status.confirmation_phrase || 'FACTORY RESET' }),
+        placeholder: status.confirmation_phrase || 'FACTORY RESET',
+        validate: (value) => String(value || '').trim() === String(status.confirmation_phrase || 'FACTORY RESET'),
+      },
+      confirmText: settingsT('transfer.factoryResetConfirm'),
+      confirmClass: 'btn-danger',
+      resolveValue: ({ modal, input }) => ({
+        confirmation_phrase: String(input.value || '').trim(),
+        server_name: String(modal.querySelector('#factory-reset-server-name')?.value || '').trim(),
+        current_password: String(modal.querySelector('#factory-reset-password')?.value || ''),
+        ack_configuration: !!modal.querySelector('#factory-reset-ack-configuration')?.checked,
+        ack_operational_data: !!modal.querySelector('#factory-reset-ack-data')?.checked,
+        ack_secrets: !!modal.querySelector('#factory-reset-ack-secrets')?.checked,
+        ack_repositories_preserved: !!modal.querySelector('#factory-reset-ack-repositories')?.checked,
+      }),
+    });
+    if (!confirmation) return;
+    const resetRes = await fetch('/api/settings/factory-reset', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(confirmation),
+    });
+    const result = await resetRes.json();
+    if (!resetRes.ok) throw new Error(apiErrorMessage(result, resetRes.status));
+    showMsg(messageId, 'success', settingsT('transfer.factoryResetScheduled'));
+    const waitForRestart = async (remaining = 30) => {
+      try {
+        const response = await fetch('/api/auth/status', { credentials: 'include', cache: 'no-store' });
+        const state = await response.json();
+        if (response.ok && state.bootstrap_required) {
+          window.location.href = '/setup-admin';
+          return;
+        }
+      } catch (_) { /* service is expected to be temporarily unavailable */ }
+      if (remaining > 0) setTimeout(() => waitForRestart(remaining - 1), 2000);
+    };
+    setTimeout(() => waitForRestart(), 3000);
+  } catch (err) {
+    showMsg(messageId, 'error', settingsT('transfer.factoryResetFailed', { message: err.message }));
   }
 }
 
@@ -2407,7 +2701,8 @@ async function importJobsApplySelected() {
     const srep = data?.settings_report || null;
     const stext = srep ? ` · Settings(${srep.mode}): ${srep.applied || 0} ${settingsT('transfer.settingsApplied')}, ${settingsT('transfer.conflicts')} ${srep.conflicts || 0}${data?.settings_backup ? `, Backup: ${data.settings_backup}` : ''}` : '';
     const ppText = Number(data?.restored_passphrases || 0) ? ` · ${settingsT('transfer.passphrasesRestored', { count: Number(data.restored_passphrases) })}` : '';
-    showMsg('settings-transfer-msg', 'success', settingsT('transfer.importSummary', { jobs: data.imported_count || 0, schedules: data.scheduled_count || 0, details: `${detail}${stext}${ppText}` }));
+    const keyText = Number(data?.restored_keyfiles || 0) ? ` · ${settingsT('transfer.keyfilesRestored', { count: Number(data.restored_keyfiles) })}` : '';
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.importSummary', { jobs: data.imported_count || 0, schedules: data.scheduled_count || 0, details: `${detail}${stext}${ppText}${keyText}` }));
     settingsState.transferJobsPreview = null;
     settingsState.transferJobsBundleText = '';
     settingsState.transferJobsSecurePayloadB64 = '';
@@ -3476,9 +3771,7 @@ async function onSettingsContentClick(event) {
       await refreshSettings();
     }
     const tab = tabBtn.dataset.settingsTab || 'general';
-    settingsState.activeTab = tab;
-    settingsState.profileEditing = '';
-    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    activateSettingsTab(tab);
     return;
   }
   const advancedTabBtn = event.target.closest('[data-settings-advanced-tab]');
@@ -3506,6 +3799,7 @@ async function onSettingsContentClick(event) {
   if (action === 'import-profile-secrets-select-file') return importProfileSecretsPreviewSelectFile();
   if (action === 'import-profile-secrets-apply') return importProfileSecretsApplySelected();
   if (action === 'export-support-bundle') return exportSupportBundle();
+  if (action === 'factory-reset-start') return startFactoryReset();
   if (action === 'runtime-recovery-ack') return acknowledgeRuntimeRecoveryEntry(el);
   if (action === 'legacy-cleanup-apply') return applyLegacyCleanupFromSettings(el);
   if (action === 'diff-config-backup') return diffSettingsConfigBackup(el.dataset.backupName || '');
@@ -3544,6 +3838,21 @@ async function onSettingsContentClick(event) {
   if (action === 'storagebox-key-public') return storageboxKeyPublic();
   if (action === 'storagebox-key-deploy') return storageboxKeyDeploy();
   if (action === 'storagebox-test') return storageboxTest();
+  if (action === 'local-profile-add') {
+    addLocalProfileRow();
+    onLocalProfileInputChanged();
+    settingsState.profileEditing = 'local';
+    syncSettingsProfileManager('local', true);
+    return;
+  }
+  if (action === 'local-profile-remove') {
+    const row = event.target.closest('.local-profile-row');
+    if (await blockProfileRemovalIfInUse(row, 'local')) return;
+    row?.remove();
+    onLocalProfileInputChanged();
+    syncSettingsProfileManager('local');
+    return;
+  }
   if (action === 'usb-profile-add') {
     addUsbProfileRow();
     onUsbProfileInputChanged();
@@ -4281,8 +4590,10 @@ async function saveSettings() {
   syncStorageProfilesHiddenInput();
   syncRestoreAllowedRootsHiddenInput({ normalizeInputs: true });
   const updates = {};
+  const profileUpdates = {};
   const activePanel = document.querySelector('#settings-content .settings-tab-panel:not(.hidden)');
   const activeTab = activePanel?.dataset?.settingsPanel || settingsState.activeTab || 'general';
+  if (activeTab === 'local' && !validateLocalProfilesForSave()) return false;
   activePanel?.querySelectorAll('[data-key]').forEach(el => {
     const key = el.dataset.key;
     if (el.type === 'checkbox') {
@@ -4295,9 +4606,10 @@ async function saveSettings() {
     const key = el.dataset.ntfySecretKey;
     if (key && String(el.value || '').trim()) updates[key] = el.value;
   });
-  if (activeTab === 'usb') updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());
-  if (activeTab === 'smb') updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());
-  if (activeTab === 'storagebox') updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());
+  if (activeTab === 'local') profileUpdates.local = getLocalProfilesFromDom();
+  if (activeTab === 'usb') profileUpdates.usb = getUsbProfilesFromDom();
+  if (activeTab === 'smb') profileUpdates.smb = getSmbProfilesFromDom();
+  if (activeTab === 'storagebox') profileUpdates.storagebox = getStorageProfilesFromDom();
   if (Object.prototype.hasOwnProperty.call(updates, 'GLOBAL_DATA_DIR') && !String(updates.GLOBAL_DATA_DIR || '').trim()) {
     showMsg('settings-message', 'error', settingsT('forms.dataDirRequired'));
     return false;
@@ -4330,6 +4642,7 @@ async function saveSettings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         updates,
+        profile_updates: profileUpdates,
         smb_cleanup_keys: settingsState.smbCleanupKeys || [],
         smb_secret_cleanup_keys: settingsState.smbSecretCleanupKeys || [],
       }),

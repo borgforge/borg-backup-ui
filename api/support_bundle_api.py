@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg_passcommand)", re.IGNORECASE)
-SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg_passcommand)\s*=\s*([^\s]+)")
+SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
+SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
 PRIVACY_KEY_RE = re.compile(
     r"(?i)(mail|email|recipient|sender|smtp_(host|user)|ntfy_(server_url|username|click_url)|storagebox_(host|user)|"
     r"\bhost\b|\buser(name)?\b|\burl\b)"
@@ -95,6 +95,22 @@ def _add_text_file(zf: zipfile.ZipFile, arcname: str, path: Path, *, max_bytes: 
         return False
 
 
+def _add_jsonl_file(zf: zipfile.ZipFile, arcname: str, path: Path, *, max_bytes: int = 262144) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        rows = []
+        for line in _read_text_tail(path, max_bytes=max_bytes).splitlines():
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                rows.append(sanitize_text(line))
+                continue
+            rows.append(json.dumps(sanitize_data(payload), ensure_ascii=False))
+        zf.writestr(arcname, "\n".join(rows) + ("\n" if rows else ""))
+        return True
+    except OSError:
+        return False
 def _safe_json_file(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8", errors="replace"))
@@ -155,14 +171,13 @@ def _arc_safe_path(prefix: str, path: Path) -> str:
 
 
 def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
-    from config_api import get_conf_file, read_expanded_conf, read_settings_payload
+    from config_api import get_conf_file, read_expanded_conf
     from system_health_api import get_system_health_data
 
     created_at = datetime.now().isoformat(timespec="seconds")
     root = _root_from_config(config)
     scripts_dir = Path(str(config.get("BACKUP_SCRIPTS_DIR", root / "scripts")))
     expanded = read_expanded_conf(config)
-    settings_payload = read_settings_payload(config)
     health = get_system_health_data(config)
 
     files: List[str] = []
@@ -178,8 +193,30 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         _add_json(zf, "config/expanded-conf.sanitized.json", expanded)
         _record_added("config/expanded-conf.sanitized.json")
-        _add_json(zf, "config/settings.sanitized.json", settings_payload)
-        _record_added("config/settings.sanitized.json")
+        for filename in ("storages.json", "repositories.json", "migration-state.json"):
+            source = root / "config" / filename
+            if source.is_file():
+                arcname = f"config/{source.stem}.sanitized.json"
+                _add_json(zf, arcname, _safe_json_file(source))
+                _record_added(arcname)
+            else:
+                _record_skipped(source, "not_found_or_unreadable")
+        migration_log = root / "config" / "migrations.log.jsonl"
+        if _add_jsonl_file(zf, "config/migrations.log.sanitized.jsonl", migration_log, max_bytes=262144):
+            _record_added("config/migrations.log.sanitized.jsonl")
+        else:
+            _record_skipped(migration_log, "not_found_or_unreadable")
+        factory_reset_log = Path(__file__).resolve().parents[1] / "factory-reset.log.jsonl"
+        if factory_reset_log.is_file():
+            if _add_jsonl_file(
+                zf,
+                "config/factory-reset.sanitized.jsonl",
+                factory_reset_log,
+                max_bytes=65536,
+            ):
+                _record_added("config/factory-reset.sanitized.jsonl")
+            else:
+                _record_skipped(factory_reset_log, "unreadable")
         _add_json(zf, "system/health.json", health)
         _record_added("system/health.json")
 

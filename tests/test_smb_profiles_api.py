@@ -15,6 +15,8 @@ from smb_profiles_api import (
     normalize_smb_profile_rows,
     validate_smb_profile_usage_before_save,
 )
+from repositories_api import write_repository_store
+from storage_objects_api import write_storage_store
 
 
 def test_smb_profile_normalization_derives_key_from_secret_path(tmp_path: Path):
@@ -55,10 +57,11 @@ def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: P
     meta_dir.mkdir(parents=True)
     (meta_dir / "job1.json").write_text(
         json.dumps({
+            "schema_version": 2,
             "job_key": "job1",
             "name": "Job 1",
             "location": "smb",
-            "smb_profile_key": "nas-a",
+            "repository_key": "repo_job1",
         }) + "\n",
         encoding="utf-8",
     )
@@ -72,9 +75,25 @@ def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: P
         "password_file": "/boot/config/borg-backup/secrets/.smb-nas-a.cred",
     }]
 
-    monkeypatch.setattr(jobs_api, "resolve_scripts_dir", lambda _cfg: scripts_dir)
-    monkeypatch.setattr(jobs_api, "resolve_data_root", lambda _cfg: data_root)
-    monkeypatch.setattr(jobs_api, "get_jobs_meta_dirs", lambda _scripts, _data: [meta_dir])
+    config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_nas_a",
+        "display_name": "NAS A",
+        "storage_type": "smb",
+        "location": "smb",
+        "identity": "smb-profile:nas-a",
+        "profile_key": "nas-a",
+        "base_path": "/mnt/user/borg-backup-ui/remotes/nas-a",
+        "mount_path": "/mnt/user/borg-backup-ui/remotes/nas-a",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_job1",
+        "display_name": "Job 1",
+        "storage_key": "storage_nas_a",
+        "relative_path": "borg-backup-job1",
+        "path_raw": "/mnt/user/borg-backup-ui/remotes/nas-a/borg-backup-job1",
+        "encryption": "none",
+    }]})
     monkeypatch.setattr(config_api, "get_conf_file", lambda _cfg: scripts_dir / "config" / "backup.conf")
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {
         "SMB_PROFILES_JSON": json.dumps(profiles),
@@ -82,4 +101,4 @@ def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: P
     })
 
     with pytest.raises(ValueError, match="SMB profile cannot be deleted"):
-        validate_smb_profile_usage_before_save({"BACKUP_SCRIPTS_DIR": str(scripts_dir)}, [])
+        validate_smb_profile_usage_before_save(config, [])

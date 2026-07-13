@@ -14,26 +14,27 @@ Borg Backup UI verwaltet Borg-Backup-Jobs auf Unraid. Die Anwendung hilft beim E
 - Bei Warnung auf **Systemstatus** klicken und in **Einstellungen > Systemzustand & Migration** die offenen Punkte ansehen.
 - Wichtig: Der Bereich trennt Systemprüfungen, Job-Prüfungen, letzte Migration und Konfigurations-/Wartungspunkte.
 
-### 2) Profile vorbereiten
+### 2) Speicherziel und Repository vorbereiten
 
-- **Local/USB**: Zielpfad bzw. USB-Profil prüfen.
-- **SMB**: In **Einstellungen > SMB-Profile** Profil anlegen, speichern und testen.
-- **SSH/Storagebox/Synology**: In **Einstellungen > SSH-Profile** Host, Port, User, Basispfad und SSH-Key pflegen und den Profiltest ausführen.
+- Das Speicherziel zuerst unter **Einstellungen** bei den lokalen, USB-, SMB- oder SSH-Profilen anlegen und prüfen.
+- In **Repositories** auf **Repository hinzufügen** klicken.
+- Das vorhandene Speicherziel auswählen.
+- Anschließend ein neues Borg-Repository erstellen oder ein vorhandenes Repository importieren.
 
-Tipp: Repository-URIs für SSH-Ziele sollten aus dem Profil entstehen. Nicht manuell raten oder den Pfad frei zusammenbauen.
+Tipp: Beim Import wird das Repository mit `borg info` geprüft, aber nicht verändert oder initialisiert.
 
 ### 3) Job anlegen oder bearbeiten
 
 - In **Jobs** auf **Neuer Job** klicken oder einen bestehenden Job bearbeiten.
-- Jobname, Typ und Ziel-Location wählen.
+- Jobname und Typ wählen.
 - Quellpfade eintragen.
-- Repository, Verschlüsselung, Passphrase, Kompression und Aufbewahrung prüfen.
+- Speichertyp, Speicherziel und ein dazugehöriges vorhandenes Repository wählen.
+- Kompression und Aufbewahrung prüfen. Verschlüsselung und Passphrase gehören zum Repository und werden nicht im Job geändert.
 - Zeitplan aktivieren, falls der Job automatisch laufen soll.
 
 ### 4) Vorschau und Prüfungen beachten
 
-- Der Wizard zeigt eine Vorschau des Repository-Pfads.
-- Bei SSH-/Storagebox-Jobs wird angezeigt, ob das Repository gefunden wurde oder eine Anlage bestätigt werden muss.
+- Der Wizard zeigt das ausgewählte verwaltete Repository und dessen Pfad.
 - Die schnelle Job-Prüfung ist eine lokale Plausibilitätsprüfung. Sie ersetzt keinen vollständigen Borg-Repo-Test.
 
 ### 5) Ersten Lauf manuell starten
@@ -93,12 +94,21 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - Der konkrete Repository-Test erfolgt über **Storage** oder im Wizard über die Repo-Vorschau.
 - Ein korrekter relativer Basispfad sieht z. B. wie `./backup` aus und wird in der URI als `/./backup/...` verwendet.
 
-## Storage
+## Repositories
 
-- **Storage** ist der richtige Ort für Repository-Tests.
-- Repo-Tests prüfen den Zugriff auf das Borg-Repository.
-- SMB-Repos müssen vorher gemountet sein.
-- SSH-Profiltests bestätigen das Profil, prüfen aber nicht automatisch jedes einzelne Job-Repository.
+- **Repositories** ist der Ort zum Einrichten, Importieren und Warten von Borg-Repositories.
+- Links werden Repositorys nach dem konkreten Speicherziel gruppiert. Die Suche filtert die Repository-Liste, ohne den ausgewählten Speicherort zu verändern.
+- **Übersicht** zeigt Borg-Kennzahlen, den letzten bekannten Wartungszustand und die verständlichen Repository-Daten.
+- Borg-Kennzahlen werden im Hintergrund mindestens alle 24 Stunden neu geladen und zwischengespeichert. Nach einem Verbindungsfehler versucht die Anwendung die Aktualisierung nach einer Stunde erneut.
+- Der Kopfbereich verwendet den konfigurierten Anzeigenamen des Repositorys. Repository-Verzeichnis, absoluter Repository-Pfad und Pfad im Speicherziel werden getrennt bezeichnet.
+- **Archive** lädt die aktuelle Archivliste direkt aus dem ausgewählten Repository.
+- **Wartung** bietet Check, Datenprüfung, Prune und Compact. Der Status und das Ergebnis bleiben nach Abschluss sichtbar; ein technisches Live-Log ist dafür nicht erforderlich.
+- **Verwaltung** zeigt Job-Verknüpfungen. Dort kann ein ungenutztes Repository nur aus der UI entfernt oder nach erneuter Identitätsprüfung endgültig gelöscht werden.
+- Prune verwendet die Aufbewahrungsrichtlinie des verknüpften Jobs und ist ohne Job-Zuordnung deaktiviert.
+- Nach Prune werden die entfernten Archive zusammengefasst. Compact zeigt den freigegebenen Speicherplatz, wenn Borg diesen Wert ausgibt.
+- Bei Fehlern können maskierte technische Details im betreffenden Statusfeld geöffnet werden.
+- Datenprüfung, Prune und Compact müssen ausdrücklich bestätigt werden.
+- Eine endgültige Löschung ist gesperrt, solange Jobs oder laufende Aktionen das Repository verwenden, und verlangt Anzeigename sowie `DELETE` als doppelte Bestätigung.
 
 ## Restore und Restore Tests
 
@@ -135,6 +145,7 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - Setup-Checks beschreiben vorhandene Strukturen und sind nicht automatisch eine Migration.
 - Cleanup-Kandidaten sind Hinweise auf alte oder nicht mehr benötigte Konfigurationseinträge.
 - Cleanup-Aktionen erstellen vorher ein Backup und müssen bewusst gestartet werden.
+- **Einstellungen > Werkseinstellungen** ist der letzte Wartungseintrag und setzt die Anwendung nach mehrfacher Sicherheitsbestätigung auf den Erstinstallationszustand zurück. Borg-Repositories werden nicht gelöscht.
 
 ## Häufige Probleme
 
@@ -144,12 +155,11 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 - In **Offene Punkte** die konkrete Meldung lesen.
 - Wenn nur Cleanup-Kandidaten angezeigt werden, ist das meist Wartung und kein akuter Backup-Fehler.
 
-### Repository-Anlage muss bestätigt werden
+### Kein Repository im Job-Wizard auswählbar
 
-- Der Wizard konnte das Repository nicht sicher als vorhanden erkennen.
-- In **Storage** den passenden Repo-Test ausführen.
-- Bei SMB zuerst mounten.
-- Bei SSH Profiltest und Repository-Pfad prüfen.
+- Unter **Repositories** zuerst ein Repository erstellen oder importieren.
+- Prüfen, ob Speichertyp und Speicherziel im Job-Wizard richtig gewählt wurden.
+- Es werden nur Repositorys angezeigt, die zum exakten Speicherziel gehören.
 
 ### SMB-Repo-Test funktioniert nicht
 

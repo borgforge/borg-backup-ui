@@ -116,9 +116,13 @@ def list_restore_test_plan(config: dict) -> dict:
         rows.append({
             "job_key": key,
             "display_name": job.get("display_name") or job.get("name") or key,
+            "name": job.get("name") or job.get("display_name") or key,
             "location": job.get("location") or "",
             "enabled": bool(job.get("enabled", True)),
             "backup_type": job.get("backup_type") or "",
+            "icon": job.get("icon") or "",
+            "icon_color": job.get("icon_color") or "",
+            "is_utility": bool(job.get("is_utility", False)),
             "policy": eff,
             "policy_raw": raw_policy,
             "last_test_date": last_test_date,

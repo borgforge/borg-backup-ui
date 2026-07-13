@@ -9,7 +9,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from system_health_api import _build_migration_summary, _collect_job_health, _last_migration_successful, _read_migration_state
+from system_health_api import _build_migration_summary, _collect_job_health, _last_migration_successful, _probe_cifs_support, _read_migration_state, get_system_health_data
 
 
 def test_migration_summary_without_run():
@@ -190,7 +190,7 @@ def test_migration_summary_no_changes_has_no_actions():
     assert summary["errors"] == []
 
 
-def test_collect_job_health_flags_broken_storagebox_repo_uri(tmp_path, monkeypatch):
+def test_collect_job_health_rejects_job_without_repository_assignment(tmp_path, monkeypatch):
     import config_api
 
     source_dir = tmp_path / "source"
@@ -212,22 +212,70 @@ def test_collect_job_health_flags_broken_storagebox_repo_uri(tmp_path, monkeypat
         }) + "\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(config_api, "read_settings_payload", lambda _cfg: {
-        "storage_profiles": [{
-            "key": "storage-1",
-            "name": "Storagebox",
-            "host": "u123.your-storagebox.de",
-            "port": "23",
-            "user": "u123",
-            "base_path": "./backup",
-            "target_type": "storagebox",
-        }]
-    })
-
     health = _collect_job_health({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, jobs_dir)
 
     assert health["summary"]["failed"] == 1
-    assert "missing a slash" in " ".join(health["items"][0]["errors"])
+    assert "awaits repository migration" in " ".join(health["items"][0]["errors"])
     assert [row["code"] for row in health["items"][0]["error_details"]] == [
-        "storagebox_repo_port_slash",
+        "repository_context_invalid",
     ]
+
+
+def test_system_health_surfaces_corrupt_canonical_inventory(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "jobs").mkdir()
+    (tmp_path / "secrets").mkdir()
+    (config_dir / "repositories.json").write_text("{broken", encoding="utf-8")
+    (config_dir / "storages.json").write_text('{"schema_version":1,"storages":[]}', encoding="utf-8")
+
+    health = get_system_health_data({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+
+    assert health["checks"]["canonical_inventories_ok"] is False
+    assert health["canonical_inventories"]["errors"][0]["inventory"] == "repositories"
+    assert "malformed JSON" in health["canonical_inventories"]["errors"][0]["error"]
+    assert "notification_reminders" not in health
+
+
+def test_cifs_probe_uses_local_capabilities_without_external_process(monkeypatch) -> None:
+    monkeypatch.setattr("system_health_api.shutil.which", lambda name: "/sbin/mount.cifs" if name == "mount.cifs" else None)
+
+    supported, state = _probe_cifs_support()
+
+    assert supported is True
+    assert state in {"loaded", "available"}
+
+
+def test_collect_job_health_loads_canonical_inventory_once_for_all_jobs(tmp_path, monkeypatch) -> None:
+    import repository_context
+
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for job_key in ("flash_local", "appdata_local", "photos_local"):
+        (jobs_dir / f"{job_key}.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "job_key": job_key,
+                "name": job_key,
+                "location": "local",
+                "repository_key": f"repo_{job_key}",
+                "paths": {"default": str(source_dir)},
+            }) + "\n",
+            encoding="utf-8",
+        )
+
+    loads = []
+    inventory = {"repositories": {}, "storages": {}}
+    monkeypatch.setattr(repository_context, "load_repository_inventory", lambda _config: loads.append(True) or inventory)
+    monkeypatch.setattr(
+        repository_context,
+        "resolve_job_repository_context",
+        lambda _config, _job_key, *, job, inventory: {"location": job["location"]},
+    )
+
+    health = _collect_job_health({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, jobs_dir)
+
+    assert health["summary"] == {"total": 3, "ok": 3, "failed": 0, "warnings": 0}
+    assert loads == [True]

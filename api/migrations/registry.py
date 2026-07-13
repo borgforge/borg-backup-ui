@@ -2,38 +2,31 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
-from . import notification_events_v1, restore_history_v1
+from . import (
+    canonical_data_model_v1,
+    notification_events_v1,
+    restore_history_v1,
+)
+from .audit import append_event, config_dir as audit_config_dir, read_state
 
 MIGRATIONS = [
     restore_history_v1,
     notification_events_v1,
+    canonical_data_model_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}
 
 
-def _config_dir(config: dict) -> Path:
-    return Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup") / "config"
+def _config_dir(config: dict):
+    return audit_config_dir(config)
 
 
 def read_central_migration_state(config: dict) -> dict[str, Any]:
-    fp = _config_dir(config) / "migration-state.json"
-    if not fp.exists():
-        return {}
-    try:
-        raw = json.loads(fp.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _migration_log_file(config: dict) -> Path:
-    return _config_dir(config) / "migrations.log.jsonl"
+    return read_state(config)
 
 
 def _migration_entry(state: dict[str, Any], migration_id: str) -> dict[str, Any]:
@@ -137,18 +130,17 @@ def _write_state_and_log(config: dict, summary: dict[str, Any]) -> None:
 
     state_file = _config_dir(config) / "migration-state.json"
     state_file.parent.mkdir(parents=True, exist_ok=True)
-    state_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    from inventory_store import atomic_write_json
+    atomic_write_json(state_file, payload)
 
     if effective:
         entry = {
-            "schema_version": 2,
             "event": "startup_migration",
             **last_run,
             "migrations": migrations,
         }
         try:
-            with _migration_log_file(config).open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            append_event(config, entry)
         except (OSError, TypeError, ValueError):
             pass
 
@@ -178,7 +170,24 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
             messages.append(f"{migration_id}=skipped(previous={previous_state})")
             continue
 
-        detected = migration.detect(config)
+        try:
+            detected = migration.detect(config)
+        except Exception as exc:
+            result = {
+                "migration_id": migration_id,
+                "introduced_in": str(migration.INTRODUCED_IN),
+                "runner": "central_migration_registry",
+                "status": "failed",
+                "details": {
+                    "error_type": type(exc).__name__,
+                    "error": str(exc)[:500],
+                    "failed_phase": "detect",
+                },
+            }
+            results[migration_id] = result
+            failed.append(migration_id)
+            messages.append(f"{migration_id}=failed")
+            continue
         if not bool(detected.get("required")):
             skipped.append(migration_id)
             results[migration_id] = {

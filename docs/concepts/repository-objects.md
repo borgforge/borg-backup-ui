@@ -1,8 +1,8 @@
 # Konzept: Repository-Objekte als auswählbare Ziele
 
 - Issue: #184
-- Status: Konzept, keine Implementierung
-- Stand: 2026-07-09
+- Status: Umgesetzt mit Issues #184 und #187
+- Stand: 2026-07-11
 
 ## 1. Zusammenfassung
 
@@ -15,9 +15,9 @@ neue Nutzer wirkt es aber ungewohnt. Sie erwarten häufig diesen Ablauf:
 2. Repository erstellen oder vorhandenes Repository importieren.
 3. Backup-Job anlegen und Repository auswählen.
 
-Dieses Konzept schlägt deshalb vor, Borg-Repositories als eigene, auswählbare
-Objekte einzuführen. Jobs sollen langfristig nicht mehr primär einen
-Repository-Pfad erzeugen, sondern ein bestehendes Repository referenzieren.
+Die Anwendung verwaltet Borg-Repositories deshalb als eigene, auswählbare
+Objekte. Jobs erzeugen keinen Repository-Pfad mehr, sondern referenzieren ein
+vorhandenes Repository über dessen stabile ID.
 
 Das ist keine reine UI-Änderung. Es ist eine kleine Architekturverschiebung,
 die aber gut zur bestehenden Anwendung passt, wenn sie schrittweise umgesetzt
@@ -41,9 +41,10 @@ Im Job-Wizard wählt der Nutzer dann:
 statt einen Repository-Pfad direkt in den Job zu tippen oder indirekt erzeugen
 zu lassen.
 
-## 3. Ist-Zustand
+## 3. Ausgangszustand vor Umsetzung
 
-Aktuell liegen repository-relevante Informationen an mehreren Stellen:
+Vor Issue #184/#187 lagen repository-relevante Informationen an mehreren
+Stellen:
 
 - Job-Metadaten enthalten `repo.conf_key` und `repo.default`.
 - `backup.conf` enthält Repository-Keys und weitere Laufzeitwerte.
@@ -77,10 +78,16 @@ Mögliche Felder:
 
 | Feld | Bedeutung |
 | --- | --- |
-| `storage_key` | stabile technische ID |
-| `type` | `local`, `usb`, `smb`, `ssh`, später `rclone` |
+| `storage_key` | stabile technische ID, z. B. `storage_storagebox_5bf81d53` |
+| `storage_type` | `local`, `usb`, `smb`, `ssh`, später `rclone` |
+| `location` | UI-/Job-Kategorie wie `local`, `usb`, `smb`, `storagebox` |
 | `display_name` | sichtbarer Name |
-| `profile_key` | Referenz auf USB-/SMB-/SSH-Profil, falls vorhanden |
+| `profile_key` | bisherige Profil-ID während der Migration, z. B. `storage-1` |
+| `base_path` | Basis-Pfad des Speicherziels |
+| `mount_path` | lokaler Mount-Pfad, falls vorhanden |
+| `host`, `port`, `user` | SSH-/Storagebox-Verbindungsdaten ohne Secrets |
+| `server`, `share` | SMB-Zieldaten ohne Passwort |
+| `ssh_key_path` | Pfad zum SSH-Key, kein Key-Inhalt |
 | `mount_mode` | none, managed, external |
 | `status` | letzter Verbindungs-/Mount-Status |
 
@@ -92,11 +99,12 @@ Mögliche Felder:
 
 | Feld | Bedeutung |
 | --- | --- |
-| `repository_key` | stabile technische ID, z. B. `repo_appdata_usb` |
+| `repository_key` | stabile technische ID mit Hash-Suffix, z. B. `repo_appdata_usb_7f3c45ab` |
 | `display_name` | sichtbarer Name |
 | `storage_key` | Referenz auf Storage Target |
-| `repo_path` | lokaler Pfad oder relativer Pfad auf dem Storage |
-| `repo_uri` | effektive Borg-URI, falls remote |
+| `repository_name` | Name des Borg-Repositories, z. B. `borg-backup-appdata` |
+| `relative_path` | relativer Repository-Pfad auf dem Storage |
+| `relative_path` | kanonischer Pfad relativ zum Storage Target |
 | `borg_repo_id` | optional aus `borg info`, falls verfügbar |
 | `passphrase_ref` | optionaler Secret-/Passphrase-Verweis |
 | `last_test_status` | letzter Repository-Test |
@@ -114,12 +122,16 @@ Ein Job referenziert künftig ein Repository:
 {
   "job_key": "appdata_usb",
   "source_paths": ["/mnt/user/appdata"],
-  "repository_key": "repo_appdata_usb"
+  "repository_key": "repo_appdata_usb_7f3c45ab"
 }
 ```
 
-Der Job kann für eine Übergangszeit weiterhin `repo.default` speichern, aber die
-führende Quelle wäre langfristig `repository_key`.
+Der Job speichert ausschließlich `repository_key`. Repository-Pfad,
+Verschlüsselung und Passphrase-Verweis werden zur Laufzeit aus dem
+Repository-Objekt aufgelöst; Storage- und Profilinformationen stammen über
+`storage_key` aus dem Storage-Objekt. Die früheren Jobfelder `repo`,
+`passphrase`, `encryption` sowie direkte Storage-/Profil-Keys werden einmalig
+migriert und danach entfernt.
 
 ## 5. Warum das wichtig ist
 
@@ -148,89 +160,107 @@ Repository-Objekt kann ausdrücken:
 Dashboard, Reports, Restore, Repository-Checks und Wizard könnten langfristig
 auf dieselbe Repository-Auflösung zugreifen.
 
-## 6. Migrationsidee
+## 6. Umgesetzte Migration
 
 Da die Anwendung noch nicht öffentlich über Community Apps veröffentlicht ist,
 sollte keine dauerhafte Legacy-Parallelwelt aufgebaut werden. Trotzdem dürfen
 vorhandene Tester-Daten nicht verloren gehen.
 
-Vorgeschlagene Migration:
+Die Baseline-Migration `canonical_data_model_v1` führt folgende Schritte
+idempotent aus:
 
 1. Alle Job-Metadaten lesen.
 2. Für jeden eindeutigen Repository-Pfad oder jede eindeutige URI ein
    Repository-Objekt erzeugen.
 3. Storage-Typ und Profil aus Job-Location, Profil-Key und Repo-URI ableiten.
 4. Job um `repository_key` ergänzen.
-5. Bestehende `repo`-Information zunächst erhalten, aber als abgeleitet
-   behandeln.
-6. Migration idempotent protokollieren.
+5. Alte Repository-, Passphrase-, Verschlüsselungs- und Profilfelder aus den
+   Job-Metadaten entfernen.
+6. Übergangsfelder aus dem Repository-Inventar entfernen, nachdem Storage- und
+   Repository-Objekte vollständig verknüpft sind.
+7. Das Endmodell vollständig validieren.
+8. Erst nach erfolgreicher Validierung die obsolete `settings.json` entfernen.
+9. Migration und Cleanup im zentralen Migrationslog protokollieren.
 
 Beispiel:
 
 ```json
 {
-  "migration_id": "repository_objects_v1",
+  "migration_id": "canonical_data_model_v1",
   "status": "applied",
   "actions": [
-    "created repository repo_appdata_usb from job appdata_usb",
-    "linked job appdata_usb to repo_appdata_usb"
+    "created repository repo_appdata_usb_7f3c45ab from job appdata_usb",
+    "linked job appdata_usb to repo_appdata_usb_7f3c45ab"
   ]
 }
 ```
 
+Unterstützte Ausgangszustände sind der aktuelle Stable-Stand mit Legacy-Jobs,
+teilweise migrierte Testinstallationen und bereits kanonische Installationen.
+Bestehende kanonische Storage- und Repository-IDs bleiben erhalten. Vor der
+ersten Änderung wird unter `config/migration-backups/` ein Lauf-Backup erstellt.
+Schlägt eine Phase oder die Abschlussvalidierung fehl, werden die betroffenen
+Dateien zurückgespielt und der Fehler samt Phase und Rollback-Ergebnis im Audit
+protokolliert.
+
 Wichtig: Die Migration darf keine Borg-Repositories initialisieren, löschen oder
-verändern. Sie erstellt nur UI-Metadaten.
+verändern. Sie erstellt und bereinigt nur UI-Metadaten.
 
 ## 7. Datenablage
 
-Eine mögliche Ablage:
+Repository-Objekte werden getrennt von Jobs und allgemeinen Einstellungen
+gespeichert:
 
 ```text
 /boot/config/borg-backup/config/repositories.json
 ```
 
-oder, falls das bestehende Settings-Modell bevorzugt wird:
+Storage Targets liegen entsprechend in `storages.json`. Effektive lokale Pfade
+oder SSH-URIs werden zur Laufzeit aus `storage_key` und `relative_path`
+aufgelöst und nicht redundant persistiert.
 
-```json
-{
-  "repositories": []
-}
-```
+Allgemeine Anwendungseinstellungen verbleiben in `backup.conf`. Eine separate
+`settings.json` ist nach erfolgreicher Baseline-Migration nicht mehr Bestandteil
+des Datenmodells.
 
-Für Wartbarkeit spricht eine eigene Datei, weil Repositorys fachlich näher an
-Jobs, Restore, Reports und Storage liegen als an allgemeinen Einstellungen.
+Der kompakte aktuelle Zustand steht in `config/migration-state.json`. Der
+append-only Audit mit Lauf-ID, Phasen, Objektänderungen, Validierung und
+Rollback-Ergebnis steht in `config/migrations.log.jsonl`. Die früheren
+Teil-Migrations-IDs können bei Testinstallationen als historische Einträge
+vorhanden bleiben, steuern aber keine neuen Läufe mehr und werden in der
+normalen Systemzustandsansicht ausgeblendet.
 
-## 8. API-Entwurf
-
-Mögliche Endpunkte:
+## 8. API-Vertrag
 
 | Methode | Pfad | Zweck |
 | --- | --- | --- |
 | GET | `/api/repositories` | Repositorys listen |
 | POST | `/api/repositories` | Repository anlegen/importieren |
 | POST | `/api/repositories/test` | Repository testen |
-| PUT | `/api/repositories/<key>` | Metadaten aktualisieren |
-| DELETE | `/api/repositories/<key>` | Repository-Objekt entfernen, nicht Borg-Daten löschen |
+| DELETE | `/api/repositories` | Repository entfernen oder Borg-Daten nach doppelter Bestätigung löschen |
 
 Löschregel:
 
 - Ein Repository-Objekt darf nicht gelöscht werden, wenn Jobs es verwenden.
-- Das Löschen des UI-Objekts darf niemals das Borg-Repository auf dem Datenträger
-  löschen.
+- Das reine Entfernen des UI-Objekts löscht keine Borg-Daten.
+- Das physische Löschen ist eine getrennte, auditierte Aktion mit doppelter
+  Bestätigung und nur ohne Job-Verwendung möglich.
 
 ## 9. Auswirkungen auf bestehende Bereiche
 
 ### 9.1 Job-Wizard
 
-Der Wizard sollte Repository-Auswahl anzeigen:
+Der Wizard zeigt eine Repository-Auswahl an:
 
 - vorhandenes Repository auswählen
 - neues Repository über Storage-/Repository-Wizard erstellen
 - vorhandenes Repository importieren
 
-### 9.2 Storage
+### 9.2 Repositories
 
-Storage zeigt nicht nur Profile, sondern darunter zugehörige Repositories.
+Die Seite **Repositories** gruppiert Repositorys nach Speicherziel und bietet
+Informationen, Archive, Wartung und Verwaltung pro Repository. Storage-Profile
+werden getrennt unter **Einstellungen** verwaltet.
 
 ### 9.3 Restore
 
@@ -251,40 +281,12 @@ Neue Prüfungen:
 - Repository-Pfad ist leer oder nicht plausibel.
 - Repository wird von keinem Job genutzt.
 
-## 10. Offene Fragen
+## 10. Verbindliche Architektur
 
-- Soll ein Repository von mehreren Jobs genutzt werden dürfen?
-- Soll die UI davor warnen, wenn mehrere Jobs in dasselbe Repository schreiben?
-- Wie stark sollen Repository-Namen automatisch aus Jobnamen erzeugt werden?
-- Soll ein Repository ein eigenes Check-Intervall besitzen oder weiter der Job?
-- Wo liegt die Grenze zwischen Storage Target und Repository bei SSH-URIs?
-
-## 11. Umsetzungsvorschlag
-
-### Phase 1: Konzept und Datenmodell
-
-- Repository-Objektmodell festlegen.
-- Migrationsplan finalisieren.
-- API-Vertrag entwerfen.
-
-### Phase 2: Read-only Repository-Inventar
-
-- Repositorys aus bestehenden Jobs ableiten.
-- Repository-Liste anzeigen.
-- Keine Änderung am Job-Wizard.
-
-### Phase 3: Migration und Job-Verknüpfung
-
-- `repositories.json` einführen.
-- Jobs mit `repository_key` ergänzen.
-- Systemzustand um Repository-Prüfungen erweitern.
-
-### Phase 4: Wizard-Integration
-
-- Job-Wizard nutzt Repository-Auswahl.
-- Neues Repository wird über den Storage-/Repository-Wizard erzeugt.
-
-### Phase 5: Aufräumen
-
-- Alte direkte Repository-Pfad-Eingabe nur noch als erweiterter Modus.
-- Doppelte Repository-Auflösung reduzieren.
+- Jobs speichern ausschließlich `repository_key` als Repository-Verweis.
+- Repositorys speichern `storage_key`, `relative_path`, Verschlüsselung und
+  Secret-/Keyfile-Verweise.
+- Storage Targets speichern Verbindung, Basis-Pfad und Profilinformationen.
+- Borg-Laufzeitpfade werden zentral aufgelöst.
+- Alte Job- und Repository-Vertragsfelder werden nur innerhalb einmaliger
+  Migrationen gelesen; produktive APIs akzeptieren sie nicht.

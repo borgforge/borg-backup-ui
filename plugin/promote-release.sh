@@ -98,6 +98,27 @@ test = test_manifest.read_text(encoding="utf-8")
 stable = re.sub(r'<!ENTITY version   "[^"]*">', f'<!ENTITY version   "{version}">', stable, count=1)
 stable = re.sub(r"<MD5>[^<]*</MD5>", f"<MD5>{md5}</MD5>", stable, count=1)
 
+launch_match = re.search(r'<PLUGIN\b[^>]*\blaunch="([^"]+)"', test, re.S)
+if not launch_match:
+    raise SystemExit("Test manifest does not define the tested Unraid launch target")
+launch_target = launch_match.group(1)
+if re.search(r'<PLUGIN\b[^>]*\blaunch="[^"]*"', stable, re.S):
+    stable = re.sub(
+        r'(<PLUGIN\b[^>]*?)\blaunch="[^"]*"',
+        lambda match: match.group(1) + f'launch="{launch_target}"',
+        stable,
+        count=1,
+        flags=re.S,
+    )
+else:
+    stable = re.sub(
+        r'(<PLUGIN\b[^>]*?\bversion="[^"]*")',
+        lambda match: match.group(1) + f'\n        launch="{launch_target}"',
+        stable,
+        count=1,
+        flags=re.S,
+    )
+
 block_match = re.search(rf"###(?:{re.escape(version)})###\n(?:.*?)(?=\n###|\n\]\]>|\Z)", test, re.S)
 if not block_match:
     raise SystemExit(f"Could not find changelog block for {version} in test manifest")

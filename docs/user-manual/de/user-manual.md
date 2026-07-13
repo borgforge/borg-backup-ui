@@ -13,7 +13,7 @@ Dieses Handbuch beschreibt Borg-Backup-UI in der Reihenfolge des Menüs der Anwe
 1. [Grundlagen](#1-grundlagen)
 2. [Dashboard](#2-dashboard)
 3. [Jobs](#3-jobs)
-4. [Storage](#4-storage)
+4. [Repositories](#4-repositories)
 5. [History](#5-history)
 6. [Berichte](#6-berichte)
 7. [Browse & Restore](#7-browse--restore)
@@ -145,20 +145,19 @@ Der Job-Wizard führt in festen Schritten durch die Erstellung oder Bearbeitung 
 
 #### Schritt 1: Grunddaten
 
-Hier werden Jobname, Typ-ID, Icon, Icon-Farbe, Standort und erste Laufzeitoptionen gesetzt.
+Hier werden Jobname, Typ-ID, Icon, Icon-Farbe und erste Laufzeitoptionen gesetzt.
 
 Wichtige Felder:
 
 - **Job-Name:** Sichtbarer Name in UI, Berichten und Benachrichtigungen.
 - **Typ-ID:** Technischer Schlüsselbestandteil. Er sollte kurz, eindeutig und stabil sein.
 - **Icon / Icon-Farbe:** Darstellung in Dashboard, Jobs, Restore und Reports.
-- **Location:** `Lokal`, `USB`, `SMB` oder `Storagebox`.
 - **Docker vor dem Backup stoppen:** Aktiviert Docker-Steuerung.
 - **VMs vor dem Backup herunterfahren:** Aktiviert VM-Steuerung.
 
 #### Schritt 2: Quellen & Ziel
 
-Hier werden Quellpfade und das Repository-Ziel festgelegt. Je nach Standort wird ein Profil gewählt oder ein Pfad/URI aufgebaut.
+Die kompakte Ansicht zeigt links **Quellen und Ausschlüsse** und rechts das **Backup-Ziel**. Hier werden Quellpfade, optionale Ausschlusspfade, Speichertyp, konkretes Speicherziel, ein vorhandenes Repository und die Job-Kompression gewählt. Die Repository-Liste zeigt ausschließlich Repositorys, die zum ausgewählten Speicherziel gehören. Repository-Pfade werden im Job nicht mehr frei eingegeben.
 
 Typische Quellpfade:
 
@@ -168,6 +167,8 @@ Typische Quellpfade:
 - `/mnt/user/photos/`
 
 > **Hinweis:** Quellpfade müssen auf dem Unraid-System existieren und für den Backup-Prozess lesbar sein.
+
+Ausschlusspfade sind konkrete Dateien oder Verzeichnisse unterhalb eines ausgewählten Quellpfads. Sie werden nicht in das Borg-Archiv aufgenommen. Bei vielen Einträgen scrollen nur die Pfadlisten innerhalb ihres Bereichs.
 
 #### Docker- und VM-Schritte
 
@@ -182,9 +183,9 @@ Bei `/mnt/user/appdata` empfiehlt die Anwendung, alle Docker-Container zu stoppe
 
 > **Warnung:** Appdata- und VM-Backups können Warnungen oder inkonsistente Daten erzeugen, wenn während des Backups Dateien geändert werden. Stoppen Sie bei vollständigen Appdata- oder Domains-Backups möglichst alle betroffenen Dienste.
 
-#### Retention, Passphrase und Beschreibung
+#### Retention, Kompression und Beschreibung
 
-Der Wizard setzt Borg-Optionen wie Kompression, Aufbewahrung und Verschlüsselung. Passphrasen werden als Secret behandelt und nicht im Klartext angezeigt.
+Der Wizard setzt jobbezogene Borg-Optionen wie Kompression und Aufbewahrung. Verschlüsselung und Passphrase gehören zum Repository und werden ausschließlich beim Erstellen oder Importieren des Repositorys festgelegt.
 
 #### Zeitplan
 
@@ -221,60 +222,89 @@ Best Practices:
 
 ### 3.6 Typische Meldungen
 
-- **Vorschau Fehler / ungültige Angaben:** Ein Feld im Wizard ist nicht plausibel. Prüfen Sie Quellpfade, Repository-Pfad, Typ-ID und Profile.
-- **Kein Profil vorhanden:** Für USB, SMB oder Storagebox muss zuerst ein Profil in den Einstellungen angelegt werden.
-- **Remote-Repository anlegen bestätigen:** Das Ziel konnte nicht als existierendes Borg-Repository erkannt werden.
+- **Vorschau Fehler / ungültige Angaben:** Ein Feld im Wizard ist nicht plausibel. Prüfen Sie Quellpfade, Typ-ID, Speicherziel und Repository-Auswahl.
+- **Kein Speicherziel oder Repository vorhanden:** Richten Sie das Speicherziel zuerst unter **Einstellungen** ein. Erstellen oder importieren Sie danach das Repository unter **Repositories**.
 - **Schedule disabled / Zeitplan deaktiviert:** Der Job läuft nur manuell.
 
-## 4. Storage
+## 4. Repositories
 
 ![Storage](../assets/de/storage.png)
 
-Die Seite **Storage** zeigt Speicherziele, Repositorys und Zugriffstests.
+Die Seite **Repositories** verwendet eine Master-Detail-Ansicht. Links werden Borg-Repositorys nach dem exakten Speicherziel gruppiert; rechts bleibt der Arbeitsbereich des ausgewählten Repositorys sichtbar. Über **Repository hinzufügen** können Repositorys auf einem bereits unter **Einstellungen** eingerichteten Speicherziel erstellt oder importiert werden.
+
+Lokale Speicherziele werden unter **Einstellungen > Lokale Profile** angelegt.
+Zulässig sind konkrete Verzeichnisse unter `/mnt`, etwa `/mnt/backup` oder
+`/mnt/disks/USB-A`. Zu breite Wurzeln, Systempfade und fehlerhafte Eingaben mit
+leeren, `.`- oder `..`-Segmenten werden vor dem Speichern abgelehnt.
 
 ### 4.1 Zweck der Seite
 
-Storage hilft zu prüfen, ob die Backup-Ziele erreichbar sind. Die Seite ist nicht primär zum Erstellen von Profilen gedacht; Profile werden in **Einstellungen** gepflegt.
+Die Seite trennt Speicherziele, Borg-Repositorys und Backup-Jobs. Ein Speicherziel beschreibt den physischen oder entfernten Ort. Ein Repository enthält Borg-Archive. Ein Job wählt ein vorhandenes Repository und bestimmt Quellen, Zeitplan, Kompression und Aufbewahrung.
 
 ### 4.2 Bereiche und Funktionen
 
-- **Standort-Sidebar:** Filtert nach `Lokal`, `USB`, `SMB` und `Storagebox`.
-- **Repository-Tabelle:** Zeigt Jobs, Repository-Pfade, Check-Status und Aktionen.
-- **Repository-Test:** Prüft Zugriff, Passphrase und Borg-Verfügbarkeit für ein konkretes Repository.
-- **SMB-Mount-Aktionen:** Wenn SMB-Ziele vorhanden sind, können Mount-Status und Mount-Aktionen sichtbar sein.
-- **Borg Check:** Führt bei Bedarf einen intensiveren Repository-Check aus.
-- **Details:** Zeigen Testausgaben und Fehlerursachen.
+- **Repository-Sidebar:** Gruppiert Repositorys nach dem konkreten Speicherziel und zeigt pro Eintrag Anzeigename, Repository-Verzeichnis und Status.
+- **Suche:** Filtert die Einträge der Sidebar nach Namen, Pfad, Job oder Speicherziel.
+- **Kopfbereich:** Zeigt das ausgewählte Repository, seinen Pfad und den aktuellen zusammengefassten Zustand.
+- **Übersicht:** Zeigt Borg-Kennzahlen, Wartungsstatus sowie verständliche Angaben zu Repository, Speicherziel, Job, Verschlüsselung und Pfad.
+- **Archive:** Lädt die aktuelle Archivliste mit Archivname, technischer ID, Startzeit und Dauer direkt aus Borg.
+- **Wartung:** Bietet Check, Datenprüfung, Prune und Compact als klar getrennte Aktionen mit dauerhaft sichtbarem Ergebnis.
+- **Verwaltung:** Zeigt aktuelle Job-Verknüpfungen und trennt das nicht-destruktive Entfernen aus der UI von der endgültigen Repository-Löschung.
+- **Repository hinzufügen:** Öffnet einen Assistenten zum Auswählen eines vorhandenen Speicherziels und zum Erstellen oder Importieren eines Repositorys.
 
-### 4.3 Profiltest, Job-Check und Repository-Test
+Die Borg-Kennzahlen werden im Hintergrund alle 24 Stunden aktualisiert und in `repositories.json` zwischengespeichert. Fehlt die Information oder ist sie älter, wird sie beim nächsten stündlichen Prüflauf geladen. Fehlgeschlagene Aktualisierungen werden nach einer Stunde erneut versucht. Der Seitenaufruf selbst wartet dadurch nicht auf alle lokalen und entfernten Repositorys.
 
-Es gibt drei verschiedene Prüfarten:
+Der Repository-Kopf verwendet den beim Erstellen oder Importieren vergebenen **Anzeigenamen**. Das **Repository-Verzeichnis** ist der letzte Verzeichnisname, der **Repository-Pfad** ist der vollständige lokale oder entfernte Zielpfad und **Pfad im Speicherziel** ist der relative Pfad innerhalb des ausgewählten Speicherziels.
 
-- **Profiltest:** Prüft, ob ein USB-, SMB- oder SSH-Profil grundsätzlich nutzbar ist.
-- **Job-Check:** Prüft lokale Plausibilität, z. B. Profilreferenzen, Quellpfade und Secret-Dateien.
-- **Repository-Test:** Prüft das konkrete Borg-Repository und ist der wichtigste Zugriffstest.
+### 4.3 Repository erstellen oder importieren
+
+1. Öffnen Sie **Repositories** und klicken Sie **Repository hinzufügen**.
+2. Wählen Sie ein vorhandenes Speicherziel. Neue lokale, USB-, SMB- und SSH-Speicherziele werden ausschließlich unter **Einstellungen** eingerichtet und geprüft.
+3. Der Assistent prüft das ausgewählte Speicherziel vor dem Repository-Zugriff erneut.
+4. Wählen Sie **Neues Repository erstellen** oder **Vorhandenes Repository importieren**.
+5. Geben Sie Anzeigename und relativen Repository-Pfad an.
+6. Beim Erstellen wählen Sie Verschlüsselung und Passphrase. Keyfile-Schlüssel werden persistent im geschützten Plugin-Verzeichnis gespeichert.
+7. Beim Import wird die Verschlüsselung durch `borg info` erkannt. Für ein Keyfile-Repository fügen Sie bei Bedarf einen zuvor mit `borg key export` erzeugten Borg-Key-Export ein; ein exakt passender vorhandener Schlüssel wird automatisch übernommen.
+8. Prüfen Sie die Zusammenfassung und speichern Sie.
+
+> **Warnung:** Ein Import initialisiert oder verändert das Repository nicht. Ein Erstellen führt ausdrücklich `borg init` aus.
+
+> **Warnung:** Bei `keyfile` und `keyfile-blake2` benötigen Sie für eine Wiederherstellung sowohl die Passphrase als auch die lokale Schlüsseldatei. Verwenden Sie für einen Systemumzug den verschlüsselten Jobs-/Secrets-Export und bewahren Sie zusätzlich einen unabhängigen `borg key export` auf.
 
 ### 4.4 Typische Aktionen
 
-Repository prüfen:
+Repository prüfen und warten:
 
-1. Öffnen Sie **Storage**.
-2. Wählen Sie den Standort.
-3. Suchen Sie das Repository.
-4. Starten Sie den Repository-Test.
-5. Lesen Sie das Ergebnis und öffnen Sie Details, wenn eine Warnung oder ein Fehler angezeigt wird.
+1. Öffnen Sie **Repositories**.
+2. Wählen Sie das Repository in der nach Speicherziel gruppierten Sidebar.
+3. Prüfen Sie unter **Übersicht** die Borg-Kennzahlen und den letzten Zustand.
+4. Öffnen Sie **Wartung** und starten Sie bei Bedarf Check, Datenprüfung, Prune oder Compact.
+5. Prüfen Sie nach Abschluss den Status. Bei einem Fehler können Sie die maskierten technischen Details im Statusfeld öffnen.
 
 SMB-Ziel prüfen:
 
 1. Prüfen Sie zuerst das SMB-Profil in **Einstellungen > SMB-Profile**.
-2. Öffnen Sie **Storage**.
-3. Stellen Sie sicher, dass das SMB-Ziel gemountet ist.
-4. Führen Sie danach den Repository-Test aus.
+2. Öffnen Sie **Repositories**.
+3. Wählen Sie das Repository. Die Anwendung hängt ein noch nicht eingehängtes verwaltetes SMB-Ziel für den Zugriff temporär ein und anschließend wieder aus.
+4. Aktualisieren Sie danach unter **Übersicht** die Repository-Informationen.
+
+Repository aus der Anwendung entfernen oder endgültig löschen:
+
+1. Entfernen oder weisen Sie zuerst alle verknüpften Backup-Jobs einem anderen Repository zu.
+2. Öffnen Sie beim Repository den Reiter **Verwaltung** und prüfen Sie, dass keine Job-Verknüpfung oder laufende Aktion mehr gemeldet wird.
+3. **Aus Borg-Backup-UI entfernen** löscht nur den Eintrag aus dem Repository-Inventar. Daten und Passphrase-Datei bleiben erhalten.
+4. **Repository endgültig löschen** prüft Repository-ID, Pfad und Archivanzahl erneut und verlangt den exakten Anzeigenamen sowie das Sicherheitswort `DELETE`.
+5. Erst nach erfolgreichem `borg delete` entfernt die Anwendung den Inventareintrag und eine ausschließlich diesem Repository zugeordnete Passphrase-Datei.
 
 ### 4.5 Hinweise
 
-> **Hinweis:** Ein erfolgreicher SSH-Profiltest bedeutet nicht automatisch, dass jedes Job-Repository existiert. Prüfen Sie das konkrete Repository zusätzlich auf der Storage-Seite.
+> **Hinweis:** Prune nutzt die Retention des verknüpften Jobs. Ohne Job-Zuordnung bleibt Prune deaktiviert.
+
+> **Hinweis:** Prune listet entfernte Archive im Ergebnis. Compact zeigt den freigegebenen Speicherplatz nur dann numerisch an, wenn Borg diesen Wert ausgibt.
 
 > **Warnung:** Borg Check kann je nach Repository-Größe und Ziel sehr lange laufen. Starten Sie ihn bewusst und nicht unnötig häufig.
+
+> **Warnung:** Die endgültige Repository-Löschung entfernt alle Archive unwiderruflich. Sie ist gesperrt, solange Jobs verknüpft sind oder Backup, Restore, Restore-Test beziehungsweise Wartung laufen.
 
 ## 5. History
 
@@ -686,7 +716,7 @@ Typische Aktionen:
 2. Zugangsdaten eintragen.
 3. Speichern.
 4. Status prüfen.
-5. Auf der Storage-Seite Repository testen.
+5. Repository unter **Repositories** öffnen und die Informationen aktualisieren.
 
 ### 9.7 SSH-Profile
 
@@ -712,7 +742,7 @@ Funktionen:
 - Verbindung testen
 - Profil speichern
 
-> **Hinweis:** Für Hetzner Storage Box ist ein relativer Basispfad wie `./backup` typisch. Prüfen Sie die erzeugte Repository-URI in Job-Vorschau und Storage-Test.
+> **Hinweis:** Für Hetzner Storage Box ist ein relativer Basispfad wie `./backup` typisch. Prüfen Sie den aufgelösten Repository-Pfad auf der Seite **Repositories**.
 
 ### 9.8 Import / Export
 
@@ -748,7 +778,17 @@ Unterbereiche:
 
 Die Reminder-Diagnose zeigt, wann ein Lauf erwartet wurde, ab wann er als überfällig gilt, wann zuletzt gesendet wurde und wann der nächste Reminder möglich ist. Diese Ansicht sendet keine Benachrichtigungen; sie ist rein diagnostisch.
 
-### 9.10 Systemstatus und Migration
+### 9.10 Werkseinstellungen
+
+**Werkseinstellungen** ist der letzte Eintrag im Bereich **Wartung**. Die Funktion entfernt die Anwendungskonfiguration und die konfigurierten Betriebsdaten und startet Borg Backup UI anschließend mit der Admin-Erstkonfiguration neu.
+
+Vor dem Zurücksetzen prüft die Anwendung laufende Backups, Restores, Restore-Tests und Repository-Wartungen. Verwaltete Borg-Repositories innerhalb eines zu löschenden Verzeichnisses blockieren den Vorgang. Externe Borg-Repositories und die Plugin-Installation werden nicht gelöscht.
+
+Für die Freigabe sind alle Risikobestätigungen, der Servername, das aktuelle Admin-Passwort und der Bestätigungstext `FACTORY RESET` erforderlich.
+
+> **Warnung:** Benutzer, Jobs, Zeitpläne, Speicherziele, Repository-Zuordnungen, Secrets, Borg-Keyfiles, Logs, Status- und Verlaufsdaten werden dauerhaft entfernt. Erstellen Sie vorher eine Sicherung von `/boot/config/borg-backup`.
+
+### 9.11 Systemstatus und Migration
 
 ![Einstellungen - Systemstatus und Migration](../assets/de/settings-system-health.png)
 
@@ -797,9 +837,9 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 2. Klicken Sie auf **Neuer Job**.
 3. Tragen Sie Name, Typ-ID, Icon und Standort ein.
 4. Wählen Sie Quellpfade.
-5. Wählen oder definieren Sie das Repository-Ziel.
+5. Wählen Sie zuerst das Speicherziel und danach ein vorhandenes Repository.
 6. Konfigurieren Sie Docker- oder VM-Steuerung, wenn nötig.
-7. Setzen Sie Kompression, Retention und Passphrase.
+7. Setzen Sie Kompression und Retention. Verschlüsselung und Passphrase gehören zum Repository.
 8. Aktivieren Sie optional einen Zeitplan.
 9. Prüfen Sie die Flow-Vorschau.
 10. Speichern Sie den Job.
@@ -807,11 +847,11 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 
 ### 11.2 Repository prüfen
 
-1. Öffnen Sie **Storage**.
-2. Wählen Sie den Standort.
-3. Starten Sie den Repository-Test.
-4. Lesen Sie Details bei Fehlern.
-5. Prüfen Sie Passphrase, Profil, Mount oder SSH-Verbindung.
+1. Öffnen Sie **Repositories**.
+2. Wählen Sie Speicherziel und Repository.
+3. Aktualisieren Sie die Repository-Informationen.
+4. Öffnen Sie bei Bedarf **Wartung** und starten Sie die passende Prüfung.
+5. Prüfen Sie bei Fehlern Passphrase, Profil, Mount oder SSH-Verbindung.
 
 ### 11.3 Dateien wiederherstellen
 
@@ -875,7 +915,7 @@ Empfohlene Reihenfolge:
 1. **Dashboard** für Überblick.
 2. **History** für konkreten Lauf.
 3. Logdatei aus History öffnen.
-4. **Storage** für Repository-Test.
+4. **Repositories** für Repository-Informationen und Wartungsstatus.
 5. **Einstellungen > Systemstatus und Migration** für Konfigurationsprobleme.
 6. Support-Paket erstellen, falls der Fehler weitergegeben werden soll.
 

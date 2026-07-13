@@ -71,9 +71,9 @@ def validate_smb_profiles_json(raw_value: str) -> List[Dict[str, str]]:
     try:
         decoded = json.loads(str(raw_value or "[]"))
     except (json.JSONDecodeError, TypeError, ValueError):
-        raise ValueError("SMB_PROFILES_JSON is not valid JSON.")
+        raise ValueError("SMB profile data is not valid JSON.")
     if not isinstance(decoded, list):
-        raise ValueError("SMB_PROFILES_JSON must be a list.")
+        raise ValueError("SMB profile data must be a list.")
     normalized = normalize_smb_profile_rows(decoded)
     if len(normalized) != len([x for x in decoded if isinstance(x, dict)]):
         raise ValueError("SMB profiles are incomplete. Required: name, server, share, mount path, username.")
@@ -117,114 +117,13 @@ def prepare_smb_profiles_for_save(raw_value: str) -> List[Dict[str, str]]:
 
 
 def get_smb_profile_job_refs(ui_config: dict) -> Dict[str, List[str]]:
-    from config_api import get_conf_file, read_expanded_conf
-    from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-
-    scripts_dir = resolve_scripts_dir(ui_config)
-    data_root = resolve_data_root(ui_config)
-    conf_file = get_conf_file(ui_config)
-    refs: Dict[str, List[str]] = {}
-    conf = read_expanded_conf(ui_config)
-    profile_rows = validate_smb_profiles_json(conf.get("SMB_PROFILES_JSON", "[]"))
-    mount_to_key: Dict[str, str] = {}
-    for p in profile_rows:
-        pkey = str(p.get("key") or "").strip().lower()
-        mpath = str(p.get("mount_path") or "").strip().rstrip("/")
-        if pkey and mpath:
-            mount_to_key[mpath] = pkey
-    meta_dirs: List[Path] = []
-    seen_dirs: set[str] = set()
-
-    def _add_meta_dir(p: Path) -> None:
-        key = str(p)
-        if key in seen_dirs:
-            return
-        seen_dirs.add(key)
-        meta_dirs.append(p)
-
-    for p in get_jobs_meta_dirs(scripts_dir, data_root):
-        _add_meta_dir(p)
-    _add_meta_dir(Path("/boot/config/borg-backup/config/jobs"))
-    _add_meta_dir((conf_file.parent / "jobs").resolve())
-    gdd = str(conf.get("GLOBAL_DATA_DIR", "")).strip()
-    if gdd:
-        _add_meta_dir(Path(gdd) / "config" / "jobs")
-
-    search_roots = [
-        Path("/boot/config/borg-backup"),
-        Path("/boot/config/plugins/borg-backup-ui"),
-        data_root,
-        scripts_dir,
-        scripts_dir.parent,
-    ]
-    scanned_dirs: set[str] = set()
-    for root in search_roots:
-        try:
-            if not root.exists() or not root.is_dir():
-                continue
-            for pattern in ("config/jobs", "jobs"):
-                for p in root.rglob(pattern):
-                    if not p.is_dir():
-                        continue
-                    if pattern == "jobs":
-                        try:
-                            if not any(p.glob("*.json")):
-                                continue
-                        except Exception:
-                            continue
-                    sp = str(p.resolve())
-                    if sp in scanned_dirs:
-                        continue
-                    scanned_dirs.add(sp)
-                    _add_meta_dir(p.resolve())
-        except Exception:
-            continue
-
-    for meta_dir in meta_dirs:
-        if not meta_dir.is_dir():
-            continue
-        for meta_file in sorted(meta_dir.glob("*.json")):
-            try:
-                raw = json.loads(meta_file.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            if str(raw.get("location") or "").strip().lower() != "smb":
-                continue
-            key = str(raw.get("smb_profile_key") or "").strip().lower()
-            job_key = str(raw.get("job_key") or meta_file.stem).strip()
-            name = str(raw.get("name") or "").strip()
-            label = f"{job_key} ({name})" if name else job_key
-            matched_keys: set[str] = set()
-            if key:
-                matched_keys.add(key)
-            repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
-            repo_key = str(repo_cfg.get("conf_key") or "").strip()
-            repo_default = str(repo_cfg.get("default") or "").strip()
-            repo_candidates: set[str] = set()
-            if repo_default:
-                repo_candidates.add(repo_default)
-            if repo_key:
-                conf_repo = str(conf.get(repo_key, "")).strip()
-                if conf_repo:
-                    repo_candidates.add(conf_repo)
-
-            for repo_path in repo_candidates:
-                repo_norm = str(repo_path or "").strip().rstrip("/")
-                if not repo_norm:
-                    continue
-                for mpath, pkey in mount_to_key.items():
-                    if repo_norm == mpath or repo_norm.startswith(mpath + "/"):
-                        matched_keys.add(pkey)
-            for mk in matched_keys:
-                refs.setdefault(mk, []).append(label)
-    return refs
+    from repository_context import profile_job_references
+    return profile_job_references(ui_config, "smb")
 
 
 def get_smb_profiles_with_status(ui_config: dict) -> List[Dict[str, Any]]:
-    from config_api import read_expanded_conf
-
-    conf = read_expanded_conf(ui_config)
-    rows = validate_smb_profiles_json(conf.get("SMB_PROFILES_JSON", "[]"))
+    from storage_objects_api import settings_profiles_from_storages
+    rows = validate_smb_profiles_json(json.dumps(settings_profiles_from_storages(ui_config).get("smb_profiles", [])))
     refs = get_smb_profile_job_refs(ui_config)
     out: List[Dict[str, Any]] = []
     for row in rows:

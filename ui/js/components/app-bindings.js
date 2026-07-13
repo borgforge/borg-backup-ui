@@ -62,9 +62,8 @@
     _setHidden('[data-jobs-action="toggle-menu"]', isViewer);
     _setHidden('[data-jobs-action="open-wizard"]', isViewer);
 
-    _setHidden('#check-run-btn', isViewer);
-    _setHidden('[data-storage-action="test-repo"]', isViewer);
-    _setHidden('[data-storage-action="smb-action"]', isViewer);
+    _setHidden('[data-storage-action="repository-maintenance"]', isViewer);
+    _setHidden('#storage-add-repository-btn', !canSettings);
 
     _setHidden('#rt-run-btn', isViewer);
     _setHidden('#restore-start-btn', isViewer);
@@ -117,13 +116,24 @@
     document.getElementById('history-refresh-btn')?.addEventListener('click', refreshHistory);
     document.getElementById('history-content')?.addEventListener('click', onHistoryContentClick);
     document.getElementById('storage-refresh-btn')?.addEventListener('click', refreshStorage);
+    document.getElementById('storage-add-repository-btn')?.addEventListener('click', openRepositoryManager);
     document.getElementById('storage-location-list')?.addEventListener('click', onStorageLocationClick);
-    document.getElementById('check-level-select')?.addEventListener('change', checkUpdateModeHint);
+    document.getElementById('storage-location-list')?.addEventListener('input', onStorageSearchInput);
     document.getElementById('storage-content')?.addEventListener('click', onStorageContentClick);
-    document.getElementById('storage-content')?.addEventListener('input', onStorageSearchInput);
-    document.getElementById('check-run-btn')?.addEventListener('click', checkRun);
-    document.getElementById('check-clear-log-btn')?.addEventListener('click', checkClearLog);
-    document.getElementById('check-close-log-btn')?.addEventListener('click', checkCloseLog);
+    document.getElementById('storage-maintenance-confirm-close-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(false));
+    document.getElementById('storage-maintenance-confirm-cancel-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(false));
+    document.getElementById('storage-maintenance-confirm-start-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(true));
+    document.getElementById('storage-maintenance-confirm-modal')?.addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeStorageMaintenanceConfirm(false);
+    });
+    document.getElementById('repository-lifecycle-close-btn')?.addEventListener('click', closeRepositoryLifecycle);
+    document.getElementById('repository-lifecycle-cancel-btn')?.addEventListener('click', closeRepositoryLifecycle);
+    document.getElementById('repository-lifecycle-confirm-btn')?.addEventListener('click', confirmRepositoryLifecycle);
+    document.getElementById('repository-lifecycle-name-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
+    document.getElementById('repository-lifecycle-phrase-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
+    document.getElementById('repository-lifecycle-modal')?.addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeRepositoryLifecycle();
+    });
     document.getElementById('history-filter-type')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-location')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-status')?.addEventListener('change', applyHistoryFilters);
@@ -178,9 +188,17 @@
       if (sel) theme()?.applyThemePreference?.(sel.value, true);
     });
     document.getElementById('log-viewer-close-btn')?.addEventListener('click', () => logViewer()?.close?.());
-    document.getElementById('storage-test-close-btn')?.addEventListener('click', closeStorageTestDetails);
-    document.getElementById('storage-test-ok-btn')?.addEventListener('click', closeStorageTestDetails);
-    document.getElementById('storage-test-copy-btn')?.addEventListener('click', copyStorageTestDetails);
+    document.getElementById('repository-manager-close-btn')?.addEventListener('click', closeRepositoryManager);
+    document.getElementById('repository-manager-cancel-btn')?.addEventListener('click', closeRepositoryManager);
+    document.getElementById('repository-manager-back-btn')?.addEventListener('click', repositoryManagerBack);
+    document.getElementById('repository-manager-next-btn')?.addEventListener('click', repositoryManagerNext);
+    document.getElementById('repository-manager-save-btn')?.addEventListener('click', saveRepositoryManager);
+    document.getElementById('repository-manager-action')?.addEventListener('change', repositoryManagerSyncFields);
+    document.getElementById('repository-manager-storage')?.addEventListener('change', repositoryManagerSyncFields);
+    document.getElementById('repository-manager-encryption')?.addEventListener('change', repositoryManagerSyncFields);
+    document.getElementById('repository-manager-display-name')?.addEventListener('input', repositoryManagerUpdateSummary);
+    document.getElementById('repository-manager-relative-path')?.addEventListener('input', repositoryManagerPathInputChanged);
+    document.getElementById('repository-manager-passphrase')?.addEventListener('input', repositoryManagerUpdateSummary);
     document.getElementById('storage-deploy-close-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-ok-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-send-btn')?.addEventListener('click', storageDeploySendInput);
@@ -206,9 +224,7 @@
         '[data-jobs-action="start-job"]',
         '[data-jobs-action="open-wizard"]',
         '[data-jobs-action="toggle-menu"]',
-        '[data-storage-action="test-repo"]',
-        '[data-storage-action="smb-action"]',
-        '#check-run-btn',
+        '[data-storage-action="repository-maintenance"]',
         '#rt-run-btn',
         '#restore-start-btn',
         '#settings-save-btn',
@@ -234,26 +250,19 @@
       wizardClearError(1);
     });
     document.getElementById('wiz-location')?.addEventListener('change', wizardAutoFill);
-    document.getElementById('wiz-usb-profile')?.addEventListener('change', wizardAutoFill);
-    document.getElementById('wiz-smb-profile')?.addEventListener('change', wizardAutoFill);
-    document.getElementById('wiz-storage-profile')?.addEventListener('change', wizardAutoFill);
+    document.getElementById('wiz-storage-key')?.addEventListener('change', wizardAutoFill);
+    document.getElementById('wiz-repository-key')?.addEventListener('change', wizardApplySelectedRepository);
     document.getElementById('wiz-icon')?.addEventListener('change', wizardUpdateIconPreview);
     document.getElementById('wiz-icon-color')?.addEventListener('change', wizardUpdateIconPreview);
     document.getElementById('wiz-source-paths')?.addEventListener('input', () => wizardClearError(2));
-    document.getElementById('wiz-repo-path')?.addEventListener('input', () => wizardClearError(2));
-    document.getElementById('wiz-keep-btn')?.addEventListener('click', wizardKeepPassphrase);
-    document.getElementById('wiz-replace-btn')?.addEventListener('click', wizardReplacePassphrase);
-    document.getElementById('wiz-passphrase')?.addEventListener('input', (e) => {
-      wizardClearError(4);
-      document.getElementById('wiz-copy-btn').disabled = !(e.target?.value || '').trim();
-    });
-    document.getElementById('wiz-passphrase-toggle')?.addEventListener('click', wizardTogglePassphrase);
-    document.getElementById('wiz-generate-btn')?.addEventListener('click', wizardGeneratePassphrase);
-    document.getElementById('wiz-copy-btn')?.addEventListener('click', wizardCopyPassphrase);
     document.getElementById('wiz-source-path-input')?.addEventListener('input', wizardSourcePathInputChanged);
     document.getElementById('wiz-source-path-input')?.addEventListener('keydown', wizardSourcePathKeydown);
     document.getElementById('wiz-source-path-list')?.addEventListener('click', wizardSourcePathsClick);
     document.getElementById('wiz-source-path-suggest')?.addEventListener('click', wizardSourcePathsClick);
+    document.getElementById('wiz-exclude-path-input')?.addEventListener('input', wizardExcludePathInputChanged);
+    document.getElementById('wiz-exclude-path-input')?.addEventListener('keydown', wizardExcludePathKeydown);
+    document.getElementById('wiz-exclude-path-list')?.addEventListener('click', wizardExcludePathsClick);
+    document.getElementById('wiz-exclude-path-suggest')?.addEventListener('click', wizardExcludePathsClick);
     document.getElementById('wiz-description-help-btn')?.addEventListener('click', openWizardDescriptionHelp);
     document.getElementById('wizard-help-close-btn')?.addEventListener('click', closeWizardDescriptionHelp);
     document.getElementById('wizard-help-ok-btn')?.addEventListener('click', closeWizardDescriptionHelp);
@@ -296,7 +305,7 @@
     m.setAction('confirmInputChanged', typeof checkDeleteConfirmInput === 'function' ? checkDeleteConfirmInput : null);
     m.setAction('closeScheduleModal', typeof closeScheduleModal === 'function' ? closeScheduleModal : null);
     m.setAction('closeWizardHelpModal', typeof closeWizardDescriptionHelp === 'function' ? closeWizardDescriptionHelp : null);
-    m.setAction('closeStorageTestModal', typeof closeStorageTestDetails === 'function' ? closeStorageTestDetails : null);
+    m.setAction('closeRepositoryManager', typeof closeRepositoryManager === 'function' ? closeRepositoryManager : null);
     m.setAction('closeStorageDeployModal', typeof closeStorageDeployModal === 'function' ? closeStorageDeployModal : null);
   }
 
@@ -346,7 +355,6 @@
     const logEl = document.getElementById('log-output');
     if (logEl) logEl.addEventListener('scroll', () => checkScrollHint(logEl));
 
-    checkUpdateModeHint();
     window.BBUI?.components?.modal?.init?.();
     window.BBUI?.components?.scheduleModal?.init?.();
   }

@@ -59,7 +59,7 @@ def test_restore_overwrite_blocks_symlink_destination_outside_target(tmp_path: P
     cfg = _allow_root(monkeypatch, allowed)
 
     monkeypatch.setattr(restore_api, "_get_job_repo_info", lambda _config, _job_key: {"repo": "/repo", "passphrase_file": None})
-    monkeypatch.setattr(restore_api, "_borg_env", lambda _passphrase_file: {})
+    monkeypatch.setattr(restore_api, "_borg_env", lambda _config, _passphrase_file: {})
     monkeypatch.setattr(
         restore_api,
         "_precheck_metadata",

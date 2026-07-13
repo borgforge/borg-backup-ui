@@ -12,8 +12,10 @@ Die Anwendung ersetzt nicht das Verständnis für die eigenen Daten. Sie hilft a
 
 ## Wichtige Begriffe
 
-- **Job**: Eine Backup-Aufgabe mit Quellen, Ziel, Repository, Passphrase, Retention und optionalem Zeitplan.
-- **Repository**: Das Borg-Ziel, in dem Archive gespeichert werden.
+- **Job**: Eine Backup-Aufgabe mit Quellen, Repository-Zuordnung, Kompression,
+  Retention und optionalem Zeitplan.
+- **Repository**: Das Borg-Ziel mit Verschlüsselung und Secret-Verweis, in dem
+  Archive gespeichert werden.
 - **Archiv**: Ein einzelner Backup-Stand innerhalb eines Repositorys.
 - **Location**: Zieltyp eines Jobs, z. B. `local`, `usb`, `smb` oder `storagebox`.
 - **Profil**: Wiederverwendbare Zielkonfiguration, z. B. USB-, SMB- oder SSH-Profil.
@@ -26,15 +28,18 @@ Die Anwendung ersetzt nicht das Verständnis für die eigenen Daten. Sie hilft a
 ## Welche Daten verwaltet werden
 
 - `backup.conf` für zentrale Konfigurationswerte.
-- `settings.json` für Profile und UI-nahe Einstellungen.
-- Job-Metadaten im Jobs-Verzeichnis.
+- `storages.json` für verwaltete Speicherziele.
+- `repositories.json` für Repository-Metadaten und Storage-Zuordnungen.
+- Job-Metadaten mit einer eindeutigen `repository_key`-Referenz.
 - Secret-Dateien für Passphrases, Profil-Credentials und SSH-Schlüssel.
 - Status-, History-, Report- und Restore-Test-Daten.
 - Migration-State und Migrations-Log für nachvollziehbare Wartung.
 
 ## Ergebnis prüfen
 
-Nach diesem Kapitel sollte klar sein, dass Jobs die Backup-Logik enthalten, Profile Zielzugänge beschreiben und Repository-Tests nicht dasselbe sind wie reine Profiltests.
+Nach diesem Kapitel sollte klar sein, dass Jobs die Backup-Logik enthalten,
+Storage-Profile Zielzugänge beschreiben und Repository-Informationen sowie
+Borg-Wartung nicht dasselbe sind wie reine Profiltests.
 
 ## Hinweise
 

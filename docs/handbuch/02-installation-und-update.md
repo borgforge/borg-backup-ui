@@ -46,4 +46,4 @@ Ein Update gilt als erfolgreich, wenn die UI startet, der Systemstatus plausibel
 - **UI startet nicht**: Plugin-Service und Python-Runtime auf der Unraid-Control-Page prüfen.
 - **Systemstatus unbekannt**: Seite neu laden, Backend-Status prüfen.
 - **Jobs fehlen**: `GLOBAL_DATA_DIR`, Jobs-Verzeichnis und Import/Export-Status prüfen.
-- **Repository nicht erreichbar**: Storage-Profil und Storage-Seite prüfen.
+- **Repository nicht erreichbar**: Storage-Profil und Repository-Seite prüfen.

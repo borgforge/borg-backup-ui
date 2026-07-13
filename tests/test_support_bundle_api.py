@@ -80,14 +80,41 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
     status_dir.mkdir(parents=True)
     restore_status_dir.mkdir(parents=True)
     log_dir.mkdir(parents=True)
+    key_dir = root / "secrets" / "borg-keys"
+    key_dir.mkdir(parents=True)
+    (key_dir / "repo-key").write_text("BORG_KEY " + "a" * 64 + "\nPRIVATE-BORG-KEY-DATA\n", encoding="utf-8")
     (scripts_config_dir / "backup.conf").write_text(
         'GLOBAL_SMTP_PASSWORD="supersecret"\nGLOBAL_DATA_DIR="/mnt/user/borg"\n',
         encoding="utf-8",
     )
-    (config_dir / "settings.json").write_text(
-        json.dumps({"schema_version": 1, "smb_profiles": [], "storage_profiles": [], "usb_profiles": []}) + "\n",
-        encoding="utf-8",
-    )
+    (config_dir / "storages.json").write_text(json.dumps({
+        "schema_version": 1,
+        "storages": [{
+            "storage_key": "storage_remote",
+            "display_name": "Remote",
+            "host": "u123.your-storagebox.de",
+            "user": "u123",
+            "base_path": "./backup",
+        }],
+    }) + "\n", encoding="utf-8")
+    (config_dir / "repositories.json").write_text(json.dumps({
+        "schema_version": 1,
+        "repositories": [{
+            "repository_key": "repo_job1",
+            "storage_key": "storage_remote",
+            "relative_path": "job1",
+            "passphrase_ref": "/boot/config/borg-backup/secrets/.borg-passphrase-job1",
+        }],
+    }) + "\n", encoding="utf-8")
+    (config_dir / "migration-state.json").write_text(json.dumps({
+        "schema_version": 2,
+        "migrations": {"canonical_data_model_v1": {"state": "applied"}},
+    }) + "\n", encoding="utf-8")
+    (config_dir / "migrations.log.jsonl").write_text(json.dumps({
+        "event": "migration_completed",
+        "migration_id": "canonical_data_model_v1",
+        "host": "u123.your-storagebox.de",
+    }) + "\n", encoding="utf-8")
     (jobs_dir / "job1.json").write_text(
         json.dumps({
             "job_key": "job1",
@@ -121,12 +148,6 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         "RESTORE_TEST_STATUS_DIR": str(restore_status_dir),
         "PLUGIN_LOG_FILE": str(plugin_log),
     })
-    monkeypatch.setattr(config_api, "read_settings_payload", lambda _cfg: {
-        "schema_version": 1,
-        "smb_profiles": [],
-        "storage_profiles": [],
-        "usb_profiles": [],
-    })
     monkeypatch.setattr(system_health_api, "get_system_health_data", lambda _cfg: {"checks": {"ok": True}})
 
     bundle = create_support_bundle({"BACKUP_SCRIPTS_DIR": str(scripts)}, app_version="test-version")
@@ -137,11 +158,17 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         assert "manifest.json" in names
         assert "support/sanitizing-report.json" in names
         assert "config/backup.conf.sanitized.txt" in names
+        assert "config/settings.sanitized.json" not in names
+        assert "config/storages.sanitized.json" in names
+        assert "config/repositories.sanitized.json" in names
+        assert "config/migration-state.sanitized.json" in names
+        assert "config/migrations.log.sanitized.jsonl" in names
         assert "jobs/job1.json" in names
         assert "status/status/job1.status" in names
         assert "status/restore-status/restore.state" in names
         assert "status/restore-status/job1.test" in names
         assert any(name.startswith("logs/plugin/") and name.endswith("borg_backup_ui.log") for name in names)
+        assert not any("borg-keys" in name or name.endswith("repo-key") for name in names)
         all_text = "\n".join(
             zf.read(name).decode("utf-8", errors="replace")
             for name in zf.namelist()
@@ -150,6 +177,7 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
     assert "test-version" in all_text
     assert "supersecret" not in all_text
     assert "secret-passphrase" not in all_text
+    assert "PRIVATE-BORG-KEY-DATA" not in all_text
     assert "hunter2" not in all_text
     assert "abc123" not in all_text
     assert "admin@example.test" not in all_text

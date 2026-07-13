@@ -13,16 +13,17 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+from repositories_api import write_repository_store
+from storage_objects_api import write_storage_store
 from wizard_api import generate_flow_preview, load_job_for_wizard, save_job
 
 
-def _storagebox_params(repo: str = "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash") -> dict:
+def _storagebox_params() -> dict:
     return {
         "type_id": "flash",
         "job_name": "Flash",
         "location": "storagebox",
         "storage_profile_key": "storage-1",
-        "repo_path": repo,
         "source_paths": "/boot",
         "encryption": "none",
     }
@@ -35,32 +36,43 @@ class _RunResult:
         self.stderr = "not found" if returncode else ""
 
 
-def test_wizard_preview_marks_existing_storagebox_repo_without_confirm(monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
-
+def test_wizard_preview_does_not_initialize_unmanaged_storagebox_repository():
     flow = generate_flow_preview(_storagebox_params(), {}, Path("/tmp/scripts"))
 
-    assert flow["remote_repo"]["checked"] is True
-    assert flow["remote_repo"]["exists"] is True
+    assert flow["remote_repo"]["checked"] is False
+    assert flow["remote_repo"]["exists"] is False
     assert flow["remote_repo"]["needs_init_confirm"] is False
 
 
-def test_wizard_preview_rebuilds_storagebox_repo_from_profile(monkeypatch):
-    import storage_profiles_api
-
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
-    monkeypatch.setattr(storage_profiles_api, "resolve_storage_profile", lambda _cfg, _key: {
-        "key": "storage-1",
+def test_wizard_preview_resolves_only_the_selected_repository_object(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Storagebox",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "identity": "storagebox-profile:storage-1",
+        "profile_key": "storage-1",
         "host": "u123.your-storagebox.de",
         "port": "23",
         "user": "u123",
         "base_path": "./backup",
-    })
-    params = _storagebox_params("ssh://u123@u123.your-storagebox.de:23./backup/borg-backup-flash")
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_flash_storagebox_test",
+        "display_name": "Flash Storagebox",
+        "storage_key": "storage_storagebox_test",
+        "relative_path": "borg-backup-flash",
+        "encryption": "none",
+    }]})
+    params = _storagebox_params()
+    params["repository_key"] = "repo_flash_storagebox_test"
 
-    flow = generate_flow_preview(params, {}, Path("/tmp/scripts"))
+    flow = generate_flow_preview(params, config, Path("/tmp/scripts"))
 
-    assert flow["summary"]["repo"] == "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash"
+    assert flow["summary"]["repo"] == (
+        "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash"
+    )
 
 
 def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypatch):
@@ -78,7 +90,7 @@ def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypa
         "statusNotification",
         "resourceLocksRelease",
     ]
-    assert flow["step_codes"][2]["params"] == {"count": 2}
+    assert flow["step_codes"][2]["params"] == {"count": 2, "exclusions": 0}
     fallback = "\n".join(flow["steps"])
     assert "Pfade" not in fallback
     assert "Quelle(n)" not in fallback
@@ -86,24 +98,48 @@ def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypa
     assert "Benachrichtigung" not in fallback
 
 
-def test_save_storagebox_job_existing_repo_disables_create_if_missing(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
-
-    result = save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})
+def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "data")}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Storagebox",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "identity": "storagebox-profile:storage-1",
+        "profile_key": "storage-1",
+        "host": "u123.your-storagebox.de",
+        "port": "23",
+        "user": "u123",
+        "base_path": "./backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_flash_storagebox_test",
+        "display_name": "Flash Storagebox",
+        "repository_name": "borg-backup-flash",
+        "location": "storagebox",
+        "storage_type": "ssh",
+        "storage_key": "storage_storagebox_test",
+        "relative_path": "borg-backup-flash",
+        "encryption": "none",
+    }]})
+    params = _storagebox_params()
+    params["repository_key"] = "repo_flash_storagebox_test"
+    result = save_job(params, tmp_path / "scripts", tmp_path / "data", config)
     metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
 
-    assert metadata["remote_init_confirmed"] is False
-    assert metadata["create_repo_if_missing"] is False
+    assert metadata["repository_key"] == "repo_flash_storagebox_test"
+    assert "remote_init_confirmed" not in metadata
+    assert "create_repo_if_missing" not in metadata
+    assert "repo" not in metadata
+    assert "passphrase" not in metadata
 
 
-def test_save_storagebox_job_missing_repo_requires_confirm(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(2))
-
-    with pytest.raises(ValueError, match="Remote repository creation is not confirmed"):
+def test_save_storagebox_job_without_repository_object_is_rejected(tmp_path: Path):
+    with pytest.raises(ValueError, match="Selected repository object was not found"):
         save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})
 
 
-def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypatch):
+def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkeypatch):
     data_root = tmp_path / "borg-backup"
     scripts_dir = data_root / "scripts"
     jobs_dir = data_root / "config" / "jobs"
@@ -111,16 +147,14 @@ def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypat
     jobs_dir.mkdir(parents=True)
     (jobs_dir / "vms_local.json").write_text(
         json.dumps({
+            "schema_version": 2,
             "job_key": "vms_local",
             "backup_type": "vms",
             "location": "local",
             "name": "VMs",
             "enabled": True,
             "runner": "scriptless-wizard-runner",
-            "repo": {
-                "conf_key": "REPO_VMS_LOCAL",
-                "default": "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms",
-            },
+            "repository_key": "repo_vms_local_test",
             "paths": {
                 "conf_key": "BACKUP_PATHS_VMS",
                 "default": "/mnt/user/domains",
@@ -128,11 +162,26 @@ def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypat
         }),
         encoding="utf-8",
     )
+    config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/remotes/192.168.1.5_raid_backup",
+        "base_path": "/mnt/remotes/192.168.1.5_raid_backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_vms_local_test",
+        "display_name": "VMs",
+        "storage_key": "storage_local_test",
+        "relative_path": "borg-backup-vms",
+        "encryption": "none",
+    }]})
 
     monkeypatch.setattr(
         "config_api.read_expanded_conf",
         lambda _cfg: {
-            "REPO_VMS_LOCAL": "/mnt/backup/borg-backup-vms",
             "BACKUP_PATHS_VMS": "/mnt/legacy/domains",
         },
     )
@@ -140,8 +189,38 @@ def test_edit_wizard_prefers_job_metadata_repo_default(tmp_path: Path, monkeypat
     loaded = load_job_for_wizard(
         "vms_local",
         scripts_dir,
-        {"BACKUP_SCRIPTS_DIR": str(data_root)},
+        config,
     )
 
     assert loaded["repo_path"] == "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms"
     assert loaded["source_paths"] == "/mnt/user/domains"
+
+
+def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypatch):
+    data_root = tmp_path / "borg-backup"
+    scripts_dir = data_root / "scripts"
+    jobs_dir = data_root / "config" / "jobs"
+    scripts_dir.mkdir(parents=True)
+    jobs_dir.mkdir(parents=True)
+    (jobs_dir / "photos_smb.json").write_text(json.dumps({
+        "schema_version": 2,
+        "job_key": "photos_smb",
+        "backup_type": "photos",
+        "location": "smb",
+        "name": "Photos",
+        "enabled": True,
+        "runner": "scriptless-wizard-runner",
+        "repository_key": "repo_missing",
+        "paths": {"default": "/mnt/user/photos"},
+    }), encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    write_storage_store(config, {"storages": []})
+    write_repository_store(config, {"repositories": []})
+    monkeypatch.setattr("config_api.read_expanded_conf", lambda _cfg: {})
+
+    loaded = load_job_for_wizard("photos_smb", scripts_dir, config)
+
+    assert loaded["repository_key"] == "repo_missing"
+    assert loaded["repo_path"] == ""
+    assert "Assigned repository was not found" in loaded["repository_assignment_error"]
+    assert loaded["source_paths"] == "/mnt/user/photos"

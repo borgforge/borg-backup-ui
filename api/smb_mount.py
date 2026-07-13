@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 from pathlib import Path
@@ -25,21 +24,6 @@ class SmbMountGuard:
             pass
 
 
-def _parse_smb_profiles(config: dict) -> dict[str, dict]:
-    from config_api import read_settings_payload
-
-    payload = read_settings_payload(config)
-    rows = payload.get("smb_profiles") if isinstance(payload.get("smb_profiles"), list) else []
-    out: dict[str, dict] = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        key = str(row.get("key", "")).strip()
-        if key:
-            out[key] = row
-    return out
-
-
 def _is_smb_mounted(mount_path: str) -> bool:
     if not mount_path:
         return False
@@ -58,29 +42,24 @@ def _is_smb_mounted(mount_path: str) -> bool:
 
 
 def _job_smb_meta(config: dict, job_key: str) -> Optional[dict]:
-    from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
+    from repository_context import RepositoryContextError, resolve_job_repository_context
 
-    scripts_dir = resolve_scripts_dir(config)
-    data_root = resolve_data_root(config)
-    for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-        p = meta_dir / f"{job_key}.json"
-        if not p.exists():
-            continue
-        try:
-            raw = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return None
-        if str(raw.get("location") or "").strip().lower() != "smb":
-            return None
-        smb_key = str(raw.get("smb_profile_key") or "").strip()
-        if not smb_key:
-            return None
-        return {
-            "smb_profile_key": smb_key,
-            "mount_before_run": bool(raw.get("mount_before_run", True)),
-            "unmount_after_run": bool(raw.get("unmount_after_run", True)),
-        }
-    return None
+    try:
+        context = resolve_job_repository_context(config, job_key, require_passphrase_file=False)
+    except RepositoryContextError:
+        return None
+    if str(context.get("location") or "").strip().lower() != "smb":
+        return None
+    raw = context.get("job") if isinstance(context.get("job"), dict) else {}
+    smb_key = str(context.get("profile_key") or "").strip()
+    if not smb_key:
+        return None
+    return {
+        "profile_key": smb_key,
+        "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
+        "mount_before_run": bool(raw.get("mount_before_run", True)),
+        "unmount_after_run": bool(raw.get("unmount_after_run", True)),
+    }
 
 
 def _validate_mount_option_value(val: str) -> str:
@@ -105,11 +84,8 @@ def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
     if not bool(meta.get("mount_before_run", True)):
         return guard
 
-    profiles = _parse_smb_profiles(config)
-    profile_key = str(meta.get("smb_profile_key") or "").strip()
-    profile = profiles.get(profile_key)
-    if not isinstance(profile, dict):
-        raise ValueError(f"SMB profile not found: {profile_key}")
+    profile_key = str(meta.get("profile_key") or "").strip()
+    profile = meta.get("storage") if isinstance(meta.get("storage"), dict) else {}
 
     server = str(profile.get("server", "")).strip()
     share = str(profile.get("share", "")).strip().lstrip("/")

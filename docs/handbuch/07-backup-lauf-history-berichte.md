@@ -38,5 +38,5 @@ Ein Lauf gilt als erfolgreich, wenn der Exit-Status OK ist, keine relevanten War
 
 - **Job startet nicht**: `GLOBAL_DATA_DIR` und Systemstatus prüfen.
 - **Lauf bricht ab**: History-Details und Log lesen.
-- **Ziel nicht erreichbar**: Storage-Profil und Repository-Test prüfen.
+- **Ziel nicht erreichbar**: Storage-Profil und Repository-Informationen prüfen.
 - **Ungewöhnlich lange Laufzeit**: Datenmenge, Netzwerk und Borg-Check/Prune-Aktivität prüfen.

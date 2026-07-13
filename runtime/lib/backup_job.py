@@ -31,7 +31,7 @@ import re
 import shutil
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, TYPE_CHECKING
@@ -80,6 +80,7 @@ class BackupJobConfig:
     backup_paths: List[Path]
     borg_cache_dir: Path
     date_tag: str
+    exclude_paths: List[Path] = field(default_factory=list)
     log_retention_days: int = 30
     status_dir: Path = Path("/mnt/user/backup-status")
     runtime_recovery_file: Path = Path("/boot/config/borg-backup/config/runtime-recovery.json")
@@ -97,6 +98,13 @@ class BackupJobConfig:
         """Liest Konfiguration aus Umgebungsvariablen."""
         paths_str = env.get("BACKUP_PATHS", "")
         backup_paths = [Path(p) for p in paths_str.split() if p] if paths_str else []
+        exclude_paths: List[Path] = []
+        try:
+            raw_excludes = json.loads(env.get("BACKUP_EXCLUDE_PATHS_JSON", "[]") or "[]")
+            if isinstance(raw_excludes, list):
+                exclude_paths = [Path(str(path)) for path in raw_excludes if str(path).strip()]
+        except (json.JSONDecodeError, TypeError, ValueError):
+            logger.warning("Invalid BACKUP_EXCLUDE_PATHS_JSON; no paths will be excluded")
 
         status_dir_str = (
             env.get("STATUS_DIR_OVERRIDE")
@@ -123,6 +131,7 @@ class BackupJobConfig:
             log_dir=Path(env.get("LOG_DIR", "/tmp")),
             log_file=Path(env.get("LOG_FILE", "/tmp/borg-backup.log")),
             backup_paths=backup_paths,
+            exclude_paths=exclude_paths,
             borg_cache_dir=Path(env.get("BORG_CACHE_DIR", "/tmp/borg-cache")),
             date_tag=env.get("DATE_TAG", datetime.now().strftime("%Y-%m-%d")),
             log_retention_days=int(env.get("LOG_RETENTION_DAYS", "30") or "30"),
@@ -209,6 +218,7 @@ class BackupJob:
         logger.info("Effective configuration:")
         logger.info("  Repository:  %s", cfg.borg_repo or os.environ.get("BORG_REPO", ""))
         logger.info("  Compression: %s", cfg.borg_compression)
+        logger.info("  Exclusions:  %s", ", ".join(str(path) for path in cfg.exclude_paths) or "none")
         logger.info(
             "  Retention:   %dd / %dw / %dm / %dy",
             cfg.borg_keep_daily, cfg.borg_keep_weekly,
@@ -956,6 +966,7 @@ if __name__ == "__main__":
         print(f"log_dir:             {cfg.log_dir}")
         print(f"log_file:            {cfg.log_file}")
         print(f"backup_paths:        {[str(p) for p in cfg.backup_paths]}")
+        print(f"exclude_paths:       {[str(p) for p in cfg.exclude_paths]}")
         print(f"borg_cache_dir:      {cfg.borg_cache_dir}")
         print(f"log_retention_days:  {cfg.log_retention_days}")
         print(f"status_dir:          {cfg.status_dir}")

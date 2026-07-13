@@ -9,6 +9,7 @@ Zwei Lesemodi:
 import os
 import re
 import json
+import logging
 import subprocess
 import shutil
 import shlex
@@ -54,6 +55,8 @@ from usb_profiles_api import (
     test_usb_profiles_status,
     validate_usb_profile_usage_before_save,
 )
+
+logger = logging.getLogger(__name__)
 
 BACKUP_TYPES = ["flash", "appdata", "photos", "VMs", "sonstiges"]
 
@@ -102,8 +105,6 @@ _DEFAULTS: Dict[str, str] = {
     "NTFY_TIMEOUT_SECONDS": "15",
     "BORG_SSH_KEY": "/root/.ssh/id_rsa",
     "USB_MOUNT_PATH": "/mnt/disks/USB",
-    "USB_PROFILES_JSON": "[]",
-    "SMB_PROFILES_JSON": "[]",
     "STORAGEBOX_HOST": "",
     "STORAGEBOX_PORT": "23",
     "STORAGEBOX_USER": "",
@@ -135,7 +136,6 @@ _DEFAULTS: Dict[str, str] = {
     "WEEKLY_REPORT_RECIPIENT": "",
 }
 
-_SETTINGS_SCHEMA_VERSION = 1
 
 
 # ── Pfad-Hilfsfunktionen ─────────────────────────────────────────────────────
@@ -193,19 +193,6 @@ def conf_exists(ui_config: dict) -> bool:
 
 def _conf_backup_dir(ui_config: dict) -> Path:
     return Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backups"
-
-
-def _settings_file(ui_config: dict) -> Path:
-    return Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "settings.json"
-
-
-def _default_settings_payload() -> Dict[str, Any]:
-    return {
-        "schema_version": _SETTINGS_SCHEMA_VERSION,
-        "usb_profiles": [],
-        "smb_profiles": [],
-        "storage_profiles": [],
-    }
 
 
 def backup_conf_snapshot(ui_config: dict, keep: int = 10, reason: str = "") -> Optional[Path]:
@@ -428,21 +415,6 @@ def read_expanded_conf(ui_config: dict) -> dict:
         merged.update(load_config(conf_file))
     except ImportError:
         pass
-    payload = ensure_settings_migrated(ui_config)
-    merged["USB_PROFILES_JSON"] = json.dumps(payload.get("usb_profiles", []), ensure_ascii=False)
-    merged["SMB_PROFILES_JSON"] = json.dumps(payload.get("smb_profiles", []), ensure_ascii=False)
-    storage_rows = _normalize_storage_profile_rows(
-        payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []
-    )
-    if storage_rows:
-        active = storage_rows[0]
-        merged["STORAGEBOX_HOST"] = str(active.get("host", "")).strip()
-        merged["STORAGEBOX_PORT"] = str(active.get("port", "23")).strip() or "23"
-        merged["STORAGEBOX_USER"] = str(active.get("user", "")).strip()
-        merged["STORAGEBOX_BASE_PATH"] = _normalize_storage_base_path(str(active.get("base_path", "/./backup")))
-        active_key = str(active.get("ssh_key_path", "")).strip()
-        if active_key:
-            merged["BORG_SSH_KEY"] = active_key
     return merged
 
 
@@ -477,164 +449,6 @@ def read_raw_conf(ui_config: dict) -> dict:
         if key:
             result[key] = value
     return result
-
-
-def read_settings_payload(ui_config: dict) -> Dict[str, Any]:
-    sf = _settings_file(ui_config)
-    if not sf.exists():
-        return _default_settings_payload()
-    try:
-        raw = json.loads(sf.read_text(encoding="utf-8"))
-    except Exception:
-        return _default_settings_payload()
-    if not isinstance(raw, dict):
-        return _default_settings_payload()
-    payload = _default_settings_payload()
-    payload["schema_version"] = int(raw.get("schema_version", _SETTINGS_SCHEMA_VERSION))
-    payload["usb_profiles"] = _normalize_usb_profile_rows(raw.get("usb_profiles") if isinstance(raw.get("usb_profiles"), list) else [])
-    smb_rows = raw.get("smb_profiles") if isinstance(raw.get("smb_profiles"), list) else []
-    payload["smb_profiles"] = normalize_smb_profile_rows(smb_rows)
-    payload["storage_profiles"] = _normalize_storage_profile_rows(
-        raw.get("storage_profiles") if isinstance(raw.get("storage_profiles"), list) else []
-    )
-    return payload
-
-
-def write_settings_payload(ui_config: dict, payload: Dict[str, Any]) -> None:
-    sf = _settings_file(ui_config)
-    sf.parent.mkdir(parents=True, exist_ok=True)
-    tmp = sf.with_suffix(".json.tmp")
-    data = {
-        "schema_version": _SETTINGS_SCHEMA_VERSION,
-        "usb_profiles": _normalize_usb_profile_rows(payload.get("usb_profiles") if isinstance(payload.get("usb_profiles"), list) else []),
-        "smb_profiles": normalize_smb_profile_rows(payload.get("smb_profiles") if isinstance(payload.get("smb_profiles"), list) else []),
-        "storage_profiles": _normalize_storage_profile_rows(payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []),
-    }
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(sf)
-
-
-def _strip_profile_keys_from_conf(ui_config: dict) -> bool:
-    conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
-    if not conf_file.exists():
-        return False
-    old = conf_file.read_text(encoding="utf-8")
-    lines = old.splitlines(keepends=True)
-    drop = {"USB_PROFILES_JSON", "SMB_PROFILES_JSON"}
-    out: List[str] = []
-    changed = False
-    for line in lines:
-        stripped = line.strip()
-        clean = stripped.removeprefix("readonly ")
-        if "=" in clean:
-            key = clean.split("=", 1)[0].strip()
-            if key in drop:
-                changed = True
-                continue
-        out.append(line)
-    if changed:
-        backup_conf_snapshot(ui_config, keep=10, reason="Migration")
-        conf_file.write_text("".join(out), encoding="utf-8")
-    return changed
-
-
-def ensure_settings_migrated(ui_config: dict) -> Dict[str, Any]:
-    def _ensure_storage_job_profile_links(default_key: str) -> None:
-        if not default_key:
-            return
-        try:
-            from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-            scripts_dir = resolve_scripts_dir(ui_config)
-            data_root = resolve_data_root(ui_config)
-            for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-                if not meta_dir.is_dir():
-                    continue
-                for p in meta_dir.glob("*.json"):
-                    try:
-                        raw = json.loads(p.read_text(encoding="utf-8"))
-                    except Exception:
-                        continue
-                    if str(raw.get("location") or "").strip().lower() != "storagebox":
-                        continue
-                    if str(raw.get("storage_profile_key") or "").strip():
-                        continue
-                    raw["storage_profile_key"] = default_key
-                    p.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        except Exception:
-            return
-
-    sf = _settings_file(ui_config)
-    if sf.exists():
-        payload = read_settings_payload(ui_config)
-        storage_rows = payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []
-        if not storage_rows:
-            conf = read_raw_conf(ui_config)
-            host = str(conf.get("STORAGEBOX_HOST", "")).strip()
-            user = str(conf.get("STORAGEBOX_USER", "")).strip()
-            if host and user:
-                payload["storage_profiles"] = _normalize_storage_profile_rows([{
-                    "key": "storage-1",
-                    "name": "Storagebox",
-                    "host": host,
-                    "port": str(conf.get("STORAGEBOX_PORT", "23")).strip() or "23",
-                    "user": user,
-                    "base_path": str(conf.get("STORAGEBOX_BASE_PATH", "/./backup")).strip() or "/./backup",
-                    "target_type": "storagebox",
-                    "ssh_key_path": str(conf.get("BORG_SSH_KEY", "")).strip(),
-                }])
-                write_settings_payload(ui_config, payload)
-                payload = read_settings_payload(ui_config)
-        # enforce no legacy profile keys in backup.conf after migration
-        _strip_profile_keys_from_conf(ui_config)
-        storage_rows = payload.get("storage_profiles") if isinstance(payload.get("storage_profiles"), list) else []
-        first_key = str(storage_rows[0].get("key") or "").strip() if storage_rows and isinstance(storage_rows[0], dict) else ""
-        _ensure_storage_job_profile_links(first_key)
-        return payload
-
-    conf = read_raw_conf(ui_config)
-    usb_rows: List[Dict[str, str]] = []
-    smb_rows: List[Dict[str, str]] = []
-    storage_rows: List[Dict[str, str]] = []
-    try:
-        decoded = json.loads(str(conf.get("USB_PROFILES_JSON", "[]") or "[]"))
-        if isinstance(decoded, list):
-            usb_rows = _normalize_usb_profile_rows(decoded)
-    except Exception:
-        usb_rows = []
-    try:
-        smb_rows = validate_smb_profiles_json(str(conf.get("SMB_PROFILES_JSON", "[]")))
-    except Exception:
-        smb_rows = []
-    try:
-        host = str(conf.get("STORAGEBOX_HOST", "")).strip()
-        user = str(conf.get("STORAGEBOX_USER", "")).strip()
-        if host and user:
-            storage_rows = _normalize_storage_profile_rows([{
-                "key": "storage-1",
-                "name": "Storagebox",
-                "host": host,
-                "port": str(conf.get("STORAGEBOX_PORT", "23")).strip() or "23",
-                "user": user,
-                "base_path": str(conf.get("STORAGEBOX_BASE_PATH", "/./backup")).strip() or "/./backup",
-                "target_type": "storagebox",
-                "ssh_key_path": str(conf.get("BORG_SSH_KEY", "")).strip(),
-            }])
-    except Exception:
-        storage_rows = []
-
-    payload = {
-        "schema_version": _SETTINGS_SCHEMA_VERSION,
-        "usb_profiles": usb_rows,
-        "smb_profiles": smb_rows,
-        "storage_profiles": storage_rows,
-    }
-    write_settings_payload(ui_config, payload)
-    _strip_profile_keys_from_conf(ui_config)
-    out = read_settings_payload(ui_config)
-    storage_rows = out.get("storage_profiles") if isinstance(out.get("storage_profiles"), list) else []
-    first_key = str(storage_rows[0].get("key") or "").strip() if storage_rows and isinstance(storage_rows[0], dict) else ""
-    _ensure_storage_job_profile_links(first_key)
-    return out
 
 
 def _iter_conf_assignment_keys(lines: List[str]) -> List[str]:
@@ -731,8 +545,8 @@ def sync_backup_conf_schema(ui_config: dict) -> dict:
 
     # Keep legacy keys active (for compatibility), but grouped and marked.
     deprecated_reasons = {
-        "BORG_PASSPHRASE_FILE_LOCAL": "deprecated: per-job passphrase path in job JSON is authoritative",
-        "BORG_PASSPHRASE_FILE_STORAGEBOX": "deprecated: per-job passphrase path in job JSON is authoritative",
+        "BORG_PASSPHRASE_FILE_LOCAL": "deprecated: repository inventory owns the passphrase reference",
+        "BORG_PASSPHRASE_FILE_STORAGEBOX": "deprecated: repository inventory owns the passphrase reference",
         "GLOBAL_DOCKER_STOP_TIMEOUT": "deprecated: use DOCKER_STOP_TIMEOUT",
         "GLOBAL_DOCKER_STOP_WAIT": "deprecated: use DOCKER_STOP_WAIT",
         "GLOBAL_DOCKER_START_WAIT": "deprecated: use DOCKER_START_WAIT",
@@ -866,89 +680,13 @@ def get_repositories_data(ui_config: dict) -> dict:
     storagebox_port = expanded.get("STORAGEBOX_PORT", "23")
 
     groups: Dict[str, List[Dict]] = {"local": [], "usb": [], "smb": [], "storagebox": []}
-
-    for key, display_val in expanded.items():
-        if not key.startswith("REPO_"):
-            continue
-        name = key[5:]  # e.g. "FLASH_LOCAL"
-        # Split auf letzten Underscore für Location
-        parts = name.rsplit("_", 1)
-        if len(parts) != 2:
-            continue
-        type_raw, loc_raw = parts
-        backup_type = _CONF_TYPE_MAP.get(type_raw.upper(), type_raw.lower())
-        location = loc_raw.lower()
-        if location == "storagebox":
-            location = "storagebox"
-
-        if location not in groups:
-            groups[location] = []
-
-        fixed_display = _inject_storagebox_user(display_val) if location == "storagebox" else display_val
-        fixed_raw = _inject_storagebox_user(raw.get(key, display_val)) if location == "storagebox" else raw.get(key, display_val)
-
-        groups[location].append(
-            {
-                "conf_key": key,
-                "backup_type": backup_type,
-                "location": location,
-                "path_display": fixed_display,
-                "path_raw": fixed_raw,
-            }
-        )
-
-    # Ergänze Wizard-Repositorys (scriptless Jobs), falls nicht als REPO_* in backup.conf vorhanden.
     try:
-        from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-        scripts_dir = resolve_scripts_dir(ui_config)
-        data_root = resolve_data_root(ui_config)
-        seen = {
-            (
-                str(r.get("backup_type") or "").strip().lower(),
-                str(r.get("location") or "").strip().lower(),
-                str(r.get("path_raw") or "").strip(),
-            )
-            for g in groups.values()
-            for r in g
-        }
-        for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-            if not meta_dir.is_dir():
-                continue
-            for meta_file in sorted(meta_dir.glob("*.json")):
-                try:
-                    job = json.loads(meta_file.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                job_key = str(job.get("job_key") or "").strip()
-                if not job_key:
-                    continue
-                repo_cfg = job.get("repo") if isinstance(job.get("repo"), dict) else {}
-                repo_key = str(repo_cfg.get("conf_key") or "").strip()
-                repo_default = str(repo_cfg.get("default") or "").strip()
-                repo_raw = raw.get(repo_key, repo_default) if repo_key else repo_default
-                repo_display = expanded.get(repo_key, repo_default) if repo_key else repo_default
-                backup_type = str(job.get("backup_type") or "").strip().lower()
-                location = str(job.get("location") or "").strip().lower()
-                if location == "storagebox":
-                    repo_raw = _inject_storagebox_user(repo_raw)
-                    repo_display = _inject_storagebox_user(repo_display)
-                if not repo_raw or location not in {"local", "usb", "smb", "storagebox", "custom"}:
-                    continue
-                marker = (backup_type.lower(), location.lower(), repo_raw)
-                if marker in seen:
-                    continue
-                seen.add(marker)
-                groups.setdefault(location, []).append(
-                    {
-                        "conf_key": repo_key or f"JOB:{job_key}",
-                        "backup_type": backup_type,
-                        "location": location,
-                        "path_display": _inject_storagebox_user(repo_display) if location == "storagebox" else repo_display,
-                        "path_raw": _inject_storagebox_user(repo_raw) if location == "storagebox" else repo_raw,
-                    }
-                )
+        from repositories_api import build_repository_groups
+        from storage_objects_api import read_storage_store
+        groups = build_repository_groups(ui_config)
+        storages = read_storage_store(ui_config).get("storages", [])
     except Exception:
-        pass
+        storages = []
 
     # Sortierung innerhalb Gruppen
     type_order = {}
@@ -960,6 +698,7 @@ def get_repositories_data(ui_config: dict) -> dict:
 
     return {
         "groups": groups,
+        "storages": storages,
         "smb_profiles": get_smb_profiles_with_status(ui_config),
         "usb_mount": usb_mount,
         "storagebox_host": storagebox_host,
@@ -969,120 +708,36 @@ def get_repositories_data(ui_config: dict) -> dict:
     }
 
 
-def test_repository(repo_path: str, ui_config: dict, repo_conf_key: str = "") -> dict:
-    """Führt 'borg info' auf dem Repository aus."""
-    env = dict(os.environ)
-    raw_conf = read_raw_conf(ui_config)
-    expanded = read_expanded_conf(ui_config)
+def test_repository(ui_config: dict, repository_key: str) -> dict:
+    """Run borg info for one canonical repository object."""
+    from repository_context import repository_by_key, repository_path, storage_by_key
 
-    def _storagebox_user_from_conf() -> str:
-        user = str(expanded.get("STORAGEBOX_USER", "")).strip()
-        if user:
-            return user
-        host = str(expanded.get("STORAGEBOX_HOST", "")).strip()
-        if host and "." in host:
-            prefix = host.split(".", 1)[0].strip()
-            if prefix:
-                return prefix
-        return ""
+    key = str(repository_key or "").strip()
+    if not key:
+        raise ValueError("repository_key is required")
+    repository = repository_by_key(ui_config, key)
+    storage = storage_by_key(ui_config, str(repository.get("storage_key") or ""))
+    resolved_path = repository_path(repository, storage)
+    passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
 
-    def _inject_storagebox_user(uri: str) -> str:
-        text = str(uri or "").strip()
-        if not text.startswith("ssh://"):
-            return text
-        rest = text[6:]
-        if not rest or "@" in rest.split("/", 1)[0]:
-            return text
-        user = _storagebox_user_from_conf()
-        if not user:
-            return text
-        return f"ssh://{user}@{rest}"
+    from repositories_api import _repo_env
 
-    def _repo_variants(value: str) -> set[str]:
-        v = str(value or "").strip()
-        if not v:
-            return set()
-        variants = {v}
-        def _expand_local(text: str) -> str:
-            return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", lambda m: str(raw_conf.get(m.group(1), m.group(0))), text)
-        try:
-            variants.add(_expand_local(v))
-        except Exception:
-            pass
-        return {x.strip() for x in variants if x and x.strip()}
-
-    def _resolve_job_passphrase_path() -> str:
-        """Versucht die Passphrase über Wizard-Jobmetadaten aufzulösen."""
-        try:
-            from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-            scripts_dir = resolve_scripts_dir(ui_config)
-            data_root = resolve_data_root(ui_config)
-        except Exception:
-            return ""
-
-        repo_candidates = _repo_variants(repo_path)
-        if not repo_candidates:
-            return ""
-
-        for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-            if not meta_dir.is_dir():
-                continue
-            for meta_file in sorted(meta_dir.glob("*.json")):
-                try:
-                    job = json.loads(meta_file.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-
-                repo_cfg = job.get("repo") if isinstance(job.get("repo"), dict) else {}
-                repo_key = str(repo_cfg.get("conf_key") or "").strip()
-                if repo_conf_key and repo_key and repo_conf_key == repo_key:
-                    pass_cfg = job.get("passphrase") if isinstance(job.get("passphrase"), dict) else {}
-                    pass_key = str(pass_cfg.get("conf_key") or "").strip()
-                    pass_default = str(pass_cfg.get("default") or "").strip()
-                    if pass_key:
-                        return str(expanded.get(pass_key, pass_default)).strip()
-                    return pass_default
-                repo_default = str(repo_cfg.get("default") or "").strip()
-                repo_raw = str(raw_conf.get(repo_key, repo_default)).strip() if repo_key else repo_default
-                if not repo_raw:
-                    continue
-                job_repo_candidates = _repo_variants(repo_raw)
-                if repo_candidates.isdisjoint(job_repo_candidates):
-                    continue
-
-                pass_cfg = job.get("passphrase") if isinstance(job.get("passphrase"), dict) else {}
-                pass_key = str(pass_cfg.get("conf_key") or "").strip()
-                pass_default = str(pass_cfg.get("default") or "").strip()
-                if pass_key:
-                    return str(expanded.get(pass_key, pass_default)).strip()
-                return pass_default
-        return ""
-
-    repo_path = _inject_storagebox_user(repo_path)
-
-    # Passphrase job-basiert auflösen (inkl. _local/_usb/_storagebox).
-    # Zentrale Legacy-Passphrase-Keys werden nicht mehr verwendet.
-    pf = _resolve_job_passphrase_path()
-    if pf:
-        env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pf))}"
-    env["BORG_REPO"] = repo_path
-    if expanded.get("BORG_SSH_KEY"):
-        env["BORG_RSH"] = f"ssh -i {expanded['BORG_SSH_KEY']}"
+    passphrase_file = Path(passphrase_ref) if passphrase_ref else None
+    if str(repository.get("encryption") or "").strip().lower() != "none":
+        if passphrase_file is None or not passphrase_file.is_file():
+            raise ValueError("Repository passphrase file is missing")
+    env = _repo_env(storage, passphrase_file, ui_config)
 
     try:
         result = subprocess.run(
-            ["borg", "info", "--json", repo_path],
+            ["borg", "info", "--json", resolved_path],
             capture_output=True,
             text=True,
             timeout=20,
             env=env,
         )
         output = mask_secrets((result.stdout or "") + (result.stderr or ""))
-        return {
-            "success": result.returncode == 0,
-            "output": output[:2000],  # Ausgabe begrenzen
-            "exit_code": result.returncode,
-        }
+        return {"success": result.returncode == 0, "output": output[:2000], "exit_code": result.returncode}
     except FileNotFoundError:
         return {"success": False, "output": "borg binary not found.", "exit_code": -1}
     except subprocess.TimeoutExpired:
@@ -1095,9 +750,9 @@ def _resolve_storage_profile(ui_config: dict, profile_key: str = "") -> dict:
     return resolve_storage_profile(ui_config, profile_key)
 
 
-def get_storagebox_setup_status(ui_config: dict, profile_key: str = "") -> dict:
+def get_storagebox_setup_status(ui_config: dict, profile_key: str = "", *, probe_auth: bool = True) -> dict:
     from storagebox_api import get_storagebox_setup_status as _get_storagebox_setup_status
-    return _get_storagebox_setup_status(ui_config, profile_key=profile_key)
+    return _get_storagebox_setup_status(ui_config, profile_key=profile_key, probe_auth=probe_auth)
 
 
 def storagebox_key_status(ui_config: dict, profile_key: str = "") -> dict:
@@ -1282,45 +937,72 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
         "storagebox_setup": {},
     }
     if include_storagebox_setup:
-        data["storagebox_setup"] = get_storagebox_setup_status(ui_config)
-    settings_payload = ensure_settings_migrated(ui_config)
-    data["usb_profiles"] = _normalize_usb_profile_rows(
-        settings_payload.get("usb_profiles") if isinstance(settings_payload.get("usb_profiles"), list) else []
-    )
-    usb_refs = get_usb_profile_job_refs(ui_config)
+        # Normal settings reads must never wait for a remote SSH probe. Explicit
+        # connection tests remain available through the storage profile actions.
+        data["storagebox_setup"] = get_storagebox_setup_status(ui_config, probe_auth=False)
+    from storage_objects_api import settings_profiles_from_storages
+    canonical_profiles = settings_profiles_from_storages(ui_config)
+    from repositories_api import read_repository_store
+    repository_rows = read_repository_store(ui_config).get("repositories", [])
+    refs_by_storage: Dict[str, List[str]] = {}
+    for repository in repository_rows:
+        storage_key = str(repository.get("storage_key") or "")
+        refs = [str(value) for value in repository.get("used_by", []) if str(value)]
+        refs_by_storage.setdefault(storage_key, []).extend(refs)
+    data["local_profiles"] = [
+        {
+            **row,
+            "jobs_count": len(set(refs_by_storage.get(str(row.get("storage_key") or ""), []))),
+            "job_refs": sorted(set(refs_by_storage.get(str(row.get("storage_key") or ""), [])))[:10],
+        }
+        for row in canonical_profiles.get("local_profiles", [])
+    ]
+    usb_storage_keys = {
+        str(row.get("key") or "").strip().lower(): str(row.get("storage_key") or "")
+        for row in canonical_profiles.get("usb_profiles", [])
+    }
+    data["usb_profiles"] = _normalize_usb_profile_rows(canonical_profiles.get("usb_profiles", []))
     data["usb_profiles"] = [
         {
             **row,
-            "jobs_count": len(usb_refs.get(str(row.get("key") or "").strip().lower(), [])),
-            "job_refs": usb_refs.get(str(row.get("key") or "").strip().lower(), [])[:10],
+            "storage_key": usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""),
+            "jobs_count": len(set(refs_by_storage.get(usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), []))),
+            "job_refs": sorted(set(refs_by_storage.get(usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), [])))[:10],
         }
         for row in data["usb_profiles"]
     ]
-    data["storage_profiles"] = _normalize_storage_profile_rows(
-        settings_payload.get("storage_profiles") if isinstance(settings_payload.get("storage_profiles"), list) else []
-    )
-    storage_refs = get_storage_profile_job_refs(ui_config)
+    ssh_storage_keys = {
+        str(row.get("key") or "").strip().lower(): str(row.get("storage_key") or "")
+        for row in canonical_profiles.get("storage_profiles", [])
+    }
+    data["storage_profiles"] = _normalize_storage_profile_rows(canonical_profiles.get("storage_profiles", []))
     data["storage_profiles"] = [
         {
             **row,
-            "jobs_count": len(storage_refs.get(str(row.get("key") or "").strip().lower(), [])),
-            "job_refs": storage_refs.get(str(row.get("key") or "").strip().lower(), [])[:10],
+            "storage_key": ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""),
+            "jobs_count": len(set(refs_by_storage.get(ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), []))),
+            "job_refs": sorted(set(refs_by_storage.get(ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), [])))[:10],
         }
         for row in data["storage_profiles"]
     ]
     smb_profiles: List[Dict[str, str]] = []
-    smb_refs = get_smb_profile_job_refs(ui_config)
+    smb_storage_keys = {
+        str(row.get("key") or "").strip().lower(): str(row.get("storage_key") or "")
+        for row in canonical_profiles.get("smb_profiles", [])
+    }
     try:
         raw_rows = normalize_smb_profile_rows(
-            settings_payload.get("smb_profiles") if isinstance(settings_payload.get("smb_profiles"), list) else []
+            canonical_profiles.get("smb_profiles", [])
         )
         smb_profiles = []
         for row in raw_rows:
             pf = str(row.get("password_file", "")).strip()
             key = str(row.get("key", "")).strip()
-            refs = smb_refs.get(key.lower(), [])
+            storage_key = smb_storage_keys.get(key.lower(), "")
+            refs = sorted(set(refs_by_storage.get(storage_key, [])))
             smb_profiles.append({
                 "key": key,
+                "storage_key": storage_key,
                 "name": str(row.get("name", "")).strip(),
                 "server": str(row.get("server", "")).strip(),
                 "share": str(row.get("share", "")).strip(),
@@ -1385,140 +1067,6 @@ def ensure_data_dirs(global_data_dir: str) -> dict:
     probe.write_text("ok\n", encoding="utf-8")
     probe.unlink(missing_ok=True)
     return {"ok": True, "paths": paths, "created": created}
-
-
-def migrate_storage_paths_from_global_data_dir(ui_config: dict) -> dict:
-    """
-    Enforce canonical runtime paths derived from GLOBAL_DATA_DIR and persist them to backup.conf.
-    The durable migration state is stored in config/migration-state.json by the startup flow.
-    """
-    conf_raw = read_raw_conf(ui_config)
-    conf = read_expanded_conf(ui_config)
-    data_dir = str(conf_raw.get("GLOBAL_DATA_DIR", "")).strip() or str(conf.get("GLOBAL_DATA_DIR", "")).strip()
-    if not data_dir:
-        return {"changed": False, "reason": "GLOBAL_DATA_DIR is not set", "migrated_files": []}
-    if data_dir == "/mnt/user" or data_dir.startswith("/mnt/user/"):
-        if not _is_unraid_array_started():
-            return {
-                "changed": False,
-                "reason": "array_not_started",
-                "details": "Storage path migration skipped: the Unraid array has not started yet",
-                "migrated_files": [],
-            }
-
-    dirs = derive_data_dirs(data_dir)
-    ensure_data_dirs(data_dir)
-    updates: Dict[str, str] = {
-        "GLOBAL_LOG_DIR": dirs["logs"],
-        "STATUS_DIR": dirs["status"],
-        "RESTORE_TEST_STATUS_DIR": dirs["restore_status"],
-        "GLOBAL_BORG_CACHE_BASE": dirs["cache"],
-    }
-
-    # Move known legacy data only when target child does not already exist.
-    legacy_sources = {
-        "logs": [str(conf_raw.get("GLOBAL_LOG_DIR", "")).strip(), str(conf.get("GLOBAL_LOG_DIR", "")).strip(), "/mnt/user/borg-backup_ui/logs"],
-        "status": [str(conf_raw.get("STATUS_DIR", "")).strip(), str(conf.get("STATUS_DIR", "")).strip(), "/mnt/user/borg-backup_ui/status", "/mnt/user/backup-status"],
-        "restore_status": [str(conf_raw.get("RESTORE_TEST_STATUS_DIR", "")).strip(), str(conf.get("RESTORE_TEST_STATUS_DIR", "")).strip(), "/mnt/user/borg-backup_ui/restore-status"],
-        "cache": [str(conf_raw.get("GLOBAL_BORG_CACHE_BASE", "")).strip(), str(conf.get("GLOBAL_BORG_CACHE_BASE", "")).strip(), "/mnt/cache/borg-cache", "/mnt/user/borg-cache"],
-    }
-    migrated_files: List[Dict[str, str]] = []
-    migration_errors: List[Dict[str, str]] = []
-    settings_changed = False
-
-    def _safe_move_tree(src: Path, dst: Path) -> None:
-        if not src.exists():
-            return
-        try:
-            if src.resolve() == dst.resolve():
-                return
-        except OSError:
-            return
-        dst.mkdir(parents=True, exist_ok=True)
-        for child in src.iterdir():
-            target = dst / child.name
-            if target.exists():
-                continue
-            try:
-                # Cross-device-safe move (e.g. /mnt/cache -> /mnt/user).
-                shutil.move(str(child), str(target))
-                migrated_files.append({"from": str(child), "to": str(target)})
-            except Exception as exc:
-                migration_errors.append({"from": str(child), "to": str(target), "reason": str(exc)})
-
-    for key, candidates in legacy_sources.items():
-        dst = Path(dirs[key])
-        for raw in candidates:
-            src_s = str(raw or "").strip()
-            if not src_s:
-                continue
-            src = Path(src_s)
-            if src.exists():
-                _safe_move_tree(src, dst)
-
-    # Normalize SMB mountpoints into <GLOBAL_DATA_DIR>/remotes/<profile-or-leaf>
-    try:
-        settings_payload = read_settings_payload(ui_config)
-        smb_rows = validate_smb_profiles_json(
-            json.dumps(settings_payload.get("smb_profiles", []), ensure_ascii=False)
-        )
-        normalized_rows: List[Dict[str, str]] = []
-        for row in smb_rows:
-            mpath = str(row.get("mount_path", "")).strip()
-            key = str(row.get("key", "")).strip() or "smb"
-            target_leaf = Path(mpath).name if mpath else key
-            desired_mount = str(Path(dirs["remotes"]) / target_leaf)
-            if mpath.startswith("/mnt/remotes/") or mpath == "/mnt/remotes":
-                row["mount_path"] = desired_mount
-                settings_changed = True
-            normalized_rows.append(row)
-        if settings_changed:
-            settings_payload["smb_profiles"] = normalized_rows
-            write_settings_payload(ui_config, settings_payload)
-    except Exception:
-        pass
-
-    changed = write_conf(ui_config, updates, snapshot_reason="Migration")
-    # Safety net: verify persisted values and force-write if needed.
-    persisted = read_raw_conf(ui_config)
-    needs_force = any(str(persisted.get(k, "")).strip() != str(v).strip() for k, v in updates.items())
-    forced = False
-    if needs_force:
-        conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
-        if conf_file.exists():
-            old_content = conf_file.read_text(encoding="utf-8")
-            lines = old_content.splitlines(keepends=True)
-            out: List[str] = []
-            seen: set[str] = set()
-            for line in lines:
-                stripped = line.strip()
-                clean = stripped.removeprefix("readonly ").strip()
-                if not clean or clean.startswith("#") or "=" not in clean:
-                    out.append(line)
-                    continue
-                key = clean.split("=", 1)[0].strip()
-                if key in updates:
-                    out.append(f"{key}={_quote_conf_value(str(updates[key]))}\n")
-                    seen.add(key)
-                else:
-                    out.append(line)
-            for key, val in updates.items():
-                if key not in seen:
-                    out.append(f"{key}={_quote_conf_value(str(val))}\n")
-            new_content = "".join(out)
-            if new_content != old_content:
-                backup_conf_snapshot(ui_config, keep=10, reason="Migration")
-                conf_file.write_text(new_content, encoding="utf-8")
-                forced = True
-    return {
-        "changed": bool(changed or settings_changed or forced),
-        "reason": "ok",
-        "migrated_files": migrated_files,
-        "migration_errors": migration_errors,
-        "paths": dirs,
-        "settings_changed": settings_changed,
-        "forced_conf_write": forced,
-    }
 
 
 def _as_int(v: str, default: int = 0) -> int:
@@ -1598,15 +1146,6 @@ def validate_runtime_config(ui_config: dict) -> dict:
             "key": "STORAGEBOX_PORT",
             "message": "STORAGEBOX_PORT is outside 1..65535.",
             "message_code": "config_storagebox_port",
-        })
-
-    try:
-        validate_smb_profiles_json(conf.get("SMB_PROFILES_JSON", "[]"))
-    except ValueError as exc:
-        warnings.append({
-            "key": "SMB_PROFILES_JSON",
-            "message": str(exc),
-            "message_code": "config_smb_profiles",
         })
 
     rt_level = str(conf.get("RESTORE_TEST_LEVEL", "2")).strip()

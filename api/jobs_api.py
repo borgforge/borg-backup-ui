@@ -6,6 +6,7 @@ Subprozesse gestartet; deren stdout wird live gepuffert und per SSE ausgeliefert
 """
 
 import json
+import copy
 import os
 import re
 import shutil
@@ -14,14 +15,17 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Generator, List, Optional
 
 DEFAULT_DATA_ROOT = Path("/boot/config/borg-backup")
-DEFAULT_SECRETS_DIR = DEFAULT_DATA_ROOT / "secrets"
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _RUNTIME_MODES = {"all", "selected", "none"}
+_JOB_DISCOVERY_CACHE_TTL_SECONDS = 5.0
+_job_discovery_cache: dict[str, dict] = {}
+_job_discovery_cache_lock = threading.Lock()
+_job_metadata_migrations: set[str] = set()
 
 
 def _validate_job_key(job_key: str) -> str:
@@ -80,6 +84,147 @@ def resolve_data_root(config: dict) -> Path:
     return base
 
 
+def resolve_resource_lock_dir(config: dict) -> Path:
+    """Return the shared runner lock directory for the current data root."""
+    configured = str(config.get("BORG_RESOURCE_LOCK_DIR") or "").strip()
+    if not configured:
+        try:
+            from config_api import read_expanded_conf
+            configured = str(read_expanded_conf(config).get("BORG_RESOURCE_LOCK_DIR") or "").strip()
+        except Exception:
+            configured = ""
+    return Path(configured) if configured else resolve_data_root(config) / "locks"
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def active_resource_locks(config: dict) -> List[dict]:
+    """Read live runner locks without mutating or recovering them."""
+    lock_dir = resolve_resource_lock_dir(config)
+    if not lock_dir.is_dir():
+        return []
+    rows: List[dict] = []
+    for path in sorted(lock_dir.glob("*.lock.json")):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            continue
+        if not isinstance(raw, dict):
+            continue
+        job_key = str(raw.get("job_key") or "").strip()
+        try:
+            job_key = _validate_job_key(job_key)
+        except ValueError:
+            continue
+        pid = _safe_int(raw.get("pid"), 0)
+        if not _pid_alive(pid):
+            continue
+        rows.append({
+            "job_key": job_key,
+            "pid": pid,
+            "resource": str(raw.get("resource") or "").strip(),
+            "started_at": str(raw.get("started_at") or "").strip(),
+            "updated_at": str(raw.get("updated_at") or "").strip(),
+            "log_file": str(raw.get("log_file") or "").strip(),
+        })
+    return rows
+
+
+def is_resource_active(config: dict, resource: str) -> bool:
+    expected = str(resource or "").strip()
+    return bool(expected) and any(row.get("resource") == expected for row in active_resource_locks(config))
+
+
+def _runtime_log_dir(config: dict) -> Path:
+    configured = str(config.get("GLOBAL_LOG_DIR") or "").strip()
+    if not configured:
+        try:
+            from config_api import read_expanded_conf
+            configured = str(read_expanded_conf(config).get("GLOBAL_LOG_DIR") or "").strip()
+        except Exception:
+            configured = ""
+    return Path(configured or "/mnt/user/Logs")
+
+
+def _fallback_runtime_log(config: dict, job_key: str, started_at: str) -> str:
+    log_dir = _runtime_log_dir(config)
+    if not log_dir.is_dir():
+        return ""
+    try:
+        candidates = sorted(
+            log_dir.glob(f"Borg-Backup_{job_key}--*.log"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return ""
+    if not candidates:
+        return ""
+    if started_at:
+        try:
+            started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            if candidates[0].stat().st_mtime < started.timestamp() - 120:
+                return ""
+        except (OSError, ValueError):
+            pass
+    return str(candidates[0])
+
+
+def durable_running_states(config: dict) -> Dict[str, dict]:
+    """Aggregate live runner locks into one durable state per job."""
+    grouped: Dict[str, dict] = {}
+    for lock in active_resource_locks(config):
+        job_key = str(lock.get("job_key") or "")
+        current = grouped.setdefault(job_key, {
+            "running": True,
+            "exit_code": None,
+            "start_time": str(lock.get("started_at") or ""),
+            "pid": lock.get("pid"),
+            "log_file": str(lock.get("log_file") or ""),
+            "source": "resource_lock",
+        })
+        started_at = str(lock.get("started_at") or "")
+        if started_at and (not current["start_time"] or started_at < current["start_time"]):
+            current["start_time"] = started_at
+        if not current["log_file"] and lock.get("log_file"):
+            current["log_file"] = str(lock.get("log_file"))
+    for job_key, state in grouped.items():
+        if not state.get("log_file"):
+            state["log_file"] = _fallback_runtime_log(config, job_key, str(state.get("start_time") or ""))
+        state["log_available"] = bool(state.get("log_file") and Path(str(state["log_file"])).is_file())
+    return grouped
+
+
+def get_job_runtime_state(config: dict, job_key: str) -> dict:
+    key = _validate_job_key(job_key)
+    memory = JobManager.get().get_state(key)
+    if memory.get("running"):
+        return memory
+    return durable_running_states(config).get(key, memory)
+
+
+def get_all_runtime_states(config: dict) -> Dict[str, dict]:
+    states = JobManager.get().get_all_states()
+    for job_key, durable in durable_running_states(config).items():
+        if not states.get(job_key, {}).get("running"):
+            states[job_key] = durable
+    return states
+
+
 def resolve_scripts_dir(config: dict) -> Path:
     """
     Normalize scripts directory across old/new layouts.
@@ -132,96 +277,6 @@ def migrate_jobs_metadata_dir(scripts_dir: Path, data_root: Path | None = None) 
                     src.unlink()
                 except OSError:
                     continue
-
-
-def migrate_data_layout(config: dict) -> None:
-    """
-    One-time idempotent migration to canonical data layout:
-      - jobs -> /boot/config/borg-backup/config/jobs
-      - secrets -> /boot/config/borg-backup/secrets
-      - backup.conf passphrase paths -> /boot/config/borg-backup/secrets/.borg-passphrase-*
-      - job metadata passphrase defaults -> /boot/config/borg-backup/secrets/.borg-passphrase-*
-    """
-    data_root = resolve_data_root(config)
-    scripts_dir = resolve_scripts_dir(config)
-    jobs_dir = data_root / "config" / "jobs"
-    jobs_dir.mkdir(parents=True, exist_ok=True)
-    migrate_jobs_metadata_dir(scripts_dir, data_root)
-
-    secrets_dir = DEFAULT_SECRETS_DIR
-    secrets_dir.mkdir(parents=True, exist_ok=True)
-
-    # Move secrets from old location.
-    old_secrets = Path("/boot/config/borg-secrets")
-    if old_secrets.is_dir():
-        for src in old_secrets.glob(".borg-passphrase-*"):
-            if not src.is_file():
-                continue
-            dst = secrets_dir / src.name
-            if dst.exists():
-                continue
-            try:
-                src.rename(dst)
-            except OSError:
-                pass
-
-    # Normalize metadata passphrase default path.
-    for meta in jobs_dir.glob("*.json"):
-        try:
-            raw = json.loads(meta.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        changed = False
-        pass_cfg = raw.get("passphrase")
-        if isinstance(pass_cfg, dict):
-            default = str(pass_cfg.get("default") or "").strip()
-            m = re.search(r"\.borg-passphrase-[A-Za-z0-9_]+$", default)
-            if m:
-                desired = str(secrets_dir / m.group(0))
-                if default != desired:
-                    pass_cfg["default"] = desired
-                    changed = True
-        if changed:
-            try:
-                meta.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            except OSError:
-                pass
-
-    # Update backup.conf passphrase values.
-    conf_file = data_root / "config" / "backup.conf"
-    if conf_file.exists():
-        try:
-            lines = conf_file.read_text(encoding="utf-8").splitlines(keepends=True)
-        except OSError:
-            lines = []
-        out: list[str] = []
-        changed = False
-        for line in lines:
-            s = line.strip()
-            if not s or s.startswith("#") or "=" not in s:
-                out.append(line)
-                continue
-            key, _, val = s.partition("=")
-            key = key.strip()
-            if not key.startswith("BORG_PASSPHRASE_FILE_"):
-                out.append(line)
-                continue
-            raw_val = val.strip().strip('"').strip("'")
-            name = Path(raw_val).name
-            if not name.startswith(".borg-passphrase-"):
-                out.append(line)
-                continue
-            new_val = str(secrets_dir / name)
-            q = '"' if (' ' in new_val or '/' in new_val or ':' in new_val) else ""
-            newline = f"{key}={q}{new_val}{q}\n"
-            if line != newline:
-                changed = True
-            out.append(newline)
-        if changed:
-            try:
-                conf_file.write_text("".join(out), encoding="utf-8")
-            except OSError:
-                pass
 
 
 @dataclass
@@ -420,9 +475,67 @@ class JobManager:
             time.sleep(0.1)
 
 
+def _latest_job_exit_code(config: dict, job_key: str) -> Optional[int]:
+    try:
+        from status_api import get_status_data
+        for row in get_status_data(config).get("backups", []):
+            if str(row.get("key") or "") == job_key:
+                value = row.get("exit_code")
+                return int(value) if value is not None else None
+    except Exception:
+        pass
+    return None
+
+
+def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
+    """Stream in-memory output or resume a live runner log discovered via locks."""
+    key = _validate_job_key(job_key)
+    manager = JobManager.get()
+    if manager.is_running(key):
+        yield from manager.stream_output(key)
+        return
+
+    durable = durable_running_states(config).get(key)
+    if not durable:
+        yield from manager.stream_output(key)
+        return
+    log_file = Path(str(durable.get("log_file") or ""))
+    if not log_file.is_file():
+        yield "event: error\ndata: Live log is not available for the recovered job run.\n\n"
+        return
+
+    yield ": heartbeat\n\n"
+    position = 0
+    idle_after_finish = 0
+    while True:
+        emitted = False
+        try:
+            with log_file.open("r", encoding="utf-8", errors="replace") as handle:
+                handle.seek(position)
+                for line in handle:
+                    emitted = True
+                    clean_line = line.rstrip("\r\n")
+                    yield f"data: {clean_line}\n\n"
+                position = handle.tell()
+        except OSError:
+            yield "event: error\ndata: Live log could not be read.\n\n"
+            return
+
+        if key not in durable_running_states(config):
+            idle_after_finish = 0 if emitted else idle_after_finish + 1
+            if idle_after_finish >= 2:
+                exit_code = _latest_job_exit_code(config, key)
+                value = str(exit_code) if exit_code is not None else "?"
+                yield f"event: done\ndata: {value}\n\n"
+                return
+        else:
+            idle_after_finish = 0
+        time.sleep(0.5)
+
+
 # ── Job-Erkennung ─────────────────────────────────────────────────────────────
 
-def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
+def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
     """
     Finds backup jobs from canonical JSON metadata.
     """
@@ -508,8 +621,6 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
 
     jobs_by_key: Dict[str, JobInfo] = {}
     root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
-    migrate_jobs_metadata_dir(scripts_dir, root)
-
     # ── Wizard-Metadaten (prioritär) ──────────────────────────────────────────
     meta_dirs = get_jobs_meta_dirs(scripts_dir, root)
     for meta_dir in meta_dirs:
@@ -587,6 +698,65 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
     return list(jobs_by_key.values())
 
 
+def _job_metadata_signature(meta_dir: Path, scripts_dir: Path, *, include_files: bool) -> tuple:
+    def _stat_signature(path: Path) -> tuple[int, int, int]:
+        try:
+            stat = path.stat()
+            return (int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ino))
+        except OSError:
+            return (0, 0, 0)
+
+    signature: list = [_stat_signature(meta_dir), _stat_signature(scripts_dir)]
+    if include_files and meta_dir.is_dir():
+        signature.append(tuple(
+            (path.name, *_stat_signature(path))
+            for path in sorted(meta_dir.glob("*.json"))
+        ))
+    return tuple(signature)
+
+
+def invalidate_job_discovery_cache() -> None:
+    """Invalidate cached static job metadata after an explicit metadata change."""
+    with _job_discovery_cache_lock:
+        _job_discovery_cache.clear()
+
+
+def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
+    """Read static job metadata once while keeping external changes observable."""
+    root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
+    meta_dir = get_jobs_meta_dir(scripts_dir, root)
+    cache_key = f"{scripts_dir.resolve()}::{root.resolve()}"
+    with _job_discovery_cache_lock:
+        if cache_key not in _job_metadata_migrations:
+            migrate_jobs_metadata_dir(scripts_dir, root)
+            _job_metadata_migrations.add(cache_key)
+
+    now = time.monotonic()
+    quick_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=False)
+    with _job_discovery_cache_lock:
+        cached = _job_discovery_cache.get(cache_key)
+        if cached and cached["quick_signature"] == quick_signature and now < cached["expires_at"]:
+            return copy.deepcopy(cached["jobs"])
+
+    full_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=True)
+    with _job_discovery_cache_lock:
+        cached = _job_discovery_cache.get(cache_key)
+        if cached and cached["full_signature"] == full_signature:
+            cached["quick_signature"] = quick_signature
+            cached["expires_at"] = now + _JOB_DISCOVERY_CACHE_TTL_SECONDS
+            return copy.deepcopy(cached["jobs"])
+
+    jobs = _discover_jobs_uncached(scripts_dir, root)
+    with _job_discovery_cache_lock:
+        _job_discovery_cache[cache_key] = {
+            "quick_signature": quick_signature,
+            "full_signature": full_signature,
+            "expires_at": now + _JOB_DISCOVERY_CACHE_TTL_SECONDS,
+            "jobs": copy.deepcopy(jobs),
+        }
+    return jobs
+
+
 def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
     """
     Gibt alle erkannten Jobs als JSON-serialisierbares Dict zurück,
@@ -594,12 +764,29 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
     """
     scripts_dir = resolve_scripts_dir(config)
     data_root = resolve_data_root(config)
-    manager = JobManager.get()
-
+    runtime_states = get_all_runtime_states(config)
+    try:
+        from repository_context import load_repository_inventory
+        repository_inventory = load_repository_inventory(config)
+    except Exception:
+        repository_inventory = {"repositories": {}, "storages": {}}
     result = []
     for info in discover_jobs(scripts_dir, data_root):
         last = latest_statuses.get(info.key)
-        run_state = manager.get_state(info.key)
+        run_state = runtime_states.get(info.key, {"running": False})
+        try:
+            from repository_context import resolve_job_repository_context
+            repository_context = resolve_job_repository_context(
+                config,
+                info.key,
+                require_passphrase_file=False,
+                inventory=repository_inventory,
+            )
+            repo_path = str(repository_context.get("repository_path") or "")
+            repository_key = str(repository_context.get("repository_key") or "")
+        except Exception:
+            repo_path = ""
+            repository_key = ""
 
         result.append(
             {
@@ -623,6 +810,8 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "retention_weekly": info.retention_weekly,
                 "retention_monthly": info.retention_monthly,
                 "retention_yearly": info.retention_yearly,
+                "repository_key": repository_key,
+                "repo_path": repo_path,
                 "restore_test_policy": {
                     "mode": info.restore_test_policy_mode,
                     "interval_days": info.restore_test_interval_days,
@@ -638,6 +827,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 # Aktueller Laufzustand
                 "running": run_state.get("running", False),
                 "run_start_time": run_state.get("start_time"),
+                "run_log_available": run_state.get("log_available", True),
             }
         )
     try:

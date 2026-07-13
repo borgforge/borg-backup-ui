@@ -179,22 +179,29 @@ def _storage_context(ui_config: dict, profile_key: str = "") -> tuple[dict, dict
     return conf, _storagebox_profile(conf, storage_profile=row)
 
 
-def get_storagebox_setup_status(ui_config: dict, profile_key: str = "") -> dict:
+def get_storagebox_setup_status(ui_config: dict, profile_key: str = "", *, probe_auth: bool = True) -> dict:
     _conf, p = _storage_context(ui_config, profile_key)
     key_file = Path(p["ssh_key"]) if p.get("ssh_key") else Path("")
     pub_file = Path(str(key_file) + ".pub") if str(key_file) else Path("")
     key_exists = bool(str(key_file) and key_file.exists())
     pub_exists = bool(str(pub_file) and pub_file.exists())
     profile_complete = _storagebox_is_profile_complete(p)
-    target = _detect_storage_target_type(p) if profile_complete else {"target_type": "generic", "method": "none", "hint": "Profile is incomplete"}
-    auth_ok, auth_msg = (False, "Profile is incomplete")
-    if profile_complete and key_exists:
+    target = (
+        _detect_storage_target_type(p)
+        if profile_complete and probe_auth
+        else {"target_type": str(p.get("target_type") or "generic"), "method": "configured", "hint": ""}
+    )
+    auth_ok, auth_msg = (False, "Connection not checked")
+    if probe_auth and not profile_complete:
+        auth_msg = "Profile is incomplete"
+    if probe_auth and profile_complete and key_exists:
         auth_ok, auth_msg = _storagebox_auth_test(p)
     return {
         "profile_complete": profile_complete,
         "key_exists": key_exists,
         "pub_exists": pub_exists,
         "auth_ok": auth_ok,
+        "auth_checked": bool(probe_auth),
         "message": auth_msg,
         "target_type": target.get("target_type", "generic"),
         "target_detection_method": target.get("method", "none"),

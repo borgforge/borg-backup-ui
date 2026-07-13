@@ -568,9 +568,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if m == "GET" and (
             p.startswith("/api/status")
             or p.startswith("/api/system-health")
+            or p.startswith("/api/notification-reminders")
             or p.startswith("/api/jobs")
             or p.startswith("/api/schedules")
             or p.startswith("/api/storage")
+            or p.startswith("/api/repositories")
             or p.startswith("/api/history")
             or p.startswith("/api/restore")
             or p.startswith("/api/reports")
@@ -586,6 +588,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore-tests/run",
             "/api/restore-tests/run-job",
             "/api/storage/test",
+            "/api/storages/test",
+            "/api/repositories/info",
             "/api/storage/smb-action",
             "/api/storage/check/run",
             "/api/restore/precheck",
@@ -602,7 +606,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             or p.startswith("/api/storagebox")
             or p.startswith("/api/wizard")
             or p.startswith("/api/client-log")
-            or p in {"/api/jobs/enabled", "/api/jobs", "/api/schedules", "/api/restore-tests", "/api/restore-tests/policy"}
+            or p in {"/api/jobs/enabled", "/api/jobs", "/api/schedules", "/api/storages", "/api/repositories", "/api/restore-tests", "/api/restore-tests/policy"}
         ):
             return "admin"
 
@@ -666,14 +670,18 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 },
                 "/api/status": self._get_status,
                 "/api/system-health": self._get_system_health,
+                "/api/notification-reminders/diagnostics": self._get_notification_reminder_diagnostics,
                 "/api/jobs": self._get_jobs,
                 "/api/jobs/running": self._get_running,
                 "/api/schedules": self._get_schedules,
                 "/api/storage": self._get_storage,
+                "/api/repositories": self._get_repositories,
+                "/api/repositories/archives": lambda: self._get_repository_archives(parsed.query),
                 "/api/settings": self._get_settings,
                 "/api/settings/basic": self._get_settings_basic,
                 "/api/setup-status": self._get_setup_status,
                 "/api/settings/backup-history": self._get_settings_backup_history,
+                "/api/settings/factory-reset/status": self._get_factory_reset_status,
                 "/api/settings/jobs-export": lambda: self._get_settings_jobs_export(parsed.query),
                 "/api/history": lambda: self._get_history(parsed.query),
                 "/api/restore-tests": self._get_restore_tests,
@@ -691,7 +699,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/reports/jobs": self._get_report_jobs,
                 "/api/reports/data": lambda: self._get_report_data(parsed.query),
                 "/api/history/log": lambda: self._get_log_file(parsed.query),
-                "/api/wizard/passphrase-check": lambda: self._get_wizard_passphrase_check(parsed.query),
                 "/api/wizard/job": lambda: self._get_wizard_job(parsed.query),
                 "/api/wizard/source-dirs": lambda: self._get_wizard_source_dirs(parsed.query),
                 "/api/wizard/runtime-inventory": self._get_wizard_runtime_inventory,
@@ -714,6 +721,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore-tests/run": self._post_run_restore_test,
             "/api/restore-tests/run-job": self._post_run_restore_test_job,
             "/api/storage/test": self._post_test_repo,
+            "/api/storages": self._post_storage_target,
+            "/api/storages/test": self._post_storage_target_test,
+            "/api/repositories": self._post_repository,
+            "/api/repositories/info": self._post_repository_info,
+            "/api/repositories/lifecycle": self._post_repository_lifecycle,
             "/api/storage/smb-action": self._post_storage_smb_action,
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
@@ -736,6 +748,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/settings/profile-secrets-preview": self._post_settings_profile_secrets_preview,
             "/api/settings/profile-secrets-import": self._post_settings_profile_secrets_import,
             "/api/settings/support-bundle": self._post_settings_support_bundle,
+            "/api/settings/factory-reset": self._post_factory_reset,
             "/api/settings/legacy-cleanup-apply": self._post_settings_legacy_cleanup_apply,
             "/api/system-health/runtime-recovery/ack": self._post_runtime_recovery_ack,
             "/api/settings/usb-profiles-status": self._post_settings_usb_profiles_status,
@@ -789,6 +802,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/jobs": self._delete_job,
             "/api/restore-tests": self._delete_restore_test,
             "/api/restore/history": self._delete_restore_history,
+            "/api/repositories": self._delete_repository,
             "/api/auth/users": self._delete_auth_user,
         }
         fn = routes.get(path)
@@ -802,6 +816,46 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_status(self) -> dict:
         from status_api import get_status_data
         return get_status_data(self.config)
+
+    def _get_factory_reset_status(self) -> dict:
+        from factory_reset_api import factory_reset_status
+
+        return factory_reset_status(self.config)
+
+    def _post_factory_reset(self) -> dict:
+        from factory_reset_api import (
+            FactoryResetBlocked,
+            schedule_factory_reset,
+            validate_factory_reset_request,
+        )
+
+        body = self._read_json_body()
+        session = self._get_current_session_meta() or {}
+        username = _normalize_username(session.get("username", ""))
+        role = str(session.get("role", "")).strip().lower()
+        if role != "admin" or not username:
+            raise PermissionError("An authenticated administrator is required")
+        password = str(body.get("current_password") or "")
+        if not password or not self._verify_user_credentials(username, password):
+            self._security_audit("factory_reset", "failed", target=username, detail="invalid_current_password")
+            raise PermissionError("The current administrator password is invalid")
+        try:
+            status = validate_factory_reset_request(self.config, body)
+        except FactoryResetBlocked as exc:
+            self._security_audit("factory_reset", "blocked", target=username, detail=str(exc))
+            raise ApiConflictError(str(exc), "factory_reset_blocked") from exc
+        try:
+            result = schedule_factory_reset(
+                self.config,
+                status,
+                actor=username,
+                request_id=str(getattr(self, "_current_request_id", "") or ""),
+                script_dir=SCRIPT_DIR,
+            )
+        except FactoryResetBlocked as exc:
+            raise ApiConflictError(str(exc), "factory_reset_pending") from exc
+        self._security_audit("factory_reset", "scheduled", target=username)
+        return result
 
     def _get_auth_status(self) -> dict:
         mode = self._auth_mode()
@@ -1243,8 +1297,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return {"jobs": list_jobs(self.config, latest)}
 
     def _get_running(self) -> dict:
-        from jobs_api import JobManager
-        return JobManager.get().get_all_states()
+        from jobs_api import get_all_runtime_states
+        return get_all_runtime_states(self.config)
 
     def _get_schedules(self) -> dict:
         from schedule_api import get_schedules, prune_orphaned_schedules
@@ -1280,7 +1334,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return {"saved": True, "job_key": job_key, "enabled": enabled}
 
     def _delete_job(self) -> dict:
-        from jobs_api import JobManager, discover_jobs, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
+        from jobs_api import discover_jobs, get_job_runtime_state, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
         from restore_tests_api import resolve_restore_test_dir
         from config_api import read_expanded_conf
         from schedule_api import delete_schedule
@@ -1295,7 +1349,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if job_key not in jobs:
             raise ValueError(f"Unknown job: {job_key}")
 
-        if JobManager.get().is_running(job_key):
+        if get_job_runtime_state(self.config, job_key).get("running"):
             raise RuntimeError("The job is currently running; wait for it to finish")
 
         info = jobs[job_key]
@@ -1323,16 +1377,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     pass
 
         # Metadatei des Jobs löschen (Wizard-First)
-        deleted_metadata = False
-        for jobs_meta_dir in jobs_meta_dirs:
-            meta_file = jobs_meta_dir / f"{job_key}.json"
-            if not meta_file.exists():
-                continue
-            try:
-                meta_file.unlink()
-                deleted_metadata = True
-            except OSError:
-                pass
+        metadata_paths = [jobs_meta_dir / f"{job_key}.json" for jobs_meta_dir in jobs_meta_dirs]
+        from repositories_api import delete_job_metadata_transaction
+        deleted_metadata = bool(delete_job_metadata_transaction(self.config, metadata_paths, job_key))
 
         delete_artifacts = bool(body.get("delete_artifacts", False))
 
@@ -1420,9 +1467,93 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from config_api import get_repositories_data
         return get_repositories_data(self.config)
 
+    def _get_repositories(self) -> dict:
+        from repositories_api import read_repository_store_for_api
+        return read_repository_store_for_api(self.config)
+
+    def _post_repository(self) -> dict:
+        from repositories_api import create_or_import_repository
+        body = self._read_json_body()
+        return create_or_import_repository(self.config, body)
+
+    def _post_repository_info(self) -> dict:
+        from repositories_api import RepositoryBusyError, refresh_repository_info
+        body = self._read_json_body()
+        try:
+            return refresh_repository_info(self.config, str(body.get("repository_key") or ""))
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _post_repository_lifecycle(self) -> dict:
+        from repositories_api import RepositoryBusyError, prepare_repository_lifecycle
+
+        body = self._read_json_body()
+        try:
+            return prepare_repository_lifecycle(
+                self.config,
+                str(body.get("repository_key") or ""),
+                str(body.get("mode") or "remove"),
+            )
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _delete_repository(self) -> dict:
+        from repositories_api import RepositoryBusyError, RepositoryLifecycleConflict, apply_repository_lifecycle
+
+        body = self._read_json_body()
+        session = self._get_current_session_meta() or {}
+        actor = _normalize_username(session.get("username", ""))
+        actor_role = str(session.get("role", "") or "").strip().lower()
+        auth_method = "session"
+        if not actor:
+            if self._has_valid_api_token_header():
+                actor = "api-token"
+                actor_role = "admin"
+                auth_method = "api-token"
+            else:
+                actor = "system"
+                actor_role = self._get_current_role() or "system"
+                auth_method = "internal"
+        try:
+            return apply_repository_lifecycle(
+                self.config,
+                body,
+                audit_context={
+                    "actor": actor,
+                    "actor_role": actor_role,
+                    "auth_method": auth_method,
+                    "request_id": str(getattr(self, "_current_request_id", "") or ""),
+                },
+            )
+        except RepositoryLifecycleConflict as exc:
+            raise ApiConflictError(str(exc), code=exc.code) from exc
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _get_repository_archives(self, qs_str: str) -> dict:
+        from repositories_api import get_repository_archives
+        from urllib.parse import parse_qs
+        qs = parse_qs(qs_str)
+        repository_key = str((qs.get("repository_key") or [""])[0]).strip()
+        limit = int(str((qs.get("limit") or ["100"])[0]) or "100")
+        return get_repository_archives(self.config, repository_key, limit)
+
+    def _post_storage_target(self) -> dict:
+        from storage_objects_api import create_storage_target
+        return create_storage_target(self.config, self._read_json_body())
+
+    def _post_storage_target_test(self) -> dict:
+        from storage_objects_api import test_storage_target
+        body = self._read_json_body()
+        return test_storage_target(self.config, str(body.get("storage_key") or ""))
+
     def _get_settings(self) -> dict:
         from config_api import get_settings_data
         return get_settings_data(self.config)
+
+    def _get_notification_reminder_diagnostics(self) -> dict:
+        from notification_reminder_api import get_notification_reminder_diagnostics
+        return get_notification_reminder_diagnostics(self.config)
 
     def _get_settings_basic(self) -> dict:
         from config_api import get_settings_data
@@ -1501,19 +1632,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from jobs_api import JobManager
         return JobManager.get().get_state("restore_test")
 
-    def _get_wizard_passphrase_check(self, qs: str) -> dict:
-        import re as _re
-        from urllib.parse import parse_qs as _pqs
-        from wizard_api import check_passphrase_exists
-        params = _pqs(qs)
-        type_id = (params.get("type_id") or [""])[0].strip()
-        location = (params.get("location") or [""])[0].strip().lower()
-        if not _re.fullmatch(r"[a-z0-9_]+", type_id):
-            raise ValueError("Invalid type_id")
-        if location and location not in {"local", "usb", "smb", "storagebox", "custom"}:
-            raise ValueError("Invalid location")
-        return check_passphrase_exists(type_id, location or None)
-
     def _get_wizard_job(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs
         from wizard_api import load_job_for_wizard
@@ -1527,14 +1645,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_wizard_source_dirs(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs
-        from restore_api import list_target_dirs
+        from wizard_api import list_source_directories
         params = _pqs(qs)
         prefix = (params.get("prefix") or [""])[0]
         try:
             limit = int((params.get("limit") or ["25"])[0])
         except Exception:
             limit = 25
-        return {"dirs": list_target_dirs(prefix=prefix, limit=limit)}
+        return {"dirs": list_source_directories(prefix=prefix, limit=limit)}
 
     def _get_wizard_runtime_inventory(self) -> dict:
         try:
@@ -1634,14 +1752,15 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_run_check(self) -> dict:
         self._require_data_dir_ready()
         body = self._read_json_body()
-        job_key = body.get("job", "")
-        if not job_key:
-            raise ValueError("job parameter is required")
+        repository_key = str(body.get("repository_key") or "").strip()
+        if not repository_key:
+            raise ValueError("repository_key parameter is required")
         mode = str(body.get("mode", "quick")).strip().lower()
         if mode not in {"quick", "verbose", "verify_data"}:
             raise ValueError("Invalid mode parameter")
         from check_api import CheckManager
-        ok, err = CheckManager.get().start(self.config, job_key, mode)
+        action = str(body.get("action") or "check").strip().lower()
+        ok, err = CheckManager.get().start_repository(self.config, repository_key, action, mode)
         if not ok:
             raise RuntimeError(err)
         return {"ok": True}
@@ -1682,7 +1801,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         try:
             from restore_api import get_repo_info, _borg_env
             info = get_repo_info(self.config, job_key)
-            env = _borg_env(info["passphrase_file"])
+            env = _borg_env(self.config, info["passphrase_file"])
         except Exception as exc:
             self.send_error(500, str(exc))
             return
@@ -1859,7 +1978,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if not all([job_key, archive, path]):
             raise ValueError("job, archive, and path are required")
         info = get_repo_info(self.config, job_key)
-        env = _borg_env(info["passphrase_file"])
+        env = _borg_env(self.config, info["passphrase_file"])
         repo_archive = f"{info['repo']}::{archive}"
         source_path = path.lstrip("/")
         check = self._compute_restore_download_check(repo_archive, source_path, env)
@@ -1872,7 +1991,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"))
+        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"), ui_config=self.config)
         return {"flow": generate_flow_preview(body, self.config, scripts_dir)}
 
     def _post_wizard_save(self) -> dict:
@@ -1882,7 +2001,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"))
+        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"), ui_config=self.config)
         return save_job(body, scripts_dir, data_root, self.config)
 
     def _start_restore_test_from_body(self, body: dict) -> dict:
@@ -1968,6 +2087,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "restore_test",
             cmd,
             backup_scripts_dir,
+            extra_env={"BORG_UI_DATA_ROOT": str(backup_scripts_dir)},
         )
         if not ok:
             if "already running" in str(err or "").lower():
@@ -2021,11 +2141,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_test_repo(self) -> dict:
         from config_api import test_repository
         body = self._read_json_body()
-        repo_path = body.get("repo_path", "")
-        repo_conf_key = str(body.get("repo_conf_key", "")).strip()
-        if not repo_path:
-            raise ValueError("repo_path is required")
-        return test_repository(repo_path, self.config, repo_conf_key=repo_conf_key)
+        repository_key = str(body.get("repository_key", "")).strip()
+        if not repository_key:
+            raise ValueError("repository_key is required")
+        return test_repository(self.config, repository_key)
 
     def _post_storage_smb_action(self) -> dict:
         from config_api import run_smb_profile_action
@@ -2156,8 +2275,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             derive_data_dirs,
             ensure_data_dirs,
             read_expanded_conf,
-            read_settings_payload,
-            write_settings_payload,
             _normalize_usb_profile_rows,
             _normalize_storage_profile_rows,
             validate_usb_profile_usage_before_save,
@@ -2170,12 +2287,18 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cleanup_removed_smb_secrets,
         )
         from ntfy_api import prepare_ntfy_updates_for_save
+        from storage_objects_api import replace_profile_storages, settings_profiles_from_storages
         body = self._read_json_body()
         updates = body.get("updates", {})
+        profile_updates = body.get("profile_updates", {})
         smb_cleanup_keys = body.get("smb_cleanup_keys", [])
         smb_secret_cleanup_keys = body.get("smb_secret_cleanup_keys", [])
-        if not updates:
-            raise ValueError("updates is required")
+        if not isinstance(updates, dict):
+            raise ValueError("updates must be an object")
+        if not isinstance(profile_updates, dict):
+            raise ValueError("profile_updates must be an object")
+        if not updates and not profile_updates:
+            raise ValueError("updates or profile_updates is required")
         if smb_cleanup_keys is None:
             smb_cleanup_keys = []
         if smb_secret_cleanup_keys is None:
@@ -2187,15 +2310,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         prev_conf = read_expanded_conf(self.config)
         prev_data_dir = str(prev_conf.get("GLOBAL_DATA_DIR", "")).strip()
         prev_smb_rows = []
-        settings_payload = read_settings_payload(self.config)
+        canonical_profiles = settings_profiles_from_storages(self.config)
         try:
             prev_smb_rows = validate_smb_profiles_json(
-                json.dumps(settings_payload.get("smb_profiles", []), ensure_ascii=False)
+                json.dumps(canonical_profiles.get("smb_profiles", []), ensure_ascii=False)
             )
         except ValueError:
             prev_smb_rows = []
         smb_removed_keys: set[str] = set()
-        settings_changed = False
+        if "local" in profile_updates:
+            parsed_local = profile_updates.get("local")
+            if not isinstance(parsed_local, list):
+                raise ValueError("Local profile updates must be a list.")
+            replace_profile_storages(self.config, "local", parsed_local)
         if "GLOBAL_SMTP_PASSWORD" in updates:
             incoming_pw = str(updates.get("GLOBAL_SMTP_PASSWORD", ""))
             existing_pw = str(prev_conf.get("GLOBAL_SMTP_PASSWORD", ""))
@@ -2216,46 +2343,36 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             updates["STATUS_DIR"] = dirs["status"]
             updates["RESTORE_TEST_STATUS_DIR"] = dirs["restore_status"]
             updates["GLOBAL_BORG_CACHE_BASE"] = dirs["cache"]
-        if "SMB_PROFILES_JSON" in updates:
-            normalized_preview = validate_smb_profiles_json(str(updates.get("SMB_PROFILES_JSON", "[]")))
+        if "smb" in profile_updates:
+            raw_smb = profile_updates.get("smb")
+            if not isinstance(raw_smb, list):
+                raise ValueError("SMB profile updates must be a list.")
+            raw_smb_json = json.dumps(raw_smb, ensure_ascii=False)
+            normalized_preview = validate_smb_profiles_json(raw_smb_json)
             validate_smb_profile_usage_before_save(self.config, normalized_preview)
             prev_keys = {str(r.get("key") or "").strip().lower() for r in prev_smb_rows if str(r.get("key") or "").strip()}
             new_keys = {str(r.get("key") or "").strip().lower() for r in normalized_preview if str(r.get("key") or "").strip()}
             smb_removed_keys = {k for k in prev_keys if k not in new_keys}
-            normalized_smb = prepare_smb_profiles_for_save(str(updates.get("SMB_PROFILES_JSON", "[]")))
-            settings_payload["smb_profiles"] = normalized_smb
-            updates.pop("SMB_PROFILES_JSON", None)
-            settings_changed = True
-        if "USB_PROFILES_JSON" in updates:
-            raw_usb = str(updates.get("USB_PROFILES_JSON", "[]") or "[]")
-            try:
-                parsed_usb = json.loads(raw_usb)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                raise ValueError("USB_PROFILES_JSON is not valid JSON.")
+            normalized_smb = prepare_smb_profiles_for_save(raw_smb_json)
+            replace_profile_storages(self.config, "smb", normalized_smb)
+        if "usb" in profile_updates:
+            parsed_usb = profile_updates.get("usb")
             if not isinstance(parsed_usb, list):
-                raise ValueError("USB_PROFILES_JSON must be a list.")
+                raise ValueError("USB profile updates must be a list.")
             normalized_usb = _normalize_usb_profile_rows(parsed_usb)
             validate_usb_profile_usage_before_save(self.config, normalized_usb)
-            settings_payload["usb_profiles"] = normalized_usb
-            updates.pop("USB_PROFILES_JSON", None)
-            settings_changed = True
-        if "STORAGE_PROFILES_JSON" in updates:
-            raw_storage = str(updates.get("STORAGE_PROFILES_JSON", "[]") or "[]")
-            try:
-                parsed_storage = json.loads(raw_storage)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                raise ValueError("STORAGE_PROFILES_JSON is not valid JSON.")
+            replace_profile_storages(self.config, "usb", normalized_usb)
+        if "storagebox" in profile_updates:
+            parsed_storage = profile_updates.get("storagebox")
             if not isinstance(parsed_storage, list):
-                raise ValueError("STORAGE_PROFILES_JSON must be a list.")
+                raise ValueError("SSH profile updates must be a list.")
             normalized_storage = _normalize_storage_profile_rows(parsed_storage)
             validate_storage_profiles_complete_before_save(normalized_storage)
             validate_storage_profile_usage_before_save(self.config, normalized_storage)
-            settings_payload["storage_profiles"] = normalized_storage
-            updates.pop("STORAGE_PROFILES_JSON", None)
-            settings_changed = True
+            replace_profile_storages(self.config, "storagebox", normalized_storage)
         storage_keys = {"STORAGEBOX_HOST", "STORAGEBOX_PORT", "STORAGEBOX_USER", "STORAGEBOX_BASE_PATH"}
         if storage_keys & set(updates.keys()):
-            rows = settings_payload.get("storage_profiles") if isinstance(settings_payload.get("storage_profiles"), list) else []
+            rows = canonical_profiles.get("storage_profiles") if isinstance(canonical_profiles.get("storage_profiles"), list) else []
             normalized_rows = []
             normalized_rows = _normalize_storage_profile_rows(rows)
             active = normalized_rows[0] if normalized_rows else {
@@ -2275,12 +2392,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 active["user"] = str(updates.get("STORAGEBOX_USER", "")).strip()
             if "STORAGEBOX_BASE_PATH" in updates:
                 active["base_path"] = str(updates.get("STORAGEBOX_BASE_PATH", "/./backup")).strip() or "/./backup"
-            settings_payload["storage_profiles"] = _normalize_storage_profile_rows([active] + [r for r in normalized_rows[1:] if isinstance(r, dict)])
-            validate_storage_profiles_complete_before_save(settings_payload["storage_profiles"])
-            validate_storage_profile_usage_before_save(self.config, settings_payload["storage_profiles"])
-            settings_changed = True
-        if settings_changed:
-            write_settings_payload(self.config, settings_payload)
+            next_storage_profiles = _normalize_storage_profile_rows([active] + [r for r in normalized_rows[1:] if isinstance(r, dict)])
+            validate_storage_profiles_complete_before_save(next_storage_profiles)
+            replace_profile_storages(self.config, "storagebox", next_storage_profiles)
         write_conf(self.config, updates, snapshot_reason="Manual change")
         created_paths = None
         if data_dir is not None:
@@ -2611,7 +2725,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _post_run_job(self) -> dict:
         self._require_data_dir_ready()
-        from jobs_api import JobManager, discover_jobs, resolve_data_root, resolve_scripts_dir
+        from jobs_api import JobManager, discover_jobs, get_job_runtime_state, resolve_data_root, resolve_scripts_dir
         body = self._read_json_body()
         job_key = body.get("job_key", "")
         if not job_key:
@@ -2625,6 +2739,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise ValueError(f"Unknown job: {job_key}")
         if not jobs[job_key].enabled:
             raise RuntimeError(f"Job is disabled: {job_key}")
+        if get_job_runtime_state(self.config, job_key).get("running"):
+            raise RuntimeError("Job is already running")
 
         info = jobs[job_key]
         plugin_runtime = Path(__file__).resolve().parent / "runtime"
@@ -2652,7 +2768,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     # ── SSE-Handler ───────────────────────────────────────────────────────────
 
     def _handle_sse(self, job_key: str):
-        from jobs_api import JobManager
+        from jobs_api import stream_job_output
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
@@ -2660,7 +2776,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
         try:
-            for chunk in JobManager.get().stream_output(job_key):
+            for chunk in stream_job_output(self.config, job_key):
                 self.wfile.write(chunk.encode("utf-8"))
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
@@ -2944,7 +3060,10 @@ btn.addEventListener('click',doSetup);
         except ApiConflictError as exc:
             self._send_api_error(409, exc.code, str(exc), request_id=request_id)
         except Exception as exc:
-            self._send_api_error(500, "internal_error", str(exc), request_id=request_id)
+            if exc.__class__.__module__.endswith("inventory_store"):
+                self._send_api_error(503, "inventory_unavailable", str(exc), request_id=request_id)
+            else:
+                self._send_api_error(500, "internal_error", str(exc), request_id=request_id)
         finally:
             self._current_request_id = ""
             self._last_json_body = {}
@@ -2994,25 +3113,30 @@ btn.addEventListener('click',doSetup);
         )
         profile_key_raw = (
             body.get("profile_key")
-            or body.get("smb_profile_key")
-            or body.get("storage_profile_key")
-            or body.get("usb_profile_key")
             or (qs.get("profile_key") or [""])[0]
-            or (qs.get("smb_profile_key") or [""])[0]
-            or (qs.get("storage_profile_key") or [""])[0]
-            or (qs.get("usb_profile_key") or [""])[0]
             or ""
         )
         location_raw = body.get("location") or (qs.get("location") or [""])[0] or ""
+        repository_key_raw = (
+            body.get("repository_key")
+            or (qs.get("repository_key") or [""])[0]
+            or ""
+        )
+        repository_mode_raw = body.get("mode") or ""
 
         job_key = _mask_secrets(str(job_key_raw))
         profile_key = _mask_secrets(str(profile_key_raw))
         location = _mask_secrets(str(location_raw))
-        return {
+        context = {
             "job_key": job_key,
             "profile_key": profile_key,
             "location": location,
         }
+        if repository_key_raw:
+            context["repository_key"] = _mask_secrets(str(repository_key_raw))
+        if repository_mode_raw:
+            context["repository_mode"] = _mask_secrets(str(repository_mode_raw))
+        return context
 
     @staticmethod
     def _augment_context_from_response(path: str, data: dict, ctx: dict) -> dict:
@@ -3024,6 +3148,14 @@ btn.addEventListener('click',doSetup);
             ]
             if running_keys:
                 out["job_key"] = _mask_secrets(",".join(running_keys[:5]))
+        if path == "/api/repositories" and isinstance(data, dict):
+            for key in ("repository_key", "mode"):
+                if data.get(key):
+                    context_key = "repository_mode" if key == "mode" else key
+                    out[context_key] = _mask_secrets(str(data.get(key)))
+            for key in ("repository_deleted", "secret_deleted"):
+                if isinstance(data.get(key), bool):
+                    out[key] = data[key]
         return out
 
     def log_message(self, fmt, *args):
@@ -3078,6 +3210,36 @@ def _start_notification_reminder_loop(config: dict) -> threading.Thread | None:
         return None
 
 
+def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None:
+    """Refresh cached Borg repository information without blocking UI requests."""
+    startup_delay_seconds = 300
+    check_interval_seconds = 3600
+
+    def _run() -> None:
+        time.sleep(startup_delay_seconds)
+        while True:
+            try:
+                from repositories_api import refresh_due_repository_info
+                result = refresh_due_repository_info(config, max_age_hours=24, retry_after_hours=1)
+                if int(result.get("due") or 0):
+                    _log(
+                        "Repository information refresh completed: "
+                        f"due={result.get('due')} refreshed={result.get('refreshed')} "
+                        f"deferred={result.get('deferred')} failed={result.get('failed')}"
+                    )
+            except Exception as exc:
+                _log(f"WARNING: Repository information refresh failed: {_mask_secrets(str(exc))}")
+            time.sleep(check_interval_seconds)
+
+    try:
+        thread = threading.Thread(target=_run, name="repository-info-refresh", daemon=True)
+        thread.start()
+        return thread
+    except Exception as exc:
+        _log(f"WARNING: Repository information refresh loop could not be started: {_mask_secrets(str(exc))}")
+        return None
+
+
 def _apply_runtime_dirs_from_conf(config: dict) -> None:
     """Synchronisiert runtime-pfade aus backup.conf in die laufende UI-Konfiguration."""
     try:
@@ -3124,6 +3286,18 @@ def main():
     except Exception as exc:
         _log(f"WARNING: Startup migrations skipped: {exc}")
 
+    try:
+        from repositories_api import reconcile_repository_usage
+        repository_usage = reconcile_repository_usage(config)
+        changed = repository_usage.get("reconciled_repository_keys", [])
+        _log(
+            "Repository-Zuordnungen: "
+            f"status={'ok' if repository_usage.get('ok') else 'attention'}, reconciled={len(changed)}, "
+            f"errors={len(repository_usage.get('errors', []))}"
+        )
+    except Exception as exc:
+        _log(f"WARNING: Repository assignments could not be reconciled: {exc}")
+
     lib_found = setup_lib_path(config)
     if not lib_found:
         _log("WARNING: plugin runtime/lib was not found.")
@@ -3151,6 +3325,7 @@ def main():
         _log(f"WARNING: Cron schedules could not be applied: {exc}")
 
     _start_notification_reminder_loop(config)
+    _start_repository_info_refresh_loop(config)
 
     port = int(config["PORT"])
     bind = config["BIND"]

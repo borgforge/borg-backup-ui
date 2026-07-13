@@ -4,10 +4,8 @@ api/system_health_api.py – kleiner Systemzustand fuer Migration/Verzeichnislay
 
 import json
 import shutil
-import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlsplit
 from typing import Any, Dict
 
 
@@ -194,26 +192,19 @@ def _split_job_paths(value: Any) -> list[str]:
 
 
 def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
-    try:
-        from storage_profiles_api import normalize_storage_profile_rows
-        from config_api import read_settings_payload
-        settings = read_settings_payload(config)
-        storage_profiles = normalize_storage_profile_rows(
-            settings.get("storage_profiles") if isinstance(settings.get("storage_profiles"), list) else []
-        )
-    except Exception:
-        storage_profiles = []
-    storage_by_key = {
-        str(row.get("key") or "").strip().lower(): row
-        for row in storage_profiles
-        if str(row.get("key") or "").strip()
-    }
-
     items = []
     if jobs_dir.is_dir():
         job_files = sorted(jobs_dir.glob("*.json"))
     else:
         job_files = []
+
+    repository_inventory = None
+    repository_inventory_error = ""
+    try:
+        from repository_context import load_repository_inventory
+        repository_inventory = load_repository_inventory(config)
+    except Exception as exc:
+        repository_inventory_error = str(exc)
 
     for meta_file in job_files:
         try:
@@ -241,19 +232,21 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             errors.append(message)
             error_details.append({"code": code, "params": params})
 
-        repo_cfg = raw.get("repo") if isinstance(raw.get("repo"), dict) else {}
-        repo = str(repo_cfg.get("default") or "").strip()
-        if not repo:
-            add_error("repository_missing", "Repository is missing")
-        elif location == "storagebox":
-            if not repo.startswith("ssh://"):
-                add_error("storagebox_repo_not_ssh", "Storage Box repository is not an ssh:// URI")
-            else:
-                parts = urlsplit(repo)
-                if not parts.netloc or not parts.path.startswith("/"):
-                    add_error("storagebox_repo_incomplete", "Storage Box repository URI is incomplete")
-                if ":23." in repo:
-                    add_error("storagebox_repo_port_slash", "Storage Box repository URI is missing a slash after the port")
+        repository_context = None
+        if repository_inventory_error:
+            add_error("repository_context_invalid", repository_inventory_error)
+        else:
+            try:
+                from repository_context import resolve_job_repository_context
+                repository_context = resolve_job_repository_context(
+                    config,
+                    job_key,
+                    job=raw,
+                    inventory=repository_inventory,
+                )
+                location = str(repository_context.get("location") or location)
+            except Exception as exc:
+                add_error("repository_context_invalid", str(exc))
 
         paths_cfg = raw.get("paths") if isinstance(raw.get("paths"), dict) else {}
         source_paths = _split_job_paths(paths_cfg.get("default"))
@@ -264,29 +257,13 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             if missing:
                 add_error("source_paths_not_found", f"{len(missing)} source path(s) do not exist", count=len(missing))
 
-        encryption = str(raw.get("encryption") or "").strip().lower()
-        pass_cfg = raw.get("passphrase") if isinstance(raw.get("passphrase"), dict) else {}
-        pass_mode = str(pass_cfg.get("mode") or "").strip().lower()
-        pass_path = str(pass_cfg.get("default") or "").strip()
-        if encryption != "none" and pass_mode != "none":
-            if not pass_path:
-                add_error("passphrase_metadata_missing", "Passphrase file is missing from metadata")
-            elif not Path(pass_path).is_file():
-                add_error("passphrase_file_missing", "Passphrase file does not exist")
-
-        if location == "storagebox":
-            profile_key = str(raw.get("storage_profile_key") or "").strip().lower()
-            profile = storage_by_key.get(profile_key)
-            if not profile_key:
-                add_error("storage_profile_missing", "Storage profile is missing")
-            elif profile is None:
-                add_error("storage_profile_not_found", f"Storage profile '{profile_key}' not found", profile=profile_key)
-            else:
-                ssh_key = str(profile.get("ssh_key_path") or "").strip()
-                if ssh_key and not Path(ssh_key).is_file():
-                    add_error("ssh_key_file_missing", "SSH key file does not exist")
-                if not str(profile.get("host") or "").strip() or not str(profile.get("user") or "").strip():
-                    add_error("storage_profile_incomplete", "Storage profile is incomplete")
+        if repository_context and location == "storagebox":
+            storage = repository_context.get("storage") if isinstance(repository_context.get("storage"), dict) else {}
+            ssh_key = str(storage.get("ssh_key_path") or "").strip()
+            if ssh_key and not Path(ssh_key).is_file():
+                add_error("ssh_key_file_missing", "SSH key file does not exist")
+            if not str(storage.get("host") or "").strip() or not str(storage.get("user") or "").strip():
+                add_error("storage_profile_incomplete", "Storage target is incomplete")
 
         state = "bad" if errors else ("warn" if warnings else "ok")
         items.append({
@@ -312,6 +289,27 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
     }
 
 
+def _probe_cifs_support() -> tuple[bool, str]:
+    """Inspect local CIFS capability without starting a blocking process."""
+    try:
+        filesystems = Path("/proc/filesystems").read_text(encoding="utf-8", errors="replace")
+        if any("cifs" in line for line in filesystems.splitlines()):
+            return True, "loaded"
+    except Exception:
+        pass
+    try:
+        modules = Path("/proc/modules").read_text(encoding="utf-8", errors="replace")
+        if any(line.startswith("cifs ") for line in modules.splitlines()):
+            return True, "loaded"
+    except Exception:
+        pass
+    if Path("/sys/module/cifs").exists():
+        return True, "loaded"
+    if shutil.which("mount.cifs"):
+        return True, "available"
+    return False, "missing"
+
+
 def get_system_health_data(config: dict) -> Dict[str, Any]:
     base = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
     root = base.parent if base.name == "scripts" else base
@@ -319,6 +317,30 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
     secrets_dir = root / "secrets"
     migration_file = root / "config" / "migration-state.json"
     migration_log_file = root / "config" / "migrations.log.jsonl"
+    repositories_inventory_file = root / "config" / "repositories.json"
+    storages_inventory_file = root / "config" / "storages.json"
+
+    inventory_errors: list[dict[str, str]] = []
+    try:
+        from repositories_api import read_repository_store
+        read_repository_store(config)
+    except Exception as exc:
+        inventory_errors.append({"inventory": "repositories", "path": str(repositories_inventory_file), "error": str(exc)})
+    try:
+        from storage_objects_api import read_storage_store
+        read_storage_store(config)
+    except Exception as exc:
+        inventory_errors.append({"inventory": "storages", "path": str(storages_inventory_file), "error": str(exc)})
+    inventories_ok = not inventory_errors
+    try:
+        from repositories_api import repository_assignment_report
+        repository_assignments = repository_assignment_report(config)
+    except Exception as exc:
+        repository_assignments = {
+            "ok": False,
+            "errors": [{"code": "assignment_report_failed", "message": str(exc)}],
+            "usage_mismatches": [],
+        }
 
     migration = _read_migration_state(migration_file)
     migration_log = _read_migration_log(migration_log_file)
@@ -339,40 +361,9 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
     last_effective_ts = str(last_effective.get("timestamp", "") or "").strip()
     mount_bin = shutil.which("mount")
     umount_bin = shutil.which("umount")
-    cifs_supported = False
-    cifs_state = "missing"
-    try:
-        filesystems = Path("/proc/filesystems").read_text(encoding="utf-8", errors="replace")
-        if any("cifs" in line for line in filesystems.splitlines()):
-            cifs_supported = True
-            cifs_state = "loaded"
-    except Exception:
-        pass
-    if not cifs_supported:
-        try:
-            modules = Path("/proc/modules").read_text(encoding="utf-8", errors="replace")
-            if any(line.startswith("cifs ") for line in modules.splitlines()):
-                cifs_supported = True
-                cifs_state = "loaded"
-        except Exception:
-            pass
-    if not cifs_supported:
-        try:
-            probe = subprocess.run(
-                ["modinfo", "cifs"],
-                capture_output=True,
-                text=True,
-                timeout=3,
-                check=False,
-            )
-            if probe.returncode == 0:
-                cifs_supported = True
-                cifs_state = "available"
-        except Exception:
-            pass
+    cifs_supported, cifs_state = _probe_cifs_support()
 
     config_dir = root / "config"
-    settings_json = config_dir / "settings.json"
     api_token_file = config_dir / ".api-token"
     ui_auth_file = config_dir / ".ui-auth.json"
 
@@ -403,8 +394,6 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         secret_candidates.append(api_token_file)
     if ui_auth_file.exists():
         secret_candidates.append(ui_auth_file)
-    if settings_json.exists():
-        secret_candidates.append(settings_json)
 
     bad_perm = []
     for p in secret_candidates:
@@ -433,17 +422,6 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "entries": [],
             "error": str(exc),
         }
-    try:
-        from notification_reminder_api import get_notification_reminder_diagnostics
-        notification_reminders = get_notification_reminder_diagnostics(config)
-    except Exception as exc:
-        notification_reminders = {
-            "enabled": False,
-            "error": str(exc),
-            "backup_overdue": {"enabled": False, "channels": [], "items": []},
-            "restore_test_overdue": {"enabled": False, "channels": [], "items": []},
-        }
-
     return {
         "checks": {
             "data_root_ok": root.is_dir(),
@@ -455,6 +433,8 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "cifs_supported": bool(cifs_supported),
             "cifs_state": cifs_state,
             "secrets_permissions_ok": secrets_permissions_ok,
+            "canonical_inventories_ok": inventories_ok,
+            "repository_assignments_ok": bool(repository_assignments.get("ok", False)),
         },
         "paths": {
             "data_root": str(root),
@@ -462,6 +442,8 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "secrets": str(secrets_dir),
             "migration_state_file": str(migration_file),
             "migration_log_file": str(migration_log_file),
+            "repositories_inventory_file": str(repositories_inventory_file),
+            "storages_inventory_file": str(storages_inventory_file),
             "mount_bin": str(mount_bin or ""),
             "umount_bin": str(umount_bin or ""),
         },
@@ -471,11 +453,15 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "migration_registry": migration_registry,
         "job_health": job_health,
         "runtime_recovery": runtime_recovery,
-        "notification_reminders": notification_reminders,
         "secrets_permissions": {
             "ok": secrets_permissions_ok,
             "message": perm_msg,
             "bad_files": bad_perm,
             "checked_files_count": len(secret_candidates),
         },
+        "canonical_inventories": {
+            "ok": inventories_ok,
+            "errors": inventory_errors,
+        },
+        "repository_assignments": repository_assignments,
     }

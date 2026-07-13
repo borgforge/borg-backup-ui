@@ -8,7 +8,11 @@ Dieses Kapitel erklärt Migrationen, Setup-Checks und Wartungspunkte.
 
 Eine Migration ist eine echte Änderung an vorhandenen Dateien, Verzeichnissen oder Einstellungen. Beispiele sind das Verschieben von Laufzeitpfaden oder das Umstellen einer Statusdatei auf ein neues Format.
 
-Migrationen werden in `migration-state.json` nachgehalten. Echte Änderungen können zusätzlich in `migrations.log.jsonl` protokolliert werden.
+Migrationen werden in `migration-state.json` nachgehalten. Jeder wirksame Lauf
+schreibt zusätzlich strukturierte Ereignisse in `migrations.log.jsonl`. Bei der
+Umstellung auf das kanonische Storage-/Repository-Modell nennt der Audit unter
+anderem Lauf-ID, Ausgangszustand, Phasen, Backup-Verzeichnis, betroffene
+Objekte, Validierung und ein mögliches Rollback. Secrets werden nicht geloggt.
 
 ## Setup-Checks
 
@@ -17,7 +21,7 @@ Setup-Checks beschreiben vorhandene Strukturen. Sie sind keine Migration, wenn n
 Beispiele:
 
 - Jobs-Verzeichnis vorhanden.
-- `settings.json` vorhanden.
+- `storages.json` als kanonisches Speicherziel-Inventar vorhanden.
 - `backup.conf` enthält aktuelle Schema-Keys.
 
 ## Wartung und Cleanup
@@ -30,6 +34,22 @@ Eine Cleanup-Aktion sollte:
 - anzeigen, welche Keys betroffen sind,
 - bewusst vom Benutzer gestartet werden,
 - nachher im Systemstatus nachvollziehbar sein.
+
+## Werkseinstellungen
+
+**Einstellungen > Werkseinstellungen** ist der letzte Eintrag in der Gruppe
+**Wartung**. Der Vorgang entfernt die Anwendungskonfiguration sowie die
+konfigurierten Betriebs-, Log-, Status- und Verlaufsdaten und startet danach
+die Admin-Erstkonfiguration.
+
+Die Plugin-Installation und externe Borg-Repositories bleiben erhalten. Ein
+Reset wird blockiert, wenn ein verwaltetes Repository innerhalb eines zu
+löschenden Verzeichnisses liegt oder gerade ein Backup, Restore, Restore-Test
+oder eine Repository-Wartung ausgeführt wird.
+
+Vor dem Reset `/boot/config/borg-backup` sichern. Die Freigabe erfordert alle
+Risikobestätigungen, den Servernamen, das aktuelle Admin-Passwort und den
+Bestätigungstext `FACTORY RESET`.
 
 ## Ergebnis prüfen
 

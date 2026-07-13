@@ -1,17 +1,20 @@
 # Designstudie: Repository-Modell und Storage-/Repository-Wizard
 
 - Issues: #184, #187
-- Status: Designstudie, keine Implementierung
+- Status: Designstudie, in Issues #184 und #187 umgesetzt
 - Stand: 2026-07-09
 - Referenzsystem: Borg Backup UI auf `http://192.168.178.23:8765`
 
 ## 1. Ziel der Studie
 
-Diese Designstudie beschreibt, wie die Repository-Objekte aus #184 und der
-Storage-/Repository-Wizard aus #187 in die bestehende Oberfläche integriert
-werden könnten.
+> **Umsetzungsstand:** Variante A wurde umgesetzt. Repositorys bleiben im
+> bisherigen Storage-Kontext, die Seite heißt nun **Repositories**, und der
+> Job-Wizard akzeptiert für neue und bearbeitete Jobs keinen freien
+> Repository-Pfad mehr.
 
-Die Studie ist bewusst **keine Implementierung**. Sie soll klären:
+Diese Designstudie dokumentiert die Entscheidungsgrundlage für die mit #184 und
+#187 umgesetzten Repository-Objekte und den Repository-Wizard. Die Varianten
+bleiben als Begründung der gewählten Lösung erhalten:
 
 - Wo Repositorys in der UI sichtbar werden.
 - Wie Storage und Repository fachlich getrennt werden.
@@ -32,9 +35,8 @@ sollte aber nicht der primäre Ort zum Einrichten von Repositorys werden.
 
 ### 2.2 Storage
 
-Storage ist heute die logischste Stelle für Repository-Objekte, weil die Seite
-bereits "Borg Repositories verwalten" als Seitentitel nutzt und technische
-Repository-Prüfungen bündelt.
+Die frühere Storage-Seite war die Ausgangsbasis. Sie wurde zur eigenständigen
+Seite **Repositories** mit Master-Detail-Ansicht weiterentwickelt.
 
 ![Aktuelle Storage-Seite](assets/issue-184-187/current-storage.png)
 
@@ -58,16 +60,10 @@ weiterverwenden.
 
 ### 3.1 Hauptentscheidung
 
-Repositorys sollten nicht als vollständig neue Hauptnavigation eingeführt
-werden, solange Storage bereits eine passende fachliche Heimat bietet.
-
-Empfehlung:
-
-- Menüpunkt bleibt **Storage**.
-- Innerhalb von Storage gibt es einen klaren Bereich **Repositories**.
-- Optional später: Subtabs `Repositorys`, `Storage-Ziele`, `Prüfungen`.
-
-Das reduziert Menü-Komplexität und passt zu der bisherigen UI.
+Umgesetzt wurde ein eigener Menüpunkt **Repositories**. Storage Targets bleiben
+als Profile in den Einstellungen; Repository-Informationen, Archive, Wartung
+und Verwaltung liegen auf der Repository-Seite. Damit sind Zielzugang und
+Borg-Repository fachlich klar getrennt.
 
 ### 3.2 Neue fachliche Ebenen
 
@@ -148,33 +144,28 @@ Variante B ist sinnvoll, falls Repositorys später sehr umfangreich werden:
 
 Für den ersten Umsetzungsschritt ist Variante A pragmatischer.
 
-## 6. Storage-/Repository-Wizard
+## 6. Repository-Wizard
 
-Der Wizard sollte aus Storage heraus gestartet werden und dieselbe Designsprache
-wie bestehende Wizard-Dialoge verwenden.
+Der Wizard wird aus **Repositories** gestartet und verwendet dieselbe
+Designsprache wie bestehende Wizard-Dialoge. Speicherziele werden nicht in
+diesem Wizard angelegt, sondern zentral unter **Einstellungen** verwaltet und
+geprüft.
 
 ![Storage-/Repository-Wizard Mockup](assets/issue-184-187/storage-repository-wizard-mockup.svg)
 
 ### 6.1 Schritte
 
-1. Zieltyp wählen
-2. Verbindung oder Profil
-3. Zugriff testen
-4. Repository erstellen oder importieren
-5. Zusammenfassung
+1. Vorhandenes Speicherziel auswählen und Zugriff prüfen
+2. Repository erstellen oder importieren
+3. Zusammenfassung
 
 ### 6.2 SMB-Fokus
 
-Bei SMB darf der Nutzer nicht mehr zuerst über einen temporären Mount-Pfad
-stolpern. Die UI sollte sagen:
+Bei SMB wird das Speicherziel einschließlich technischem Mount-Pfad unter
+**Einstellungen > SMB-Profile** eingerichtet. Der Repository-Wizard zeigt nur
+das fertige Speicherziel und sollte sagen:
 
-> Borg Backup UI verwaltet den technischen Mount-Pfad automatisch.
-
-Erweiterter Modus:
-
-- Mount-Pfad manuell festlegen
-- nur für Power-User
-- mit klarer Warnung und Validierung
+> Speicherziele werden zentral unter Einstellungen angelegt und geprüft.
 
 ### 6.3 Import bestehender Repositorys
 
@@ -247,11 +238,14 @@ Er sollte aber visuell untergeordnet sein.
 ### Phase 4: Job-Wizard anbinden
 
 - Job-Wizard wählt Repository-Objekt.
-- Direkter Pfad wird erweiterter Modus.
 - Neue Jobs werden immer mit `repository_key` gespeichert.
+- Jobs speichern keine Repository-Pfade, Verschlüsselung, Passphrase-Verweise
+  oder Storage-Profil-Keys mehr. Diese Daten gehören ausschließlich den
+  Repository- und Storage-Objekten.
 
 ### Phase 5: Aufräumen vor Go-Live
 
+- Direkte Repository-Pfade werden nicht mehr im Job gespeichert.
 - Alte Zwischenmigrationen entfernen, sofern für öffentliche Nutzer nicht
   relevant.
 - Nur das saubere Zielmodell behalten.

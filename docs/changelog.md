@@ -6,6 +6,163 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #187
+- The Repository Manager now only selects storage targets that were configured and tested centrally under Settings.
+- Duplicate Local, USB, SMB and SSH storage-target creation fields and logic were removed from the repository wizard.
+
+### Issue #203
+- Dashboard backup rows are grouped by storage location in the established Local, USB, SMB and Storagebox order, matching the Jobs workspace.
+- The redundant per-row location column was removed to provide more room for run, restore and storage details.
+
+### Issue #202
+- Job Wizard Docker and VM selection lists keep wheel, touchpad and touch scrolling inside the modal instead of moving the application page when a list boundary is reached.
+- Appdata and VM safety acknowledgements now use a compact inline layout, and the duplicated runtime heading was removed to leave more room for long container and VM lists.
+- The application page is locked while the Job Wizard is open; only the Wizard body or its nested selection list can scroll.
+
+### Issue #199
+- Backup jobs can define multiple concrete file or directory exclusion paths in the Job Wizard.
+- Exclusions must exist below a selected source root and are passed to Borg as safe path-prefix patterns.
+- Existing jobs remain unchanged with an empty exclusion list; edit, preview and runtime logs show the configured exclusions.
+- Job Wizard step 2 now presents sources/exclusions and backup target side by side without reserving space for hidden autocomplete results.
+
+### Issue #198
+- Added a guarded factory reset as the final entry under Settings > Maintenance.
+- Reset requires four risk acknowledgements, the exact server name, the current administrator password and the phrase `FACTORY RESET`.
+- Running jobs, restores, restore tests and repository maintenance block reset; managed repositories inside a deletion root also block reset.
+- Active-operation blockers are deduplicated and shown with one localized, user-readable reason instead of repeated internal operation identifiers.
+- Application configuration and operational data are removed, schedules are cleared and the initial directory layout is recreated without deleting Borg repositories or plugin installation files.
+- Reset execution is recorded in a protected JSONL audit log without secrets.
+
+### Issue #197
+- Test-channel manifests now open the existing Borg Backup UI control panel below Unraid Settings when the plugin icon is selected.
+- Stable promotion copies the tested Settings launch target into the separate release PR.
+
+### Issue #195
+- Job Wizard repository selection:
+  - Repository options now show the human-readable repository name with its effective repository path instead of three unlabeled values.
+  - Redundant confirmation lines below valid storage and repository selections were removed; both areas remain available for missing-selection warnings.
+- Canonical storage validation and migration diagnostics:
+  - Local storage profiles reject broad, unsafe or malformed paths such as `/mnt//backup` before saving instead of silently dropping or normalizing the entry.
+  - The canonical baseline migration validates Local, USB and SMB paths and rolls back with an audited error when malformed legacy input is encountered.
+  - German and English System Health terminology and operator documentation describe the canonical inventories and recovery path consistently.
+  - Repository workspace responses now derive the complete Local, USB, SMB or SSH path from the canonical storage target and relative repository path, so headers and details no longer show an empty repository path.
+  - Support bundles no longer synthesize a misleading `settings.sanitized.json`; canonical storage and repository inventories are included directly.
+  - Removed unused `settings.json` compatibility facades and the obsolete unregistered storage-path migration from normal runtime code.
+  - Transitional repository path and profile fields are readable only by the baseline migration phases; normal runtime inventory reads enforce the canonical repository contract.
+  - Job Wizard, Restore Test and SMB mount requests no longer transport location-specific profile keys; the selected canonical storage target supplies its profile identity.
+
+### Issue #194
+- Canonical data-model migration and diagnostics:
+  - Replaced the PR #189 repository/storage migration chain with one baseline migration, `canonical_data_model_v1`.
+  - The baseline accepts the published legacy layout, partially migrated test installations and already canonical installations while preserving existing canonical IDs.
+  - Migration phases now create one rollback snapshot, validate all storage/repository/job links and remove `settings.json` only after the final model passes validation.
+  - Migration progress, phase results, affected files, object-ID changes, validation and rollback outcomes are written to the central state and JSONL audit files without secrets.
+  - System Health hides superseded intermediate migration entries and reports the canonical storage inventory instead of requiring `settings.json`.
+  - Support bundles now include sanitized storage/repository inventories plus central migration state and audit details.
+  - Added direct legacy-to-canonical, partial-upgrade, idempotence, rollback and separate-process locking regression coverage.
+
+### Issue #193
+- Canonical storage runtime cutover:
+  - SMB backup, restore, restore-test and mount operations now consume the resolved storage object from `storages.json` instead of `SMB_PROFILES_JSON` or profile arrays in `settings.json`.
+  - Settings profile changes use a structured API payload and persist directly to the canonical storage inventory.
+  - The legacy-shaped settings reader is now only a derived compatibility view over `storages.json`; legacy input remains confined to audited startup migrations.
+  - Repository usage lists are reconciled from authoritative job `repository_key` assignments after startup migrations.
+  - System Health reports missing repositories, missing storage targets and inconsistent usage metadata with a repair path through the Job Wizard.
+  - Jobs with a broken repository assignment can still be opened in the Wizard, corrected and saved without manual JSON editing.
+
+### Issue #192
+- Repository model cleanup:
+  - Repository tests now accept only the canonical `repository_key`; direct repository paths and config keys are no longer public request parameters.
+  - Persisted repository objects now contain only `storage_key` plus `relative_path`; effective local paths and SSH URIs are derived for API responses at runtime.
+  - Added an audited, idempotent cleanup migration for repository inventories that already completed the earlier model migrations.
+  - Removed stale help and manual instructions that described jobs as owners of repository paths, encryption or passphrases.
+  - Added regression checks for canonical persistence, runtime job metadata access, translation parity and responsive Repository/Wizard layouts.
+
+### Issue #191
+- Performance:
+  - Removed the blocking `modinfo cifs` subprocess from every System Health API request.
+  - CIFS support is now detected through local kernel and `mount.cifs` capability checks without a three-second request timeout.
+  - System Health now loads the canonical repository/storage inventory once per request instead of once per job.
+  - Dashboard, sidebar and Settings now share one in-flight System Health request instead of downloading the same diagnostics repeatedly.
+  - Split the large notification-reminder diagnostics from the general System Health response and load it through a dedicated Settings endpoint.
+  - Normal Settings reads no longer run remote SSH authentication or target-detection probes; connection checks remain explicit user actions.
+  - Repository and storage inventories reuse immutable in-process snapshots while their on-disk signatures remain unchanged.
+  - Settings derives profile job counts from the canonical repository snapshot instead of rescanning every job for each profile type.
+  - Static job metadata is cached with filesystem-signature invalidation while live run state and latest backup status remain uncached.
+  - Settings menu switches reuse the existing page DOM instead of rebuilding all hidden panels and reloading backup history on every click.
+  - The asynchronously loaded user list now updates its own panel without depending on a full Settings rerender.
+  - Added regression coverage for the non-blocking capability probe.
+
+### Issue #190
+- Security:
+  - Borg keyfile encryption now uses a persistent, plugin-owned `BORG_KEYS_DIR` with restrictive directory and file permissions across backup, restore, restore tests and repository maintenance.
+  - Keyfile encryption was introduced with the canonical model and therefore writes directly to persistent storage; no unnecessary legacy-key migration is registered.
+  - Existing keyfile repositories can import a `borg key export`; unrelated or conflicting keyfiles are never overwritten.
+  - Encrypted job and secrets backups now include Borg keyfiles, while normal job exports and support bundles never contain key material.
+  - Permanent repository deletion removes an exact unreferenced persistent keyfile and records the result in the lifecycle audit log.
+
+### Issue #184
+- Storage:
+  - Added repository objects as a dedicated metadata inventory in `config/repositories.json`.
+  - Existing wizard jobs are migrated to repository objects and receive a stable `repository_key`.
+  - New or edited wizard jobs update the repository inventory automatically.
+  - The Storage page now prefers managed repository objects and shows which jobs use each repository.
+  - Repository objects now separate human-readable job, storage and repository names from technical IDs.
+  - The Storage table shows display names by default and moves technical repository/job/storage IDs into the Details view.
+  - Added `config/storages.json` as storage target inventory with stable `storage_*` IDs.
+  - Existing repositories are migrated to reference storage objects and keep relative repository paths for the later repository wizard.
+  - Repository objects now use deterministic hash-suffixed technical IDs such as `repo_flash_local_7f3c45ab`.
+  - Storage objects now include the configured profile details needed by the later Storage/Repository wizard.
+  - Missing repository encryption metadata is enriched once from linked job metadata instead of guessing a default value.
+  - Jobs now keep only `repository_key`; repository paths, passphrase references, encryption and storage/profile links are resolved exclusively through the repository and storage inventories.
+  - Added an audited, idempotent migration that validates effective legacy paths and secrets, creates a rollback backup, removes duplicate job fields and cleans deprecated repository/passphrase keys from `backup.conf`.
+  - Backup, restore, restore-test, health, profile-usage and transfer paths now share the same canonical repository resolver and refuse unmigrated job metadata instead of silently falling back.
+
+### Issue #187
+- Storage:
+  - Source-path suggestions support keyboard drill-down: Up/Down selects, Right opens the selected directory, and Enter adds the final source path.
+  - Job source-path autocomplete now browses safely below `/mnt`, debounces input and prevents stale requests from clearing newer suggestions.
+
+  - Repository paths can be typed naturally with internal hyphens; live input no longer removes a trailing hyphen before the next character is entered.
+  - Added a three-step repository manager that selects or creates and tests Local, USB, SMB, and SSH/Storagebox targets before repository setup.
+  - SMB targets receive a managed mount path; users no longer have to invent a technical temporary mount path.
+  - Existing repository imports are validated with `borg info` and do not run `borg init`.
+  - Job wizard repository handling now selects existing repository objects filtered by the exact storage target instead of accepting free-form repository paths.
+  - Repository encryption metadata is owned by the repository object; jobs keep compression settings but no longer choose repository encryption.
+  - Replaced the expandable repository table with a responsive master-detail workspace based on design variant A.
+  - The repository sidebar groups repositories by exact storage target and keeps search, selection and status visible.
+  - Repository details are split into Overview, Archives, Maintenance and Activities instead of exposing a technical live log.
+  - Repository maintenance now stores structured, secret-masked results for Check, Verify Data, Prune and Compact.
+  - Prune results list deleted archives, Compact reports reclaimed space when Borg provides it, and failed actions expose concise technical details.
+  - The Archives tab loads the live archive inventory for the selected repository and shows names, IDs, timestamps and duration.
+  - Borg repository information is refreshed in the background every 24 hours and cached; failed refreshes are retried after one hour.
+  - Repository headers now use the configured repository display name instead of combining job and location names.
+  - Display name, repository directory, absolute repository path and path inside the storage target are labeled separately.
+  - Corrected repository header icon alignment.
+  - Archive lists are sorted newest first and no longer show an unexplained empty duration column.
+  - Verify Data, Prune and Compact confirmations now use an application-styled modal instead of the browser's native confirm dialog.
+  - Removed the old job-based manual Borg Check card and the obsolete Job Wizard passphrase/repository-init path.
+  - Repository info refresh now counts archives with `borg list --json` instead of assuming that `borg info --json` contains an archive list.
+  - Repository Manager steps keep their numbered status circles, and the review distinguishes the display name from the path inside the storage target.
+  - Running backup jobs are recovered from persistent resource locks when the UI process has lost its in-memory state, including live-log continuation from the active log file.
+  - Automatic repository information refreshes are deferred while a backup uses the same repository and are shown as in use instead of as a repository failure.
+  - Repository maintenance durations now use timezone-aware start times instead of collapsing valid runtimes to zero seconds.
+  - The repository overview removes the redundant storage-relative path field, gives the absolute path the remaining row width, and drops the duplicate Activities tab until a real multi-run audit history exists.
+  - Restore-test policies now survive Job Wizard edits instead of falling back to manual/L2 for local jobs.
+  - Restore Tests now builds its sidebar from the already loaded plan and resolves all repository/storage assignments from one inventory snapshot per request.
+  - Added a separate Repository Management tab with a non-destructive inventory removal and a guarded permanent Borg repository deletion.
+  - Permanent deletion requires no linked jobs or running operations, revalidates repository ID/path/archive count, requires display-name plus `DELETE` confirmation, and records an audit entry.
+  - Repository lifecycle audit entries now record the authenticated actor, role, authentication method and request ID; the general API log also identifies the repository action and outcome without exposing secrets.
+
+### Issue #191
+- Canonical inventory consistency:
+  - Repository and storage inventories now use a shared cross-process lock, restrictive permissions, and durable atomic writes with `fsync` and `os.replace`.
+  - Existing malformed inventories stop safely and are reported through API errors and System Health instead of being interpreted as empty data.
+  - Job metadata and repository link changes are persisted as a recoverable transaction with rollback on write failures.
+  - `storages.json` is the canonical source for Local, USB, SMB, and SSH profiles; the baseline migration creates a rollback backup and removes the obsolete `settings.json` after validation.
+  - Settings now provides managed Local Profiles for arbitrary Unraid pools below `/mnt`, while broad collection roots and unsafe paths remain blocked.
+  - Effective repository paths are derived from the current storage target and relative repository path.
+
 ### Issue #180
 - Dashboard:
   - Growth now falls back to the previous backup status for the same job when no weekly snapshot baseline exists, avoiding unnecessary dash-only growth values.

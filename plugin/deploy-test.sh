@@ -86,6 +86,7 @@ require_pkg_entry() {
 echo "==> Pruefe Paketinhalt"
 require_pkg_entry "boot/config/plugins/${NAME}/borg_backup_ui.py"
 require_pkg_entry "boot/config/plugins/${NAME}/api/config_api.py"
+require_pkg_entry "boot/config/plugins/${NAME}/api/factory_reset_worker.py"
 require_pkg_entry "boot/config/plugins/${NAME}/ui/index.html"
 require_pkg_entry "boot/config/plugins/${NAME}/runtime/config/backup.conf.example"
 require_pkg_entry "etc/rc.d/rc.borg_backup_ui"
@@ -105,6 +106,35 @@ sed -i.bak \
   -e "s|<MD5>[^<]*</MD5>|<MD5>${MD5}</MD5>|" \
   "$TMP_PLG"
 rm -f "${TMP_PLG}.bak"
+
+# Unraid opens the plugin icon on the existing Settings control panel. Keep
+# this in the generated test manifest so the navigation is tested before the
+# same attribute is promoted by the dedicated stable release PR.
+python3 - "$TMP_PLG" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+if re.search(r'<PLUGIN\b[^>]*\blaunch="[^"]*"', text, re.S):
+    text = re.sub(
+        r'(<PLUGIN\b[^>]*?)\blaunch="[^"]*"',
+        r'\1launch="Settings/borg-backup-ui"',
+        text,
+        count=1,
+        flags=re.S,
+    )
+else:
+    text = re.sub(
+        r'(<PLUGIN\b[^>]*?\bversion="[^"]*")',
+        r'\1\n        launch="Settings/borg-backup-ui"',
+        text,
+        count=1,
+        flags=re.S,
+    )
+path.write_text(text, encoding="utf-8")
+PY
 
 echo "==> Pruefe Test-Manifest XML"
 python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$TMP_PLG"

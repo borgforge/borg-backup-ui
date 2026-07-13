@@ -1,0 +1,460 @@
+import json
+import subprocess
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+API_ROOT = ROOT / "api"
+if str(API_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_ROOT))
+
+import storage_objects_api  # noqa: E402
+import check_api  # noqa: E402
+import repositories_api  # noqa: E402
+from check_api import CheckManager  # noqa: E402
+from repositories_api import RepositoryLifecycleConflict, apply_repository_lifecycle, prepare_repository_lifecycle, read_repository_store, unlink_job_from_repositories, write_repository_store  # noqa: E402
+from storage_objects_api import create_storage_target, read_storage_store, test_storage_target as run_storage_target_test, write_storage_store  # noqa: E402
+
+
+def test_create_local_storage_target_is_stable_and_testable(tmp_path: Path, monkeypatch):
+    base = tmp_path / "backup"
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    monkeypatch.setattr(storage_objects_api, "_safe_local_storage_path", lambda *_args, **_kwargs: str(base))
+
+    first = create_storage_target(config, {
+        "storage_type": "local",
+        "display_name": "Local backup",
+        "base_path": str(base),
+    })
+    second = create_storage_target(config, {
+        "storage_type": "local",
+        "display_name": "Duplicate",
+        "base_path": str(base),
+    })
+
+    assert first["created"] is True
+    assert second["created"] is False
+    assert first["storage"]["storage_key"] == second["storage"]["storage_key"]
+    assert base.is_dir()
+    assert run_storage_target_test(config, first["storage"]["storage_key"])["ok"] is True
+    assert len(read_storage_store(config)["storages"]) == 1
+
+
+def test_create_usb_storage_target_updates_canonical_inventory_only(tmp_path: Path, monkeypatch):
+    mount = tmp_path / "usb"
+    mount.mkdir()
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    monkeypatch.setattr(storage_objects_api, "_safe_local_storage_path", lambda *_args, **_kwargs: str(mount))
+
+    result = create_storage_target(config, {
+        "storage_type": "usb",
+        "display_name": "USB archive",
+        "mount_path": str(mount),
+    })
+
+    assert result["storage"]["display_name"] == "USB archive"
+    assert result["storage"]["profile_key"].startswith("usb-")
+    assert result["storage"]["mount_path"] == str(mount)
+    assert not (tmp_path / "config" / "settings.json").exists()
+
+
+def test_repository_maintenance_commands_use_repository_and_job_retention(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    jobs = tmp_path / "config" / "jobs"
+    jobs.mkdir(parents=True)
+    (jobs / "photos_local.json").write_text(json.dumps({
+        "job_key": "photos_local",
+        "repository_key": "repo_photos",
+        "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
+    }), encoding="utf-8")
+    repository = {"repository_key": "repo_photos", "used_by": ["photos_local"]}
+    manager = CheckManager()
+
+    assert manager._repository_command(config, repository, "/mnt/backup/photos", "check", "quick") == [
+        "borg", "check", "--progress", "/mnt/backup/photos",
+    ]
+    assert manager._repository_command(config, repository, "/mnt/backup/photos", "compact", "quick") == [
+        "borg", "compact", "--progress", "/mnt/backup/photos",
+    ]
+    assert manager._repository_command(config, repository, "/mnt/backup/photos", "prune", "quick") == [
+        "borg", "prune", "--list", "--progress",
+        "--keep-daily", "7", "--keep-weekly", "4", "--keep-monthly", "6", "--keep-yearly", "3",
+        "/mnt/backup/photos",
+    ]
+
+
+def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: Path, monkeypatch):
+    secret = tmp_path / "secrets" / ".borg-passphrase-repo_test"
+    secret.parent.mkdir(parents=True)
+    secret.write_text("secret", encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_test",
+        "display_name": "Test",
+        "repository_name": "test",
+        "storage_key": "storage_local_test",
+        "location": "local",
+        "relative_path": "test",
+        "path_raw": "/mnt/backup/test",
+        "passphrase_ref": str(secret),
+    }]})
+    captured = {}
+
+    class Process:
+        stdout = None
+
+        def wait(self):
+            return 0
+
+        returncode = 0
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return Process()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    monkeypatch.setattr("threading.Thread.start", lambda _self: None)
+
+    ok, error = CheckManager().start_repository(config, "repo_test", "check", "quick")
+
+    assert ok is True and error is None
+    assert captured["cmd"] == ["borg", "check", "--progress", "/mnt/backup/test"]
+    assert "shell" not in captured["kwargs"]
+    assert captured["kwargs"]["env"]["BORG_PASSCOMMAND"].endswith(str(secret))
+
+
+def test_repository_maintenance_persists_structured_prune_and_compact_results(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    repository = {
+        "repository_key": "repo_test",
+        "display_name": "Test",
+        "storage_key": "storage_local_test",
+        "relative_path": "test",
+    }
+    write_repository_store(config, {"repositories": [repository]})
+
+    class Process:
+        returncode = 0
+
+    prune = check_api._CheckState(
+        Process(),
+        "repo_test",
+        "quick",
+        datetime.now() - timedelta(seconds=4),
+        action="prune",
+        config=config,
+        repository=repository,
+    )
+    prune.append_line("Pruning archive (1/2): test-2026-06-01")
+    prune.append_line("Pruning archive (2/2): test-2026-06-02")
+    prune_result = CheckManager._persist_repository_result(prune)
+
+    compact = check_api._CheckState(
+        Process(),
+        "repo_test",
+        "quick",
+        datetime.now() - timedelta(seconds=2),
+        action="compact",
+        config=config,
+        repository=repository,
+    )
+    compact.append_line("Repository compaction freed about 12.6 GB repository space.")
+    compact_result = CheckManager._persist_repository_result(compact)
+
+    stored = read_repository_store(config)["repositories"][0]["maintenance_results"]
+    assert prune_result["status"] == "success"
+    assert prune_result["duration_seconds"] >= 4
+    assert prune_result["deleted_archives_count"] == 2
+    assert stored["prune"]["deleted_archives"] == ["test-2026-06-01", "test-2026-06-02"]
+    assert compact_result["freed_space"] == "12.6 GB"
+    assert compact_result["duration_seconds"] >= 2
+    assert stored["compact"]["freed_space"] == "12.6 GB"
+
+
+def test_repository_maintenance_masks_error_details(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    repository = {
+        "repository_key": "repo_test",
+        "display_name": "Test",
+        "storage_key": "storage_local_test",
+        "relative_path": "test",
+    }
+    write_repository_store(config, {"repositories": [repository]})
+
+    class Process:
+        returncode = 2
+
+    state = check_api._CheckState(
+        Process(),
+        "repo_test",
+        "quick",
+        datetime.now() - timedelta(seconds=1),
+        action="check",
+        config=config,
+        repository=repository,
+    )
+    state.append_line("Connection failed: password=hunter2 token=secret-token")
+
+    result = CheckManager._persist_repository_result(state)
+
+    assert result["status"] == "error"
+    assert result["details"] == ["Connection failed: password=*** token=***"]
+    stored = read_repository_store(config)["repositories"][0]["maintenance_results"]["check"]
+    assert "hunter2" not in json.dumps(stored)
+    assert "secret-token" not in json.dumps(stored)
+
+
+def test_repository_maintenance_stream_exposes_completion_not_raw_output():
+    class Process:
+        returncode = 2
+
+    state = check_api._CheckState(Process(), "repo_test", "quick", datetime.now(), action="check")
+    state.append_line("password=hunter2")
+    state.finished = True
+    state.exit_code = 2
+    manager = CheckManager()
+    manager._state = state
+
+    stream = "".join(manager.stream_output())
+
+    assert "event: done" in stream
+    assert "data: 2" in stream
+    assert "hunter2" not in stream
+
+
+def _write_lifecycle_repository(tmp_path: Path, *, used_by=None) -> tuple[dict, Path, Path]:
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    base = tmp_path / "backup"
+    repository_path = base / "photos"
+    repository_path.mkdir(parents=True)
+    secret = tmp_path / "secrets" / ".borg-passphrase-repo_photos"
+    secret.parent.mkdir(parents=True)
+    secret.write_text("secret", encoding="utf-8")
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": f"local:{base}",
+        "base_path": str(base),
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_photos",
+        "display_name": "Photos",
+        "repository_name": "photos",
+        "storage_key": "storage_local_test",
+        "storage_name": "Local",
+        "location": "local",
+        "relative_path": "photos",
+        "path_raw": str(repository_path),
+        "path_display": str(repository_path),
+        "passphrase_ref": str(secret),
+        "encryption": "repokey-blake2",
+        "borg_repository_id": "repo-id-123",
+        "repository_stats": {"archives_count": 3, "unique_csize": 1024},
+        "used_by": list(used_by or []),
+        "source_job_keys": list(used_by or []),
+    }]})
+    return config, repository_path, secret
+
+
+def test_repository_remove_from_inventory_keeps_data_and_secret(tmp_path: Path):
+    config, repository_path, secret = _write_lifecycle_repository(tmp_path)
+
+    preview = prepare_repository_lifecycle(config, "repo_photos", "remove")
+    result = apply_repository_lifecycle(
+        config,
+        {
+            "repository_key": "repo_photos",
+            "mode": "remove",
+            "confirmation_name": "Photos",
+        },
+        audit_context={
+            "actor": "testadmin",
+            "actor_role": "admin",
+            "auth_method": "session",
+            "request_id": "request-123",
+        },
+    )
+
+    assert preview["allowed"] is True
+    assert result["repository_deleted"] is False
+    assert read_repository_store(config)["repositories"] == []
+    assert repository_path.is_dir()
+    assert secret.is_file()
+    audit = json.loads(
+        (tmp_path / "config" / "repository-lifecycle.log.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert audit["action"] == "remove_from_inventory"
+    assert audit["actor"] == "testadmin"
+    assert audit["actor_role"] == "admin"
+    assert audit["auth_method"] == "session"
+    assert audit["request_id"] == "request-123"
+
+
+def test_repository_lifecycle_blocks_live_job_reference(tmp_path: Path):
+    config, repository_path, _secret = _write_lifecycle_repository(tmp_path)
+    jobs = tmp_path / "config" / "jobs"
+    jobs.mkdir(parents=True)
+    (jobs / "photos_local.json").write_text(json.dumps({
+        "schema_version": 2,
+        "job_key": "photos_local",
+        "repository_key": "repo_photos",
+    }), encoding="utf-8")
+
+    preview = prepare_repository_lifecycle(config, "repo_photos", "remove")
+
+    assert preview["allowed"] is False
+    assert preview["job_keys"] == ["photos_local"]
+    assert "jobs_linked" in preview["blockers"]
+    with pytest.raises(RepositoryLifecycleConflict, match="jobs or operations"):
+        apply_repository_lifecycle(config, {
+            "repository_key": "repo_photos",
+            "mode": "remove",
+            "confirmation_name": "Photos",
+        })
+    assert repository_path.is_dir()
+
+
+def test_deleted_job_is_unlinked_from_repository_inventory(tmp_path: Path):
+    config, _repository_path, _secret = _write_lifecycle_repository(tmp_path, used_by=["photos_local"])
+
+    unlink_job_from_repositories(config, "photos_local")
+
+    repository = read_repository_store(config)["repositories"][0]
+    assert repository["used_by"] == []
+    assert repository["source_job_keys"] == []
+
+
+def test_permanent_repository_delete_revalidates_identity_and_uses_borg(tmp_path: Path, monkeypatch):
+    config, repository_path, secret = _write_lifecycle_repository(tmp_path)
+    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
+        "repository": {"id": "repo-id-123"},
+        "encryption": {"mode": "repokey-blake2"},
+        "cache": {"stats": {"unique_csize": 1024}},
+    })
+    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {
+        "archives": [{"name": "one"}, {"name": "two"}, {"name": "three"}],
+    })
+    captured = {}
+
+    class Result:
+        returncode = 0
+        stdout = "Repository deleted."
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return Result()
+
+    monkeypatch.setattr(repositories_api.subprocess, "run", fake_run)
+    preview = prepare_repository_lifecycle(config, "repo_photos", "delete")
+    result = apply_repository_lifecycle(config, {
+        "repository_key": "repo_photos",
+        "mode": "delete",
+        "confirmation_name": "Photos",
+        "confirmation_phrase": "DELETE",
+        "expected_repository_id": preview["repository_id"],
+        "expected_repository_path": preview["repository_path"],
+        "expected_archive_count": preview["archive_count"],
+    })
+
+    assert captured["command"] == ["borg", "delete", "--lock-wait", "30", str(repository_path)]
+    assert "shell" not in captured["kwargs"]
+    assert captured["kwargs"]["env"]["BORG_DELETE_I_KNOW_WHAT_I_AM_DOING"] == "YES"
+    assert result["repository_deleted"] is True
+    assert result["secret_deleted"] is True
+    assert read_repository_store(config)["repositories"] == []
+    assert not secret.exists()
+
+
+def test_permanent_repository_delete_requires_name_and_delete_phrase(tmp_path: Path):
+    config, repository_path, secret = _write_lifecycle_repository(tmp_path)
+
+    with pytest.raises(ValueError, match="display name confirmation"):
+        apply_repository_lifecycle(config, {
+            "repository_key": "repo_photos",
+            "mode": "delete",
+            "confirmation_name": "wrong",
+            "confirmation_phrase": "DELETE",
+        })
+    with pytest.raises(ValueError, match="requires DELETE"):
+        apply_repository_lifecycle(config, {
+            "repository_key": "repo_photos",
+            "mode": "delete",
+            "confirmation_name": "Photos",
+            "confirmation_phrase": "delete",
+        })
+    assert repository_path.is_dir()
+    assert secret.is_file()
+    assert len(read_repository_store(config)["repositories"]) == 1
+
+
+def test_permanent_repository_delete_rejects_changed_identity(tmp_path: Path, monkeypatch):
+    config, _repository_path, _secret = _write_lifecycle_repository(tmp_path)
+    ids = iter(["repo-id-123", "different-id"])
+    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
+        "repository": {"id": next(ids)},
+        "encryption": {"mode": "repokey-blake2"},
+        "cache": {"stats": {"unique_csize": 1024}},
+    })
+    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {"archives": []})
+    preview = prepare_repository_lifecycle(config, "repo_photos", "delete")
+
+    with pytest.raises(RepositoryLifecycleConflict, match="identity or archive count changed"):
+        apply_repository_lifecycle(config, {
+            "repository_key": "repo_photos",
+            "mode": "delete",
+            "confirmation_name": "Photos",
+            "confirmation_phrase": "DELETE",
+            "expected_repository_id": preview["repository_id"],
+            "expected_repository_path": preview["repository_path"],
+            "expected_archive_count": preview["archive_count"],
+        })
+    assert len(read_repository_store(config)["repositories"]) == 1
+
+
+def test_repository_management_ui_is_separate_and_double_confirmed():
+    script = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+    de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
+    en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
+
+    assert "repositoryTabManagement" in script
+    assert "data-lifecycle-mode=\"remove\"" in script
+    assert "data-lifecycle-mode=\"delete\"" in script
+    assert "confirmation_phrase" in script
+    assert "phrase === 'DELETE'" in script
+    assert "repository-lifecycle-modal" in html
+    assert de["storage"]["repositoryTabManagement"] == "Verwaltung"
+    assert en["storage"]["repositoryTabManagement"] == "Management"

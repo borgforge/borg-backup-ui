@@ -9,10 +9,10 @@ Dieses Kapitel beschreibt, wie Jobs angelegt, geprüft und gespeichert werden.
 1. **Jobs** öffnen.
 2. **Neuer Job** wählen.
 3. Jobname und Typ eintragen.
-4. Location wählen: `local`, `usb`, `smb` oder `storagebox`.
-5. Quellpfade eintragen.
-6. Zielprofil oder Repository prüfen.
-7. Verschlüsselung, Passphrase, Kompression und Retention setzen.
+4. Speicherziel wählen: lokal, USB, SMB oder SSH/Storagebox.
+5. Ein dazugehöriges vorhandenes Repository wählen.
+6. Quellpfade eintragen.
+7. Kompression und Retention setzen.
 8. Optional Zeitplan aktivieren.
 9. Vorschau prüfen und speichern.
 
@@ -28,7 +28,10 @@ Typische Beispiele:
 
 ## Repository
 
-Das Repository ist das Borg-Ziel. Je nach Location entsteht es unterschiedlich:
+Das Repository ist das Borg-Ziel. Es wird vor dem Job auf der Seite
+**Repositories** erstellt oder importiert. Der Job speichert ausschließlich die
+Repository-ID. Pfad, Verschlüsselung und Secret-Verweis werden aus dem
+Repository-Objekt aufgelöst:
 
 - **local**: Dateisystempfad.
 - **usb**: Pfad aus USB-Ziel plus Job-Unterpfad.
@@ -37,7 +40,8 @@ Das Repository ist das Borg-Ziel. Je nach Location entsteht es unterschiedlich:
 
 ## Wizard-Vorschau
 
-Die Vorschau zeigt den resultierenden Repository-Pfad. Bei SSH-/Storagebox-Jobs prüft der Wizard zusätzlich, ob das Repository gefunden wurde oder ob die Anlage bestätigt werden muss.
+Die Vorschau zeigt Speicherziel, Repository und den zentral aufgelösten
+Repository-Pfad. Der Wizard legt keine Repositorys an.
 
 ## Zeitplan
 
@@ -49,7 +53,9 @@ Ein Job ist bereit, wenn er gespeichert ist, keine Wizard-Fehler zeigt und der e
 
 ## Fehlerbilder
 
-- **Remote-Repository-Anlage bestätigen**: Repository konnte nicht sicher als vorhanden erkannt werden.
+- **Kein Repository vorhanden**: Repository zuerst unter **Repositories**
+  erstellen oder importieren.
 - **Kein Profil vorhanden**: Passendes USB-, SMB- oder SSH-Profil in Einstellungen anlegen.
 - **Quellpfad fehlt**: Pfad auf Unraid prüfen.
-- **Passphrase-Datei fehlt**: Job-Passphrase prüfen oder Secret importieren.
+- **Passphrase-Datei fehlt**: Repository-Secret prüfen oder Repository erneut
+  korrekt importieren.

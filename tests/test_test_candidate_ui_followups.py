@@ -8,38 +8,123 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_storage_groups_locations_and_scopes_smb_profiles() -> None:
+def test_storage_uses_repository_master_detail_navigation() -> None:
     html = _read("ui/index.html")
     script = _read("ui/js/pages/storage.js")
     assert '<small data-i18n="storage.locationsHint">' not in html
-    assert "function renderStorageRepositoryRows(repos, profiles)" in script
-    assert "STORAGE_LOCATION_ORDER.map((location)" in script
-    assert "const showSmbProfiles = (storageState.selectedLocation || 'all') === 'smb';" in script
+    assert "function renderStorageLocationSidebar(data, repos)" in script
+    assert "function renderStorageRepositoryWorkspace(repo, job)" in script
+    assert "function storageGroupRows(data, repos)" in script
+    assert 'data-storage-repository-key=' in script
+    assert 'data-storage-action="select-repository-tab"' in script
+    assert "renderStorageSmbProfiles" not in script
 
 
-def test_storage_test_details_are_visible_after_success_or_failure() -> None:
+def test_storage_repository_details_focus_on_user_facing_metadata() -> None:
     script = _read("ui/js/pages/storage.js")
     css = _read("ui/remaining-ui-redesign.css")
-    test_repo = script.split("async function testRepo", 1)[1].split(
-        "function openStorageTestDetails", 1
+    details_panel = script.split("function renderStorageRepositoryOverview(repo, job)", 1)[1].split(
+        "function renderStorageRepositoryArchives", 1
     )[0]
-    assert "if (detailsBtn) detailsBtn.classList.remove('hidden');" in test_repo
-    assert "el.dataset.fullOutput = String(data.output || '');" in test_repo
-    assert 'class="test-result hidden"' in script
-    assert ".storage-row-actions .test-result:empty { display: none; }" in css
+    assert "function storageRepositoryEncryption(repo, job)" in script
+    assert "storage.repositoryDisplayNameLabel" in details_panel
+    assert "storage.repositoryDirectoryLabel" in details_panel
+    assert "storage.storageNameLabel" in details_panel
+    assert "storage.jobNameLabel" in details_panel
+    assert "storage.location" not in details_panel
+    assert "storage.repositoryPathLabel" in details_panel
+    assert "storage.repositoryEncryption" in details_panel
+    assert "storage.repositoryRelativePath" not in details_panel
+    assert "'span-3'" in details_panel
+    assert "storage.repositoryIdLabel" not in details_panel
+    assert "storage.storageIdLabel" not in details_panel
+    assert "storage.jobIdLabel" not in details_panel
+    assert "storage.repoConfKeyLabel" not in details_panel
+    assert 'data-storage-action="test-repo"' not in script
+    assert ".storage-repository-master-detail" in css
+    assert ".storage-maintenance-summary-grid" in css
 
 
 def test_storage_repositories_use_configured_job_icons() -> None:
     script = _read("ui/js/pages/storage.js")
+    css = _read("ui/remaining-ui-redesign.css")
     assert "fetch('/api/jobs')" in script
     assert "function storageJobForRepository(repo)" in script
+    assert "function storageRepositoryTitle(repo, job)" in script
     assert "resolveJobIcon(job || repo)" in script
     assert "resolveJobIconColor(job || repo)" in script
-    repository_row = script.split("function renderStorageRepositoryRow", 1)[1].split(
-        "function storageJobForRepository", 1
+    assert ".storage-repository-icon-large" in css
+    assert "justify-content: center" in css
+    title_helper = script.split("function storageRepositoryTitle(repo, job)", 1)[1].split(
+        "function storageRepositoryName", 1
     )[0]
-    assert "typeIcon(icon)" in repository_row
-    assert "storageLocationIcon(repo.location)" not in repository_row
+    assert "repo?.display_name" in title_helper
+    assert "storageLocationLabel" not in title_helper
+    repository_row = script.split("function renderStorageLocationSidebar(data, repos)", 1)[1].split(
+        "function onStorageLocationClick", 1
+    )[0]
+    assert "storageRepositoryIcon(repo, job)" in repository_row
+    assert "storageRepositoryTitle(repo, job)" in repository_row
+    assert "storageRepositoryName(repo)" in repository_row
+    assert "storageRepositoryStatus(repo)" in repository_row
+    assert ".storage-repository-nav-item" in css
+    assert "function toggleStorageRepositoryDetails" not in script
+
+
+def test_repository_manager_uses_single_visible_repository_path_field() -> None:
+    html = _read("ui/index.html")
+    script = _read("ui/js/pages/storage.js")
+    german = _read("ui/i18n/de.json")
+    css = _read("ui/remaining-ui-redesign.css")
+    assert 'id="repository-manager-repository-name"' in html
+    assert 'type="hidden" id="repository-manager-repository-name"' in html
+    assert 'id="repository-manager-relative-path"' in html
+    assert "storage.repositoryRelativePath" in html
+    assert "Repository-Pfad im Speicherziel" in german
+    assert "function repositoryManagerNameFromRelativePath" in script
+    assert "function repositoryManagerPathInputChanged" in script
+    assert "addEventListener('input', repositoryManagerPathInputChanged)" in _read("ui/js/components/app-bindings.js")
+    assert "function repositoryManagerPathChanged" in script
+    assert "repositoryManagerPathChanged();" in script
+    assert ".repository-manager-form-grid" in css
+    assert "--ui-color-primary" not in css
+    assert "background: var(--ui-color-accent);" in css
+    assert '"repositorySummaryRepository": "Anzeigename"' in german
+    assert '"repositorySummaryPath": "Pfad im Speicherziel"' in german
+
+
+def test_wizard_source_autocomplete_cancels_stale_requests() -> None:
+    script = _read("ui/js/pages/wizard.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+    assert "function wizardCancelSourceSuggestRequest" in script
+    assert "new AbortController()" in script
+    assert "requestId !== wizardState.sourceSuggestRequest" in script
+    assert "}, 180);" in script
+    assert "event.key === 'ArrowRight' && rows.length" in script
+    assert "input.value = selected" in script
+    assert "→ Verzeichnis öffnen" in german
+    assert "→ open directory" in english
+
+
+def test_wizard_sources_and_target_use_compact_two_column_layout() -> None:
+    html = _read("ui/index.html")
+    script = _read("ui/js/pages/wizard.js")
+    css = _read("ui/style.css")
+
+    step = html.split('id="wizard-step-2"', 1)[1].split('id="wizard-step-3"', 1)[0]
+    assert 'class="wizard-step2-layout"' in step
+    assert step.index('id="wizard-step2-sources-title"') < step.index('id="wizard-step2-target-title"')
+    assert 'class="wizard-path-control"' in step
+    assert 'wizard-step2-path-list' in step
+    assert "wizard-step-scroll-hint" not in step
+    assert "wizardUpdateStep2ScrollHint" not in script
+    assert "wizardEnsureScrollHintBinding" not in script
+    assert ".wizard-step2-layout" in css
+    assert "grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr)" in css
+    assert ".wizard-path-suggest.hidden" in css
+    assert "display: none !important" in css
+    assert "@media (max-width: 700px)" in css
 
 
 def test_restore_tests_use_quiet_overdue_tile_and_consistent_sidebar_states() -> None:
@@ -60,7 +145,9 @@ def test_dashboard_and_jobs_preserve_readable_content() -> None:
     jobs = _read("ui/js/pages/jobs.js")
     german = _read("ui/i18n/de.json")
     assert "min-width: 1280px" in css
-    assert ".dashboard-inventory-table th:nth-child(1) { width: 22%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(1) { width: 24%; }" in css
+    assert "renderDashboardLocationGroups(visible)" in dashboard
+    assert ".dashboard-location-group-row td" in css
     assert "dashboard-storage-facts" in dashboard
     assert "function renderDashboardRepositoryCheck" in dashboard
     assert "dashboard-check-date" in css

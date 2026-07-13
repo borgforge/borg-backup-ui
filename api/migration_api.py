@@ -1,9 +1,4 @@
-"""
-api/migration_api.py - read-only migration registry for the legacy plugin.
-
-The registry is intentionally conservative: it reports migration status and
-cleanup candidates, but does not modify config files or move data.
-"""
+"""Migration status, diagnostics and explicit configuration cleanup actions."""
 from __future__ import annotations
 
 import json
@@ -13,8 +8,8 @@ from typing import Any, Dict, List
 
 
 DEPRECATED_CONF_KEYS: Dict[str, str] = {
-    "BORG_PASSPHRASE_FILE_LOCAL": "Passphrase path is now stored per job",
-    "BORG_PASSPHRASE_FILE_STORAGEBOX": "Passphrase path is now stored per job",
+    "BORG_PASSPHRASE_FILE_LOCAL": "Passphrase reference is now stored by the repository object",
+    "BORG_PASSPHRASE_FILE_STORAGEBOX": "Passphrase reference is now stored by the repository object",
     "GLOBAL_DOCKER_STOP_TIMEOUT": "replaced by DOCKER_STOP_TIMEOUT",
     "GLOBAL_DOCKER_STOP_WAIT": "replaced by DOCKER_STOP_WAIT",
     "GLOBAL_DOCKER_START_WAIT": "replaced by DOCKER_START_WAIT",
@@ -91,7 +86,7 @@ def _read_migration_state(config_dir: Path) -> Dict[str, Any]:
 
 def _deprecated_reason(key: str) -> str:
     if key.startswith("BORG_PASSPHRASE_FILE_"):
-        return "Passphrase path is now stored per job"
+        return "Passphrase reference is now stored by the repository object"
     return DEPRECATED_CONF_KEYS.get(key, "")
 
 
@@ -330,7 +325,20 @@ def _migration_reason_from_state(migration_id: str, state: str, details: Dict[st
 
 def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
-    hidden_legacy_ids = {"storage_paths_v1", "restore_history_v1"}
+    hidden_legacy_ids = {
+        "storage_paths_v1",
+        "restore_history_v1",
+        "repository_objects_v1",
+        "repository_objects_v2",
+        "repository_objects_v3",
+        "repository_objects_v4",
+        "storage_objects_v1",
+        "storage_objects_v2",
+        "repository_runtime_v1",
+        "borg_keyfiles_v1",
+        "canonical_storage_profiles_v1",
+        "repository_contract_cleanup_v1",
+    }
     for migration_id in sorted(str(key) for key in migrations.keys()):
         if migration_id in hidden_legacy_ids:
             continue
@@ -347,7 +355,7 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
             _migration_reason_from_state(migration_id, state, details),
             category="migration",
             details={
-                **row,
+                **details,
                 "state": state,
                 "checked_at": checked_at,
                 "updated_keys": details.get("updated_keys") if isinstance(details.get("updated_keys"), list) else [],
@@ -359,11 +367,11 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
 
 
 def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
-    from config_api import read_settings_payload
+    from storage_objects_api import read_storage_store
 
     config_dir = _config_dir(ui_config)
     conf_file = config_dir / "backup.conf"
-    settings_file = config_dir / "settings.json"
+    storage_file = config_dir / "storages.json"
     jobs_dir = config_dir / "jobs"
     migration_state = _read_migration_state(config_dir)
     example_keys = _read_example_keys(config_dir)
@@ -373,15 +381,9 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
     cleanup_plan = build_legacy_cleanup_plan(ui_config, mode="comment_out")
 
     try:
-        settings_payload = read_settings_payload(ui_config)
+        profile_count = len(read_storage_store(ui_config).get("storages", []))
     except Exception:
-        settings_payload = {}
-    profile_count = 0
-    if isinstance(settings_payload, dict):
-        for key in ("usb_profiles", "smb_profiles", "storage_profiles"):
-            rows = settings_payload.get(key)
-            if isinstance(rows, list):
-                profile_count += len(rows)
+        profile_count = 0
 
     migrations = migration_state.get("migrations") if isinstance(migration_state.get("migrations"), dict) else {}
 
@@ -395,12 +397,12 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
             details={"jobs_dir": str(jobs_dir)},
         ),
         _status_item(
-            "setup_settings_json",
-            "Profile data in settings.json",
-            "applied" if settings_file.exists() else "pending",
-            "settings.json exists." if settings_file.exists() else "settings.json is missing.",
+            "setup_storage_inventory",
+            "Canonical storage inventory",
+            "applied" if storage_file.exists() else "pending",
+            "storages.json exists." if storage_file.exists() else "storages.json is missing.",
             category="setup",
-            details={"settings_file": str(settings_file), "profile_count": profile_count},
+            details={"storage_file": str(storage_file), "profile_count": profile_count},
         ),
         _status_item(
             "config_backup_conf_schema",

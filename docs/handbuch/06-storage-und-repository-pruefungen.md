@@ -1,27 +1,32 @@
-# 06 - Storage und Repository-Prüfungen
+# 06 - Speicherziele und Repository-Wartung
 
 ## Ziel
 
-Dieses Kapitel erklärt den Unterschied zwischen Profiltest, Job-Check und Repository-Test.
+Dieses Kapitel erklärt den Unterschied zwischen Profiltest, Job-Check,
+Repository-Information und Borg-Wartung.
 
 ## Drei Arten von Prüfungen
 
 - **Profiltest**: Prüft, ob ein SMB- oder SSH-Profil grundsätzlich nutzbar ist.
 - **Job-Check**: Prüft schnell lokale Plausibilität, z. B. Profilreferenz, URI-Syntax, Quellpfade und Passphrase-Datei.
-- **Repository-Test**: Prüft den Zugriff auf das konkrete Borg-Repository.
+- **Repository-Information**: Lädt Identität, Archive, Größe und
+  Verschlüsselung des konkreten Borg-Repositorys.
+- **Repository-Wartung**: Führt Check, Datenprüfung, Prune oder Compact bewusst
+  für genau dieses Repository aus.
 
-## Storage-Seite verwenden
+## Repository-Seite verwenden
 
-1. **Storage** öffnen.
-2. Zielbereich wählen.
-3. Bei SMB zuerst Mount-Status prüfen.
-4. Falls nötig mounten.
-5. Repository-Test ausführen.
-6. Details lesen, wenn der Test fehlschlägt.
+1. **Repositories** öffnen.
+2. Speicherziel und Repository in der Seitenleiste wählen.
+3. Unter **Übersicht** die Repository-Informationen aktualisieren.
+4. Unter **Archive** vorhandene Archive prüfen.
+5. Unter **Wartung** nur die benötigte Borg-Aktion auswählen.
+6. Status und verständliche Fehlerdetails lesen.
 
 ## SMB-Besonderheiten
 
-Ein SMB-Repository kann nur sinnvoll getestet werden, wenn das SMB-Ziel gemountet ist. Ein vorhandenes Profil reicht dafür nicht aus.
+Ein SMB-Repository kann nur sinnvoll geöffnet werden, wenn das SMB-Ziel
+gemountet ist. Ein vorhandenes Profil allein reicht dafür nicht aus.
 
 ## SSH-Besonderheiten
 
@@ -33,7 +38,9 @@ Ein Borg-Check ist intensiver als ein einfacher Zugriffstest. Er sollte bewusst 
 
 ## Ergebnis prüfen
 
-Ein Repository gilt als erreichbar, wenn der Repo-Test erfolgreich ist und Details keine Authentifizierungs-, Pfad- oder Passphrase-Fehler zeigen.
+Ein Repository gilt als erreichbar, wenn seine Informationen erfolgreich
+geladen werden und keine Authentifizierungs-, Pfad- oder Passphrase-Fehler
+angezeigt werden.
 
 ## Fehlerbilder
 

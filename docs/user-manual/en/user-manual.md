@@ -13,7 +13,7 @@ This manual describes Borg-Backup-UI in the same order as the application's menu
 1. [Basics](#1-basics)
 2. [Dashboard](#2-dashboard)
 3. [Jobs](#3-jobs)
-4. [Storage](#4-storage)
+4. [Repositories](#4-repositories)
 5. [History](#5-history)
 6. [Reports](#6-reports)
 7. [Browse & Restore](#7-browse--restore)
@@ -145,20 +145,19 @@ The job wizard guides creation or editing of a job through fixed steps.
 
 #### Step 1: Basics
 
-This step sets job name, type ID, icon, icon color, location, and initial runtime options.
+This step sets job name, type ID, icon, icon color, and initial runtime options.
 
 Important fields:
 
 - **Job name:** Visible name in the UI, reports, and notifications.
 - **Type ID:** Technical key component. It should be short, unique, and stable.
 - **Icon / icon color:** Representation in Dashboard, Jobs, Restore, and Reports.
-- **Location:** `Local`, `USB`, `SMB`, or `Storagebox`.
 - **Stop Docker before backup:** Enables Docker control.
 - **Shut down VMs before backup:** Enables VM control.
 
 #### Step 2: Sources & Target
 
-This step configures source paths and the repository target. Depending on the location, a profile is selected or a path/URI is built.
+The compact view shows **Sources and exclusions** on the left and the **Backup target** on the right. This step selects source paths, optional exclusion paths, storage type, the exact storage target, an existing repository, and job compression. The repository list only shows repositories belonging to the selected storage target. Repository paths are no longer entered freely in a job.
 
 Typical source paths:
 
@@ -168,6 +167,8 @@ Typical source paths:
 - `/mnt/user/photos/`
 
 > **Note:** Source paths must exist on the Unraid system and must be readable by the backup process.
+
+Exclusion paths are concrete files or directories below a selected source path. They are omitted from the Borg archive. With many entries, only the path lists scroll inside their section.
 
 #### Docker and VM Steps
 
@@ -182,9 +183,9 @@ When `/mnt/user/appdata` is backed up, the application recommends stopping all D
 
 > **Warning:** Appdata and VM backups can produce warnings or inconsistent data if files change during the backup. For full appdata or domains backups, stop all affected services where possible.
 
-#### Retention, Passphrase, and Description
+#### Retention, Compression, and Description
 
-The wizard configures Borg options such as compression, retention, and encryption. Passphrases are treated as secrets and are not displayed in clear text.
+The wizard configures job-specific Borg options such as compression and retention. Encryption and passphrase belong to the repository and are only set when that repository is created or imported.
 
 #### Schedule
 
@@ -221,60 +222,89 @@ Best practices:
 
 ### 3.6 Typical Messages
 
-- **Preview error / invalid data:** A wizard field is not plausible. Check source paths, repository path, type ID, and profiles.
-- **No profile available:** A USB, SMB, or Storagebox profile must be created in Settings first.
-- **Confirm remote repository initialization:** The target could not be recognized as an existing Borg repository.
+- **Preview error / invalid data:** A wizard field is not plausible. Check source paths, type ID, storage target, and repository selection.
+- **No storage target or repository available:** Configure the storage target under **Settings** first. Then create or import the repository under **Repositories**.
 - **Schedule disabled:** The job only runs manually.
 
-## 4. Storage
+## 4. Repositories
 
 ![Storage](../assets/en/storage.png)
 
-The **Storage** page shows storage targets, repositories, and access tests.
+The **Repositories** page uses a master-detail workspace. Borg repositories are grouped by their exact storage target on the left, while the selected repository remains visible in the workspace on the right. **Add repository** creates or imports a repository on a storage target that has already been configured under **Settings**.
+
+Local storage targets are created under **Settings > Local Profiles**. A
+concrete directory below `/mnt`, such as `/mnt/backup` or `/mnt/disks/USB-A`,
+is allowed. Broad roots, system paths, and malformed input containing empty,
+`.` or `..` segments are rejected before saving.
 
 ### 4.1 Purpose of the Page
 
-Storage helps verify whether backup targets are reachable. The page is not primarily used to create profiles; profiles are managed in **Settings**.
+The page separates storage targets, Borg repositories, and backup jobs. A storage target describes the physical or remote location. A repository contains Borg archives. A job selects an existing repository and defines sources, schedule, compression, and retention.
 
 ### 4.2 Areas and Functions
 
-- **Location sidebar:** Filters by `Local`, `USB`, `SMB`, and `Storagebox`.
-- **Repository table:** Shows jobs, repository paths, check status, and actions.
-- **Repository test:** Checks access, passphrase, and Borg availability for a concrete repository.
-- **SMB mount actions:** If SMB targets exist, mount status and mount actions may be visible.
-- **Borg Check:** Runs a more intensive repository check when needed.
-- **Details:** Show test output and failure reasons.
+- **Repository sidebar:** Groups repositories by the exact storage target and shows display name, repository directory, and status for each entry.
+- **Search:** Filters sidebar entries by name, path, job, or storage target.
+- **Workspace header:** Shows the selected repository, its path, and the summarized current state.
+- **Overview:** Shows Borg statistics, maintenance state, and human-readable repository, storage target, job, encryption, and path details.
+- **Archives:** Loads the current Borg archive inventory with archive name, technical ID, start time, and duration.
+- **Maintenance:** Provides Check, Verify Data, Prune, and Compact as separate actions with persistent results.
+- **Management:** Shows current job links and separates non-destructive removal from the UI from permanent repository deletion.
+- **Add repository:** Opens a wizard for selecting an existing storage target and creating or importing a repository.
 
-### 4.3 Profile Test, Job Check, and Repository Test
+Borg statistics are refreshed in the background every 24 hours and cached in `repositories.json`. Missing or stale information is loaded during the next hourly scan. Failed refreshes are retried after one hour. Opening the page therefore does not wait for every local and remote repository.
 
-There are three different types of checks:
+The repository header uses the **display name** assigned during creation or import. **Repository directory** is the final directory name, **repository path** is the complete local or remote target path, and **path in storage target** is the relative path below the selected storage target.
 
-- **Profile test:** Verifies that a USB, SMB, or SSH profile is basically usable.
-- **Job check:** Performs local plausibility checks, such as profile references, source paths, and secret files.
-- **Repository test:** Checks the concrete Borg repository and is the most important access test.
+### 4.3 Create or Import a Repository
+
+1. Open **Repositories** and select **Add repository**.
+2. Select an existing storage target. New Local, USB, SMB, and SSH storage targets are configured and tested exclusively under **Settings**.
+3. The wizard validates the selected storage target again before accessing the repository.
+4. Select **Create new repository** or **Import existing repository**.
+5. Enter a display name and relative repository path.
+6. For creation, select encryption and passphrase. Keyfile keys are stored persistently in the protected plugin directory.
+7. For import, encryption is detected through `borg info`. For a keyfile repository, provide a Borg key export previously created with `borg key export` when required; an exact matching key already present on the system is adopted automatically.
+8. Review the summary and save.
+
+> **Warning:** Import does not initialize or modify the repository. Creation explicitly runs `borg init`.
+
+> **Warning:** With `keyfile` and `keyfile-blake2`, recovery requires both the passphrase and the local key file. Use the encrypted jobs/secrets export for system migration and keep an additional independent `borg key export` backup.
 
 ### 4.4 Typical Actions
 
-Check a repository:
+Check and maintain a repository:
 
-1. Open **Storage**.
-2. Select the location.
-3. Find the repository.
-4. Start the repository test.
-5. Read the result and open details if a warning or error is displayed.
+1. Open **Repositories**.
+2. Select the repository in the sidebar grouped by storage target.
+3. Review Borg statistics and the latest state under **Overview**.
+4. Open **Maintenance** and start Check, Verify Data, Prune, or Compact as required.
+5. Review the status after completion. For failures, expand the secret-masked technical details in the status card.
 
 Check an SMB target:
 
 1. First check the SMB profile in **Settings > SMB Profiles**.
-2. Open **Storage**.
-3. Make sure the SMB target is mounted.
-4. Then run the repository test.
+2. Open **Repositories**.
+3. Select the repository. The application temporarily mounts a managed SMB target when access is needed and unmounts it afterwards if it mounted it.
+4. Then refresh repository information under **Overview**.
+
+Remove a repository from the application or delete it permanently:
+
+1. Remove every linked backup job or assign those jobs to another repository first.
+2. Open the repository's **Management** tab and verify that no job link or running operation remains.
+3. **Remove from Borg Backup UI** only deletes the repository inventory entry. Repository data and the passphrase file remain intact.
+4. **Permanently delete repository** revalidates repository ID, path, and archive count and requires the exact display name plus the safety word `DELETE`.
+5. Only after `borg delete` succeeds does the application remove the inventory entry and a passphrase file used exclusively by that repository.
 
 ### 4.5 Notes
 
-> **Note:** A successful SSH profile test does not automatically mean that every job repository exists. Also check the concrete repository on the Storage page.
+> **Note:** Prune uses the linked job's retention policy. Prune remains disabled without a linked job.
+
+> **Note:** Prune lists deleted archives in its result. Compact only shows a numeric reclaimed-space value when Borg reports it.
 
 > **Warning:** Borg Check can take a long time depending on repository size and target. Start it deliberately and not too frequently.
+
+> **Warning:** Permanent repository deletion irreversibly removes every archive. It is blocked while jobs are linked or a backup, restore, restore test, or maintenance operation is running.
 
 ## 5. History
 
@@ -686,7 +716,7 @@ Typical actions:
 2. Enter credentials.
 3. Save.
 4. Check status.
-5. Test the repository on the Storage page.
+5. Open the repository under **Repositories** and refresh its information.
 
 ### 9.7 SSH Profiles
 
@@ -712,7 +742,7 @@ Functions:
 - test connection
 - save profile
 
-> **Note:** For Hetzner Storage Box, a relative base path such as `./backup` is typical. Check the generated repository URI in the job preview and Storage test.
+> **Note:** For Hetzner Storage Box, a relative base path such as `./backup` is typical. Check the resolved repository path on the **Repositories** page.
 
 ### 9.8 Import / Export
 
@@ -748,7 +778,17 @@ Subsections:
 
 Reminder diagnostics show when a run was expected, when it becomes overdue, when it was last sent, and when the next reminder is allowed. This view does not send notifications; it is diagnostic only.
 
-### 9.10 System Status and Migration
+### 9.10 Factory Reset
+
+**Factory Reset** is the final entry in the **Maintenance** group. It removes the application configuration and configured operational data, then restarts Borg Backup UI at the administrator first-setup page.
+
+Before resetting, the application checks for running backups, restores, restore tests, and repository maintenance. Managed Borg repositories inside a directory scheduled for deletion block the operation. External Borg repositories and the plugin installation are not deleted.
+
+Approval requires every risk acknowledgment, the server name, the current administrator password, and the confirmation text `FACTORY RESET`.
+
+> **Warning:** Users, jobs, schedules, storage targets, repository assignments, secrets, Borg keyfiles, logs, status, and history data are permanently removed. Back up `/boot/config/borg-backup` first.
+
+### 9.11 System Status and Migration
 
 ![Settings - System Status and Migration](../assets/en/settings-system-health.png)
 
@@ -797,9 +837,9 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 2. Click **New job**.
 3. Enter name, type ID, icon, and location.
 4. Select source paths.
-5. Select or define the repository target.
+5. Select the storage target first and then an existing repository.
 6. Configure Docker or VM control if needed.
-7. Set compression, retention, and passphrase.
+7. Set compression and retention. Encryption and passphrase belong to the repository.
 8. Optionally enable a schedule.
 9. Review the flow preview.
 10. Save the job.
@@ -807,11 +847,11 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 
 ### 11.2 Check a Repository
 
-1. Open **Storage**.
-2. Select the location.
-3. Start the repository test.
-4. Read details for failures.
-5. Check passphrase, profile, mount, or SSH connection.
+1. Open **Repositories**.
+2. Select the storage target and repository.
+3. Refresh the repository information.
+4. Open **Maintenance** and start the required check if needed.
+5. Check passphrase, profile, mount, or SSH connection when an error occurs.
 
 ### 11.3 Restore Files
 
@@ -875,7 +915,7 @@ Recommended order:
 1. **Dashboard** for overview.
 2. **History** for the concrete run.
 3. Open the log file from History.
-4. **Storage** for repository test.
+4. **Repositories** for repository information and maintenance status.
 5. **Settings > System status and migration** for configuration problems.
 6. Create a support bundle if the error needs to be shared.
 

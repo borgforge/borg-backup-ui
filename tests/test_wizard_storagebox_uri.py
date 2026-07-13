@@ -1,33 +1,15 @@
-from pathlib import Path
-import subprocess
-
-
-ROOT = Path(__file__).resolve().parents[1]
+from api.repositories_api import effective_repository_path
 
 
 def test_wizard_storagebox_relative_base_path_becomes_uri_path():
-    script = r"""
-const fs = require('fs');
-const vm = require('vm');
-const code = fs.readFileSync('ui/js/pages/wizard.js', 'utf8');
-const context = {
-  window: { BBUI: {} },
-  document: { getElementById: () => null, querySelectorAll: () => [] },
-  navigator: {},
-  fetch: async () => ({ ok: false }),
-};
-vm.createContext(context);
-vm.runInContext(code, context);
-const cases = [
-  ['./backup', '/./backup'],
-  ['/./backup', '/./backup'],
-  ['volume1/backup/', '/volume1/backup'],
-];
-for (const [raw, expected] of cases) {
-  const actual = context.wizardStorageRepoBasePathForUri(raw);
-  if (actual !== expected) {
-    throw new Error(`${raw} -> ${actual}, expected ${expected}`);
-  }
-}
-"""
-    subprocess.run(["node", "-e", script], cwd=ROOT, check=True)
+    storage = {
+        "location": "storagebox",
+        "storage_type": "ssh",
+        "user": "u123",
+        "host": "u123.your-storagebox.de",
+        "port": "23",
+        "base_path": "./backup",
+    }
+    assert effective_repository_path(storage, "borg-backup-flash") == (
+        "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash"
+    )

@@ -158,6 +158,7 @@ async function _pollRunningStates() {
     jobsState.jobs = jobsState.jobs.map(j => ({
       ...j,
       running: running[j.key]?.running ?? false,
+      run_log_available: running[j.key]?.log_available ?? j.run_log_available ?? true,
     }));
     renderJobsGrid(jobsState.jobs);
 
@@ -382,7 +383,7 @@ function renderJobCard(job) {
     ? `<div class="running-indicator">
          <span class="running-dot"></span>
          ${jobsT('jobs.running')}
-         <button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-key="${escHtml(job.key)}">${jobsT('jobs.showLog')}</button>
+         ${job.run_log_available === false ? '' : `<button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-key="${escHtml(job.key)}">${jobsT('jobs.showLog')}</button>`}
        </div>`
     : `<button class="btn btn-primary" data-jobs-action="start-job" data-job-key="${escHtml(job.key)}" ${effectiveStartDisabled ? `disabled title="${job.enabled === false ? jobsT('jobs.disabled') : jobsT('jobs.dataDirRequired')}"` : ''}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">

@@ -16,7 +16,7 @@ def test_settings_redesign_styles_load_after_shared_surfaces() -> None:
     )
 
 
-def test_settings_keeps_all_nine_areas_in_grouped_side_menu() -> None:
+def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
     script = _read("ui/js/pages/settings.js")
     for key in (
         "general",
@@ -28,12 +28,28 @@ def test_settings_keeps_all_nine_areas_in_grouped_side_menu() -> None:
         "storagebox",
         "transfer",
         "advanced",
+        "factory-reset",
     ):
         assert f"key: '{key}'" in script
     for group in ("system", "operations", "storage", "maintenance"):
         assert f"group: '{group}'" in script
     assert "function renderSettingsMenu(tabs)" in script
     assert 'class="settings-redesign-layout"' in script
+
+
+def test_factory_reset_is_the_last_maintenance_area() -> None:
+    script = _read("ui/js/pages/settings.js")
+    transfer = "{ key: 'transfer'"
+    advanced = "{ key: 'advanced'"
+    factory_reset = "{ key: 'factory-reset'"
+
+    assert script.index(transfer) < script.index(advanced) < script.index(factory_reset)
+    assert 'data-settings-panel="factory-reset"' in script
+    transfer_panel = script.split('data-settings-panel="transfer"', 1)[1].split(
+        'data-settings-panel="advanced"', 1
+    )[0]
+    assert "renderSettingsFactoryReset()" not in transfer_panel
+    assert "const hideGlobalSave = profileTab || settingsState.activeTab === 'factory-reset';" in script
 
 
 def test_profile_pages_use_master_detail_and_explicit_edit_mode() -> None:
@@ -59,8 +75,8 @@ def test_profile_pages_use_master_detail_and_explicit_edit_mode() -> None:
 
 def test_profile_pages_hide_global_save_and_keep_local_actions() -> None:
     script = _read("ui/js/pages/settings.js")
-    assert "const profileTab = ['usb', 'smb', 'storagebox'].includes" in script
-    assert "saveBtn.classList.toggle('hidden', profileTab)" in script
+    assert "const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes" in script
+    assert "saveBtn.classList.toggle('hidden', hideGlobalSave)" in script
     assert "const saved = await saveSettings();" in script
     for action in (
         "usb-profile-check",
@@ -72,6 +88,32 @@ def test_profile_pages_hide_global_save_and_keep_local_actions() -> None:
         "storagebox-test",
     ):
         assert action in script
+
+
+def test_local_profile_paths_are_validated_before_save_in_both_languages() -> None:
+    import json
+
+    script = _read("ui/js/pages/settings.js")
+    german = json.loads(_read("ui/i18n/de.json"))
+    english = json.loads(_read("ui/i18n/en.json"))
+
+    assert "function normalizeCanonicalStoragePath(value)" in script
+    assert "submitted.includes('//')" in script
+    assert "segment === '.' || segment === '..'" in script
+    assert "classList.toggle('input-error', !normalized)" in script
+    assert "activeTab === 'local' && !validateLocalProfilesForSave()" in script
+    assert german["settings"]["profiles"]["invalidLocalPath"]
+    assert english["settings"]["profiles"]["invalidLocalPath"]
+    for payload in (german, english):
+        health = payload["settings"]["health"]
+        assert health["registryCanonicalModelTitle"]
+        assert health["registryCanonicalModelFailed"]
+        assert health["registryStorageInventoryTitle"]
+        assert health["failedPhase"]
+        assert health["failureReason"]
+        assert health["rollbackStatus"]
+    assert "details.failed_phase" in script
+    assert "details.rollback_status" in script
 
 
 def test_settings_layout_is_sticky_and_responsive() -> None:
@@ -93,6 +135,7 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert "renderSettingsNotificationReminderDiagnostics" in script
     assert "renderSettingsPerRepoPassphrases" in script
     assert "systemHealth?.notification_reminders" in script
+    assert "/api/notification-reminders/diagnostics" in script
     assert "notificationReminderDiagnosticsHint" in script
     assert "backupOverdueDiagnostics" in script
     assert "restoreTestOverdueDiagnostics" in script
@@ -119,6 +162,14 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert "settings-passphrase-table" in script
     assert ".settings-passphrase-table-wrap" in css
     assert "white-space: nowrap" in css
+
+
+def test_settings_primary_tab_switch_reuses_existing_dom() -> None:
+    script = _read("ui/js/pages/settings.js")
+    assert "function activateSettingsTab(tabKey)" in script
+    assert "panel.dataset.settingsPanel !== active.key" in script
+    assert "activateSettingsTab(tab);" in script
+    assert "usersPanel.innerHTML = renderSettingsUsers();" in script
 
 
 def test_settings_menu_translations_live_in_settings_namespace() -> None:
@@ -224,9 +275,10 @@ def test_profile_pages_keep_local_save_and_block_in_use_deletes() -> None:
 def test_profile_save_uses_live_dom_payload_and_dynamic_empty_state() -> None:
     script = _read("ui/js/pages/settings.js")
 
-    assert "if (activeTab === 'usb') updates.USB_PROFILES_JSON = JSON.stringify(getUsbProfilesFromDom());" in script
-    assert "if (activeTab === 'smb') updates.SMB_PROFILES_JSON = JSON.stringify(getSmbProfilesFromDom());" in script
-    assert "if (activeTab === 'storagebox') updates.STORAGE_PROFILES_JSON = JSON.stringify(getStorageProfilesFromDom());" in script
+    assert "if (activeTab === 'usb') profileUpdates.usb = getUsbProfilesFromDom();" in script
+    assert "if (activeTab === 'smb') profileUpdates.smb = getSmbProfilesFromDom();" in script
+    assert "if (activeTab === 'storagebox') profileUpdates.storagebox = getStorageProfilesFromDom();" in script
+    assert "profile_updates: profileUpdates" in script
     assert "function updateUsbProfilesEmptyState()" in script
     assert 'id="usb-profiles-empty-state"' in script
     assert "empty.classList.toggle('hidden', getUsbProfilesFromDom().length > 0);" in script
@@ -256,5 +308,4 @@ def test_editable_backup_conf_keys_are_part_of_runtime_schema() -> None:
     literal_keys = set(re.findall(r"data-key=[\"']([A-Z][A-Z0-9_]*)[\"']", script))
     literal_keys.update(re.findall(r"f(?:text|num|mono|pwd)\('([A-Z][A-Z0-9_]*)'", script))
 
-    settings_json_keys = {"USB_PROFILES_JSON", "SMB_PROFILES_JSON", "STORAGE_PROFILES_JSON"}
-    assert literal_keys - settings_json_keys <= schema_keys
+    assert literal_keys <= schema_keys

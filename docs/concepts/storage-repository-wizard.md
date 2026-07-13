@@ -1,10 +1,17 @@
 # Konzept: Geführter Storage- und Repository-Wizard
 
 - Issue: #187
-- Status: Konzept, keine Implementierung
-- Stand: 2026-07-09
+- Status: Umgesetzt mit Issues #184 und #187
+- Stand: 2026-07-11
 
 ## 1. Zusammenfassung
+
+> **Umsetzungsstand:** Der Assistent verwendet nun vorhandene Storage- und
+> Repository-Objekte, kann Local, USB, SMB und SSH/Storagebox geführt anlegen,
+> prüft das Speicherziel vor dem nächsten Schritt und erstellt oder importiert
+> Repositorys. Der Job-Wizard wählt nur noch vorhandene Repositorys nach dem
+> exakten Speicherziel. Die folgenden Abschnitte dokumentieren die fachliche
+> Herleitung dieser Umsetzung.
 
 Tester-Feedback zeigt, dass die Einrichtung von Storage-Zielen und Borg-
 Repositories aktuell zu technisch wirkt. Besonders SMB ist schwer verständlich,
@@ -32,8 +39,9 @@ Der Wizard richtet sich an:
   planen.
 - Fortgeschrittene Nutzer, die trotzdem manuell eingreifen können wollen.
 
-Power-User sollen die bestehenden erweiterten Einstellungen weiter nutzen
-können.
+Power-User verwalten Storage-Profile weiterhin in den erweiterten
+Einstellungen; Repository-Pfade werden jedoch auch dort nicht mehr in Jobs
+gespeichert.
 
 ## 3. Grundprinzipien
 
@@ -233,26 +241,24 @@ Import darf niemals:
 
 ### 7.1 Einstiegspunkte
 
-Mögliche Buttons:
-
-- Storage-Seite: "Storage/Repository hinzufügen"
-- Repository-Seite: "Repository hinzufügen"
-- Job-Wizard: "Neues Repository einrichten"
+- Seite **Repositories**: **Repository hinzufügen**
+- Job-Wizard: Auswahl eines bereits verwalteten Repositorys
+- Seite **Einstellungen**: lokale, USB-, SMB- und SSH-Profile verwalten
 
 ### 7.2 Grobe Layout-Idee
 
 ```text
 Repository einrichten
 
-[1 Zieltyp] -> [2 Verbindung] -> [3 Test] -> [4 Repository] -> [5 Zusammenfassung]
+[1 Speicherziel] -> [2 Repository] -> [3 Zusammenfassung]
 
 ┌──────────────────────────────────────────────────────────────┐
-│ Zieltyp wählen                                                │
+│ Vorhandenes Speicherziel wählen                               │
 │                                                              │
-│ [ Lokal ] [ USB ] [ SMB ] [ SSH / Storagebox ] [ Rclone ]     │
+│ [ Backup-Lokal — /mnt/backup                         v ]       │
 │                                                              │
-│ SMB: Netzwerkfreigabe einbinden. Borg Backup UI verwaltet     │
-│ den technischen Mount-Pfad automatisch.                       │
+│ Speicherziele werden zentral unter Einstellungen angelegt     │
+│ und geprüft.                                                   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -269,22 +275,15 @@ Jeder technische Test sollte sichtbar werden:
 
 ## 8. Auswirkungen auf den Job-Wizard
 
-Der Job-Wizard sollte später im Ziel-Schritt nicht mehr primär nach einem
-Repository-Pfad fragen, sondern:
+Der Job-Wizard fragt im Ziel-Schritt nicht nach einem Repository-Pfad, sondern
+zuerst nach dem Speicherziel und danach nach einem dazugehörigen Repository:
 
 ```text
 Repository auswählen
 [ Appdata - Lokal        v ]
 
-[ Neues Repository einrichten ]
-[ Bestehendes Repository importieren ]
+[ Repository auf der Repository-Seite verwalten ]
 ```
-
-Für Übergangszeit kann ein erweiterter Modus bleiben:
-
-> Repository-Pfad manuell angeben
-
-Dieser sollte aber nicht der Standardweg sein.
 
 ## 9. Benötigte Backend-Funktionen
 
@@ -307,43 +306,13 @@ Gute Fehlermeldungen sind zentral. Beispiele:
 - "Das Repository ist erreichbar, aber die Passphrase ist falsch."
 - "Dieses Repository wird bereits von einem anderen Job verwendet."
 
-## 11. Offene Fragen
+## 11. Umgesetzter Datenfluss
 
-- Soll der Wizard eine eigene Repository-Seite voraussetzen oder in Storage
-  integriert werden?
-- Soll ein Repository mehreren Jobs zugeordnet werden dürfen?
-- Wo soll ein automatisch verwalteter SMB-Mount-Pfad genau liegen?
-- Soll der Wizard sofort Jobs erstellen können oder nur Repositorys?
-- Soll `borg init` standardmäßig mit Verschlüsselung angeboten werden?
-- Wie wird ein Repository ohne Job in Reports/Restore dargestellt?
-
-## 12. Umsetzungsvorschlag
-
-### Phase 1: Design und API-Vertrag
-
-- Repository-Objektmodell aus #184 finalisieren.
-- Wizard-Schritte und Fehlerzustände spezifizieren.
-- SMB-Mount-Konzept festlegen.
-
-### Phase 2: Repository-Inventar und Import
-
-- Bestehende Repositorys aus Jobs ableiten.
-- Repository-Liste anzeigen.
-- Import bestehender Repositorys unterstützen.
-
-### Phase 3: Wizard für neue Repositorys
-
-- Storage-Typ wählen.
-- Verbindung testen.
-- Repository erstellen oder importieren.
-
-### Phase 4: Job-Wizard-Anbindung
-
-- Job-Wizard wählt Repository-Objekt.
-- Direkte Pfadeingabe wird zum erweiterten Modus.
-
-### Phase 5: UX-Feinschliff
-
-- Path Picker aus #186 integrieren.
-- Hilfetexte und In-App-Hilfe aktualisieren.
-- Systemzustand um Repository-Probleme erweitern.
+1. Storage Target unter **Einstellungen** anlegen oder auswählen.
+2. Repository unter **Repositories** erstellen oder importieren.
+3. Der Repository-Manager speichert Verschlüsselung und Secret-Verweise im
+   Repository-Objekt.
+4. Der Job-Wizard filtert Repositorys nach dem gewählten Storage Target.
+5. Der Job speichert ausschließlich `repository_key`.
+6. Backup, Restore, Restore-Test, Reports und Wartung verwenden dieselbe
+   zentrale Repository-Auflösung.

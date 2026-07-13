@@ -13,6 +13,7 @@ from storagebox_api import (
     _sanitize_ssh_noise,
     _storagebox_profile,
     _storagebox_ssh_base_cmd,
+    get_storagebox_setup_status,
 )
 
 
@@ -96,3 +97,35 @@ def test_sanitize_ssh_noise_removes_known_hosts_permission_noise():
     )
 
     assert cleaned == "ok\ndone"
+
+
+def test_storagebox_setup_status_can_skip_remote_probe(monkeypatch, tmp_path):
+    key = tmp_path / "id_ed25519"
+    key.write_text("private", encoding="utf-8")
+    monkeypatch.setattr(
+        "storagebox_api._storage_context",
+        lambda _config, _profile_key="": ({}, {
+            "profile_key": "storage-1",
+            "profile_name": "Storagebox",
+            "host": "box.example.test",
+            "port": "22",
+            "user": "backup",
+            "base_path": "/backup",
+            "ssh_key": str(key),
+            "target_type": "generic",
+        }),
+    )
+    monkeypatch.setattr(
+        "storagebox_api._storagebox_auth_test",
+        lambda _profile: (_ for _ in ()).throw(AssertionError("remote auth probe must not run")),
+    )
+    monkeypatch.setattr(
+        "storagebox_api._detect_storage_target_type",
+        lambda _profile: (_ for _ in ()).throw(AssertionError("remote target probe must not run")),
+    )
+
+    result = get_storagebox_setup_status({}, probe_auth=False)
+
+    assert result["auth_checked"] is False
+    assert result["auth_ok"] is False
+    assert result["key_exists"] is True

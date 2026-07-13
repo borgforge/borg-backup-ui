@@ -37,6 +37,12 @@ def test_dashboard_keeps_location_inventory_contract() -> None:
     ):
         assert contract in script
 
+    assert "function renderDashboardLocationGroups(backups)" in script
+    assert "function renderDashboardLocationGroupRow(location, count)" in script
+    assert 'class="dashboard-location-group-row"' in script
+    assert 'colspan="5"' in script
+    assert "dashboard.locationColumn" not in script
+
 
 def test_jobs_keeps_location_actions_and_live_log_contract() -> None:
     html = _read("ui/index.html")
@@ -132,8 +138,10 @@ def test_dashboard_keeps_run_restore_and_storage_facts_aligned() -> None:
     assert "dashboard.deduplicated" in script
     assert "dashboard-fact-row" in script
     assert "grid-template-columns: 6.5rem minmax(0, 1fr)" in css
-    assert ".dashboard-inventory-table th:nth-child(3) { width: 16%; }" in css
-    assert ".dashboard-inventory-table th:nth-child(4) { width: 19%; }" in css
-    assert ".dashboard-inventory-table th:nth-child(5) { width: 17%; }" in css
-    assert ".dashboard-inventory-table .loc-badge" in css
+    assert ".dashboard-inventory-table th:nth-child(2) { width: 18%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(3) { width: 21%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(4) { width: 18%; }" in css
+    assert ".dashboard-inventory-table th:nth-child(5) { width: 19%; }" in css
+    assert ".dashboard-location-group-row td" in css
+    assert ".dashboard-location-group__identity" in css
     assert "white-space: nowrap" in css

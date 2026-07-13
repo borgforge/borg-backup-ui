@@ -22,26 +22,50 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         "storage-location-list",
         "storage-workspace-header",
         "storage-content",
-        "storage-check-card",
-        "check-job-select",
-        "check-level-select",
-        "check-run-btn",
-        "check-log-panel",
-        "check-log-output",
+        "storage-add-repository-btn",
+        "storage-maintenance-confirm-modal",
+        "storage-maintenance-confirm-start-btn",
+        "repository-manager-modal",
+        "repository-manager-storage",
+        "repository-manager-next-btn",
     ):
         assert f'id="{element_id}"' in html
     for contract in (
         "STORAGE_LOCATION_ORDER = ['local', 'usb', 'smb', 'storagebox']",
-        "renderStorageRepositoryRow",
-        "renderStorageSmbProfiles",
-        'data-storage-action="test-repo"',
-        'data-storage-action="smb-action"',
-        "/api/storage/test",
-        "/api/storage/smb-action",
+        "renderStorageRepositoryWorkspace",
+        "renderStorageLocationSidebar",
+        "renderStorageRepositoryArchives",
+        "openStorageMaintenanceConfirm",
+        "storage.repositoryArchiveCreated",
+        "repositoryPruneDetails",
+        "deleted_archives",
+        'data-storage-action="select-repository-tab"',
+        'data-storage-action="repository-maintenance"',
+        "/api/storages/test",
         "/api/storage/check/run",
         "/api/storage/check/stream",
     ):
         assert contract in script
+    assert 'id="check-log-panel"' not in html
+    assert 'id="check-log-output"' not in html
+    assert "window.confirm" not in script
+    assert "repository-manager-storage-mode" not in html
+    assert "repositoryManagerNewStoragePayload" not in script
+    assert "fetch('/api/storages'," not in script
+    assert "renderStorageRepositoryActivities" not in script
+    assert "repositoryTabActivities" not in script
+    assert "storage.repositoryRelativePath', repo.relative_path" not in script
+    assert "storage.repositoryPathLabel', repo.path_display || repo.path_raw || '', 'span-3'" in script
+
+
+def test_repository_information_has_a_background_refresh_loop() -> None:
+    backend = _read("borg_backup_ui.py")
+    repository_api = _read("api/repositories_api.py")
+    assert "def _start_repository_info_refresh_loop(config: dict)" in backend
+    assert "_start_repository_info_refresh_loop(config)" in backend
+    assert "def refresh_due_repository_info(" in repository_api
+    assert "max_age_hours: int = 24" in repository_api
+    assert "retry_after_hours: int = 1" in repository_api
 
 
 def test_storage_reuses_location_icons_without_summary_ledger() -> None:
@@ -69,8 +93,9 @@ def test_remaining_surfaces_are_responsive_and_modal_content_is_contained() -> N
     css = _read("ui/remaining-ui-redesign.css")
     assert "@media (max-width: 1023px)" in css
     assert "@media (max-width: 767px)" in css
-    assert ".storage-table-wrap" in css
-    assert "overflow-x: auto" in css
+    assert ".storage-repository-master-detail" in css
+    assert ".storage-repository-tabs { overflow-x: auto; }" in css
+    assert ".storage-archive-list article { grid-template-columns: .5rem minmax(0, 1fr); }" in css
     assert ".modal-body" in css
     assert "overflow-y: auto" in css
     assert ".modal-wizard" in css
