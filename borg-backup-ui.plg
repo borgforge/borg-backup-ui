@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.13.1144">
+<!ENTITY version   "2026.07.13.2248">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,19 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.13.2248###
+- Issue #205:
+  - Repository creation and import now validate targets before writing and report actionable conflicts.
+  - Editing a job preserves its schedule and reports persistence errors without closing the wizard.
+- Issue #208:
+  - SSH keepalives are applied consistently to backups, repository maintenance, restores and restore tests.
+  - Interrupted SSH connections now report a clear network error without implying repository corruption.
+- Issue #186:
+  - Existing repositories can be selected through a storage-scoped directory browser for Local, USB, SMB and SSH targets.
+- Issue #206:
+  - Backup source paths now preserve spaces through structured JSON arrays.
+  - Existing jobs are migrated once with audit, rollback backup and clear diagnostics for ambiguous legacy values.
+
 ###2026.07.13.1144###
 - Upgrade notice:
   - Back up /boot/config/borg-backup before installing this release.
@@ -310,7 +323,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>ed3b435a37df7d954905cd544b884245</MD5>
+<MD5>243714ccf09d44eb687aa2249e3f6ef1</MD5>
 </FILE>
 
 <!--
