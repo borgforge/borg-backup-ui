@@ -13,6 +13,9 @@ for path in (ROOT, API_ROOT):
 
 import factory_reset_api
 import factory_reset_worker
+import check_api
+import jobs_api
+import restore_api
 from factory_reset_worker import perform_reset
 
 
@@ -70,6 +73,44 @@ def test_factory_reset_blocks_managed_repositories_inside_deleted_roots(tmp_path
 
     with pytest.raises(factory_reset_api.FactoryResetBlocked, match="Appdata"):
         factory_reset_api.validate_factory_reset_request({}, _payload())
+
+
+def test_factory_reset_reports_running_restore_test_once(monkeypatch):
+    class Jobs:
+        def get_all_states(self):
+            return {
+                "appdata_local": {"running": True},
+                "restore_test": {"running": True},
+            }
+
+        def get_state(self, job_key):
+            assert job_key == "restore_test"
+            return {"running": True}
+
+    class Checks:
+        def get_state(self):
+            return {"running": False}
+
+    monkeypatch.setattr(jobs_api.JobManager, "get", classmethod(lambda cls: Jobs()))
+    monkeypatch.setattr(jobs_api, "active_resource_locks", lambda config: [
+        {"job_key": "appdata_local"}
+    ])
+    monkeypatch.setattr(check_api.CheckManager, "get", classmethod(lambda cls: Checks()))
+    monkeypatch.setattr(restore_api, "list_restore_runs", lambda config, limit: {"active": []})
+
+    assert factory_reset_api._active_operation_blockers({}) == [
+        {"type": "backup", "name": "appdata_local"},
+        {"type": "restore_test", "name": "restore_test"}
+    ]
+
+
+def test_factory_reset_ui_uses_localized_non_redundant_blocker_messages():
+    source = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
+
+    assert "factoryResetOperationBlockerMessage" in source
+    assert "factoryResetBlockerRestoreTest" in source
+    assert "`${row.type}: ${row.name}`" not in source
+    assert "showMsg(messageId, 'error', `${settingsT('transfer.factoryResetBlocked')}" in source
 
 
 def test_worker_removes_state_but_recreates_first_install_layout(tmp_path: Path):

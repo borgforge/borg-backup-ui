@@ -2351,6 +2351,18 @@ async function exportSupportBundle() {
   }
 }
 
+function factoryResetOperationBlockerMessage(row) {
+  const name = String(row?.name || '').trim();
+  const key = {
+    backup: 'factoryResetBlockerBackup',
+    job: 'factoryResetBlockerBackup',
+    restore_test: 'factoryResetBlockerRestoreTest',
+    repository_maintenance: 'factoryResetBlockerMaintenance',
+    restore: 'factoryResetBlockerRestore',
+  }[String(row?.type || '').trim()] || 'factoryResetBlockerOperation';
+  return settingsT(`transfer.${key}`, { name });
+}
+
 async function startFactoryReset() {
   const messageId = 'settings-factory-reset-msg';
   hideEl(messageId);
@@ -2362,10 +2374,14 @@ async function startFactoryReset() {
     const repositoryBlockers = Array.isArray(status.repository_blockers) ? status.repository_blockers : [];
     if (!status.allowed) {
       const rows = [
-        ...operationBlockers.map((row) => `${row.type}: ${row.name}`),
-        ...repositoryBlockers.map((row) => `${row.display_name}: ${row.path}`),
+        ...operationBlockers.map(factoryResetOperationBlockerMessage),
+        ...repositoryBlockers.map((row) => settingsT('transfer.factoryResetBlockerRepository', {
+          name: String(row?.display_name || '').trim(),
+          path: String(row?.path || '').trim(),
+        })),
       ];
-      throw new Error(`${settingsT('transfer.factoryResetBlocked')} ${rows.join(', ')}`.trim());
+      showMsg(messageId, 'error', `${settingsT('transfer.factoryResetBlocked')} ${rows.join(' ')}`.trim());
+      return;
     }
     const server = String(status.server_name || '');
     const configRoot = String(status.configuration_root || '');

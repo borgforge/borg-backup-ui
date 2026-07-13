@@ -117,14 +117,19 @@ def _active_operation_blockers(config: dict) -> list[dict[str, str]]:
     try:
         from jobs_api import JobManager, active_resource_locks
 
+        locked_jobs: set[str] = set()
         for row in active_resource_locks(config):
+            job_key = str(row.get("job_key") or "Backup job")
+            locked_jobs.add(job_key)
             blockers.append({
                 "type": "backup",
-                "name": str(row.get("job_key") or "Backup job"),
+                "name": job_key,
             })
         for key, state in JobManager.get().get_all_states().items():
+            if key == "restore_test" or key in locked_jobs:
+                continue
             if isinstance(state, dict) and state.get("running"):
-                blockers.append({"type": "job", "name": str(key)})
+                blockers.append({"type": "backup", "name": str(key)})
         restore_test = JobManager.get().get_state("restore_test")
         if restore_test.get("running"):
             blockers.append({"type": "restore_test", "name": "restore_test"})
