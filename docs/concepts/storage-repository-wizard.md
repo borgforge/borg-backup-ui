@@ -250,15 +250,15 @@ Import darf niemals:
 ```text
 Repository einrichten
 
-[1 Zieltyp] -> [2 Verbindung] -> [3 Test] -> [4 Repository] -> [5 Zusammenfassung]
+[1 Speicherziel] -> [2 Repository] -> [3 Zusammenfassung]
 
 ┌──────────────────────────────────────────────────────────────┐
-│ Zieltyp wählen                                                │
+│ Vorhandenes Speicherziel wählen                               │
 │                                                              │
-│ [ Lokal ] [ USB ] [ SMB ] [ SSH / Storagebox ] [ Rclone ]     │
+│ [ Backup-Lokal — /mnt/backup                         v ]       │
 │                                                              │
-│ SMB: Netzwerkfreigabe einbinden. Borg Backup UI verwaltet     │
-│ den technischen Mount-Pfad automatisch.                       │
+│ Speicherziele werden zentral unter Einstellungen angelegt     │
+│ und geprüft.                                                   │
 └──────────────────────────────────────────────────────────────┘
 ```
 

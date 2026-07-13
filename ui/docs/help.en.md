@@ -16,9 +16,9 @@ Borg Backup UI manages Borg backup jobs on Unraid. It helps configure jobs, stor
 
 ### 2) Prepare the storage target and repository
 
+- First create and test the storage target under **Settings** in Local, USB, SMB, or SSH profiles.
 - Under **Repositories**, select **Add repository**.
-- Use an existing storage target or set up Local, USB, SMB, or SSH/Storage Box through the guided flow.
-- For SMB, the application manages the technical mount path automatically.
+- Select the existing storage target.
 - Then create a Borg repository or import an existing repository.
 
 Tip: Import validates the repository with `borg info` without modifying or initializing it.

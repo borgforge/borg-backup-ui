@@ -697,36 +697,6 @@ function repositoryManagerRenderStep(step) {
   if (target === 3) repositoryManagerUpdateSummary();
 }
 
-function repositoryManagerStorageModeChanged() {
-  const isNew = document.getElementById('repository-manager-storage-mode')?.value === 'new';
-  document.getElementById('repository-manager-existing-storage-group')?.classList.toggle('hidden', isNew);
-  document.getElementById('repository-manager-new-storage')?.classList.toggle('hidden', !isNew);
-  repositoryManagerStorageTypeChanged();
-}
-
-function repositoryManagerStorageTypeChanged() {
-  const type = document.getElementById('repository-manager-storage-type')?.value || 'local';
-  document.querySelectorAll('[data-storage-fields]').forEach((el) => {
-    el.classList.toggle('hidden', el.dataset.storageFields !== type);
-  });
-}
-
-async function repositoryManagerLoadPathOptions() {
-  const target = document.getElementById('repository-manager-path-options');
-  if (!target) return;
-  try {
-    const responses = await Promise.all(['/mnt', '/mnt/disks'].map((prefix) =>
-      fetch(`/api/wizard/source-dirs?prefix=${encodeURIComponent(prefix)}&limit=100`)
-        .then((response) => response.ok ? response.json() : { dirs: [] })
-        .catch(() => ({ dirs: [] }))));
-    const paths = Array.from(new Set(responses.flatMap((payload) =>
-      (Array.isArray(payload?.dirs) ? payload.dirs : []).map((row) => String(row?.path || '').trim()).filter(Boolean))));
-    target.innerHTML = paths.map((path) => `<option value="${escHtml(path)}"></option>`).join('');
-  } catch (_) {
-    target.innerHTML = '';
-  }
-}
-
 function repositoryManagerSyncFields() {
   const action = document.getElementById('repository-manager-action')?.value || 'create';
   const encryption = document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2';
@@ -820,21 +790,6 @@ function openRepositoryManager() {
   repositoryManagerSetMessage('', '');
   repositoryManagerFillStorages();
   const defaults = {
-    'repository-manager-storage-mode': 'existing',
-    'repository-manager-storage-type': 'local',
-    'repository-manager-storage-name': '',
-    'repository-manager-local-path': '/mnt/backup',
-    'repository-manager-usb-path': '',
-    'repository-manager-smb-server': '',
-    'repository-manager-smb-share': '',
-    'repository-manager-smb-user': '',
-    'repository-manager-smb-password': '',
-    'repository-manager-smb-version': '3.0',
-    'repository-manager-ssh-host': '',
-    'repository-manager-ssh-port': '23',
-    'repository-manager-ssh-user': '',
-    'repository-manager-ssh-base': './backup',
-    'repository-manager-ssh-key': '/root/.ssh/id_rsa',
     'repository-manager-action': 'create',
     'repository-manager-display-name': '',
     'repository-manager-repository-name': '',
@@ -853,8 +808,6 @@ function openRepositoryManager() {
   if (appendOnly) appendOnly.checked = false;
   if (parentDirs) parentDirs.checked = true;
   repositoryManagerState.storageKey = '';
-  repositoryManagerLoadPathOptions();
-  repositoryManagerStorageModeChanged();
   repositoryManagerSyncFields();
   repositoryManagerRenderStep(1);
   modal.classList.remove('hidden');
@@ -903,53 +856,8 @@ function repositoryManagerPathChanged() {
   repositoryManagerUpdateSummary();
 }
 
-function repositoryManagerNewStoragePayload() {
-  const type = document.getElementById('repository-manager-storage-type')?.value || 'local';
-  const payload = {
-    storage_type: type,
-    display_name: document.getElementById('repository-manager-storage-name')?.value || '',
-  };
-  if (type === 'local') payload.base_path = document.getElementById('repository-manager-local-path')?.value || '';
-  if (type === 'usb') payload.mount_path = document.getElementById('repository-manager-usb-path')?.value || '';
-  if (type === 'smb') Object.assign(payload, {
-    server: document.getElementById('repository-manager-smb-server')?.value || '',
-    share: document.getElementById('repository-manager-smb-share')?.value || '',
-    username: document.getElementById('repository-manager-smb-user')?.value || '',
-    password: document.getElementById('repository-manager-smb-password')?.value || '',
-    vers: document.getElementById('repository-manager-smb-version')?.value || '3.0',
-  });
-  if (type === 'storagebox') Object.assign(payload, {
-    host: document.getElementById('repository-manager-ssh-host')?.value || '',
-    port: document.getElementById('repository-manager-ssh-port')?.value || '23',
-    user: document.getElementById('repository-manager-ssh-user')?.value || '',
-    base_path: document.getElementById('repository-manager-ssh-base')?.value || './backup',
-    ssh_key_path: document.getElementById('repository-manager-ssh-key')?.value || '/root/.ssh/id_rsa',
-  });
-  return payload;
-}
-
 async function repositoryManagerPrepareStorage() {
-  const mode = document.getElementById('repository-manager-storage-mode')?.value || 'existing';
-  let storageKey = document.getElementById('repository-manager-storage')?.value || '';
-  if (mode === 'new') {
-    const createResponse = await fetch('/api/storages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(repositoryManagerNewStoragePayload()),
-    });
-    const created = await createResponse.json();
-    if (!createResponse.ok) throw new Error(apiErrorMessage(created, createResponse.status));
-    storageKey = String(created?.storage?.storage_key || '').trim();
-    if (!storageKey) throw new Error(storageT('storage.storageTargetCreateFailed'));
-    await refreshStorage();
-    repositoryManagerFillStorages();
-    const select = document.getElementById('repository-manager-storage');
-    if (select) select.value = storageKey;
-    repositoryManagerState.storageKey = storageKey;
-    const modeSelect = document.getElementById('repository-manager-storage-mode');
-    if (modeSelect) modeSelect.value = 'existing';
-    repositoryManagerStorageModeChanged();
-  }
+  const storageKey = document.getElementById('repository-manager-storage')?.value || '';
   if (!storageKey) throw new Error(storageT('storage.storageTargetRequired'));
   const testResponse = await fetch('/api/storages/test', {
     method: 'POST',

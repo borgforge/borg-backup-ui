@@ -78,6 +78,7 @@ Use a disposable local profile or restore the original value after this test.
 
 ## 5. Repositories
 
+- [ ] Confirm the Repository Manager only offers storage targets already configured under Settings.
 - [X] Every repository appears below the correct exact storage target.
 - [X] Display name, repository path, encryption and job assignment are correct.
 - [X] Borg information loads successfully for an existing repository.

@@ -223,14 +223,14 @@ Best Practices:
 ### 3.6 Typische Meldungen
 
 - **Vorschau Fehler / ungültige Angaben:** Ein Feld im Wizard ist nicht plausibel. Prüfen Sie Quellpfade, Typ-ID, Speicherziel und Repository-Auswahl.
-- **Kein Speicherziel oder Repository vorhanden:** Öffnen Sie **Repositories** und richten Sie dort zuerst ein Speicherziel und Repository ein oder importieren Sie ein vorhandenes Repository.
+- **Kein Speicherziel oder Repository vorhanden:** Richten Sie das Speicherziel zuerst unter **Einstellungen** ein. Erstellen oder importieren Sie danach das Repository unter **Repositories**.
 - **Schedule disabled / Zeitplan deaktiviert:** Der Job läuft nur manuell.
 
 ## 4. Repositories
 
 ![Storage](../assets/de/storage.png)
 
-Die Seite **Repositories** verwendet eine Master-Detail-Ansicht. Links werden Borg-Repositorys nach dem exakten Speicherziel gruppiert; rechts bleibt der Arbeitsbereich des ausgewählten Repositorys sichtbar. Über **Repository hinzufügen** können Speicherziele geführt eingerichtet sowie Repositorys erstellt oder importiert werden.
+Die Seite **Repositories** verwendet eine Master-Detail-Ansicht. Links werden Borg-Repositorys nach dem exakten Speicherziel gruppiert; rechts bleibt der Arbeitsbereich des ausgewählten Repositorys sichtbar. Über **Repository hinzufügen** können Repositorys auf einem bereits unter **Einstellungen** eingerichteten Speicherziel erstellt oder importiert werden.
 
 Lokale Speicherziele werden unter **Einstellungen > Lokale Profile** angelegt.
 Zulässig sind konkrete Verzeichnisse unter `/mnt`, etwa `/mnt/backup` oder
@@ -250,7 +250,7 @@ Die Seite trennt Speicherziele, Borg-Repositorys und Backup-Jobs. Ein Speicherzi
 - **Archive:** Lädt die aktuelle Archivliste mit Archivname, technischer ID, Startzeit und Dauer direkt aus Borg.
 - **Wartung:** Bietet Check, Datenprüfung, Prune und Compact als klar getrennte Aktionen mit dauerhaft sichtbarem Ergebnis.
 - **Verwaltung:** Zeigt aktuelle Job-Verknüpfungen und trennt das nicht-destruktive Entfernen aus der UI von der endgültigen Repository-Löschung.
-- **Repository hinzufügen:** Öffnet einen Assistenten für vorhandene oder neue Speicherziele und für Erstellen oder Importieren eines Repositorys.
+- **Repository hinzufügen:** Öffnet einen Assistenten zum Auswählen eines vorhandenen Speicherziels und zum Erstellen oder Importieren eines Repositorys.
 
 Die Borg-Kennzahlen werden im Hintergrund alle 24 Stunden aktualisiert und in `repositories.json` zwischengespeichert. Fehlt die Information oder ist sie älter, wird sie beim nächsten stündlichen Prüflauf geladen. Fehlgeschlagene Aktualisierungen werden nach einer Stunde erneut versucht. Der Seitenaufruf selbst wartet dadurch nicht auf alle lokalen und entfernten Repositorys.
 
@@ -259,8 +259,8 @@ Der Repository-Kopf verwendet den beim Erstellen oder Importieren vergebenen **A
 ### 4.3 Repository erstellen oder importieren
 
 1. Öffnen Sie **Repositories** und klicken Sie **Repository hinzufügen**.
-2. Wählen Sie ein vorhandenes Speicherziel oder richten Sie Local, USB, SMB oder Storagebox/SSH ein.
-3. Der Assistent prüft Erreichbarkeit und Schreibzugriff. Bei SMB wird der technische Mount-Pfad automatisch verwaltet.
+2. Wählen Sie ein vorhandenes Speicherziel. Neue lokale, USB-, SMB- und SSH-Speicherziele werden ausschließlich unter **Einstellungen** eingerichtet und geprüft.
+3. Der Assistent prüft das ausgewählte Speicherziel vor dem Repository-Zugriff erneut.
 4. Wählen Sie **Neues Repository erstellen** oder **Vorhandenes Repository importieren**.
 5. Geben Sie Anzeigename und relativen Repository-Pfad an.
 6. Beim Erstellen wählen Sie Verschlüsselung und Passphrase. Keyfile-Schlüssel werden persistent im geschützten Plugin-Verzeichnis gespeichert.

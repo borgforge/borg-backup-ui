@@ -26,7 +26,7 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
         "storage-maintenance-confirm-modal",
         "storage-maintenance-confirm-start-btn",
         "repository-manager-modal",
-        "repository-manager-storage-mode",
+        "repository-manager-storage",
         "repository-manager-next-btn",
     ):
         assert f'id="{element_id}"' in html
@@ -49,6 +49,9 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
     assert 'id="check-log-panel"' not in html
     assert 'id="check-log-output"' not in html
     assert "window.confirm" not in script
+    assert "repository-manager-storage-mode" not in html
+    assert "repositoryManagerNewStoragePayload" not in script
+    assert "fetch('/api/storages'," not in script
     assert "renderStorageRepositoryActivities" not in script
     assert "repositoryTabActivities" not in script
     assert "storage.repositoryRelativePath', repo.relative_path" not in script

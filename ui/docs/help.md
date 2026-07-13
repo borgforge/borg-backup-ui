@@ -16,9 +16,9 @@ Borg Backup UI verwaltet Borg-Backup-Jobs auf Unraid. Die Anwendung hilft beim E
 
 ### 2) Speicherziel und Repository vorbereiten
 
+- Das Speicherziel zuerst unter **Einstellungen** bei den lokalen, USB-, SMB- oder SSH-Profilen anlegen und prüfen.
 - In **Repositories** auf **Repository hinzufügen** klicken.
-- Ein vorhandenes Speicherziel verwenden oder Local, USB, SMB bzw. SSH/Storagebox geführt einrichten.
-- Bei SMB verwaltet die Anwendung den technischen Mount-Pfad automatisch.
+- Das vorhandene Speicherziel auswählen.
 - Anschließend ein neues Borg-Repository erstellen oder ein vorhandenes Repository importieren.
 
 Tipp: Beim Import wird das Repository mit `borg info` geprüft, aber nicht verändert oder initialisiert.

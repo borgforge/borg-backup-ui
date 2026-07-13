@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #187
+- The Repository Manager now only selects storage targets that were configured and tested centrally under Settings.
+- Duplicate Local, USB, SMB and SSH storage-target creation fields and logic were removed from the repository wizard.
+
 ### Issue #203
 - Dashboard backup rows are grouped by storage location in the established Local, USB, SMB and Storagebox order, matching the Jobs workspace.
 - The redundant per-row location column was removed to provide more room for run, restore and storage details.

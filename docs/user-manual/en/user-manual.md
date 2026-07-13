@@ -223,14 +223,14 @@ Best practices:
 ### 3.6 Typical Messages
 
 - **Preview error / invalid data:** A wizard field is not plausible. Check source paths, type ID, storage target, and repository selection.
-- **No storage target or repository available:** Open **Repositories** and first set up a storage target and repository, or import an existing repository.
+- **No storage target or repository available:** Configure the storage target under **Settings** first. Then create or import the repository under **Repositories**.
 - **Schedule disabled:** The job only runs manually.
 
 ## 4. Repositories
 
 ![Storage](../assets/en/storage.png)
 
-The **Repositories** page uses a master-detail workspace. Borg repositories are grouped by their exact storage target on the left, while the selected repository remains visible in the workspace on the right. **Add repository** guides users through storage-target setup and repository creation or import.
+The **Repositories** page uses a master-detail workspace. Borg repositories are grouped by their exact storage target on the left, while the selected repository remains visible in the workspace on the right. **Add repository** creates or imports a repository on a storage target that has already been configured under **Settings**.
 
 Local storage targets are created under **Settings > Local Profiles**. A
 concrete directory below `/mnt`, such as `/mnt/backup` or `/mnt/disks/USB-A`,
@@ -250,7 +250,7 @@ The page separates storage targets, Borg repositories, and backup jobs. A storag
 - **Archives:** Loads the current Borg archive inventory with archive name, technical ID, start time, and duration.
 - **Maintenance:** Provides Check, Verify Data, Prune, and Compact as separate actions with persistent results.
 - **Management:** Shows current job links and separates non-destructive removal from the UI from permanent repository deletion.
-- **Add repository:** Opens a wizard for existing or new storage targets and for creating or importing a repository.
+- **Add repository:** Opens a wizard for selecting an existing storage target and creating or importing a repository.
 
 Borg statistics are refreshed in the background every 24 hours and cached in `repositories.json`. Missing or stale information is loaded during the next hourly scan. Failed refreshes are retried after one hour. Opening the page therefore does not wait for every local and remote repository.
 
@@ -259,8 +259,8 @@ The repository header uses the **display name** assigned during creation or impo
 ### 4.3 Create or Import a Repository
 
 1. Open **Repositories** and select **Add repository**.
-2. Select an existing storage target or set up Local, USB, SMB, or Storagebox/SSH.
-3. The wizard validates connectivity and write access. For SMB, the technical mount path is managed automatically.
+2. Select an existing storage target. New Local, USB, SMB, and SSH storage targets are configured and tested exclusively under **Settings**.
+3. The wizard validates the selected storage target again before accessing the repository.
 4. Select **Create new repository** or **Import existing repository**.
 5. Enter a display name and relative repository path.
 6. For creation, select encryption and passphrase. Keyfile keys are stored persistently in the protected plugin directory.

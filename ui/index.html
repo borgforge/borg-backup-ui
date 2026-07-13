@@ -1117,68 +1117,14 @@
       </div>
       <div id="repository-manager-step-1" class="repository-manager-main">
         <section class="repository-manager-card">
-          <h4 data-i18n="storage.repositoryStepStorageTitle">Speicherziel auswählen oder einrichten</h4>
+          <h4 data-i18n="storage.repositoryStepStorageTitle">Vorhandenes Speicherziel auswählen</h4>
           <div class="settings-grid repository-manager-form-grid">
-            <div class="form-group">
-              <label class="form-label" data-i18n="storage.storageTargetMode">Speicherziel</label>
-              <select class="form-select" id="repository-manager-storage-mode">
-                <option value="existing" data-i18n="storage.storageTargetExisting">Vorhandenes Speicherziel verwenden</option>
-                <option value="new" data-i18n="storage.storageTargetNew">Neues Speicherziel einrichten</option>
-              </select>
-            </div>
-            <div class="form-group" id="repository-manager-existing-storage-group">
+            <div class="form-group" style="grid-column:1/-1">
               <label class="form-label" data-i18n="storage.storageTargetExistingLabel">Vorhandenes Speicherziel</label>
               <select class="form-select" id="repository-manager-storage"></select>
+              <div class="form-hint" data-i18n="storage.repositoryStorageManagedHint">Speicherziele werden zentral unter Einstellungen angelegt und geprüft.</div>
             </div>
           </div>
-          <div id="repository-manager-new-storage" class="hidden">
-            <div class="settings-grid repository-manager-form-grid">
-              <div class="form-group">
-                <label class="form-label" data-i18n="storage.storageType">Speichertyp</label>
-                <select class="form-select" id="repository-manager-storage-type">
-                  <option value="local" data-i18n="jobs.locationLocal">Lokal</option>
-                  <option value="usb">USB</option>
-                  <option value="smb">SMB</option>
-                  <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox / SSH</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label" data-i18n="storage.storageDisplayName">Anzeigename</label>
-                <input class="form-input" type="text" id="repository-manager-storage-name" placeholder="Backup Server" data-i18n-placeholder="storage.storageDisplayNamePlaceholder">
-              </div>
-            </div>
-            <div data-storage-fields="local" class="settings-grid repository-manager-form-grid">
-              <div class="form-group" style="grid-column:1/-1">
-                <label class="form-label" data-i18n="storage.localBasePath">Basis-Pfad</label>
-                <input class="form-input mono" type="text" id="repository-manager-local-path" list="repository-manager-path-options" placeholder="/mnt/backup">
-                <div class="form-hint" data-i18n="storage.localBasePathHint">Dediziertes Verzeichnis unter /mnt. Es wird bei Bedarf angelegt.</div>
-              </div>
-            </div>
-            <div data-storage-fields="usb" class="settings-grid repository-manager-form-grid hidden">
-              <div class="form-group" style="grid-column:1/-1">
-                <label class="form-label" data-i18n="storage.usbMountPath">USB-Mount-Pfad</label>
-                <input class="form-input mono" type="text" id="repository-manager-usb-path" list="repository-manager-path-options" placeholder="/mnt/disks/USB-Backup">
-                <div class="form-hint" data-i18n="storage.usbMountPathHint">Das Laufwerk muss bereits durch Unraid gemountet sein.</div>
-              </div>
-            </div>
-            <div data-storage-fields="smb" class="settings-grid repository-manager-form-grid hidden">
-              <div class="form-group"><label class="form-label" data-i18n="storage.smbServer">Server</label><input class="form-input" type="text" id="repository-manager-smb-server" placeholder="192.168.1.10"></div>
-              <div class="form-group"><label class="form-label" data-i18n="storage.smbShare">Freigabe</label><input class="form-input" type="text" id="repository-manager-smb-share" placeholder="backup" data-i18n-placeholder="storage.smbSharePlaceholder"></div>
-              <div class="form-group"><label class="form-label" data-i18n="storage.smbUsername">Benutzername</label><input class="form-input" type="text" id="repository-manager-smb-user" autocomplete="username"></div>
-              <div class="form-group"><label class="form-label" data-i18n="storage.smbPassword">Passwort</label><input class="form-input" type="password" id="repository-manager-smb-password" autocomplete="new-password"></div>
-              <div class="form-group"><label class="form-label" data-i18n="storage.smbVersion">SMB-Version</label><input class="form-input" type="text" id="repository-manager-smb-version" value="3.0"></div>
-              <div class="form-hint" style="grid-column:1/-1" data-i18n="storage.smbManagedMountHint">Der technische Mount-Pfad wird automatisch verwaltet und muss nicht eingegeben werden.</div>
-            </div>
-            <div data-storage-fields="storagebox" class="settings-grid repository-manager-form-grid hidden">
-              <div class="form-group"><label class="form-label" data-i18n="storage.sshHost">Host / IP</label><input class="form-input" type="text" id="repository-manager-ssh-host"></div>
-              <div class="form-group"><label class="form-label" data-i18n="storage.sshPort">Port</label><input class="form-input" type="number" id="repository-manager-ssh-port" value="23" min="1" max="65535"></div>
-              <div class="form-group"><label class="form-label" data-i18n="storage.sshUser">Benutzer</label><input class="form-input" type="text" id="repository-manager-ssh-user"></div>
-              <div class="form-group"><label class="form-label" data-i18n="storage.sshBasePath">Basis-Pfad</label><input class="form-input mono" type="text" id="repository-manager-ssh-base" value="./backup"></div>
-              <div class="form-group" style="grid-column:1/-1"><label class="form-label" data-i18n="storage.sshKeyPath">SSH-Key</label><input class="form-input mono" type="text" id="repository-manager-ssh-key" value="/root/.ssh/id_rsa"></div>
-            </div>
-            <datalist id="repository-manager-path-options"></datalist>
-          </div>
-          <div id="repository-manager-storage-result" class="status-message hidden"></div>
         </section>
       </div>
       <div id="repository-manager-step-2" class="repository-manager-main hidden">

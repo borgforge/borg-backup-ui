@@ -144,33 +144,28 @@ Variante B ist sinnvoll, falls Repositorys später sehr umfangreich werden:
 
 Für den ersten Umsetzungsschritt ist Variante A pragmatischer.
 
-## 6. Storage-/Repository-Wizard
+## 6. Repository-Wizard
 
-Der Wizard sollte aus Storage heraus gestartet werden und dieselbe Designsprache
-wie bestehende Wizard-Dialoge verwenden.
+Der Wizard wird aus **Repositories** gestartet und verwendet dieselbe
+Designsprache wie bestehende Wizard-Dialoge. Speicherziele werden nicht in
+diesem Wizard angelegt, sondern zentral unter **Einstellungen** verwaltet und
+geprüft.
 
 ![Storage-/Repository-Wizard Mockup](assets/issue-184-187/storage-repository-wizard-mockup.svg)
 
 ### 6.1 Schritte
 
-1. Zieltyp wählen
-2. Verbindung oder Profil
-3. Zugriff testen
-4. Repository erstellen oder importieren
-5. Zusammenfassung
+1. Vorhandenes Speicherziel auswählen und Zugriff prüfen
+2. Repository erstellen oder importieren
+3. Zusammenfassung
 
 ### 6.2 SMB-Fokus
 
-Bei SMB darf der Nutzer nicht mehr zuerst über einen temporären Mount-Pfad
-stolpern. Die UI sollte sagen:
+Bei SMB wird das Speicherziel einschließlich technischem Mount-Pfad unter
+**Einstellungen > SMB-Profile** eingerichtet. Der Repository-Wizard zeigt nur
+das fertige Speicherziel und sollte sagen:
 
-> Borg Backup UI verwaltet den technischen Mount-Pfad automatisch.
-
-Erweiterter Modus:
-
-- Mount-Pfad manuell festlegen
-- nur für Power-User
-- mit klarer Warnung und Validierung
+> Speicherziele werden zentral unter Einstellungen angelegt und geprüft.
 
 ### 6.3 Import bestehender Repositorys
 

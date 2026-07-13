@@ -73,16 +73,6 @@
   background: var(--ui-color-border-strong);
 }
 
-#repository-manager-new-storage {
-  margin-top: var(--ui-space-4);
-  padding-top: var(--ui-space-4);
-  border-top: 1px solid var(--ui-color-border);
-}
-
-#repository-manager-storage-result {
-  margin-top: var(--ui-space-3);
-}
-
 .repository-manager-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(16rem, 19rem);

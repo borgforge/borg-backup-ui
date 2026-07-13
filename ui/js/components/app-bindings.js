@@ -193,8 +193,6 @@
     document.getElementById('repository-manager-back-btn')?.addEventListener('click', repositoryManagerBack);
     document.getElementById('repository-manager-next-btn')?.addEventListener('click', repositoryManagerNext);
     document.getElementById('repository-manager-save-btn')?.addEventListener('click', saveRepositoryManager);
-    document.getElementById('repository-manager-storage-mode')?.addEventListener('change', repositoryManagerStorageModeChanged);
-    document.getElementById('repository-manager-storage-type')?.addEventListener('change', repositoryManagerStorageTypeChanged);
     document.getElementById('repository-manager-action')?.addEventListener('change', repositoryManagerSyncFields);
     document.getElementById('repository-manager-storage')?.addEventListener('change', repositoryManagerSyncFields);
     document.getElementById('repository-manager-encryption')?.addEventListener('change', repositoryManagerSyncFields);
