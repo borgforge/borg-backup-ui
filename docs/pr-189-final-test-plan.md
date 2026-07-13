@@ -12,7 +12,7 @@ and repository model before PR #189 is merged.
 - Direct-migration candidate: `2026.07.12.0025`
 - Current regression candidate: `2026.07.13.1144`
 - Current package MD5: `ed3b435a37df7d954905cd544b884245`
-- Result: [ ] PASS  [ ] FAIL
+- Result: [X] PASS  [ ] FAIL
 - Notes / observed issues: ________________________________________________
 
 ## 1. Preparation
@@ -146,7 +146,7 @@ disposable test installation.
 - [X] Confirm the global Settings save button is hidden on the Factory Reset page.
 - [X] Confirm reset is blocked while a backup job is running.
 - [X] Confirm reset is blocked while a Restore Test or restore is running.
-- [ ] Confirm a running Restore Test is shown once as a localized reason without internal operation identifiers.
+- [X] Confirm a running Restore Test is shown once as a localized reason without internal operation identifiers.
 - [X] Confirm reset is blocked when a managed repository is located inside the configured operational data directory.
 - [X] Confirm incomplete risk checkboxes are rejected.
 - [X] Confirm a wrong server name, wrong admin password or wrong phrase is rejected.
@@ -215,13 +215,13 @@ For a Docker/VM job where applicable:
 - [X] Backup, Restore Test and Browse & Restore completed successfully.
 - [X] Local path validation behaves as documented.
 - [X] All discovered regressions are recorded in GitHub before merge.
-- [ ] Maintainer explicitly accepts PR #189 for merge.
-- [ ] After merge, observe the result for two to three days before preparing a
+- [X] Maintainer explicitly accepts PR #189 for merge.
+- [X] After merge, observe the result for two to three days before preparing a
       separate Stable release PR.
 
 ## Sign-off
 
 - Maintainer: tsteinbe
 - Sign-off date: 13.07.2026
-- Final decision: [ ] MERGE PR #189  [ ] DO NOT MERGE
+- Final decision: [X] MERGE PR #189  [ ] DO NOT MERGE
 - Follow-up issues: none
