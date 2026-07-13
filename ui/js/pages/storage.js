@@ -872,6 +872,53 @@ async function repositoryManagerPrepareStorage() {
   return storageKey;
 }
 
+function repositoryManagerPayload() {
+  const action = document.getElementById('repository-manager-action')?.value || 'create';
+  return {
+    action,
+    storage_key: repositoryManagerSelectedStorageKey(),
+    display_name: document.getElementById('repository-manager-display-name')?.value || '',
+    repository_name: document.getElementById('repository-manager-repository-name')?.value || '',
+    relative_path: document.getElementById('repository-manager-relative-path')?.value || '',
+    encryption: action === 'import' ? 'auto' : (document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2'),
+    passphrase: document.getElementById('repository-manager-passphrase')?.value || '',
+    key_data: action === 'import' ? (document.getElementById('repository-manager-key-data')?.value || '') : '',
+    storage_quota: action === 'create' ? (document.getElementById('repository-manager-storage-quota')?.value || '') : '',
+    append_only: action === 'create' && !!document.getElementById('repository-manager-append-only')?.checked,
+    make_parent_dirs: action === 'create' && !!document.getElementById('repository-manager-make-parent-dirs')?.checked,
+  };
+}
+
+function repositoryManagerErrorMessage(data, status = 0) {
+  const code = String(data?.code || '').trim();
+  const keyByCode = {
+    repository_already_managed: 'storage.repositoryAlreadyManaged',
+    repository_target_borg_exists: 'storage.repositoryTargetBorgExists',
+    repository_target_not_empty: 'storage.repositoryTargetNotEmpty',
+    repository_target_empty: 'storage.repositoryTargetEmpty',
+    repository_target_missing: 'storage.repositoryTargetMissing',
+    repository_target_not_directory: 'storage.repositoryTargetNotDirectory',
+    repository_target_inaccessible: 'storage.repositoryTargetInaccessible',
+  };
+  if (code === 'repository_target_borg_exists') {
+    const action = document.getElementById('repository-manager-action');
+    if (action) action.value = 'import';
+    repositoryManagerSyncFields();
+  }
+  return keyByCode[code] ? storageT(keyByCode[code]) : apiErrorMessage(data, status);
+}
+
+async function repositoryManagerValidateTarget() {
+  const response = await fetch('/api/repositories/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(repositoryManagerPayload()),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(repositoryManagerErrorMessage(data, response.status));
+  return data;
+}
+
 async function repositoryManagerNext() {
   repositoryManagerSetMessage('', '');
   const button = document.getElementById('repository-manager-next-btn');
@@ -892,6 +939,7 @@ async function repositoryManagerNext() {
     if (action === 'create' && encryption !== 'none' && !passphrase) {
       throw new Error(storageT('storage.repositoryPassphraseRequired'));
     }
+    await repositoryManagerValidateTarget();
     repositoryManagerRenderStep(3);
   } catch (err) {
     repositoryManagerSetMessage('error', err.message || storageT('storage.error'));
@@ -908,20 +956,7 @@ function repositoryManagerBack() {
 async function saveRepositoryManager() {
   repositoryManagerSetMessage('', '');
   repositoryManagerPathChanged();
-  const action = document.getElementById('repository-manager-action')?.value || 'create';
-  const payload = {
-    action,
-    storage_key: repositoryManagerSelectedStorageKey(),
-    display_name: document.getElementById('repository-manager-display-name')?.value || '',
-    repository_name: document.getElementById('repository-manager-repository-name')?.value || '',
-    relative_path: document.getElementById('repository-manager-relative-path')?.value || '',
-    encryption: action === 'import' ? 'auto' : (document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2'),
-    passphrase: document.getElementById('repository-manager-passphrase')?.value || '',
-    key_data: action === 'import' ? (document.getElementById('repository-manager-key-data')?.value || '') : '',
-    storage_quota: action === 'create' ? (document.getElementById('repository-manager-storage-quota')?.value || '') : '',
-    append_only: action === 'create' && !!document.getElementById('repository-manager-append-only')?.checked,
-    make_parent_dirs: action === 'create' && !!document.getElementById('repository-manager-make-parent-dirs')?.checked,
-  };
+  const payload = repositoryManagerPayload();
   const btn = document.getElementById('repository-manager-save-btn');
   if (btn) btn.disabled = true;
   try {
@@ -931,7 +966,7 @@ async function saveRepositoryManager() {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) throw new Error(repositoryManagerErrorMessage(data, res.status));
     closeRepositoryManager();
     await refreshStorage();
     showMsg('storage-message', 'success', storageT('storage.repositorySaved'));

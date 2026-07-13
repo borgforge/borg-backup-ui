@@ -47,6 +47,14 @@ class RepositoryLifecycleConflict(RuntimeError):
         self.code = code
 
 
+class RepositoryTargetConflict(RuntimeError):
+    """The requested target cannot safely be created or imported."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -162,6 +170,118 @@ def effective_repository_path(storage: dict[str, Any], relative_path: str) -> st
         return f"ssh://{quote(user, safe='')}@{host}:{port}{base_path}/{quote(relative, safe='/._-')}"
     base_path = str(storage.get("base_path") or storage.get("mount_path") or "").strip()
     return _join_path(base_path, relative)
+
+
+def _looks_like_borg_repository(path: Path) -> bool:
+    config_file = path / "config"
+    if not config_file.is_file():
+        return False
+    try:
+        header = config_file.read_text(encoding="utf-8", errors="replace")[:8192]
+    except OSError:
+        return False
+    return "[repository]" in header and re.search(r"(?m)^\s*id\s*=\s*[0-9a-fA-F]+\s*$", header) is not None
+
+
+def validate_repository_target(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+    """Classify a repository target without modifying it or writing secrets."""
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid repository payload")
+    action = str(payload.get("action") or "import").strip().lower()
+    if action not in {"create", "import"}:
+        raise ValueError("Invalid repository action")
+    storage_key = str(payload.get("storage_key") or "").strip()
+    storage = _storage_by_key(config).get(storage_key)
+    if not storage:
+        raise ValueError("Storage target not found")
+    relative_path = _safe_relative_path(str(payload.get("relative_path") or payload.get("repository_name") or ""))
+    repo_path = effective_repository_path(storage, relative_path)
+
+    existing = next((
+        row for row in read_repository_store(config).get("repositories", [])
+        if str(row.get("storage_key") or "") == storage_key
+        and str(row.get("relative_path") or "").rstrip("/") == relative_path.rstrip("/")
+    ), None)
+    if existing:
+        raise RepositoryTargetConflict(
+            "This repository target is already managed by Borg Backup UI.",
+            "repository_already_managed",
+        )
+
+    if "://" in repo_path:
+        return {"ok": True, "state": "remote_unchecked", "repository_path": repo_path}
+
+    target = Path(repo_path)
+    try:
+        exists = target.exists()
+        if not exists:
+            if action == "import":
+                raise RepositoryTargetConflict(
+                    "The repository target does not exist. Select Create repository or correct the path.",
+                    "repository_target_missing",
+                )
+            return {"ok": True, "state": "absent", "repository_path": repo_path}
+        if not target.is_dir():
+            raise RepositoryTargetConflict(
+                "The repository target exists but is not a directory.",
+                "repository_target_not_directory",
+            )
+        is_empty = next(target.iterdir(), None) is None
+    except RepositoryTargetConflict:
+        raise
+    except PermissionError as exc:
+        raise RepositoryTargetConflict(
+            "The repository target cannot be accessed. Check storage permissions.",
+            "repository_target_inaccessible",
+        ) from exc
+    except OSError as exc:
+        raise RepositoryTargetConflict(
+            f"The repository target cannot be inspected: {exc}",
+            "repository_target_inaccessible",
+        ) from exc
+
+    if is_empty:
+        if action == "import":
+            raise RepositoryTargetConflict(
+                "The selected directory is empty and is not a Borg repository.",
+                "repository_target_empty",
+            )
+        return {"ok": True, "state": "empty", "repository_path": repo_path}
+
+    if _looks_like_borg_repository(target):
+        if action == "create":
+            raise RepositoryTargetConflict(
+                "A Borg repository already exists at this target. Import it instead of creating it again.",
+                "repository_target_borg_exists",
+            )
+        return {"ok": True, "state": "borg_repository", "repository_path": repo_path}
+
+    raise RepositoryTargetConflict(
+        "The repository target is not empty and does not look like a Borg repository. Choose an empty path.",
+        "repository_target_not_empty",
+    )
+
+
+def _raise_borg_init_target_error(output: str, exit_code: int) -> None:
+    text = str(output or "").strip()
+    lowered = text.lower()
+    if "already exists" in lowered or "repository exists" in lowered:
+        raise RepositoryTargetConflict(
+            "A Borg repository already exists at this target. Import it instead of creating it again.",
+            "repository_target_borg_exists",
+        )
+    if "not empty" in lowered:
+        raise RepositoryTargetConflict(
+            "The repository target is not empty. Choose an empty path or import the existing Borg repository.",
+            "repository_target_not_empty",
+        )
+    if "permission denied" in lowered or "operation not permitted" in lowered:
+        raise RepositoryTargetConflict(
+            "The repository target cannot be written. Check storage permissions.",
+            "repository_target_inaccessible",
+        )
+    first_line = text.splitlines()[0] if text.splitlines() else f"borg init failed with exit {exit_code}"
+    raise RuntimeError(first_line)
 
 
 def _storage_name_from_location(location: str) -> str:
@@ -1233,6 +1353,9 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         and str(row.get("relative_path") or "").rstrip("/") == relative_path.rstrip("/")
     ), None)
 
+    if action == "create":
+        validate_repository_target(config, payload)
+
     passphrase_ref = str((existing or {}).get("passphrase_ref") or "").strip()
     passphrase_file: Path | None = None
     passphrase = str(payload.get("passphrase") or "").strip()
@@ -1297,7 +1420,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
             raise TimeoutError("borg init timed out")
         if exit_code != 0:
             restore_secret()
-            raise RuntimeError(output.splitlines()[0] if output.splitlines() else f"borg init failed with exit {exit_code}")
+            _raise_borg_init_target_error(output, exit_code)
         initialized = True
         try:
             info_fields = _borg_info_fields(_borg_info(config, storage, repo_path, passphrase_file))

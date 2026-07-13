@@ -724,6 +724,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/storages": self._post_storage_target,
             "/api/storages/test": self._post_storage_target_test,
             "/api/repositories": self._post_repository,
+            "/api/repositories/validate": self._post_repository_validate,
             "/api/repositories/info": self._post_repository_info,
             "/api/repositories/lifecycle": self._post_repository_lifecycle,
             "/api/storage/smb-action": self._post_storage_smb_action,
@@ -1472,9 +1473,25 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return read_repository_store_for_api(self.config)
 
     def _post_repository(self) -> dict:
-        from repositories_api import create_or_import_repository
+        from repositories_api import (
+            RepositoryTargetConflict,
+            create_or_import_repository,
+            validate_repository_target,
+        )
         body = self._read_json_body()
-        return create_or_import_repository(self.config, body)
+        try:
+            validate_repository_target(self.config, body)
+            return create_or_import_repository(self.config, body)
+        except RepositoryTargetConflict as exc:
+            raise ApiConflictError(str(exc), code=exc.code) from exc
+
+    def _post_repository_validate(self) -> dict:
+        from repositories_api import RepositoryTargetConflict, validate_repository_target
+        body = self._read_json_body()
+        try:
+            return validate_repository_target(self.config, body)
+        except RepositoryTargetConflict as exc:
+            raise ApiConflictError(str(exc), code=exc.code) from exc
 
     def _post_repository_info(self) -> dict:
         from repositories_api import RepositoryBusyError, refresh_repository_info
