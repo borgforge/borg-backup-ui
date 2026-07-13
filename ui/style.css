@@ -4223,6 +4223,7 @@ body {
   height: 420px;
   min-height: 420px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 .wizard-step-body {
   min-height: 100%;
@@ -4406,6 +4407,7 @@ body {
 .wizard-runtime-selection {
   max-height: 260px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);

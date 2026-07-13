@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #202
+- Job Wizard Docker and VM selection lists keep wheel, touchpad and touch scrolling inside the modal instead of moving the application page when a list boundary is reached.
+
 ### Issue #199
 - Backup jobs can define multiple concrete file or directory exclusion paths in the Job Wizard.
 - Exclusions must exist below a selected source root and are passed to Borg as safe path-prefix patterns.
