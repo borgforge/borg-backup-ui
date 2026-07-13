@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.05.1531">
+<!ENTITY version   "2026.07.13.1144">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -12,12 +12,17 @@
 <PLUGIN name="&name;"
         author="&author;"
         version="&version;"
+        launch="Settings/borg-backup-ui"
         pluginURL="&pluginURL;"
         description="Web UI for Borg Backup – Dashboard, Jobs, Storage, History, Restore Tests and Settings. No pip required, pure Python 3."
         icon="plugin-icon.png">
 
 <CHANGES>
 <![CDATA[
+###2026.07.13.1144###
+- Issue #198:
+  - Factory reset blockers are deduplicated and displayed as one localized, user-readable reason.
+
 ###2026.07.05.1531###
 - Issue #171:
   - Reports now show the translated restore-test failure reason, such as network or SSH connection errors, when restore verification fails.
@@ -293,7 +298,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>cbddf6f30f1ece09b383f8e0644aff55</MD5>
+<MD5>ed3b435a37df7d954905cd544b884245</MD5>
 </FILE>
 
 <!--
