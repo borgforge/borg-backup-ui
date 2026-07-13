@@ -5,7 +5,7 @@ and repository model before PR #189 is merged.
 
 ## Test record
 
-- Date: 12.07.2026
+- Date: 13.07.2026
 - Tester: tsteinbe
 - Unraid version: 7.2.6
 - Source plugin version: `2026.07.05.1531`
@@ -78,7 +78,7 @@ Use a disposable local profile or restore the original value after this test.
 
 ## 5. Repositories
 
-- [ ] Confirm the Repository Manager only offers storage targets already configured under Settings.
+- [X] Confirm the Repository Manager only offers storage targets already configured under Settings.
 - [X] Every repository appears below the correct exact storage target.
 - [X] Display name, repository path, encryption and job assignment are correct.
 - [X] Borg information loads successfully for an existing repository.
@@ -99,10 +99,10 @@ Optional disposable-repository test:
 
 ## 6. Job Wizard and relationships
 
-- [ ] Confirm step 2 shows Sources/Exclusions and Backup Target side by side without scrolling at normal desktop width.
-- [ ] Confirm autocomplete suggestions overlay the form without shifting the remaining fields.
-- [ ] Confirm long source and exclusion selections scroll only inside their path lists.
-- [ ] Confirm step 2 falls back to one readable column on a narrow/mobile viewport.
+- [X] Confirm step 2 shows Sources/Exclusions and Backup Target side by side without scrolling at normal desktop width.
+- [X] Confirm autocomplete suggestions overlay the form without shifting the remaining fields.
+- [X] Confirm long source and exclusion selections scroll only inside their path lists.
+- [X] Confirm step 2 falls back to one readable column on a narrow/mobile viewport.
 - [X] Open an existing job and confirm storage target is selected before repository.
 - [X] Confirm only repositories for the selected exact storage target are offered.
 - [X] Confirm options use `Repository name (effective path)`.
@@ -123,39 +123,39 @@ Optional disposable-repository test:
 
 ### Source exclusions (Issue #199)
 
-- [ ] Add one existing directory below a selected source as an exclusion.
-- [ ] Add one existing file below a selected source as an exclusion.
-- [ ] Confirm an exclusion outside every selected source is rejected.
-- [ ] Save and reopen the job; confirm all exclusions remain selected.
-- [ ] Run the job and confirm the exclusions are listed in the live log.
-- [ ] Browse the created archive and confirm the excluded file and directory are absent.
+- [X] Add one existing directory below a selected source as an exclusion.
+- [X] Add one existing file below a selected source as an exclusion.
+- [X] Confirm an exclusion outside every selected source is rejected.
+- [X] Save and reopen the job; confirm all exclusions remain selected.
+- [X] Run the job and confirm the exclusions are listed in the live log.
+- [X] Browse the created archive and confirm the excluded file and directory are absent.
 
 ## 6a. Unraid plugin entry (Issue #197)
 
-- [ ] Open the Unraid Plugins page and select the Borg Backup UI icon.
-- [ ] Confirm the existing control panel opens below Unraid Settings.
-- [ ] Confirm Start, Stop, Restart, port and bind controls remain available.
-- [ ] Confirm `Open Borg Backup UI` opens the application.
+- [X] Open the Unraid Plugins page and select the Borg Backup UI icon.
+- [X] Confirm the existing control panel opens below Unraid Settings.
+- [X] Confirm Start, Stop, Restart, port and bind controls remain available.
+- [X] Confirm `Open Borg Backup UI` opens the application.
 
 ## 6b. Guarded factory reset (Issue #198)
 
 Perform this test only after backing up `/boot/config/borg-backup` and use a
 disposable test installation.
 
-- [ ] Confirm **Settings > Factory Reset** is the final entry in the Maintenance sidebar group.
-- [ ] Confirm the global Settings save button is hidden on the Factory Reset page.
-- [ ] Confirm reset is blocked while a backup job is running.
-- [ ] Confirm reset is blocked while a Restore Test or restore is running.
-- [ ] Confirm reset is blocked when a managed repository is located inside the configured operational data directory.
-- [ ] Confirm incomplete risk checkboxes are rejected.
-- [ ] Confirm a wrong server name, wrong admin password or wrong phrase is rejected.
-- [ ] Complete the reset with all confirmations.
-- [ ] Confirm the plugin installation, port and bind configuration remain installed.
-- [ ] Confirm job and weekly-report crontab blocks were removed.
-- [ ] Confirm configuration and operational directories were initialized again.
-- [ ] Confirm the Admin first-setup page opens after restart.
-- [ ] Confirm external Borg repositories still exist and can be imported again.
-- [ ] Confirm `factory-reset.log.jsonl` contains a secret-free audit entry.
+- [X] Confirm **Settings > Factory Reset** is the final entry in the Maintenance sidebar group.
+- [X] Confirm the global Settings save button is hidden on the Factory Reset page.
+- [X] Confirm reset is blocked while a backup job is running.
+- [X] Confirm reset is blocked while a Restore Test or restore is running.
+- [X] Confirm reset is blocked when a managed repository is located inside the configured operational data directory.
+- [X] Confirm incomplete risk checkboxes are rejected.
+- [X] Confirm a wrong server name, wrong admin password or wrong phrase is rejected.
+- [X] Complete the reset with all confirmations.
+- [X] Confirm the plugin installation, port and bind configuration remain installed.
+- [X] Confirm job and weekly-report crontab blocks were removed.
+- [X] Confirm configuration and operational directories were initialized again.
+- [X] Confirm the Admin first-setup page opens after restart.
+- [X] Confirm external Borg repositories still exist and can be imported again.
+- [X] Confirm `factory-reset.log.jsonl` contains a secret-free audit entry.
 
 ## 7. Backup runtime
 
@@ -220,7 +220,7 @@ For a Docker/VM job where applicable:
 
 ## Sign-off
 
-- Maintainer: ____________________
-- Sign-off date: ____________________
+- Maintainer: tsteinbe
+- Sign-off date: 13.07.2026
 - Final decision: [ ] MERGE PR #189  [ ] DO NOT MERGE
-- Follow-up issues: ________________________________________________
+- Follow-up issues: none
