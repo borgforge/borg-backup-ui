@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import shlex
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +84,62 @@ def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
     assert "passphrase" not in metadata
     assert "BORG_PASSCOMMAND" not in env
     assert wizard_runner.os.environ["BORG_PASSCOMMAND"] == f"cat {secret}"
+
+
+def test_wizard_runner_keeps_ssh_identity_and_keepalive_options(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    jobs_dir = tmp_path / "config" / "jobs"
+    jobs_dir.mkdir(parents=True)
+    (jobs_dir / "appdata_storagebox.json").write_text(json.dumps({
+        "schema_version": 2,
+        "job_key": "appdata_storagebox",
+        "name": "Appdata",
+        "backup_type": "appdata",
+        "location": "storagebox",
+        "repository_key": "repo_appdata_storagebox",
+        "paths": {"default": "/mnt/user/appdata"},
+        "compression": "lz4",
+        "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
+    }) + "\n", encoding="utf-8")
+    secret = tmp_path / "secrets" / ".borg-passphrase-repo_appdata_storagebox"
+    secret.parent.mkdir()
+    secret.write_text("secret\n", encoding="utf-8")
+    key_path = tmp_path / "keys" / "storage box"
+    key_path.parent.mkdir()
+    key_path.write_text("private-key", encoding="utf-8")
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_ssh_test",
+        "display_name": "Storagebox",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "endpoint": "backup@example.test:23",
+        "host": "example.test",
+        "port": "23",
+        "user": "backup",
+        "base_path": "./backup",
+        "ssh_key_path": str(key_path),
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_appdata_storagebox",
+        "display_name": "Appdata",
+        "storage_key": "storage_ssh_test",
+        "relative_path": "borg-backup-appdata",
+        "passphrase_ref": str(secret),
+        "encryption": "repokey-blake2",
+    }]})
+    (tmp_path / "config" / "backup.conf").write_text(
+        "GLOBAL_LOG_DIR=/mnt/user/logs\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("BORG_RSH", raising=False)
+
+    env, _metadata = wizard_runner._load_env_from_job("appdata_storagebox", tmp_path / "scripts", tmp_path)
+
+    tokens = shlex.split(env["BORG_RSH"])
+    assert tokens[tokens.index("-i") + 1] == str(key_path)
+    assert "ServerAliveInterval=30" in tokens
+    assert "ServerAliveCountMax=10" in tokens
+    assert "TCPKeepAlive=yes" in tokens
 
 
 def test_runtime_repository_resolution_does_not_read_legacy_job_fields():

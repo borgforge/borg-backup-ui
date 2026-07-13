@@ -347,6 +347,7 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
         "passphrase_file": context["passphrase_ref"] or None,
         "repository_key": context["repository_key"],
         "storage_key": context["storage_key"],
+        "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
     }
 
 
@@ -359,6 +360,14 @@ def _borg_env(config: dict, passphrase_file: str | None) -> dict:
         if pass_path.exists():
             env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pass_path))}"
     return apply_borg_key_environment(env, config)
+
+
+def _repository_borg_env(config: dict, info: dict) -> dict:
+    from borg_ssh import configure_borg_ssh
+
+    env = _borg_env(config, info["passphrase_file"])
+    configure_borg_ssh(env, info.get("storage"), str(info["repo"] or ""))
+    return env
 
 
 def _get_max_runtime_hours(config: dict) -> int:
@@ -385,7 +394,7 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
     guard = ensure_smb_mount_for_job(config, job_key)
     try:
         info = _get_job_repo_info(config, job_key)
-        env = _borg_env(config, info["passphrase_file"])
+        env = _repository_borg_env(config, info)
 
         r = subprocess.run(
             ["borg", "list", "--json", info["repo"]],
@@ -485,7 +494,7 @@ def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict
     guard = ensure_smb_mount_for_job(config, job_key)
     try:
         info = _get_job_repo_info(config, job_key)
-        env = _borg_env(config, info["passphrase_file"])
+        env = _repository_borg_env(config, info)
 
         index = _build_index(info["repo"], archive, env)
 
@@ -508,7 +517,7 @@ def get_repo_stats(config: dict, job_key: str) -> dict:
     from smb_mount import ensure_smb_mount_for_job
     ensure_smb_mount_for_job(config, job_key)
     info = _get_job_repo_info(config, job_key)
-    env = _borg_env(config, info["passphrase_file"])
+    env = _repository_borg_env(config, info)
 
     r_info = subprocess.run(
         ["borg", "info", "--json", info["repo"]],
@@ -744,7 +753,7 @@ def restore_precheck(
     from smb_mount import ensure_smb_mount_for_job
     ensure_smb_mount_for_job(config, job_key)
     info = _get_job_repo_info(config, job_key)
-    env = _borg_env(config, info["passphrase_file"])
+    env = _repository_borg_env(config, info)
     target = _validate_target_dir(target_dir, config)
     if conflict_mode not in {"skip", "overwrite", "rename"}:
         raise ValueError("Invalid conflict mode")
@@ -796,7 +805,7 @@ def start_restore(
     from smb_mount import ensure_smb_mount_for_job
     ensure_smb_mount_for_job(config, job_key)
     info = _get_job_repo_info(config, job_key)
-    env = _borg_env(config, info["passphrase_file"])
+    env = _repository_borg_env(config, info)
     target = _validate_target_dir(target_dir, config)
     if conflict_mode not in {"skip", "overwrite", "rename"}:
         raise ValueError("Invalid conflict mode")

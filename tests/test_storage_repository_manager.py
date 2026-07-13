@@ -136,6 +136,22 @@ def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: P
     assert captured["kwargs"]["env"]["BORG_PASSCOMMAND"].endswith(str(secret))
 
 
+def test_repository_environment_combines_ssh_key_and_keepalives(tmp_path: Path):
+    key_path = tmp_path / "storage key"
+    key_path.write_text("private-key", encoding="utf-8")
+
+    env = repositories_api._repo_env({
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "ssh_key_path": str(key_path),
+    }, None, {"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+
+    assert f"-i '{key_path}'" in env["BORG_RSH"]
+    assert "ServerAliveInterval=30" in env["BORG_RSH"]
+    assert "ServerAliveCountMax=10" in env["BORG_RSH"]
+    assert "TCPKeepAlive=yes" in env["BORG_RSH"]
+
+
 def test_repository_maintenance_persists_structured_prune_and_compact_results(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     write_storage_store(config, {"storages": [{
@@ -231,6 +247,50 @@ def test_repository_maintenance_masks_error_details(tmp_path: Path):
     stored = read_repository_store(config)["repositories"][0]["maintenance_results"]["check"]
     assert "hunter2" not in json.dumps(stored)
     assert "secret-token" not in json.dumps(stored)
+
+
+def test_repository_maintenance_classifies_interrupted_ssh_connection(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_ssh_test",
+        "display_name": "Storagebox",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "endpoint": "backup@example.test:23",
+        "base_path": "./backup",
+    }]})
+    repository = {
+        "repository_key": "repo_test",
+        "display_name": "Test",
+        "storage_key": "storage_ssh_test",
+        "relative_path": "test",
+    }
+    write_repository_store(config, {"repositories": [repository]})
+
+    class Process:
+        returncode = 2
+
+    state = check_api._CheckState(
+        Process(),
+        "repo_test",
+        "verify_data",
+        datetime.now() - timedelta(seconds=2),
+        action="check",
+        config=config,
+        repository=repository,
+    )
+    state.append_line("Remote: Read from remote host backup.example.test: Connection reset by peer")
+    state.append_line("Remote: client_loop: send disconnect: Broken pipe")
+    state.append_line("Connection closed by remote host.")
+
+    result = CheckManager._persist_repository_result(state)
+
+    assert result["status"] == "error"
+    assert result["error_category"] == "network"
+    assert result["failure_code"] == "borg_ssh_connection_interrupted"
+    assert "does not necessarily indicate repository damage" in result["failure_hint"]
+    stored = read_repository_store(config)["repositories"][0]["maintenance_results"]["verify_data"]
+    assert stored["failure_code"] == "borg_ssh_connection_interrupted"
 
 
 def test_repository_maintenance_stream_exposes_completion_not_raw_output():
@@ -458,3 +518,18 @@ def test_repository_management_ui_is_separate_and_double_confirmed():
     assert "repository-lifecycle-modal" in html
     assert de["storage"]["repositoryTabManagement"] == "Verwaltung"
     assert en["storage"]["repositoryTabManagement"] == "Management"
+
+
+def test_repository_import_has_storage_scoped_directory_browser():
+    script = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
+    bindings = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(encoding="utf-8")
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="repository-manager-browser"' in html
+    assert 'id="repository-manager-browser-list"' in html
+    assert 'id="repository-manager-browser-btn"' in html
+    assert "/api/repositories/browse?storage_key=" in script
+    assert "row.managed" in script
+    assert "selectDisabled = managed || !supported" in script
+    assert "repositoryManagerBrowserClick" in bindings
+    assert "repositoryManagerOpenBrowser" in bindings
