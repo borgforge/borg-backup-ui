@@ -119,6 +119,10 @@ body {
   min-height: 100vh;
 }
 
+body.wizard-modal-open {
+  overflow: hidden;
+}
+
 /* ── Layout ── */
 .app-layout {
   display: flex;
@@ -4336,31 +4340,35 @@ body {
 .wizard-runtime-workspace {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.wizard-runtime-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elev-1);
-}
-
-.wizard-runtime-title {
-  color: var(--text-primary);
-  font-weight: 700;
-  font-size: 14px;
-}
-
-.wizard-runtime-subtitle {
-  margin-top: 3px;
-  color: var(--text-muted);
+.wizard-runtime-risk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 8px 12px;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.wizard-runtime-risk-copy {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.wizard-runtime-risk-copy strong {
+  white-space: nowrap;
+}
+
+.wizard-runtime-risk-ack {
+  margin: 0;
+  white-space: nowrap;
 }
 
 .wizard-runtime-card-grid {
@@ -4514,6 +4522,12 @@ body {
   }
   .wizard-step2-checkboxes {
     grid-template-columns: 1fr;
+  }
+  .wizard-runtime-risk {
+    grid-template-columns: 1fr;
+  }
+  .wizard-runtime-risk-ack {
+    white-space: normal;
   }
 }
 

@@ -1502,16 +1502,12 @@
       <div id="wizard-step-3" class="wizard-step-body hidden">
         <div id="wizard-error-3" class="status-message error hidden"></div>
         <div class="wizard-runtime-workspace">
-          <div class="wizard-runtime-head">
-            <div>
-              <div class="wizard-runtime-title" data-i18n="wizard.runtimeDockerTitle">Docker-Container</div>
-              <div class="wizard-runtime-subtitle" data-i18n="wizard.runtimeDockerSubtitle">Auswählen, welche Docker-Container vor dem Backup gestoppt werden.</div>
+          <div id="wiz-appdata-risk" class="status-message warning wizard-runtime-risk hidden">
+            <div class="wizard-runtime-risk-copy">
+              <strong data-i18n="wizard.appdataRiskTitle">Appdata-Hinweis</strong>
+              <span data-i18n="wizard.appdataRiskText">Bei /mnt/user/appdata sollten alle Docker-Container gestoppt werden, sonst können Backup-Warnungen durch geänderte Dateien entstehen.</span>
             </div>
-          </div>
-          <div id="wiz-appdata-risk" class="status-message warning hidden">
-            <strong data-i18n="wizard.appdataRiskTitle">Appdata-Hinweis</strong>
-            <div data-i18n="wizard.appdataRiskText">Bei /mnt/user/appdata sollten alle Docker-Container gestoppt werden, sonst können Backup-Warnungen durch geänderte Dateien entstehen.</div>
-            <label class="form-checkbox-row">
+            <label class="form-checkbox-row wizard-runtime-risk-ack">
               <input type="checkbox" id="wiz-ack-appdata-risk">
               <span data-i18n="wizard.ackRisk">Ich habe den Hinweis verstanden.</span>
             </label>
@@ -1541,16 +1537,12 @@
       <div id="wizard-step-4" class="wizard-step-body hidden">
         <div id="wizard-error-4" class="status-message error hidden"></div>
         <div class="wizard-runtime-workspace">
-          <div class="wizard-runtime-head">
-            <div>
-              <div class="wizard-runtime-title" data-i18n="wizard.runtimeVmTitle">Virtuelle Maschinen</div>
-              <div class="wizard-runtime-subtitle" data-i18n="wizard.runtimeVmSubtitle">Auswählen, welche VMs vor dem Backup heruntergefahren werden.</div>
+          <div id="wiz-domains-risk" class="status-message warning wizard-runtime-risk hidden">
+            <div class="wizard-runtime-risk-copy">
+              <strong data-i18n="wizard.domainsRiskTitle">VM-Domains-Hinweis</strong>
+              <span data-i18n="wizard.domainsRiskText">Bei /mnt/user/domains sollten alle VMs heruntergefahren werden, sonst können inkonsistente VM-Images gesichert werden.</span>
             </div>
-          </div>
-          <div id="wiz-domains-risk" class="status-message warning hidden">
-            <strong data-i18n="wizard.domainsRiskTitle">VM-Domains-Hinweis</strong>
-            <div data-i18n="wizard.domainsRiskText">Bei /mnt/user/domains sollten alle VMs heruntergefahren werden, sonst können inkonsistente VM-Images gesichert werden.</div>
-            <label class="form-checkbox-row">
+            <label class="form-checkbox-row wizard-runtime-risk-ack">
               <input type="checkbox" id="wiz-ack-domains-risk">
               <span data-i18n="wizard.ackRisk">Ich habe den Hinweis verstanden.</span>
             </label>

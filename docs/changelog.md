@@ -12,6 +12,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #202
 - Job Wizard Docker and VM selection lists keep wheel, touchpad and touch scrolling inside the modal instead of moving the application page when a list boundary is reached.
+- Appdata and VM safety acknowledgements now use a compact inline layout, and the duplicated runtime heading was removed to leave more room for long container and VM lists.
+- The application page is locked while the Job Wizard is open; only the Wizard body or its nested selection list can scroll.
 
 ### Issue #199
 - Backup jobs can define multiple concrete file or directory exclusion paths in the Job Wizard.

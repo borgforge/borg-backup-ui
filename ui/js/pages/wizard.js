@@ -397,6 +397,7 @@ function openWizard() {
   wizardRenderRuntimeControls();
   _renderWizardStep(1);
   document.getElementById('wizard-modal').classList.remove('hidden');
+  document.body.classList.add('wizard-modal-open');
 }
 
 function _wizardFillFromJob(job) {
@@ -484,6 +485,7 @@ function wizardNeedsScriptRegeneration(params) {
 
 function closeWizard() {
   document.getElementById('wizard-modal').classList.add('hidden');
+  document.body.classList.remove('wizard-modal-open');
 }
 
 function _renderWizardStep(n) {
