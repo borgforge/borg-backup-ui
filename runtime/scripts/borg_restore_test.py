@@ -264,13 +264,16 @@ class RestoreTest:
         except Exception as exc:
             self.log(f"  notification event failed: {exc}")
 
-    def _env(self, passphrase: str) -> dict:
+    def _env(self, passphrase: str, storage: dict | None = None, repository: str = "") -> dict:
         from borg_key_store import apply_borg_key_environment
+        from borg_ssh import configure_borg_ssh
 
         env = dict(os.environ)
         env["BORG_PASSPHRASE"] = passphrase
         env.pop("BORG_PASSCOMMAND", None)
-        return apply_borg_key_environment(env, self.conf)
+        env = apply_borg_key_environment(env, self.conf)
+        configure_borg_ssh(env, storage, repository)
+        return env
 
     def _borg(self, args: list, env: dict, timeout: int | None = None) -> subprocess.CompletedProcess:
         if timeout is None:
@@ -433,7 +436,11 @@ class RestoreTest:
 
     @staticmethod
     def _analyze_error(output: str) -> dict:
+        from borg_ssh import SSH_INTERRUPTION_MESSAGE, is_ssh_connection_interruption
+
         lo = output.lower()
+        if is_ssh_connection_interruption(output):
+            return {"category": "network", "details": SSH_INTERRUPTION_MESSAGE}
         if "timed out" in lo or "timeout" in lo:
             return {"category": "timeout",              "details": "Borg command exceeded the configured timeout"}
         if "passphrase" in lo and ("wrong" in lo or "incorrect" in lo):
@@ -559,7 +566,7 @@ class RestoreTest:
                 self.log(f"  ERROR: {exc}")
                 return 1
 
-            env = self._env(passphrase)
+            env = self._env(passphrase, repo.get("storage"), path)
             t0 = time.time()
 
             self.log("Level 1: Repository integrity")

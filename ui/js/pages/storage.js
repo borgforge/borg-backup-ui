@@ -359,6 +359,9 @@ function storageMaintenanceTitle(key) {
 
 function storageMaintenanceSummary(key, result) {
   if (!result) return storageT('storage.repositoryNotRun');
+  if (result.failure_code === 'borg_ssh_connection_interrupted') {
+    return storageT('storage.repositorySshInterrupted');
+  }
   if (result.status === 'error') return storageT('storage.repositoryActionFailed');
   if (result.status === 'warning') return storageT('storage.repositoryActionWarning');
   if (key === 'prune') {
@@ -382,6 +385,9 @@ function renderStorageMaintenanceCard(repo, key, { withAction = false, job = nul
   const disabled = key === 'prune' && !job ? ' disabled' : '';
   const details = Array.isArray(result?.details) ? result.details : [];
   const deletedArchives = Array.isArray(result?.deleted_archives) ? result.deleted_archives : [];
+  const userHint = result?.failure_code === 'borg_ssh_connection_interrupted'
+    ? `<p class="storage-maintenance-user-hint">${escHtml(storageT('storage.repositorySshInterruptedHint'))}</p>`
+    : '';
   const resultDetails = details.length
     ? `<details class="storage-maintenance-result-details status-error"><summary>${escHtml(storageT('storage.repositoryErrorDetails'))}</summary><pre>${escHtml(details.join('\n'))}</pre></details>`
     : (key === 'prune' && deletedArchives.length
@@ -393,6 +399,7 @@ function renderStorageMaintenanceCard(repo, key, { withAction = false, job = nul
       <small>${escHtml(storageMaintenanceTitle(key))}</small>
       <strong>${escHtml(running ? storageT('storage.repositoryActionRunning') : storageMaintenanceSummary(key, result))}</strong>
       <span>${running ? storageT('storage.repositoryPleaseWait') : (result ? `${storageFormatDateTime(result.finished_at)} · ${storageFormatDuration(result.duration_seconds, result.started_at, result.finished_at)}` : storageT('storage.repositoryNoResult'))}</span>
+      ${userHint}
       ${resultDetails}
     </div>
     ${withAction ? `<button class="btn btn-secondary btn-sm" data-storage-action="repository-maintenance" data-repository-key="${escHtml(repositoryKey)}" data-repository-action="${escHtml(action)}" data-check-mode="${escHtml(mode)}"${disabled}>${escHtml(running ? storageT('storage.repositoryRunning') : storageT('storage.repositoryStartAction'))}</button>` : ''}
