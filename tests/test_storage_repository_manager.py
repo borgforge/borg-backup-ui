@@ -518,3 +518,18 @@ def test_repository_management_ui_is_separate_and_double_confirmed():
     assert "repository-lifecycle-modal" in html
     assert de["storage"]["repositoryTabManagement"] == "Verwaltung"
     assert en["storage"]["repositoryTabManagement"] == "Management"
+
+
+def test_repository_import_has_storage_scoped_directory_browser():
+    script = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
+    bindings = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(encoding="utf-8")
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="repository-manager-browser"' in html
+    assert 'id="repository-manager-browser-list"' in html
+    assert 'id="repository-manager-browser-btn"' in html
+    assert "/api/repositories/browse?storage_key=" in script
+    assert "row.managed" in script
+    assert "selectDisabled = managed || !supported" in script
+    assert "repositoryManagerBrowserClick" in bindings
+    assert "repositoryManagerOpenBrowser" in bindings

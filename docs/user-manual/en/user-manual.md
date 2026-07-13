@@ -262,7 +262,7 @@ The repository header uses the **display name** assigned during creation or impo
 2. Select an existing storage target. New Local, USB, SMB, and SSH storage targets are configured and tested exclusively under **Settings**.
 3. The wizard validates the selected storage target again before accessing the repository.
 4. Select **Create new repository** or **Import existing repository**.
-5. Enter a display name and relative repository path.
+5. Enter the display name. For imports, enter the relative repository path manually or use **Browse** to open and select existing directories inside the chosen storage target. Repositories that are already managed are identified and cannot be imported again.
 6. For creation, select encryption and passphrase. Keyfile keys are stored persistently in the protected plugin directory.
 7. For import, encryption is detected through `borg info`. For a keyfile repository, provide a Borg key export previously created with `borg key export` when required; an exact matching key already present on the system is adopted automatically.
 8. Review the summary and save.

@@ -242,6 +242,7 @@ normalen Systemzustandsansicht ausgeblendet.
 | Methode | Pfad | Zweck |
 | --- | --- | --- |
 | GET | `/api/repositories` | Repositorys listen |
+| GET | `/api/repositories/browse` | Verzeichnisse innerhalb eines kanonischen Speicherziels fuer den Repository-Import auflisten |
 | POST | `/api/repositories` | Repository anlegen/importieren |
 | POST | `/api/repositories/test` | Repository testen |
 | DELETE | `/api/repositories` | Repository entfernen oder Borg-Daten nach doppelter Bestätigung löschen |

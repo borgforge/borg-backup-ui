@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shlex
 import subprocess
@@ -43,6 +44,14 @@ class RepositoryLifecycleConflict(RuntimeError):
     """A repository cannot be removed while references or operations exist."""
 
     def __init__(self, message: str, code: str = "repository_lifecycle_conflict") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class RepositoryTargetConflict(RuntimeError):
+    """The requested target cannot safely be created or imported."""
+
+    def __init__(self, message: str, code: str) -> None:
         super().__init__(message)
         self.code = code
 
@@ -162,6 +171,118 @@ def effective_repository_path(storage: dict[str, Any], relative_path: str) -> st
         return f"ssh://{quote(user, safe='')}@{host}:{port}{base_path}/{quote(relative, safe='/._-')}"
     base_path = str(storage.get("base_path") or storage.get("mount_path") or "").strip()
     return _join_path(base_path, relative)
+
+
+def _looks_like_borg_repository(path: Path) -> bool:
+    config_file = path / "config"
+    if not config_file.is_file():
+        return False
+    try:
+        header = config_file.read_text(encoding="utf-8", errors="replace")[:8192]
+    except OSError:
+        return False
+    return "[repository]" in header and re.search(r"(?m)^\s*id\s*=\s*[0-9a-fA-F]+\s*$", header) is not None
+
+
+def validate_repository_target(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+    """Classify a repository target without modifying it or writing secrets."""
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid repository payload")
+    action = str(payload.get("action") or "import").strip().lower()
+    if action not in {"create", "import"}:
+        raise ValueError("Invalid repository action")
+    storage_key = str(payload.get("storage_key") or "").strip()
+    storage = _storage_by_key(config).get(storage_key)
+    if not storage:
+        raise ValueError("Storage target not found")
+    relative_path = _safe_relative_path(str(payload.get("relative_path") or payload.get("repository_name") or ""))
+    repo_path = effective_repository_path(storage, relative_path)
+
+    existing = next((
+        row for row in read_repository_store(config).get("repositories", [])
+        if str(row.get("storage_key") or "") == storage_key
+        and str(row.get("relative_path") or "").rstrip("/") == relative_path.rstrip("/")
+    ), None)
+    if existing:
+        raise RepositoryTargetConflict(
+            "This repository target is already managed by Borg Backup UI.",
+            "repository_already_managed",
+        )
+
+    if "://" in repo_path:
+        return {"ok": True, "state": "remote_unchecked", "repository_path": repo_path}
+
+    target = Path(repo_path)
+    try:
+        exists = target.exists()
+        if not exists:
+            if action == "import":
+                raise RepositoryTargetConflict(
+                    "The repository target does not exist. Select Create repository or correct the path.",
+                    "repository_target_missing",
+                )
+            return {"ok": True, "state": "absent", "repository_path": repo_path}
+        if not target.is_dir():
+            raise RepositoryTargetConflict(
+                "The repository target exists but is not a directory.",
+                "repository_target_not_directory",
+            )
+        is_empty = next(target.iterdir(), None) is None
+    except RepositoryTargetConflict:
+        raise
+    except PermissionError as exc:
+        raise RepositoryTargetConflict(
+            "The repository target cannot be accessed. Check storage permissions.",
+            "repository_target_inaccessible",
+        ) from exc
+    except OSError as exc:
+        raise RepositoryTargetConflict(
+            f"The repository target cannot be inspected: {exc}",
+            "repository_target_inaccessible",
+        ) from exc
+
+    if is_empty:
+        if action == "import":
+            raise RepositoryTargetConflict(
+                "The selected directory is empty and is not a Borg repository.",
+                "repository_target_empty",
+            )
+        return {"ok": True, "state": "empty", "repository_path": repo_path}
+
+    if _looks_like_borg_repository(target):
+        if action == "create":
+            raise RepositoryTargetConflict(
+                "A Borg repository already exists at this target. Import it instead of creating it again.",
+                "repository_target_borg_exists",
+            )
+        return {"ok": True, "state": "borg_repository", "repository_path": repo_path}
+
+    raise RepositoryTargetConflict(
+        "The repository target is not empty and does not look like a Borg repository. Choose an empty path.",
+        "repository_target_not_empty",
+    )
+
+
+def _raise_borg_init_target_error(output: str, exit_code: int) -> None:
+    text = str(output or "").strip()
+    lowered = text.lower()
+    if "already exists" in lowered or "repository exists" in lowered:
+        raise RepositoryTargetConflict(
+            "A Borg repository already exists at this target. Import it instead of creating it again.",
+            "repository_target_borg_exists",
+        )
+    if "not empty" in lowered:
+        raise RepositoryTargetConflict(
+            "The repository target is not empty. Choose an empty path or import the existing Borg repository.",
+            "repository_target_not_empty",
+        )
+    if "permission denied" in lowered or "operation not permitted" in lowered:
+        raise RepositoryTargetConflict(
+            "The repository target cannot be written. Check storage permissions.",
+            "repository_target_inaccessible",
+        )
+    first_line = text.splitlines()[0] if text.splitlines() else f"borg init failed with exit {exit_code}"
+    raise RuntimeError(first_line)
 
 
 def _storage_name_from_location(location: str) -> str:
@@ -460,6 +581,186 @@ def _storage_by_key(config: dict) -> dict[str, dict[str, Any]]:
         str(row.get("storage_key") or ""): row
         for row in read_storage_store(config).get("storages", [])
         if str(row.get("storage_key") or "").strip()
+    }
+
+
+def _browse_relative_path(value: str) -> str:
+    """Normalize an optional storage-relative path without allowing traversal."""
+    text = str(value or "").strip()
+    if text.startswith("/"):
+        raise ValueError("Repository browse path must be relative to the storage target")
+    text = text.strip("/")
+    if not text:
+        return ""
+    if "\x00" in text or "\n" in text or "\r" in text:
+        raise ValueError("Repository browse path contains control characters")
+    parts = text.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ValueError("Repository browse path contains unsafe path segments")
+    return "/".join(parts)
+
+
+def _browse_name_supported(name: str) -> bool:
+    try:
+        return _normalize_repo_segment(name) == name
+    except ValueError:
+        return False
+
+
+def _managed_repository_paths(config: dict, storage_key: str) -> dict[str, dict[str, str]]:
+    managed: dict[str, dict[str, str]] = {}
+    for row in read_repository_store(config).get("repositories", []):
+        if str(row.get("storage_key") or "").strip() != storage_key:
+            continue
+        relative = str(row.get("relative_path") or "").strip().strip("/")
+        if not relative:
+            continue
+        managed[relative] = {
+            "repository_key": str(row.get("repository_key") or "").strip(),
+            "display_name": str(row.get("display_name") or row.get("repository_name") or "").strip(),
+        }
+    return managed
+
+
+@contextmanager
+def _local_storage_browse_path(config: dict, storage: dict[str, Any]):
+    """Yield a mounted local base path and undo only mounts created here."""
+    cleanup = None
+    if str(storage.get("location") or storage.get("storage_type") or "").strip().lower() == "smb":
+        from smb_profiles_api import run_smb_profile_action
+
+        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
+        if not mounted.get("ok"):
+            raise ValueError(str(mounted.get("message") or "SMB mount failed"))
+        if mounted.get("message_code") == "smb_mount_success":
+            profile_key = str(storage.get("profile_key") or "")
+            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+
+    raw_base = str(storage.get("base_path") or storage.get("mount_path") or "").strip()
+    if not raw_base:
+        if cleanup:
+            cleanup()
+        raise ValueError("Storage base path is missing")
+    try:
+        yield Path(raw_base)
+    finally:
+        if cleanup:
+            cleanup()
+
+
+def _list_local_storage_directories(
+    config: dict,
+    storage: dict[str, Any],
+    relative_path: str,
+) -> list[str]:
+    with _local_storage_browse_path(config, storage) as raw_base:
+        try:
+            base = raw_base.resolve(strict=True)
+            current = (base / relative_path).resolve(strict=True) if relative_path else base
+            current.relative_to(base)
+        except (OSError, ValueError) as exc:
+            raise ValueError("Repository browse path does not exist inside the storage target") from exc
+        if not current.is_dir():
+            raise ValueError("Repository browse path is not a directory")
+        try:
+            return sorted(
+                (
+                    child.name
+                    for child in current.iterdir()
+                    if child.is_dir() and not child.is_symlink()
+                ),
+                key=str.lower,
+            )
+        except OSError as exc:
+            raise ValueError(f"Repository directory cannot be listed: {exc}") from exc
+
+
+def _ssh_storage_profile(storage: dict[str, Any]) -> dict[str, str]:
+    return {
+        "host": str(storage.get("host") or "").strip(),
+        "port": str(storage.get("port") or "22").strip() or "22",
+        "user": str(storage.get("user") or "").strip(),
+        "base_path": str(storage.get("base_path") or "").strip(),
+        "ssh_key": str(storage.get("ssh_key_path") or "").strip(),
+    }
+
+
+def _ssh_storage_browse_path(storage: dict[str, Any], relative_path: str) -> str:
+    base = str(storage.get("base_path") or "").strip() or "."
+    if base.startswith("/./"):
+        base = f".{base[2:]}"
+    base = base.rstrip("/") or "/"
+    return posixpath.join(base, relative_path) if relative_path else base
+
+
+def _list_ssh_storage_directories(storage: dict[str, Any], relative_path: str) -> list[str]:
+    from storagebox_api import _storagebox_ssh_base_cmd
+
+    profile = _ssh_storage_profile(storage)
+    if not profile["host"] or not profile["user"]:
+        raise ValueError("SSH storage target is incomplete")
+    remote_path = _ssh_storage_browse_path(storage, relative_path)
+    remote_command = f"ls -1Ap -- {shlex.quote(remote_path)}"
+    try:
+        proc = subprocess.run(
+            _storagebox_ssh_base_cmd(profile) + [remote_command],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise ValueError("ssh binary not found") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("SSH directory listing timed out") from exc
+    output = _mask_repo_output(((proc.stdout or "") + "\n" + (proc.stderr or "")).strip())
+    if proc.returncode != 0:
+        first = next((line.strip() for line in output.splitlines() if line.strip()), "SSH directory listing failed")
+        raise ValueError(first[:500])
+    directories = []
+    for line in (proc.stdout or "").splitlines():
+        name = line.strip()
+        if not name.endswith("/"):
+            continue
+        name = name.rstrip("/")
+        if name and name not in {".", ".."} and "/" not in name:
+            directories.append(name)
+    return sorted(set(directories), key=str.lower)
+
+
+def browse_repository_directories(config: dict, storage_key: str, relative_path: str = "") -> dict[str, Any]:
+    """List one safe directory level inside a canonical storage target."""
+    key = str(storage_key or "").strip()
+    storage = _storage_by_key(config).get(key)
+    if not storage:
+        raise ValueError("Storage target not found")
+    current = _browse_relative_path(relative_path)
+    storage_type = str(storage.get("storage_type") or storage.get("location") or "").strip().lower()
+    if storage_type == "ssh" or str(storage.get("location") or "").strip().lower() == "storagebox":
+        names = _list_ssh_storage_directories(storage, current)
+    else:
+        names = _list_local_storage_directories(config, storage, current)
+
+    managed = _managed_repository_paths(config, key)
+    directories = []
+    for name in names:
+        relative = f"{current}/{name}" if current else name
+        existing = managed.get(relative, {})
+        directories.append({
+            "name": name,
+            "relative_path": relative,
+            "supported": all(_browse_name_supported(part) for part in relative.split("/")),
+            "managed": bool(existing),
+            "repository_key": str(existing.get("repository_key") or ""),
+            "display_name": str(existing.get("display_name") or ""),
+        })
+    parent = current.rsplit("/", 1)[0] if "/" in current else ""
+    return {
+        "storage_key": key,
+        "storage_name": str(storage.get("display_name") or key),
+        "relative_path": current,
+        "parent_path": parent,
+        "directories": directories,
     }
 
 
@@ -1235,6 +1536,9 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         and str(row.get("relative_path") or "").rstrip("/") == relative_path.rstrip("/")
     ), None)
 
+    if action == "create":
+        validate_repository_target(config, payload)
+
     passphrase_ref = str((existing or {}).get("passphrase_ref") or "").strip()
     passphrase_file: Path | None = None
     passphrase = str(payload.get("passphrase") or "").strip()
@@ -1299,7 +1603,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
             raise TimeoutError("borg init timed out")
         if exit_code != 0:
             restore_secret()
-            raise RuntimeError(output.splitlines()[0] if output.splitlines() else f"borg init failed with exit {exit_code}")
+            _raise_borg_init_target_error(output, exit_code)
         initialized = True
         try:
             info_fields = _borg_info_fields(_borg_info(config, storage, repo_path, passphrase_file))

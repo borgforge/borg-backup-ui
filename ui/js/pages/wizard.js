@@ -29,6 +29,8 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   vms: [],
   selectedDockerContainers: [],
   selectedVms: [],
+  unlockedStep: 1,
+  originalSchedule: null,
 };
 const wizardState = window.BBUI.wizardState;
 
@@ -328,6 +330,8 @@ function openWizard() {
   wizardState.existingJobKey = '';
   wizardState.original = null;
   wizardState.step = 1;
+  wizardState.unlockedStep = 1;
+  wizardState.originalSchedule = null;
   const title = document.getElementById('wizard-modal-title');
   if (title) title.textContent = wizardT('wizard.newTitle');
   document.getElementById('wiz-job-name').value = '';
@@ -430,6 +434,7 @@ function _wizardFillFromJob(job) {
   document.getElementById('wiz-keep-weekly').value = job.keep_weekly || '4';
   document.getElementById('wiz-keep-monthly').value = job.keep_monthly || '6';
   document.getElementById('wiz-keep-yearly').value = job.keep_yearly || '3';
+  _wizardApplySchedule(job.schedule);
   wizardUpdateIconPreview();
   wizardAutoFill();
   if (job.repository_assignment_error) {
@@ -463,11 +468,17 @@ async function openWizardForJob(jobKey, mode = 'edit') {
       docker_control: job.docker_control || { mode: job.use_docker ? 'all' : 'none', selected: [] },
       vm_control: job.vm_control || { mode: job.use_vm ? 'all' : 'none', selected: [] },
     };
+    wizardState.originalSchedule = job.schedule && typeof job.schedule === 'object'
+      ? { cron: String(job.schedule.cron || '').trim(), enabled: !!job.schedule.enabled }
+      : null;
+    wizardState.unlockedStep = 9;
+    _renderWizardStep(wizardState.step);
   } catch (err) {
     closeWizard();
     showMsg('jobs-message', 'error', wizardT('wizard.loadFailed', { message: err.message }));
   } finally {
     _setWizardFormDisabled(false);
+    _wizardUpdateStepNavigation();
   }
 }
 
@@ -494,7 +505,12 @@ function _renderWizardStep(n) {
   [1,2,3,4,5,6,7,8,9].forEach(i => {
     document.getElementById(`wizard-step-${i}`)?.classList.toggle('hidden', i !== n);
     const dot = document.getElementById(`wstep-dot-${i}`);
-    if (dot) dot.classList.toggle('active', i <= n);
+    if (dot) {
+      dot.classList.toggle('active', i <= n);
+      dot.classList.toggle('wizard-step-current', i === n);
+      if (i === n) dot.setAttribute('aria-current', 'step');
+      else dot.removeAttribute('aria-current');
+    }
   });
   const backBtn = document.getElementById('wizard-back-btn');
   const nextBtn = document.getElementById('wizard-next-btn');
@@ -503,6 +519,19 @@ function _renderWizardStep(n) {
   nextBtn.classList.toggle('hidden', n === 9);
   saveBtn.classList.toggle('hidden', n !== 9);
   wizardState.step = n;
+  _wizardUpdateStepNavigation();
+}
+
+function _wizardUpdateStepNavigation() {
+  [1,2,3,4,5,7,8,9].forEach((step) => {
+    const dot = document.getElementById(`wstep-dot-${step}`);
+    if (!dot) return;
+    const skipped = !_wizardStepEnabled(step);
+    const locked = step > Number(wizardState.unlockedStep || 1);
+    dot.disabled = skipped || locked;
+    dot.setAttribute('aria-disabled', String(skipped || locked));
+    dot.classList.toggle('wizard-step-skipped', skipped);
+  });
 }
 
 function _wizardStepEnabled(step) {
@@ -979,10 +1008,13 @@ async function wizardNext() {
   const cur = wizardState.step;
   if (!_wizardValidate(cur)) return;
   if (cur < 8) {
-    _renderWizardStep(_wizardNextStepFrom(cur));
+    const next = _wizardNextStepFrom(cur);
+    wizardState.unlockedStep = Math.max(Number(wizardState.unlockedStep || 1), next);
+    _renderWizardStep(next);
     return;
   }
   // Step 8 -> 9: load preview
+  wizardState.unlockedStep = 9;
   _renderWizardStep(9);
   await _wizardPreview();
 }
@@ -991,6 +1023,27 @@ function wizardBack() {
   const cur = wizardState.step;
   if (cur <= 1) return;
   _renderWizardStep(_wizardPreviousStepFrom(cur));
+}
+
+async function wizardGoToStep(target) {
+  const next = Number(target || 0);
+  const current = Number(wizardState.step || 1);
+  if (!next || next === current || !_wizardStepEnabled(next)) return;
+  if (next > Number(wizardState.unlockedStep || 1)) return;
+  if (next > current) {
+    let cursor = current;
+    while (cursor < next) {
+      if (!_wizardValidate(cursor)) {
+        _renderWizardStep(cursor);
+        return;
+      }
+      const following = _wizardNextStepFrom(cursor);
+      if (following <= cursor) return;
+      cursor = following;
+    }
+  }
+  _renderWizardStep(next);
+  if (next === 9) await _wizardPreview();
 }
 
 async function _wizardPreview() {
@@ -1114,23 +1167,25 @@ async function saveWizardJob() {
     const data = await res.json();
     if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
 
-    // Save schedule if enabled
+    // Save schedule changes and surface crontab/application failures.
     const schedEnabled = document.getElementById('wiz-sched-enabled').checked;
-    if (schedEnabled) {
+    if (schedEnabled || wizardState.originalSchedule) {
       const jobKey = `${params.type_id}_${params.location}`;
       const cron   = _wizardBuildCron();
-      try {
-        const sRes = await fetch('/api/schedules', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_key: jobKey, cron, enabled: true }),
-        });
-        if (sRes.ok) {
-          const schedules = window.BBUI.core.getSchedulesData();
-          schedules[jobKey] = { cron, enabled: true };
-          window.BBUI.core.setSchedulesData(schedules);
-        }
-      } catch (_) { /* schedule save failure is non-fatal */ }
+      const sRes = await fetch('/api/schedules', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_key: jobKey, cron, enabled: schedEnabled }),
+      });
+      const sData = await sRes.json().catch(() => ({}));
+      if (!sRes.ok) {
+        throw new Error(wizardT('wizard.scheduleSaveError', {
+          message: wizardApiErrorMessage(sData, sRes.status),
+        }));
+      }
+      const schedules = window.BBUI.core.getSchedulesData();
+      schedules[jobKey] = { cron, enabled: schedEnabled };
+      window.BBUI.core.setSchedulesData(schedules);
     }
 
     closeWizard();
@@ -1149,6 +1204,33 @@ async function saveWizardJob() {
 
 window.BBUI.wizardSchedState = window.BBUI.wizardSchedState || { frequency: 'daily', dow: 1 };
 const wizardSchedState = window.BBUI.wizardSchedState;
+
+function _wizardApplySchedule(schedule) {
+  const data = schedule && typeof schedule === 'object' ? schedule : null;
+  const cron = String(data?.cron || '0 3 * * *').trim();
+  document.getElementById('wiz-sched-enabled').checked = !!data?.enabled;
+  document.getElementById('wiz-sched-cron-custom').value = cron;
+  const parts = cron.split(/\s+/);
+  let frequency = 'custom';
+  if (parts.length === 5 && /^\d+$/.test(parts[0]) && /^\d+$/.test(parts[1])) {
+    document.getElementById('wiz-sched-minute').value = Number(parts[0]);
+    document.getElementById('wiz-sched-hour').value = Number(parts[1]);
+    if (parts[2] === '*' && parts[3] === '*' && parts[4] === '*') frequency = 'daily';
+    else if (parts[2] === '*' && parts[3] === '*' && /^[0-6]$/.test(parts[4])) {
+      frequency = 'weekly';
+      wizardSchedState.dow = Number(parts[4]);
+    } else if (/^(?:[1-9]|1\d|2[0-8])$/.test(parts[2]) && parts[3] === '*' && parts[4] === '*') {
+      frequency = 'monthly';
+      document.getElementById('wiz-sched-dom').value = Number(parts[2]);
+    }
+  }
+  wizardSchedState.frequency = frequency;
+  _wizardScheduleApplyUI(frequency);
+  document.querySelectorAll('[data-wiz-dow]').forEach((button) => {
+    button.classList.toggle('active', Number(button.dataset.wizDow) === wizardSchedState.dow);
+  });
+  wizardSchedulePreview();
+}
 
 function _wizardScheduleApplyUI(freq) {
   document.querySelectorAll('[data-wiz-freq]').forEach(b =>

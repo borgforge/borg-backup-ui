@@ -676,6 +676,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/schedules": self._get_schedules,
                 "/api/storage": self._get_storage,
                 "/api/repositories": self._get_repositories,
+                "/api/repositories/browse": lambda: self._get_repository_directories(parsed.query),
                 "/api/repositories/archives": lambda: self._get_repository_archives(parsed.query),
                 "/api/settings": self._get_settings,
                 "/api/settings/basic": self._get_settings_basic,
@@ -724,6 +725,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/storages": self._post_storage_target,
             "/api/storages/test": self._post_storage_target_test,
             "/api/repositories": self._post_repository,
+            "/api/repositories/validate": self._post_repository_validate,
             "/api/repositories/info": self._post_repository_info,
             "/api/repositories/lifecycle": self._post_repository_lifecycle,
             "/api/storage/smb-action": self._post_storage_smb_action,
@@ -1471,10 +1473,37 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from repositories_api import read_repository_store_for_api
         return read_repository_store_for_api(self.config)
 
+    def _get_repository_directories(self, qs_str: str) -> dict:
+        from repositories_api import browse_repository_directories
+        from urllib.parse import parse_qs
+
+        qs = parse_qs(qs_str)
+        storage_key = str((qs.get("storage_key") or [""])[0]).strip()
+        relative_path = str((qs.get("path") or [""])[0]).strip()
+        if not storage_key:
+            raise ValueError("storage_key is required")
+        return browse_repository_directories(self.config, storage_key, relative_path)
+
     def _post_repository(self) -> dict:
-        from repositories_api import create_or_import_repository
+        from repositories_api import (
+            RepositoryTargetConflict,
+            create_or_import_repository,
+            validate_repository_target,
+        )
         body = self._read_json_body()
-        return create_or_import_repository(self.config, body)
+        try:
+            validate_repository_target(self.config, body)
+            return create_or_import_repository(self.config, body)
+        except RepositoryTargetConflict as exc:
+            raise ApiConflictError(str(exc), code=exc.code) from exc
+
+    def _post_repository_validate(self) -> dict:
+        from repositories_api import RepositoryTargetConflict, validate_repository_target
+        body = self._read_json_body()
+        try:
+            return validate_repository_target(self.config, body)
+        except RepositoryTargetConflict as exc:
+            raise ApiConflictError(str(exc), code=exc.code) from exc
 
     def _post_repository_info(self) -> dict:
         from repositories_api import RepositoryBusyError, refresh_repository_info
