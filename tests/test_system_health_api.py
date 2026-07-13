@@ -206,7 +206,7 @@ def test_collect_job_health_rejects_job_without_repository_assignment(tmp_path, 
             "location": "storagebox",
             "storage_profile_key": "storage-1",
             "repo": {"default": "ssh://u123@u123.your-storagebox.de:23./backup/borg-backup-flash"},
-            "paths": {"default": str(source_dir)},
+            "source_paths": [str(source_dir)],
             "encryption": "repokey-blake2",
             "passphrase": {"default": str(pass_file), "mode": "existing_file"},
         }) + "\n",
@@ -256,12 +256,12 @@ def test_collect_job_health_loads_canonical_inventory_once_for_all_jobs(tmp_path
     for job_key in ("flash_local", "appdata_local", "photos_local"):
         (jobs_dir / f"{job_key}.json").write_text(
             json.dumps({
-                "schema_version": 2,
+                "schema_version": 3,
                 "job_key": job_key,
                 "name": job_key,
                 "location": "local",
                 "repository_key": f"repo_{job_key}",
-                "paths": {"default": str(source_dir)},
+                "source_paths": [str(source_dir)],
             }) + "\n",
             encoding="utf-8",
         )

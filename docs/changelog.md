@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #206
+- Job source paths are now persisted and transported as JSON arrays, so spaces remain part of a path instead of being interpreted as separators.
+- Added an audited, idempotent schema migration with a rollback backup for existing jobs and a clear failure state when a legacy value cannot be converted unambiguously.
+- Job imports upgrade old source-path metadata only at the import boundary; normal Wizard, health and backup runtime paths no longer contain a legacy string fallback.
+
 ### Issue #208
 - Borg operations now use one shared SSH transport configuration across backups, repository maintenance, restores and restore tests.
 - SSH keys no longer replace the configured keepalive options; interrupted WAN or SSH connections are classified consistently.

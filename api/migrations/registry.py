@@ -7,6 +7,7 @@ from typing import Any
 
 from . import (
     canonical_data_model_v1,
+    job_source_paths_v1,
     notification_events_v1,
     restore_history_v1,
 )
@@ -16,6 +17,7 @@ MIGRATIONS = [
     restore_history_v1,
     notification_events_v1,
     canonical_data_model_v1,
+    job_source_paths_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}

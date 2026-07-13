@@ -187,10 +187,6 @@ def _build_migration_summary(migration: Dict[str, Any], migration_log: Dict[str,
     }
 
 
-def _split_job_paths(value: Any) -> list[str]:
-    return [p.strip() for p in str(value or "").replace("\n", " ").split(" ") if p.strip()]
-
-
 def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
     items = []
     if jobs_dir.is_dir():
@@ -248,14 +244,14 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             except Exception as exc:
                 add_error("repository_context_invalid", str(exc))
 
-        paths_cfg = raw.get("paths") if isinstance(raw.get("paths"), dict) else {}
-        source_paths = _split_job_paths(paths_cfg.get("default"))
-        if not source_paths:
-            add_error("source_paths_missing", "Source paths are missing")
-        else:
+        try:
+            from job_source_paths import normalize_source_paths
+            source_paths = normalize_source_paths(raw.get("source_paths"), field=f"Job '{job_key}' source_paths")
             missing = [p for p in source_paths if not Path(p).exists()]
             if missing:
                 add_error("source_paths_not_found", f"{len(missing)} source path(s) do not exist", count=len(missing))
+        except ValueError as exc:
+            add_error("source_paths_invalid", str(exc), message=str(exc))
 
         if repository_context and location == "storagebox":
             storage = repository_context.get("storage") if isinstance(repository_context.get("storage"), dict) else {}

@@ -39,13 +39,13 @@ def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
     (jobs_dir / "appdata_local.json").write_text(json.dumps({
-        "schema_version": 2,
+        "schema_version": 3,
         "job_key": "appdata_local",
         "name": "Appdata",
         "backup_type": "appdata",
         "location": "local",
         "repository_key": "repo_appdata_test",
-        "paths": {"default": "/mnt/user/appdata"},
+        "source_paths": ["/mnt/user/appdata"],
         "compression": "lz4",
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
     }) + "\n", encoding="utf-8")
@@ -80,6 +80,8 @@ def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
     assert env["BORG_REPO"] == "/mnt/backup/borg-backup-appdata"
     assert metadata["repository_key"] == "repo_appdata_test"
     assert metadata["_resolved_repository"]["passphrase_ref"] == str(secret)
+    assert json.loads(env["BACKUP_PATHS_JSON"]) == ["/mnt/user/appdata"]
+    assert "BACKUP_PATHS" not in env
     assert "repo" not in metadata
     assert "passphrase" not in metadata
     assert "BORG_PASSCOMMAND" not in env
@@ -91,13 +93,13 @@ def test_wizard_runner_keeps_ssh_identity_and_keepalive_options(tmp_path: Path, 
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
     (jobs_dir / "appdata_storagebox.json").write_text(json.dumps({
-        "schema_version": 2,
+        "schema_version": 3,
         "job_key": "appdata_storagebox",
         "name": "Appdata",
         "backup_type": "appdata",
         "location": "storagebox",
         "repository_key": "repo_appdata_storagebox",
-        "paths": {"default": "/mnt/user/appdata"},
+        "source_paths": ["/mnt/user/appdata"],
         "compression": "lz4",
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
     }) + "\n", encoding="utf-8")

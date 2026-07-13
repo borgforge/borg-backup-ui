@@ -12,7 +12,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from migrations import canonical_data_model_v1  # noqa: E402
+from migrations import canonical_data_model_v1, job_source_paths_v1  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
 from repositories_api import read_repository_store, repository_key_for, write_repository_store  # noqa: E402
 from storage_objects_api import read_storage_store, write_storage_store  # noqa: E402
@@ -140,9 +140,15 @@ def test_stable_legacy_install_is_migrated_and_audited(tmp_path: Path):
     second = run_startup_migrations(_config(tmp_path))
 
     assert first["results"][canonical_data_model_v1.MIGRATION_ID]["status"] == "applied"
+    assert first["results"][job_source_paths_v1.MIGRATION_ID]["status"] == "applied"
     assert second["results"][canonical_data_model_v1.MIGRATION_ID]["status"] == "skipped"
+    assert second["results"][job_source_paths_v1.MIGRATION_ID]["status"] == "skipped"
     assert not settings.exists()
-    assert "repo" not in json.loads(job_file.read_text(encoding="utf-8"))
+    migrated_job = json.loads(job_file.read_text(encoding="utf-8"))
+    assert migrated_job["schema_version"] == 3
+    assert migrated_job["source_paths"] == ["/mnt/user/appdata"]
+    assert "paths" not in migrated_job
+    assert "repo" not in migrated_job
     assert "REPO_APPDATA_LOCAL" not in conf.read_text(encoding="utf-8")
     assert len(read_storage_store(_config(tmp_path))["storages"]) == 1
     assert len(read_repository_store(_config(tmp_path))["repositories"]) == 1
@@ -154,8 +160,9 @@ def test_stable_legacy_install_is_migrated_and_audited(tmp_path: Path):
     assert any(row.get("event") == "migration_started" for row in events)
     assert any(row.get("event") == "migration_completed" for row in events)
     backup_dirs = list((tmp_path / "config" / "migration-backups").iterdir())
-    assert len(backup_dirs) == 1
-    assert backup_dirs[0].name.startswith(f"{canonical_data_model_v1.MIGRATION_ID}-")
+    assert len(backup_dirs) == 2
+    assert any(path.name.startswith(f"{canonical_data_model_v1.MIGRATION_ID}-") for path in backup_dirs)
+    assert any(path.name.startswith(f"{job_source_paths_v1.MIGRATION_ID}-") for path in backup_dirs)
 
 
 def test_partial_test_install_preserves_canonical_ids(tmp_path: Path):
@@ -173,11 +180,16 @@ def test_partial_test_install_preserves_canonical_ids(tmp_path: Path):
     result = run_startup_migrations(_config(tmp_path))
 
     assert result["results"][canonical_data_model_v1.MIGRATION_ID]["status"] == "applied"
+    assert result["results"][job_source_paths_v1.MIGRATION_ID]["status"] == "applied"
     assert read_storage_store(_config(tmp_path))["storages"][0]["storage_key"] == storage_key
     assert read_repository_store(_config(tmp_path))["repositories"][0]["repository_key"] == repository_key
     assert not (tmp_path / "config" / "settings.json").exists()
     details = result["results"][canonical_data_model_v1.MIGRATION_ID]["details"]
     assert details["source_classification"] == "partial_test_install"
+    migrated_job = json.loads((tmp_path / "config" / "jobs" / "appdata_local.json").read_text(encoding="utf-8"))
+    assert migrated_job["repository_key"] == repository_key
+    assert migrated_job["schema_version"] == 3
+    assert migrated_job["source_paths"] == ["/mnt/user/appdata"]
 
 
 def test_published_profile_layout_migrates_all_targets_and_preserves_policy_state(tmp_path: Path):
@@ -243,6 +255,7 @@ def test_published_profile_layout_migrates_all_targets_and_preserves_policy_stat
     result = run_startup_migrations(_config(tmp_path))
 
     assert result["results"][canonical_data_model_v1.MIGRATION_ID]["status"] == "applied"
+    assert result["results"][job_source_paths_v1.MIGRATION_ID]["status"] == "applied"
     storages = read_storage_store(_config(tmp_path))["storages"]
     repositories = read_repository_store(_config(tmp_path))["repositories"]
     assert {row["location"] for row in storages} == {"local", "usb", "smb", "storagebox"}
@@ -253,7 +266,9 @@ def test_published_profile_layout_migrates_all_targets_and_preserves_policy_stat
     assert all(Path(row["passphrase_ref"]).is_file() for row in repositories)
     for path in jobs:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["schema_version"] == 2
+        assert payload["schema_version"] == 3
+        assert payload["source_paths"] == ["/mnt/user/appdata"]
+        assert "paths" not in payload
         assert payload["restore_test_policy"] == {"mode": "scheduled", "interval_days": 30, "level": 3}
         assert payload["repository_key"] in {row["repository_key"] for row in repositories}
     assert schedules.read_bytes() == schedules_before
@@ -268,6 +283,7 @@ def test_already_canonical_install_is_not_rewritten(tmp_path: Path):
     result = run_startup_migrations(_config(tmp_path))
 
     assert result["results"][canonical_data_model_v1.MIGRATION_ID]["status"] == "not_required"
+    assert result["results"][job_source_paths_v1.MIGRATION_ID]["status"] == "applied"
     assert (tmp_path / "config" / "repositories.json").read_bytes() == repo_before
     assert (tmp_path / "config" / "storages.json").read_bytes() == storage_before
     assert read_storage_store(_config(tmp_path))["storages"][0]["storage_key"] == storage_key
@@ -315,7 +331,8 @@ def test_malformed_canonical_storage_path_fails_migration_and_rolls_back(tmp_pat
 
 
 def test_malformed_legacy_settings_is_audited_and_rolled_back_without_startup_crash(tmp_path: Path):
-    _write_legacy_job(tmp_path)
+    job_file = _write_legacy_job(tmp_path)
+    job_before = job_file.read_bytes()
     (tmp_path / "config" / "settings.json").write_text("{broken", encoding="utf-8")
 
     result = run_startup_migrations(_config(tmp_path))
@@ -327,4 +344,9 @@ def test_malformed_legacy_settings_is_audited_and_rolled_back_without_startup_cr
     assert failure["details"]["error_type"] == "RuntimeError"
     assert failure["details"]["rollback_status"] == "completed"
     assert failure["details"]["run_id"]
+    source_failure = result["results"][job_source_paths_v1.MIGRATION_ID]
+    assert source_failure["status"] == "failed"
+    assert source_failure["details"]["failed_phase"] == "detect"
+    assert "canonical data-model migration" in source_failure["details"]["error"]
+    assert job_file.read_bytes() == job_before
     assert (tmp_path / "config" / "settings.json").read_text(encoding="utf-8") == "{broken"

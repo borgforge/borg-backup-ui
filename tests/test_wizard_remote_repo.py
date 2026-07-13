@@ -24,7 +24,7 @@ def _storagebox_params() -> dict:
         "job_name": "Flash",
         "location": "storagebox",
         "storage_profile_key": "storage-1",
-        "source_paths": "/boot",
+        "source_paths": ["/boot"],
         "encryption": "none",
     }
 
@@ -78,7 +78,7 @@ def test_wizard_preview_resolves_only_the_selected_repository_object(tmp_path: P
 def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
     params = _storagebox_params()
-    params["source_paths"] = "/boot /mnt/user/appdata"
+    params["source_paths"] = ["/boot", "/mnt/user/appdata"]
 
     flow = generate_flow_preview(params, {}, Path("/tmp/scripts"))
 
@@ -147,7 +147,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
     jobs_dir.mkdir(parents=True)
     (jobs_dir / "vms_local.json").write_text(
         json.dumps({
-            "schema_version": 2,
+            "schema_version": 3,
             "job_key": "vms_local",
             "backup_type": "vms",
             "location": "local",
@@ -155,10 +155,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
             "enabled": True,
             "runner": "scriptless-wizard-runner",
             "repository_key": "repo_vms_local_test",
-            "paths": {
-                "conf_key": "BACKUP_PATHS_VMS",
-                "default": "/mnt/user/domains",
-            },
+            "source_paths": ["/mnt/user/domains"],
         }),
         encoding="utf-8",
     )
@@ -193,7 +190,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
     )
 
     assert loaded["repo_path"] == "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms"
-    assert loaded["source_paths"] == "/mnt/user/domains"
+    assert loaded["source_paths"] == ["/mnt/user/domains"]
 
 
 def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypatch):
@@ -203,7 +200,7 @@ def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypa
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
     (jobs_dir / "photos_smb.json").write_text(json.dumps({
-        "schema_version": 2,
+        "schema_version": 3,
         "job_key": "photos_smb",
         "backup_type": "photos",
         "location": "smb",
@@ -211,7 +208,7 @@ def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypa
         "enabled": True,
         "runner": "scriptless-wizard-runner",
         "repository_key": "repo_missing",
-        "paths": {"default": "/mnt/user/photos"},
+        "source_paths": ["/mnt/user/photos"],
     }), encoding="utf-8")
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     write_storage_store(config, {"storages": []})
@@ -223,4 +220,4 @@ def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypa
     assert loaded["repository_key"] == "repo_missing"
     assert loaded["repo_path"] == ""
     assert "Assigned repository was not found" in loaded["repository_assignment_error"]
-    assert loaded["source_paths"] == "/mnt/user/photos"
+    assert loaded["source_paths"] == ["/mnt/user/photos"]

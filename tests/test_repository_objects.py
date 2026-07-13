@@ -74,7 +74,9 @@ def test_repository_objects_migration_links_existing_jobs(tmp_path: Path):
 
     assert result["results"]["canonical_data_model_v1"]["status"] == "applied"
     assert job["repository_key"] == expected_key
-    assert job["schema_version"] == 2
+    assert job["schema_version"] == 3
+    assert job["source_paths"] == ["/mnt/user/appdata"]
+    assert "paths" not in job
     assert "repo" not in job
     assert "passphrase" not in job
     assert "encryption" not in job
@@ -231,7 +233,7 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     params = {
         "type_id": "photos",
         "job_name": "Photos",
-        "source_paths": str(source),
+        "source_paths": [str(source)],
         "repository_key": repo_key,
         "location": "local",
     }
@@ -240,7 +242,8 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     store = read_repository_store(config)
     assert job["repository_key"] == repo_key
-    assert job["schema_version"] == 2
+    assert job["schema_version"] == 3
+    assert job["source_paths"] == [str(source)]
     assert "repo" not in job
     assert "passphrase" not in job
     assert "encryption" not in job
