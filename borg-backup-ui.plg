@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.13.1144">
+<!ENTITY version   "2026.07.13.2248">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.13.2248###
+- Issue #206: Backup source paths now preserve spaces through structured JSON arrays.
+- Existing jobs are migrated once with audit, rollback backup and clear diagnostics for ambiguous legacy values.
+
 ###2026.07.13.1144###
 - Upgrade notice:
   - Back up /boot/config/borg-backup before installing this release.
@@ -310,7 +314,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>ed3b435a37df7d954905cd544b884245</MD5>
+<MD5>243714ccf09d44eb687aa2249e3f6ef1</MD5>
 </FILE>
 
 <!--
