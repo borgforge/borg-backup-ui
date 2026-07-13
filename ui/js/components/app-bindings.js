@@ -198,6 +198,11 @@
     document.getElementById('repository-manager-encryption')?.addEventListener('change', repositoryManagerSyncFields);
     document.getElementById('repository-manager-display-name')?.addEventListener('input', repositoryManagerUpdateSummary);
     document.getElementById('repository-manager-relative-path')?.addEventListener('input', repositoryManagerPathInputChanged);
+    document.getElementById('repository-manager-relative-path')?.addEventListener('focus', repositoryManagerOpenBrowser);
+    document.getElementById('repository-manager-browser-btn')?.addEventListener('click', () => repositoryManagerLoadBrowser(repositoryManagerBrowserStartPath()));
+    document.getElementById('repository-manager-browser-up-btn')?.addEventListener('click', repositoryManagerBrowserUp);
+    document.getElementById('repository-manager-browser-refresh-btn')?.addEventListener('click', () => repositoryManagerLoadBrowser(repositoryManagerState.browserPath || ''));
+    document.getElementById('repository-manager-browser-list')?.addEventListener('click', repositoryManagerBrowserClick);
     document.getElementById('repository-manager-passphrase')?.addEventListener('input', repositoryManagerUpdateSummary);
     document.getElementById('storage-deploy-close-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-ok-btn')?.addEventListener('click', closeStorageDeployModal);
