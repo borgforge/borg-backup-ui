@@ -475,11 +475,9 @@ def _repo_env(
     env["LANG"] = "C"
     if passphrase_file is not None:
         env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(passphrase_file))}"
-    ssh_key = str(storage.get("ssh_key_path") or "").strip()
-    if ssh_key:
-        env["BORG_RSH"] = f"ssh -i {shlex.quote(ssh_key)} -o WarnWeakCrypto=no"
-    elif str(storage.get("storage_type") or "").strip().lower() == "ssh":
-        env["BORG_RSH"] = "ssh -o WarnWeakCrypto=no"
+    from borg_ssh import configure_borg_ssh
+
+    configure_borg_ssh(env, storage)
     if persistent_keys:
         from borg_key_store import apply_borg_key_environment
 
@@ -497,7 +495,11 @@ def _mask_repo_output(text: str, passphrase: str = "") -> str:
 
 
 def _raise_borg_command_error(output: str, fallback: str) -> None:
+    from borg_ssh import SSH_INTERRUPTION_MESSAGE, is_ssh_connection_interruption
+
     safe_output = _mask_repo_output(output)
+    if is_ssh_connection_interruption(safe_output):
+        raise RuntimeError(SSH_INTERRUPTION_MESSAGE)
     lowered = safe_output.lower()
     if "failed to create/acquire the lock" in lowered or "lock.exclusive" in lowered:
         raise RepositoryBusyError("Repository is currently in use by another Borg operation.")

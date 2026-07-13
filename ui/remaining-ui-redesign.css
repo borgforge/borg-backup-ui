@@ -710,6 +710,13 @@
   margin: 2px 0;
 }
 
+.storage-maintenance-user-hint {
+  margin: var(--ui-space-2) 0 0;
+  color: var(--ui-state-error-fg);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.45;
+}
+
 .storage-maintenance-result-details {
   margin-top: var(--ui-space-2);
 }

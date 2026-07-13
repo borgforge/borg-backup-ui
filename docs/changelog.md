@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #208
+- Borg operations now use one shared SSH transport configuration across backups, repository maintenance, restores and restore tests.
+- SSH keys no longer replace the configured keepalive options; interrupted WAN or SSH connections are classified consistently.
+- Repository checks and restore tests now explain that a connection interruption leaves the operation incomplete without automatically implying repository damage.
+
 ### Issue #187
 - The Repository Manager now only selects storage targets that were configured and tested centrally under Settings.
 - Duplicate Local, USB, SMB and SSH storage-target creation fields and logic were removed from the repository wizard.

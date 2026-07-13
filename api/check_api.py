@@ -245,6 +245,7 @@ class CheckManager:
 
     @staticmethod
     def _maintenance_result(state: _CheckState) -> dict:
+        from borg_ssh import SSH_INTERRUPTION_CODE, SSH_INTERRUPTION_MESSAGE, is_ssh_connection_interruption
         from security_utils import mask_secrets
 
         lines, _, _ = state.snapshot()
@@ -282,6 +283,8 @@ class CheckManager:
                 if str(line or "").strip() and not str(line or "").startswith("[Info] Starting repository")
             ]
             details = visible[-20:]
+        combined_output = "\n".join(str(line or "") for line in lines)
+        interrupted = status != "success" and is_ssh_connection_interruption(combined_output)
         return {
             "action": action_key,
             "mode": state.mode,
@@ -294,6 +297,9 @@ class CheckManager:
             "deleted_archives": deleted_archives[:50],
             "freed_space": freed_space,
             "details": details,
+            "error_category": "network" if interrupted else "",
+            "failure_code": SSH_INTERRUPTION_CODE if interrupted else "",
+            "failure_hint": SSH_INTERRUPTION_MESSAGE if interrupted else "",
         }
 
     @classmethod

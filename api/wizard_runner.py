@@ -53,31 +53,6 @@ def _env_flag(value: object, default: bool = False) -> bool:
     return default
 
 
-def _ensure_warn_weak_crypto_suppressed(borg_rsh: str) -> str:
-    option = "-o WarnWeakCrypto=no"
-    if option in borg_rsh:
-        return borg_rsh
-    return f"{borg_rsh} {option}".strip()
-
-
-def _ensure_legacy_remote_ssh_options(borg_rsh: str) -> str:
-    options = [
-        "-o Compression=no",
-        "-o ServerAliveInterval=30",
-        "-o ServerAliveCountMax=3",
-        "-o Ciphers=aes128-gcm@openssh.com,chacha20-poly1305@openssh.com",
-        "-o ControlMaster=auto",
-        "-o ControlPath=/tmp/ssh-borg-%r@%h:%p",
-        "-o ControlPersist=600",
-        "-o LogLevel=ERROR",
-    ]
-    out = borg_rsh
-    for opt in options:
-        if opt not in out:
-            out = f"{out} {opt}".strip()
-    return out
-
-
 def _setup_stdout_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -438,22 +413,15 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     )
 
     repo = env.get("BORG_REPO", "")
-    if repo.startswith("ssh://"):
-        if env.get("BORG_RSH"):
-            env["BORG_RSH"] = _ensure_warn_weak_crypto_suppressed(str(env["BORG_RSH"]))
-        else:
-            env["BORG_RSH"] = "ssh -o WarnWeakCrypto=no"
-        env["BORG_RSH"] = _ensure_legacy_remote_ssh_options(str(env["BORG_RSH"]))
+    from borg_ssh import configure_borg_ssh
+
+    configure_borg_ssh(env, storage, repo)
 
     pass_file = str(repository_context.get("passphrase_ref") or "").strip()
     if repository_context.get("encryption") != "none":
         os.environ["BORG_PASSCOMMAND"] = f"cat {shlex.quote(pass_file)}"
     else:
         os.environ.pop("BORG_PASSCOMMAND", None)
-
-    ssh_key = str(storage.get("ssh_key_path") or "").strip()
-    if ssh_key:
-        env["BORG_RSH"] = f"ssh -i {shlex.quote(ssh_key)} -o WarnWeakCrypto=no"
 
     os.environ["BORG_REPO"] = env["BORG_REPO"]
     os.environ["BORG_CACHE_DIR"] = env["BORG_CACHE_DIR"]
