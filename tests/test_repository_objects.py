@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import inspect
 import json
 import os
+import pytest
 import subprocess
 import sys
 
@@ -16,7 +17,7 @@ import repositories_api  # noqa: E402
 import smb_profiles_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
 from migrations.registry import run_startup_migrations  # noqa: E402
-from repositories_api import create_or_import_repository, get_repository_archives, read_repository_store, refresh_due_repository_info, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
+from repositories_api import browse_repository_directories, create_or_import_repository, get_repository_archives, read_repository_store, refresh_due_repository_info, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
 from restore_tests_api import list_restore_test_plan  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
@@ -635,6 +636,167 @@ def test_repository_archives_unmounts_smb_only_when_api_mounted_it(tmp_path: Pat
 
     assert result["archive_count"] == 0
     assert calls == [("smb-1", "mount"), ("smb-1", "unmount")]
+
+
+def test_repository_browser_lists_safe_local_directories_and_managed_state(tmp_path: Path):
+    base = tmp_path / "storage"
+    (base / "borg-backup-appdata").mkdir(parents=True)
+    (base / "team" / "photos").mkdir(parents=True)
+    (base / "unsupported name").mkdir()
+    (base / "plain-file").write_text("not a directory", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (base / "escape").symlink_to(outside, target_is_directory=True)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Backup Local",
+        "storage_type": "local",
+        "location": "local",
+        "base_path": str(base),
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_appdata_local_test",
+        "display_name": "Appdata",
+        "storage_key": "storage_local_test",
+        "relative_path": "borg-backup-appdata",
+    }]})
+
+    root = browse_repository_directories(config, "storage_local_test")
+    nested = browse_repository_directories(config, "storage_local_test", "team")
+
+    assert root["storage_name"] == "Backup Local"
+    assert root["relative_path"] == ""
+    assert root["parent_path"] == ""
+    assert [row["name"] for row in root["directories"]] == [
+        "borg-backup-appdata",
+        "team",
+        "unsupported name",
+    ]
+    appdata = next(row for row in root["directories"] if row["name"] == "borg-backup-appdata")
+    unsupported = next(row for row in root["directories"] if row["name"] == "unsupported name")
+    assert appdata["managed"] is True
+    assert appdata["display_name"] == "Appdata"
+    assert unsupported["supported"] is False
+    assert nested["relative_path"] == "team"
+    assert nested["parent_path"] == ""
+    assert nested["directories"][0]["relative_path"] == "team/photos"
+
+
+def test_repository_browser_rejects_absolute_traversal_and_symlink_escape(tmp_path: Path):
+    base = tmp_path / "storage"
+    base.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (base / "escape").symlink_to(outside, target_is_directory=True)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "base_path": str(base),
+    }]})
+
+    with pytest.raises(ValueError, match="must be relative"):
+        browse_repository_directories(config, "storage_local_test", "/etc")
+    with pytest.raises(ValueError, match="unsafe path segments"):
+        browse_repository_directories(config, "storage_local_test", "../outside")
+    with pytest.raises(ValueError, match="inside the storage target"):
+        browse_repository_directories(config, "storage_local_test", "escape")
+
+
+def test_repository_browser_mounts_and_unmounts_smb_only_for_its_request(tmp_path: Path, monkeypatch):
+    base = tmp_path / "smb"
+    (base / "borg-existing").mkdir(parents=True)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_smb_test",
+        "display_name": "NAS",
+        "storage_type": "smb",
+        "location": "smb",
+        "profile_key": "smb-1",
+        "base_path": str(base),
+        "mount_path": str(base),
+    }]})
+    calls = []
+
+    def fake_action(_config, profile_key, action):
+        calls.append((profile_key, action))
+        return {
+            "ok": True,
+            "message_code": "smb_mount_success" if action == "mount" else "smb_unmount_success",
+        }
+
+    monkeypatch.setattr(smb_profiles_api, "run_smb_profile_action", fake_action)
+
+    result = browse_repository_directories(config, "storage_smb_test")
+
+    assert result["directories"][0]["name"] == "borg-existing"
+    assert calls == [("smb-1", "mount"), ("smb-1", "unmount")]
+
+
+def test_repository_browser_keeps_preexisting_smb_mount(tmp_path: Path, monkeypatch):
+    base = tmp_path / "smb"
+    (base / "borg-existing").mkdir(parents=True)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_smb_test",
+        "display_name": "NAS",
+        "storage_type": "smb",
+        "location": "smb",
+        "profile_key": "smb-1",
+        "base_path": str(base),
+    }]})
+    calls = []
+
+    def fake_action(_config, profile_key, action):
+        calls.append((profile_key, action))
+        return {"ok": True, "message_code": "smb_already_mounted"}
+
+    monkeypatch.setattr(smb_profiles_api, "run_smb_profile_action", fake_action)
+
+    browse_repository_directories(config, "storage_smb_test")
+
+    assert calls == [("smb-1", "mount")]
+
+
+def test_repository_browser_lists_storagebox_directories_with_quoted_path(tmp_path: Path, monkeypatch):
+    import storagebox_api
+
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Offsite",
+        "storage_type": "storagebox",
+        "location": "storagebox",
+        "base_path": "./backup",
+        "host": "box.example.test",
+        "port": "23",
+        "user": "u123",
+        "ssh_key_path": "/root/.ssh/id_test",
+    }]})
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = "borg-one/\nplain-file\nchild two/\n"
+        stderr = ""
+
+    monkeypatch.setattr(storagebox_api, "_storagebox_ssh_base_cmd", lambda profile: ["ssh", profile["host"]])
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return Result()
+
+    monkeypatch.setattr(repositories_api.subprocess, "run", fake_run)
+
+    result = browse_repository_directories(config, "storage_storagebox_test", "team data")
+
+    assert calls[0][0] == ["ssh", "box.example.test", "ls -1Ap -- './backup/team data'"]
+    assert calls[0][1]["timeout"] == 15
+    assert [row["name"] for row in result["directories"]] == ["borg-one", "child two"]
+    assert all(row["supported"] is False for row in result["directories"])
 
 
 def test_repository_test_uses_repository_object_passphrase(tmp_path: Path, monkeypatch):

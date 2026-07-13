@@ -686,8 +686,13 @@ function repositoryManagerSetMessage(type, message) {
 window.BBUI.repositoryManagerState = window.BBUI.repositoryManagerState || {
   step: 1,
   storageKey: '',
+  browserPath: '',
+  browserVisible: false,
 };
 const repositoryManagerState = window.BBUI.repositoryManagerState;
+repositoryManagerState.browserPath = repositoryManagerState.browserPath || '';
+repositoryManagerState.browserVisible = false;
+repositoryManagerState.browserController = null;
 
 function repositoryManagerRenderStep(step) {
   const target = Math.max(1, Math.min(3, Number(step) || 1));
@@ -717,6 +722,9 @@ function repositoryManagerSyncFields() {
   });
   document.getElementById('repository-manager-storage-quota')?.closest('.form-group')?.classList.toggle('hidden', action !== 'create');
   document.querySelector('.repository-manager-checks')?.classList.toggle('hidden', action !== 'create');
+  document.getElementById('repository-manager-browser-btn')?.classList.toggle('hidden', action !== 'import');
+  document.getElementById('repository-manager-browser-hint')?.classList.toggle('hidden', action !== 'import');
+  if (action !== 'import') repositoryManagerCloseBrowser();
   const encryptionDescription = document.getElementById('repository-manager-encryption-description');
   if (encryptionDescription) {
     const family = encryption.startsWith('keyfile')
@@ -815,6 +823,8 @@ function openRepositoryManager() {
   if (appendOnly) appendOnly.checked = false;
   if (parentDirs) parentDirs.checked = true;
   repositoryManagerState.storageKey = '';
+  repositoryManagerState.browserPath = '';
+  repositoryManagerCloseBrowser();
   repositoryManagerSyncFields();
   repositoryManagerRenderStep(1);
   modal.classList.remove('hidden');
@@ -825,7 +835,126 @@ function closeRepositoryManager() {
   const keyData = document.getElementById('repository-manager-key-data');
   if (passphrase) passphrase.value = '';
   if (keyData) keyData.value = '';
+  repositoryManagerCloseBrowser();
   document.getElementById('repository-manager-modal')?.classList.add('hidden');
+}
+
+function repositoryManagerCloseBrowser() {
+  if (repositoryManagerState.browserController) {
+    repositoryManagerState.browserController.abort();
+    repositoryManagerState.browserController = null;
+  }
+  repositoryManagerState.browserVisible = false;
+  const browser = document.getElementById('repository-manager-browser');
+  const input = document.getElementById('repository-manager-relative-path');
+  browser?.classList.add('hidden');
+  input?.setAttribute('aria-expanded', 'false');
+}
+
+function repositoryManagerBrowserStartPath() {
+  const value = String(document.getElementById('repository-manager-relative-path')?.value || '').trim().replace(/^\/+|\/+$/g, '');
+  if (!value || !value.includes('/')) return '';
+  const parts = value.split('/');
+  parts.pop();
+  return parts.join('/');
+}
+
+function repositoryManagerRenderBrowser(data) {
+  const browser = document.getElementById('repository-manager-browser');
+  const list = document.getElementById('repository-manager-browser-list');
+  const path = document.getElementById('repository-manager-browser-path');
+  const up = document.getElementById('repository-manager-browser-up-btn');
+  const input = document.getElementById('repository-manager-relative-path');
+  if (!browser || !list || !path) return;
+  const current = String(data?.relative_path || '').trim();
+  repositoryManagerState.browserPath = current;
+  const storageName = String(data?.storage_name || repositoryManagerSelectedStorageLabel() || '').trim();
+  path.textContent = `${storageName}${current ? ` / ${current}` : ' /'}`;
+  if (up) up.disabled = !current;
+  const rows = Array.isArray(data?.directories) ? data.directories : [];
+  list.innerHTML = rows.length ? rows.map((row) => {
+    const relative = String(row.relative_path || '').trim();
+    const managed = !!row.managed;
+    const supported = row.supported !== false;
+    const status = managed
+      ? storageT('storage.repositoryBrowseManaged', { name: row.display_name || row.name || '' })
+      : (!supported ? storageT('storage.repositoryBrowseUnsupported') : storageT('storage.repositoryBrowseAvailable'));
+    const selectDisabled = managed || !supported;
+    return `<div class="repository-manager-browser-row">
+      <button type="button" class="repository-manager-browser-open" data-repository-browser-open="${escHtml(relative)}" ${selectDisabled ? 'disabled' : ''}>
+        <span class="repository-manager-browser-folder" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v9H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+        <span class="repository-manager-browser-name"><strong>${escHtml(row.name || relative)}</strong><small>${escHtml(status)}</small></span>
+      </button>
+      <button type="button" class="btn btn-secondary" data-repository-browser-select="${escHtml(relative)}" ${selectDisabled ? 'disabled' : ''}>${escHtml(storageT('storage.repositoryBrowseSelect'))}</button>
+    </div>`;
+  }).join('') : `<div class="repository-manager-browser-state">${escHtml(storageT('storage.repositoryBrowseEmpty'))}</div>`;
+  browser.classList.remove('hidden');
+  input?.setAttribute('aria-expanded', 'true');
+  repositoryManagerState.browserVisible = true;
+}
+
+async function repositoryManagerLoadBrowser(path = '') {
+  if ((document.getElementById('repository-manager-action')?.value || 'create') !== 'import') return;
+  const storageKey = repositoryManagerSelectedStorageKey();
+  if (!storageKey) return;
+  const browser = document.getElementById('repository-manager-browser');
+  const list = document.getElementById('repository-manager-browser-list');
+  const pathLabel = document.getElementById('repository-manager-browser-path');
+  const input = document.getElementById('repository-manager-relative-path');
+  if (!browser || !list) return;
+  if (repositoryManagerState.browserController) repositoryManagerState.browserController.abort();
+  const controller = new AbortController();
+  repositoryManagerState.browserController = controller;
+  repositoryManagerState.browserVisible = true;
+  browser.classList.remove('hidden');
+  input?.setAttribute('aria-expanded', 'true');
+  if (pathLabel) pathLabel.textContent = repositoryManagerSelectedStorageLabel();
+  list.innerHTML = `<div class="repository-manager-browser-state">${escHtml(storageT('storage.repositoryBrowseLoading'))}</div>`;
+  try {
+    const response = await fetch(`/api/repositories/browse?storage_key=${encodeURIComponent(storageKey)}&path=${encodeURIComponent(path || '')}`, {
+      signal: controller.signal,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    if (repositoryManagerState.browserController !== controller) return;
+    repositoryManagerRenderBrowser(data);
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    const details = String(error?.message || '').trim();
+    const message = details
+      ? `${storageT('storage.repositoryBrowseFailed')} ${details}`
+      : storageT('storage.repositoryBrowseFailed');
+    list.innerHTML = `<div class="repository-manager-browser-state error">${escHtml(message)}</div>`;
+  } finally {
+    if (repositoryManagerState.browserController === controller) repositoryManagerState.browserController = null;
+  }
+}
+
+function repositoryManagerOpenBrowser() {
+  if ((document.getElementById('repository-manager-action')?.value || 'create') !== 'import') return;
+  if (repositoryManagerState.browserVisible) return;
+  repositoryManagerLoadBrowser(repositoryManagerBrowserStartPath());
+}
+
+function repositoryManagerBrowserUp() {
+  const current = String(repositoryManagerState.browserPath || '');
+  const parts = current.split('/').filter(Boolean);
+  parts.pop();
+  repositoryManagerLoadBrowser(parts.join('/'));
+}
+
+function repositoryManagerBrowserClick(event) {
+  const open = event.target.closest('[data-repository-browser-open]');
+  if (open) {
+    repositoryManagerLoadBrowser(open.dataset.repositoryBrowserOpen || '');
+    return;
+  }
+  const select = event.target.closest('[data-repository-browser-select]');
+  if (!select || select.disabled) return;
+  const input = document.getElementById('repository-manager-relative-path');
+  if (input) input.value = select.dataset.repositoryBrowserSelect || '';
+  repositoryManagerPathChanged();
+  repositoryManagerCloseBrowser();
 }
 
 function repositoryManagerSlug(value) {

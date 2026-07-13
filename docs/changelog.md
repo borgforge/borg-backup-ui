@@ -11,6 +11,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - SSH keys no longer replace the configured keepalive options; interrupted WAN or SSH connections are classified consistently.
 - Repository checks and restore tests now explain that a connection interruption leaves the operation incomplete without automatically implying repository damage.
 
+### Issue #186
+- Existing repository imports can browse directories inside the selected Local, USB, SMB or SSH/Storagebox target.
+- The browser stays anchored to the canonical storage target, supports nested folders and preserves manual relative-path entry.
+- Already managed repositories and unsupported repository path names are visible but cannot be selected for another import.
+- Absolute paths, traversal segments and symlink escapes are rejected server-side; temporary SMB mounts are cleaned up after browsing.
+
 ### Issue #187
 - The Repository Manager now only selects storage targets that were configured and tested centrally under Settings.
 - Duplicate Local, USB, SMB and SSH storage-target creation fields and logic were removed from the repository wizard.

@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shlex
 import subprocess
@@ -460,6 +461,186 @@ def _storage_by_key(config: dict) -> dict[str, dict[str, Any]]:
         str(row.get("storage_key") or ""): row
         for row in read_storage_store(config).get("storages", [])
         if str(row.get("storage_key") or "").strip()
+    }
+
+
+def _browse_relative_path(value: str) -> str:
+    """Normalize an optional storage-relative path without allowing traversal."""
+    text = str(value or "").strip()
+    if text.startswith("/"):
+        raise ValueError("Repository browse path must be relative to the storage target")
+    text = text.strip("/")
+    if not text:
+        return ""
+    if "\x00" in text or "\n" in text or "\r" in text:
+        raise ValueError("Repository browse path contains control characters")
+    parts = text.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ValueError("Repository browse path contains unsafe path segments")
+    return "/".join(parts)
+
+
+def _browse_name_supported(name: str) -> bool:
+    try:
+        return _normalize_repo_segment(name) == name
+    except ValueError:
+        return False
+
+
+def _managed_repository_paths(config: dict, storage_key: str) -> dict[str, dict[str, str]]:
+    managed: dict[str, dict[str, str]] = {}
+    for row in read_repository_store(config).get("repositories", []):
+        if str(row.get("storage_key") or "").strip() != storage_key:
+            continue
+        relative = str(row.get("relative_path") or "").strip().strip("/")
+        if not relative:
+            continue
+        managed[relative] = {
+            "repository_key": str(row.get("repository_key") or "").strip(),
+            "display_name": str(row.get("display_name") or row.get("repository_name") or "").strip(),
+        }
+    return managed
+
+
+@contextmanager
+def _local_storage_browse_path(config: dict, storage: dict[str, Any]):
+    """Yield a mounted local base path and undo only mounts created here."""
+    cleanup = None
+    if str(storage.get("location") or storage.get("storage_type") or "").strip().lower() == "smb":
+        from smb_profiles_api import run_smb_profile_action
+
+        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
+        if not mounted.get("ok"):
+            raise ValueError(str(mounted.get("message") or "SMB mount failed"))
+        if mounted.get("message_code") == "smb_mount_success":
+            profile_key = str(storage.get("profile_key") or "")
+            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+
+    raw_base = str(storage.get("base_path") or storage.get("mount_path") or "").strip()
+    if not raw_base:
+        if cleanup:
+            cleanup()
+        raise ValueError("Storage base path is missing")
+    try:
+        yield Path(raw_base)
+    finally:
+        if cleanup:
+            cleanup()
+
+
+def _list_local_storage_directories(
+    config: dict,
+    storage: dict[str, Any],
+    relative_path: str,
+) -> list[str]:
+    with _local_storage_browse_path(config, storage) as raw_base:
+        try:
+            base = raw_base.resolve(strict=True)
+            current = (base / relative_path).resolve(strict=True) if relative_path else base
+            current.relative_to(base)
+        except (OSError, ValueError) as exc:
+            raise ValueError("Repository browse path does not exist inside the storage target") from exc
+        if not current.is_dir():
+            raise ValueError("Repository browse path is not a directory")
+        try:
+            return sorted(
+                (
+                    child.name
+                    for child in current.iterdir()
+                    if child.is_dir() and not child.is_symlink()
+                ),
+                key=str.lower,
+            )
+        except OSError as exc:
+            raise ValueError(f"Repository directory cannot be listed: {exc}") from exc
+
+
+def _ssh_storage_profile(storage: dict[str, Any]) -> dict[str, str]:
+    return {
+        "host": str(storage.get("host") or "").strip(),
+        "port": str(storage.get("port") or "22").strip() or "22",
+        "user": str(storage.get("user") or "").strip(),
+        "base_path": str(storage.get("base_path") or "").strip(),
+        "ssh_key": str(storage.get("ssh_key_path") or "").strip(),
+    }
+
+
+def _ssh_storage_browse_path(storage: dict[str, Any], relative_path: str) -> str:
+    base = str(storage.get("base_path") or "").strip() or "."
+    if base.startswith("/./"):
+        base = f".{base[2:]}"
+    base = base.rstrip("/") or "/"
+    return posixpath.join(base, relative_path) if relative_path else base
+
+
+def _list_ssh_storage_directories(storage: dict[str, Any], relative_path: str) -> list[str]:
+    from storagebox_api import _storagebox_ssh_base_cmd
+
+    profile = _ssh_storage_profile(storage)
+    if not profile["host"] or not profile["user"]:
+        raise ValueError("SSH storage target is incomplete")
+    remote_path = _ssh_storage_browse_path(storage, relative_path)
+    remote_command = f"ls -1Ap -- {shlex.quote(remote_path)}"
+    try:
+        proc = subprocess.run(
+            _storagebox_ssh_base_cmd(profile) + [remote_command],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise ValueError("ssh binary not found") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("SSH directory listing timed out") from exc
+    output = _mask_repo_output(((proc.stdout or "") + "\n" + (proc.stderr or "")).strip())
+    if proc.returncode != 0:
+        first = next((line.strip() for line in output.splitlines() if line.strip()), "SSH directory listing failed")
+        raise ValueError(first[:500])
+    directories = []
+    for line in (proc.stdout or "").splitlines():
+        name = line.strip()
+        if not name.endswith("/"):
+            continue
+        name = name.rstrip("/")
+        if name and name not in {".", ".."} and "/" not in name:
+            directories.append(name)
+    return sorted(set(directories), key=str.lower)
+
+
+def browse_repository_directories(config: dict, storage_key: str, relative_path: str = "") -> dict[str, Any]:
+    """List one safe directory level inside a canonical storage target."""
+    key = str(storage_key or "").strip()
+    storage = _storage_by_key(config).get(key)
+    if not storage:
+        raise ValueError("Storage target not found")
+    current = _browse_relative_path(relative_path)
+    storage_type = str(storage.get("storage_type") or storage.get("location") or "").strip().lower()
+    if storage_type == "ssh" or str(storage.get("location") or "").strip().lower() == "storagebox":
+        names = _list_ssh_storage_directories(storage, current)
+    else:
+        names = _list_local_storage_directories(config, storage, current)
+
+    managed = _managed_repository_paths(config, key)
+    directories = []
+    for name in names:
+        relative = f"{current}/{name}" if current else name
+        existing = managed.get(relative, {})
+        directories.append({
+            "name": name,
+            "relative_path": relative,
+            "supported": all(_browse_name_supported(part) for part in relative.split("/")),
+            "managed": bool(existing),
+            "repository_key": str(existing.get("repository_key") or ""),
+            "display_name": str(existing.get("display_name") or ""),
+        })
+    parent = current.rsplit("/", 1)[0] if "/" in current else ""
+    return {
+        "storage_key": key,
+        "storage_name": str(storage.get("display_name") or key),
+        "relative_path": current,
+        "parent_path": parent,
+        "directories": directories,
     }
 
 

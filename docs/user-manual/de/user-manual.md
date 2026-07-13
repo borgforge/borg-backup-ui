@@ -262,7 +262,7 @@ Der Repository-Kopf verwendet den beim Erstellen oder Importieren vergebenen **A
 2. Wählen Sie ein vorhandenes Speicherziel. Neue lokale, USB-, SMB- und SSH-Speicherziele werden ausschließlich unter **Einstellungen** eingerichtet und geprüft.
 3. Der Assistent prüft das ausgewählte Speicherziel vor dem Repository-Zugriff erneut.
 4. Wählen Sie **Neues Repository erstellen** oder **Vorhandenes Repository importieren**.
-5. Geben Sie Anzeigename und relativen Repository-Pfad an.
+5. Geben Sie den Anzeigenamen an. Beim Import können Sie den relativen Repository-Pfad manuell eingeben oder über **Durchsuchen** vorhandene Verzeichnisse innerhalb des gewählten Speicherziels öffnen und auswählen. Bereits verwaltete Repositorys werden gekennzeichnet und können nicht erneut importiert werden.
 6. Beim Erstellen wählen Sie Verschlüsselung und Passphrase. Keyfile-Schlüssel werden persistent im geschützten Plugin-Verzeichnis gespeichert.
 7. Beim Import wird die Verschlüsselung durch `borg info` erkannt. Für ein Keyfile-Repository fügen Sie bei Bedarf einen zuvor mit `borg key export` erzeugten Borg-Key-Export ein; ein exakt passender vorhandener Schlüssel wird automatisch übernommen.
 8. Prüfen Sie die Zusammenfassung und speichern Sie.

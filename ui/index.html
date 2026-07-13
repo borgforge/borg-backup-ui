@@ -1150,8 +1150,23 @@
               <input type="hidden" id="repository-manager-repository-name" value="">
               <div class="form-group" style="grid-column:1/-1">
                 <label class="form-label" data-i18n="storage.repositoryRelativePath">Repository-Pfad im Speicherziel</label>
-                <input class="form-input mono" type="text" id="repository-manager-relative-path" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryRelativePathPlaceholder">
+                <div class="repository-manager-path-control">
+                  <input class="form-input mono" type="text" id="repository-manager-relative-path" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryRelativePathPlaceholder" aria-controls="repository-manager-browser" aria-expanded="false">
+                  <button class="btn btn-secondary hidden" type="button" id="repository-manager-browser-btn" data-i18n="storage.repositoryBrowse">Durchsuchen</button>
+                </div>
+                <div class="repository-manager-browser hidden" id="repository-manager-browser">
+                  <div class="repository-manager-browser-header">
+                    <button class="btn btn-secondary" type="button" id="repository-manager-browser-up-btn" data-i18n-aria-label="storage.repositoryBrowseUp" aria-label="Eine Ebene höher">↑</button>
+                    <div class="repository-manager-browser-location">
+                      <span data-i18n="storage.repositoryBrowseLocation">Speicherziel</span>
+                      <strong class="mono" id="repository-manager-browser-path">/</strong>
+                    </div>
+                    <button class="btn btn-secondary" type="button" id="repository-manager-browser-refresh-btn" data-i18n="storage.refresh">Aktualisieren</button>
+                  </div>
+                  <div class="repository-manager-browser-list" id="repository-manager-browser-list" role="listbox"></div>
+                </div>
                 <div class="form-hint" data-i18n="storage.repositoryRelativePathHint">Relativ zum Speicherziel. Keine absoluten Pfade und keine .. Segmente.</div>
+                <div class="form-hint hidden" id="repository-manager-browser-hint" data-i18n="storage.repositoryBrowseHint">Beim Import kannst du vorhandene Verzeichnisse im gewählten Speicherziel durchsuchen oder den relativen Pfad weiterhin manuell eingeben.</div>
               </div>
             </div>
           </section>
