@@ -10,8 +10,8 @@ and repository model before PR #189 is merged.
 - Unraid version: 7.2.6
 - Source plugin version: `2026.07.05.1531`
 - Direct-migration candidate: `2026.07.12.0025`
-- Current regression candidate: `2026.07.13.0909`
-- Current package MD5: `3e325a72717a763dc371ef241c4f7552`
+- Current regression candidate: `2026.07.13.1116`
+- Current package MD5: `7d7b53629b21c445f06b1dfaf0672845`
 - Result: [ ] PASS  [ ] FAIL
 - Notes / observed issues: ________________________________________________
 
