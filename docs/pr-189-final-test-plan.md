@@ -10,8 +10,8 @@ and repository model before PR #189 is merged.
 - Unraid version: 7.2.6
 - Source plugin version: `2026.07.05.1531`
 - Direct-migration candidate: `2026.07.12.0025`
-- Current regression candidate: `2026.07.12.1027`
-- Current package MD5: `362f9345047c0f7aff1cc77aa03f255c`
+- Current regression candidate: `2026.07.13.0909`
+- Current package MD5: `3e325a72717a763dc371ef241c4f7552`
 - Result: [ ] PASS  [ ] FAIL
 - Notes / observed issues: ________________________________________________
 
@@ -28,7 +28,7 @@ and repository model before PR #189 is merged.
 
 ## 2. Automated gate
 
-- [x] `pytest -q`: 374 tests passed.
+- [x] `pytest -q`: 394 tests passed.
 - [x] `./plugin/mr-preflight.sh`: passed.
 - [x] Test manifest and package MD5 match.
 - [x] Stable remains unchanged at `2026.07.05.1531`.
