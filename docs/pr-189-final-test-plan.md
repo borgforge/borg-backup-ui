@@ -10,8 +10,8 @@ and repository model before PR #189 is merged.
 - Unraid version: 7.2.6
 - Source plugin version: `2026.07.05.1531`
 - Direct-migration candidate: `2026.07.12.0025`
-- Current regression candidate: `2026.07.13.1116`
-- Current package MD5: `7d7b53629b21c445f06b1dfaf0672845`
+- Current regression candidate: `2026.07.13.1144`
+- Current package MD5: `ed3b435a37df7d954905cd544b884245`
 - Result: [ ] PASS  [ ] FAIL
 - Notes / observed issues: ________________________________________________
 
@@ -146,6 +146,7 @@ disposable test installation.
 - [X] Confirm the global Settings save button is hidden on the Factory Reset page.
 - [X] Confirm reset is blocked while a backup job is running.
 - [X] Confirm reset is blocked while a Restore Test or restore is running.
+- [ ] Confirm a running Restore Test is shown once as a localized reason without internal operation identifiers.
 - [X] Confirm reset is blocked when a managed repository is located inside the configured operational data directory.
 - [X] Confirm incomplete risk checkboxes are rejected.
 - [X] Confirm a wrong server name, wrong admin password or wrong phrase is rejected.
