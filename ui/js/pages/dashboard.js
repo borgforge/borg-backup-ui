@@ -231,14 +231,35 @@ function renderBackupGrid(backups) {
     <table class="ui-table dashboard-inventory-table">
       <thead><tr>
         <th>${dashboardT('dashboard.backupColumn')}</th>
-        <th>${dashboardT('dashboard.locationColumn')}</th>
         <th>${dashboardT('dashboard.runStatusColumn')}</th>
         <th>${dashboardT('dashboard.restoreColumn')}</th>
         <th>${dashboardT('dashboard.storageColumn')}</th>
         <th>${dashboardT('dashboard.growthCheckColumn')}</th>
       </tr></thead>
-      <tbody>${visible.map(renderDashboardInventoryRow).join('')}</tbody>
+      <tbody>${renderDashboardLocationGroups(visible)}</tbody>
     </table>`;
+}
+
+function renderDashboardLocationGroups(backups) {
+  const locations = dashboardSelectedLocation === 'all'
+    ? DASHBOARD_LOCATION_ORDER
+    : [dashboardSelectedLocation];
+  return locations.map((location) => {
+    const locationBackups = backups.filter((backup) => dashboardLocationKey(backup) === location);
+    if (!locationBackups.length) return '';
+    return `${renderDashboardLocationGroupRow(location, locationBackups.length)}${locationBackups.map(renderDashboardInventoryRow).join('')}`;
+  }).join('');
+}
+
+function renderDashboardLocationGroupRow(location, count) {
+  return `<tr class="dashboard-location-group-row">
+    <td colspan="5">
+      <span class="dashboard-location-group__identity">
+        <span class="location-nav-glyph ${location}">${dashboardLocationGlyph(location)}</span>
+        <span><strong>${escHtml(dashboardLocationLabel(location))}</strong><small>${escHtml(dashboardBackupCount(count))}</small></span>
+      </span>
+    </td>
+  </tr>`;
 }
 
 function dashboardLocationKey(backup) {
@@ -379,7 +400,6 @@ function renderDashboardRestoreVerificationBadge(backup) {
 }
 
 function renderDashboardInventoryRow(backup) {
-  const location = dashboardLocationKey(backup);
   const run = dashboardRunStatus(backup);
   const message = dashboardRunMessage(backup);
   const growthClass = backup.growth_bytes == null ? 'neutral' : backup.growth_bytes > 0 ? 'positive' : 'negative';
@@ -411,7 +431,6 @@ function renderDashboardInventoryRow(backup) {
       <span class="type-icon type-icon-${escHtml(String(backup.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</span>
       <span><strong class="dashboard-cell-primary">${escHtml(type)}</strong><span class="dashboard-cell-detail mono" title="${escHtml(identityDetail)}">${escHtml(identityDetail)}</span></span>
     </div></td>
-    <td><span class="loc-badge ${location}">${escHtml(dashboardLocationLabel(location))}</span></td>
     <td><div class="dashboard-table-badges">
       ${backup.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
       <span class="badge ${run.cls}"><span class="badge-dot"></span>${escHtml(run.label)}</span>

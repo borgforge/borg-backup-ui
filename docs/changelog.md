@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #203
+- Dashboard backup rows are grouped by storage location in the established Local, USB, SMB and Storagebox order, matching the Jobs workspace.
+- The redundant per-row location column was removed to provide more room for run, restore and storage details.
+
 ### Issue #202
 - Job Wizard Docker and VM selection lists keep wheel, touchpad and touch scrolling inside the modal instead of moving the application page when a list boundary is reached.
 
