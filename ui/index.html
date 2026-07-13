@@ -1249,45 +1249,45 @@
 
     <!-- Stepper -->
     <div class="wizard-stepper">
-      <div class="wizard-step active" id="wstep-dot-1">
+      <button type="button" class="wizard-step active" id="wstep-dot-1" data-wizard-step="1" onclick="wizardGoToStep(1)" aria-current="step">
         <div class="wizard-step-dot">1</div>
         <div class="wizard-step-label" data-i18n="wizard.stepBasics">Grunddaten</div>
-      </div>
+      </button>
       <div class="wizard-step-line"></div>
-      <div class="wizard-step" id="wstep-dot-2">
+      <button type="button" class="wizard-step" id="wstep-dot-2" data-wizard-step="2" onclick="wizardGoToStep(2)" disabled>
         <div class="wizard-step-dot">2</div>
         <div class="wizard-step-label" data-i18n="wizard.stepSourcesTarget">Quellen &amp; Ziel</div>
-      </div>
+      </button>
       <div class="wizard-step-line"></div>
-      <div class="wizard-step" id="wstep-dot-3">
+      <button type="button" class="wizard-step" id="wstep-dot-3" data-wizard-step="3" onclick="wizardGoToStep(3)" disabled>
         <div class="wizard-step-dot">3</div>
         <div class="wizard-step-label" data-i18n="wizard.stepDocker">Docker</div>
-      </div>
+      </button>
       <div class="wizard-step-line"></div>
-      <div class="wizard-step" id="wstep-dot-4">
+      <button type="button" class="wizard-step" id="wstep-dot-4" data-wizard-step="4" onclick="wizardGoToStep(4)" disabled>
         <div class="wizard-step-dot">4</div>
         <div class="wizard-step-label" data-i18n="wizard.stepVms">VMs</div>
-      </div>
+      </button>
       <div class="wizard-step-line"></div>
-      <div class="wizard-step" id="wstep-dot-5">
+      <button type="button" class="wizard-step" id="wstep-dot-5" data-wizard-step="5" onclick="wizardGoToStep(5)" disabled>
         <div class="wizard-step-dot">5</div>
         <div class="wizard-step-label" data-i18n="wizard.stepRetention">Retention</div>
-      </div>
+      </button>
       <div class="wizard-step-line"></div>
-      <div class="wizard-step" id="wstep-dot-7">
+      <button type="button" class="wizard-step" id="wstep-dot-7" data-wizard-step="7" onclick="wizardGoToStep(7)" disabled>
         <div class="wizard-step-dot">6</div>
         <div class="wizard-step-label" data-i18n="wizard.stepDescription">Beschreibung</div>
-      </div>
+      </button>
       <div class="wizard-step-line"></div>
-      <div class="wizard-step" id="wstep-dot-8">
+      <button type="button" class="wizard-step" id="wstep-dot-8" data-wizard-step="8" onclick="wizardGoToStep(8)" disabled>
         <div class="wizard-step-dot">7</div>
         <div class="wizard-step-label" data-i18n="wizard.stepSchedule">Zeitplan</div>
-      </div>
+      </button>
       <div class="wizard-step-line"></div>
-      <div class="wizard-step" id="wstep-dot-9">
+      <button type="button" class="wizard-step" id="wstep-dot-9" data-wizard-step="9" onclick="wizardGoToStep(9)" disabled>
         <div class="wizard-step-dot">8</div>
         <div class="wizard-step-label" data-i18n="wizard.stepPreview">Flow-Vorschau</div>
-      </div>
+      </button>
     </div>
 
     <div class="wizard-body">

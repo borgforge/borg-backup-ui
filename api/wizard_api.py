@@ -355,6 +355,12 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
 
     # Prefer explicit job metadata name (JSON) over display label with location suffix.
     # This keeps edited names stable (e.g. "Flash" stays "Flash", not "Flash - Lokal").
+    from schedule_api import get_schedules
+
+    schedule = get_schedules(ui_config).get(job_key)
+    if not isinstance(schedule, dict):
+        schedule = None
+
     params = {
         "job_key": job_key,
         "type_id": type_id,
@@ -382,6 +388,10 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "keep_monthly": meta_keep_monthly or conf.get(f"RETENTION_{_type_upper(type_id)}_MONTHLY", "6"),
         "keep_yearly": meta_keep_yearly or conf.get(f"RETENTION_{_type_upper(type_id)}_YEARLY", "3"),
         "standard": info.standard,
+        "schedule": {
+            "cron": str(schedule.get("cron") or "").strip(),
+            "enabled": bool(schedule.get("enabled", True)),
+        } if schedule else None,
     }
     return params
 

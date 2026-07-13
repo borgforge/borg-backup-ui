@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #205
+- Repository creation and import now classify local target paths before submission and return actionable conflict messages for existing Borg repositories, non-empty foreign directories, missing import targets and inaccessible paths.
+- Failed repository creation restores or removes newly written passphrase material, and known `borg init` target conflicts no longer surface as generic internal server errors.
+- Editing a backup job now preloads its enabled state and daily, weekly, monthly or custom schedule instead of showing misleading defaults; schedule persistence failures remain visible in the open Wizard.
+- Previously validated Job Wizard steps are keyboard-accessible and can be selected directly without allowing required or conditional steps to be bypassed. The Repository Wizard remains sequential.
 ### Issue #208
 - Borg operations now use one shared SSH transport configuration across backups, repository maintenance, restores and restore tests.
 - SSH keys no longer replace the configured keepalive options; interrupted WAN or SSH connections are classified consistently.
