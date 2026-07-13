@@ -120,7 +120,7 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
     (jobs_dir / "flash_local.json").write_text(json.dumps({
-        "schema_version": 2,
+        "schema_version": 3,
         "job_key": "flash_local",
         "backup_type": "flash",
         "location": "local",
@@ -128,7 +128,7 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
         "enabled": True,
         "runner": "scriptless-wizard-runner",
         "repository_key": "repo_flash_local_test",
-        "paths": {"default": "/boot"},
+        "source_paths": ["/boot"],
     }), encoding="utf-8")
     (data_root / "config" / "schedules.json").write_text(json.dumps({
         "flash_local": {"cron": "10 6 * * 2", "enabled": True},
@@ -179,14 +179,14 @@ def test_edit_wizard_preserves_schedule_inventory_values(
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
     (jobs_dir / "flash_local.json").write_text(json.dumps({
-        "schema_version": 2,
+        "schema_version": 3,
         "job_key": "flash_local",
         "backup_type": "flash",
         "location": "local",
         "name": "Flash",
         "runner": "scriptless-wizard-runner",
         "repository_key": "repo_flash_local_test",
-        "paths": {"default": "/boot"},
+        "source_paths": ["/boot"],
     }), encoding="utf-8")
     (data_root / "config" / "schedules.json").write_text(json.dumps({
         "flash_local": {"cron": cron, "enabled": enabled},

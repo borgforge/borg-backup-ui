@@ -87,9 +87,11 @@ def test_plain_job_export_contains_only_keyfile_metadata(tmp_path: Path):
     jobs = root / "config" / "jobs"
     jobs.mkdir(parents=True)
     (jobs / "flash_local.json").write_text(json.dumps({
+        "schema_version": 3,
         "job_key": "flash_local",
         "name": "Flash",
         "repository_key": "repo_flash",
+        "source_paths": ["/boot"],
     }), encoding="utf-8")
     write_storage_store(config, {"storages": [{
         "storage_key": "storage_local",
@@ -127,9 +129,11 @@ def test_encrypted_job_transfer_restores_keyfile_to_target_store(tmp_path: Path)
     jobs = source / "config" / "jobs"
     jobs.mkdir(parents=True)
     (jobs / "flash_local.json").write_text(json.dumps({
+        "schema_version": 3,
         "job_key": "flash_local",
         "name": "Flash",
         "repository_key": "repo_flash",
+        "source_paths": ["/boot"],
     }), encoding="utf-8")
     write_storage_store(source_config, {"storages": [{
         "storage_key": "storage_local",

@@ -120,6 +120,7 @@ Ein Job referenziert künftig ein Repository:
 
 ```json
 {
+  "schema_version": 3,
   "job_key": "appdata_usb",
   "source_paths": ["/mnt/user/appdata"],
   "repository_key": "repo_appdata_usb_7f3c45ab"
@@ -132,6 +133,12 @@ Repository-Objekt aufgelöst; Storage- und Profilinformationen stammen über
 `storage_key` aus dem Storage-Objekt. Die früheren Jobfelder `repo`,
 `passphrase`, `encryption` sowie direkte Storage-/Profil-Keys werden einmalig
 migriert und danach entfernt.
+
+Quellpfade sind ab Job-Schema 3 ausschließlich als JSON-Liste gespeichert.
+Dadurch bleiben Leerzeichen Bestandteil eines einzelnen Pfades und werden nicht
+mehr als Trennzeichen interpretiert. Das frühere Objekt `paths` und die
+Laufzeitvariable `BACKUP_PATHS` werden nach der einmaligen Migration nicht mehr
+verwendet.
 
 ## 5. Warum das wichtig ist
 

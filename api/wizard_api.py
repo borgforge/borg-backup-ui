@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from job_source_paths import JOB_SCHEMA_VERSION, SourcePathValidationError, normalize_source_paths
+
 
 def _type_upper(type_id: str) -> str:
     return re.sub(r"[^A-Z0-9]", "_", type_id.upper())
@@ -184,8 +186,8 @@ def validate_params(
         raise ValueError("Type ID may contain only lowercase letters, digits, and underscores")
     if not params.get("job_name", "").strip():
         raise ValueError("Job name must not be empty")
-    if not params.get("source_paths", "").strip():
-        raise ValueError("At least one source path is required")
+    raw_sources = normalize_source_paths(params.get("source_paths"))
+    params["source_paths"] = raw_sources
     selected_repo = _repository_from_params(params, ui_config)
     if not selected_repo:
         raise ValueError("Repository selection is required")
@@ -213,7 +215,6 @@ def validate_params(
     if location == "storagebox" and not profile_key:
         raise ValueError("Storage profile is missing")
 
-    raw_sources = [p.strip() for p in str(params.get("source_paths", "")).split() if p.strip()]
     for src in raw_sources:
         p = Path(src)
         if not p.exists():
@@ -240,10 +241,6 @@ def validate_params(
     meta_target = get_jobs_meta_dir(scripts_dir, data_root) / f"{job_key}.json"
     if meta_target.exists() and not allow_existing:
         raise FileExistsError(f"Job already exists: {type_id}_{location}")
-
-
-def _paths_conf_key(type_id: str) -> str:
-    return f"BACKUP_PATHS_{_type_upper(type_id)}"
 
 
 def _repository_from_params(params: dict, ui_config: Optional[dict]) -> Optional[dict]:
@@ -294,10 +291,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     type_id = str(info.backup_type or "").lower()
     location = str(info.location or "local").lower()
 
-    paths_key = _paths_conf_key(type_id)
-
     # Prefer explicit wizard metadata values if available.
-    meta_paths_default = ""
+    meta_source_paths: list[str] = []
     meta_exclude_paths: list[str] = []
     meta_compression = ""
     meta_keep_daily = ""
@@ -315,9 +310,22 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         if not meta_file.exists():
             continue
         try:
-            meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            if isinstance(meta.get("paths"), dict):
-                meta_paths_default = str(meta["paths"].get("default") or "").strip()
+            candidate = json.loads(meta_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError, TypeError):
+            continue
+        if not isinstance(candidate, dict):
+            raise ValueError(f"Wizard metadata root is not an object: {job_key}")
+        try:
+            meta_source_paths = normalize_source_paths(
+                candidate.get("source_paths"), field=f"Job '{job_key}' source_paths"
+            )
+        except SourcePathValidationError as exc:
+            raise ValueError(
+                f"Job '{job_key}' has not been migrated to structured source paths: {exc}. "
+                "Review Settings > System Health & Migration before editing or running this job."
+            ) from exc
+        try:
+            meta = candidate
             meta_exclude_paths = _exclude_paths(meta.get("exclude_paths", []))
             meta_compression = str(meta.get("compression") or "").strip()
             meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
@@ -331,7 +339,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
             meta_docker_control = _runtime_control_from_meta(meta, "docker")
             meta_vm_control = _runtime_control_from_meta(meta, "vm")
             break
-        except (json.JSONDecodeError, OSError, UnicodeDecodeError, TypeError, ValueError):
+        except (TypeError, ValueError):
             continue
 
     from repository_context import RepositoryContextError, resolve_job_repository_context
@@ -350,7 +358,6 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         repository_context = {}
         repo_path = ""
         assignment_error = str(exc)
-    source_paths = meta_paths_default or conf.get(paths_key) or ""
     compression = meta_compression or conf.get(f"COMPRESSION_{_type_upper(type_id)}", "lz4")
 
     # Prefer explicit job metadata name (JSON) over display label with location suffix.
@@ -373,7 +380,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "use_vm": meta_vm_control["mode"] != "none",
         "docker_control": meta_docker_control,
         "vm_control": meta_vm_control,
-        "source_paths": source_paths or "",
+        "source_paths": meta_source_paths,
         "exclude_paths": meta_exclude_paths,
         "repo_path": repo_path or "",
         "repository_key": meta_repository_key,
@@ -400,7 +407,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     """Erzeugt eine textuelle Backup-Flow-Vorschau fuer den Wizard."""
     type_id = params["type_id"].strip()
     location = params.get("location", "local")
-    source_paths = [p for p in params.get("source_paths", "").split() if p]
+    source_paths = normalize_source_paths(params.get("source_paths"))
     exclude_paths = _exclude_paths(params.get("exclude_paths", []))
     selected_repo = _repository_from_params(params, ui_config)
     repo_path = _repository_path(selected_repo, ui_config)
@@ -492,8 +499,6 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
 
     # ── Wizard-Metadaten schreiben (Phase 2) ─────────────────────────────────
     job_key = f"{type_id}_{location}"
-    type_upper = _type_upper(type_id)
-
     now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     jobs_meta_dir = get_jobs_meta_dir(scripts_dir, data_root)
     jobs_meta_dir.mkdir(parents=True, exist_ok=True)
@@ -519,7 +524,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     vm_control = _runtime_control_from_params(params, "vm", existing)
 
     metadata = {
-        "schema_version": 2,
+        "schema_version": JOB_SCHEMA_VERSION,
         "job_key": job_key,
         "name": params.get("job_name", "").strip() or job_key,
         "description": description,
@@ -533,10 +538,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "unmount_after_run": unmount_after_run if location == "smb" else True,
         "script": "",
         "runner": "scriptless-wizard-runner",
-        "paths": {
-            "conf_key": f"BACKUP_PATHS_{type_upper}",
-            "default": params.get("source_paths", "").strip(),
-        },
+        "source_paths": normalize_source_paths(params.get("source_paths")),
         "exclude_paths": _exclude_paths(params.get("exclude_paths", [])),
         "features": {
             "docker": docker_control["mode"] != "none",

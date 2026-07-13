@@ -359,9 +359,8 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     date_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_dir = env.get("GLOBAL_LOG_DIR", "/mnt/user/Logs")
 
-    paths_cfg = meta.get("paths") if isinstance(meta.get("paths"), dict) else {}
-    paths_key = str(paths_cfg.get("conf_key") or f"BACKUP_PATHS_{tu}")
-    paths_default = str(paths_cfg.get("default") or "")
+    from job_source_paths import normalize_source_paths
+    source_paths = normalize_source_paths(meta.get("source_paths"), field=f"Job '{job_key}' source_paths")
     exclude_paths = meta.get("exclude_paths") if isinstance(meta.get("exclude_paths"), list) else []
 
     meta_compression = str(meta.get("compression") or "").strip()
@@ -400,7 +399,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     env.setdefault("BORG_KEEP_MONTHLY", meta_keep_monthly or env.get(f"RETENTION_{tu}_MONTHLY", "6"))
     env.setdefault("BORG_KEEP_YEARLY", meta_keep_yearly or env.get(f"RETENTION_{tu}_YEARLY", "3"))
     env.setdefault("LOCK_FILE", f"{env.get('LOCK_FILE_DIR', '/var/run')}/borg-backup-{type_id}.lock")
-    env.setdefault("BACKUP_PATHS", env.get(paths_key, paths_default))
+    env["BACKUP_PATHS_JSON"] = json.dumps(source_paths, ensure_ascii=False)
     env["BACKUP_EXCLUDE_PATHS_JSON"] = json.dumps(
         [str(path).strip() for path in exclude_paths if str(path).strip()],
         ensure_ascii=False,

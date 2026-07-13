@@ -96,8 +96,22 @@ class BackupJobConfig:
     @classmethod
     def from_config(cls, env: dict) -> "BackupJobConfig":
         """Liest Konfiguration aus Umgebungsvariablen."""
-        paths_str = env.get("BACKUP_PATHS", "")
-        backup_paths = [Path(p) for p in paths_str.split() if p] if paths_str else []
+        try:
+            raw_paths = json.loads(env.get("BACKUP_PATHS_JSON", "") or "")
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            raise ValueError("BACKUP_PATHS_JSON is missing or invalid") from exc
+        if not isinstance(raw_paths, list) or not raw_paths:
+            raise ValueError("BACKUP_PATHS_JSON must contain at least one source path")
+        backup_paths: List[Path] = []
+        for index, raw_path in enumerate(raw_paths):
+            if not isinstance(raw_path, str) or not raw_path.strip():
+                raise ValueError(f"BACKUP_PATHS_JSON entry {index + 1} is invalid")
+            if any(character in raw_path for character in ("\x00", "\n", "\r")):
+                raise ValueError(f"BACKUP_PATHS_JSON entry {index + 1} contains control characters")
+            path = Path(raw_path.strip())
+            if not path.is_absolute():
+                raise ValueError(f"BACKUP_PATHS_JSON entry {index + 1} is not absolute")
+            backup_paths.append(path)
         exclude_paths: List[Path] = []
         try:
             raw_excludes = json.loads(env.get("BACKUP_EXCLUDE_PATHS_JSON", "[]") or "[]")

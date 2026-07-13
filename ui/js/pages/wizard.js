@@ -414,7 +414,9 @@ function _wizardFillFromJob(job) {
   document.getElementById('wiz-location').value = job.location || 'local';
   _wizardSetRuntimeControl('docker', job.docker_control || { mode: job.use_docker ? 'all' : 'none' });
   _wizardSetRuntimeControl('vm', job.vm_control || { mode: job.use_vm ? 'all' : 'none' });
-  const parsedPaths = (job.source_paths || '').split(' ').filter(Boolean);
+  const parsedPaths = Array.isArray(job.source_paths)
+    ? job.source_paths.map((path) => String(path || '').trim()).filter(Boolean)
+    : [];
   document.getElementById('wiz-source-paths').value = parsedPaths.join('\n');
   wizardState.sourcePaths = parsedPaths;
   wizardRenderSourcePaths();
@@ -622,7 +624,7 @@ function _wizardFocusRuntimeRisk(id) {
 }
 
 function _wizardCollectParams() {
-  const rawPaths = (wizardState.sourcePaths || []).map((s) => String(s || '').trim()).filter(Boolean).join(' ');
+  const rawPaths = (wizardState.sourcePaths || []).map((s) => String(s || '').trim()).filter(Boolean);
   const storage = wizardSelectedStorage();
   const repository = wizardSelectedRepository();
   const dockerMode = _wizardRuntimeMode('docker');
@@ -975,7 +977,7 @@ function _wizardValidate(step) {
     }
   }
   if (step === 2) {
-    if (!p.source_paths) { _wizardShowError(2, wizardT('wizard.validationSource')); return false; }
+    if (!Array.isArray(p.source_paths) || !p.source_paths.length) { _wizardShowError(2, wizardT('wizard.validationSource')); return false; }
     if (!p.storage_key) { _wizardShowError(2, wizardT('wizard.validationStorageTarget')); return false; }
     if (!p.repository_key) { _wizardShowError(2, wizardT('wizard.validationRepositorySelect')); return false; }
   }

@@ -1606,6 +1606,10 @@ function _migrationRegistryText(item, field) {
       title: 'registryCanonicalModelTitle',
       reason: status === 'applied' ? 'registryCanonicalModelApplied' : (status === 'not_needed' ? 'registryCanonicalModelCurrent' : (status === 'failed' ? 'registryCanonicalModelFailed' : 'registryCanonicalModelPending')),
     },
+    job_source_paths_v1: {
+      title: 'registryJobSourcePathsTitle',
+      reason: status === 'applied' ? 'registryJobSourcePathsApplied' : (status === 'not_needed' ? 'registryJobSourcePathsCurrent' : (status === 'failed' ? 'registryJobSourcePathsFailed' : 'registryJobSourcePathsPending')),
+    },
     borg_keyfiles_v1: {
       title: 'registryBorgKeyfilesTitle',
       reason: status === 'applied' ? 'registryBorgKeyfilesApplied' : (status === 'not_needed' ? 'registryBorgKeyfilesCurrent' : 'registryBorgKeyfilesPending'),

@@ -34,11 +34,23 @@ def test_exclusion_must_exist_below_a_source(tmp_path: Path):
 
 def test_backup_job_config_reads_exclusions_as_json(tmp_path: Path):
     cfg = BackupJobConfig.from_config({
-        "BACKUP_PATHS": str(tmp_path / "source"),
+        "BACKUP_PATHS_JSON": json.dumps([str(tmp_path / "source")]),
         "BACKUP_EXCLUDE_PATHS_JSON": json.dumps([str(tmp_path / "source" / "cache")]),
     })
 
     assert cfg.exclude_paths == [tmp_path / "source" / "cache"]
+
+
+def test_backup_job_config_preserves_multiple_source_paths_with_spaces(tmp_path: Path):
+    first = tmp_path / "Intel UHD Graphics 630 - Treiber"
+    second = tmp_path / "Second source"
+
+    cfg = BackupJobConfig.from_config({
+        "BACKUP_PATHS_JSON": json.dumps([str(first), str(second)]),
+        "BACKUP_EXCLUDE_PATHS_JSON": "[]",
+    })
+
+    assert cfg.backup_paths == [first, second]
 
 
 def test_borg_create_uses_safe_path_prefix_patterns(monkeypatch, tmp_path: Path):

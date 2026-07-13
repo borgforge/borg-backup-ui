@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from config_api import get_smb_profile_job_refs
+from job_source_paths import SourcePathValidationError, upgrade_job_source_paths
 from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
 from schedule_api import get_schedules, write_schedules
 
@@ -197,6 +198,27 @@ def _resolve_import_key(existing: set[str], desired: str, mode: str) -> Tuple[st
     return None, "skipped_exists"
 
 
+def _canonical_import_jobs(jobs: list, selected: set[str] | None = None) -> list:
+    """Upgrade old bundle jobs at the import boundary, never during runtime."""
+    normalized: list = []
+    for raw in jobs:
+        if not isinstance(raw, dict):
+            normalized.append(raw)
+            continue
+        source_key = str(raw.get("job_key") or "").strip()
+        if selected and source_key not in selected:
+            normalized.append(dict(raw))
+            continue
+        label = source_key or "<unknown>"
+        try:
+            normalized.append(upgrade_job_source_paths(raw, job_key=label))
+        except SourcePathValidationError as exc:
+            raise ValueError(
+                f"Imported job '{label}' cannot be converted to structured source paths: {exc}"
+            ) from exc
+    return normalized
+
+
 def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
     jobs = bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []
     schedules = bundle.get("schedules") if isinstance(bundle.get("schedules"), dict) else {}
@@ -253,7 +275,11 @@ def preview_jobs_bundle(config: dict, bundle: dict) -> dict:
         raise ValueError("Invalid bundle")
     if bundle.get("format") != "bbui-job-bundle-v2":
         raise ValueError("Unknown bundle format")
-    rows = _job_preview_rows(config, bundle)
+    normalized_bundle = dict(bundle)
+    normalized_bundle["jobs"] = _canonical_import_jobs(
+        bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []
+    )
+    rows = _job_preview_rows(config, normalized_bundle)
     settings_preview = _preview_settings_payload(config, bundle.get("settings_payload"))
     return {
         "format": bundle.get("format"),
@@ -524,6 +550,7 @@ def import_jobs_bundle(
         raise ValueError("Bundle does not contain a job list")
 
     selected_set = set(str(x).strip() for x in (selected_jobs or []) if str(x).strip())
+    jobs = _canonical_import_jobs(jobs, selected_set or None)
     inventory_jobs = [
         row for row in jobs
         if isinstance(row, dict) and (not selected_set or str(row.get("job_key") or "").strip() in selected_set)
