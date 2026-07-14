@@ -1,4 +1,6 @@
+import os
 from pathlib import Path
+import subprocess
 import xml.etree.ElementTree as ET
 
 
@@ -38,6 +40,91 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     assert 'require_pkg_entry "etc/rc.d/rc.borg_backup_ui"' in script
     assert "ET.parse(sys.argv[1])" in script
     assert 'launch="Settings/borg-backup-ui"' in script
+
+
+def test_build_removes_stale_generated_packages() -> None:
+    script = (ROOT / "plugin" / "build.sh").read_text(encoding="utf-8")
+
+    assert 'find "${SCRIPT_DIR}/build"' in script
+    assert '-name "${NAME}-*.txz" -delete' in script
+
+
+def test_test_channel_publisher_replaces_snapshot_with_exact_lease(tmp_path: Path) -> None:
+    publisher = ROOT / "plugin" / "publish-test-snapshot.sh"
+    remote = tmp_path / "remote.git"
+    work = tmp_path / "work"
+    work.mkdir()
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "GIT_AUTHOR_NAME": "Test",
+            "GIT_AUTHOR_EMAIL": "test@example.invalid",
+            "GIT_COMMITTER_NAME": "Test",
+            "GIT_COMMITTER_EMAIL": "test@example.invalid",
+        }
+    )
+
+    manifest = work / "borg-backup-ui-test.plg"
+    first_package = work / "borg-backup-ui-1.txz"
+    manifest.write_text("version=1\n", encoding="utf-8")
+    first_package.write_bytes(b"first package")
+    subprocess.run(
+        [
+            str(publisher),
+            str(remote),
+            "test-channel",
+            str(manifest),
+            str(first_package),
+            "first snapshot",
+            str(work),
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+    )
+
+    manifest.write_text("version=2\n", encoding="utf-8")
+    second_package = work / "borg-backup-ui-2.txz"
+    second_package.write_bytes(b"second package")
+    subprocess.run(
+        [
+            str(publisher),
+            str(remote),
+            "test-channel",
+            str(manifest),
+            str(second_package),
+            "second snapshot",
+            str(work),
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+    )
+
+    files = subprocess.run(
+        ["git", f"--git-dir={remote}", "ls-tree", "-r", "--name-only", "test-channel"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    history_count = subprocess.run(
+        ["git", f"--git-dir={remote}", "rev-list", "--count", "test-channel"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    assert files == ["borg-backup-ui-test.plg", "releases/borg-backup-ui-2.txz"]
+    assert history_count == "1"
+
+
+def test_test_channel_publisher_uses_exact_force_with_lease() -> None:
+    script = (ROOT / "plugin" / "publish-test-snapshot.sh").read_text(encoding="utf-8")
+
+    assert '--force-with-lease="refs/heads/${TEST_BRANCH}:${REMOTE_HEAD}"' in script
+    assert 'if [ "$TEST_BRANCH" != "test-channel" ]; then' in script
 
 
 def test_release_promotion_copies_tested_settings_launch_target() -> None:

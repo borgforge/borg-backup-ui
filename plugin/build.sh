@@ -96,8 +96,12 @@ fi
 
 # ── Aufräumen ──────────────────────────────────────────────────────────────
 rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}"
 mkdir -p "${SCRIPT_DIR}/build"
+# Build-Ausgaben sind kurzlebig. Alte Pakete duerfen sich hier nicht bei jedem
+# Test-Deploy weiter ansammeln; stabile Release-Artefakte liegen separat unter
+# releases/ und werden von dieser Bereinigung nicht beruehrt.
+find "${SCRIPT_DIR}/build" -maxdepth 1 -type f -name "${NAME}-*.txz" -delete
+mkdir -p "${BUILD_DIR}"
 
 # ── App-Dateien → /boot/config/plugins/borg-backup-ui/ ────────────────────
 APP_DST="${BUILD_DIR}/boot/config/plugins/${NAME}"

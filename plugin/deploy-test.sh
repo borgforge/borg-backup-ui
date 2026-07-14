@@ -43,7 +43,6 @@ if [ -f "$PKG_FILE" ]; then
   PKG_EXISTED=1
 fi
 
-WORKTREE=""
 TMP_PLG=""
 
 restore_stable_files() {
@@ -58,9 +57,6 @@ restore_stable_files() {
 
 cleanup() {
   restore_stable_files || true
-  if [ -n "$WORKTREE" ]; then
-    rm -rf "$WORKTREE"
-  fi
   if [ -n "$TMP_PLG" ]; then
     rm -f "$TMP_PLG"
   fi
@@ -139,32 +135,14 @@ PY
 echo "==> Pruefe Test-Manifest XML"
 python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$TMP_PLG"
 
-WORKTREE="$(mktemp -d "${TMP_ROOT}/${TEST_BRANCH}.XXXXXX")"
 ORIGIN_URL="$(git -C "$REPO_DIR" remote get-url origin)"
-git -C "$WORKTREE" init
-git -C "$WORKTREE" remote add origin "$ORIGIN_URL"
-
-if git -C "$REPO_DIR" ls-remote --exit-code --heads origin "$TEST_BRANCH" >/dev/null 2>&1; then
-  git -C "$WORKTREE" fetch --depth 1 origin "$TEST_BRANCH"
-  git -C "$WORKTREE" switch -c "$TEST_BRANCH" FETCH_HEAD
-else
-  git -C "$WORKTREE" switch -c "$TEST_BRANCH"
-fi
-
-mkdir -p "${WORKTREE}/releases"
-rm -f "${WORKTREE}/releases/${NAME}-"*.txz
-cp "$TMP_PLG" "${WORKTREE}/${NAME}-test.plg"
-cp "$PKG_FILE" "${WORKTREE}/releases/"
-
-git -C "$WORKTREE" add "${NAME}-test.plg" "releases/${NAME}-${VERSION}.txz"
-
-if git -C "$WORKTREE" diff --cached --quiet; then
-  echo "==> Test-Channel ist bereits aktuell."
-else
-  git -C "$WORKTREE" commit -m "Deploy test ${VERSION} from ${CURRENT_BRANCH}"
-fi
-
-git -C "$WORKTREE" push origin "HEAD:${TEST_BRANCH}"
+"${SCRIPT_DIR}/publish-test-snapshot.sh" \
+  "$ORIGIN_URL" \
+  "$TEST_BRANCH" \
+  "$TMP_PLG" \
+  "$PKG_FILE" \
+  "Deploy test ${VERSION} from ${CURRENT_BRANCH}" \
+  "$TMP_ROOT"
 
 cat <<EOF
 
