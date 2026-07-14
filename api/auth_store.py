@@ -13,6 +13,10 @@ import secrets
 from pathlib import Path
 
 
+class UsersStoreError(RuntimeError):
+    """Raised when an existing user store cannot be trusted."""
+
+
 def data_root(config: dict) -> Path:
     return Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
 
@@ -83,14 +87,27 @@ def read_users_store(config: dict) -> dict:
         return default_users_store()
     try:
         raw = json.loads(fp.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return default_users_store()
-        raw.setdefault("schema_version", 1)
-        raw.setdefault("users", [])
-        raw.setdefault("security", {})
-        return raw
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        return default_users_store()
+    except (OSError, json.JSONDecodeError, UnicodeError) as exc:
+        raise UsersStoreError(
+            f"Authentication user store is unreadable or invalid: {fp}"
+        ) from exc
+
+    if not isinstance(raw, dict):
+        raise UsersStoreError(f"Authentication user store has an invalid structure: {fp}")
+    if "users" not in raw:
+        raise UsersStoreError(f"Authentication user store has no users list: {fp}")
+
+    users = raw.get("users")
+    security = raw.get("security", {})
+    if not isinstance(users, list) or any(not isinstance(user, dict) for user in users):
+        raise UsersStoreError(f"Authentication user store has an invalid users list: {fp}")
+    if not isinstance(security, dict):
+        raise UsersStoreError(f"Authentication user store has invalid security settings: {fp}")
+
+    raw.setdefault("schema_version", 1)
+    raw["users"] = users
+    raw["security"] = security
+    return raw
 
 
 def write_users_store(config: dict, data: dict) -> None:

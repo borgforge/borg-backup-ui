@@ -13,6 +13,7 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from api.auth_store import (
+    UsersStoreError,
     hash_password,
     parse_cookie_header,
     read_sessions_store,
@@ -96,6 +97,169 @@ def test_auth_store_writes_users_and_sessions_atomically(tmp_path: Path):
     assert read_sessions_store(cfg)["sessions"][0]["sid"] == "s1"
     assert (tmp_path / "config" / "users.json").stat().st_mode & 0o777 == 0o600
     assert (tmp_path / "config" / "sessions.json").stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "{invalid-json",
+        "[]",
+        "{}",
+        '{"users": {"admin": true}}',
+        '{"users": [], "security": []}',
+    ],
+)
+def test_existing_invalid_users_store_fails_closed(tmp_path: Path, payload: str):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    users_path = tmp_path / "config" / "users.json"
+    users_path.parent.mkdir(parents=True)
+    users_path.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(UsersStoreError, match="Authentication user store"):
+        read_users_store(cfg)
+
+
+def test_missing_users_store_still_requires_initial_admin_setup(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    h = _make_handler()
+    h.config = cfg
+
+    assert read_users_store(cfg)["users"] == []
+    assert h._bootstrap_required() is True
+    assert h._ui_auth_enabled() is False
+
+
+def test_existing_empty_users_store_does_not_reopen_bootstrap(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    users_path = tmp_path / "config" / "users.json"
+    users_path.parent.mkdir(parents=True)
+    users_path.write_text('{"schema_version": 1, "users": [], "security": {}}', encoding="utf-8")
+    h = _make_handler()
+    h.config = cfg
+
+    assert h._bootstrap_required() is False
+    assert h._ui_auth_enabled() is True
+
+
+def test_corrupt_users_store_blocks_bootstrap_sessions_and_api(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    users_path = tmp_path / "config" / "users.json"
+    users_path.parent.mkdir(parents=True)
+    users_path.write_text("{broken", encoding="utf-8")
+    h = _make_handler()
+    h.config = cfg
+    h.command = "GET"
+    errors = []
+    h._send_api_error = lambda status, code, message, *, request_id: errors.append(
+        (status, code, message, request_id)
+    )
+
+    assert h._bootstrap_required() is False
+    assert h._ui_auth_enabled() is True
+    assert h._is_ui_session_valid() is False
+    assert h._authorize_api_request("/api/status", "req-corrupt") is False
+    assert errors[0][0:2] == (503, "auth_store_unavailable")
+
+
+def test_static_file_serving_rejects_paths_outside_ui_root(tmp_path: Path):
+    ui_root = tmp_path / "ui"
+    ui_root.mkdir()
+    outside = tmp_path / "private.txt"
+    outside.write_text("private", encoding="utf-8")
+    h = _make_handler()
+    h.wfile = BytesIO()
+    errors = []
+    h.send_error = lambda status, message: errors.append((status, message))
+
+    h._serve_file(outside, allowed_root=ui_root)
+
+    assert errors == [(404, "Not found")]
+    assert h.wfile.getvalue() == b""
+
+
+def test_static_file_serving_rejects_symlink_escape(tmp_path: Path):
+    ui_root = tmp_path / "ui"
+    ui_root.mkdir()
+    outside = tmp_path / "private.txt"
+    outside.write_text("private", encoding="utf-8")
+    linked_asset = ui_root / "linked.txt"
+    linked_asset.symlink_to(outside)
+    h = _make_handler()
+    h.wfile = BytesIO()
+    errors = []
+    h.send_error = lambda status, message: errors.append((status, message))
+
+    h._serve_file(linked_asset, allowed_root=ui_root)
+
+    assert errors == [(404, "Not found")]
+    assert h.wfile.getvalue() == b""
+
+
+def test_static_file_serving_allows_regular_ui_asset(tmp_path: Path):
+    ui_root = tmp_path / "ui"
+    ui_root.mkdir()
+    asset = ui_root / "app.js"
+    asset.write_text("console.log('ok');", encoding="utf-8")
+    h = _make_handler()
+    h.wfile = BytesIO()
+    status = []
+    headers = []
+    h.send_response = lambda value: status.append(value)
+    h.send_header = lambda name, value: headers.append((name, value))
+    h.end_headers = lambda: None
+    h.send_error = lambda _status, _message: pytest.fail("valid UI asset was rejected")
+
+    h._serve_file(asset, allowed_root=ui_root)
+
+    assert status == [200]
+    assert ("Content-Type", "application/javascript") in headers
+    assert h.wfile.getvalue() == b"console.log('ok');"
+
+
+@pytest.mark.parametrize(
+    ("path", "handler_name"),
+    [
+        ("/api/jobs/log/stream?job=flash_local", "_handle_sse"),
+        ("/api/restore-tests/log/stream", "_handle_sse"),
+        ("/api/restore/download?job=x&archive=y&path=z", "_handle_restore_download"),
+        ("/api/storage/check/stream", "_handle_check_sse"),
+    ],
+)
+def test_direct_stream_and_download_routes_use_api_authorization(path: str, handler_name: str):
+    h = _make_handler()
+    h.path = path
+    h.command = "GET"
+    calls = []
+    h._handle_direct_api = lambda _fn: calls.append("authorized-wrapper")
+    setattr(h, handler_name, lambda *_args: pytest.fail("route bypassed authorization wrapper"))
+
+    h.do_GET()
+
+    assert calls == ["authorized-wrapper"]
+
+
+def test_direct_api_authorization_rejects_missing_credentials():
+    h = _make_handler()
+    h.command = "GET"
+    h._auth_store_failure = lambda: ""
+    h._is_api_authorized = lambda: False
+    errors = []
+    h._send_api_error = lambda status, code, message, *, request_id: errors.append(
+        (status, code, message, request_id)
+    )
+
+    assert h._authorize_api_request("/api/jobs/log/stream", "req-stream") is False
+    assert errors[0][0:2] == (401, "unauthorized")
+
+
+def test_direct_api_authorization_accepts_viewer_session():
+    h = _make_handler()
+    h.command = "GET"
+    h._auth_store_failure = lambda: ""
+    h._is_api_authorized = lambda: True
+    h._get_current_role = lambda: "viewer"
+
+    assert h._authorize_api_request("/api/restore/download", "req-download") is True
 
 
 def test_is_api_authorized_accepts_header_token_when_ui_session_not_required():

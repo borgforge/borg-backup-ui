@@ -27,8 +27,8 @@ from time import perf_counter
 from urllib.parse import parse_qs, urlparse
 
 from api.auth_store import (
+    UsersStoreError as _UsersStoreError,
     default_users_store as _default_users_store,
-    has_active_admin as _has_active_admin,
     has_any_users as _has_any_users,
     hash_password as _hash_password,
     load_or_create_api_token as _load_or_create_api_token,
@@ -39,6 +39,7 @@ from api.auth_store import (
     read_users_store as _read_users_store,
     safe_user_view as _safe_user_view,
     verify_password_hash as _verify_password_hash,
+    users_file as _users_file,
     write_sessions_store as _write_sessions_store,
     write_users_store as _write_users_store,
 )
@@ -332,10 +333,29 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return "users"
 
     def _bootstrap_required(self) -> bool:
-        return not _has_any_users(self.config)
+        try:
+            _read_users_store(self.config)
+        except _UsersStoreError:
+            return False
+        return not _users_file(self.config).exists()
 
     def _ui_auth_enabled(self) -> bool:
-        return _has_active_admin(self.config)
+        try:
+            _read_users_store(self.config)
+        except _UsersStoreError:
+            # An existing but unreadable user store must never disable auth.
+            return True
+        # Only a missing file denotes a fresh installation. Any existing user
+        # store keeps authentication enabled even if its admin entry needs
+        # explicit local recovery.
+        return _users_file(self.config).exists()
+
+    def _auth_store_failure(self) -> str:
+        try:
+            _read_users_store(self.config)
+        except _UsersStoreError as exc:
+            return str(exc)
+        return ""
 
     def _session_idle_timeout_seconds(self) -> int:
         timeout_min = int(self._ui_auth_cfg().get("session_timeout_minutes", 30) or 30)
@@ -396,6 +416,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self._persist_sessions()
 
     def _is_ui_session_valid(self) -> bool:
+        if self._auth_store_failure():
+            return False
         if not self._ui_auth_enabled():
             return True
         self._prune_sessions()
@@ -613,6 +635,64 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         # Safe default for unknown API routes
         return "admin"
 
+    def _authorize_api_request(self, path: str, request_id: str) -> bool:
+        auth_failure = self._auth_store_failure()
+        if auth_failure:
+            self._send_api_error(
+                503,
+                "auth_store_unavailable",
+                "Authentication data is unavailable. Restore config/users.json from a trusted backup or follow the local recovery procedure.",
+                request_id=request_id,
+            )
+            return False
+
+        auth_free_paths = {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin"}
+        if self.command in {"POST", "PUT", "DELETE"}:
+            if not self._has_valid_api_token_header() and not self._is_same_origin_request():
+                self._send_api_error(
+                    403,
+                    "csrf_origin_mismatch",
+                    "Invalid Origin header",
+                    request_id=request_id,
+                )
+                return False
+        if path not in auth_free_paths and not self._is_api_authorized():
+            self._send_api_error(
+                401,
+                "unauthorized",
+                "The API token is missing or invalid",
+                request_id=request_id,
+            )
+            return False
+        required_role = self._required_role_for_request(path, self.command)
+        if required_role:
+            role = self._get_current_role()
+            if not self._role_at_least(role, required_role):
+                self._send_api_error(
+                    403,
+                    "forbidden",
+                    f"Role '{required_role}' is required",
+                    request_id=request_id,
+                )
+                return False
+        return True
+
+    def _handle_direct_api(self, fn) -> None:
+        request_id = uuid.uuid4().hex[:12]
+        self._current_request_id = request_id
+        self._refreshed_session_cookie = ""
+        try:
+            path = urlparse(self.path).path
+            if self._authorize_api_request(path, request_id):
+                fn()
+        finally:
+            self._current_request_id = ""
+            self._refreshed_session_cookie = ""
+
+    def _send_refreshed_session_header(self) -> None:
+        if self._refreshed_session_cookie:
+            self.send_header("Set-Cookie", self._refreshed_session_cookie)
+
     # ── Routing ───────────────────────────────────────────────────────────────
 
     def do_GET(self):
@@ -644,21 +724,21 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 return
-            self._serve_file(UI_DIR / "index.html")
+            self._serve_file(UI_DIR / "index.html", allowed_root=UI_DIR)
         elif path.startswith("/ui/"):
             # Static UI assets must stay directly reachable, otherwise browsers receive
             # HTML redirects for JS/CSS and fail with MIME/syntax errors on /login.
-            self._serve_file(UI_DIR / path[4:])
+            self._serve_file(UI_DIR / path[4:], allowed_root=UI_DIR)
         elif path == "/api/jobs/log/stream":
             qs = parse_qs(parsed.query)
             job_key = (qs.get("job") or [""])[0]
-            self._handle_sse(job_key)
+            self._handle_direct_api(lambda: self._handle_sse(job_key))
         elif path == "/api/restore-tests/log/stream":
-            self._handle_sse("restore_test")
+            self._handle_direct_api(lambda: self._handle_sse("restore_test"))
         elif path == "/api/restore/download":
-            self._handle_restore_download(parsed)
+            self._handle_direct_api(lambda: self._handle_restore_download(parsed))
         elif path == "/api/storage/check/stream":
-            self._handle_check_sse()
+            self._handle_direct_api(self._handle_check_sse)
         else:
             routes = {
                 "/api/version": lambda: {
@@ -1801,6 +1881,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
         self.send_header("X-Accel-Buffering", "no")
+        self._send_refreshed_session_header()
         self.end_headers()
         try:
             for chunk in CheckManager.get().stream_output():
@@ -1887,6 +1968,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Disposition", f'attachment; filename="{dl_name}"')
         self.send_header("Cache-Control", "no-cache")
+        self._send_refreshed_session_header()
         self.end_headers()
         try:
             while True:
@@ -2803,6 +2885,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
         self.send_header("X-Accel-Buffering", "no")
+        self._send_refreshed_session_header()
         self.end_headers()
         try:
             for chunk in stream_job_output(self.config, job_key):
@@ -2826,8 +2909,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._last_json_body = {}
         return {}
 
-    def _serve_file(self, filepath: Path):
+    def _serve_file(self, filepath: Path, *, allowed_root: Path):
+        root = allowed_root.resolve()
         filepath = filepath.resolve()
+        try:
+            filepath.relative_to(root)
+        except ValueError:
+            self.send_error(404, "Not found")
+            return
         if not filepath.exists() or not filepath.is_file():
             self.send_error(404, "Not found")
             return
@@ -3038,21 +3127,8 @@ btn.addEventListener('click',doSetup);
             self._current_request_id = request_id
             self._refreshed_session_cookie = ""
             path = urlparse(self.path).path
-            auth_free_paths = {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin"}
-            if self.command in {"POST", "PUT", "DELETE"}:
-                if not self._has_valid_api_token_header():
-                    if not self._is_same_origin_request():
-                        self._send_api_error(403, "csrf_origin_mismatch", "Invalid Origin header", request_id=request_id)
-                        return
-            if path not in auth_free_paths and not self._is_api_authorized():
-                self._send_api_error(401, "unauthorized", "The API token is missing or invalid", request_id=request_id)
+            if not self._authorize_api_request(path, request_id):
                 return
-            required_role = self._required_role_for_request(path, self.command)
-            if required_role:
-                role = self._get_current_role()
-                if not self._role_at_least(role, required_role):
-                    self._send_api_error(403, "forbidden", f"Role '{required_role}' is required", request_id=request_id)
-                    return
             refreshed_session_cookie = self._refreshed_session_cookie
             self._extra_response_headers = []
             data = fn()

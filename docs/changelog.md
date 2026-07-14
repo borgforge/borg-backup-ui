@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #196
+- Static UI assets are now restricted to the resolved UI directory, including symlink and traversal containment checks.
+- Job logs, restore-test logs, restore downloads and repository-check streams now use the central API authentication and role policy.
+- Existing unreadable or malformed user stores fail closed with a service-unavailable response instead of reopening administrator bootstrap or disabling authentication.
+- Added focused security regressions and a local user-store recovery procedure.
+
 ### Issue #206
 - Job source paths are now persisted and transported as JSON arrays, so spaces remain part of a path instead of being interpreted as separators.
 - Added an audited, idempotent schema migration with a rollback backup for existing jobs and a clear failure state when a legacy value cannot be converted unambiguously.
