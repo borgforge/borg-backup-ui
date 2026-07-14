@@ -39,6 +39,8 @@ class BackupStatus:
     duration_seconds: int = 0
     exit_code: int = 99
     status: str = "unknown"          # success | warning | error | skipped
+    failure_code: str = ""
+    missing_source_paths: List[str] = field(default_factory=list)
     skip_reason_code: str = ""
     skip_reason_text: str = ""
     error_message: str = ""
@@ -78,6 +80,13 @@ class BackupStatus:
             _exit = data.get("borg_exit_code")
         obj.exit_code = int(_exit if _exit is not None else 99)
         obj.status = str(data.get("status", "unknown"))
+        obj.failure_code = str(data.get("failure_code", "") or "")
+        raw_missing_sources = data.get("missing_source_paths", [])
+        obj.missing_source_paths = (
+            [str(path) for path in raw_missing_sources]
+            if isinstance(raw_missing_sources, list)
+            else []
+        )
         obj.error_message = str(data.get("error_message", "") or "")
         obj.log_file = str(data.get("log_file", "") or "")
         obj.archive_name = str(data.get("archive_name", "") or "")

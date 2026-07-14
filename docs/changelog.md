@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #214
+- Backup runs now fail before Docker or VM shutdown and before Borg maintenance when any configured source path is missing.
+- Failure status records include the stable `required_source_paths_missing` code and list every missing path with a corrective action.
+- Existing USB, SMB and parity skip behavior remains unchanged.
+
 ### Issue #218
 - Repository check, data verification, prune and compact now wait up to 30 seconds for transient Borg lock contention.
 - Added a privacy-safe troubleshooting procedure for persistent repository locks without automatic lock removal.

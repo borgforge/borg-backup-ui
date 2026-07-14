@@ -45,6 +45,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _HR = "━" * 80
+REQUIRED_SOURCE_PATHS_MISSING = "required_source_paths_missing"
+
+
+class RequiredSourcePathsMissing(RuntimeError):
+    """Raised before runtime services or Borg are touched when sources are absent."""
+
+    failure_code = REQUIRED_SOURCE_PATHS_MISSING
+
+    def __init__(self, missing_paths: List[Path]) -> None:
+        self.missing_paths = list(missing_paths)
+        paths = ", ".join(str(path) for path in self.missing_paths)
+        super().__init__(
+            "Required backup source path(s) are missing. "
+            "The backup was aborted before Docker, VMs, or Borg were changed. "
+            f"Missing path(s): {paths}. "
+            "Open the job in the Job Wizard and correct or remove the unavailable source path(s)."
+        )
 
 
 def _log_section(title: str) -> None:
@@ -210,6 +227,8 @@ class BackupJob:
         self._skip_finish: bool = False
         self._skip_reason: str = ""
         self._skip_status_written: bool = False
+        self._failure_code: str = ""
+        self._missing_source_paths: List[str] = []
         self._lock_fd = None
 
     # ------------------------------------------------------------------
@@ -260,6 +279,12 @@ class BackupJob:
         if exc_type is not None and not self._skip_finish:
             if self._borg_exit == 99:
                 self._borg_exit = 2
+            if isinstance(exc_val, RequiredSourcePathsMissing):
+                self._failure_code = exc_val.failure_code
+                self._missing_source_paths = [
+                    str(path) for path in exc_val.missing_paths
+                ]
+                self._final_msg = str(exc_val)
             logger.error("Job aborted by exception: %s", exc_val)
 
         if not self._skip_finish:
@@ -449,18 +474,22 @@ class BackupJob:
         Prüft Backup-Voraussetzungen: Pfade, borg-Installation, Cache-Verzeichnis.
 
         Lock-File wird NICHT hier erstellt – das übernimmt __enter__.
-        Fehlende Backup-Pfade sind Warnungen (kein Abbruch).
+        Fehlende Backup-Pfade brechen den Lauf vor Docker/VM und Borg ab.
         """
         _log_section("PHASE 1: VALIDATION")
         logger.info("Validating prerequisites...")
 
         logger.info("  [1/3] Checking backup paths...")
-        missing = [p for p in self.config.backup_paths if not p.is_dir()]
+        missing = [p for p in self.config.backup_paths if not p.exists()]
         existing_count = len(self.config.backup_paths) - len(missing)
         if missing:
-            logger.warning("  WARNING: %d path(s) do not exist:", len(missing))
+            logger.error("  ERROR: %d required source path(s) do not exist:", len(missing))
             for p in missing:
-                logger.warning("    - %s", p)
+                logger.error("    - %s", p)
+            logger.error(
+                "  Backup aborted before Docker, VMs, borg create, prune, or compact."
+            )
+            raise RequiredSourcePathsMissing(missing)
         logger.info(
             "  OK - %d/%d paths found", existing_count, len(self.config.backup_paths)
         )
@@ -830,8 +859,16 @@ class BackupJob:
             status_str = "error"
 
         stats = self._borg_stats
-        repo_size = self._get_repository_size()
-        repo_check_date, repo_check_status, repo_next_check = self._get_repo_check_info()
+        if self._failure_code == REQUIRED_SOURCE_PATHS_MISSING:
+            repo_size = 0
+            repo_check_date, repo_check_status, repo_next_check = (
+                "unknown",
+                "unknown",
+                "unknown",
+            )
+        else:
+            repo_size = self._get_repository_size()
+            repo_check_date, repo_check_status, repo_next_check = self._get_repo_check_info()
         error_msg = self._extract_error_message(exit_code)
 
         transfer_speed = 0
@@ -845,6 +882,8 @@ class BackupJob:
             duration_seconds=duration,
             exit_code=exit_code,
             status=status_str,
+            failure_code=self._failure_code,
+            missing_source_paths=self._missing_source_paths,
             error_message=error_msg,
             log_file=str(self.config.log_file),
             archive_name=stats.archive_name if stats else "",
@@ -910,6 +949,9 @@ class BackupJob:
         """Extrahiert Fehlermeldung aus Log-Datei (max. 500 Zeichen)."""
         if exit_code == 0:
             return ""
+
+        if self._final_msg:
+            return self._final_msg[:500]
 
         if self.config.log_file.is_file():
             try:
