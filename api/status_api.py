@@ -80,6 +80,10 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
                 "duration_seconds": st.duration_seconds,
                 "duration_formatted": format_duration(st.duration_seconds),
                 "exit_code": st.exit_code,
+                "failure_code": getattr(st, "failure_code", "") or "",
+                "missing_source_paths": list(
+                    getattr(st, "missing_source_paths", []) or []
+                ),
                 "error_message": st.error_message or "",
                 "skip_reason_code": getattr(st, "skip_reason_code", "") or "",
                 "skip_reason_text": getattr(st, "skip_reason_text", "") or "",

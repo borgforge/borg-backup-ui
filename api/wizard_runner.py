@@ -577,7 +577,11 @@ def main() -> int:
         return 2
 
     _ensure_runtime_import_paths(backup_scripts_dir)
-    from lib.backup_job import BackupJob, BackupJobConfig  # type: ignore
+    from lib.backup_job import (  # type: ignore
+        BackupJob,
+        BackupJobConfig,
+        RequiredSourcePathsMissing,
+    )
     from lib.borg_runner import BorgConfig, BorgRunner, parse_borg_stats  # type: ignore
     from lib.notifications import MailConfig, NtfyConfig  # type: ignore
     from lib.docker_manager import DockerConfig, DockerManager  # type: ignore
@@ -665,6 +669,8 @@ def main() -> int:
             exit_code = max(create_exit, maint_exit)
             job.set_result(exit_code, parse_borg_stats(job_config.log_file))
             return exit_code
+    except RequiredSourcePathsMissing:
+        return 2
     finally:
         smb_session.cleanup()
         lock_set.release()
