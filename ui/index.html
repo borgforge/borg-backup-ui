@@ -9,13 +9,14 @@
       try {
         const key = 'bbui_theme_preference';
         const pref = localStorage.getItem(key);
-        const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'dark';
+        const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'system';
         const resolved = clean === 'system'
           ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
           : clean;
         document.documentElement.setAttribute('data-theme', resolved);
       } catch (error) {
-        document.documentElement.setAttribute('data-theme', 'dark');
+        const resolved = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', resolved);
       }
     })();
   </script>

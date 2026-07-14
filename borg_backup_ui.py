@@ -2954,13 +2954,18 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 <title>Borg Backup Login</title>
 <script>
 (() => {
-  const key = 'bbui_theme_preference';
-  const pref = localStorage.getItem(key);
-  const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'dark';
-  const resolved = clean === 'system'
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : clean;
-  document.documentElement.setAttribute('data-theme', resolved);
+  try {
+    const key = 'bbui_theme_preference';
+    const pref = localStorage.getItem(key);
+    const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'system';
+    const resolved = clean === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : clean;
+    document.documentElement.setAttribute('data-theme', resolved);
+  } catch (error) {
+    const resolved = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', resolved);
+  }
 })();
 </script>
 <link rel="stylesheet" href="/ui/style.css">
@@ -3042,13 +3047,18 @@ if(document.getElementById('login-username')){document.getElementById('login-use
 <title>Borg Backup Setup</title>
 <script>
 (() => {
-  const key = 'bbui_theme_preference';
-  const pref = localStorage.getItem(key);
-  const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'dark';
-  const resolved = clean === 'system'
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : clean;
-  document.documentElement.setAttribute('data-theme', resolved);
+  try {
+    const key = 'bbui_theme_preference';
+    const pref = localStorage.getItem(key);
+    const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'system';
+    const resolved = clean === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : clean;
+    document.documentElement.setAttribute('data-theme', resolved);
+  } catch (error) {
+    const resolved = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', resolved);
+  }
 })();
 </script>
 <link rel="stylesheet" href="/ui/style.css">
