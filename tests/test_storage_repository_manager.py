@@ -75,13 +75,17 @@ def test_repository_maintenance_commands_use_repository_and_job_retention(tmp_pa
     manager = CheckManager()
 
     assert manager._repository_command(config, repository, "/mnt/backup/photos", "check", "quick") == [
-        "borg", "check", "--progress", "/mnt/backup/photos",
+        "borg", "check", "--lock-wait", "30", "--progress", "/mnt/backup/photos",
+    ]
+    assert manager._repository_command(config, repository, "/mnt/backup/photos", "check", "verify_data") == [
+        "borg", "check", "--lock-wait", "30", "--progress", "--verbose", "--verify-data",
+        "/mnt/backup/photos",
     ]
     assert manager._repository_command(config, repository, "/mnt/backup/photos", "compact", "quick") == [
-        "borg", "compact", "--progress", "/mnt/backup/photos",
+        "borg", "compact", "--lock-wait", "30", "--progress", "/mnt/backup/photos",
     ]
     assert manager._repository_command(config, repository, "/mnt/backup/photos", "prune", "quick") == [
-        "borg", "prune", "--list", "--progress",
+        "borg", "prune", "--lock-wait", "30", "--list", "--progress",
         "--keep-daily", "7", "--keep-weekly", "4", "--keep-monthly", "6", "--keep-yearly", "3",
         "/mnt/backup/photos",
     ]
@@ -131,7 +135,9 @@ def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: P
     ok, error = CheckManager().start_repository(config, "repo_test", "check", "quick")
 
     assert ok is True and error is None
-    assert captured["cmd"] == ["borg", "check", "--progress", "/mnt/backup/test"]
+    assert captured["cmd"] == [
+        "borg", "check", "--lock-wait", "30", "--progress", "/mnt/backup/test",
+    ]
     assert "shell" not in captured["kwargs"]
     assert captured["kwargs"]["env"]["BORG_PASSCOMMAND"].endswith(str(secret))
 
