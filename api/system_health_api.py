@@ -361,6 +361,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
 
     config_dir = root / "config"
     api_token_file = config_dir / ".api-token"
+    homepage_widget_token_file = config_dir / ".homepage-widget-token"
     ui_auth_file = config_dir / ".ui-auth.json"
 
     def _mode_octal(path: Path) -> str:
@@ -388,6 +389,8 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             secret_candidates.append(p)
     if api_token_file.exists():
         secret_candidates.append(api_token_file)
+    if homepage_widget_token_file.exists():
+        secret_candidates.append(homepage_widget_token_file)
     if ui_auth_file.exists():
         secret_candidates.append(ui_auth_file)
 

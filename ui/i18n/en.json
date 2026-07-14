@@ -1546,6 +1546,27 @@
       "checkInterval": "Check interval (days)",
       "abortParity": "Abort backup while a parity check is running"
     },
+    "homepageWidget": {
+      "title": "Homepage widget",
+      "description": "Provides Homepage with a compact read-only status summary. The dedicated token cannot access any other API endpoint.",
+      "configured": "Widget access is configured.",
+      "notConfigured": "Widget access is not configured yet.",
+      "create": "Create widget token",
+      "rotate": "Rotate token",
+      "revoke": "Revoke access",
+      "token": "Widget token",
+      "tokenOnce": "The complete token is shown only now. Store it like a password.",
+      "copy": "Copy token",
+      "yaml": "Homepage configuration",
+      "copyYaml": "Copy YAML",
+      "rotatedSuccess": "Widget token created. Copy the configuration before leaving this page.",
+      "revokedSuccess": "Widget access was revoked.",
+      "revokeTitle": "Revoke Homepage widget",
+      "revokeMessage": "The existing Homepage configuration will no longer be able to retrieve status data.",
+      "actionFailed": "Widget action failed: {message}",
+      "copied": "Copied to clipboard.",
+      "copyFailed": "Could not copy to the clipboard."
+    },
     "users": {
       "title": "User management",
       "sessionTimeout": "Session timeout (minutes)",

@@ -35,6 +35,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   smbSecretCleanupKeys: [],
   authStatus: null,
   authUsers: [],
+  homepageWidgetToken: '',
   appInfo: null,
   data: null,
   systemHealth: null,
@@ -123,6 +124,7 @@ async function refreshSettings() {
     if (health && reminderRes?.ok) {
       health.notification_reminders = await reminderRes.json();
     }
+    settingsState.homepageWidgetToken = '';
     settingsState.data = data;
     settingsState.systemHealth = health;
     renderSettings(data, health);
@@ -227,6 +229,7 @@ function renderSettings(data, systemHealth) {
     <div class="settings-tab-panel ${settingsState.activeTab === 'general' ? '' : 'hidden'}" data-settings-panel="general">
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
+      ${renderSettingsHomepageWidget(data.homepage_widget || {})}
       ${renderSettingsNotificationReminders(data.unraid_notifications || {})}
       ${renderSettingsSMTP(data.smtp || {})}
       ${renderSettingsUnraidNotifications(data.unraid_notifications || {})}
@@ -1861,6 +1864,89 @@ function renderSettingsGeneral(g) {
         ${settingsT('general.abortParity')}
       </label>
     </div>`);
+}
+
+function homepageWidgetYaml(token) {
+  const endpoint = `${window.location.origin}/api/widget/summary`;
+  return `- Borg Backup UI:\n    href: ${window.location.origin}/\n    widget:\n      type: customapi\n      url: ${endpoint}\n      refreshInterval: 60000\n      headers:\n        X-Borg-Widget-Token: "${token}"\n      mappings:\n        - field: status.label\n          label: Status\n        - field: display.backups\n          label: Backups\n        - field: display.restore_tests\n          label: Restore tests\n        - field: display.active\n          label: Active`;
+}
+
+function renderSettingsHomepageWidget(widget) {
+  const configured = !!widget?.configured;
+  const token = String(settingsState.homepageWidgetToken || '');
+  const yaml = token ? homepageWidgetYaml(token) : '';
+  const statusClass = configured ? 'success' : 'warning';
+  const statusText = settingsT(configured ? 'homepageWidget.configured' : 'homepageWidget.notConfigured');
+  return settingsCard(settingsT('homepageWidget.title'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h3v3H7zM14 9h3M14 13h3M7 16h10"/></svg>`,
+    `<div class="settings-body">
+      <p style="margin:0 0 12px">${settingsT('homepageWidget.description')}</p>
+      <div class="status-message ${statusClass}" style="margin-bottom:12px">${statusText}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" type="button" data-settings-action="homepage-widget-rotate">${settingsT(configured ? 'homepageWidget.rotate' : 'homepageWidget.create')}</button>
+        ${configured ? `<button class="btn btn-secondary btn-sm" type="button" data-settings-action="homepage-widget-revoke">${settingsT('homepageWidget.revoke')}</button>` : ''}
+      </div>
+      ${token ? `<div class="form-group" style="margin-top:16px">
+        <label class="form-label">${settingsT('homepageWidget.token')}</label>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px">
+          <input class="form-input mono" id="homepage-widget-token" value="${escAttr(token)}" readonly>
+          <button class="btn btn-secondary btn-sm" type="button" data-settings-action="homepage-widget-copy-token">${settingsT('homepageWidget.copy')}</button>
+        </div>
+        <small>${settingsT('homepageWidget.tokenOnce')}</small>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">${settingsT('homepageWidget.yaml')}</label>
+        <textarea class="form-input mono" id="homepage-widget-yaml" rows="18" readonly>${escHtml(yaml)}</textarea>
+        <button class="btn btn-secondary btn-sm" style="margin-top:8px" type="button" data-settings-action="homepage-widget-copy-yaml">${settingsT('homepageWidget.copyYaml')}</button>
+      </div>` : ''}
+      <div id="homepage-widget-message" class="status-message hidden" style="margin-top:12px"></div>
+    </div>`);
+}
+
+async function rotateHomepageWidgetToken() {
+  try {
+    const res = await fetch('/api/settings/homepage-widget-token', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || !data?.token) throw new Error(data?.message || `HTTP ${res.status}`);
+    settingsState.homepageWidgetToken = String(data.token);
+    settingsState.data.homepage_widget = { configured: true };
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    showMsg('homepage-widget-message', 'success', settingsT('homepageWidget.rotatedSuccess'));
+  } catch (err) {
+    showMsg('homepage-widget-message', 'error', settingsT('homepageWidget.actionFailed', { message: err.message }));
+  }
+}
+
+async function revokeHomepageWidgetToken() {
+  const confirmed = await _openSettingsDialog({
+    title: settingsT('homepageWidget.revokeTitle'),
+    message: settingsT('homepageWidget.revokeMessage'),
+    confirmText: settingsT('homepageWidget.revoke'),
+    confirmClass: 'btn-danger',
+  });
+  if (!confirmed) return;
+  try {
+    const res = await fetch('/api/settings/homepage-widget-token', { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    settingsState.homepageWidgetToken = '';
+    settingsState.data.homepage_widget = { configured: false };
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    showMsg('homepage-widget-message', 'success', settingsT('homepageWidget.revokedSuccess'));
+  } catch (err) {
+    showMsg('homepage-widget-message', 'error', settingsT('homepageWidget.actionFailed', { message: err.message }));
+  }
+}
+
+async function copyHomepageWidgetField(id) {
+  const value = String(document.getElementById(id)?.value || '');
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    showMsg('homepage-widget-message', 'success', settingsT('homepageWidget.copied'));
+  } catch (err) {
+    showMsg('homepage-widget-message', 'error', settingsT('homepageWidget.copyFailed'));
+  }
 }
 
 function renderSettingsUsers() {
@@ -3841,6 +3927,10 @@ async function onSettingsContentClick(event) {
   if (action === 'send-test-email') return sendTestEmail();
   if (action === 'send-test-ntfy') return sendTestNtfy();
   if (action === 'send-weekly-report') return sendWeeklyReport();
+  if (action === 'homepage-widget-rotate') return rotateHomepageWidgetToken();
+  if (action === 'homepage-widget-revoke') return revokeHomepageWidgetToken();
+  if (action === 'homepage-widget-copy-token') return copyHomepageWidgetField('homepage-widget-token');
+  if (action === 'homepage-widget-copy-yaml') return copyHomepageWidgetField('homepage-widget-yaml');
   if (action === 'restore-subtab') {
     settingsState.restoreSubtab = el.dataset.restoreSubtab === 'browse' ? 'browse' : 'tests';
     renderSettings(settingsState.data || {}, settingsState.systemHealth);

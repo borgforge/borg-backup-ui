@@ -31,13 +31,17 @@ from api.auth_store import (
     default_users_store as _default_users_store,
     has_any_users as _has_any_users,
     hash_password as _hash_password,
+    homepage_widget_token_status as _homepage_widget_token_status,
     load_or_create_api_token as _load_or_create_api_token,
     load_ui_auth_config as _load_ui_auth_config,
     normalize_username as _normalize_username,
     parse_cookie_header as _parse_cookie_header,
+    read_homepage_widget_token as _read_homepage_widget_token,
     read_sessions_store as _read_sessions_store,
     read_users_store as _read_users_store,
     safe_user_view as _safe_user_view,
+    revoke_homepage_widget_token as _revoke_homepage_widget_token,
+    rotate_homepage_widget_token as _rotate_homepage_widget_token,
     verify_password_hash as _verify_password_hash,
     users_file as _users_file,
     write_sessions_store as _write_sessions_store,
@@ -503,6 +507,23 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
         return False
 
+    def _is_homepage_widget_authorized(self) -> bool:
+        # Signed-in browser sessions may inspect the endpoint during setup.
+        if self._ui_auth_enabled() and self._is_ui_session_valid():
+            return True
+        expected = _read_homepage_widget_token(self.config)
+        if not expected:
+            return False
+        header_token = (self.headers.get("X-Borg-Widget-Token") or "").strip()
+        if header_token and secrets.compare_digest(header_token, expected):
+            return True
+        auth_header = (self.headers.get("Authorization") or "").strip()
+        if auth_header.lower().startswith("bearer "):
+            bearer = auth_header[7:].strip()
+            if bearer and secrets.compare_digest(bearer, expected):
+                return True
+        return False
+
     def _role_at_least(self, role: str, required: str) -> bool:
         have = self._ROLE_ORDER.get(str(role or "").strip().lower(), 0)
         need = self._ROLE_ORDER.get(str(required or "").strip().lower(), 9999)
@@ -642,6 +663,17 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 503,
                 "auth_store_unavailable",
                 "Authentication data is unavailable. Restore config/users.json from a trusted backup or follow the local recovery procedure.",
+                request_id=request_id,
+            )
+            return False
+
+        if path == "/api/widget/summary":
+            if self.command == "GET" and self._is_homepage_widget_authorized():
+                return True
+            self._send_api_error(
+                401,
+                "widget_unauthorized",
+                "The Homepage widget token is missing or invalid",
                 request_id=request_id,
             )
             return False
@@ -788,6 +820,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/storagebox/deploy/state": lambda: self._get_storagebox_deploy_state(parsed.query),
                 "/api/auth/status": self._get_auth_status,
                 "/api/auth/users": self._get_auth_users,
+                "/api/widget/summary": self._get_homepage_widget_summary,
             }
             fn = routes.get(path)
             if fn is None:
@@ -854,6 +887,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/auth/users/password-reset": self._post_auth_user_password_reset,
             "/api/auth/change-password": self._post_auth_change_password,
             "/api/auth/logout-all-sessions": self._post_auth_logout_all_sessions,
+            "/api/settings/homepage-widget-token": self._post_homepage_widget_token,
         }
         fn = routes.get(path)
         if fn is None:
@@ -886,6 +920,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore/history": self._delete_restore_history,
             "/api/repositories": self._delete_repository,
             "/api/auth/users": self._delete_auth_user,
+            "/api/settings/homepage-widget-token": self._delete_homepage_widget_token,
         }
         fn = routes.get(path)
         if fn is None:
@@ -898,6 +933,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_status(self) -> dict:
         from status_api import get_status_data
         return get_status_data(self.config)
+
+    def _get_homepage_widget_summary(self) -> dict:
+        from homepage_widget_api import build_homepage_widget_summary
+        return build_homepage_widget_summary(self.config)
 
     def _get_factory_reset_status(self) -> dict:
         from factory_reset_api import factory_reset_status
@@ -1658,7 +1697,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_settings(self) -> dict:
         from config_api import get_settings_data
-        return get_settings_data(self.config)
+        data = get_settings_data(self.config)
+        data["homepage_widget"] = _homepage_widget_token_status(self.config)
+        return data
+
+    def _post_homepage_widget_token(self) -> dict:
+        token = _rotate_homepage_widget_token(self.config)
+        self._security_audit("homepage_widget_token", "rotated")
+        return {"configured": True, "token": token}
+
+    def _delete_homepage_widget_token(self) -> dict:
+        revoked = _revoke_homepage_widget_token(self.config)
+        self._security_audit("homepage_widget_token", "revoked" if revoked else "not_configured")
+        return {"configured": False, "revoked": revoked}
 
     def _get_notification_reminder_diagnostics(self) -> dict:
         from notification_reminder_api import get_notification_reminder_diagnostics
@@ -3149,7 +3200,12 @@ btn.addEventListener('click',doSetup);
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(content)))
-            self.send_header("Cache-Control", "no-cache")
+            cache_control = (
+                "no-store"
+                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token"}
+                else "no-cache"
+            )
+            self.send_header("Cache-Control", cache_control)
             self.send_header("X-Request-Id", request_id)
             for hk, hv in self._extra_response_headers:
                 self.send_header(hk, hv)

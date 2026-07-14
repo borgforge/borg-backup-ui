@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #228
+- Added a dedicated read-only summary endpoint for Homepage dashboards with backup, restore-verification, overdue and active-run status.
+- Homepage uses a separately managed widget token that cannot access the general Borg Backup UI API and is stored with restricted file permissions.
+- Settings can create, rotate or revoke the widget token and provide a ready-to-copy Homepage Custom API configuration.
+- Widget responses use local cached state only and omit repository paths, logs, raw errors, user data and secrets.
+
 ### Issue #223
 - New and migrated SMB profiles use automatic modern SMB 2/3 protocol negotiation instead of forcing SMB 3.0.
 - Administrators can still select SMB 3.1.1, 3.0, 2.1 or 2.0 explicitly; SMB1 is rejected and never used as an automatic fallback.

@@ -117,6 +117,7 @@ publication requirements are complete.
 | [Release workflow](docs/release-workflow.md) | Build, test-channel, and stable release process. |
 | [Manual maintenance tests](docs/manual-maintenance-tests.md) | Manual validation checklist for Unraid test systems. |
 | [Changelog](docs/changelog.md) | Technical and release history. |
+| [Homepage widget](docs/integrations/homepage-widget.md) | Read-only dashboard integration and token setup. |
 | [German user manual](docs/handbuch/README.md) | Current German handbuch draft. |
 
 ## Development
