@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.13.2248">
+<!ENTITY version   "2026.07.14.1342">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.14.1342###
+- Issue #223:
+  - SMB profiles now negotiate modern SMB 2/3 automatically by default.
+  - SMB profile checks provide actionable diagnostics for protocol, authentication, permissions, share and network failures.
+
 ###2026.07.13.2248###
 - Issue #205:
   - Repository creation and import now validate targets before writing and report actionable conflicts.
@@ -323,7 +328,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>243714ccf09d44eb687aa2249e3f6ef1</MD5>
+<MD5>72a930901f2be0a383da3f2c4493ba73</MD5>
 </FILE>
 
 <!--
