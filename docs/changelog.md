@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #218
+- Repository check, data verification, prune and compact now wait up to 30 seconds for transient Borg lock contention.
+- Added a privacy-safe troubleshooting procedure for persistent repository locks without automatic lock removal.
+
 ### Issue #215
 - VM restart recovery now validates only the VMs stopped by the current backup job.
 - Failed VM restarts remain visible as open runtime-recovery entries and identify the affected VMs.

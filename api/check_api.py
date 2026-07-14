@@ -55,6 +55,7 @@ class _CheckState:
 class CheckManager:
     _instance: Optional["CheckManager"] = None
     _init_lock = threading.Lock()
+    _LOCK_WAIT_SECONDS = "30"
     _MODE_ARGS = {
         "quick": ["--progress"],
         "verbose": ["--progress", "--verbose"],
@@ -159,9 +160,15 @@ class CheckManager:
 
     def _repository_command(self, config: dict, repository: dict, repo_path: str, action: str, mode: str) -> list[str]:
         if action == "check":
-            return ["borg", "check", *self._MODE_ARGS[mode], repo_path]
+            return [
+                "borg", "check", "--lock-wait", self._LOCK_WAIT_SECONDS,
+                *self._MODE_ARGS[mode], repo_path,
+            ]
         if action == "compact":
-            return ["borg", "compact", "--progress", repo_path]
+            return [
+                "borg", "compact", "--lock-wait", self._LOCK_WAIT_SECONDS,
+                "--progress", repo_path,
+            ]
 
         from repository_context import jobs_using_repository
         used_by = jobs_using_repository(config, str(repository.get("repository_key") or ""))
@@ -169,7 +176,10 @@ class CheckManager:
         if not job_key:
             raise ValueError("Prune requires a backup job with a retention policy")
         retention = self._job_retention(config, job_key)
-        cmd = ["borg", "prune", "--list", "--progress"]
+        cmd = [
+            "borg", "prune", "--lock-wait", self._LOCK_WAIT_SECONDS,
+            "--list", "--progress",
+        ]
         for key, option in (("daily", "--keep-daily"), ("weekly", "--keep-weekly"), ("monthly", "--keep-monthly"), ("yearly", "--keep-yearly")):
             value = str(retention.get(key) or "").strip()
             if value:
