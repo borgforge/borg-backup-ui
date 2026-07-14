@@ -340,11 +340,19 @@ class BackupJob:
             and not self._vms_restarted
         ):
             self._vms_restarted = True
-            self.vm_manager.start_all(self._vm_shutdown_result)
+            start_result = self.vm_manager.start_all(self._vm_shutdown_result)
+            if start_result.success:
+                message = f"All {start_result.count_after} VM(s) restarted successfully."
+            else:
+                failed_names = ", ".join(start_result.failed_vms) or "unknown"
+                message = (
+                    f"{len(start_result.failed_vms)} VM(s) could not be restarted: "
+                    f"{failed_names}."
+                )
             self._mark_runtime_restarted(
                 self._vm_recovery_id,
-                success=True,
-                message="VM restart was attempted after backup completion.",
+                success=bool(start_result.success),
+                message=message,
             )
 
     def check_usb_mount(self, mount_path: Path) -> None:
