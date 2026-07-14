@@ -10,6 +10,7 @@ from . import (
     job_source_paths_v1,
     notification_events_v1,
     restore_history_v1,
+    smb_protocol_auto_v1,
 )
 from .audit import append_event, config_dir as audit_config_dir, read_state
 
@@ -18,6 +19,7 @@ MIGRATIONS = [
     notification_events_v1,
     canonical_data_model_v1,
     job_source_paths_v1,
+    smb_protocol_auto_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}

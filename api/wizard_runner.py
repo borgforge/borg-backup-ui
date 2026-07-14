@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+from smb_protocol import build_smb_mount_options, classify_smb_mount_error, sanitize_smb_error
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
@@ -482,30 +484,14 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
         return sess
 
     src = f"//{server}/{share}"
-    opts = [f"credentials={password_file}", "iocharset=utf8"]
-    vers = str(storage.get("vers", "")).strip() or "3.0"
-    opts.append(f"vers={vers}")
-    sec = str(storage.get("sec", "")).strip()
-    if sec:
-        opts.append(f"sec={sec}")
-    uid = str(storage.get("uid", "")).strip()
-    if uid:
-        opts.append(f"uid={uid}")
-    gid = str(storage.get("gid", "")).strip()
-    if gid:
-        opts.append(f"gid={gid}")
-    file_mode = str(storage.get("file_mode", "")).strip()
-    if file_mode:
-        opts.append(f"file_mode={file_mode}")
-    dir_mode = str(storage.get("dir_mode", "")).strip()
-    if dir_mode:
-        opts.append(f"dir_mode={dir_mode}")
+    opts = build_smb_mount_options(storage, password_file)
 
     cmd = ["mount", "-t", "cifs", src, mount_path, "-o", ",".join(opts)]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
     if res.returncode != 0:
-        msg = (res.stderr or res.stdout or "SMB mount failed").strip()
-        raise RuntimeError(f"SMB mount failed ({src} -> {mount_path}): {msg}")
+        technical = sanitize_smb_error(res.stderr or res.stdout or "SMB mount failed")
+        _code, hint = classify_smb_mount_error(technical)
+        raise RuntimeError(f"{hint} Technical details: {technical}")
     sess.mounted_by_runner = True
     logging.info("SMB mount succeeded: %s -> %s", src, mount_path)
     return sess

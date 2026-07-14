@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #223
+- New and migrated SMB profiles use automatic modern SMB 2/3 protocol negotiation instead of forcing SMB 3.0.
+- Administrators can still select SMB 3.1.1, 3.0, 2.1 or 2.0 explicitly; SMB1 is rejected and never used as an automatic fallback.
+- SMB profile tests, backups, restores and restore tests now share the same protocol policy and provide actionable network, share, authentication, permission and protocol diagnostics without exposing credentials.
+
 ### Issue #185
 - New users now follow the browser or operating-system theme instead of defaulting to dark mode.
 - Existing explicit light, dark or system preferences remain unchanged.

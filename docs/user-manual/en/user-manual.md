@@ -708,7 +708,13 @@ Important fields:
 - mount path
 - username
 - password
+- SMB version: **Automatic (SMB 2/3)** by default; a fixed modern version can be selected when required
+- optional security setting for specific server requirements
 - optional mount parameters
+
+The status check verifies TCP port 445, credentials, a temporary mount, the share, write access, and a clean unmount. Errors distinguish network, share name, authentication/permissions, and protocol/mount options. SMB1 is not supported and is never used as an automatic fallback.
+
+> **Tip:** Start with automatic SMB 2/3 negotiation. Select a fixed version only when the server documentation explicitly requires it.
 
 Typical actions:
 

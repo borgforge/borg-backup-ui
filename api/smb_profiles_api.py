@@ -9,6 +9,13 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from smb_protocol import (
+    build_smb_mount_options,
+    classify_smb_mount_error,
+    normalize_smb_version,
+    sanitize_smb_error,
+)
+
 
 def _smb_secret_path(profile_key: str) -> Path:
     safe_key = re.sub(r"[^a-z0-9_-]+", "-", str(profile_key or "").strip().lower()).strip("-")
@@ -29,7 +36,7 @@ def normalize_smb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str
         mount_path = str(row.get("mount_path", "")).strip()
         username = str(row.get("username", "")).strip()
         smb_password = str(row.get("smb_password", row.get("password", ""))).strip()
-        vers = str(row.get("vers", "")).strip() or "3.0"
+        vers = normalize_smb_version(row.get("vers"))
         sec = str(row.get("sec", "")).strip()
         if not name or not server or not share or not mount_path or not username:
             continue
@@ -109,7 +116,7 @@ def prepare_smb_profiles_for_save(raw_value: str) -> List[Dict[str, str]]:
             "share": str(row.get("share", "")).strip(),
             "mount_path": str(row.get("mount_path", "")).strip(),
             "username": username,
-            "vers": str(row.get("vers", "")).strip() or "3.0",
+            "vers": normalize_smb_version(row.get("vers")),
             "sec": str(row.get("sec", "")).strip(),
             "password_file": str(secret_file),
         })
@@ -150,7 +157,7 @@ def get_smb_profiles_with_status(ui_config: dict) -> List[Dict[str, Any]]:
             "share": str(row.get("share", "")).strip(),
             "mount_path": mount_path,
             "username": str(row.get("username", "")).strip(),
-            "vers": str(row.get("vers", "")).strip() or "3.0",
+            "vers": normalize_smb_version(row.get("vers")),
             "sec": str(row.get("sec", "")).strip(),
             "is_mounted": mounted,
             "jobs_count": len(refs.get(key, [])),
@@ -208,16 +215,30 @@ def run_smb_profile_action(ui_config: dict, profile_key: str, action: str) -> Di
     if act == "mount":
         if _mounted():
             return {"ok": True, "action": "mount", "message": "Already mounted", "message_code": "smb_already_mounted"}
-        opts = [f"credentials={cred}", "iocharset=utf8", f"vers={profile['vers']}"]
-        if profile.get("sec"):
-            opts.append(f"sec={profile['sec']}")
+        opts = build_smb_mount_options(profile, cred)
         res = subprocess.run(
             ["mount", "-t", "cifs", src, mount_path, "-o", ",".join(opts)],
             capture_output=True, text=True, timeout=30, check=False,
         )
         ok = res.returncode == 0
-        msg = "Mount OK" if ok else (res.stderr or res.stdout or "Mount failed").strip()
-        return {"ok": ok, "action": "mount", "message": msg, "message_code": "smb_mount_success" if ok else "smb_mount_failed"}
+        if ok:
+            return {
+                "ok": True,
+                "action": "mount",
+                "message": "Mount OK",
+                "message_code": "smb_mount_success",
+            }
+        technical = sanitize_smb_error(res.stderr or res.stdout or "Mount failed")
+        failure_code, failure_hint = classify_smb_mount_error(technical)
+        return {
+            "ok": False,
+            "action": "mount",
+            "message": failure_hint,
+            "message_code": "smb_mount_failed",
+            "failure_code": failure_code,
+            "failure_hint": failure_hint,
+            "technical_details": technical,
+        }
 
     if not _mounted():
         return {"ok": True, "action": "unmount", "message": "Already unmounted", "message_code": "smb_already_unmounted"}
@@ -356,6 +377,9 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
             "is_dir": False,
             "is_mounted": False,
             "message": "",
+            "failure_code": "",
+            "failure_hint": "",
+            "technical_details": "",
             "checks": {
                 "port_ok": False,
                 "port_msg": "",
@@ -456,22 +480,16 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
                 temp_cred_file.chmod(0o600)
                 cred_path = temp_cred_file
 
-            vers = str(row.get("vers", "")).strip() or "3.0"
-            sec = str(row.get("sec", "")).strip()
-            vers_candidates = [vers] if vers else ["3.1.1", "3.0", "2.1"]
-            errors: List[str] = []
-            mnt = None
-            for v in vers_candidates:
-                opts = [f"credentials={cred_path}", "iocharset=utf8", f"vers={v}"]
-                if sec:
-                    opts.append(f"sec={sec}")
-                cmd = ["mount", "-t", "cifs", f"//{server}/{share}", mount_path, "-o", ",".join(opts)]
-                mnt = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
-                if mnt.returncode == 0:
-                    break
-                errors.append(f"vers={v}: {(mnt.stderr or mnt.stdout or 'mount failed').strip()}")
-            if not mnt or mnt.returncode != 0:
-                item["message"] = "SMB test mount failed: " + " | ".join(errors[:3])
+            opts = build_smb_mount_options(row, cred_path)
+            cmd = ["mount", "-t", "cifs", f"//{server}/{share}", mount_path, "-o", ",".join(opts)]
+            mnt = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
+            if mnt.returncode != 0:
+                technical = sanitize_smb_error(mnt.stderr or mnt.stdout or "mount failed")
+                failure_code, failure_hint = classify_smb_mount_error(technical)
+                item["failure_code"] = failure_code
+                item["failure_hint"] = failure_hint
+                item["technical_details"] = technical
+                item["message"] = failure_hint
                 item["checks"]["mount_msg"] = item["message"]
                 if temp_cred_file and temp_cred_file.exists():
                     temp_cred_file.unlink(missing_ok=True)
@@ -481,7 +499,8 @@ def test_smb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
             test_mounted = True
             item["is_mounted"] = True
             item["checks"]["mount_ok"] = True
-            item["checks"]["mount_msg"] = "Test mount succeeded"
+            protocol = normalize_smb_version(row.get("vers"))
+            item["checks"]["mount_msg"] = f"Test mount succeeded (protocol: {protocol})"
         else:
             item["checks"]["mount_ok"] = True
             item["checks"]["mount_msg"] = "Already mounted"

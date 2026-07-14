@@ -13,8 +13,11 @@ if str(API_ROOT) not in sys.path:
 
 from smb_profiles_api import (
     normalize_smb_profile_rows,
+    run_smb_profile_action,
+    test_smb_profiles_status as check_smb_profiles_status,
     validate_smb_profile_usage_before_save,
 )
+from smb_protocol import build_smb_mount_options, normalize_smb_version
 from repositories_api import write_repository_store
 from storage_objects_api import write_storage_store
 
@@ -39,12 +42,108 @@ def test_smb_profile_normalization_derives_key_from_secret_path(tmp_path: Path):
         "share": "backup",
         "mount_path": "/mnt/user/borg-backup-ui/remotes/nas-a",
         "username": "backup",
-        "vers": "3.0",
+        "vers": "auto",
         "sec": "",
         "password_file": str(cred),
         "smb_password": "",
         "password_set": "true",
     }]
+
+
+def test_smb_protocol_auto_omits_fixed_dialect_and_rejects_smb1():
+    assert build_smb_mount_options({"vers": "auto"}, "/secret.cred") == [
+        "credentials=/secret.cred",
+        "iocharset=utf8",
+    ]
+    assert "vers=3.0" in build_smb_mount_options({"vers": "3.0"}, "/secret.cred")
+    with pytest.raises(ValueError, match="SMB1 is not supported"):
+        normalize_smb_version("1.0")
+
+
+def test_smb_status_reports_actionable_protocol_error_without_secret(tmp_path: Path, monkeypatch):
+    credential = tmp_path / ".smb-nas.cred"
+    credential.write_text("username=backup\npassword=top-secret\n", encoding="utf-8")
+    mount_path = tmp_path / "mount"
+    calls = []
+
+    class SocketContext:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr("socket.create_connection", lambda *_args, **_kwargs: SocketContext())
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        if command[0] == "findmnt":
+            return type("Result", (), {"returncode": 1, "stdout": "", "stderr": ""})()
+        if command[0] == "mount":
+            return type("Result", (), {
+                "returncode": 32,
+                "stdout": "",
+                "stderr": "mount error(22): Invalid argument password=top-secret",
+            })()
+        raise AssertionError(command)
+
+    monkeypatch.setattr("smb_profiles_api.subprocess.run", fake_run)
+    result = check_smb_profiles_status([{
+        "key": "nas",
+        "name": "NAS",
+        "server": "nas.example.test",
+        "share": "backup",
+        "mount_path": str(mount_path),
+        "username": "backup",
+        "password_file": str(credential),
+        "vers": "auto",
+    }])["results"][0]
+
+    mount_command = next(command for command in calls if command[0] == "mount")
+    assert "vers=" not in mount_command[-1]
+    assert result["failure_code"] == "SMB_PROTOCOL_OR_OPTIONS_FAILED"
+    assert "automatic SMB 2/3 negotiation" in result["failure_hint"]
+    assert "top-secret" not in result["technical_details"]
+    assert "password=***" in result["technical_details"]
+
+
+def test_manual_smb_mount_uses_same_safe_diagnostics(tmp_path: Path, monkeypatch):
+    import smb_profiles_api
+
+    secret = tmp_path / ".smb-nas.cred"
+    secret.write_text("username=backup\npassword=top-secret\n", encoding="utf-8")
+    profile = {
+        "key": "nas",
+        "name": "NAS",
+        "server": "nas.example.test",
+        "share": "backup",
+        "mount_path": str(tmp_path / "mount"),
+        "username": "backup",
+        "password_file": str(secret),
+        "vers": "auto",
+    }
+    monkeypatch.setattr(smb_profiles_api, "get_smb_profiles_with_status", lambda _config: [profile])
+    monkeypatch.setattr(smb_profiles_api, "_smb_secret_path", lambda _key: secret)
+
+    def fake_run(command, **_kwargs):
+        if command[0] == "findmnt":
+            return type("Result", (), {"returncode": 1, "stdout": "", "stderr": ""})()
+        if command[0] == "mount":
+            assert "vers=" not in command[-1]
+            return type("Result", (), {
+                "returncode": 32,
+                "stdout": "",
+                "stderr": "mount error(13): Permission denied password=top-secret",
+            })()
+        raise AssertionError(command)
+
+    monkeypatch.setattr(smb_profiles_api.subprocess, "run", fake_run)
+    result = run_smb_profile_action({}, "nas", "mount")
+
+    assert result["ok"] is False
+    assert result["failure_code"] == "SMB_AUTH_OR_PERMISSION_FAILED"
+    assert "top-secret" not in result["technical_details"]
+    assert "password=***" in result["technical_details"]
 
 
 def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: Path, monkeypatch):
