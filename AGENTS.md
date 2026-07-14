@@ -184,6 +184,11 @@ Der Branch `test-channel` ist ein Sonderbranch und wird nicht durch dieselben
 Regeln wie `main` geschuetzt. Er wird ausschliesslich ueber
 `./plugin/deploy-test.sh <version>` aktualisiert.
 
+`test-channel` ist ein kurzlebiger Snapshot-Branch. Das Deploy-Skript darf nur
+fuer diesen Branch einen neuen Root-Commit mit exakt einem Manifest und einem
+Paket per `--force-with-lease` veroeffentlichen. Fuer alle anderen Branches
+bleiben Force Pushes verboten.
+
 ## Sprache und Kommunikation
 
 Die direkte Kommunikation mit dem Repository-Maintainer erfolgt auf Deutsch.
@@ -398,7 +403,7 @@ Der Branch `test-channel` ist kein normaler Entwicklungsbranch.
 Er enthaelt ausschliesslich:
 
 * borg-backup-ui-test.plg
-* zugehoerige Release-Pakete
+* genau ein zugehoeriges Release-Paket
 
 Deploys ausschliesslich ueber:
 
@@ -409,8 +414,8 @@ Deploys ausschliesslich ueber:
 Nach jedem Deploy pruefen:
 
 ```bash
-git fetch origin test-channel
-git show origin/test-channel:borg-backup-ui-test.plg
+TEST_COMMIT="$(git ls-remote origin refs/heads/test-channel | awk '{print $1}')"
+curl -fsSL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_COMMIT}/borg-backup-ui-test.plg"
 ```
 
 Verifizieren:
@@ -419,6 +424,7 @@ Verifizieren:
 * pluginURL
 * pkgurl
 * MD5
+* genau ein Paket im Snapshot
 
 ---
 

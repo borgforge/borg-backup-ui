@@ -161,14 +161,21 @@ Das Skript:
 - pusht den Test-Channel
 - stellt lokale Stable-Build-Dateien anschliessend wieder her, damit der
   Arbeitsbranch kein Stable-Manifest und kein Stable-Paket enthaelt
+- veroeffentlicht `test-channel` als einzelnen Snapshot ohne Paket-Historie
+
+Der Branch `test-channel` ist absichtlich kurzlebig. Jeder Deploy erzeugt einen
+neuen Root-Commit mit genau dem Test-Manifest und dem darin referenzierten
+Paket. Das Skript aktualisiert ausschliesslich diesen Sonderbranch kontrolliert
+mit `--force-with-lease`. Stimmt der zuvor gelesene Remote-Stand wegen eines
+parallelen Deploys nicht mehr, bricht der Push ab, statt fremde Aenderungen zu
+ueberschreiben.
 
 Die Version kann explizit angegeben werden. Ohne Angabe wird ein Zeitstempel im
 Format `YYYY.MM.DD.HHMM` verwendet.
 
-GitHub-Fetch- oder Push-Schritte im Deploy koennen mehrere Minuten ohne neue
-Konsolenausgabe laufen. Den Deploy nicht vorschnell abbrechen. Wenn unklar ist,
-ob der Prozess noch laeuft, zuerst in einer zweiten Shell den Prozess- und
-Remote-Zustand pruefen, statt `Ctrl-C` zu senden.
+Der Paket-Upload kann abhaengig von der Verbindung kurze Zeit ohne neue
+Konsolenausgabe laufen. Alte Testpakete werden dabei weder heruntergeladen noch
+erneut uebertragen.
 
 Paket-Builds sind aktuell nicht garantiert byte-identisch reproduzierbar. Ein
 erneuter Build derselben Version kann daher eine andere MD5 erzeugen. Relevant
@@ -220,13 +227,16 @@ Release-Artefakte und offene Pull Requests.
 
 ### Test-Channel-Deploy pruefen
 
-Nach jedem Test-Channel-Deploy muss das erzeugte Remote-Manifest direkt
-geprueft werden:
+Nach jedem Test-Channel-Deploy muss der erzeugte Remote-Snapshot direkt
+geprueft werden, ohne den kurzlebigen Branch in die lokale Haupt-Git-Datenbank
+zu laden:
 
 ```bash
-git fetch origin test-channel
-git show origin/test-channel:borg-backup-ui-test.plg
-git show origin/test-channel:releases/borg-backup-ui-<version>.txz >/dev/null
+TEST_COMMIT="$(git ls-remote origin refs/heads/test-channel | awk '{print $1}')"
+MANIFEST_URL="https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_COMMIT}/borg-backup-ui-test.plg"
+PACKAGE_URL="https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_COMMIT}/releases/borg-backup-ui-<version>.txz"
+curl -fsSL "$MANIFEST_URL"
+curl -fsSL "$PACKAGE_URL" | md5sum
 ```
 
 Dabei pruefen:
@@ -255,11 +265,11 @@ dem Commit auf den Stand von `origin/main` zuruecksetzen.
 Nach erfolgreichem Test-Channel-Deploy zusaetzlich pruefen:
 
 ```bash
-git fetch origin main test-channel
+git fetch origin main
 git show origin/main:borg-backup-ui.plg | grep 'ENTITY version'
-git show origin/test-channel:borg-backup-ui-test.plg | grep 'ENTITY version'
-git show origin/test-channel:borg-backup-ui-test.plg | grep '<MD5>'
-git show origin/test-channel:releases/borg-backup-ui-<version>.txz | md5sum
+curl -fsSL "$MANIFEST_URL" | grep 'ENTITY version'
+curl -fsSL "$MANIFEST_URL" | grep '<MD5>'
+curl -fsSL "$PACKAGE_URL" | md5sum
 ```
 
 Die Test-Channel-Version und die MD5 muessen zusammenpassen. `origin/main` muss
