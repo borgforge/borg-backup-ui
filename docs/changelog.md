@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #215
+- VM restart recovery now validates only the VMs stopped by the current backup job.
+- Failed VM restarts remain visible as open runtime-recovery entries and identify the affected VMs.
+
 ### Issue #196
 - Static UI assets are now restricted to the resolved UI directory, including symlink and traversal containment checks.
 - Job logs, restore-test logs, restore downloads and repository-check streams now use the central API authentication and role policy.

@@ -88,6 +88,28 @@ class VmShutdownResult:
         return len(self.stopped_vms)
 
 
+@dataclass
+class VmStartResult:
+    """Result of restarting the VMs stopped by a backup job."""
+
+    target_vms: List[str] = field(default_factory=list)
+    started_vms: List[str] = field(default_factory=list)
+    failed_vms: List[str] = field(default_factory=list)
+    available: bool = True
+
+    @property
+    def count_before(self) -> int:
+        return len(self.target_vms)
+
+    @property
+    def count_after(self) -> int:
+        return len(self.started_vms)
+
+    @property
+    def success(self) -> bool:
+        return not self.failed_vms
+
+
 # ---------------------------------------------------------------------------
 # Standalone-Funktionen (analog zu docker_available in docker_manager.py)
 # ---------------------------------------------------------------------------
@@ -279,47 +301,61 @@ class VmManager:
         logger.info("Selected VMs shut down successfully")
         return VmShutdownResult(stopped_vms=list(running))
 
-    def start_all(self, result: VmShutdownResult) -> None:
+    def start_all(self, result: VmShutdownResult) -> VmStartResult:
         """
         Startet alle zuvor gestoppten VMs neu.
 
         Fehlertolerant – einzelne Startfehler brechen den Prozess nicht ab.
         Validiert nach startup_wait ob alle VMs laufen.
         """
-        if not virsh_available() or not result.stopped_vms:
-            return
+        target_vms = _normalize_vm_names(result.stopped_vms)
+        start_result = VmStartResult(target_vms=target_vms)
+        if not target_vms:
+            return start_result
+        if not virsh_available():
+            start_result.available = False
+            start_result.failed_vms = list(target_vms)
+            logger.error(
+                "ERROR: virsh is unavailable; %d VM(s) could not be restarted: %s",
+                len(target_vms),
+                ", ".join(target_vms),
+            )
+            return start_result
 
-        logger.info("Restarting %d VM(s)...", result.count)
-        for vm in result.stopped_vms:
+        logger.info("Restarting %d VM(s)...", len(target_vms))
+        for vm in target_vms:
             logger.info("  Starting: %s", vm)
             try:
-                subprocess.run(
+                proc = subprocess.run(
                     ["virsh", "start", vm],
-                    capture_output=True, timeout=30,
+                    capture_output=True, text=True, timeout=30,
                 )
+                if proc.returncode != 0:
+                    detail = (proc.stderr or proc.stdout or "virsh start failed").strip()
+                    logger.warning("  WARNING: Could not start %s: %s", vm, detail)
             except (subprocess.TimeoutExpired, OSError) as exc:
                 logger.warning("  WARNING: Could not start %s: %s", vm, exc)
 
         time.sleep(self.config.startup_wait)
 
-        running_after = self._get_running_vms()
-        running_count = len(running_after)
-        if running_count == result.count:
+        running_after = set(self._get_running_vms())
+        start_result.started_vms = [vm for vm in target_vms if vm in running_after]
+        start_result.failed_vms = [vm for vm in target_vms if vm not in running_after]
+        if start_result.success:
             logger.info(
                 "All VMs restarted successfully (%d/%d)",
-                running_count, result.count,
+                start_result.count_after, start_result.count_before,
             )
         else:
-            failed = result.count - running_count
             logger.warning(
                 "WARNING: %d VM(s) could not be started (%d/%d running)",
-                failed, running_count, result.count,
+                len(start_result.failed_vms),
+                start_result.count_after,
+                start_result.count_before,
             )
-            not_started = [
-                vm for vm in result.stopped_vms if vm not in running_after
-            ]
-            for vm in not_started:
+            for vm in start_result.failed_vms:
                 logger.warning("  - %s", vm)
+        return start_result
 
     def get_vm_os_type(self, vm_name: str) -> str:
         """
