@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FOUNDATION = ROOT / "ui" / "design-system.css"
+STYLE = ROOT / "ui" / "style.css"
 
 
 def _foundation() -> str:
@@ -23,6 +24,46 @@ def test_main_app_applies_stored_theme_before_stylesheets() -> None:
     assert "bbui_theme_preference" in html
     assert "document.documentElement.setAttribute('data-theme', resolved)" in html
     assert html.index("bbui_theme_preference") < html.index('<link rel="stylesheet" href="/ui/style.css">')
+
+
+def test_new_users_follow_system_theme_without_overwriting_existing_preferences() -> None:
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+    component = (ROOT / "ui" / "js" / "components" / "theme.js").read_text(encoding="utf-8")
+    server = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
+
+    system_fallback = "? pref : 'system'"
+    assert system_fallback in html
+    assert system_fallback in component
+    assert server.count(system_fallback) == 2
+    assert server.count("window.matchMedia?.('(prefers-color-scheme: dark)').matches") == 2
+    assert "localStorage.setItem(UI_THEME_KEY, clean)" in component
+    assert "return 'system';" in component
+    assert "setAttribute('data-theme', 'dark')" not in html
+    assert "localStorage.removeItem" not in component
+    assert "localStorage.clear" not in component
+
+
+def test_dark_theme_secondary_text_meets_normal_text_contrast() -> None:
+    dark_theme = STYLE.read_text(encoding="utf-8").split(':root[data-theme="light"]', 1)[0]
+
+    def token(name: str) -> str:
+        match = re.search(rf"{re.escape(name)}:\s*(#[0-9a-fA-F]{{6}})", dark_theme)
+        assert match, name
+        return match.group(1)
+
+    def luminance(color: str) -> float:
+        channels = [int(color[index:index + 2], 16) / 255 for index in (1, 3, 5)]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    for foreground_name in ("--text-secondary", "--text-muted"):
+        for background_name in ("--bg-base", "--bg-surface", "--bg-card-opaque"):
+            foreground = luminance(token(foreground_name))
+            background = luminance(token(background_name))
+            contrast = (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+            assert contrast >= 4.5, (
+                f"{foreground_name} on {background_name} contrast is only {contrast:.2f}:1"
+            )
 
 
 def test_foundation_defines_shared_tokens_for_both_themes() -> None:

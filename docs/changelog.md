@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #185
+- New users now follow the browser or operating-system theme instead of defaulting to dark mode.
+- Existing explicit light, dark or system preferences remain unchanged.
+- Secondary dark-theme text uses a WCAG-readable contrast token across shared UI components.
+
 ### Issue #214
 - Backup runs now fail before Docker or VM shutdown and before Borg maintenance when any configured source path is missing.
 - Failure status records include the stable `required_source_paths_missing` code and list every missing path with a corrective action.

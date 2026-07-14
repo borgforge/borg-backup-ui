@@ -8,8 +8,12 @@
   let uiThemeMediaQuery = null;
 
   function getStoredThemePreference() {
-    const p = localStorage.getItem(UI_THEME_KEY);
-    return (p === 'light' || p === 'dark' || p === 'system') ? p : 'dark';
+    try {
+      const p = localStorage.getItem(UI_THEME_KEY);
+      return (p === 'light' || p === 'dark' || p === 'system') ? p : 'system';
+    } catch (error) {
+      return 'system';
+    }
   }
 
   function resolvedTheme(pref) {
@@ -18,8 +22,14 @@
   }
 
   function applyThemePreference(pref, persist = true) {
-    const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'dark';
-    if (persist) localStorage.setItem(UI_THEME_KEY, clean);
+    const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'system';
+    if (persist) {
+      try {
+        localStorage.setItem(UI_THEME_KEY, clean);
+      } catch (error) {
+        // The selected theme still applies when browser storage is unavailable.
+      }
+    }
     document.documentElement.setAttribute('data-theme', resolvedTheme(clean));
     const sel = document.getElementById('ui-theme-select');
     if (sel) sel.value = clean;
