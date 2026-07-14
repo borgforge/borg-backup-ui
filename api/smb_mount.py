@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 from typing import Optional
+
+from smb_protocol import build_smb_mount_options, classify_smb_mount_error, sanitize_smb_error
 
 
 class SmbMountGuard:
@@ -62,19 +63,6 @@ def _job_smb_meta(config: dict, job_key: str) -> Optional[dict]:
     }
 
 
-def _validate_mount_option_value(val: str) -> str:
-    raw = str(val or "").strip()
-    if not raw:
-        raise ValueError("Empty SMB option values are not allowed")
-    if "," in raw:
-        raise ValueError(f"Invalid SMB option value (commas are not allowed): {raw}")
-    if "=" in raw:
-        raise ValueError(f"Invalid SMB option value (= is not allowed): {raw}")
-    if not re.fullmatch(r"[\w.:/+@-]+", raw):
-        raise ValueError(f"Invalid SMB option value: {raw}")
-    return raw
-
-
 def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
     guard = SmbMountGuard()
     meta = _job_smb_meta(config, job_key)
@@ -105,35 +93,14 @@ def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
         return guard
 
     src = f"//{server}/{share}"
-    opts = [f"credentials={password_file}", "iocharset=utf8"]
-    vers = _validate_mount_option_value(str(profile.get("vers", "")).strip() or "3.0")
-    opts.append(f"vers={vers}")
-    sec = str(profile.get("sec", "")).strip()
-    if sec:
-        sec = _validate_mount_option_value(sec)
-        opts.append(f"sec={sec}")
-    uid = str(profile.get("uid", "")).strip()
-    if uid:
-        uid = _validate_mount_option_value(uid)
-        opts.append(f"uid={uid}")
-    gid = str(profile.get("gid", "")).strip()
-    if gid:
-        gid = _validate_mount_option_value(gid)
-        opts.append(f"gid={gid}")
-    file_mode = str(profile.get("file_mode", "")).strip()
-    if file_mode:
-        file_mode = _validate_mount_option_value(file_mode)
-        opts.append(f"file_mode={file_mode}")
-    dir_mode = str(profile.get("dir_mode", "")).strip()
-    if dir_mode:
-        dir_mode = _validate_mount_option_value(dir_mode)
-        opts.append(f"dir_mode={dir_mode}")
+    opts = build_smb_mount_options(profile, password_file)
 
     cmd = ["mount", "-t", "cifs", src, mount_path, "-o", ",".join(opts)]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
     if res.returncode != 0:
-        msg = (res.stderr or res.stdout or "SMB mount failed").strip()
-        raise RuntimeError(f"SMB mount failed ({src} -> {mount_path}): {msg}")
+        technical = sanitize_smb_error(res.stderr or res.stdout or "SMB mount failed")
+        _code, hint = classify_smb_mount_error(technical)
+        raise RuntimeError(f"{hint} Technical details: {technical}")
 
     guard.mounted_by_guard = True
     return guard

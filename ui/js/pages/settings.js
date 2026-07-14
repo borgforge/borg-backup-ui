@@ -870,7 +870,7 @@ function normalizeSmbProfileRows(rows) {
     const share = String(r?.share || '').trim();
     const mount_path = String(r?.mount_path || '').trim();
     const username = String(r?.username || '').trim();
-    const vers = String(r?.vers || '').trim() || '3.0';
+    const vers = String(r?.vers || '').trim() || 'auto';
     const sec = String(r?.sec || '').trim();
     const smb_password = String(r?.smb_password || '').trim();
     const password_set = !!r?.password_set;
@@ -916,6 +916,20 @@ function onSmbProfileInputChanged() {
   markSettingsDirty();
 }
 
+function _smbVersionSelectHtml(value) {
+  const selected = String(value || '').trim() || 'auto';
+  const options = [
+    ['auto', settingsT('profiles.smbVersionAuto')],
+    ['3.1.1', 'SMB 3.1.1'],
+    ['3.0', 'SMB 3.0'],
+    ['2.1', 'SMB 2.1'],
+    ['2.0', 'SMB 2.0'],
+  ];
+  return `<select class="form-select mono" data-smb-profile-vers onchange="onSmbProfileInputChanged()">
+    ${options.map(([raw, label]) => `<option value="${escHtml(raw)}"${selected === raw ? ' selected' : ''}>${escHtml(label)}</option>`).join('')}
+  </select>`;
+}
+
 function addSmbProfileRow(row = {}) {
   const box = document.getElementById('smb-profiles-rows');
   if (!box) return;
@@ -925,7 +939,7 @@ function addSmbProfileRow(row = {}) {
   const share = String(row.share || '').trim();
   const path = String(row.mount_path || '').trim();
   const username = String(row.username || '').trim();
-  const vers = String(row.vers || '').trim() || '3.0';
+  const vers = String(row.vers || '').trim() || 'auto';
   const sec = String(row.sec || '').trim();
   const passwordSet = !!row.password_set;
   const jobsCount = Number(row.jobs_count || 0);
@@ -945,7 +959,7 @@ function addSmbProfileRow(row = {}) {
       <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: jobsCount })}</span>
     </div>
     <div class="smb-profile-optional hidden" data-smb-profile-optional>
-      <input class="form-input mono" type="text" data-smb-profile-vers placeholder="${settingsT('profiles.smbVersionPlaceholder')}" value="${escHtml(vers)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      ${_smbVersionSelectHtml(vers)}
       <input class="form-input mono" type="text" data-smb-profile-sec placeholder="${settingsT('profiles.securityPlaceholder')}" value="${escHtml(sec)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
     </div>
     <div class="smb-profile-checks hidden" data-smb-profile-checks></div>
@@ -970,7 +984,7 @@ function renderSettingsSmbProfiles(rows) {
         <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(r.jobs_count || 0) })}</span>
       </div>
       <div class="smb-profile-optional hidden" data-smb-profile-optional>
-        <input class="form-input mono" type="text" data-smb-profile-vers placeholder="${settingsT('profiles.smbVersionPlaceholder')}" value="${escHtml(r.vers || '3.0')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        ${_smbVersionSelectHtml(r.vers || 'auto')}
         <input class="form-input mono" type="text" data-smb-profile-sec placeholder="${settingsT('profiles.securityPlaceholder')}" value="${escHtml(r.sec || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
       </div>
       <div class="smb-profile-checks hidden" data-smb-profile-checks></div>
@@ -1022,11 +1036,21 @@ function _renderSmbChecksHtml(r) {
     return `<div class="smb-check-row skip"><span>${escHtml(label)}</span><span>${settingsT('profiles.notTested')}</span></div>`;
   };
   const rows = steps.map((s) => line(s.label, s.ok, s.msg)).join('');
+  const failureHints = {
+    SMB_AUTH_OR_PERMISSION_FAILED: settingsT('profiles.smbAuthOrPermissionFailed'),
+    SMB_SHARE_NOT_FOUND: settingsT('profiles.smbShareNotFound'),
+    SMB_PROTOCOL_OR_OPTIONS_FAILED: settingsT('profiles.smbProtocolOrOptionsFailed'),
+    SMB_NETWORK_UNREACHABLE: settingsT('profiles.smbNetworkUnreachable'),
+    SMB_MOUNT_FAILED: settingsT('profiles.smbMountFailedGeneric'),
+  };
+  const failureHint = failureHints[String(r?.failure_code || '')] || String(r?.failure_hint || r?.message || '');
+  const technicalDetails = String(r?.technical_details || '').trim();
   return `
     <div class="smb-check-grid">
       ${rows}
     </div>
-    ${r?.message ? `<details class="smb-check-details"><summary>${settingsT('common.details')}</summary><pre>${escHtml(String(r.message || ''))}</pre></details>` : ''}
+    ${failureHint ? `<div class="status-message ${r?.ok ? 'success' : 'error'}" style="margin-top:8px">${escHtml(failureHint)}</div>` : ''}
+    ${technicalDetails ? `<details class="smb-check-details"><summary>${settingsT('profiles.technicalDetails')}</summary><pre>${escHtml(technicalDetails)}</pre></details>` : ''}
   `;
 }
 
@@ -1573,6 +1597,7 @@ function _migrationRegistryStatusLabel(status) {
     pending: settingsT('health.statusPending'),
     failed: settingsT('health.statusFailed'),
     not_needed: settingsT('health.statusNotNeeded'),
+    not_required: settingsT('health.statusNotNeeded'),
     unknown: settingsT('health.statusUnknown'),
   };
   return labels[raw] || raw;
@@ -1609,6 +1634,10 @@ function _migrationRegistryText(item, field) {
     job_source_paths_v1: {
       title: 'registryJobSourcePathsTitle',
       reason: status === 'applied' ? 'registryJobSourcePathsApplied' : (status === 'not_needed' ? 'registryJobSourcePathsCurrent' : (status === 'failed' ? 'registryJobSourcePathsFailed' : 'registryJobSourcePathsPending')),
+    },
+    smb_protocol_auto_v1: {
+      title: 'registrySmbProtocolTitle',
+      reason: status === 'applied' ? 'registrySmbProtocolApplied' : (['not_needed', 'not_required'].includes(status) ? 'registrySmbProtocolCurrent' : (status === 'failed' ? 'registrySmbProtocolFailed' : 'registrySmbProtocolPending')),
     },
     borg_keyfiles_v1: {
       title: 'registryBorgKeyfilesTitle',

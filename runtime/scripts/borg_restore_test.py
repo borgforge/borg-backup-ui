@@ -40,6 +40,8 @@ _API_DIR = SCRIPT_DIR.parent.parent / "api"
 if _API_DIR.is_dir() and str(_API_DIR) not in sys.path:
     sys.path.insert(0, str(_API_DIR))
 
+from smb_protocol import build_smb_mount_options, classify_smb_mount_error, sanitize_smb_error
+
 # Lib-Pfad: ausschließlich plugin runtime/lib (kein Fallback)
 _LIB_DIR = SCRIPT_DIR.parent / "lib"
 if _LIB_DIR.is_dir():
@@ -330,8 +332,6 @@ class RestoreTest:
         server = str(profile.get("server", "")).strip()
         share = str(profile.get("share", "")).strip().lstrip("/")
         mount_path = str(profile.get("mount_path") or profile.get("base_path") or "").strip()
-        vers = str(profile.get("vers", "")).strip() or "3.0"
-        sec = str(profile.get("sec", "")).strip()
         if not server or not share or not mount_path:
             return False, f"SMB profile is incomplete: {key}"
         pf = str(profile.get("password_file", "")).strip()
@@ -344,15 +344,15 @@ class RestoreTest:
         if self._is_smb_mounted(mount_path):
             return False, ""
 
-        opts = [f"credentials={pf}", "iocharset=utf8", f"vers={vers}"]
-        if sec:
-            opts.append(f"sec={sec}")
+        opts = build_smb_mount_options(profile, pf)
         res = subprocess.run(
             ["mount", "-t", "cifs", f"//{server}/{share}", mount_path, "-o", ",".join(opts)],
             capture_output=True, text=True, timeout=30, check=False
         )
         if res.returncode != 0:
-            return False, (res.stderr or res.stdout or "SMB mount failed").strip()
+            technical = sanitize_smb_error(res.stderr or res.stdout or "SMB mount failed")
+            _code, hint = classify_smb_mount_error(technical)
+            return False, f"{hint} Technical details: {technical}"
         return True, ""
 
     def _cleanup_smb_mount(self, repo: dict, mounted_by_me: bool) -> None:

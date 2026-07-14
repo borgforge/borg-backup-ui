@@ -17,6 +17,7 @@ from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from inventory_store import atomic_write_bytes, atomic_write_inventory, inventory_lock, read_inventory
+from smb_protocol import normalize_smb_version
 
 
 SCHEMA_VERSION = 1
@@ -157,7 +158,7 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
             "share": str(row.get("share") or "").strip(),
             "username": str(row.get("username") or "").strip(),
             "password_file": str(row.get("password_file") or "").strip(),
-            "vers": str(row.get("vers") or "3.0").strip() or "3.0",
+            "vers": normalize_smb_version(row.get("vers")),
             "sec": str(row.get("sec") or "").strip(),
             "target_type": str(row.get("target_type") or "").strip(),
             "ssh_key_path": str(row.get("ssh_key_path") or "").strip(),
@@ -270,7 +271,7 @@ def settings_profiles_from_storages(config: dict) -> dict[str, list[dict[str, An
                 "mount_path": str(row.get("mount_path") or row.get("base_path") or ""),
                 "username": str(row.get("username") or ""),
                 "password_file": str(row.get("password_file") or ""),
-                "vers": str(row.get("vers") or "3.0"),
+                "vers": normalize_smb_version(row.get("vers")),
                 "sec": str(row.get("sec") or ""),
             })
         elif location == "storagebox" or str(row.get("storage_type") or "") == "ssh":
@@ -339,7 +340,7 @@ def _replace_profile_storages_locked(config: dict, location: str, profiles: list
                     "share": str(raw.get("share") or "").strip(),
                     "username": str(raw.get("username") or "").strip(),
                     "password_file": str(raw.get("password_file") or "").strip(),
-                    "vers": str(raw.get("vers") or "3.0").strip() or "3.0",
+                    "vers": normalize_smb_version(raw.get("vers")),
                     "sec": str(raw.get("sec") or "").strip(),
                 }
                 if not values["server"] or not values["share"] or not values["username"]:
@@ -487,7 +488,7 @@ def _create_storage_target_locked(config: dict, payload: dict[str, Any]) -> dict
             "mount_path": mount_path,
             "username": username,
             "smb_password": password,
-            "vers": str(payload.get("vers") or "3.0").strip() or "3.0",
+            "vers": normalize_smb_version(payload.get("vers")),
             "sec": str(payload.get("sec") or "").strip(),
         }
         from smb_profiles_api import prepare_smb_profiles_for_save

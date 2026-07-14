@@ -1008,7 +1008,7 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
                 "share": str(row.get("share", "")).strip(),
                 "mount_path": str(row.get("mount_path", "")).strip(),
                 "username": str(row.get("username", "")).strip(),
-                "vers": str(row.get("vers", "")).strip() or "3.0",
+                "vers": str(row.get("vers", "")).strip() or "auto",
                 "sec": str(row.get("sec", "")).strip(),
                 "password_set": bool(pf and Path(pf).is_file()),
                 "jobs_count": len(refs),

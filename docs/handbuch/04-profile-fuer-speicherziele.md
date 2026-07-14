@@ -28,7 +28,7 @@ Prüfen:
 
 ## SMB-Profile
 
-SMB-Profile werden in **Einstellungen > SMB-Profile** angelegt. Ein Profil enthält Server, Share, Mount-Pfad und Zugangsdaten.
+SMB-Profile werden in **Einstellungen > SMB-Profile** angelegt. Ein Profil enthält Server, Share, Mount-Pfad und Zugangsdaten. Standardmäßig handelt der Client automatisch eine moderne SMB-2/3-Version aus. Optional kann SMB 3.1.1, 3.0, 2.1 oder 2.0 fest gewählt werden; SMB1 wird nicht unterstützt.
 
 Schritte:
 

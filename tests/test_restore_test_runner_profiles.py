@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -148,3 +149,35 @@ def test_restore_runner_discovers_smb_profile_repository(tmp_path, monkeypatch) 
 
     assert repos[0]["path"] == "/mnt/remotes/nas-a/borg-backup-photos"
     assert repos[0]["profile_key"] == "nas-a"
+
+
+def test_restore_runner_auto_smb_mount_does_not_force_protocol(tmp_path, monkeypatch) -> None:
+    runner = _load_restore_runner()
+    secret = tmp_path / ".smb-nas.cred"
+    secret.write_text("username=backup\npassword=secret\n", encoding="utf-8")
+    mount_path = tmp_path / "mount"
+    instance = object.__new__(runner.RestoreTest)
+    instance.args = SimpleNamespace(smb_auto_mount=True)
+    monkeypatch.setattr(instance, "_is_smb_mounted", lambda _path: False)
+
+    def fake_run(command, **_kwargs):
+        assert command[0] == "mount"
+        assert "vers=" not in command[-1]
+        return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    mounted, error = instance._ensure_smb_mount({
+        "location": "smb",
+        "profile_key": "nas",
+        "mount_before_run": True,
+        "storage": {
+            "server": "nas.example.test",
+            "share": "backup",
+            "mount_path": str(mount_path),
+            "password_file": str(secret),
+            "vers": "auto",
+        },
+    })
+
+    assert mounted is True
+    assert error == ""
