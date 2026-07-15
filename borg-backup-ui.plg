@@ -20,8 +20,11 @@
 <CHANGES>
 <![CDATA[
 ###2026.07.15.1415###
-- Encrypted export previews now distinguish password, integrity and unsupported-format errors.
+- Backup cleanup now attempts Docker and VM recovery, status persistence and lock release independently, even if an earlier cleanup step fails.
+- Jobs, repository passphrases and profile-secret exports now use a versioned authenticated format with manipulation detection.
+- Wrong passwords, modified, damaged and unsupported export files now produce actionable errors before import data is written.
 - Failed preview attempts clear previously loaded preview data before another import can be applied.
+- Existing encrypted exports remain importable as an explicitly marked legacy format; all new exports use the authenticated format.
 
 ###2026.07.14.1342###
 - Security and access control:
