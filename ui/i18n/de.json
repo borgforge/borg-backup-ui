@@ -1546,6 +1546,27 @@
       "checkInterval": "Check-Intervall (Tage)",
       "abortParity": "Backup abbrechen wenn Parity-Check läuft"
     },
+    "homepageWidget": {
+      "title": "Homepage-Widget",
+      "description": "Stellt Homepage eine kompakte, ausschließlich lesende Statusübersicht bereit. Das separate Token erlaubt keinen Zugriff auf andere API-Endpunkte.",
+      "configured": "Widget-Zugriff ist eingerichtet.",
+      "notConfigured": "Widget-Zugriff ist noch nicht eingerichtet.",
+      "create": "Widget-Token erstellen",
+      "rotate": "Token rotieren",
+      "revoke": "Zugriff widerrufen",
+      "token": "Widget-Token",
+      "tokenOnce": "Das Token wird nur jetzt vollständig angezeigt. Bewahre es wie ein Passwort auf.",
+      "copy": "Token kopieren",
+      "yaml": "Homepage-Konfiguration",
+      "copyYaml": "YAML kopieren",
+      "rotatedSuccess": "Widget-Token wurde erstellt. Kopiere die Konfiguration, bevor du die Seite verlässt.",
+      "revokedSuccess": "Widget-Zugriff wurde widerrufen.",
+      "revokeTitle": "Homepage-Widget widerrufen",
+      "revokeMessage": "Die bestehende Homepage-Konfiguration kann danach keine Statusdaten mehr abrufen.",
+      "actionFailed": "Widget-Aktion fehlgeschlagen: {message}",
+      "copied": "In die Zwischenablage kopiert.",
+      "copyFailed": "Kopieren in die Zwischenablage ist fehlgeschlagen."
+    },
     "users": {
       "title": "Benutzerverwaltung",
       "sessionTimeout": "Session-Timeout (Minuten)",
