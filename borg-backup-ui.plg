@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.14.1342">
+<!ENTITY version   "2026.07.15.1415">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,15 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.15.1415###
+- Added a read-only Homepage dashboard widget for backup, restore-test, overdue and active-run status with a dedicated restricted token.
+- Homepage widget settings can create, rotate or revoke the token and provide a ready-to-copy Custom API configuration.
+- Backup cleanup now attempts Docker and VM recovery, status persistence and lock release independently, even if an earlier cleanup step fails.
+- Jobs, repository passphrases and profile-secret exports now use a versioned authenticated format with manipulation detection.
+- Wrong passwords, modified, damaged and unsupported export files now produce actionable errors before import data is written.
+- Failed preview attempts clear previously loaded preview data before another import can be applied.
+- Existing encrypted exports remain importable as an explicitly marked legacy format; all new exports use the authenticated format.
+
 ###2026.07.14.1342###
 - Security and access control:
   - Static UI paths, log streams, restore downloads and repository streams now enforce path containment, authentication and role checks.
@@ -337,7 +346,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>72a930901f2be0a383da3f2c4493ba73</MD5>
+<MD5>ed5c759b0c7afaaa77e2b25b124322f8</MD5>
 </FILE>
 
 <!--
