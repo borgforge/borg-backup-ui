@@ -101,6 +101,7 @@ def test_wrong_password_is_rejected_without_exposing_password():
         transfer._decrypt_encrypted_export(encrypted, wrong_password)
 
     assert "authentication failed" in str(exc_info.value).lower()
+    assert exc_info.value.api_code == "encrypted_export_authentication_failed"
     assert wrong_password not in str(exc_info.value)
     assert PASSWORD not in str(exc_info.value)
 
@@ -108,15 +109,26 @@ def test_wrong_password_is_rejected_without_exposing_password():
 def test_tampered_ciphertext_is_rejected_before_decryption():
     encrypted = transfer._encrypt_authenticated_export(b"sensitive payload", PASSWORD)
 
-    with pytest.raises(ValueError, match="authentication failed"):
+    with pytest.raises(ValueError, match="authentication failed") as exc_info:
         transfer._decrypt_encrypted_export(_tamper_ciphertext(encrypted), PASSWORD)
+
+    assert exc_info.value.api_code == "encrypted_export_authentication_failed"
 
 
 def test_truncated_export_is_rejected_with_clear_error():
     encrypted = transfer._encrypt_authenticated_export(b"sensitive payload", PASSWORD)
 
-    with pytest.raises(ValueError, match="invalid or truncated"):
+    with pytest.raises(ValueError, match="invalid or truncated") as exc_info:
         transfer._decrypt_encrypted_export(encrypted[:-11], PASSWORD)
+
+    assert exc_info.value.api_code == "encrypted_export_invalid"
+
+
+def test_unsupported_export_format_has_actionable_error_code():
+    with pytest.raises(ValueError, match="Unsupported encrypted export format") as exc_info:
+        transfer._decrypt_encrypted_export(b"unknown encrypted format", PASSWORD)
+
+    assert exc_info.value.api_code == "encrypted_export_unsupported"
 
 
 def test_legacy_openssl_export_remains_explicitly_importable():
@@ -208,3 +220,42 @@ def test_invalid_transport_base64_is_rejected_without_writes(tmp_path: Path, mon
         transfer.import_secrets_backup(PASSWORD, "not valid base64!", mode="overwrite")
 
     assert list(secrets_dir.rglob("*")) == []
+
+
+def test_server_preserves_safe_encrypted_export_error_codes():
+    source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
+
+    assert 'getattr(exc, "api_code", "") or "bad_request"' in source
+
+
+def test_failed_preview_invalidates_previously_loaded_sensitive_state():
+    source = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
+    cases = [
+        (
+            "async function importJobsSecurePreviewSelectFile()",
+            "async function importJobsApplySelected()",
+            "clearJobsImportPreview();",
+            "fetch('/api/settings/jobs-import-secure-preview'",
+        ),
+        (
+            "async function importSecretsPreviewSelectFile()",
+            "async function importSecretsApplySelected()",
+            "clearSecretsImportPreview();",
+            "fetch('/api/settings/secrets-backup-preview'",
+        ),
+        (
+            "async function importProfileSecretsPreviewSelectFile()",
+            "async function importProfileSecretsApplySelected()",
+            "clearProfileSecretsImportPreview();",
+            "fetch('/api/settings/profile-secrets-preview'",
+        ),
+    ]
+
+    for start_marker, end_marker, clear_call, fetch_call in cases:
+        block = source[source.index(start_marker):source.index(end_marker)]
+        assert block.index(clear_call) < block.index(fetch_call)
+
+    assert "settingsState.transferProfileSecretsPreview = null;" in source
+    assert "settingsState.transferProfileSecretsPayloadB64 = '';" in source
+    assert "settingsState.transferProfileSecretsPassword = '';" in source
+    assert "previewEl.replaceChildren();" in source

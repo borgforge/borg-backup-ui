@@ -36,6 +36,14 @@ _ENCRYPTION_FORMAT_AUTHENTICATED = "authenticated-v2"
 _ENCRYPTION_FORMAT_LEGACY = "legacy-openssl-aes-256-cbc"
 
 
+class EncryptedExportError(ValueError):
+    """Safe, localized API error for encrypted export handling."""
+
+    def __init__(self, api_code: str, message: str):
+        super().__init__(message)
+        self.api_code = str(api_code or "encrypted_export_invalid")
+
+
 def _canonical_profile_payload(config: dict) -> dict:
     from storage_objects_api import settings_profiles_from_storages
     profiles = settings_profiles_from_storages(config)
@@ -828,8 +836,11 @@ def _openssl_decrypt_cbc(ciphertext: bytes, password: str, *, legacy: bool = Fal
     )
     if proc.returncode != 0:
         if legacy:
-            raise ValueError("Legacy encrypted export could not be decrypted (invalid password or file)")
-        raise ValueError("Encrypted export could not be decrypted")
+            raise EncryptedExportError(
+                "encrypted_export_authentication_failed",
+                "Legacy encrypted export could not be decrypted (invalid password or file)",
+            )
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export could not be decrypted")
     return proc.stdout
 
 
@@ -886,23 +897,23 @@ def _encrypt_authenticated_export(plaintext: bytes, password: str) -> bytes:
 
 def _validate_authenticated_export_header(header: object) -> bytes:
     if not isinstance(header, dict):
-        raise ValueError("Encrypted export is invalid or truncated")
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated")
     expected = _authenticated_export_header(b"placeholder")
     authentication = header.get("authentication")
     if not isinstance(authentication, dict):
-        raise ValueError("Encrypted export is invalid or truncated")
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated")
     salt_b64 = authentication.get("salt_b64")
     comparable = dict(header)
     comparable["authentication"] = dict(authentication)
     comparable["authentication"]["salt_b64"] = expected["authentication"]["salt_b64"]
     if comparable != expected:
-        raise ValueError("Unsupported encrypted export parameters")
+        raise EncryptedExportError("encrypted_export_unsupported", "Unsupported encrypted export parameters")
     try:
         auth_salt = base64.b64decode(str(salt_b64 or "").encode("ascii"), validate=True)
     except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
-        raise ValueError("Encrypted export is invalid or truncated") from exc
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated") from exc
     if len(auth_salt) != _AUTHENTICATED_EXPORT_SALT_BYTES:
-        raise ValueError("Encrypted export is invalid or truncated")
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated")
     return auth_salt
 
 
@@ -911,9 +922,9 @@ def _decrypt_encrypted_export(payload: bytes, password: str) -> tuple[bytes, str
         try:
             envelope = json.loads(payload[len(_AUTHENTICATED_EXPORT_MAGIC):].decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ValueError("Encrypted export is invalid or truncated") from exc
+            raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated") from exc
         if not isinstance(envelope, dict):
-            raise ValueError("Encrypted export is invalid or truncated")
+            raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated")
         header = envelope.get("protected")
         auth_salt = _validate_authenticated_export_header(header)
         try:
@@ -926,9 +937,9 @@ def _decrypt_encrypted_export(payload: bytes, password: str) -> tuple[bytes, str
                 validate=True,
             )
         except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
-            raise ValueError("Encrypted export is invalid or truncated") from exc
+            raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated") from exc
         if not ciphertext.startswith(_LEGACY_OPENSSL_MAGIC) or len(supplied_tag) != _AUTHENTICATED_EXPORT_TAG_BYTES:
-            raise ValueError("Encrypted export is invalid or truncated")
+            raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated")
         auth_key = _derive_export_authentication_key(password, auth_salt)
         expected_tag = hmac.new(
             auth_key,
@@ -936,27 +947,33 @@ def _decrypt_encrypted_export(payload: bytes, password: str) -> tuple[bytes, str
             hashlib.sha256,
         ).digest()
         if not hmac.compare_digest(supplied_tag, expected_tag):
-            raise ValueError("Encrypted export authentication failed (invalid password or modified file)")
+            raise EncryptedExportError(
+                "encrypted_export_authentication_failed",
+                "Encrypted export authentication failed (invalid password or modified file)",
+            )
         plaintext = _openssl_decrypt_cbc(ciphertext, password)
         if not plaintext.startswith(_AUTHENTICATED_PLAINTEXT_MAGIC):
-            raise ValueError("Encrypted export authentication failed (invalid password or modified file)")
+            raise EncryptedExportError(
+                "encrypted_export_authentication_failed",
+                "Encrypted export authentication failed (invalid password or modified file)",
+            )
         return plaintext[len(_AUTHENTICATED_PLAINTEXT_MAGIC):], _ENCRYPTION_FORMAT_AUTHENTICATED
 
     if payload.startswith(_LEGACY_OPENSSL_MAGIC):
         if len(payload) <= len(_LEGACY_OPENSSL_MAGIC):
-            raise ValueError("Legacy encrypted export is invalid or truncated")
+            raise EncryptedExportError("encrypted_export_invalid", "Legacy encrypted export is invalid or truncated")
         return _openssl_decrypt_cbc(payload, password, legacy=True), _ENCRYPTION_FORMAT_LEGACY
 
-    raise ValueError("Unsupported encrypted export format")
+    raise EncryptedExportError("encrypted_export_unsupported", "Unsupported encrypted export format")
 
 
 def _decode_encrypted_export_payload(payload_b64: str) -> bytes:
     try:
         payload = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=True)
     except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
-        raise ValueError("Encrypted export is invalid or truncated") from exc
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated") from exc
     if not payload:
-        raise ValueError("Encrypted export is invalid or truncated")
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export is invalid or truncated")
     return payload
 
 
@@ -964,9 +981,9 @@ def _decode_encrypted_json_payload(plaintext: bytes) -> dict:
     try:
         payload = json.loads(plaintext.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("Encrypted export payload is invalid") from exc
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export payload is invalid") from exc
     if not isinstance(payload, dict):
-        raise ValueError("Encrypted export payload is invalid")
+        raise EncryptedExportError("encrypted_export_invalid", "Encrypted export payload is invalid")
     return payload
 
 
