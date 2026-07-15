@@ -771,6 +771,8 @@ Importstrategien können je nach Importtyp vorhandene Einträge behalten, ersetz
 
 > **Warnung:** Bewahren Sie Export-Passwörter sicher auf. Ohne passendes Passwort können verschlüsselte Exporte nicht wiederhergestellt werden.
 
+Neue verschlüsselte Exporte verwenden eine versionierte, authentifizierte Hülle. Ein falsches Passwort sowie beschädigte, abgeschnittene oder manipulierte Dateien werden geprüft, bevor Importdaten geschrieben werden. Ältere AES-CBC-Exporte bleiben importierbar, erscheinen in der Vorschau jedoch mit einem Legacy-Hinweis. Erstellen Sie nach einem Legacy-Import einen neuen Export im aktuellen Format.
+
 ### 9.9 Erweitert
 
 ![Einstellungen - Erweitert](../assets/de/settings-advanced.png)

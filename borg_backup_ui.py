@@ -3227,7 +3227,8 @@ btn.addEventListener('click',doSetup);
         except RateLimitExceeded as exc:
             self._send_api_error(429, "rate_limited", str(exc), request_id=request_id)
         except ValueError as exc:
-            self._send_api_error(400, "bad_request", str(exc), request_id=request_id)
+            error_code = str(getattr(exc, "api_code", "") or "bad_request")
+            self._send_api_error(400, error_code, str(exc), request_id=request_id)
         except ApiConflictError as exc:
             self._send_api_error(409, exc.code, str(exc), request_id=request_id)
         except Exception as exc:

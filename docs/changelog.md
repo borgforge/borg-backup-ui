@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #231
+- New jobs, passphrase and profile-secret exports use a versioned authenticated encrypt-then-MAC envelope instead of unauthenticated AES-CBC alone.
+- Wrong passwords, tampering and truncation are rejected before import data is written, without exposing cryptographic details or secrets.
+- Failed preview attempts now show actionable password, integrity or format errors and invalidate any previously loaded preview and import payload.
+- Existing AES-CBC exports remain explicitly importable as a visibly marked legacy format; every new export uses the authenticated format.
+
 ### Issue #230
 - Backup finalization now attempts Docker recovery, VM recovery, status persistence and lock release independently, so one cleanup failure cannot skip the remaining safeguards.
 - Runtime recovery failures force a failed backup result while preserving an original backup exception as the primary error.

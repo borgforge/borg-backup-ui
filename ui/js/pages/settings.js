@@ -2097,6 +2097,37 @@ function renderSettingsFactoryReset() {
     </div>`);
 }
 
+function renderLegacyEncryptionWarning(data) {
+  if (!data?.legacy_encryption) return '';
+  return `<div class="status-message warning" style="margin:0 0 8px 0">${settingsT('transfer.legacyEncryptionWarning')}</div>`;
+}
+
+function clearJobsImportPreview() {
+  settingsState.transferJobsPreview = null;
+  settingsState.transferJobsBundleText = '';
+  settingsState.transferJobsSecurePayloadB64 = '';
+  settingsState.transferJobsSecurePassword = '';
+  settingsState.transferJobsSecureMode = false;
+  const previewEl = document.getElementById('settings-transfer-preview-jobs');
+  if (previewEl) previewEl.replaceChildren();
+  document.querySelector('[data-settings-action="import-jobs-apply"]')?.setAttribute('disabled', 'disabled');
+}
+
+function clearSecretsImportPreview() {
+  settingsState.transferSecretsPreview = null;
+  settingsState.transferSecretsPayloadB64 = '';
+  settingsState.transferSecretsPassword = '';
+}
+
+function clearProfileSecretsImportPreview() {
+  settingsState.transferProfileSecretsPreview = null;
+  settingsState.transferProfileSecretsPayloadB64 = '';
+  settingsState.transferProfileSecretsPassword = '';
+  const previewEl = document.getElementById('settings-transfer-preview-profile-secrets');
+  if (previewEl) previewEl.replaceChildren();
+  document.querySelector('[data-settings-action="import-profile-secrets-apply"]')?.setAttribute('disabled', 'disabled');
+}
+
 function renderJobsImportPreview(d) {
   const rows = Array.isArray(d?.jobs) ? d.jobs : [];
   const sp = d?.settings_preview || null;
@@ -2139,6 +2170,7 @@ function renderJobsImportPreview(d) {
     </table>
   ` : '';
   return `
+    ${renderLegacyEncryptionWarning(d)}
     ${settingsBlock}
     <div class="text-muted" style="font-size:12px;margin-bottom:8px">${settingsT('transfer.jobsPreviewTitle', { count: rows.length })}${Number(d?.passphrase_count || 0) ? ` · ${settingsT('transfer.passphrasesInPackage', { count: Number(d.passphrase_count) })}` : ''}${Number(d?.keyfile_count || 0) ? ` · ${settingsT('transfer.keyfilesInPackage', { count: Number(d.keyfile_count) })}` : ''}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
@@ -2190,6 +2222,7 @@ function renderSecretsImportPreview(d) {
     return acc;
   }, { total: 0, present: 0, mismatch: 0, missing: 0, unknown: 0 });
   return `
+    ${renderLegacyEncryptionWarning(d)}
     <div class="text-muted" style="font-size:12px;margin:12px 0 8px 0">${settingsT('transfer.passphrasePreview', { count: rows.length })}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
       ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.presentCount', { count: stats.present })} · ${settingsT('transfer.differentCount', { count: stats.mismatch })} · ${settingsT('transfer.missingCount', { count: stats.missing })}${stats.unknown ? ` · ${settingsT('transfer.unknownCount', { count: stats.unknown })}` : ''}
@@ -2260,6 +2293,7 @@ function renderProfileSecretsImportPreview(d) {
     </table>
   ` : '';
   return `
+    ${renderLegacyEncryptionWarning(d)}
     ${settingsBlock}
     <div class="text-muted" style="font-size:12px;margin:12px 0 8px 0">${settingsT('transfer.profilesSecretsPreview', { count: rows.length })}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
@@ -2687,6 +2721,7 @@ async function importJobsPreviewSelectFile() {
     });
     if (!picked) return;
     const text = picked.content;
+    clearJobsImportPreview();
     const res = await fetch('/api/settings/jobs-import-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2727,6 +2762,7 @@ async function importJobsSecurePreviewSelectFile() {
     });
     if (!password) return;
     const payload_b64 = picked.payload_b64;
+    clearJobsImportPreview();
     const res = await fetch('/api/settings/jobs-import-secure-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2955,6 +2991,7 @@ async function importSecretsPreviewSelectFile() {
     });
     if (!picked) return;
     const payload_b64 = picked.payload_b64;
+    clearSecretsImportPreview();
     const res = await fetch('/api/settings/secrets-backup-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3076,6 +3113,7 @@ async function importProfileSecretsPreviewSelectFile() {
     });
     if (!password) return;
     const payload_b64 = picked.payload_b64;
+    clearProfileSecretsImportPreview();
     const res = await fetch('/api/settings/profile-secrets-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
