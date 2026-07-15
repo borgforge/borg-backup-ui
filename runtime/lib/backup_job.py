@@ -34,7 +34,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from lib.docker_manager import DockerManager, DockerStopResult
@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 _HR = "━" * 80
 REQUIRED_SOURCE_PATHS_MISSING = "required_source_paths_missing"
+RUNTIME_RECOVERY_FAILED = "runtime_recovery_failed"
 
 
 class RequiredSourcePathsMissing(RuntimeError):
@@ -271,34 +272,109 @@ class BackupJob:
         logger.info("")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # Skip-Szenarien (USB/Parity): als Warning-Status speichern, dann sauber beenden
-        if exc_type is SystemExit and getattr(exc_val, "code", None) == 0:
-            self._skip_finish = True
+        cleanup_errors: List[Tuple[str, Exception]] = []
+        original_exception = exc_type is not None
+        original_failure = original_exception and not (
+            exc_type is SystemExit and getattr(exc_val, "code", None) == 0
+        )
 
-        # Unbehandelte Exceptions: Exit-Code auf 2 setzen
-        if exc_type is not None and not self._skip_finish:
-            if self._borg_exit == 99:
+        try:
+            # Skip-Szenarien (USB/Parity): als Warning-Status speichern, dann sauber beenden
+            if exc_type is SystemExit and getattr(exc_val, "code", None) == 0:
+                self._skip_finish = True
+
+            # Unbehandelte Exceptions: Exit-Code auf 2 setzen
+            if original_exception and not self._skip_finish:
+                if self._borg_exit == 99:
+                    self._borg_exit = 2
+                if isinstance(exc_val, RequiredSourcePathsMissing):
+                    self._failure_code = exc_val.failure_code
+                    self._missing_source_paths = [
+                        str(path) for path in exc_val.missing_paths
+                    ]
+                    self._final_msg = str(exc_val)
+                logger.error("Job aborted by exception: %s", exc_val)
+
+            if not self._skip_finish:
+                _log_section("PHASE 5: CLEANUP & COMPLETION")
+
+            recovery_failures: List[str] = []
+            if not self._docker_restarted and self._docker_stop_result is not None:
+                if self._run_cleanup_step(
+                    "Docker recovery", self.start_docker, cleanup_errors
+                ):
+                    recovery_failures.append("Docker")
+            if not self._vms_restarted and self._vm_shutdown_result is not None:
+                if self._run_cleanup_step(
+                    "VM recovery", self.start_vms, cleanup_errors
+                ):
+                    recovery_failures.append("VM")
+
+            if recovery_failures and not self._skip_finish:
                 self._borg_exit = 2
-            if isinstance(exc_val, RequiredSourcePathsMissing):
-                self._failure_code = exc_val.failure_code
-                self._missing_source_paths = [
-                    str(path) for path in exc_val.missing_paths
-                ]
-                self._final_msg = str(exc_val)
-            logger.error("Job aborted by exception: %s", exc_val)
+                self._failure_code = self._failure_code or RUNTIME_RECOVERY_FAILED
+                recovery_message = (
+                    "Runtime recovery failed for "
+                    + " and ".join(recovery_failures)
+                    + ". Check the runtime recovery status and backup log."
+                )
+                self._final_msg = " ".join(
+                    part for part in (self._final_msg.strip(), recovery_message) if part
+                )
 
-        if not self._skip_finish:
-            _log_section("PHASE 5: CLEANUP & COMPLETION")
+            if self._skip_finish:
+                self._run_cleanup_step(
+                    "skipped status persistence",
+                    self._persist_skip_status_once,
+                    cleanup_errors,
+                )
+            else:
+                self._run_cleanup_step(
+                    "backup completion", self._do_finish, cleanup_errors
+                )
+        except Exception as cleanup_exc:
+            self._record_cleanup_error(
+                "backup finalization", cleanup_exc, cleanup_errors
+            )
+        finally:
+            try:
+                self._remove_lock()
+            except Exception as lock_exc:
+                self._record_cleanup_error(
+                    "lock release", lock_exc, cleanup_errors
+                )
 
-        self._restart_docker()
-
-        if self._skip_finish:
-            self._persist_skip_status_once()
-        else:
-            self._do_finish()
-
-        self._remove_lock()
+        if cleanup_errors and not original_failure:
+            raise RuntimeError(
+                "Backup cleanup failed. Check the backup log and runtime recovery status."
+            ) from None
         return False
+
+    @staticmethod
+    def _record_cleanup_error(
+        step: str,
+        exc: Exception,
+        errors: List[Tuple[str, Exception]],
+    ) -> None:
+        errors.append((step, exc))
+        logger.error(
+            "Backup cleanup step failed: %s (%s). Check preceding component logs.",
+            step,
+            type(exc).__name__,
+        )
+
+    def _run_cleanup_step(
+        self,
+        step: str,
+        action: Callable[[], None],
+        errors: List[Tuple[str, Exception]],
+    ) -> bool:
+        try:
+            action()
+            return False
+        except Exception as exc:
+            self._record_cleanup_error(step, exc, errors)
+            return True
 
     # ------------------------------------------------------------------
     # Öffentliche Methoden
@@ -587,22 +663,22 @@ class BackupJob:
         """Entfernt Lock-File."""
         fd = self._lock_fd
         self._lock_fd = None
+        errors: List[OSError] = []
+        if fd is not None:
+            try:
+                fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            except OSError as exc:
+                errors.append(exc)
+            try:
+                fd.close()
+            except OSError as exc:
+                errors.append(exc)
         try:
-            if fd is not None:
-                try:
-                    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-                finally:
-                    fd.close()
             self.config.lock_file.unlink(missing_ok=True)
         except OSError as exc:
-            logger.warning("Could not remove lock file: %s", exc)
-
-    def _restart_docker(self) -> None:
-        """Startet Docker-Container und VMs neu, falls sie gestoppt wurden."""
-        if not self._docker_restarted and self._docker_stop_result is not None:
-            self.start_docker()
-        if not self._vms_restarted and self._vm_shutdown_result is not None:
-            self.start_vms()
+            errors.append(exc)
+        if errors:
+            raise errors[0]
 
     def _record_docker_recovery_state(self) -> None:
         result = self._docker_stop_result

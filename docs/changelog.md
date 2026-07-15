@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #230
+- Backup finalization now attempts Docker recovery, VM recovery, status persistence and lock release independently, so one cleanup failure cannot skip the remaining safeguards.
+- Runtime recovery failures force a failed backup result while preserving an original backup exception as the primary error.
+- Cleanup diagnostics identify the failed phase without copying exception details that could contain credentials into the log.
+
 ### Issue #223
 - New and migrated SMB profiles use automatic modern SMB 2/3 protocol negotiation instead of forcing SMB 3.0.
 - Administrators can still select SMB 3.1.1, 3.0, 2.1 or 2.0 explicitly; SMB1 is rejected and never used as an automatic fallback.
