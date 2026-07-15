@@ -25,6 +25,55 @@ def api_token_file(config: dict) -> Path:
     return data_root(config) / "config" / ".api-token"
 
 
+def homepage_widget_token_file(config: dict) -> Path:
+    return data_root(config) / "config" / ".homepage-widget-token"
+
+
+def read_homepage_widget_token(config: dict) -> str:
+    """Read the optional read-only widget token without creating one."""
+    token_file = homepage_widget_token_file(config)
+    if not token_file.is_file():
+        return ""
+    try:
+        return token_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def homepage_widget_token_status(config: dict) -> dict:
+    return {"configured": bool(read_homepage_widget_token(config))}
+
+
+def rotate_homepage_widget_token(config: dict) -> str:
+    token_file = homepage_widget_token_file(config)
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_hex(32)
+    tmp = token_file.with_name(f".{token_file.name}.{secrets.token_hex(8)}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(f"{token}\n")
+        os.replace(tmp, token_file)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+    try:
+        os.chmod(token_file, 0o600)
+    except OSError:
+        pass
+    return token
+
+
+def revoke_homepage_widget_token(config: dict) -> bool:
+    token_file = homepage_widget_token_file(config)
+    if not token_file.exists():
+        return False
+    token_file.unlink()
+    return True
+
+
 def load_or_create_api_token(config: dict) -> str:
     token_file = api_token_file(config)
     token_file.parent.mkdir(parents=True, exist_ok=True)

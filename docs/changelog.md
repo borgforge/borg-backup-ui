@@ -10,6 +10,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Backup finalization now attempts Docker recovery, VM recovery, status persistence and lock release independently, so one cleanup failure cannot skip the remaining safeguards.
 - Runtime recovery failures force a failed backup result while preserving an original backup exception as the primary error.
 - Cleanup diagnostics identify the failed phase without copying exception details that could contain credentials into the log.
+### Issue #228
+- Added a dedicated read-only summary endpoint for Homepage dashboards with backup, restore-verification, overdue and active-run status.
+- Homepage uses a separately managed widget token that cannot access the general Borg Backup UI API and is stored with restricted file permissions.
+- Settings can create, rotate or revoke the widget token and provide a ready-to-copy Homepage Custom API configuration.
+- Widget responses use local cached state only and omit repository paths, logs, raw errors, user data and secrets.
 
 ### Issue #223
 - New and migrated SMB profiles use automatic modern SMB 2/3 protocol negotiation instead of forcing SMB 3.0.
