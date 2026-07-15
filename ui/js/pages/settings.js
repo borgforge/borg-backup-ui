@@ -1938,13 +1938,42 @@ async function revokeHomepageWidgetToken() {
   }
 }
 
-async function copyHomepageWidgetField(id) {
-  const value = String(document.getElementById(id)?.value || '');
-  if (!value) return;
+function copyHomepageWidgetFieldFallback(field, value) {
+  const previousFocus = document.activeElement;
+  const previousStart = typeof field.selectionStart === 'number' ? field.selectionStart : null;
+  const previousEnd = typeof field.selectionEnd === 'number' ? field.selectionEnd : null;
   try {
-    await navigator.clipboard.writeText(value);
+    field.focus();
+    field.select();
+    if (typeof field.setSelectionRange === 'function') field.setSelectionRange(0, value.length);
+    return document.execCommand('copy');
+  } catch (_) {
+    return false;
+  } finally {
+    if (previousStart !== null && previousEnd !== null && typeof field.setSelectionRange === 'function') {
+      field.setSelectionRange(previousStart, previousEnd);
+    }
+    if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
+  }
+}
+
+async function copyHomepageWidgetField(id) {
+  const field = document.getElementById(id);
+  const value = String(field?.value || '');
+  if (!value) return;
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(value);
+      copied = true;
+    }
+  } catch (_) {
+    copied = false;
+  }
+  if (!copied) copied = copyHomepageWidgetFieldFallback(field, value);
+  if (copied) {
     showMsg('homepage-widget-message', 'success', settingsT('homepageWidget.copied'));
-  } catch (err) {
+  } else {
     showMsg('homepage-widget-message', 'error', settingsT('homepageWidget.copyFailed'));
   }
 }

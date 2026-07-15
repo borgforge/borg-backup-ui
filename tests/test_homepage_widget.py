@@ -168,3 +168,11 @@ def test_settings_javascript_contains_homepage_custom_api_configuration():
     assert "X-Borg-Widget-Token" in source
     assert "/api/widget/summary" in source
     assert "refreshInterval: 60000" in source
+
+
+def test_settings_javascript_has_clipboard_fallback_for_plain_http():
+    source = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
+
+    assert "window.isSecureContext" in source
+    assert "copyHomepageWidgetFieldFallback" in source
+    assert "document.execCommand('copy')" in source
