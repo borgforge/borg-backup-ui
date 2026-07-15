@@ -132,6 +132,8 @@ Recommendation: Enable a permanent schedule for a new job only after a successfu
 ## Import, export, and backups
 
 - **Settings > Import / Export** provides encrypted exports for jobs, passphrases, profiles, and secrets.
+- New encrypted exports are versioned and protected against unnoticed modification. Wrong passwords and damaged or manipulated files are rejected before import.
+- Older AES-CBC exports can still be imported but are marked as a legacy format without integrity protection. Create a new export after importing one.
 - A preview is displayed before an import.
 - Import modes such as `skip`, `overwrite`, or `rename` control how existing data is handled.
 - Job imports can include matching USB/SMB profiles from the package.

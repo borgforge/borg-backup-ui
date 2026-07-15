@@ -771,6 +771,8 @@ Import strategies can keep, replace, or rename existing entries depending on the
 
 > **Warning:** Store export passwords securely. Encrypted exports cannot be restored without the matching password.
 
+New encrypted exports use a versioned, authenticated envelope. Wrong passwords and damaged, truncated, or manipulated files are checked before import data is written. Older AES-CBC exports remain importable but show a legacy warning in the preview. Create a new export in the current format after a legacy import.
+
 ### 9.9 Advanced
 
 ![Settings - Advanced](../assets/en/settings-advanced.png)

@@ -1805,6 +1805,7 @@
       "selectPreviewBackupMessage": "Select the encrypted backup file to preview.",
       "previewLoadedPassphrases": "Preview loaded: {count} passphrase files ({file})",
       "secretsPreviewFailed": "Secrets preview failed: {message}",
+      "legacyEncryptionWarning": "Legacy export without integrity protection. Import it only from a trusted source, then create a new encrypted export.",
       "noSecretsPreview": "No secrets preview available",
       "noPassphraseFilesSelected": "No passphrase files selected",
       "confirmPassphraseImport": "Selection: {count} file(s), mode: {mode}{different}. Start import now?",

@@ -8,7 +8,9 @@ Passphrase-Dateien.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
+import hmac
 import json
 import os
 import subprocess
@@ -20,6 +22,18 @@ from config_api import get_smb_profile_job_refs
 from job_source_paths import SourcePathValidationError, upgrade_job_source_paths
 from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
 from schedule_api import get_schedules, write_schedules
+
+
+_AUTHENTICATED_EXPORT_MAGIC = b"BBUI-AUTH-ENC-V2\n"
+_AUTHENTICATED_PLAINTEXT_MAGIC = b"BBUI-AUTH-PLAINTEXT-V2\n"
+_AUTHENTICATED_EXPORT_FORMAT = "bbui-authenticated-export"
+_AUTHENTICATED_EXPORT_VERSION = 2
+_AUTHENTICATED_EXPORT_ITERATIONS = 200000
+_AUTHENTICATED_EXPORT_SALT_BYTES = 16
+_AUTHENTICATED_EXPORT_TAG_BYTES = 32
+_LEGACY_OPENSSL_MAGIC = b"Salted__"
+_ENCRYPTION_FORMAT_AUTHENTICATED = "authenticated-v2"
+_ENCRYPTION_FORMAT_LEGACY = "legacy-openssl-aes-256-cbc"
 
 
 def _canonical_profile_payload(config: dict) -> dict:
@@ -754,7 +768,16 @@ def _target_path_for_profile_secret(
     return ""
 
 
-def _openssl_encrypt(plaintext: bytes, password: str) -> bytes:
+def _canonical_json_bytes(value: dict) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def _openssl_encrypt_cbc(plaintext: bytes, password: str) -> bytes:
     env = dict(os.environ)
     env["BBUI_SECRET_PASS"] = password
     proc = subprocess.run(
@@ -765,7 +788,9 @@ def _openssl_encrypt(plaintext: bytes, password: str) -> bytes:
             "-pbkdf2",
             "-salt",
             "-iter",
-            "200000",
+            str(_AUTHENTICATED_EXPORT_ITERATIONS),
+            "-md",
+            "sha256",
             "-pass",
             "env:BBUI_SECRET_PASS",
         ],
@@ -775,33 +800,181 @@ def _openssl_encrypt(plaintext: bytes, password: str) -> bytes:
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError((proc.stderr or b"").decode("utf-8", "ignore").strip() or "OpenSSL encryption failed")
+        raise RuntimeError("Encrypted export could not be created")
     return proc.stdout
 
 
-def _openssl_decrypt(ciphertext: bytes, password: str) -> bytes:
+def _openssl_decrypt_cbc(ciphertext: bytes, password: str, *, legacy: bool = False) -> bytes:
     env = dict(os.environ)
     env["BBUI_SECRET_PASS"] = password
+    command = [
+        "openssl",
+        "enc",
+        "-d",
+        "-aes-256-cbc",
+        "-pbkdf2",
+        "-iter",
+        str(_AUTHENTICATED_EXPORT_ITERATIONS),
+    ]
+    if not legacy:
+        command.extend(["-md", "sha256"])
+    command.extend(["-pass", "env:BBUI_SECRET_PASS"])
     proc = subprocess.run(
-        [
-            "openssl",
-            "enc",
-            "-d",
-            "-aes-256-cbc",
-            "-pbkdf2",
-            "-iter",
-            "200000",
-            "-pass",
-            "env:BBUI_SECRET_PASS",
-        ],
+        command,
         input=ciphertext,
         capture_output=True,
         env=env,
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError("Decryption failed (invalid password or file)")
+        if legacy:
+            raise ValueError("Legacy encrypted export could not be decrypted (invalid password or file)")
+        raise ValueError("Encrypted export could not be decrypted")
     return proc.stdout
+
+
+def _authenticated_export_header(auth_salt: bytes) -> dict:
+    return {
+        "format": _AUTHENTICATED_EXPORT_FORMAT,
+        "version": _AUTHENTICATED_EXPORT_VERSION,
+        "cipher": {
+            "name": "aes-256-cbc",
+            "kdf": "pbkdf2-hmac-sha256",
+            "iterations": _AUTHENTICATED_EXPORT_ITERATIONS,
+            "salt": "openssl-embedded",
+        },
+        "authentication": {
+            "name": "hmac-sha256",
+            "kdf": "pbkdf2-hmac-sha256",
+            "iterations": _AUTHENTICATED_EXPORT_ITERATIONS,
+            "salt_b64": base64.b64encode(auth_salt).decode("ascii"),
+        },
+    }
+
+
+def _derive_export_authentication_key(password: str, auth_salt: bytes) -> bytes:
+    return hashlib.pbkdf2_hmac(
+        "sha256",
+        str(password or "").encode("utf-8"),
+        auth_salt,
+        _AUTHENTICATED_EXPORT_ITERATIONS,
+        dklen=_AUTHENTICATED_EXPORT_TAG_BYTES,
+    )
+
+
+def _authenticated_export_mac_input(header: dict, ciphertext: bytes) -> bytes:
+    return _AUTHENTICATED_EXPORT_MAGIC + _canonical_json_bytes(header) + b"\0" + ciphertext
+
+
+def _encrypt_authenticated_export(plaintext: bytes, password: str) -> bytes:
+    auth_salt = os.urandom(_AUTHENTICATED_EXPORT_SALT_BYTES)
+    header = _authenticated_export_header(auth_salt)
+    ciphertext = _openssl_encrypt_cbc(_AUTHENTICATED_PLAINTEXT_MAGIC + plaintext, password)
+    auth_key = _derive_export_authentication_key(password, auth_salt)
+    tag = hmac.new(
+        auth_key,
+        _authenticated_export_mac_input(header, ciphertext),
+        hashlib.sha256,
+    ).digest()
+    envelope = {
+        "protected": header,
+        "ciphertext_b64": base64.b64encode(ciphertext).decode("ascii"),
+        "tag_b64": base64.b64encode(tag).decode("ascii"),
+    }
+    return _AUTHENTICATED_EXPORT_MAGIC + _canonical_json_bytes(envelope)
+
+
+def _validate_authenticated_export_header(header: object) -> bytes:
+    if not isinstance(header, dict):
+        raise ValueError("Encrypted export is invalid or truncated")
+    expected = _authenticated_export_header(b"placeholder")
+    authentication = header.get("authentication")
+    if not isinstance(authentication, dict):
+        raise ValueError("Encrypted export is invalid or truncated")
+    salt_b64 = authentication.get("salt_b64")
+    comparable = dict(header)
+    comparable["authentication"] = dict(authentication)
+    comparable["authentication"]["salt_b64"] = expected["authentication"]["salt_b64"]
+    if comparable != expected:
+        raise ValueError("Unsupported encrypted export parameters")
+    try:
+        auth_salt = base64.b64decode(str(salt_b64 or "").encode("ascii"), validate=True)
+    except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
+        raise ValueError("Encrypted export is invalid or truncated") from exc
+    if len(auth_salt) != _AUTHENTICATED_EXPORT_SALT_BYTES:
+        raise ValueError("Encrypted export is invalid or truncated")
+    return auth_salt
+
+
+def _decrypt_encrypted_export(payload: bytes, password: str) -> tuple[bytes, str]:
+    if payload.startswith(_AUTHENTICATED_EXPORT_MAGIC):
+        try:
+            envelope = json.loads(payload[len(_AUTHENTICATED_EXPORT_MAGIC):].decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("Encrypted export is invalid or truncated") from exc
+        if not isinstance(envelope, dict):
+            raise ValueError("Encrypted export is invalid or truncated")
+        header = envelope.get("protected")
+        auth_salt = _validate_authenticated_export_header(header)
+        try:
+            ciphertext = base64.b64decode(
+                str(envelope.get("ciphertext_b64") or "").encode("ascii"),
+                validate=True,
+            )
+            supplied_tag = base64.b64decode(
+                str(envelope.get("tag_b64") or "").encode("ascii"),
+                validate=True,
+            )
+        except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
+            raise ValueError("Encrypted export is invalid or truncated") from exc
+        if not ciphertext.startswith(_LEGACY_OPENSSL_MAGIC) or len(supplied_tag) != _AUTHENTICATED_EXPORT_TAG_BYTES:
+            raise ValueError("Encrypted export is invalid or truncated")
+        auth_key = _derive_export_authentication_key(password, auth_salt)
+        expected_tag = hmac.new(
+            auth_key,
+            _authenticated_export_mac_input(header, ciphertext),
+            hashlib.sha256,
+        ).digest()
+        if not hmac.compare_digest(supplied_tag, expected_tag):
+            raise ValueError("Encrypted export authentication failed (invalid password or modified file)")
+        plaintext = _openssl_decrypt_cbc(ciphertext, password)
+        if not plaintext.startswith(_AUTHENTICATED_PLAINTEXT_MAGIC):
+            raise ValueError("Encrypted export authentication failed (invalid password or modified file)")
+        return plaintext[len(_AUTHENTICATED_PLAINTEXT_MAGIC):], _ENCRYPTION_FORMAT_AUTHENTICATED
+
+    if payload.startswith(_LEGACY_OPENSSL_MAGIC):
+        if len(payload) <= len(_LEGACY_OPENSSL_MAGIC):
+            raise ValueError("Legacy encrypted export is invalid or truncated")
+        return _openssl_decrypt_cbc(payload, password, legacy=True), _ENCRYPTION_FORMAT_LEGACY
+
+    raise ValueError("Unsupported encrypted export format")
+
+
+def _decode_encrypted_export_payload(payload_b64: str) -> bytes:
+    try:
+        payload = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=True)
+    except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
+        raise ValueError("Encrypted export is invalid or truncated") from exc
+    if not payload:
+        raise ValueError("Encrypted export is invalid or truncated")
+    return payload
+
+
+def _decode_encrypted_json_payload(plaintext: bytes) -> dict:
+    try:
+        payload = json.loads(plaintext.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Encrypted export payload is invalid") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Encrypted export payload is invalid")
+    return payload
+
+
+def _encryption_preview_metadata(encryption_format: str) -> dict:
+    return {
+        "encryption_format": encryption_format,
+        "legacy_encryption": encryption_format == _ENCRYPTION_FORMAT_LEGACY,
+    }
 
 
 def export_secrets_backup(password: str) -> dict:
@@ -833,7 +1006,7 @@ def export_secrets_backup(password: str) -> dict:
         "files": files,
     }
     plaintext = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    encrypted = _openssl_encrypt(plaintext, pw)
+    encrypted = _encrypt_authenticated_export(plaintext, pw)
     return {
         "filename": f"bbui-secrets-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.enc",
         "payload_b64": base64.b64encode(encrypted).decode("ascii"),
@@ -842,9 +1015,9 @@ def export_secrets_backup(password: str) -> dict:
 
 
 def preview_secrets_backup(password: str, payload_b64: str) -> dict:
-    enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
-    plaintext = _openssl_decrypt(enc, str(password or ""))
-    payload = json.loads(plaintext.decode("utf-8"))
+    enc = _decode_encrypted_export_payload(payload_b64)
+    plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
+    payload = _decode_encrypted_json_payload(plaintext)
     if payload.get("format") != "bbui-secrets-backup-v1":
         raise ValueError("Invalid secrets backup format")
     files = payload.get("files") or []
@@ -870,7 +1043,12 @@ def preview_secrets_backup(password: str, payload_b64: str) -> dict:
             else:
                 status = "present"
         rows.append({"name": name, "status": status, "source_sha256": str(item.get("sha256") or ""), "local_sha256": local_hash})
-    return {"format": payload.get("format"), "count": len(rows), "files": rows}
+    return {
+        "format": payload.get("format"),
+        "count": len(rows),
+        "files": rows,
+        **_encryption_preview_metadata(encryption_format),
+    }
 
 
 def import_secrets_backup(
@@ -881,9 +1059,9 @@ def import_secrets_backup(
 ) -> dict:
     if mode not in {"skip", "overwrite", "rename"}:
         raise ValueError("Invalid import mode")
-    enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
-    plaintext = _openssl_decrypt(enc, str(password or ""))
-    payload = json.loads(plaintext.decode("utf-8"))
+    enc = _decode_encrypted_export_payload(payload_b64)
+    plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
+    payload = _decode_encrypted_json_payload(plaintext)
     if payload.get("format") != "bbui-secrets-backup-v1":
         raise ValueError("Invalid secrets backup format")
     files = payload.get("files") or []
@@ -923,7 +1101,11 @@ def import_secrets_backup(
         os.chmod(target, 0o600)
         written += 1
         report.append({"name": name, "written_as": target.name, "status": "written"})
-    return {"restored_count": written, "report": report}
+    return {
+        "restored_count": written,
+        "report": report,
+        **_encryption_preview_metadata(encryption_format),
+    }
 
 
 def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: list[str] | None = None) -> dict:
@@ -945,7 +1127,7 @@ def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: lis
         "passphrase_files": passphrase_files,
         "key_files": key_files,
     }
-    encrypted = _openssl_encrypt(json.dumps(payload, ensure_ascii=False).encode("utf-8"), pw)
+    encrypted = _encrypt_authenticated_export(json.dumps(payload, ensure_ascii=False).encode("utf-8"), pw)
     return {
         "filename": f"bbui-jobs-secure-{datetime.now().strftime('%Y%m%d-%H%M%S')}.jobs.enc",
         "payload_b64": base64.b64encode(encrypted).decode("ascii"),
@@ -956,9 +1138,9 @@ def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: lis
 
 
 def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str) -> dict:
-    enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
-    plaintext = _openssl_decrypt(enc, str(password or ""))
-    payload = json.loads(plaintext.decode("utf-8"))
+    enc = _decode_encrypted_export_payload(payload_b64)
+    plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
+    payload = _decode_encrypted_json_payload(plaintext)
     if payload.get("format") != "bbui-job-bundle-secure-v2":
         raise ValueError("Unknown encrypted jobs format")
     bundle = payload.get("bundle")
@@ -968,6 +1150,7 @@ def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str)
     out["secure_format"] = payload.get("format")
     out["passphrase_count"] = len(payload.get("passphrase_files") or {})
     out["keyfile_count"] = len(payload.get("key_files") or {})
+    out.update(_encryption_preview_metadata(encryption_format))
     return out
 
 
@@ -984,9 +1167,9 @@ def import_jobs_bundle_encrypted(
     import_jobs: bool = True,
     import_passphrases: bool = True,
 ) -> dict:
-    enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
-    plaintext = _openssl_decrypt(enc, str(password or ""))
-    payload = json.loads(plaintext.decode("utf-8"))
+    enc = _decode_encrypted_export_payload(payload_b64)
+    plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
+    payload = _decode_encrypted_json_payload(plaintext)
     if payload.get("format") != "bbui-job-bundle-secure-v2":
         raise ValueError("Unknown encrypted jobs format")
     bundle = payload.get("bundle")
@@ -1093,6 +1276,7 @@ def import_jobs_bundle_encrypted(
         if changed:
             write_repository_store(config, {"repositories": list(repositories.values())})
     result["restored_keyfiles"] = restored_keys
+    result.update(_encryption_preview_metadata(encryption_format))
     return result
 
 
@@ -1132,7 +1316,7 @@ def export_profile_secrets_backup(config: dict, password: str) -> dict:
         ],
     }
     plaintext = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    encrypted = _openssl_encrypt(plaintext, pw)
+    encrypted = _encrypt_authenticated_export(plaintext, pw)
     return {
         "filename": f"bbui-profile-secrets-{datetime.now().strftime('%Y%m%d-%H%M%S')}.profiles.enc",
         "payload_b64": base64.b64encode(encrypted).decode("ascii"),
@@ -1141,9 +1325,9 @@ def export_profile_secrets_backup(config: dict, password: str) -> dict:
 
 
 def preview_profile_secrets_backup(config: dict, password: str, payload_b64: str) -> dict:
-    enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
-    plaintext = _openssl_decrypt(enc, str(password or ""))
-    payload = json.loads(plaintext.decode("utf-8"))
+    enc = _decode_encrypted_export_payload(payload_b64)
+    plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
+    payload = _decode_encrypted_json_payload(plaintext)
     if payload.get("format") != "bbui-profile-secrets-v1":
         raise ValueError("Invalid profile secrets format")
     manifest = payload.get("manifest") if isinstance(payload.get("manifest"), list) else []
@@ -1190,6 +1374,7 @@ def preview_profile_secrets_backup(config: dict, password: str, payload_b64: str
             "smb": sorted(smb_keys),
             "storage": sorted(storage_keys),
         },
+        **_encryption_preview_metadata(encryption_format),
     }
 
 
@@ -1208,9 +1393,9 @@ def import_profile_secrets_backup(
     if settings_mode not in {"ignore", "merge", "replace"}:
         raise ValueError("Invalid settings import mode")
 
-    enc = base64.b64decode(str(payload_b64 or "").encode("ascii"), validate=False)
-    plaintext = _openssl_decrypt(enc, str(password or ""))
-    payload = json.loads(plaintext.decode("utf-8"))
+    enc = _decode_encrypted_export_payload(payload_b64)
+    plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
+    payload = _decode_encrypted_json_payload(plaintext)
     if payload.get("format") != "bbui-profile-secrets-v1":
         raise ValueError("Invalid profile secrets format")
 
@@ -1286,4 +1471,5 @@ def import_profile_secrets_backup(
         "settings_applied": settings_applied,
         "settings_report": settings_report,
         "settings_backup": settings_backup,
+        **_encryption_preview_metadata(encryption_format),
     }

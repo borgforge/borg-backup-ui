@@ -1805,6 +1805,7 @@
       "selectPreviewBackupMessage": "Bitte die verschlüsselte Backup-Datei für die Vorschau auswählen.",
       "previewLoadedPassphrases": "Vorschau geladen: {count} Passphrase-Dateien ({file})",
       "secretsPreviewFailed": "Secrets-Vorschau fehlgeschlagen: {message}",
+      "legacyEncryptionWarning": "Legacy-Export ohne Integritätsschutz. Importieren Sie ihn nur aus einer vertrauenswürdigen Quelle und erstellen Sie danach einen neuen verschlüsselten Export.",
       "noSecretsPreview": "Keine Secrets-Vorschau vorhanden",
       "noPassphraseFilesSelected": "Keine Passphrase-Dateien ausgewählt",
       "confirmPassphraseImport": "Auswahl: {count} Datei(en), Modus: {mode}{different}. Import jetzt starten?",

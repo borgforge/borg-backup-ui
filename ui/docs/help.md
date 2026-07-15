@@ -132,6 +132,8 @@ Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerha
 ## Import, Export und Backups
 
 - **Einstellungen > Import / Export** bietet verschlüsselte Exporte für Jobs, Passphrases, Profile und Secrets.
+- Neue verschlüsselte Exporte sind versioniert und gegen unbemerkte Änderungen geschützt. Ein falsches Passwort sowie beschädigte oder manipulierte Dateien werden vor dem Import abgewiesen.
+- Ältere AES-CBC-Exporte können weiterhin importiert werden, werden aber als Legacy-Format ohne Integritätsschutz gekennzeichnet. Erstellen Sie nach einem solchen Import einen neuen Export.
 - Vor Importen wird eine Vorschau angezeigt.
 - Import-Modi wie `skip`, `overwrite` oder `rename` steuern den Umgang mit bestehenden Daten.
 - Jobs-Importe können passende USB-/SMB-Profile aus dem Paket mitbringen.
