@@ -19,9 +19,6 @@
 
 <CHANGES>
 <![CDATA[
-###NEXT###
-- Updated the German and English user-manual screenshots to the current light-theme interface, restored numbered guide callouts and removed environment-specific SSH profile values.
-
 ###2026.07.15.1415###
 - Added a read-only Homepage dashboard widget for backup, restore-test, overdue and active-run status with a dedicated restricted token.
 - Homepage widget settings can create, rotate or revoke the token and provide a ready-to-copy Custom API configuration.
