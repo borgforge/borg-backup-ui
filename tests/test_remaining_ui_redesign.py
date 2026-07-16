@@ -84,9 +84,35 @@ def test_help_has_generated_table_of_contents() -> None:
     html = _read("ui/index.html")
     script = _read("ui/js/pages/help.js")
     assert 'id="help-toc"' in html
+    assert 'id="help-search-input"' in html
+    assert 'id="help-search-clear-btn"' in html
+    assert 'id="help-search-status"' in html
+    assert 'id="help-view-quick-btn"' in html
+    assert 'id="help-view-manual-btn"' in html
     assert "function _renderHelpToc(content)" in script
     assert "content.querySelectorAll('h2, h3')" in script
     assert "_renderHelpToc(box);" in script
+    assert "function helpFilter(rawQuery = '')" in script
+    assert "section.tocTargets" in script
+    assert "node.matches?.('h2, h3')" in script
+    assert "function helpSetView(rawView)" in script
+    assert "function openHelpTopic(topic)" in script
+    assert "const helpDocument = await fetchHelpDocument(language)" in script
+    assert "const document = await fetchHelpDocument(language)" not in script
+    assert "window.helpSetView = helpSetView" in script
+    assert "window.openHelpTopic = openHelpTopic" in script
+
+
+def test_help_renders_operational_callouts_and_ordered_steps() -> None:
+    script = _read("ui/js/pages/help.js")
+    css = _read("ui/remaining-ui-redesign.css")
+    assert "NOTE|TIP|WARNING|IMPORTANT" in script
+    assert "Hinweis|Tipp|Warnung|Wichtig|Note|Tip|Warning|Important" in script
+    assert "'<a href=\"#help-' + target.slice(1)" in script
+    assert "<ol>" in script
+    assert "help-callout--warning" in css
+    assert "help-callout--tip" in css
+    assert ".help-search-hidden" in css
 
 
 def test_remaining_surfaces_are_responsive_and_modal_content_is_contained() -> None:

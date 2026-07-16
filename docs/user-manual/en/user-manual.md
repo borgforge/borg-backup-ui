@@ -1,8 +1,8 @@
 # Borg-Backup-UI User Manual
 
-Date: 2026-07-03  
+Date: 2026-07-16
 Language: English  
-Audience: Users and administrators of an Unraid system
+Audience: Beginners, advanced users, and administrators of an Unraid system
 
 This manual describes Borg-Backup-UI in the same order as the application's menu. It explains the visible pages, typical workflows, important warnings, and the effects of user actions.
 
@@ -22,6 +22,9 @@ This manual describes Borg-Backup-UI in the same order as the application's menu
 10. [Help](#10-help)
 11. [Typical Tasks](#11-typical-tasks)
 12. [Status, Warnings, and Best Practices](#12-status-warnings-and-best-practices)
+13. [Troubleshooting](#13-troubleshooting)
+14. [FAQ](#14-faq)
+15. [Recommended Operating Practices](#15-recommended-operating-practices)
 
 ## 1. Basics
 
@@ -44,13 +47,19 @@ After signing in, the left sidebar shows the main menu, system status, language 
 
 The language can be switched between German and English at the bottom left. This affects the web interface, not the technical log files. Logs, machine-readable values, and technical error codes may still contain English terms.
 
-The application supports at least the roles `admin` and `viewer`. Administrators can change settings, manage jobs, and execute user actions. A viewer role is read-only; write actions may be disabled or rejected.
+The application supports the `admin`, `operator`, and `viewer` roles:
+
+- **admin:** Full access to users, settings, storage targets, repositories, and jobs.
+- **operator:** May run operational actions such as backups, restores, and maintenance, but cannot manage administrative settings.
+- **viewer:** Read-only access; write actions are disabled or rejected.
 
 > **Warning:** Keep passwords, Borg passphrases, SSH keys, and export passwords secure. Borg-Backup-UI masks secrets in diagnostic output, but support bundles should still be reviewed before sharing.
 
 ## 2. Dashboard
 
-![Dashboard](../assets/en/dashboard.png)
+![Dashboard with highlighted status and filter areas](../assets/en/dashboard-guide.png)
+
+**Figure 1 - Dashboard:** (1) overall backup-run and restore-evidence status, (2) location filter, (3) detailed table for the filtered jobs.
 
 The Dashboard is the central overview of backup state, restore evidence, storage growth, and repository checks.
 
@@ -96,11 +105,13 @@ The page consists of:
 
 > **Tip:** Use the Dashboard as the daily control point. If all backup and restore counters look plausible, detailed pages only need to be opened when something stands out.
 
-> **Note:** The Dashboard shows the most recently known status data. If a repository is not reachable or a status file is missing, the table may show stale or incomplete values. In that case, check **History**, **Storage**, and the logs.
+> **Note:** The Dashboard shows the most recently known status data. If a repository is not reachable or a status file is missing, the table may show stale or incomplete values. In that case, check **History**, **Repositories**, and the logs.
 
 ## 3. Jobs
 
-![Jobs](../assets/en/jobs.png)
+![Jobs page with target filter, new-job action, and job list](../assets/en/jobs-guide.png)
+
+**Figure 2 - Jobs:** (1) filter by storage target, (2) entry point to the job wizard, (3) job cards with state, policy, and start action.
 
 The **Jobs** page manages backup jobs. Jobs can be viewed, started, edited, scheduled, and deleted here.
 
@@ -133,13 +144,11 @@ Jobs define which data is backed up and where it is stored. A job contains:
 3. Click **Start**.
 4. Confirm the start dialog.
 5. Watch the live log.
-6. Afterwards, check **History** and optionally **Storage**.
+6. Afterwards, check **History** and optionally **Repositories**.
 
 > **Warning:** If the job is configured to stop Docker containers or VMs, only the targets configured in the job are controlled. Review this selection before production runs.
 
 ### 3.4 Job Wizard
-
-![Job wizard](../assets/en/job-wizard-step-1.png)
 
 The job wizard guides creation or editing of a job through fixed steps.
 
@@ -227,8 +236,6 @@ Best practices:
 - **Schedule disabled:** The job only runs manually.
 
 ## 4. Repositories
-
-![Storage](../assets/en/storage.png)
 
 The **Repositories** page uses a master-detail workspace. Borg repositories are grouped by their exact storage target on the left, while the selected repository remains visible in the workspace on the right. **Add repository** creates or imports a repository on a storage target that has already been configured under **Settings**.
 
@@ -384,7 +391,9 @@ Reports help analyze trends:
 
 ## 7. Browse & Restore
 
-![Browse & Restore](../assets/en/restore-wizard.png)
+![Restore wizard with highlighted interaction areas](../assets/en/restore-guide.png)
+
+**Figure 3 - Browse & Restore:** (1) switch between Restore and History, (2) job selection by location, (3) progress through the five wizard steps, (4) content of the current step.
 
 **Browse & Restore** guides recovery of data from Borg archives.
 
@@ -574,7 +583,9 @@ Typical status values:
 
 ## 9. Settings
 
-![Settings](../assets/en/settings.png)
+![Settings with navigation, system health, and configuration area](../assets/en/settings-guide.png)
+
+**Figure 4 - Settings:** (1) section navigation, (2) system health and migration, (3) settings for the selected section, (4) central save action.
 
 The **Settings** page manages the application configuration. It is grouped into System, Operations, Storage Targets, and Maintenance.
 
@@ -593,6 +604,7 @@ Typical contents:
 - Unraid notifications
 - ntfy push notifications
 - weekly report
+- Homepage widget for external dashboards
 
 #### Notifications
 
@@ -616,6 +628,10 @@ Reminder settings apply across channels. The reminder interval prevents the same
 
 > **Note:** Test messages verify only the delivery channel. They do not replace a real backup or restore test.
 
+#### Homepage Widget
+
+The Homepage widget provides a compact, token-protected status summary for the **Homepage** project. The UI generates a YAML template containing health, successful backups, restore tests, and active runs. Treat the widget token like a password and do not expose it in screenshots or support bundles.
+
 ### 9.2 Users
 
 ![Settings - Users](../assets/en/settings-users.png)
@@ -635,6 +651,7 @@ Functions:
 Roles:
 
 - **admin:** Full access to settings and actions.
+- **operator:** Operational actions without administrative configuration rights.
 - **viewer:** Read access; write actions are restricted.
 
 > **Tip:** Disable users first instead of immediately deleting them permanently. This makes offboarding easier to control.
@@ -674,7 +691,23 @@ This area manages allowed restore target roots. By default, only `/mnt/user` is 
 
 > **Warning:** Do not add overly broad paths such as `/`, `/mnt`, `/mnt/disks`, or `/mnt/remotes`. Use concrete targets such as `/mnt/disks/<name>` or `/mnt/remotes/<name>`.
 
-### 9.5 USB Profiles
+### 9.5 Local Profiles
+
+Local profiles define concrete storage targets below `/mnt`, for example `/mnt/backup`, `/mnt/cache/backups`, or a dedicated pool. The repository wizard offers only storage targets that have already been created and checked.
+
+Functions:
+
+- create a profile with a unique display name
+- select or enter a concrete base path
+- test availability and write access
+- edit the profile
+- delete an unused profile
+
+Overly broad or dangerous targets such as `/`, `/mnt`, and system directories are rejected. A profile cannot be deleted while repositories or jobs still reference it.
+
+> **Recommendation:** Use one profile per physical pool or mount and assign a clear name such as `Local Backup` or `USB-5TB`.
+
+### 9.6 USB Profiles
 
 ![Settings - USB Profiles](../assets/en/settings-usb.png)
 
@@ -694,7 +727,7 @@ Important fields:
 
 > **Note:** A USB profile does not automatically make a device available. The target must be mounted on Unraid when a backup runs.
 
-### 9.6 SMB Profiles
+### 9.7 SMB Profiles
 
 ![Settings - SMB Profiles](../assets/en/settings-smb.png)
 
@@ -724,7 +757,7 @@ Typical actions:
 4. Check status.
 5. Open the repository under **Repositories** and refresh its information.
 
-### 9.7 SSH Profiles
+### 9.8 SSH Profiles
 
 ![Settings - SSH Profiles](../assets/en/settings-storagebox.png)
 
@@ -750,7 +783,7 @@ Functions:
 
 > **Note:** For Hetzner Storage Box, a relative base path such as `./backup` is typical. Check the resolved repository path on the **Repositories** page.
 
-### 9.8 Import / Export
+### 9.9 Import / Export
 
 ![Settings - Import / Export](../assets/en/settings-import-export.png)
 
@@ -773,7 +806,7 @@ Import strategies can keep, replace, or rename existing entries depending on the
 
 New encrypted exports use a versioned, authenticated envelope. Wrong passwords and damaged, truncated, or manipulated files are checked before import data is written. Older AES-CBC exports remain importable but show a legacy warning in the preview. Create a new export in the current format after a legacy import.
 
-### 9.9 Advanced
+### 9.10 Advanced
 
 ![Settings - Advanced](../assets/en/settings-advanced.png)
 
@@ -786,7 +819,7 @@ Subsections:
 
 Reminder diagnostics show when a run was expected, when it becomes overdue, when it was last sent, and when the next reminder is allowed. This view does not send notifications; it is diagnostic only.
 
-### 9.10 Factory Reset
+### 9.11 Factory Reset
 
 **Factory Reset** is the final entry in the **Maintenance** group. It removes the application configuration and configured operational data, then restarts Borg Backup UI at the administrator first-setup page.
 
@@ -796,7 +829,7 @@ Approval requires every risk acknowledgment, the server name, the current admini
 
 > **Warning:** Users, jobs, schedules, storage targets, repository assignments, secrets, Borg keyfiles, logs, status, and history data are permanently removed. Back up `/boot/config/borg-backup` first.
 
-### 9.11 System Status and Migration
+### 9.12 System Status and Migration
 
 ![Settings - System Status and Migration](../assets/en/settings-system-health.png)
 
@@ -835,6 +868,8 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 
 - **Refresh:** Reloads the help document.
 - **Table of contents:** Jumps to sections.
+- **Search:** Filters the table of contents and chapters for terms such as `restore`, `SMB`, or `passphrase`.
+- **Callouts:** Highlight recommendations, warnings, and security-relevant information.
 - **Language-dependent content:** Help follows the selected UI language.
 
 ## 11. Typical Tasks
@@ -928,3 +963,116 @@ Recommended order:
 6. Create a support bundle if the error needs to be shared.
 
 > **Tip:** A successful backup is truly reliable only after restore tests and at least one manual restore into a test target have also succeeded.
+
+## 13. Troubleshooting
+
+### 13.1 Backup Succeeds but Contains No Data
+
+An existing but empty source directory is technically valid. Do not rely on the exit code alone:
+
+1. Open the job and compare the source path character by character with the Unraid path. Linux paths are case-sensitive.
+2. Verify that the path contains readable files.
+3. Review exclusion paths. An overly broad exclusion can remove all content.
+4. Run the job again and check file count and original size in History or Reports.
+
+If a configured source path is missing, Borg-Backup-UI stops the run. This prevents an apparently successful but incomplete archive.
+
+### 13.2 Repository Lock or SSH Disconnect
+
+A lock normally means that another Borg process is using the repository or that a previous connection did not close cleanly. Borg-Backup-UI waits for a limited time. Before removing any lock manually, verify:
+
+- Is a backup, restore, restore test, or check still running?
+- Is an SSH connection still active?
+- Is another computer accessing the repository?
+
+`Connection reset by peer` or `Broken pipe` means that the SSH connection was interrupted. Check WAN connectivity, the target server, and SSH keepalive, then restart the action. Borg does not resume an interrupted full check from its previous progress position.
+
+### 13.3 Storage Target Is Unavailable
+
+- **USB:** Confirm that the configured mount path is actually mounted.
+- **SMB:** Test port 445, share, user, password, and SMB 2/3 compatibility in the profile check.
+- **SSH/Storagebox:** Check host, port, public key, and base path.
+- **Local:** Verify that the pool or disk is online and writable.
+
+Depending on the protection rule, an unavailable managed target results in **Skipped** or **Failed**. The run log contains the exact reason.
+
+### 13.4 Email or ntfy Is Not Sent
+
+1. Send a test notification.
+2. Verify that the specific event is enabled for the channel.
+3. Check recipient, server, topic, and authentication.
+4. Open **Settings > Advanced > Notification Reminders** to see whether a reminder was already sent and when the next one is allowed.
+5. Review the application log for SMTP errors. `WRONG_VERSION_NUMBER` usually indicates an invalid port and TLS-mode combination.
+
+### 13.5 Migration or System Check Failed
+
+A failed required migration places the application in restricted maintenance mode. Open **Settings > System Status & Migration**, read the reason and affected file, and use the referenced migration backup. Normal write operations remain blocked until the problem is resolved.
+
+> **Warning:** Do not edit JSON files without a backup. Use a support bundle and the structured migration log when requesting support.
+
+## 14. FAQ
+
+### Do I Need BorgBackup Experience?
+
+No. The wizards guide you through common workflows. You should still understand repository, archive, retention, and restore; this manual explains them in context.
+
+### Does a Backup Job Create Its Repository Automatically?
+
+No. Storage targets are managed under **Settings**, repositories are created or imported under **Repositories**, and a job then selects an existing repository. This separation prevents accidental duplicate or incorrectly encrypted repositories.
+
+### Where Is Encryption Configured?
+
+When the repository is created. A job defines sources, compression, retention, and schedule but does not change encryption for an existing repository.
+
+### Can Multiple Jobs Write to the Same Repository?
+
+The application maintains an explicit repository assignment. Do not schedule overlapping access. Separate repositories per backup purpose are usually easier to operate when data sets or retention policies differ.
+
+### Why Are Only Previously Running Containers or VMs Restarted?
+
+This prevents Borg-Backup-UI from starting services that an administrator intentionally left stopped. Runtime recovery records the targets that were actually stopped and supports verification after an abort or restart.
+
+### Is a Successful Backup Enough?
+
+No. Also verify repository health, notifications, restore tests, and a real restore to a separate test target at regular intervals.
+
+### Is a Support Bundle Anonymous?
+
+No. It is **sanitized**, not fully anonymous. Secrets are masked, but technical paths, names, and infrastructure references may still identify the environment. Review the bundle before sharing it.
+
+## 15. Recommended Operating Practices
+
+### 15.1 Backup Strategy
+
+Use the 3-2-1-0-0 principle:
+
+- three data copies including the original
+- two different media or storage locations
+- one offsite copy
+- zero unnoticed backup failures
+- zero untested backups through regular restore tests
+
+A typical Unraid setup combines the original data on the array with a local or USB repository and an SSH/Storagebox repository.
+
+### 15.2 Repository Layout and Secrets
+
+- Use clear display names.
+- Separate important data sets into understandable repositories.
+- Back up passphrases and keyfiles outside the Unraid server.
+- Export configuration and secrets in encrypted form and test the import preview.
+- Delete repositories only through the protected Administration workflow and only after reviewing every job assignment.
+
+### 15.3 Scheduling and Performance
+
+- Leave sufficient time between large jobs.
+- Avoid parallel maintenance actions on the same repository.
+- Run full data checks less frequently than normal checks.
+- Select compression based on hardware and data; stronger compression consumes more CPU time.
+- Avoid checking offsite targets during known WAN maintenance windows.
+
+### 15.4 Restore Readiness
+
+- Schedule L3 tests for critical jobs at suitable intervals.
+- Perform a manual restore to a test directory after major changes.
+- Document where passphrases, keyfiles, and export passwords are securely stored.
+- After updates, verify migration, jobs, repository assignments, and at least one representative backup run.

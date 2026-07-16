@@ -73,7 +73,21 @@
     "loadFailed": "Dokumentation konnte nicht geladen werden: {message}",
     "navigation": "Navigation",
     "contents": "Inhalt",
-    "contentsHint": "Abschnitte dieser Hilfe"
+    "contentsHint": "Aufgaben und Themen dieser Hilfe",
+    "viewTabs": "Dokumentationsansicht",
+    "quickHelp": "Schnellhilfe",
+    "fullManual": "Handbuch",
+    "searchLabel": "Hilfe durchsuchen",
+    "searchPlaceholder": "Begriff oder Aufgabe eingeben...",
+    "searchClear": "Suche löschen",
+    "searchHint": "Kapitel auswählen oder Hilfe durchsuchen.",
+    "searchResults": "{count} passende Kapitel",
+    "callout": {
+      "note": "Hinweis",
+      "tip": "Tipp",
+      "warning": "Achtung",
+      "important": "Wichtig"
+    }
   },
   "api": {
     "errors": {

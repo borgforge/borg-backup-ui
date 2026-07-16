@@ -1,188 +1,237 @@
-# Borg Backup UI - Kurzhilfe
+# Borg Backup UI - Benutzerleitfaden
 
-Diese Hilfe ist als schnelle Orientierung gedacht. Sie ersetzt kein vollständiges Handbuch, sondern fasst die wichtigsten Bedienwege, Prüfungen und typischen Fehlerbilder zusammen.
+Diese Hilfe begleitet Einsteiger, fortgeschrittene Anwender und Administratoren durch den vollständigen Backup-Lebenszyklus. Wählen Sie links ein Kapitel oder suchen Sie nach einer Aufgabe, einem Status oder einer Fehlermeldung.
 
-## Wofür ist die Anwendung?
+> [!IMPORTANT] Backups sind erst belastbar, wenn mindestens ein Restore-Test und eine manuelle Wiederherstellung in ein Testziel erfolgreich waren.
 
-Borg Backup UI verwaltet Borg-Backup-Jobs auf Unraid. Die Anwendung hilft beim Einrichten von Jobs, Speicherzielen, Zeitplänen, Restore-Tests und beim Prüfen des Systemzustands.
+## 1. Erste Schritte
 
-## Schnellstart
+### Vor dem ersten Backup
 
-### 1) Systemstatus prüfen
+1. Öffnen Sie **Einstellungen > Allgemein** und prüfen Sie den Systemzustand.
+2. Legen Sie unter **Lokale Profile**, **USB-Profile**, **SMB-Profile** oder **SSH-Profile** ein Speicherziel an.
+3. Erstellen oder importieren Sie unter **Repositories** ein Borg-Repository.
+4. Erstellen Sie unter **Jobs** einen Backup-Job und wählen Sie das vorhandene Repository.
+5. Starten Sie den Job zuerst manuell und prüfen Sie Live-Log und **History**.
+6. Planen Sie anschließend einen Restore-Test.
 
-- In der Sidebar zeigt **Systemstatus**, ob alles OK ist oder ob Punkte offen sind.
-- Bei Warnung auf **Systemstatus** klicken und in **Einstellungen > Systemzustand & Migration** die offenen Punkte ansehen.
-- Wichtig: Der Bereich trennt Systemprüfungen, Job-Prüfungen, letzte Migration und Konfigurations-/Wartungspunkte.
+### Grundbegriffe
 
-### 2) Speicherziel und Repository vorbereiten
+- **Speicherziel:** Physischer oder entfernter Ort, zum Beispiel ein Unraid-Pool, USB-Datenträger, SMB-Share oder SSH-Server.
+- **Repository:** Borg-Datenspeicher auf einem Speicherziel. Er enthält die Archive und besitzt Verschlüsselung sowie Passphrase oder Keyfile.
+- **Job:** Legt Quellen, Ausschlüsse, Kompression, Aufbewahrung, Docker-/VM-Steuerung und Zeitplan fest.
+- **Archiv:** Ein einzelner Sicherungsstand innerhalb eines Repositorys.
+- **Restore-Test:** Automatisierte Prüfung, ob Daten aus einem Archiv wiederhergestellt werden können.
 
-- Das Speicherziel zuerst unter **Einstellungen** bei den lokalen, USB-, SMB- oder SSH-Profilen anlegen und prüfen.
-- In **Repositories** auf **Repository hinzufügen** klicken.
-- Das vorhandene Speicherziel auswählen.
-- Anschließend ein neues Borg-Repository erstellen oder ein vorhandenes Repository importieren.
+> [!TIP] Richten Sie zuerst Speicherziel und Repository ein. Der Job-Wizard legt keine Repositorys mehr nebenbei an.
 
-Tipp: Beim Import wird das Repository mit `borg info` geprüft, aber nicht verändert oder initialisiert.
+## 2. Oberfläche und Rollen
 
-### 3) Job anlegen oder bearbeiten
+### Navigation
 
-- In **Jobs** auf **Neuer Job** klicken oder einen bestehenden Job bearbeiten.
-- Jobname und Typ wählen.
-- Quellpfade eintragen.
-- Speichertyp, Speicherziel und ein dazugehöriges vorhandenes Repository wählen.
-- Kompression und Aufbewahrung prüfen. Verschlüsselung und Passphrase gehören zum Repository und werden nicht im Job geändert.
-- Zeitplan aktivieren, falls der Job automatisch laufen soll.
+Das Hauptmenü folgt dem Betriebsablauf: **Dashboard**, **Jobs**, **Repositories**, **History**, **Berichte**, **Browse & Restore**, **Restore Tests**, **Einstellungen** und **Hilfe**. Unten links befinden sich Systemstatus, Sprache, Anmeldung und Version.
 
-### 4) Vorschau und Prüfungen beachten
+### Rollen
 
-- Der Wizard zeigt das ausgewählte verwaltete Repository und dessen Pfad.
-- Die schnelle Job-Prüfung ist eine lokale Plausibilitätsprüfung. Sie ersetzt keinen vollständigen Borg-Repo-Test.
+- **viewer:** Darf Zustände und Berichte lesen, aber keine Änderungen speichern.
+- **operator:** Darf betriebliche Aktionen ausführen, jedoch keine administrativen Einstellungen verwalten.
+- **admin:** Darf Benutzer, Einstellungen, Speicherziele, Repositorys und Jobs verwalten.
 
-### 5) Ersten Lauf manuell starten
+### Statusfarben
 
-- Nach dem Speichern den Job einmal manuell starten.
-- Log-Ausgabe beobachten.
-- Danach **History** und **Berichte** prüfen.
+- **Grün:** Erfolgreich, bereit oder verifiziert.
+- **Orange:** Warnung, überfällig oder Aufmerksamkeit erforderlich.
+- **Rot:** Fehlgeschlagen, nicht erreichbar oder blockiert.
+- **Grau:** Nicht geplant, nicht ausgeführt oder unbekannt.
 
-Empfehlung: Einen neuen Job erst nach einem erfolgreichen manuellen Lauf dauerhaft per Zeitplan verwenden.
+## 3. Dashboard
 
-### 6) Benachrichtigungen optional einrichten
+Das Dashboard beantwortet, ob Backups und Restore-Nachweise aktuell gesund sind. Die Kennzahlen oben fassen Backup-Läufe und Restore-Tests zusammen. Die Standort-Sidebar filtert die Jobtabelle nach Lokal, USB, SMB oder Storagebox.
 
-- SMTP wird unter **Einstellungen > Allgemein** gepflegt.
-- Nach dem Speichern eine Test-E-Mail senden.
-- ntfy wird ebenfalls unter **Einstellungen > Allgemein** gepflegt.
-- Für ntfy werden Server-URL, Topic und optional Authentifizierung benötigt. Passwort und Token werden als Secret-Dateien gespeichert.
-- Nach dem Eintragen eine ntfy-Testnachricht senden.
-- E-Mail, Unraid-Systemmeldungen und ntfy besitzen eigene Ereignis-Auswahlen. Reminder werden zentral begrenzt, damit überfällige Prüfungen nicht bei jedem Poll erneut melden.
-- Für geplante Backups kann eine Überfälligkeits-Toleranz in Stunden gesetzt werden. Eine Meldung erfolgt, wenn ein erwarteter Lauf nicht innerhalb dieser Toleranz erfolgreich abgeschlossen wurde.
-- Der Wochenbericht wird unter **Einstellungen > Backup** aktiviert und terminiert.
-- Der Wochenbericht nutzt entweder seinen eigenen Empfänger oder, wenn leer, den globalen E-Mail-Empfänger.
+### Wichtige Spalten
 
-## Systemstatus verstehen
+- **Laufstatus:** Ergebnis, Zeitpunkt und Dauer des letzten Backup-Laufs.
+- **Restore:** letzter Restore-Test und seine Gültigkeit.
+- **Speicherdaten:** Quellgröße, komprimierte und deduplizierte Daten sowie Repository-Größe.
+- **Wachstum / Check:** Größenänderung und letzter bekannter Repository-Check.
 
-### Sidebar
+> [!NOTE] Das Dashboard zeigt zuletzt gespeicherte Statusdaten. Für technische Details öffnen Sie **History**, **Berichte** oder **Repositories**.
 
-- **alles OK**: Die letzte Systemprüfung war erfolgreich.
-- **Punkt(e) offen**: Mindestens eine System-, Job- oder Wartungsprüfung braucht Aufmerksamkeit.
-- **unbekannt**: Status konnte noch nicht geladen werden oder der Backend-Check ist fehlgeschlagen.
+## 4. Speicherziele und Profile
 
-### Einstellungen > Systemzustand & Migration
+Speicherziele werden zentral unter **Einstellungen** verwaltet. Ein Profil darf erst gelöscht werden, wenn kein Repository oder Job mehr darauf verweist.
 
-- **System** prüft Basisverzeichnisse, Tools, CIFS-Unterstützung und Secret-Dateirechte.
-- **Migration** zeigt den letzten Lauf und ob echte Änderungen protokolliert wurden.
-- **Setup & Konfiguration** zeigt Bestand, offene Punkte, fehlerhafte Punkte und Cleanup-Kandidaten.
-- **Offene Punkte** zeigt konkrete Aktionen, wenn etwas vom Benutzer erledigt werden kann.
-- **Technische Details** enthalten Pfade, Registry-Details und Diagnoseinformationen.
+### Lokale Profile
 
-## Jobs und Speicherziele
+Verwenden Sie konkrete Pfade unter `/mnt`, zum Beispiel `/mnt/backup`, `/mnt/cache/backups` oder einen Unraid-Pool. Zu breite Wurzeln und Systempfade werden abgelehnt.
 
-### Local und USB
+### USB-Profile
 
-- Repository-Pfade sind normale Dateisystempfade.
-- Bei USB-Zielen muss das Ziel verfügbar sein, bevor ein Lauf erfolgreich sein kann.
+Ein USB-Profil verweist auf einen vorhandenen Mount-Pfad. Der Datenträger muss zum Laufzeitpunkt gemountet sein; andernfalls wird der Lauf geschützt übersprungen oder abgebrochen.
 
-### SMB
+### SMB-Profile
 
-- SMB-Jobs nutzen ein gespeichertes SMB-Profil.
-- Der Job-Check prüft Profilreferenz und Pfad-Plausibilität.
-- Der eigentliche Repository-Zugriff ist erst sinnvoll prüfbar, wenn das SMB-Ziel gemountet ist.
-- In **Storage > SMB** zuerst mounten, dann Repo-Test ausführen.
+Der Verbindungstest prüft Port 445, Anmeldung, temporären Mount, Share, Schreibzugriff und Unmount. Verwenden Sie SMB 2 oder 3; SMB 1 wird nicht unterstützt.
 
-### SSH, Storagebox und Synology
+### SSH-Profile
 
-- SSH-Ziele nutzen ein SSH-Profil mit Host, Port, User, Basispfad und Key.
-- Der Profiltest prüft SSH, Borg, Basispfad und Schreibzugriff.
-- Der konkrete Repository-Test erfolgt über **Storage** oder im Wizard über die Repo-Vorschau.
-- Ein korrekter relativer Basispfad sieht z. B. wie `./backup` aus und wird in der URI als `/./backup/...` verwendet.
+SSH-Profile enthalten Host, Port, Benutzer, Basispfad und SSH-Key. Vorhandene Schlüssel werden nicht überschrieben. Prüfen und deployen Sie den öffentlichen Schlüssel, bevor Sie ein Repository importieren.
 
-## Repositories
+## 5. Repositories
 
-- **Repositories** ist der Ort zum Einrichten, Importieren und Warten von Borg-Repositories.
-- Links werden Repositorys nach dem konkreten Speicherziel gruppiert. Die Suche filtert die Repository-Liste, ohne den ausgewählten Speicherort zu verändern.
-- **Übersicht** zeigt Borg-Kennzahlen, den letzten bekannten Wartungszustand und die verständlichen Repository-Daten.
-- Borg-Kennzahlen werden im Hintergrund mindestens alle 24 Stunden neu geladen und zwischengespeichert. Nach einem Verbindungsfehler versucht die Anwendung die Aktualisierung nach einer Stunde erneut.
-- Der Kopfbereich verwendet den konfigurierten Anzeigenamen des Repositorys. Repository-Verzeichnis, absoluter Repository-Pfad und Pfad im Speicherziel werden getrennt bezeichnet.
-- **Archive** lädt die aktuelle Archivliste direkt aus dem ausgewählten Repository.
-- **Wartung** bietet Check, Datenprüfung, Prune und Compact. Der Status und das Ergebnis bleiben nach Abschluss sichtbar; ein technisches Live-Log ist dafür nicht erforderlich.
-- **Verwaltung** zeigt Job-Verknüpfungen. Dort kann ein ungenutztes Repository nur aus der UI entfernt oder nach erneuter Identitätsprüfung endgültig gelöscht werden.
-- Prune verwendet die Aufbewahrungsrichtlinie des verknüpften Jobs und ist ohne Job-Zuordnung deaktiviert.
-- Nach Prune werden die entfernten Archive zusammengefasst. Compact zeigt den freigegebenen Speicherplatz, wenn Borg diesen Wert ausgibt.
-- Bei Fehlern können maskierte technische Details im betreffenden Statusfeld geöffnet werden.
-- Datenprüfung, Prune und Compact müssen ausdrücklich bestätigt werden.
-- Eine endgültige Löschung ist gesperrt, solange Jobs oder laufende Aktionen das Repository verwenden, und verlangt Anzeigename sowie `DELETE` als doppelte Bestätigung.
+Die Seite **Repositories** gruppiert Borg-Repositorys nach Speicherziel. Ein Repository besitzt einen Anzeigenamen, einen vollständigen Repository-Pfad, Verschlüsselungsmetadaten und optionale Job-Zuordnungen.
 
-## Restore und Restore Tests
+### Repository erstellen
 
-- **Browse & Restore** dient zum Durchsuchen von Archiven und Wiederherstellen einzelner Daten.
-- Restore-Ziele sind auf sichere Zielpfade unter `/mnt/user/...` begrenzt.
-- **Restore Tests** prüfen regelmäßig, ob Wiederherstellungen technisch funktionieren.
-- Restore-Tests sind keine vollständige Datenkontrolle, aber ein wichtiger Nachweis, dass Repository, Archiv und Restore-Pfad zusammen funktionieren.
+1. Klicken Sie auf **Repository hinzufügen**.
+2. Wählen Sie ein vorhandenes Speicherziel.
+3. Wählen Sie **Neues Repository erstellen**.
+4. Geben Sie Anzeigename, Pfad im Speicherziel und Verschlüsselung an.
+5. Hinterlegen Sie die Passphrase oder wählen Sie ein Keyfile-Verfahren.
+6. Prüfen Sie die Zusammenfassung und speichern Sie das Repository.
 
-## Benachrichtigungen, E-Mail und Berichte
+### Repository importieren
 
-- SMTP-Konfiguration und Testmail liegen unter **Einstellungen > Allgemein**.
-- Das SMTP-Passwort wird nach dem Speichern nicht im Klartext angezeigt. Ein gesetztes Passwort wird nur als Status angezeigt.
-- E-Mail-Benachrichtigungen folgen den ausgewählten Benachrichtigungsereignissen; reguläre Zusammenfassungen laufen über den Wochenbericht.
-- ntfy-Konfiguration und Testnachricht liegen ebenfalls unter **Einstellungen > Allgemein**.
-- ntfy kann Backup-Erfolg, Backup-Fehler/Warnungen und übersprungene Backups als Push-Benachrichtigung senden.
-- Überfällige geplante Backups und Restore-Tests können als Reminder gemeldet werden, wenn das jeweilige Ereignis im Kanal aktiviert ist.
-- ntfy-Passwort und Access Token werden nach dem Speichern nicht im Klartext angezeigt.
-- Der Wochenbericht wird unter **Einstellungen > Backup** aktiviert. Er verwendet die gespeicherte SMTP-Konfiguration.
-- Testmails, Wochenberichte und technische Ausgaben werden immer auf Englisch versendet.
+Wählen Sie **Vorhandenes Repository importieren** und anschließend ein Verzeichnis innerhalb des Speicherziels. Bei verschlüsselten Repositorys ist die passende Passphrase oder ein vorhandener beziehungsweise importierter Borg-Key erforderlich.
 
-## Import, Export und Backups
+### Reiter
 
-- **Einstellungen > Import / Export** bietet verschlüsselte Exporte für Jobs, Passphrases, Profile und Secrets.
-- Neue verschlüsselte Exporte sind versioniert und gegen unbemerkte Änderungen geschützt. Ein falsches Passwort sowie beschädigte oder manipulierte Dateien werden vor dem Import abgewiesen.
-- Ältere AES-CBC-Exporte können weiterhin importiert werden, werden aber als Legacy-Format ohne Integritätsschutz gekennzeichnet. Erstellen Sie nach einem solchen Import einen neuen Export.
-- Vor Importen wird eine Vorschau angezeigt.
-- Import-Modi wie `skip`, `overwrite` oder `rename` steuern den Umgang mit bestehenden Daten.
-- Jobs-Importe können passende USB-/SMB-Profile aus dem Paket mitbringen.
-- Profil-Secret-Importe können fehlende SMB-/SSH-Profile aus dem Paket anlegen, wenn der Settings-Import nicht auf `ignore` steht.
-- Config-Backups dienen als Rückfallpunkt vor Wartungs- oder Cleanup-Aktionen.
-- Support-Pakete sollten keine Secrets im Klartext enthalten.
+- **Übersicht:** Borg-Größen, Archivanzahl, Zustand, Pfad, Speicherziel, Verschlüsselung und Job-Zuordnung.
+- **Archive:** Archive, technische IDs, Zeitpunkte und Dauer; neueste Archive stehen zuerst.
+- **Wartung:** Check, vollständige Datenprüfung, Prune und Compact.
+- **Verwaltung:** Job-Verknüpfungen, Entfernen aus der UI und geschützte endgültige Löschung.
 
-## Migration und Wartung
+> [!WARNING] Eine endgültige Repository-Löschung entfernt Borg-Daten. Sie ist nur ohne Job-Zuordnung und nach mehrstufiger Bestätigung möglich.
 
-- Migrationen sind echte Änderungen an bestehenden Dateien, Verzeichnissen oder Einstellungen.
-- Setup-Checks beschreiben vorhandene Strukturen und sind nicht automatisch eine Migration.
-- Cleanup-Kandidaten sind Hinweise auf alte oder nicht mehr benötigte Konfigurationseinträge.
-- Cleanup-Aktionen erstellen vorher ein Backup und müssen bewusst gestartet werden.
-- **Einstellungen > Werkseinstellungen** ist der letzte Wartungseintrag und setzt die Anwendung nach mehrfacher Sicherheitsbestätigung auf den Erstinstallationszustand zurück. Borg-Repositories werden nicht gelöscht.
+## 6. Backup-Jobs
 
-## Häufige Probleme
+Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselung gehört zum Repository; Kompression und Aufbewahrung gehören zum Job.
 
-### Systemstatus zeigt Warnung
+### Job-Wizard
 
-- Auf **Systemstatus** in der Sidebar klicken.
-- In **Offene Punkte** die konkrete Meldung lesen.
-- Wenn nur Cleanup-Kandidaten angezeigt werden, ist das meist Wartung und kein akuter Backup-Fehler.
+1. **Grunddaten:** Name, technischer Typ, Icon und optionale Docker-/VM-Steuerung.
+2. **Quellen & Ziel:** Quellpfade, Ausschlüsse, Speichertyp, Speicherziel, Repository und Kompression.
+3. **Docker:** alle laufenden oder nur ausgewählte Container stoppen und danach neu starten.
+4. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
+5. **Retention:** tägliche, wöchentliche, monatliche und jährliche Aufbewahrung.
+6. **Beschreibung:** verständliche Beschreibung mit optionalem Markdown.
+7. **Zeitplan:** einfache Planung oder Cron-Ausdruck.
+8. **Flow-Vorschau:** endgültige Prüfung des geplanten Ablaufs.
 
-### Kein Repository im Job-Wizard auswählbar
+### Quellen und Ausschlüsse
 
-- Unter **Repositories** zuerst ein Repository erstellen oder importieren.
-- Prüfen, ob Speichertyp und Speicherziel im Job-Wizard richtig gewählt wurden.
-- Es werden nur Repositorys angezeigt, die zum exakten Speicherziel gehören.
+Quellen müssen existieren. Fehlende Pflichtquellen stoppen den Lauf, damit kein scheinbar erfolgreiches, aber unvollständiges Archiv entsteht. Ausschlüsse müssen unterhalb einer Quelle liegen.
 
-### SMB-Repo-Test funktioniert nicht
+> [!TIP] Starten Sie jeden neuen oder grundlegend geänderten Job einmal manuell, bevor Sie seinen Zeitplan aktivieren.
 
-- SMB-Profil in **Einstellungen > SMB-Profile** prüfen.
-- In **Storage > SMB** Mount-Status prüfen.
-- Falls nicht gemountet: mounten, dann erneut testen.
+## 7. Zeitplanung
 
-### SSH-URI sieht falsch aus
+Cron verwendet fünf Felder: Minute, Stunde, Tag, Monat und Wochentag. `0 3 * * *` startet einen Job täglich um 03:00 Uhr. Planen Sie große Jobs mit ausreichendem Abstand und vermeiden Sie parallele Zugriffe auf dasselbe Repository.
 
-- SSH-Profil prüfen: Host, Port, User und Basispfad.
-- Basispfad für Storagebox-Ziele typischerweise `./backup`.
-- Die resultierende URI enthält dann nach dem Port einen Slash, z. B. `:23/./backup/...`.
+### Überfälligkeit
 
-### Passphrase oder Secret fehlt
+Die Anwendung berechnet den erwarteten Lauf aus dem Zeitplan. Nach Ablauf der konfigurierten Toleranz kann sie über Unraid, E-Mail oder ntfy informieren. Das Reminder-Intervall verhindert sofortige Wiederholungen.
 
-- Job bearbeiten und Passphrase-Datei prüfen.
-- Import/Export nur mit verschlüsselten Secret-Paketen für Passphrases und Profil-Secrets verwenden.
-- Secret-Dateien sollten restriktive Dateirechte haben.
+## 8. Docker und VMs
 
-### SMTP-, ntfy- oder Wochenberichtswerte fehlen nach Reload
+Die Anwendung zeichnet vor dem Backup auf, welche Container oder VMs tatsächlich liefen. Nur diese Ziele werden danach wieder gestartet. Bei einem Abbruch oder Serverneustart weist **Runtime-Recovery** im Systemstatus auf offene Neustarts hin.
 
-- Die Werte zuerst im passenden Bereich speichern: SMTP und ntfy unter **Allgemein**, Wochenbericht unter **Backup**.
-- Nach dem Speichern wird der Zustand aus `backup.conf` neu geladen.
-- SMTP-Passwort, ntfy-Passwort und ntfy-Token bleiben absichtlich leer sichtbar, wenn sie bereits gespeichert sind.
+### Appdata und Domains
+
+- Bei einer vollständigen Sicherung von `/mnt/user/appdata` sollten alle schreibenden Container gestoppt werden.
+- Bei einer vollständigen Sicherung von `/mnt/user/domains` sollten die betroffenen VMs heruntergefahren werden.
+- Selektive Steuerung ist sinnvoll, wenn Quellen und abhängige Dienste eindeutig bekannt sind.
+
+## 9. History und Live-Logs
+
+**History** zeigt Backup-Läufe nach Standort, Typ und Status. Öffnen Sie einen Eintrag für Archivname, Größen, Dauer, Exit-Code, Repository-Check und Logdatei. Laufende Jobs besitzen ein Live-Log; abgeschlossene Läufe verweisen auf das gespeicherte Log.
+
+### Borg-Ergebnisse
+
+- Exit-Code `0` bedeutet Erfolg.
+- Warnungen können ein nutzbares Archiv erzeugen, müssen aber geprüft werden.
+- Fehler bedeuten, dass der Lauf nicht als verlässliche Sicherung gilt.
+- Übersprungen bedeutet, dass eine Schutzbedingung wie fehlender Mount oder aktiver Parity-Check gegriffen hat.
+
+## 10. Berichte
+
+Berichte zeigen Kennzahlen und Trends pro Job. Dazu gehören Laufzahlen, Erfolgsquote, Dauer, Wachstum, Repository-Größe, Borg-Informationen und Restore-Nachweis. Wählen Sie links einen Job und aktualisieren Sie Borg-Informationen nur bei Bedarf.
+
+## 11. Browse & Restore
+
+Der Restore-Wizard führt durch Job, Archiv, Auswahl, Ziel und Prüfung. Wiederherstellungen dürfen nur in freigegebene Zielbereiche geschrieben werden.
+
+### Sicherer Ablauf
+
+1. Wählen Sie Job und Archiv.
+2. Markieren Sie Dateien oder Verzeichnisse.
+3. Wählen Sie einen separaten Zielordner.
+4. Verwenden Sie im Zweifel **Nicht überschreiben**.
+5. Prüfen Sie die Zusammenfassung und Bestätigung.
+6. Beobachten Sie Live-Log und anschließend **Restore History**.
+
+> [!WARNING] Stellen Sie produktive Daten nicht ohne Prüfung direkt über vorhandene Dateien wieder her. Nutzen Sie zuerst ein Testziel.
+
+## 12. Restore Tests
+
+Restore-Tests prüfen automatisiert die Wiederherstellbarkeit. **Planung & Policy** legt Modus, Intervall und Level fest. **Prüfberichte** zeigt Nachweise, Abdeckung, Prüfschritte und verständliche Fehlerkategorien.
+
+### Testlevel
+
+- **L1:** Erreichbarkeit und grundlegende Repository-Prüfung.
+- **L2:** Zusätzlich Stichproben-Wiederherstellung und technische Prüfungen.
+- **L3:** Umfangreichste Prüfung mit größerer Stichprobe und Integritätsvergleich.
+
+> [!NOTE] Höhere Level benötigen mehr Zeit und I/O. Planen Sie große Offsite-Repositorys außerhalb produktiver Spitzenzeiten.
+
+## 13. Einstellungen
+
+### Allgemein
+
+Verwaltet Datenpfade, Theme, Log-Aufbewahrung, Borg-Cache, Parity-Schutz, Reminder, SMTP, Wochenbericht, Unraid-Benachrichtigungen, ntfy, Homepage-Widget und Anwendungsinformationen.
+
+### Benutzer
+
+Administratoren verwalten Benutzer, Rollen, Passwörter und Sessions. Deaktivieren Sie einen Benutzer zunächst, bevor Sie ihn dauerhaft löschen.
+
+### Backup und Restore
+
+**Backup** enthält globale Laufzeit-, Docker-, VM- und Reportvorgaben. **Restore** enthält Restore-Test-Standards und erlaubte Zielbereiche für Browse & Restore.
+
+### Import / Export
+
+Exporte sichern Jobs, Profile und Secrets. Das aktuelle verschlüsselte Format erkennt falsche Passwörter und manipulierte Dateien vor dem Schreiben. Die Vorschau zeigt Konflikte vor dem Import. Profil-Secret-Importe werden erst nach einer erfolgreichen Vorschau angewendet.
+
+### Erweitert und Werkseinstellungen
+
+**Erweitert** zeigt Reminder-Diagnose und Per-Repository-Passphrasen. **Werkseinstellungen** löscht Anwendungskonfiguration und Betriebsdaten nach mehrstufiger Bestätigung, jedoch keine externen Borg-Repositorys.
+
+## 14. Systemstatus, Migration und Support
+
+Der Systemstatus prüft Datenpfade, Jobs, Secrets, Profile, Repository-Verweise, Migrationen und Runtime-Recovery. Eine fehlgeschlagene Pflichtmigration versetzt die Anwendung in einen eingeschränkten Wartungsmodus, bis der Fehler behoben ist.
+
+### Supportpaket
+
+Supportpakete sind **bereinigt, aber nicht anonym**. Secrets werden maskiert, dennoch können Pfade, Jobnamen, Hostnamen oder andere Metadaten Rückschlüsse auf das System erlauben. Prüfen Sie das Paket vor der Weitergabe.
+
+## 15. Fehlerbehebung und FAQ
+
+### Kein Repository im Job-Wizard
+
+Prüfen Sie, ob ein passendes Speicherziel und darauf ein verwaltetes Repository existieren. Der Wizard zeigt nur Repositorys des ausgewählten Speicherziels.
+
+### Repository gesperrt
+
+Ein laufender Borg-Prozess oder eine unterbrochene Verbindung kann einen Lock halten. Warten Sie laufende Prozesse ab. Entfernen Sie Locks nur nach sicherer Prüfung gemäß Troubleshooting-Dokumentation.
+
+### Netzwerk- oder SSH-Abbruch
+
+Prüfen Sie WAN-Verbindung, Servererreichbarkeit und SSH-Keepalive. Ein abgebrochener Check muss erneut gestartet werden; ein Teilfortschritt wird von Borg nicht fortgesetzt.
+
+### Backup enthält keine Daten
+
+Prüfen Sie Schreibweise, Groß-/Kleinschreibung, Inhalt und Lesbarkeit der Quellpfade. Ein vorhandenes, aber leeres Verzeichnis ist technisch gültig und erzeugt ein leeres Archiv.
+
+### Welche Backup-Strategie ist sinnvoll?
+
+Nutzen Sie mehrere Kopien auf unterschiedlichen Medien, mindestens eine Offsite-Kopie, automatische Fehlerüberwachung und regelmäßige Restore-Tests. Passphrasen und Keyfiles müssen zusätzlich außerhalb des Servers gesichert werden.

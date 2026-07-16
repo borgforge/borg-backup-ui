@@ -182,6 +182,11 @@
     document.getElementById('restore-tests-plan-content')?.addEventListener('click', onRestoreTestsPlanClick);
     document.getElementById('settings-save-btn')?.addEventListener('click', saveSettings);
     document.getElementById('help-refresh-btn')?.addEventListener('click', helpInit);
+    document.getElementById('help-search-input')?.addEventListener('input', (event) => helpFilter(event.target.value));
+    document.getElementById('help-search-clear-btn')?.addEventListener('click', helpClearSearch);
+    document.querySelectorAll('[data-help-view]').forEach((button) => {
+      button.addEventListener('click', () => helpSetView(button.dataset.helpView));
+    });
     document.getElementById('settings-content')?.addEventListener('click', onSettingsContentClick);
     document.getElementById('settings-content')?.addEventListener('change', (event) => {
       const sel = event.target.closest('#ui-theme-select');
