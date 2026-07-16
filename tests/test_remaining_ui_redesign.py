@@ -84,9 +84,25 @@ def test_help_has_generated_table_of_contents() -> None:
     html = _read("ui/index.html")
     script = _read("ui/js/pages/help.js")
     assert 'id="help-toc"' in html
+    assert 'id="help-search-input"' in html
+    assert 'id="help-search-clear-btn"' in html
+    assert 'id="help-search-status"' in html
     assert "function _renderHelpToc(content)" in script
     assert "content.querySelectorAll('h2, h3')" in script
     assert "_renderHelpToc(box);" in script
+    assert "function helpFilter(rawQuery = '')" in script
+    assert "function openHelpTopic(topic)" in script
+    assert "window.openHelpTopic = openHelpTopic" in script
+
+
+def test_help_renders_operational_callouts_and_ordered_steps() -> None:
+    script = _read("ui/js/pages/help.js")
+    css = _read("ui/remaining-ui-redesign.css")
+    assert "NOTE|TIP|WARNING|IMPORTANT" in script
+    assert "<ol>" in script
+    assert "help-callout--warning" in css
+    assert "help-callout--tip" in css
+    assert ".help-search-hidden" in css
 
 
 def test_remaining_surfaces_are_responsive_and_modal_content_is_contained() -> None:

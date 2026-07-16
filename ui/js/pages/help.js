@@ -2,6 +2,7 @@
 
 let _helpLoadedLanguage = '';
 let _helpRequestId = 0;
+let _helpSections = [];
 
 function helpT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`help.${key}`, params) || key;
@@ -43,7 +44,25 @@ function _renderHelpMarkdown(md) {
   const lines = String(md || '').replace(/\r\n?/g, '\n').split('\n');
   const out = [];
   let inList = false;
+  let listType = '';
   let inCode = false;
+  let callout = [];
+
+  const closeList = () => {
+    if (!inList) return;
+    out.push(listType === 'ol' ? '</ol>' : '</ul>');
+    inList = false;
+    listType = '';
+  };
+  const closeCallout = () => {
+    if (!callout.length) return;
+    const first = callout[0].match(/^\[!(NOTE|TIP|WARNING|IMPORTANT)\]\s*(.*)$/i);
+    const kind = String(first?.[1] || 'NOTE').toLowerCase();
+    const title = first?.[2] || helpT(`callout.${kind}`);
+    const body = first ? callout.slice(1) : callout;
+    out.push(`<aside class="help-callout help-callout--${kind}"><strong>${_helpInline(title)}</strong>${body.map(item => `<p>${_helpInline(item)}</p>`).join('')}</aside>`);
+    callout = [];
+  };
 
   for (const raw of lines) {
     const line = raw.replace(/\t/g, '  ');
@@ -52,7 +71,8 @@ function _renderHelpMarkdown(md) {
     if (t.startsWith('```')) {
       if (!inCode) {
         inCode = true;
-        if (inList) { out.push('</ul>'); inList = false; }
+        closeList();
+        closeCallout();
         out.push('<pre><code>');
       } else {
         inCode = false;
@@ -66,37 +86,62 @@ function _renderHelpMarkdown(md) {
     }
 
     if (!t) {
-      if (inList) { out.push('</ul>'); inList = false; }
+      closeList();
+      closeCallout();
       continue;
     }
 
+    if (t.startsWith('> ')) {
+      closeList();
+      callout.push(t.slice(2).trim());
+      continue;
+    }
+    closeCallout();
+
     if (t.startsWith('# ')) {
-      if (inList) { out.push('</ul>'); inList = false; }
+      closeList();
       out.push(`<h2>${_helpInline(t.slice(2).trim())}</h2>`);
       continue;
     }
     if (t.startsWith('## ')) {
-      if (inList) { out.push('</ul>'); inList = false; }
+      closeList();
       out.push(`<h3>${_helpInline(t.slice(3).trim())}</h3>`);
       continue;
     }
     if (t.startsWith('### ')) {
-      if (inList) { out.push('</ul>'); inList = false; }
+      closeList();
       out.push(`<h4>${_helpInline(t.slice(4).trim())}</h4>`);
       continue;
     }
     if (t.startsWith('- ') || t.startsWith('* ')) {
-      if (!inList) out.push('<ul>');
+      if (inList && listType !== 'ul') closeList();
+      if (!inList) { out.push('<ul>'); listType = 'ul'; }
       inList = true;
       out.push(`<li>${_helpInline(t.slice(2).trim())}</li>`);
       continue;
     }
 
-    if (inList) { out.push('</ul>'); inList = false; }
+    const ordered = t.match(/^\d+\.\s+(.+)$/);
+    if (ordered) {
+      if (inList && listType !== 'ol') closeList();
+      if (!inList) { out.push('<ol>'); listType = 'ol'; }
+      inList = true;
+      out.push(`<li>${_helpInline(ordered[1])}</li>`);
+      continue;
+    }
+
+    if (t === '---') {
+      closeList();
+      out.push('<hr>');
+      continue;
+    }
+
+    closeList();
     out.push(`<p>${_helpInline(t)}</p>`);
   }
 
-  if (inList) out.push('</ul>');
+  closeList();
+  closeCallout();
   if (inCode) out.push('</code></pre>');
   return out.join('');
 }
@@ -121,9 +166,54 @@ function _renderHelpToc(content) {
   });
   toc.innerHTML = headings.map((heading, index) => `
     <a class="ui-context-nav__item help-toc-entry ${heading.tagName === 'H3' ? 'is-subsection' : ''}"
-      href="#${heading.id}" ${index === 0 ? 'aria-current="page"' : ''}>
+      href="#${heading.id}" data-help-target="${heading.id}" ${index === 0 ? 'aria-current="page"' : ''}>
       <span>${escHtml(heading.textContent || '')}</span>
     </a>`).join('');
+
+  _helpSections = [];
+  let current = null;
+  [...content.children].forEach((node) => {
+    if (node.tagName === 'H2') {
+      current = { heading: node, nodes: [node], text: '' };
+      _helpSections.push(current);
+    } else if (current) {
+      current.nodes.push(node);
+    }
+  });
+  _helpSections.forEach((section) => {
+    section.text = section.nodes.map(node => node.textContent || '').join(' ').toLocaleLowerCase();
+  });
+}
+
+function helpFilter(rawQuery = '') {
+  const query = String(rawQuery || '').trim().toLocaleLowerCase();
+  const clear = document.getElementById('help-search-clear-btn');
+  const status = document.getElementById('help-search-status');
+  clear?.classList.toggle('hidden', !query);
+  let visible = 0;
+  _helpSections.forEach((section) => {
+    const match = !query || section.text.includes(query);
+    section.nodes.forEach(node => node.classList.toggle('help-search-hidden', !match));
+    document.querySelectorAll(`[data-help-target="${section.heading.id}"]`).forEach(link => link.classList.toggle('help-search-hidden', !match));
+    if (match) visible += 1;
+  });
+  if (status) status.textContent = query ? helpT('searchResults', { count: visible }) : helpT('searchHint');
+}
+
+function helpClearSearch() {
+  const input = document.getElementById('help-search-input');
+  if (input) input.value = '';
+  helpFilter('');
+  input?.focus();
+}
+
+function openHelpTopic(topic) {
+  const input = document.getElementById('help-search-input');
+  if (input) input.value = '';
+  helpFilter('');
+  const normalized = String(topic || '').replace(/^#/, '');
+  const target = document.getElementById(normalized) || document.getElementById(`help-${normalized}`);
+  target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function helpInit(force = false) {
@@ -141,6 +231,7 @@ async function helpInit(force = false) {
     if (requestId !== _helpRequestId) return;
     box.innerHTML = _renderHelpMarkdown(md);
     _renderHelpToc(box);
+    helpFilter(document.getElementById('help-search-input')?.value || '');
     _helpLoadedLanguage = language;
   } catch (err) {
     if (requestId !== _helpRequestId) return;
@@ -152,3 +243,6 @@ async function helpInit(force = false) {
 
 window.addEventListener?.('bbui:language-changed', () => helpInit(true));
 window.helpInit = helpInit;
+window.helpFilter = helpFilter;
+window.helpClearSearch = helpClearSearch;
+window.openHelpTopic = openHelpTopic;

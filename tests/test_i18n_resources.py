@@ -164,6 +164,42 @@ def test_in_app_help_follows_language_with_german_fallback_and_live_reload():
     assert "'bbui:language-changed', () => helpInit(true)" in source
 
 
+def test_user_manuals_cover_core_workflows_and_reference_existing_assets():
+    manuals = {
+        "de": ROOT / "docs" / "user-manual" / "de" / "user-manual.md",
+        "en": ROOT / "docs" / "user-manual" / "en" / "user-manual.md",
+    }
+    required_terms = {
+        "de": (
+            "Dashboard",
+            "Repositories",
+            "Job-Wizard",
+            "Browse & Restore",
+            "Restore Tests",
+            "Fehlerbehebung",
+            "FAQ",
+            "Empfohlene Betriebspraxis",
+        ),
+        "en": (
+            "Dashboard",
+            "Repositories",
+            "Job Wizard",
+            "Browse & Restore",
+            "Restore Tests",
+            "Troubleshooting",
+            "FAQ",
+            "Recommended Operating Practices",
+        ),
+    }
+
+    for language, path in manuals.items():
+        content = path.read_text(encoding="utf-8")
+        for term in required_terms[language]:
+            assert term in content
+        for target in re.findall(r"!\[[^]]*\]\(([^)]+)\)", content):
+            assert (path.parent / target).resolve().is_file(), target
+
+
 def test_settings_dynamic_content_uses_localization_helpers():
     settings = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
 

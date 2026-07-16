@@ -886,7 +886,15 @@
           <div class="ui-context-sidebar__header">
             <small data-i18n="help.navigation">Navigation</small>
             <strong data-i18n="help.contents">Inhalt</strong>
-            <small data-i18n="help.contentsHint">Abschnitte dieser Hilfe</small>
+            <small data-i18n="help.contentsHint">Aufgaben und Themen dieser Hilfe</small>
+            <label class="help-search-label" for="help-search-input" data-i18n="help.searchLabel">Hilfe durchsuchen</label>
+            <div class="help-search-wrap">
+              <input id="help-search-input" type="search" autocomplete="off"
+                data-i18n-placeholder="help.searchPlaceholder" placeholder="Begriff oder Aufgabe eingeben...">
+              <button type="button" class="btn btn-secondary help-search-clear hidden" id="help-search-clear-btn"
+                data-i18n-aria-label="help.searchClear" aria-label="Suche löschen">&times;</button>
+            </div>
+            <small id="help-search-status" class="help-search-status" aria-live="polite"></small>
           </div>
           <nav id="help-toc" class="ui-context-nav" data-i18n-aria-label="help.contents" aria-label="Inhalt"></nav>
         </aside>

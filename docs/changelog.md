@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #236
+- Rebuilt the in-app help as a searchable bilingual operational guide with a generated table of contents, structured callouts and direct topic navigation.
+- Expanded the German and English user manuals to cover the current menu order, roles, repositories, jobs, restore workflows, settings, troubleshooting, FAQ and operational best practices.
+- Added annotated guide images with numbered callouts plus a prioritized review of contextual-help and UI wording improvements.
+
 ### Issue #231
 - New jobs, passphrase and profile-secret exports use a versioned authenticated encrypt-then-MAC envelope instead of unauthenticated AES-CBC alone.
 - Wrong passwords, tampering and truncation are rejected before import data is written, without exposing cryptographic details or secrets.

@@ -1,8 +1,8 @@
 # Borg-Backup-UI Benutzerhandbuch
 
-Stand: 03.07.2026  
+Stand: 16.07.2026
 Sprache: Deutsch  
-Zielgruppe: Anwender und Administratoren eines Unraid-Systems
+Zielgruppe: Einsteiger, fortgeschrittene Anwender und Administratoren eines Unraid-Systems
 
 Dieses Handbuch beschreibt Borg-Backup-UI in der Reihenfolge des Menüs der Anwendung. Es erklärt die sichtbaren Seiten, typische Arbeitsabläufe, wichtige Warnungen und die Auswirkungen der jeweiligen Aktionen.
 
@@ -22,6 +22,9 @@ Dieses Handbuch beschreibt Borg-Backup-UI in der Reihenfolge des Menüs der Anwe
 10. [Hilfe](#10-hilfe)
 11. [Typische Aufgaben](#11-typische-aufgaben)
 12. [Status, Warnungen und Best Practices](#12-status-warnungen-und-best-practices)
+13. [Fehlerbehebung](#13-fehlerbehebung)
+14. [FAQ](#14-faq)
+15. [Empfohlene Betriebspraxis](#15-empfohlene-betriebspraxis)
 
 ## 1. Grundlagen
 
@@ -44,13 +47,19 @@ Nach der Anmeldung zeigt die linke Seitenleiste das Hauptmenü, den Systemstatus
 
 Die Sprache kann unten links zwischen Deutsch und Englisch umgeschaltet werden. Die Änderung betrifft die Weboberfläche, nicht die technischen Logdateien. Logs, maschinenlesbare Werte und technische Fehlercodes können weiterhin englische Begriffe enthalten.
 
-Die Anwendung kennt mindestens die Rollen `admin` und `viewer`. Administratoren können Einstellungen ändern, Jobs verwalten und Benutzeraktionen ausführen. Eine Viewer-Rolle ist lesend eingeschränkt; schreibende Aktionen können deaktiviert oder abgelehnt werden.
+Die Anwendung kennt die Rollen `admin`, `operator` und `viewer`:
+
+- **admin:** Vollzugriff auf Benutzer, Einstellungen, Speicherziele, Repositorys und Jobs.
+- **operator:** Darf betriebliche Aktionen wie Backup-, Restore- und Wartungsläufe ausführen, jedoch keine administrativen Einstellungen verwalten.
+- **viewer:** Lesender Zugriff; schreibende Aktionen werden deaktiviert oder abgelehnt.
 
 > **Warnung:** Bewahren Sie Passwörter, Borg-Passphrasen, SSH-Keys und Export-Passwörter sicher auf. Borg-Backup-UI maskiert Secrets in Diagnoseausgaben, trotzdem sollten Support-Pakete vor einer Weitergabe geprüft werden.
 
 ## 2. Dashboard
 
-![Dashboard](../assets/de/dashboard.png)
+![Dashboard mit markierten Status- und Filterbereichen](../assets/de/dashboard-guide.png)
+
+**Abbildung 1 - Dashboard:** (1) Gesamtstatus fuer Backup-Laeufe und Restore-Nachweise, (2) Standortfilter, (3) Detailtabelle der gefilterten Jobs.
 
 Das Dashboard ist die zentrale Übersicht über Backup-Zustand, Restore-Nachweise, Speicherentwicklung und Repository-Prüfungen.
 
@@ -96,11 +105,13 @@ Die Seite besteht aus:
 
 > **Tipp:** Nutzen Sie das Dashboard als täglichen Kontrollpunkt. Wenn alle Backup- und Restore-Zähler plausibel sind, können Detailseiten gezielt nur bei Auffälligkeiten geöffnet werden.
 
-> **Hinweis:** Das Dashboard zeigt die zuletzt bekannten Statusdaten. Wenn ein Repository nicht erreichbar ist oder ein Statusfile fehlt, kann die Tabelle veraltete oder unvollständige Werte anzeigen. Prüfen Sie in diesem Fall **History**, **Storage** und die Logs.
+> **Hinweis:** Das Dashboard zeigt die zuletzt bekannten Statusdaten. Wenn ein Repository nicht erreichbar ist oder ein Statusfile fehlt, kann die Tabelle veraltete oder unvollständige Werte anzeigen. Prüfen Sie in diesem Fall **History**, **Repositories** und die Logs.
 
 ## 3. Jobs
 
-![Jobs](../assets/de/jobs.png)
+![Job-Seite mit Standortfilter, Neuer-Job-Aktion und Jobliste](../assets/de/jobs-guide.png)
+
+**Abbildung 2 - Jobs:** (1) Filter nach Speicherziel, (2) Einstieg in den Job-Wizard, (3) Jobkarten mit Zustand, Richtlinie und Startaktion.
 
 Die Seite **Jobs** verwaltet Backup-Jobs. Hier werden Jobs angezeigt, gestartet, bearbeitet, geplant und gelöscht.
 
@@ -133,13 +144,11 @@ Jobs definieren, welche Daten wohin gesichert werden. Ein Job enthält:
 3. Klicken Sie auf **Starten**.
 4. Bestätigen Sie den Startdialog.
 5. Beobachten Sie das Live-Log.
-6. Prüfen Sie anschließend **History** und ggf. **Storage**.
+6. Prüfen Sie anschließend **History** und ggf. **Repositories**.
 
 > **Warnung:** Wenn der Job Docker-Container oder VMs stoppen soll, werden nur die im Job konfigurierten Ziele gesteuert. Prüfen Sie diese Auswahl vor produktiven Läufen.
 
 ### 3.4 Job-Wizard
-
-![Job-Wizard](../assets/de/job-wizard-step-1.png)
 
 Der Job-Wizard führt in festen Schritten durch die Erstellung oder Bearbeitung eines Jobs.
 
@@ -227,8 +236,6 @@ Best Practices:
 - **Schedule disabled / Zeitplan deaktiviert:** Der Job läuft nur manuell.
 
 ## 4. Repositories
-
-![Storage](../assets/de/storage.png)
 
 Die Seite **Repositories** verwendet eine Master-Detail-Ansicht. Links werden Borg-Repositorys nach dem exakten Speicherziel gruppiert; rechts bleibt der Arbeitsbereich des ausgewählten Repositorys sichtbar. Über **Repository hinzufügen** können Repositorys auf einem bereits unter **Einstellungen** eingerichteten Speicherziel erstellt oder importiert werden.
 
@@ -384,7 +391,9 @@ Berichte helfen bei der Auswertung von Trends:
 
 ## 7. Browse & Restore
 
-![Browse & Restore](../assets/de/restore-wizard.png)
+![Restore-Wizard mit markierten Bedienbereichen](../assets/de/restore-guide.png)
+
+**Abbildung 3 - Browse & Restore:** (1) Wechsel zwischen Restore und History, (2) Jobauswahl nach Standort, (3) Fortschritt der fuenf Wizard-Schritte, (4) Inhalt des aktuellen Schritts.
 
 **Browse & Restore** führt durch die Wiederherstellung von Daten aus Borg-Archiven.
 
@@ -574,7 +583,9 @@ Typische Statuswerte:
 
 ## 9. Einstellungen
 
-![Einstellungen](../assets/de/settings.png)
+![Einstellungen mit Navigation, Systemzustand und Konfigurationsbereich](../assets/de/settings-guide.png)
+
+**Abbildung 4 - Einstellungen:** (1) Bereichsnavigation, (2) Systemzustand und Migration, (3) Einstellungen des gewaehlten Bereichs, (4) zentrale Speicheraktion.
 
 Die Seite **Einstellungen** verwaltet die Anwendungskonfiguration. Sie ist in Gruppen aufgeteilt: System, Betrieb, Speicherziele und Wartung.
 
@@ -593,6 +604,7 @@ Typische Inhalte:
 - Unraid-Benachrichtigungen
 - ntfy-Push-Benachrichtigungen
 - Wochenbericht
+- Homepage-Widget für externe Dashboards
 
 #### Benachrichtigungen
 
@@ -616,6 +628,10 @@ Die Reminder-Einstellungen gelten kanalübergreifend. Das Reminder-Intervall ver
 
 > **Hinweis:** Testnachrichten prüfen nur den Versandkanal. Sie ersetzen keinen echten Backup- oder Restore-Test.
 
+#### Homepage-Widget
+
+Das Homepage-Widget stellt eine kompakte, token-geschützte Statusübersicht für das Projekt **Homepage** bereit. Die Oberfläche erzeugt eine YAML-Vorlage mit Status, erfolgreichen Backups, Restore-Tests und aktiven Läufen. Behandeln Sie den Widget-Token wie ein Passwort und geben Sie ihn nicht in Screenshots oder Support-Paketen weiter.
+
 ### 9.2 Benutzer
 
 ![Einstellungen - Benutzer](../assets/de/settings-users.png)
@@ -635,6 +651,7 @@ Funktionen:
 Rollen:
 
 - **admin:** Vollzugriff auf Einstellungen und Aktionen.
+- **operator:** Betriebliche Aktionen ohne administrative Konfigurationsrechte.
 - **viewer:** Lesender Zugriff; schreibende Aktionen sind eingeschränkt.
 
 > **Tipp:** Deaktivieren Sie Benutzer zunächst, statt sie sofort dauerhaft zu löschen. So bleibt der Offboarding-Schritt kontrollierbarer.
@@ -674,7 +691,23 @@ Hier werden erlaubte Restore-Zielbereiche verwaltet. Standardmäßig ist nur `/m
 
 > **Warnung:** Tragen Sie keine zu breiten Pfade wie `/`, `/mnt`, `/mnt/disks` oder `/mnt/remotes` ein. Verwenden Sie konkrete Ziele wie `/mnt/disks/<name>` oder `/mnt/remotes/<name>`.
 
-### 9.5 USB-Profile
+### 9.5 Lokale Profile
+
+Lokale Profile definieren konkrete Speicherziele unter `/mnt`, beispielsweise `/mnt/backup`, `/mnt/cache/backups` oder einen eigenen Pool. Der Repository-Assistent bietet nur zuvor angelegte und geprüfte Speicherziele an.
+
+Funktionen:
+
+- Profil mit eindeutigem Anzeigenamen anlegen
+- konkreten Basispfad auswählen oder eingeben
+- Erreichbarkeit und Schreibbarkeit prüfen
+- Profil bearbeiten
+- ungenutztes Profil löschen
+
+Zu breite oder gefährliche Ziele wie `/`, `/mnt` und Systemverzeichnisse werden abgelehnt. Ein Profil kann nicht gelöscht werden, solange Repositorys oder Jobs darauf verweisen.
+
+> **Empfehlung:** Verwenden Sie pro physischem Pool oder Mount ein eigenes Profil mit einem verständlichen Namen, zum Beispiel `Backup-Lokal` oder `USB-5TB`.
+
+### 9.6 USB-Profile
 
 ![Einstellungen - USB-Profile](../assets/de/settings-usb.png)
 
@@ -694,7 +727,7 @@ Wichtige Felder:
 
 > **Hinweis:** Ein USB-Profil macht ein Gerät nicht automatisch verfügbar. Das Ziel muss auf Unraid gemountet sein, wenn ein Backup läuft.
 
-### 9.6 SMB-Profile
+### 9.7 SMB-Profile
 
 ![Einstellungen - SMB-Profile](../assets/de/settings-smb.png)
 
@@ -724,7 +757,7 @@ Typische Aktionen:
 4. Status prüfen.
 5. Repository unter **Repositories** öffnen und die Informationen aktualisieren.
 
-### 9.7 SSH-Profile
+### 9.8 SSH-Profile
 
 ![Einstellungen - SSH-Profile](../assets/de/settings-storagebox.png)
 
@@ -750,7 +783,7 @@ Funktionen:
 
 > **Hinweis:** Für Hetzner Storage Box ist ein relativer Basispfad wie `./backup` typisch. Prüfen Sie den aufgelösten Repository-Pfad auf der Seite **Repositories**.
 
-### 9.8 Import / Export
+### 9.9 Import / Export
 
 ![Einstellungen - Import / Export](../assets/de/settings-import-export.png)
 
@@ -773,7 +806,7 @@ Importstrategien können je nach Importtyp vorhandene Einträge behalten, ersetz
 
 Neue verschlüsselte Exporte verwenden eine versionierte, authentifizierte Hülle. Ein falsches Passwort sowie beschädigte, abgeschnittene oder manipulierte Dateien werden geprüft, bevor Importdaten geschrieben werden. Ältere AES-CBC-Exporte bleiben importierbar, erscheinen in der Vorschau jedoch mit einem Legacy-Hinweis. Erstellen Sie nach einem Legacy-Import einen neuen Export im aktuellen Format.
 
-### 9.9 Erweitert
+### 9.10 Erweitert
 
 ![Einstellungen - Erweitert](../assets/de/settings-advanced.png)
 
@@ -786,7 +819,7 @@ Unterbereiche:
 
 Die Reminder-Diagnose zeigt, wann ein Lauf erwartet wurde, ab wann er als überfällig gilt, wann zuletzt gesendet wurde und wann der nächste Reminder möglich ist. Diese Ansicht sendet keine Benachrichtigungen; sie ist rein diagnostisch.
 
-### 9.10 Werkseinstellungen
+### 9.11 Werkseinstellungen
 
 **Werkseinstellungen** ist der letzte Eintrag im Bereich **Wartung**. Die Funktion entfernt die Anwendungskonfiguration und die konfigurierten Betriebsdaten und startet Borg Backup UI anschließend mit der Admin-Erstkonfiguration neu.
 
@@ -796,7 +829,7 @@ Für die Freigabe sind alle Risikobestätigungen, der Servername, das aktuelle A
 
 > **Warnung:** Benutzer, Jobs, Zeitpläne, Speicherziele, Repository-Zuordnungen, Secrets, Borg-Keyfiles, Logs, Status- und Verlaufsdaten werden dauerhaft entfernt. Erstellen Sie vorher eine Sicherung von `/boot/config/borg-backup`.
 
-### 9.11 Systemstatus und Migration
+### 9.12 Systemstatus und Migration
 
 ![Einstellungen - Systemstatus und Migration](../assets/de/settings-system-health.png)
 
@@ -835,6 +868,8 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 
 - **Aktualisieren:** Lädt das Hilfedokument neu.
 - **Inhaltsverzeichnis:** Springt zu Abschnitten.
+- **Suche:** Filtert Inhaltsverzeichnis und Kapitel nach Begriffen wie `Restore`, `SMB` oder `Passphrase`.
+- **Hinweisboxen:** Heben Empfehlungen, Warnungen und sicherheitsrelevante Informationen hervor.
 - **Sprachabhängiger Inhalt:** Die Hilfe folgt der ausgewählten UI-Sprache.
 
 ## 11. Typische Aufgaben
@@ -928,3 +963,116 @@ Empfohlene Reihenfolge:
 6. Support-Paket erstellen, falls der Fehler weitergegeben werden soll.
 
 > **Tipp:** Ein erfolgreiches Backup ist erst dann wirklich belastbar, wenn auch Restore-Tests und mindestens ein manueller Restore in ein Testziel erfolgreich waren.
+
+## 13. Fehlerbehebung
+
+### 13.1 Backup ist erfolgreich, enthält aber keine Daten
+
+Ein vorhandenes, aber leeres Quellverzeichnis ist technisch gültig. Prüfen Sie deshalb nicht nur den Exit-Code:
+
+1. Öffnen Sie den Job und vergleichen Sie den Quellpfad Zeichen für Zeichen mit dem Unraid-Pfad. Linux unterscheidet Groß- und Kleinschreibung.
+2. Prüfen Sie, ob Dateien unter dem Pfad vorhanden und lesbar sind.
+3. Prüfen Sie Ausschlusspfade. Ein zu breiter Ausschluss kann den gesamten Inhalt entfernen.
+4. Starten Sie den Job erneut und kontrollieren Sie Dateianzahl und Originalgröße in History oder Report.
+
+Fehlt ein konfigurierter Quellpfad, bricht Borg-Backup-UI den Lauf ab. Dadurch wird kein scheinbar erfolgreiches, aber unvollständiges Archiv erzeugt.
+
+### 13.2 Repository-Lock oder SSH-Verbindungsabbruch
+
+Ein Lock bedeutet meistens, dass ein anderer Borg-Prozess das Repository verwendet oder eine vorherige Verbindung nicht sauber beendet wurde. Borg-Backup-UI wartet begrenzt auf den Lock. Prüfen Sie vor jeder manuellen Lock-Entfernung:
+
+- Läuft noch ein Backup, Restore, Restore-Test oder Check?
+- Besteht noch eine aktive SSH-Verbindung?
+- Ist das Repository über einen anderen Rechner geöffnet?
+
+Bei `Connection reset by peer` oder `Broken pipe` wurde die SSH-Verbindung unterbrochen. Prüfen Sie WAN, Zielserver und SSH-Keepalive und starten Sie die Aktion anschließend neu. Ein unterbrochener vollständiger Check wird von Borg nicht an der alten Stelle fortgesetzt.
+
+### 13.3 Speicherziel ist nicht verfügbar
+
+- **USB:** Kontrollieren Sie, ob der konfigurierte Mount-Pfad tatsächlich eingehängt ist.
+- **SMB:** Prüfen Sie Port 445, Share, Benutzer, Passwort und SMB-2/3-Kompatibilität im Profiltest.
+- **SSH/Storagebox:** Prüfen Sie Host, Port, Public Key und Basispfad.
+- **Lokal:** Prüfen Sie, ob Pool oder Laufwerk gestartet und beschreibbar ist.
+
+Ein nicht verfügbares verwaltetes Speicherziel führt je nach Schutzregel zu **Übersprungen** oder **Fehler**. Die Ursache steht im Laufprotokoll.
+
+### 13.4 E-Mail oder ntfy wird nicht gesendet
+
+1. Senden Sie eine Testnachricht.
+2. Prüfen Sie, ob das konkrete Ereignis für den Kanal aktiviert ist.
+3. Prüfen Sie Empfänger, Server, Topic und Authentifizierung.
+4. Prüfen Sie unter **Einstellungen > Erweitert > Notification Reminder**, ob bereits ein Reminder gesendet wurde und wann der nächste möglich ist.
+5. Lesen Sie bei SMTP-Fehlern das Anwendungslog. `WRONG_VERSION_NUMBER` weist meist auf eine falsche Kombination aus Port und TLS-Modus hin.
+
+### 13.5 Migration oder Systemprüfung ist fehlgeschlagen
+
+Eine fehlgeschlagene Pflichtmigration versetzt die Anwendung in einen eingeschränkten Wartungsmodus. Öffnen Sie **Einstellungen > Systemstatus & Migration**, lesen Sie Grund und betroffene Datei und verwenden Sie das angegebene Migrationsbackup. Normale Schreiboperationen bleiben blockiert, bis der Fehler behoben ist.
+
+> **Warnung:** Bearbeiten Sie JSON-Dateien nicht ohne vorherige Sicherung. Verwenden Sie für Support ein Support-Paket und das strukturierte Migrationslog.
+
+## 14. FAQ
+
+### Muss ich BorgBackup kennen?
+
+Nein. Die Assistenten führen durch die üblichen Abläufe. Grundbegriffe wie Repository, Archiv, Retention und Restore sollten Sie dennoch verstehen; dieses Handbuch erklärt sie im jeweiligen Kontext.
+
+### Legt ein Backup-Job sein Repository automatisch an?
+
+Nein. Speicherziele werden unter **Einstellungen** verwaltet, Repositorys unter **Repositories** erstellt oder importiert und anschließend im Job ausgewählt. Diese Trennung verhindert versehentlich doppelte oder falsch verschlüsselte Repositorys.
+
+### Wo wird die Verschlüsselung festgelegt?
+
+Beim Erstellen des Repositorys. Ein Job bestimmt Quellen, Kompression, Retention und Zeitplan, ändert aber nicht die Verschlüsselung eines vorhandenen Repositorys.
+
+### Kann ich mehrere Jobs auf dasselbe Repository schreiben lassen?
+
+Die Anwendung bildet eine eindeutige Repository-Zuordnung ab. Planen Sie keine überlappenden Zugriffe. Für klar getrennte Datenbestände und Retention ist ein eigenes Repository pro Backup-Zweck meist leichter zu betreiben.
+
+### Warum werden nur vorher laufende Container oder VMs neu gestartet?
+
+Damit Borg-Backup-UI keine Dienste startet, die der Administrator bewusst ausgeschaltet hatte. Der Runtime-Recovery-Status speichert die tatsächlich gestoppten Ziele und unterstützt die Prüfung nach einem Abbruch oder Neustart.
+
+### Ist ein erfolgreiches Backup ausreichend?
+
+Nein. Prüfen Sie zusätzlich Repository-Zustand, Benachrichtigungen, Restore-Tests und regelmäßig einen echten Restore in ein separates Testziel.
+
+### Ist ein Support-Paket anonym?
+
+Nein. Es ist **sanitized**, aber nicht vollständig anonym. Secrets werden maskiert, technische Pfade, Namen oder Infrastrukturbezüge können trotzdem Rückschlüsse erlauben. Prüfen Sie das Paket vor jeder Weitergabe.
+
+## 15. Empfohlene Betriebspraxis
+
+### 15.1 Backup-Strategie
+
+Orientieren Sie sich an 3-2-1-0-0:
+
+- drei Datenkopien einschließlich Original
+- zwei unterschiedliche Medien oder Speicherorte
+- eine Offsite-Kopie
+- null unbemerkte Backup-Fehler
+- null ungeprüfte Backups durch regelmäßige Restore-Tests
+
+Ein typisches Unraid-Setup kombiniert Originaldaten auf dem Array mit einem lokalen oder USB-Repository und einem SSH-/Storagebox-Repository.
+
+### 15.2 Repository-Aufbau und Secrets
+
+- Verwenden Sie sprechende Anzeigenamen.
+- Trennen Sie wichtige Datenbereiche in nachvollziehbare Repositorys.
+- Sichern Sie Passphrasen und Keyfiles außerhalb des Unraid-Servers.
+- Exportieren Sie Konfiguration und Secrets verschlüsselt und testen Sie die Importvorschau.
+- Löschen Sie Repositorys nur über die abgesicherte Verwaltung und nur nach Prüfung aller Job-Zuordnungen.
+
+### 15.3 Zeitpläne und Leistung
+
+- Starten Sie große Jobs mit ausreichend Abstand.
+- Vermeiden Sie parallele Wartungsaktionen auf demselben Repository.
+- Planen Sie vollständige Datenchecks seltener als normale Checks.
+- Wählen Sie Kompression passend zur Hardware und zu den Daten; hohe Kompression kostet CPU-Zeit.
+- Prüfen Sie Offsite-Ziele nicht während bekannter WAN-Wartungsfenster.
+
+### 15.4 Restore-Bereitschaft
+
+- Planen Sie L3-Tests für besonders wichtige Jobs in angemessenen Abständen.
+- Führen Sie nach wesentlichen Änderungen einen manuellen Restore in ein Testverzeichnis durch.
+- Dokumentieren Sie, wo Passphrase, Keyfile und Export-Passwort sicher hinterlegt sind.
+- Prüfen Sie nach Updates Migration, Jobs, Repository-Zuordnung und mindestens einen repräsentativen Backup-Lauf.

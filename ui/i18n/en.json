@@ -73,7 +73,18 @@
     "loadFailed": "Documentation could not be loaded: {message}",
     "navigation": "Navigation",
     "contents": "Contents",
-    "contentsHint": "Sections in this help"
+    "contentsHint": "Tasks and topics in this help",
+    "searchLabel": "Search help",
+    "searchPlaceholder": "Enter a term or task...",
+    "searchClear": "Clear search",
+    "searchHint": "Select a chapter or search the help.",
+    "searchResults": "{count} matching chapters",
+    "callout": {
+      "note": "Note",
+      "tip": "Tip",
+      "warning": "Warning",
+      "important": "Important"
+    }
   },
   "api": {
     "errors": {
