@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.15.1415">
+<!ENTITY version   "2026.07.16.1604">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,12 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.16.1604###
+- Rebuilt the bilingual in-app help and complete German and English user manuals with searchable chapter navigation and offline access inside the application.
+- Running backup jobs can now be cancelled cooperatively from the Jobs page while Docker and VM recovery remains protected and visible.
+- Running restore tests now reopen their live log automatically after the page is loaded or refreshed.
+- Updated the German and English user-manual screenshots to the current light-theme interface, restored numbered guide callouts and removed environment-specific SSH profile values.
+
 ###2026.07.15.1415###
 - Added a read-only Homepage dashboard widget for backup, restore-test, overdue and active-run status with a dedicated restricted token.
 - Homepage widget settings can create, rotate or revoke the token and provide a ready-to-copy Custom API configuration.
@@ -346,7 +352,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>ed5c759b0c7afaaa77e2b25b124322f8</MD5>
+<MD5>d0103c5a8fe7979cbcd2778f7275554f</MD5>
 </FILE>
 
 <!--
