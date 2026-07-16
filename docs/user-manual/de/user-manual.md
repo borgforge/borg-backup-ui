@@ -250,6 +250,8 @@ Best Practices:
 
 Die Seite **Repositories** verwendet eine Master-Detail-Ansicht. Links werden Borg-Repositorys nach dem exakten Speicherziel gruppiert; rechts bleibt der Arbeitsbereich des ausgewählten Repositorys sichtbar. Über **Repository hinzufügen** können Repositorys auf einem bereits unter **Einstellungen** eingerichteten Speicherziel erstellt oder importiert werden.
 
+![Repository-Verwaltung mit Speicherzielgruppen und Detailbereich](../assets/de/repositories.png)
+
 Lokale Speicherziele werden unter **Einstellungen > Lokale Profile** angelegt.
 Zulässig sind konkrete Verzeichnisse unter `/mnt`, etwa `/mnt/backup` oder
 `/mnt/disks/USB-A`. Zu breite Wurzeln, Systempfade und fehlerhafte Eingaben mit

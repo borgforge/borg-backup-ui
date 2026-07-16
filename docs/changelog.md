@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #242
+- Replaced the German and English user-manual screenshots with current light-theme captures from the present UI and restored the numbered guide callouts.
+- Updated the manual to show the current Repositories workspace and removed the obsolete standalone Storage screenshot.
+- Sanitized environment-specific SSH profile values in the packaged documentation assets.
+
 ### Issue #238
 - Running backup jobs can be cancelled cooperatively from the Jobs page. Active Borg processes receive SIGINT, Docker/VM stop phases finish before automatic recovery, and recovery failures remain visible as errors.
 - The Jobs page keeps cancellation controls synchronized with the active backup phase and aligns running-job actions consistently without wrapping controls into unrelated columns.
