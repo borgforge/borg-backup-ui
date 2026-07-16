@@ -29,13 +29,19 @@ function restoreTestsLocale() {
   return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
 }
 
+function resumeRestoreTestLiveLog(messageKey) {
+  showMsg('restore-tests-message', 'warning', restoreTestsT(messageKey));
+  if (!restoreTestsState.activeEventSource) {
+    _openRTLogPanel();
+  }
+  startRTPolling();
+}
+
 function handleRestoreTestAlreadyRunning(payload) {
   if (String(payload?.code || '') !== 'restore_test_already_running') {
     return false;
   }
-  showMsg('restore-tests-message', 'warning', restoreTestsT('alreadyRunningOpenLog'));
-  _openRTLogPanel();
-  startRTPolling();
+  resumeRestoreTestLiveLog('alreadyRunningOpenLog');
   return true;
 }
 
@@ -357,8 +363,7 @@ async function refreshRestoreTests() {
     if (runningRes.ok) {
       const runningState = await runningRes.json().catch(() => ({}));
       if (runningState.running) {
-        showMsg('restore-tests-message', 'warning', restoreTestsT('runningWithoutFinalLog'));
-        startRTPolling();
+        resumeRestoreTestLiveLog('runningWithoutFinalLog');
       }
     }
     restoreTestsState.loaded = true;

@@ -339,7 +339,7 @@
 .jobs-redesign-row {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(15rem, 1.2fr) minmax(11rem, 0.75fr) minmax(15rem, 1fr) minmax(8.5rem, auto);
+  grid-template-columns: minmax(15rem, 1.2fr) minmax(11rem, 0.75fr) minmax(15rem, 1fr) minmax(13rem, 0.8fr);
   min-width: 0;
   border-bottom: 1px solid var(--ui-color-border);
 }
@@ -442,9 +442,37 @@
   gap: var(--ui-space-2);
 }
 
-.jobs-redesign-actions .running-indicator {
-  align-items: flex-start;
-  flex-direction: column;
+.jobs-running-actions {
+  display: grid;
+  flex: 1 1 auto;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+.jobs-running-state,
+.jobs-running-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.jobs-running-state {
+  color: var(--ui-state-running-fg);
+  font-size: var(--ui-font-size-sm);
+  font-weight: var(--ui-font-weight-semibold);
+  white-space: nowrap;
+}
+
+.jobs-running-buttons {
+  flex-wrap: wrap;
+}
+
+.jobs-running-message {
+  max-width: 24rem;
+  color: var(--ui-color-text-muted);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .jobs-redesign-actions .job-card-menu {

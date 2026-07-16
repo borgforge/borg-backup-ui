@@ -124,6 +124,12 @@ Quellen müssen existieren. Fehlende Pflichtquellen stoppen den Lauf, damit kein
 
 > [!TIP] Starten Sie jeden neuen oder grundlegend geänderten Job einmal manuell, bevor Sie seinen Zeitplan aktivieren.
 
+### Laufenden Job kontrolliert abbrechen
+
+Bei einem laufenden Job fordert **Job abbrechen** einen kontrollierten Abbruch an. Ein aktiver Borg-Schritt wird unterbrochen. Läuft gerade das Stoppen von Docker-Containern oder VMs, wird dieser Vorgang vollständig beendet und anschließend werden die zuvor laufenden Systeme wieder gestartet. Während des Neustarts ist kein weiterer Abbruch möglich. Schlägt die Wiederherstellung fehl, endet der Lauf als Fehler und der Runtime-Recovery-Hinweis bleibt sichtbar.
+
+Ein abgebrochener Lauf wird mit dem Status **Abgebrochen** gespeichert. Die Anwendung startet danach nicht automatisch einen Repository-Check und entfernt keine Borg-Locks. Prüfen Sie bei auffälligen Meldungen das Live- beziehungsweise gespeicherte Log.
+
 ## 7. Zeitplanung
 
 Cron verwendet fünf Felder: Minute, Stunde, Tag, Monat und Wochentag. `0 3 * * *` startet einen Job täglich um 03:00 Uhr. Planen Sie große Jobs mit ausreichendem Abstand und vermeiden Sie parallele Zugriffe auf dasselbe Repository.

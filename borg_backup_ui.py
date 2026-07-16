@@ -628,6 +628,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         # Operator actions (run/test/restore)
         if p in {
             "/api/jobs/run",
+            "/api/jobs/cancel",
             "/api/restore-tests/run",
             "/api/restore-tests/run-job",
             "/api/storage/test",
@@ -832,6 +833,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         routes = {
             "/api/jobs/run": self._post_run_job,
+            "/api/jobs/cancel": self._post_cancel_job,
             "/api/restore-tests/run": self._post_run_restore_test,
             "/api/restore-tests/run-job": self._post_run_restore_test_job,
             "/api/storage/test": self._post_test_repo,
@@ -2925,7 +2927,31 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         )
         if not ok:
             raise RuntimeError(err)
-        return {"started": True, "job_key": job_key}
+        state = JobManager.get().get_state(job_key)
+        return {"started": True, "job_key": job_key, "run_id": state.get("run_id", "")}
+
+    def _post_cancel_job(self) -> dict:
+        from jobs_api import cancel_job
+
+        body = self._read_json_body()
+        job_key = str(body.get("job_key") or "").strip()
+        run_id = str(body.get("run_id") or "").strip()
+        if not job_key or not run_id:
+            raise ValueError("job_key and run_id are required")
+        session = self._get_current_session_meta() or {}
+        requested_by = _normalize_username(session.get("username", ""))
+        try:
+            state = cancel_job(self.config, job_key, run_id, requested_by=requested_by)
+        except (FileNotFoundError, RuntimeError) as exc:
+            raise ApiConflictError(str(exc), "job_cancel_unavailable") from exc
+        return {
+            "cancel_requested": True,
+            "job_key": job_key,
+            "run_id": run_id,
+            "phase": state.get("phase", ""),
+            "cancellation_deferred": bool(state.get("cancellation_deferred")),
+            "message_key": state.get("message_key", ""),
+        }
 
     # ── SSE-Handler ───────────────────────────────────────────────────────────
 

@@ -127,7 +127,8 @@ function renderHistoryLocationSidebar(data) {
 function renderHistoryRow(e, idx) {
   if (e.entry_kind === 'restore_test_report') return renderRestoreReportRow(e, idx);
   const detailError = historyRunDetailMessage(e);
-  const statusBadge = `<span class="history-status-badge ${e.status}">${historyStatusLabel(e.status)}</span>`;
+  const statusClass = e.status === 'cancelled' ? 'warning' : e.status;
+  const statusBadge = `<span class="history-status-badge ${statusClass}">${historyStatusLabel(e.status)}</span>`;
   const locClass = e.location || '';
   const typeLabel = historyTypeLabel(e.backup_type);
   const rowId = `hrow-${idx}`;
@@ -307,7 +308,7 @@ function renderHistoryError(message, isNotice = false) {
 }
 
 function historyStatusLabel(s) {
-  return { success: historyT('statusSuccess'), skipped: historyT('statusSkipped'), warning: historyT('statusWarning'), error: historyT('statusError') }[s] || s;
+  return { success: historyT('statusSuccess'), skipped: historyT('statusSkipped'), warning: historyT('statusWarning'), cancelled: historyT('statusCancelled'), error: historyT('statusError') }[s] || s;
 }
 
 function historyTypeLabel(t) {
