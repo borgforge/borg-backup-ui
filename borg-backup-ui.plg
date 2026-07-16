@@ -19,6 +19,10 @@
 
 <CHANGES>
 <![CDATA[
+###NEXT###
+- Running backup jobs can now be cancelled safely from the Jobs page; Borg is interrupted cooperatively and stopped Docker containers or VMs are recovered before the run finishes.
+- Restore Tests now reconnects the live log automatically when an active test is detected after opening or refreshing the page.
+
 ###2026.07.15.1415###
 - Added a read-only Homepage dashboard widget for backup, restore-test, overdue and active-run status with a dedicated restricted token.
 - Homepage widget settings can create, rotate or revoke the token and provide a ready-to-copy Custom API configuration.
