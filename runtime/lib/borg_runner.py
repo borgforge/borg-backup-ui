@@ -42,6 +42,7 @@ def _log_section(title: str) -> None:
 BORG_EXIT_OK = 0       # Alles in Ordnung
 BORG_EXIT_WARNING = 1  # Warnungen, Backup trotzdem verwendbar
 BORG_EXIT_ERROR = 2    # Fehler, Backup möglicherweise unbrauchbar
+BORG_EXIT_CANCELLED = 130
 
 # SI-Einheiten (Borg verwendet 1000er-Basis)
 # IEC-Einheiten (1024er-Basis) als Fallback
@@ -163,8 +164,10 @@ class BorgRunner:
         check_exit = runner.check()
     """
 
-    def __init__(self, config: Optional[BorgConfig] = None) -> None:
+    def __init__(self, config: Optional[BorgConfig] = None, process_controller=None, phase_callback=None) -> None:
         self.config = config or BorgConfig()
+        self.process_controller = process_controller
+        self.phase_callback = phase_callback
 
     def prune(self) -> int:
         """
@@ -176,6 +179,8 @@ class BorgRunner:
         Returns:
             Borg Exit-Code (0, 1 oder 2)
         """
+        if self.phase_callback:
+            self.phase_callback("borg_prune")
         logger.info(
             "Borg prune: deleting old backups "
             "(keep: %dd/%dw/%dm/%dy)",
@@ -198,7 +203,7 @@ class BorgRunner:
         if self.config.repo:
             cmd.append(self.config.repo)
 
-        exit_code = _run_borg(cmd)
+        exit_code = _run_borg(cmd, self.process_controller)
 
         if exit_code == BORG_EXIT_OK:
             logger.info("Borg prune succeeded")
@@ -218,13 +223,15 @@ class BorgRunner:
         Returns:
             Borg Exit-Code (0 = OK, >0 = Fehler)
         """
+        if self.phase_callback:
+            self.phase_callback("borg_compact")
         logger.info("Borg compact: reclaiming unused space...")
 
         cmd = ["borg", "compact", "--verbose", "--show-rc"]
         if self.config.repo:
             cmd.append(self.config.repo)
 
-        exit_code = _run_borg(cmd)
+        exit_code = _run_borg(cmd, self.process_controller)
 
         if exit_code == BORG_EXIT_OK:
             logger.info("Borg compact succeeded")
@@ -244,6 +251,8 @@ class BorgRunner:
         Returns:
             Borg Exit-Code, oder 0 wenn Check übersprungen wurde
         """
+        if self.phase_callback:
+            self.phase_callback("borg_check")
         days_since = _days_since_flag(self.config.check_flag_file)
 
         if days_since < self.config.check_interval_days:
@@ -265,7 +274,7 @@ class BorgRunner:
         if self.config.repo:
             cmd.append(self.config.repo)
 
-        exit_code = _run_borg(cmd)
+        exit_code = _run_borg(cmd, self.process_controller)
 
         if exit_code == BORG_EXIT_OK:
             logger.info("Borg check succeeded - repository OK")
@@ -296,6 +305,8 @@ class BorgRunner:
         Returns:
             Borg Exit-Code (0, 1 oder ≥2)
         """
+        if self.phase_callback:
+            self.phase_callback("borg_create")
         repo = self.config.repo or os.environ.get("BORG_REPO", "")
         if not repo:
             logger.error("borg create: BORG_REPO is not set")
@@ -355,6 +366,8 @@ class BorgRunner:
             logger.error("Borg process could not be started: %s", exc)
             return BORG_EXIT_ERROR
 
+        if self.process_controller is not None:
+            self.process_controller.attach_process(process)
         wd_stop = threading.Event()
         wd_thread = _start_process_watchdog(
             process,
@@ -370,10 +383,15 @@ class BorgRunner:
                     logger.info("%s", line)
         finally:
             process.wait()
+            if self.process_controller is not None:
+                self.process_controller.detach_process()
             wd_stop.set()
             if wd_thread is not None:
                 wd_thread.join(timeout=1.0)
-        exit_code = process.returncode
+        exit_code = BORG_EXIT_CANCELLED if (
+            self.process_controller is not None
+            and self.process_controller.is_cancel_requested()
+        ) else process.returncode
 
         if exit_code == BORG_EXIT_OK:
             logger.info("Borg create succeeded")
@@ -404,6 +422,8 @@ class BorgRunner:
         ]
 
         for step_name, step_fn in steps:
+            if self.process_controller is not None and self.process_controller.is_cancel_requested():
+                return BORG_EXIT_CANCELLED
             logger.info("Maintenance step: %s", step_name)
             exit_code = step_fn()
             if exit_code >= BORG_EXIT_ERROR:
@@ -530,7 +550,7 @@ def convert_to_bytes(size_str: str) -> int:
 # Interne Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
-def _run_borg(cmd: List[str]) -> int:
+def _run_borg(cmd: List[str], process_controller=None) -> int:
     """
     Führt ein Borg-Kommando aus und streamt die Ausgabe mit Zeitstempel.
 
@@ -559,6 +579,9 @@ def _run_borg(cmd: List[str]) -> int:
         logger.error("Borg process could not be started: %s", exc)
         return BORG_EXIT_ERROR
 
+    if process_controller is not None:
+        process_controller.attach_process(process)
+
     max_runtime_hours = _max_runtime_hours_from_env(os.environ)
     wd_stop = threading.Event()
     wd_thread = _start_process_watchdog(
@@ -575,9 +598,13 @@ def _run_borg(cmd: List[str]) -> int:
                 logger.info("%s", line)
     finally:
         process.wait()
+        if process_controller is not None:
+            process_controller.detach_process()
         wd_stop.set()
         if wd_thread is not None:
             wd_thread.join(timeout=1.0)
+    if process_controller is not None and process_controller.is_cancel_requested():
+        return BORG_EXIT_CANCELLED
     return process.returncode
 
 

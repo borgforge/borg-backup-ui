@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,42 @@ def _validate_job_key(job_key: str) -> str:
     if not _JOB_KEY_RX.fullmatch(key):
         raise ValueError("Invalid job key")
     return key
+
+
+def _control_state_for_run(run_id: str) -> dict:
+    if not run_id:
+        return {}
+    try:
+        from job_control import read_control_state
+
+        state = read_control_state(run_id)
+    except (ImportError, OSError, TypeError, ValueError):
+        return {}
+    return {
+        key: state.get(key)
+        for key in (
+            "phase",
+            "cancel_allowed",
+            "cancellation_deferred",
+            "cancel_requested",
+            "message_key",
+        )
+        if key in state
+    }
+
+
+def cancel_job(config: dict, job_key: str, run_id: str, requested_by: str = "") -> dict:
+    """Request cooperative cancellation for the currently active run."""
+    key = _validate_job_key(job_key)
+    runtime = get_job_runtime_state(config, key)
+    active_run_id = str(runtime.get("run_id") or "").strip()
+    if not runtime.get("running") or not active_run_id:
+        raise FileNotFoundError("The backup run is no longer active")
+    if str(run_id or "").strip() != active_run_id:
+        raise ValueError("The selected backup run is no longer active")
+    from job_control import request_cancel
+
+    return request_cancel(key, active_run_id, requested_by=requested_by)
 
 
 def _safe_int(value, default: int) -> int:
@@ -138,6 +175,7 @@ def active_resource_locks(config: dict) -> List[dict]:
             "started_at": str(raw.get("started_at") or "").strip(),
             "updated_at": str(raw.get("updated_at") or "").strip(),
             "log_file": str(raw.get("log_file") or "").strip(),
+            "run_id": str(raw.get("run_id") or "").strip(),
         })
     return rows
 
@@ -196,16 +234,20 @@ def durable_running_states(config: dict) -> Dict[str, dict]:
             "pid": lock.get("pid"),
             "log_file": str(lock.get("log_file") or ""),
             "source": "resource_lock",
+            "run_id": str(lock.get("run_id") or ""),
         })
         started_at = str(lock.get("started_at") or "")
         if started_at and (not current["start_time"] or started_at < current["start_time"]):
             current["start_time"] = started_at
         if not current["log_file"] and lock.get("log_file"):
             current["log_file"] = str(lock.get("log_file"))
+        if not current.get("run_id") and lock.get("run_id"):
+            current["run_id"] = str(lock.get("run_id"))
     for job_key, state in grouped.items():
         if not state.get("log_file"):
             state["log_file"] = _fallback_runtime_log(config, job_key, str(state.get("start_time") or ""))
         state["log_available"] = bool(state.get("log_file") and Path(str(state["log_file"])).is_file())
+        state.update(_control_state_for_run(str(state.get("run_id") or "")))
     return grouped
 
 
@@ -316,9 +358,10 @@ class JobInfo:
 
 
 class _JobState:
-    def __init__(self, proc: subprocess.Popen, start_time: datetime):
+    def __init__(self, proc: subprocess.Popen, start_time: datetime, run_id: str):
         self.proc = proc
         self.start_time = start_time
+        self.run_id = run_id
         self.lines: List[str] = []
         self.finished = False
         self.exit_code: Optional[int] = None
@@ -371,6 +414,8 @@ class JobManager:
         env = dict(os.environ)
         # Damit das Script seine lib/ findet
         env["BORG_SCRIPT_DIR"] = str(cwd)
+        run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:12]}"
+        env["BORG_UI_RUN_ID"] = run_id
         if extra_env:
             env.update(extra_env)
 
@@ -387,7 +432,7 @@ class JobManager:
         except OSError as exc:
             return False, f"Start failed: {exc}"
 
-        new_state = _JobState(proc, datetime.now())
+        new_state = _JobState(proc, datetime.now(), run_id)
         with self._lock:
             self._states[job_key] = new_state
 
@@ -427,6 +472,8 @@ class JobManager:
             "exit_code": exit_code,
             "start_time": state.start_time.isoformat(),
             "line_count": len(lines),
+            "run_id": state.run_id,
+            **_control_state_for_run(state.run_id),
         }
 
     def get_all_states(self) -> dict:

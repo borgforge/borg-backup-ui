@@ -38,7 +38,7 @@ class BackupStatus:
     timestamp: str = ""
     duration_seconds: int = 0
     exit_code: int = 99
-    status: str = "unknown"          # success | warning | error | skipped
+    status: str = "unknown"          # success | warning | error | skipped | cancelled
     failure_code: str = ""
     missing_source_paths: List[str] = field(default_factory=list)
     skip_reason_code: str = ""
@@ -394,7 +394,7 @@ class _BackupAggregate:
         self.total += 1
         if st.status == "success":
             self.success += 1
-        elif st.status in {"warning", "skipped"}:
+        elif st.status in {"warning", "skipped", "cancelled"}:
             self.warning += 1
         elif st.status == "error":
             self.error += 1

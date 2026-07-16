@@ -2,6 +2,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "runtime"
@@ -107,7 +109,8 @@ def test_backup_job_keeps_failed_vm_recovery_open(monkeypatch, tmp_path: Path):
     )
     job._record_vm_recovery_state()
 
-    job.start_vms()
+    with pytest.raises(RuntimeError, match="Windows11"):
+        job.start_vms()
 
     summary = runtime_recovery.summarize_runtime_recovery(
         job.config.runtime_recovery_file

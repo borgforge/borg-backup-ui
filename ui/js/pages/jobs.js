@@ -159,6 +159,12 @@ async function _pollRunningStates() {
       ...j,
       running: running[j.key]?.running ?? false,
       run_log_available: running[j.key]?.log_available ?? j.run_log_available ?? true,
+      run_id: running[j.key]?.run_id ?? j.run_id ?? '',
+      run_phase: running[j.key]?.phase ?? '',
+      cancel_allowed: running[j.key]?.cancel_allowed ?? false,
+      cancellation_deferred: running[j.key]?.cancellation_deferred ?? false,
+      cancel_requested: running[j.key]?.cancel_requested ?? false,
+      cancel_message_key: running[j.key]?.message_key ?? '',
     }));
     renderJobsGrid(jobsState.jobs);
 
@@ -364,7 +370,7 @@ function renderJobCard(job) {
        </div>`
     : '');
 
-  const stateClass = isRunning ? 'info' : job.enabled === false ? 'warning' : (job.last_status || 'unknown');
+  const stateClass = isRunning ? 'info' : job.enabled === false ? 'warning' : (job.last_status === 'cancelled' ? 'warning' : (job.last_status || 'unknown'));
   const stateLabel = isRunning
     ? jobsT('jobs.running')
     : job.enabled === false
@@ -379,11 +385,21 @@ function renderJobCard(job) {
 
   const startDisabled = !_isDataDirReady();
   const effectiveStartDisabled = startDisabled || job.enabled === false;
+  const cancelStatus = job.cancel_requested
+    ? jobsT(job.cancel_message_key || 'jobs.cancelPending')
+    : (!job.cancel_allowed && job.cancel_message_key)
+      ? jobsT(job.cancel_message_key)
+      : '';
+  const cancelButton = job.cancel_allowed && !job.cancel_requested && job.run_id
+    ? `<button class="btn btn-danger btn-sm" data-jobs-action="cancel-job" data-job-key="${escHtml(job.key)}">${jobsT('jobs.cancelJob')}</button>`
+    : '';
   const actionHtml = isRunning
     ? `<div class="running-indicator">
          <span class="running-dot"></span>
          ${jobsT('jobs.running')}
          ${job.run_log_available === false ? '' : `<button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-key="${escHtml(job.key)}">${jobsT('jobs.showLog')}</button>`}
+         ${cancelButton}
+         ${cancelStatus ? `<span class="jobs-redesign-detail">${escHtml(cancelStatus)}</span>` : ''}
        </div>`
     : `<button class="btn btn-primary" data-jobs-action="start-job" data-job-key="${escHtml(job.key)}" ${effectiveStartDisabled ? `disabled title="${job.enabled === false ? jobsT('jobs.disabled') : jobsT('jobs.dataDirRequired')}"` : ''}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -507,6 +523,7 @@ function statusLabel(s) {
     success: 'OK',
     skipped: jobsT('jobs.statusSkipped'),
     warning: jobsT('jobs.statusWarning'),
+    cancelled: jobsT('jobs.statusCancelled'),
     error: jobsT('jobs.statusError'),
   }[s] || s;
 }
@@ -542,6 +559,7 @@ function onJobsGridClick(event) {
   if (action === 'open-wizard') return openWizard();
   if (action === 'open-log') return openLogPanel(jobKey);
   if (action === 'start-job') return showStartModal(jobKey);
+  if (action === 'cancel-job') return showCancelJobModal(jobKey);
   if (action === 'toggle-menu') return toggleJobMenu(event, jobKey);
   if (action === 'edit-job') {
     closeAllJobMenus();
@@ -651,6 +669,30 @@ function showStartModal(jobKey) {
   document.getElementById('confirm-modal').classList.remove('hidden');
 }
 
+function showCancelJobModal(jobKey) {
+  const job = jobsState.jobs.find(j => j.key === jobKey);
+  if (!job || !job.running || !job.run_id) return;
+  jobsState.pendingJobKey = jobKey;
+  jobsState.confirmAction = 'cancel';
+  const name = job.name || job.display_name || job.key;
+  document.getElementById('modal-title').textContent = jobsT('jobs.cancelTitle', { name });
+  document.getElementById('modal-description').textContent = jobsT('jobs.cancelDescription');
+  document.getElementById('modal-info').innerHTML = `<div class="modal-info-item warning"><span class="modal-info-text">${jobsT('jobs.cancelWarning')}</span></div>`;
+  const confirmWrap = document.getElementById('modal-confirm-input-wrap');
+  const confirmInput = document.getElementById('modal-confirm-input');
+  const passphraseWrap = document.getElementById('modal-passphrase-delete-wrap');
+  const passphraseCheckbox = document.getElementById('modal-delete-passphrase');
+  if (confirmWrap) confirmWrap.classList.add('hidden');
+  if (confirmInput) confirmInput.value = '';
+  if (passphraseWrap) passphraseWrap.classList.add('hidden');
+  if (passphraseCheckbox) passphraseCheckbox.checked = false;
+  const confirmBtn = document.getElementById('modal-confirm-btn');
+  confirmBtn.className = 'btn btn-danger';
+  confirmBtn.textContent = jobsT('jobs.cancelNow');
+  confirmBtn.disabled = false;
+  document.getElementById('confirm-modal').classList.remove('hidden');
+}
+
 function closeModal() {
   document.getElementById('confirm-modal').classList.add('hidden');
   jobsState.pendingJobKey = null;
@@ -739,7 +781,28 @@ function checkDeleteConfirmInput() {
 
 function confirmModalPrimaryAction() {
   if (jobsState.confirmAction === 'delete') return confirmJobDelete();
+  if (jobsState.confirmAction === 'cancel') return confirmJobCancel();
   return confirmJobStart();
+}
+
+async function confirmJobCancel() {
+  const jobKey = jobsState.pendingJobKey;
+  const job = jobsState.jobs.find(j => j.key === jobKey);
+  if (!job?.run_id) return;
+  closeModal();
+  try {
+    const res = await fetch('/api/jobs/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_key: jobKey, run_id: job.run_id }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    showMsg('jobs-message', 'warning', jobsT(data.message_key || 'jobs.cancelRequested'));
+    await _pollRunningStates();
+  } catch (err) {
+    showJobsError(jobsT('jobs.cancelFailed', { message: err.message }));
+  }
 }
 
 async function confirmJobDelete() {
@@ -829,7 +892,8 @@ function openLogPanel(jobKey) {
 
   es.addEventListener('done', (e) => {
     const code = e.data;
-    setLogStatus(parseInt(code, 10) === 0 ? 'success' : 'error', code);
+    const numericCode = parseInt(code, 10);
+    setLogStatus(numericCode === 0 ? 'success' : (numericCode === 130 ? 'cancelled' : 'error'), code);
     es.close();
     jobsState.activeEventSource = null;
     setTimeout(refreshJobs, 1500);
@@ -895,6 +959,9 @@ function setLogStatus(state, exitCode) {
     const dot = document.createElement('span');
     dot.className = 'badge-dot';
     badge.append(dot, document.createTextNode(jobsT('jobs.logDone', { code: exit })));
+  } else if (state === 'cancelled') {
+    badge.className = 'badge warning';
+    badge.textContent = jobsT('jobs.logCancelled', { code: exit });
   } else {
     badge.className = 'badge error';
     badge.textContent = '';

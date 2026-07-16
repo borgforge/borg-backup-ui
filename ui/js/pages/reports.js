@@ -365,7 +365,7 @@ function _berichtSizeChart(runs) {
     ].join('\n');
     const clr = r.status === 'error'
       ? 'var(--error)'
-      : (r.status === 'warning' || r.status === 'skipped')
+      : (r.status === 'warning' || r.status === 'skipped' || r.status === 'cancelled')
         ? 'var(--warning)'
         : 'var(--accent)';
     bars += `<rect x="${x}" y="${y}" width="${BAR_W}" height="${barH}" rx="2" fill="${clr}" opacity="0.8"><title>${escHtml(tooltip)}</title></rect>`;
@@ -635,6 +635,7 @@ function _reportStatusLabel(status) {
     success: reportsT('statusSuccess'),
     warning: reportsT('statusWarning'),
     skipped: reportsT('statusSkipped'),
+    cancelled: reportsT('statusCancelled'),
     error: reportsT('statusError'),
     unknown: reportsT('statusUnknown'),
   }[String(status || '').toLowerCase()] || status || reportsT('statusUnknown');

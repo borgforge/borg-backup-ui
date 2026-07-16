@@ -136,6 +136,7 @@ Jobs definieren, welche Daten wohin gesichert werden. Ein Job enthält:
 - **Neuer Job:** Öffnet den Job-Wizard.
 - **Aktualisieren:** Lädt Jobliste und Status neu.
 - **Live-Log:** Während eines laufenden Jobs kann die Ausgabe im Browser verfolgt werden.
+- **Job abbrechen:** Fordert einen kontrollierten Abbruch des laufenden Jobs an.
 
 ### 3.3 Job manuell starten
 
@@ -148,7 +149,17 @@ Jobs definieren, welche Daten wohin gesichert werden. Ein Job enthält:
 
 > **Warnung:** Wenn der Job Docker-Container oder VMs stoppen soll, werden nur die im Job konfigurierten Ziele gesteuert. Prüfen Sie diese Auswahl vor produktiven Läufen.
 
-### 3.4 Job-Wizard
+### 3.4 Laufenden Job abbrechen
+
+1. Klicken Sie beim laufenden Job auf **Job abbrechen**.
+2. Bestätigen Sie den kontrollierten Abbruch.
+3. Beobachten Sie Status und Live-Log, bis die Wiederherstellung der Laufzeitumgebung abgeschlossen ist.
+
+Ein aktiver Borg-Schritt wird mit einem Interrupt beendet. Wird der Abbruch während des Stoppens von Docker-Containern oder VMs angefordert, beendet die Anwendung zunächst den bereits begonnenen Stoppvorgang vollständig. Danach werden die zuvor laufenden Container beziehungsweise VMs automatisch wieder gestartet. Während dieser Wiederherstellung ist kein weiterer Abbruch möglich. Schlägt der Neustart eines Containers oder einer VM fehl, endet der Lauf als Fehler und **Systemzustand & Migration** zeigt den offenen Runtime-Recovery-Hinweis.
+
+> **Hinweis:** Ein kontrolliert abgebrochener Lauf wird als **Abgebrochen** gespeichert. Die Anwendung startet nach einem Abbruch nicht automatisch `borg check`, entfernt keine Borg-Locks und repariert kein Repository. Prüfen Sie bei auffälligen Borg-Meldungen das Log und verwenden Sie die Repository-Wartung gezielt.
+
+### 3.5 Job-Wizard
 
 Der Job-Wizard führt in festen Schritten durch die Erstellung oder Bearbeitung eines Jobs.
 

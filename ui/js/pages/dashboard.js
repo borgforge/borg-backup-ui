@@ -314,11 +314,12 @@ function dashboardRunStatus(backup) {
   if (backup.never_run) return { cls: 'unknown', label: dashboardT('dashboard.neverExecuted') };
   const status = String(backup.status || 'unknown').toLowerCase();
   return {
-    cls: status,
+    cls: status === 'cancelled' ? 'warning' : status,
     label: {
       success: dashboardT('dashboard.successful'),
       skipped: dashboardT('dashboard.skipped'),
       warning: dashboardT('jobs.statusWarning'),
+      cancelled: dashboardT('jobs.statusCancelled'),
       error: dashboardT('jobs.statusError'),
     }[status] || dashboardT('dashboard.unknown'),
   };

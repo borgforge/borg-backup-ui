@@ -124,6 +124,12 @@ Sources must exist. Missing required sources stop the run so that an apparently 
 
 > [!TIP] Run every new or substantially changed job manually once before enabling its schedule.
 
+### Cancel a Running Job Safely
+
+For a running job, **Cancel job** requests a controlled cancellation. An active Borg step is interrupted. If Docker containers or VMs are currently being stopped, that operation is completed first and the systems that were running before the backup are restarted afterwards. No further cancellation is possible during recovery. If recovery fails, the run ends as an error and the runtime recovery notice remains visible.
+
+A cancelled run is stored with the **Cancelled** status. The application does not automatically run a repository check or remove Borg locks afterwards. Review the live or stored log if Borg reports anything unusual.
+
 ## 7. Scheduling
 
 Cron uses five fields: minute, hour, day, month, and weekday. `0 3 * * *` starts a job every day at 03:00. Leave enough time between large jobs and avoid concurrent access to the same repository.

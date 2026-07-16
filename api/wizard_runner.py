@@ -157,6 +157,7 @@ class ResourceLockSet:
         grace_seconds: int = 60,
         heartbeat_seconds: int = 20,
         log_file: str = "",
+        run_id: str = "",
     ) -> None:
         self.lock_dir = lock_dir
         self.job_key = job_key
@@ -164,6 +165,7 @@ class ResourceLockSet:
         self.grace_seconds = grace_seconds
         self.heartbeat_seconds = heartbeat_seconds
         self.log_file = str(log_file or "").strip()
+        self.run_id = str(run_id or "").strip()
         self._owned: list[Path] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -186,6 +188,8 @@ class ResourceLockSet:
         }
         if self.log_file:
             payload["log_file"] = self.log_file
+        if self.run_id:
+            payload["run_id"] = self.run_id
         return payload
 
     def _write_new(self, path: Path, payload: dict) -> bool:
@@ -543,6 +547,9 @@ def main() -> int:
     _setup_stdout_logging()
 
     job_key = os.environ.get("BORG_UI_JOB_KEY", "").strip()
+    run_id = os.environ.get("BORG_UI_RUN_ID", "").strip() or (
+        f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.getpid()}"
+    )
     borg_scripts_dir_raw = os.environ.get("BORG_UI_BORG_SCRIPTS_DIR", "").strip()
     backup_scripts_dir_raw = os.environ.get("BORG_SCRIPT_DIR", "").strip()
     if not job_key:
@@ -552,6 +559,29 @@ def main() -> int:
         logging.error("Runner context is missing (BORG_UI_BORG_SCRIPTS_DIR / BORG_SCRIPT_DIR)")
         return 2
 
+    from job_control import JobControl
+
+    control = JobControl(job_key, run_id)
+
+    def set_phase(phase: str) -> None:
+        recovery_phase = phase in {"recovering_docker", "recovering_vms", "unmounting"}
+        stopping_phase = phase in {"stopping_docker", "stopping_vms"}
+        message_key = ""
+        if phase == "stopping_docker":
+            message_key = "jobs.cancelPendingDocker"
+        elif phase == "stopping_vms":
+            message_key = "jobs.cancelPendingVm"
+        elif recovery_phase:
+            message_key = "jobs.cancelUnavailableRecovery"
+        control.update_phase(
+            phase,
+            cancel_allowed=not recovery_phase,
+            cancellation_deferred=stopping_phase,
+            message_key=message_key,
+        )
+
+    set_phase("preparing")
+
     borg_scripts_dir = Path(borg_scripts_dir_raw)
     backup_scripts_dir = Path(backup_scripts_dir_raw)
     try:
@@ -560,6 +590,7 @@ def main() -> int:
         env, meta = _load_env_from_job(job_key, borg_scripts_dir, backup_scripts_dir)
     except Exception as exc:
         logging.error("Loading job failed: %s", exc)
+        control.update_phase("failed", cancel_allowed=False, finished=True, exit_code=2)
         return 2
 
     _ensure_runtime_import_paths(backup_scripts_dir)
@@ -594,15 +625,19 @@ def main() -> int:
         grace_seconds=grace_seconds,
         heartbeat_seconds=heartbeat_seconds,
         log_file=str(env.get("LOG_FILE") or ""),
+        run_id=run_id,
     )
     resources = _build_resources(env, meta)
     ok, reason = lock_set.acquire(resources)
     if not ok:
         logging.warning("Job is being skipped: %s", reason)
+        control.update_phase("failed", cancel_allowed=False, finished=True, exit_code=2)
         return 2
 
     smb_session = SmbMountSession()
+    result_code = 2
     try:
+        set_phase("mounting")
         smb_session = _ensure_smb_mount(env, meta)
         docker_mgr = None
         vm_mgr = None
@@ -622,7 +657,13 @@ def main() -> int:
             mail_config=mail_config,
             ntfy_config=ntfy_config,
             notification_config=env,
+            phase_callback=set_phase,
         ) as job:
+            set_phase("preparing")
+            if control.is_cancel_requested():
+                job.set_cancelled()
+                result_code = 130
+                return result_code
             if abort_on_parity:
                 logging.info("Parity check enabled (ABORT_ON_PARITY_CHECK=true)")
                 job.check_parity()
@@ -634,32 +675,80 @@ def main() -> int:
                 job.check_usb_mount(Path(usb_mount_path))
             job.check_prerequisites()
             job.cleanup_old_logs()
+            if control.is_cancel_requested():
+                job.set_cancelled()
+                result_code = 130
+                return result_code
             if docker_mgr is not None:
+                set_phase("stopping_docker")
                 selected = docker_control["selected"] if docker_control["mode"] == "selected" else None
                 job.stop_docker(selected)
+                if control.is_cancel_requested():
+                    logging.info("Cancellation requested; Docker stop completed and recovery starts now")
+                    job.set_cancelled()
+                    result_code = 130
+                    return result_code
             if vm_mgr is not None:
+                set_phase("stopping_vms")
                 selected = vm_control["selected"] if vm_control["mode"] == "selected" else None
                 job.shutdown_vms(selected)
+                if control.is_cancel_requested():
+                    logging.info("Cancellation requested; VM shutdown completed and recovery starts now")
+                    job.set_cancelled()
+                    result_code = 130
+                    return result_code
 
-            runner = BorgRunner(borg_config)
+            runner = BorgRunner(
+                borg_config,
+                process_controller=control,
+                phase_callback=set_phase,
+            )
             create_exit = runner.create(
                 job_config.backup_paths,
                 archive_prefix,
                 exclude_paths=job_config.exclude_paths,
             )
+            if control.is_cancel_requested():
+                job.set_cancelled()
+                result_code = 130
+                return result_code
             if create_exit >= 2:
                 job.set_result(create_exit, final_msg=f"borg create failed (exit {create_exit})")
-                return create_exit
+                result_code = create_exit
+                return result_code
 
             maint_exit = runner.maintenance()
+            if control.is_cancel_requested():
+                job.set_cancelled()
+                result_code = 130
+                return result_code
             exit_code = max(create_exit, maint_exit)
             job.set_result(exit_code, parse_borg_stats(job_config.log_file))
-            return exit_code
+            result_code = exit_code
+            return result_code
     except RequiredSourcePathsMissing:
+        result_code = 2
         return 2
+    except Exception:
+        # Runtime recovery can fail while unwinding an accepted cancellation.
+        # That failure must win over the earlier exit code 130.
+        result_code = 2
+        raise
     finally:
-        smb_session.cleanup()
-        lock_set.release()
+        set_phase("unmounting")
+        try:
+            smb_session.cleanup()
+        finally:
+            try:
+                lock_set.release()
+            finally:
+                terminal_phase = "cancelled" if result_code == 130 else ("completed" if result_code < 2 else "failed")
+                control.update_phase(
+                    terminal_phase,
+                    cancel_allowed=False,
+                    finished=True,
+                    exit_code=result_code,
+                )
 
 
 if __name__ == "__main__":

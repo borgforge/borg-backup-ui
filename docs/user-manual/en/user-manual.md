@@ -136,6 +136,7 @@ Jobs define which data is backed up and where it is stored. A job contains:
 - **New job:** Opens the job wizard.
 - **Refresh:** Reloads job list and status.
 - **Live log:** During a running job, output can be followed in the browser.
+- **Cancel job:** Requests a controlled cancellation of the running job.
 
 ### 3.3 Start a Job Manually
 
@@ -148,7 +149,17 @@ Jobs define which data is backed up and where it is stored. A job contains:
 
 > **Warning:** If the job is configured to stop Docker containers or VMs, only the targets configured in the job are controlled. Review this selection before production runs.
 
-### 3.4 Job Wizard
+### 3.4 Cancel a Running Job
+
+1. Click **Cancel job** on the running job.
+2. Confirm the controlled cancellation.
+3. Watch the status and live log until runtime recovery is complete.
+
+An active Borg step is interrupted with SIGINT. If cancellation is requested while Docker containers or VMs are being stopped, the application first completes the stop operation already in progress. It then automatically restarts the containers or VMs that were running before the backup. Cancellation is no longer available during this recovery. If a container or VM cannot be restarted, the run ends as an error and **System Health & Migration** shows the pending runtime recovery item.
+
+> **Note:** A controlled cancellation is stored as **Cancelled**. The application does not automatically run `borg check`, remove Borg locks, or repair a repository after cancellation. Review the log when Borg reports anything unusual and use repository maintenance deliberately.
+
+### 3.5 Job Wizard
 
 The job wizard guides creation or editing of a job through fixed steps.
 

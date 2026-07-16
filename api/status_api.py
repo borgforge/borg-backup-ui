@@ -147,7 +147,7 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
 
     total = len(backups)
     success = sum(1 for b in backups if b["status"] == "success")
-    warning = sum(1 for b in backups if b["status"] == "warning")
+    warning = sum(1 for b in backups if b["status"] in {"warning", "cancelled"})
     skipped = sum(1 for b in backups if b["status"] == "skipped")
     error = sum(1 for b in backups if b["status"] == "error")
 

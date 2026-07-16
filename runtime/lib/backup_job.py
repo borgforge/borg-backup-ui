@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 _HR = "━" * 80
 REQUIRED_SOURCE_PATHS_MISSING = "required_source_paths_missing"
 RUNTIME_RECOVERY_FAILED = "runtime_recovery_failed"
+USER_CANCELLED = "user_cancelled"
 
 
 class RequiredSourcePathsMissing(RuntimeError):
@@ -206,6 +207,7 @@ class BackupJob:
         mail_config: Optional["MailConfig"] = None,
         ntfy_config: Optional["NtfyConfig"] = None,
         notification_config: Optional[Dict[str, str]] = None,
+        phase_callback: Optional[Callable[[str], None]] = None,
     ) -> None:
         self.config = config
         self.docker_manager = docker_manager
@@ -213,6 +215,7 @@ class BackupJob:
         self.mail_config = mail_config
         self.ntfy_config = ntfy_config
         self.notification_config = notification_config
+        self.phase_callback = phase_callback
 
         self._start_time: float = 0.0
         self._borg_exit: int = 99
@@ -229,6 +232,7 @@ class BackupJob:
         self._skip_reason: str = ""
         self._skip_status_written: bool = False
         self._failure_code: str = ""
+        self._cancelled: bool = False
         self._missing_source_paths: List[str] = []
         self._lock_fd = None
 
@@ -300,11 +304,13 @@ class BackupJob:
 
             recovery_failures: List[str] = []
             if not self._docker_restarted and self._docker_stop_result is not None:
+                self._emit_phase("recovering_docker")
                 if self._run_cleanup_step(
                     "Docker recovery", self.start_docker, cleanup_errors
                 ):
                     recovery_failures.append("Docker")
             if not self._vms_restarted and self._vm_shutdown_result is not None:
+                self._emit_phase("recovering_vms")
                 if self._run_cleanup_step(
                     "VM recovery", self.start_vms, cleanup_errors
                 ):
@@ -312,7 +318,8 @@ class BackupJob:
 
             if recovery_failures and not self._skip_finish:
                 self._borg_exit = 2
-                self._failure_code = self._failure_code or RUNTIME_RECOVERY_FAILED
+                self._cancelled = False
+                self._failure_code = RUNTIME_RECOVERY_FAILED
                 recovery_message = (
                     "Runtime recovery failed for "
                     + " and ".join(recovery_failures)
@@ -391,6 +398,17 @@ class BackupJob:
         self._borg_stats = borg_stats
         self._final_msg = final_msg
 
+    def set_cancelled(self, message: str = "Backup cancelled by user request.") -> None:
+        """Mark the run as deliberately cancelled after safe runtime recovery."""
+        self._cancelled = True
+        self._borg_exit = 130
+        self._failure_code = USER_CANCELLED
+        self._final_msg = message
+
+    def _emit_phase(self, phase: str) -> None:
+        if self.phase_callback is not None:
+            self.phase_callback(phase)
+
     def stop_docker(self, selected_names: Optional[List[str]] = None) -> None:
         """Stoppt Docker-Container für das Backup."""
         if self.docker_manager is not None:
@@ -423,6 +441,10 @@ class BackupJob:
                     else f"{len(start_result.failed_ids)} Docker container(s) could not be restarted."
                 ),
             )
+            if not start_result.success:
+                raise RuntimeError(
+                    f"{len(start_result.failed_ids)} Docker container(s) could not be restarted"
+                )
 
     def shutdown_vms(self, selected_names: Optional[List[str]] = None) -> None:
         """Fährt VMs herunter (mit Vorwarnung). Tracking für Neustart in __exit__."""
@@ -455,6 +477,8 @@ class BackupJob:
                 success=bool(start_result.success),
                 message=message,
             )
+            if not start_result.success:
+                raise RuntimeError(message)
 
     def check_usb_mount(self, mount_path: Path) -> None:
         """
@@ -755,7 +779,9 @@ class BackupJob:
         if not self._final_msg:
             self._final_msg = f"Backup finished (borg exit {exit_code})."
 
-        if exit_code == 0:
+        if self._cancelled:
+            logger.info("Backup was cancelled by the user after safe runtime recovery")
+        elif exit_code == 0:
             logger.info("Borg backup completed successfully (exit 0)")
             self._send_notification_event(
                 "backup_success",
@@ -927,7 +953,9 @@ class BackupJob:
         from lib.status import BackupStatus
 
         exit_code = self._borg_exit
-        if exit_code == 0:
+        if self._cancelled:
+            status_str = "cancelled"
+        elif exit_code == 0:
             status_str = "success"
         elif exit_code == 1:
             status_str = "warning"
