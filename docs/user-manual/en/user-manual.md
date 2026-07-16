@@ -250,6 +250,8 @@ Best practices:
 
 The **Repositories** page uses a master-detail workspace. Borg repositories are grouped by their exact storage target on the left, while the selected repository remains visible in the workspace on the right. **Add repository** creates or imports a repository on a storage target that has already been configured under **Settings**.
 
+![Repository management with storage-target groups and a detail workspace](../assets/en/repositories.png)
+
 Local storage targets are created under **Settings > Local Profiles**. A
 concrete directory below `/mnt`, such as `/mnt/backup` or `/mnt/disks/USB-A`,
 is allowed. Broad roots, system paths, and malformed input containing empty,
