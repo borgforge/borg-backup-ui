@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.15.1415">
+<!ENTITY version   "2026.07.16.1226">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.16.1226###
+- Running backup jobs keep their cancellation controls synchronized with the current backup phase.
+- Job runtime actions and recovery notices are aligned consistently in the Jobs view.
+- Active Restore Tests reconnect their live log after page load or refresh.
+
 ###2026.07.15.1415###
 - Added a read-only Homepage dashboard widget for backup, restore-test, overdue and active-run status with a dedicated restricted token.
 - Homepage widget settings can create, rotate or revoke the token and provide a ready-to-copy Custom API configuration.
@@ -346,7 +351,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>ed5c759b0c7afaaa77e2b25b124322f8</MD5>
+<MD5>47adc4211b84e31db1165a310a46bd03</MD5>
 </FILE>
 
 <!--
