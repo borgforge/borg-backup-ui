@@ -91,16 +91,19 @@ async function refreshJobs() {
 
   try {
     await window.BBUI.core.updateDataDirWarning();
-    const [jobsRes, statusRes, schedRes] = await Promise.all([
+    const [jobsRes, statusRes, schedRes, runningRes] = await Promise.all([
       fetch('/api/jobs'),
       fetch('/api/status'),
       fetch('/api/schedules'),
+      fetch('/api/jobs/running'),
     ]);
     if (!jobsRes.ok) throw new Error(`Jobs: HTTP ${jobsRes.status}`);
     if (!statusRes.ok) throw new Error(`Status: HTTP ${statusRes.status}`);
+    if (!runningRes.ok) throw new Error(`Running jobs: HTTP ${runningRes.status}`);
 
     const jobsData   = await jobsRes.json();
     const statusData = await statusRes.json();
+    const runningData = await runningRes.json();
     if (schedRes.ok) {
       const nextSchedules = await schedRes.json();
       _coreSetSchedules(nextSchedules);
@@ -119,7 +122,9 @@ async function refreshJobs() {
         last_timestamp: statusMap[j.key].timestamp,
         last_exit_code: statusMap[j.key].exit_code,
       } : {},
+      ...jobRuntimeState(runningData[j.key]),
     }));
+    jobsState.lastRunningSnapshot = JSON.stringify(runningData);
 
     jobsState.loaded = true;
     renderJobsGrid(jobsState.jobs);
@@ -134,7 +139,7 @@ async function refreshJobs() {
 
 function startJobsPolling() {
   if (jobsState.pollingTimer) return;
-  jobsState.pollingTimer = setInterval(_pollRunningStates, 10_000);
+  jobsState.pollingTimer = setInterval(_pollRunningStates, 3_000);
 }
 
 function stopJobsPolling() {
@@ -157,14 +162,7 @@ async function _pollRunningStates() {
 
     jobsState.jobs = jobsState.jobs.map(j => ({
       ...j,
-      running: running[j.key]?.running ?? false,
-      run_log_available: running[j.key]?.log_available ?? j.run_log_available ?? true,
-      run_id: running[j.key]?.run_id ?? j.run_id ?? '',
-      run_phase: running[j.key]?.phase ?? '',
-      cancel_allowed: running[j.key]?.cancel_allowed ?? false,
-      cancellation_deferred: running[j.key]?.cancellation_deferred ?? false,
-      cancel_requested: running[j.key]?.cancel_requested ?? false,
-      cancel_message_key: running[j.key]?.message_key ?? '',
+      ...jobRuntimeState(running[j.key], j),
     }));
     renderJobsGrid(jobsState.jobs);
 
@@ -177,6 +175,19 @@ async function _pollRunningStates() {
   } catch {
     // Netzwerkfehler ignorieren
   }
+}
+
+function jobRuntimeState(runtime, previous = {}) {
+  return {
+    running: runtime?.running ?? false,
+    run_log_available: runtime?.log_available ?? previous.run_log_available ?? true,
+    run_id: runtime?.run_id ?? previous.run_id ?? '',
+    run_phase: runtime?.phase ?? '',
+    cancel_allowed: runtime?.cancel_allowed ?? false,
+    cancellation_deferred: runtime?.cancellation_deferred ?? false,
+    cancel_requested: runtime?.cancel_requested ?? false,
+    cancel_message_key: runtime?.message_key ?? '',
+  };
 }
 
 // ── Jobs rendern ──────────────────────────────────────────────────────────────
@@ -394,12 +405,13 @@ function renderJobCard(job) {
     ? `<button class="btn btn-danger btn-sm" data-jobs-action="cancel-job" data-job-key="${escHtml(job.key)}">${jobsT('jobs.cancelJob')}</button>`
     : '';
   const actionHtml = isRunning
-    ? `<div class="running-indicator">
-         <span class="running-dot"></span>
-         ${jobsT('jobs.running')}
-         ${job.run_log_available === false ? '' : `<button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-key="${escHtml(job.key)}">${jobsT('jobs.showLog')}</button>`}
-         ${cancelButton}
-         ${cancelStatus ? `<span class="jobs-redesign-detail">${escHtml(cancelStatus)}</span>` : ''}
+    ? `<div class="jobs-running-actions">
+         <div class="jobs-running-state"><span class="running-dot"></span><span>${jobsT('jobs.running')}</span></div>
+         <div class="jobs-running-buttons">
+           ${job.run_log_available === false ? '' : `<button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-key="${escHtml(job.key)}">${jobsT('jobs.showLog')}</button>`}
+           ${cancelButton}
+         </div>
+         ${cancelStatus ? `<div class="jobs-running-message">${escHtml(cancelStatus)}</div>` : ''}
        </div>`
     : `<button class="btn btn-primary" data-jobs-action="start-job" data-job-key="${escHtml(job.key)}" ${effectiveStartDisabled ? `disabled title="${job.enabled === false ? jobsT('jobs.disabled') : jobsT('jobs.dataDirRequired')}"` : ''}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">

@@ -167,3 +167,26 @@ def test_cancelled_status_is_localized_across_primary_views():
     assert "statusCancelled" in dashboard
     assert "statusCancelled" in history
     assert "statusCancelled" in reports
+
+
+def test_jobs_page_keeps_runtime_state_during_full_refresh():
+    jobs = (ROOT / "ui/js/pages/jobs.js").read_text(encoding="utf-8")
+
+    refresh_start = jobs.index("async function refreshJobs()")
+    refresh_end = jobs.index("// ── Jobs-Polling", refresh_start)
+    refresh_source = jobs[refresh_start:refresh_end]
+
+    assert "fetch('/api/jobs/running')" in refresh_source
+    assert "jobRuntimeState(runningData[j.key])" in refresh_source
+    assert "setInterval(_pollRunningStates, 3_000)" in jobs
+
+
+def test_jobs_page_uses_structured_runtime_actions():
+    jobs = (ROOT / "ui/js/pages/jobs.js").read_text(encoding="utf-8")
+    styles = (ROOT / "ui/dashboard-jobs.css").read_text(encoding="utf-8")
+
+    assert 'class="jobs-running-state"' in jobs
+    assert 'class="jobs-running-buttons"' in jobs
+    assert 'class="jobs-running-message"' in jobs
+    assert ".jobs-running-actions" in styles
+    assert ".jobs-running-message" in styles

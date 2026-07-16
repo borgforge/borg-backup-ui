@@ -8,6 +8,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #238
 - Running backup jobs can be cancelled cooperatively from the Jobs page. Active Borg processes receive SIGINT, Docker/VM stop phases finish before automatic recovery, and recovery failures remain visible as errors.
+- The Jobs page keeps cancellation controls synchronized with the active backup phase and aligns running-job actions consistently without wrapping controls into unrelated columns.
 
 ### Issue #239
 - Restore Tests now opens and reconnects the live log when a running test is detected during page load or refresh, not only after a conflicting start request.
