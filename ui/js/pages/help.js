@@ -281,10 +281,10 @@ async function helpInit(force = false) {
   if (toc) toc.innerHTML = '';
   box.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>${escHtml(helpT('loading'))}</span></div>`;
   try {
-    const document = await fetchHelpDocument(language);
+    const helpDocument = await fetchHelpDocument(language);
     if (requestId !== _helpRequestId) return;
-    _helpDocumentUrl = document.path;
-    box.innerHTML = _renderHelpMarkdown(document.markdown);
+    _helpDocumentUrl = helpDocument.path;
+    box.innerHTML = _renderHelpMarkdown(helpDocument.markdown);
     _renderHelpToc(box);
     helpFilter(document.getElementById('help-search-input')?.value || '');
     _helpLoadedLanguage = language;

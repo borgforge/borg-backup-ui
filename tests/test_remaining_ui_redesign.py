@@ -97,6 +97,8 @@ def test_help_has_generated_table_of_contents() -> None:
     assert "node.matches?.('h2, h3')" in script
     assert "function helpSetView(rawView)" in script
     assert "function openHelpTopic(topic)" in script
+    assert "const helpDocument = await fetchHelpDocument(language)" in script
+    assert "const document = await fetchHelpDocument(language)" not in script
     assert "window.helpSetView = helpSetView" in script
     assert "window.openHelpTopic = openHelpTopic" in script
 
