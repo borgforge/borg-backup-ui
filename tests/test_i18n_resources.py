@@ -158,10 +158,21 @@ def test_in_app_help_follows_language_with_german_fallback_and_live_reload():
 
     assert "getLanguage?.() === 'en' ? 'en' : 'de'" in source
     assert "language === 'en' ? '/ui/docs/help.en.md' : '/ui/docs/help.md'" in source
+    assert "`/ui/docs/manual/${language}/user-manual.md`" in source
     assert "if (language === 'de') throw new Error" in source
-    assert "fetch(helpDocumentPath('de')" in source
+    assert "const fallbackPath = helpDocumentPath('de')" in source
+    assert "fetch(fallbackPath" in source
     assert "requestId !== _helpRequestId" in source
     assert "'bbui:language-changed', () => helpInit(true)" in source
+
+
+def test_user_manuals_are_packaged_for_offline_in_app_access():
+    build_script = (ROOT / "plugin" / "build.sh").read_text(encoding="utf-8")
+
+    assert 'MANUAL_DST="${APP_DST}/ui/docs/manual"' in build_script
+    assert 'docs/user-manual/de/user-manual.md' in build_script
+    assert 'docs/user-manual/en/user-manual.md' in build_script
+    assert 'docs/user-manual/assets' in build_script
 
 
 def test_user_manuals_cover_core_workflows_and_reference_existing_assets():

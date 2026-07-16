@@ -3,6 +3,8 @@
 let _helpLoadedLanguage = '';
 let _helpRequestId = 0;
 let _helpSections = [];
+let _helpView = 'quick';
+let _helpDocumentUrl = '';
 
 function helpT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`help.${key}`, params) || key;
@@ -12,30 +14,47 @@ function helpLanguage() {
   return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en' : 'de';
 }
 
-function helpDocumentPath(language) {
+function helpDocumentPath(language, view = _helpView) {
+  if (view === 'manual') return `/ui/docs/manual/${language}/user-manual.md`;
   return language === 'en' ? '/ui/docs/help.en.md' : '/ui/docs/help.md';
 }
 
 async function fetchHelpDocument(language) {
-  const primary = await fetch(helpDocumentPath(language), { cache: 'no-store' });
-  if (primary.ok) return primary.text();
+  const primaryPath = helpDocumentPath(language);
+  const primary = await fetch(primaryPath, { cache: 'no-store' });
+  if (primary.ok) return { markdown: await primary.text(), path: primaryPath };
   if (language === 'de') throw new Error(`HTTP ${primary.status}`);
 
-  const fallback = await fetch(helpDocumentPath('de'), { cache: 'no-store' });
+  const fallbackPath = helpDocumentPath('de');
+  const fallback = await fetch(fallbackPath, { cache: 'no-store' });
   if (!fallback.ok) throw new Error(`HTTP ${fallback.status}`);
-  return fallback.text();
+  return { markdown: await fallback.text(), path: fallbackPath };
+}
+
+function _helpAssetUrl(rawSource) {
+  const source = String(rawSource || '').trim();
+  if (!source || /^(?:[a-z]+:|\/|#)/i.test(source)) return source;
+  try {
+    return new URL(source, new URL(_helpDocumentUrl, window.location.origin)).pathname;
+  } catch (_err) {
+    return source;
+  }
 }
 
 function _helpInline(mdText) {
+  const inlineCodePattern = new RegExp(String.fromCharCode(96) + '([^\\n]+)' + String.fromCharCode(96), 'g');
   return escHtml(String(mdText || ''))
-    .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g, (_m, alt, src, title) => {
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, src) => {
       const a = escHtml(alt || '');
-      const u = escHtml(src || '');
-      const t = escHtml(title || alt || '');
+      const u = escHtml(_helpAssetUrl(src));
+      const t = a;
       return `<figure class="help-figure"><img src="${u}" alt="${a}" title="${t}" loading="lazy"><figcaption>${a || t || ''}</figcaption></figure>`;
     })
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label, target) => {
+      if (target.startsWith('#')) return '<a href="#help-' + target.slice(1) + '">' + label + '</a>';
+      return '<a href="' + target + '" target="_blank" rel="noopener">' + label + '</a>';
+    })
+    .replace(inlineCodePattern, '<code>$1</code>')
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
     .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
 }
@@ -56,10 +75,20 @@ function _renderHelpMarkdown(md) {
   };
   const closeCallout = () => {
     if (!callout.length) return;
-    const first = callout[0].match(/^\[!(NOTE|TIP|WARNING|IMPORTANT)\]\s*(.*)$/i);
-    const kind = String(first?.[1] || 'NOTE').toLowerCase();
-    const title = first?.[2] || helpT(`callout.${kind}`);
-    const body = first ? callout.slice(1) : callout;
+    const directive = callout[0].match(/^\[!(NOTE|TIP|WARNING|IMPORTANT)\]\s*(.*)$/i);
+    const emphasized = callout[0].match(/^\*\*(Hinweis|Tipp|Warnung|Wichtig|Note|Tip|Warning|Important):\*\*\s*(.*)$/i);
+    const calloutKinds = {
+      hinweis: 'note', note: 'note', tipp: 'tip', tip: 'tip',
+      warnung: 'warning', warning: 'warning', wichtig: 'important', important: 'important',
+    };
+    const kind = directive
+      ? String(directive[1]).toLowerCase()
+      : (calloutKinds[String(emphasized?.[1] || '').toLowerCase()] || 'note');
+    const title = directive?.[2] || emphasized?.[1] || helpT(`callout.${kind}`);
+    const firstBody = emphasized?.[2] || '';
+    const body = directive
+      ? callout.slice(1)
+      : (emphasized ? [firstBody, ...callout.slice(1)].filter(Boolean) : callout);
     out.push(`<aside class="help-callout help-callout--${kind}"><strong>${_helpInline(title)}</strong>${body.map(item => `<p>${_helpInline(item)}</p>`).join('')}</aside>`);
     callout = [];
   };
@@ -100,17 +129,22 @@ function _renderHelpMarkdown(md) {
 
     if (t.startsWith('# ')) {
       closeList();
-      out.push(`<h2>${_helpInline(t.slice(2).trim())}</h2>`);
+      out.push(`<h2 class="help-document-title">${_helpInline(t.slice(2).trim())}</h2>`);
       continue;
     }
     if (t.startsWith('## ')) {
       closeList();
-      out.push(`<h3>${_helpInline(t.slice(3).trim())}</h3>`);
+      out.push(`<h2>${_helpInline(t.slice(3).trim())}</h2>`);
       continue;
     }
     if (t.startsWith('### ')) {
       closeList();
-      out.push(`<h4>${_helpInline(t.slice(4).trim())}</h4>`);
+      out.push(`<h3>${_helpInline(t.slice(4).trim())}</h3>`);
+      continue;
+    }
+    if (t.startsWith('#### ')) {
+      closeList();
+      out.push(`<h4>${_helpInline(t.slice(5).trim())}</h4>`);
       continue;
     }
     if (t.startsWith('- ') || t.startsWith('* ')) {
@@ -182,6 +216,10 @@ function _renderHelpToc(content) {
   });
   _helpSections.forEach((section) => {
     section.text = section.nodes.map(node => node.textContent || '').join(' ').toLocaleLowerCase();
+    section.tocTargets = section.nodes
+      .filter(node => node.matches?.('h2, h3'))
+      .map(node => node.id)
+      .filter(Boolean);
   });
 }
 
@@ -194,7 +232,9 @@ function helpFilter(rawQuery = '') {
   _helpSections.forEach((section) => {
     const match = !query || section.text.includes(query);
     section.nodes.forEach(node => node.classList.toggle('help-search-hidden', !match));
-    document.querySelectorAll(`[data-help-target="${section.heading.id}"]`).forEach(link => link.classList.toggle('help-search-hidden', !match));
+    section.tocTargets.forEach((target) => {
+      document.querySelectorAll(`[data-help-target="${target}"]`).forEach(link => link.classList.toggle('help-search-hidden', !match));
+    });
     if (match) visible += 1;
   });
   if (status) status.textContent = query ? helpT('searchResults', { count: visible }) : helpT('searchHint');
@@ -205,6 +245,20 @@ function helpClearSearch() {
   if (input) input.value = '';
   helpFilter('');
   input?.focus();
+}
+
+function helpSetView(rawView) {
+  const view = rawView === 'manual' ? 'manual' : 'quick';
+  if (_helpView === view && _helpLoadedLanguage) return;
+  _helpView = view;
+  _helpLoadedLanguage = '';
+  document.querySelectorAll('[data-help-view]').forEach((button) => {
+    const active = button.dataset.helpView === view;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  helpClearSearch();
+  helpInit(true);
 }
 
 function openHelpTopic(topic) {
@@ -227,9 +281,10 @@ async function helpInit(force = false) {
   if (toc) toc.innerHTML = '';
   box.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>${escHtml(helpT('loading'))}</span></div>`;
   try {
-    const md = await fetchHelpDocument(language);
+    const document = await fetchHelpDocument(language);
     if (requestId !== _helpRequestId) return;
-    box.innerHTML = _renderHelpMarkdown(md);
+    _helpDocumentUrl = document.path;
+    box.innerHTML = _renderHelpMarkdown(document.markdown);
     _renderHelpToc(box);
     helpFilter(document.getElementById('help-search-input')?.value || '');
     _helpLoadedLanguage = language;
@@ -245,4 +300,5 @@ window.addEventListener?.('bbui:language-changed', () => helpInit(true));
 window.helpInit = helpInit;
 window.helpFilter = helpFilter;
 window.helpClearSearch = helpClearSearch;
+window.helpSetView = helpSetView;
 window.openHelpTopic = openHelpTopic;
