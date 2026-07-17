@@ -1075,6 +1075,18 @@ function _renderStorageboxChecksHtml(payload) {
 }
 
 function renderSettingsSystemHealth(data) {
+  const startupState = data?.startup_state && typeof data.startup_state === 'object'
+    ? data.startup_state
+    : (window.BBUI?.core?.getStartupState?.() || {});
+  const maintenanceActive = String(startupState?.mode || '') === 'maintenance';
+  const startupFailures = Array.isArray(startupState?.failures) ? startupState.failures : [];
+  const primaryStartupFailure = startupFailures.find((row) => String(row?.error || '').trim()) || startupFailures[0] || {};
+  const failedStartupMigrations = Array.isArray(startupState?.failed_migrations)
+    ? startupState.failed_migrations.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const startupMigration = String(primaryStartupFailure?.migration_id || failedStartupMigrations[0] || '—');
+  const startupPhase = String(primaryStartupFailure?.phase || settingsT('health.startupFailureUnknownPhase'));
+  const startupCause = String(primaryStartupFailure?.error || settingsT('health.startupFailureUnknownCause'));
   const cifsState = String(data?.checks?.cifs_state || '').toLowerCase();
   const cifsDetail = cifsState === 'loaded'
     ? settingsT('health.cifsLoaded')
@@ -1125,12 +1137,41 @@ function renderSettingsSystemHealth(data) {
   const runtimeAttention = Number(runtimeRecovery.attention_count || 0);
   const failedChecks = checks.filter(([, ok]) => !ok).length;
   const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.deprecated_key_candidates || 0);
-  const overallOk = failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0 && runtimeAttention === 0;
+  const overallOk = !maintenanceActive && failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0 && runtimeAttention === 0;
   const jobTotal = Number(jobSummary.total || jobItems.length || 0);
   const jobsDetail = jobFailed
     ? settingsT('health.jobChecksFailed', { count: jobFailed })
     : `${jobTotal} ${settingsT('health.jobs')}`;
-  const migrationOk = migrationSummary.status !== 'failed';
+  const migrationOk = !maintenanceActive && migrationSummary.status !== 'failed';
+  const migrationStateLabel = maintenanceActive ? settingsT('health.startupBlocked') : migrationSummary.state;
+  const migrationReasonLabel = maintenanceActive ? startupCause : migrationSummary.reason;
+  const startupFailureHtml = maintenanceActive ? `
+      <section class="startup-migration-critical" role="alert">
+        <div class="startup-migration-critical-header">
+          <span class="startup-migration-critical-mark">!</span>
+          <div>
+            <strong>${settingsT('health.startupFailureTitle')}</strong>
+            <span>${settingsT('health.startupFailureSubtitle')}</span>
+          </div>
+          <span class="system-health-badge bad">${settingsT('health.severityCritical')}</span>
+        </div>
+        <div class="startup-migration-facts">
+          <div><span>${settingsT('health.startupFailureMigration')}</span><strong>${escHtml(startupMigration)}</strong></div>
+          <div><span>${settingsT('health.startupFailurePhase')}</span><strong>${escHtml(startupPhase)}</strong></div>
+          <div><span>${settingsT('health.startupFailureCause')}</span><strong>${escHtml(startupCause)}</strong></div>
+        </div>
+        <div class="startup-migration-recommendations">
+          <strong>${settingsT('health.startupFailureRecommendations')}</strong>
+          <ol>
+            <li>${settingsT('health.recommendationSupportBundle')}</li>
+            <li>${escHtml(settingsT('health.recommendationMigrationLog', { path: data?.paths?.migration_log_file || '—' }))}</li>
+            <li>${settingsT('health.recommendationCorrectCause')}</li>
+            <li>${settingsT('health.recommendationRestart')}</li>
+            <li>${settingsT('health.recommendationPreserveState')}</li>
+          </ol>
+          <button type="button" class="btn btn-secondary btn-sm" data-settings-tab="transfer">${settingsT('health.openImportExport')}</button>
+        </div>
+      </section>` : '';
   const technicalRows = [
     [settingsT('health.migrationState'), data?.paths?.migration_state_file || '—'],
     [settingsT('health.migrationLog'), data?.paths?.migration_log_file || '—'],
@@ -1140,11 +1181,12 @@ function renderSettingsSystemHealth(data) {
   return settingsCard(settingsT('health.title'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
     `<div class="settings-body">
+      ${startupFailureHtml}
       <div class="system-health-overview ${overallOk ? 'ok' : 'bad'}">
         <span class="system-health-overview-mark">${overallOk ? '✓' : '!'}</span>
         <div>
-          <div class="system-health-overview-title">${overallOk ? settingsT('health.okTitle') : settingsT('health.attentionTitle')}</div>
-          <div class="system-health-overview-subtitle">${overallOk ? settingsT('health.okSubtitle') : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed, runtimeAttention)}</div>
+          <div class="system-health-overview-title">${overallOk ? settingsT('health.okTitle') : (maintenanceActive ? settingsT('health.startupBlocked') : settingsT('health.attentionTitle'))}</div>
+          <div class="system-health-overview-subtitle">${overallOk ? settingsT('health.okSubtitle') : (maintenanceActive ? settingsT('health.startupFailureSubtitle') : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed, runtimeAttention))}</div>
         </div>
         <span class="system-health-badge ${overallOk ? 'ok' : 'bad'}">${overallOk ? settingsT('common.ok') : settingsT('health.check')}</span>
       </div>
@@ -1153,7 +1195,7 @@ function renderSettingsSystemHealth(data) {
         <div><span>${settingsT('health.dataRoot')}</span><strong class="${data?.checks?.data_root_ok ? 'ok' : 'bad'}">${data?.checks?.data_root_ok ? settingsT('common.ok') : settingsT('health.check')}</strong><small>${escHtml(data?.paths?.data_root || '—')}</small></div>
         <div><span>${settingsT('health.jobsPath')}</span><strong class="${jobFailed ? 'bad' : 'ok'}">${jobFailed ? settingsT('health.check') : settingsT('common.ok')}</strong><small>${escHtml(jobsDetail)}</small></div>
         <div><span>${settingsT('health.secretsPath')}</span><strong class="${data?.checks?.secrets_path_ok ? 'ok' : 'bad'}">${data?.checks?.secrets_path_ok ? settingsT('common.ok') : settingsT('health.check')}</strong><small>${escHtml(String(perms.checked_files_count ?? 0))} ${settingsT('health.checkedSecretFiles')}</small></div>
-        <div><span>${settingsT('health.lastMigration')}</span><strong class="${migrationOk ? 'ok' : 'bad'}">${escHtml(migrationSummary.state)}</strong><small>${escHtml(migrationSummary.reason)}</small></div>
+        <div><span>${settingsT('health.lastMigration')}</span><strong class="${migrationOk ? 'ok' : 'bad'}">${escHtml(migrationStateLabel)}</strong><small>${escHtml(migrationReasonLabel)}</small></div>
       </div>
 
       <details class="system-health-technical">
@@ -1178,10 +1220,10 @@ function renderSettingsSystemHealth(data) {
           <div class="migration-status-grid">
             <div><span class="system-health-name">${settingsT('health.lastRun')}</span><strong>${escHtml(migrationSummary.lastRun)}</strong></div>
             <div><span class="system-health-name">${settingsT('health.lastEffectiveRun')}</span><strong>${escHtml(lastEffectiveTs)}</strong></div>
-            <div><span class="system-health-name">${settingsT('health.status')}</span><span class="system-health-badge ${migrationOk ? 'ok' : 'bad'}">${escHtml(migrationSummary.state)}</span></div>
+            <div><span class="system-health-name">${settingsT('health.status')}</span><span class="system-health-badge ${migrationOk ? 'ok' : 'bad'}">${escHtml(migrationStateLabel)}</span></div>
           </div>
           <div class="migration-summary">
-            <div><strong>${settingsT('health.reason')}</strong> ${escHtml(migrationSummary.reason)}</div>
+            <div><strong>${settingsT('health.reason')}</strong> ${escHtml(migrationReasonLabel)}</div>
             <div><strong>${settingsT('health.actions')}</strong> ${migrationSummary.actions.length ? migrationSummary.actions.map((a) => escHtml(a)).join(' · ') : settingsT('common.none')}</div>
             ${migrationSummary.errors ? `<div class="system-health-error"><strong>${settingsT('health.errors')}</strong> ${escHtml(migrationSummary.errors)}</div>` : ''}
           </div>
@@ -3192,6 +3234,10 @@ async function importProfileSecretsApplySelected() {
 async function refreshSettingsConfigBackups() {
   const el = document.getElementById('settings-config-backups-list');
   if (!el) return;
+  if (window.BBUI?.core?.isStartupMaintenanceMode?.()) {
+    el.innerHTML = `<div class="status-message warning-state">${settingsT('backups.maintenanceUnavailable')}</div>`;
+    return;
+  }
   try {
     const res = await fetch('/api/settings/backup-history');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

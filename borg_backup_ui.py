@@ -3586,9 +3586,26 @@ def _public_startup_state(config: dict) -> dict:
     state = _get_startup_state(config)
     return {
         "mode": str(state.get("mode") or "normal"),
+        "severity": str(state.get("severity") or "ok"),
+        "blocking": bool(state.get("blocking")),
         "reason_code": str(state.get("reason_code") or ""),
+        "message": str(state.get("message") or ""),
         "failed_migrations": [
             str(item) for item in state.get("failed_migrations", []) if str(item).strip()
+        ],
+        "failures": [
+            {
+                "migration_id": str(item.get("migration_id") or ""),
+                "phase": str(item.get("phase") or ""),
+                "error_type": str(item.get("error_type") or ""),
+                "error": str(item.get("error") or ""),
+            }
+            for item in state.get("failures", [])
+            if isinstance(item, dict)
+        ],
+        "checked_at": str(state.get("checked_at") or ""),
+        "recommendation_codes": [
+            str(item) for item in state.get("recommendation_codes", []) if str(item).strip()
         ],
     }
 

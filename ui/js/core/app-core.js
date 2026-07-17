@@ -17,8 +17,9 @@ let globalDataDirReady = true;
 let setupRequired = false;
 let setupStatusCache = { ts: 0, data: null };
 let systemHealthCache = { ts: 0, data: null, promise: null };
-let startupStateCache = { mode: 'normal', failed_migrations: [] };
+let startupStateCache = { mode: 'normal', severity: 'ok', blocking: false, failed_migrations: [], failures: [] };
 const coreActions = Object.create(null);
+const MAINTENANCE_ALLOWED_PAGES = new Set(['settings', 'hilfe']);
 
 function isStaleDate(dateStr) {
   if (!dateStr) return false;
@@ -59,11 +60,30 @@ function getCurrentPage() {
   return state.currentPage;
 }
 
+function isStartupMaintenanceMode() {
+  return String(startupStateCache?.mode || '') === 'maintenance';
+}
+
+function getStartupState() {
+  return { ...startupStateCache };
+}
+
+function isMaintenancePageAllowed(page) {
+  return MAINTENANCE_ALLOWED_PAGES.has(String(page || ''));
+}
+
+function maintenanceFallbackPage() {
+  return state.currentRole === 'admin' ? 'settings' : 'hilfe';
+}
+
 // ── Navigation ───────────────────────────────────────────────────────────────
 
 function navigate(page) {
   if (page === 'settings' && state.currentRole !== 'admin') {
     page = 'dashboard';
+  }
+  if (isStartupMaintenanceMode() && !isMaintenancePageAllowed(page)) {
+    page = maintenanceFallbackPage();
   }
   if (setupRequired && page !== 'settings') {
     page = 'settings';
@@ -139,19 +159,47 @@ function renderStartupMaintenanceBanner(startupState = {}) {
   if (!banner) return;
   startupStateCache = startupState && typeof startupState === 'object'
     ? startupState
-    : { mode: 'normal', failed_migrations: [] };
+    : { mode: 'normal', severity: 'ok', blocking: false, failed_migrations: [], failures: [] };
   const active = String(startupStateCache.mode || '') === 'maintenance';
   banner.classList.toggle('hidden', !active);
+  applyStartupMaintenanceNavigation();
   if (!active) return;
   const failures = Array.isArray(startupStateCache.failed_migrations)
     ? startupStateCache.failed_migrations.filter(Boolean).join(', ')
     : '';
+  const failureRows = Array.isArray(startupStateCache.failures) ? startupStateCache.failures : [];
+  const primaryFailure = failureRows.find((row) => row && typeof row === 'object') || {};
+  const cause = String(primaryFailure.error || '').trim();
+  const phase = String(primaryFailure.phase || '').trim();
   const target = document.getElementById('startup-maintenance-failures');
   if (target) {
-    target.textContent = failures
+    const migrationLine = failures
       ? _sidebarTranslation('maintenanceMode.failed', { migrations: failures })
       : _sidebarTranslation('maintenanceMode.action');
+    const causeLine = _sidebarTranslation('maintenanceMode.cause', {
+      phase: phase || _sidebarTranslation('maintenanceMode.unknownPhase'),
+      message: cause || _sidebarTranslation('maintenanceMode.unknownCause'),
+    });
+    target.textContent = `${migrationLine}\n${causeLine}`;
   }
+  if (!isMaintenancePageAllowed(state.currentPage)) {
+    navigate(maintenanceFallbackPage());
+  }
+}
+
+function applyStartupMaintenanceNavigation() {
+  const active = isStartupMaintenanceMode();
+  document.querySelectorAll('.nav-item[data-page]').forEach((el) => {
+    const page = el.getAttribute('data-page');
+    const locked = active && !isMaintenancePageAllowed(page);
+    el.classList.toggle('maintenance-disabled', locked);
+    el.setAttribute('aria-disabled', locked ? 'true' : 'false');
+    if (locked) {
+      el.title = _sidebarTranslation('maintenanceMode.navigationBlocked');
+    } else if (el.title === _sidebarTranslation('maintenanceMode.navigationBlocked')) {
+      el.title = '';
+    }
+  });
 }
 
 function _setSidebarSystemHealth(tone, text, title = '') {
@@ -197,7 +245,7 @@ async function updateSidebarSystemHealth(force = false) {
     const count = _systemHealthAttentionCount(data);
     if (count > 0) {
       _setSidebarSystemHealth(
-        'warn',
+        isStartupMaintenanceMode() ? 'bad' : 'warn',
         _sidebarTranslation('sidebar.healthOpen', { count }),
         _sidebarTranslation('sidebar.healthAttention'),
       );
@@ -298,6 +346,7 @@ function applySetupNavLock() {
     const locked = setupRequired && page !== 'settings';
     el.classList.toggle('disabled', locked);
   });
+  applyStartupMaintenanceNavigation();
 }
 
 function applyDataDirActionGates() {
@@ -343,6 +392,9 @@ window.BBUI.core.setAction = setCoreAction;
 window.BBUI.core.runAction = runCoreAction;
 window.BBUI.core.navigate = navigate;
 window.BBUI.core.getCurrentPage = getCurrentPage;
+window.BBUI.core.isStartupMaintenanceMode = isStartupMaintenanceMode;
+window.BBUI.core.getStartupState = getStartupState;
+window.BBUI.core.isMaintenancePageAllowed = isMaintenancePageAllowed;
 window.BBUI.core.updateDataDirWarning = updateDataDirWarning;
 window.BBUI.core.applySetupNavLock = applySetupNavLock;
 window.BBUI.core.applyDataDirActionGates = applyDataDirActionGates;

@@ -11,6 +11,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Repository reconciliation, schedule application, notification reminders and repository information refresh remain disabled until a later clean restart completes all migrations successfully.
 - Operational and configuration-changing API requests return a clear maintenance response after normal authentication and role checks, while login, version, system health, migration diagnostics and support bundle creation remain available.
 - A global bilingual UI notice identifies the failed migration and directs administrators to System Health & Migration; migration detection, application and runner failures are recorded without exposing secrets.
+- Restricted navigation now keeps only Settings and Help available, replaces raw HTTP 503 states and endless loading indicators with a maintenance explanation, and marks the sidebar state as critical.
+- System Health & Migration now shows the failed migration, failure phase, masked technical cause and prioritized recovery guidance while support bundle creation remains available.
 
 ### Issue #242
 - Replaced the German and English user-manual screenshots with current light-theme captures from the present UI and restored the numbered guide callouts.

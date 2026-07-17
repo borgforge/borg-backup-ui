@@ -28,12 +28,15 @@ def normal_startup_state(summary: dict[str, Any] | None = None) -> dict[str, Any
     data = summary if isinstance(summary, dict) else {}
     return {
         "mode": NORMAL_MODE,
+        "severity": "ok",
+        "blocking": False,
         "reason_code": "",
         "message": "Normal operation is available.",
         "failed_migrations": [],
         "failures": [],
         "checked_at": _timestamp(),
         "applied_migrations": [str(item) for item in data.get("applied", []) if str(item).strip()],
+        "recommendation_codes": [],
     }
 
 
@@ -73,12 +76,21 @@ def migration_maintenance_state(
 
     return {
         "mode": MAINTENANCE_MODE,
+        "severity": "critical",
+        "blocking": True,
         "reason_code": reason_code,
         "message": "Normal operation is blocked because a required startup migration failed.",
         "failed_migrations": failed,
         "failures": failures,
         "checked_at": _timestamp(),
         "applied_migrations": [str(item) for item in data.get("applied", []) if str(item).strip()],
+        "recommendation_codes": [
+            "create_support_bundle",
+            "review_migration_log",
+            "correct_failure",
+            "restart_plugin",
+            "preserve_migration_state",
+        ],
     }
 
 

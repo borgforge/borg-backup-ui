@@ -57,8 +57,13 @@
     "title": "Eingeschränkter Wartungsmodus",
     "message": "Eine erforderliche Startmigration ist fehlgeschlagen. Backups, Restore-Aktionen und Änderungen sind blockiert.",
     "failed": "Fehlgeschlagene Migration: {migrations}",
+    "cause": "Phase: {phase} · Ursache: {message}",
+    "unknownCause": "Keine sichere Fehlerursache verfügbar. Migrationsprotokoll prüfen.",
+    "unknownPhase": "Startmigration",
     "action": "Details unter Systemzustand & Migration prüfen oder ein Supportpaket erstellen.",
-    "openSettings": "Systemzustand öffnen"
+    "openSettings": "Systemzustand öffnen",
+    "navigationBlocked": "Im eingeschränkten Wartungsmodus nicht verfügbar.",
+    "settingsReadOnly": "Änderungen sind im eingeschränkten Wartungsmodus blockiert."
   },
   "common": {
     "close": "Schließen",
@@ -1691,7 +1696,8 @@
       "cleanupTitle": "Backups aufräumen",
       "cleanupMessage": "Alle Config-Backups außer dem neuesten löschen?",
       "cleanup": "Aufräumen",
-      "cleanupError": "Aufräumen fehlgeschlagen: {message}"
+      "cleanupError": "Aufräumen fehlgeschlagen: {message}",
+      "maintenanceUnavailable": "Config-Backups sind im eingeschränkten Wartungsmodus schreibgeschützt. Ein Supportpaket kann weiterhin erstellt werden."
     },
     "transfer": {
       "title": "Import / Export",
@@ -2037,6 +2043,22 @@
       "okTitle": "Systemzustand OK",
       "attentionTitle": "Prüfung benötigt Aufmerksamkeit",
       "okSubtitle": "Alle Systemprüfungen sind erfolgreich.",
+      "startupFailureTitle": "Kritischer Fehler bei der Startmigration",
+      "startupFailureSubtitle": "Der normale Betrieb bleibt bis zur Behebung gesperrt.",
+      "startupFailureMigration": "Migration",
+      "startupFailurePhase": "Phase",
+      "startupFailureCause": "Ursache",
+      "startupFailureRecommendations": "Empfohlene Schritte",
+      "startupFailureUnknownPhase": "Startmigration",
+      "startupFailureUnknownCause": "Keine sichere Fehlerursache verfügbar. Migrationsprotokoll prüfen.",
+      "recommendationSupportBundle": "Supportpaket erstellen und für die Fehleranalyse sichern.",
+      "recommendationMigrationLog": "Migrationsprotokoll prüfen: {path}",
+      "recommendationCorrectCause": "Die angezeigte Ursache beheben. Migrationsstatus-Dateien nicht manuell löschen oder verändern.",
+      "recommendationRestart": "Plugin danach neu starten. Die Migration wird erneut geprüft.",
+      "recommendationPreserveState": "Vor manuellen Eingriffen /boot/config/borg-backup sichern.",
+      "openImportExport": "Zu Import / Export",
+      "severityCritical": "Kritisch",
+      "startupBlocked": "Startmigration fehlgeschlagen",
       "check": "Prüfen",
       "system": "System",
       "jobs": "Jobs",

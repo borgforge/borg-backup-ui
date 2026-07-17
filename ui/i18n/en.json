@@ -57,8 +57,13 @@
     "title": "Restricted maintenance mode",
     "message": "A required startup migration failed. Backups, restore actions, and configuration changes are blocked.",
     "failed": "Failed migration: {migrations}",
+    "cause": "Phase: {phase} · Cause: {message}",
+    "unknownCause": "No safe error detail is available. Review the migration log.",
+    "unknownPhase": "startup migration",
     "action": "Review System Health & Migration or create a support bundle.",
-    "openSettings": "Open system health"
+    "openSettings": "Open system health",
+    "navigationBlocked": "Unavailable while restricted maintenance mode is active.",
+    "settingsReadOnly": "Changes are blocked while restricted maintenance mode is active."
   },
   "common": {
     "close": "Close",
@@ -1691,7 +1696,8 @@
       "cleanupTitle": "Clean up backups",
       "cleanupMessage": "Delete all configuration backups except the latest one?",
       "cleanup": "Clean up",
-      "cleanupError": "Cleanup failed: {message}"
+      "cleanupError": "Cleanup failed: {message}",
+      "maintenanceUnavailable": "Configuration backups are read-only while restricted maintenance mode is active. A support bundle can still be created."
     },
     "transfer": {
       "title": "Import / Export",
@@ -2037,6 +2043,22 @@
       "okTitle": "System health OK",
       "attentionTitle": "Check requires attention",
       "okSubtitle": "All system checks passed.",
+      "startupFailureTitle": "Critical startup migration failure",
+      "startupFailureSubtitle": "Normal operation remains blocked until the failure is resolved.",
+      "startupFailureMigration": "Migration",
+      "startupFailurePhase": "Phase",
+      "startupFailureCause": "Cause",
+      "startupFailureRecommendations": "Recommended steps",
+      "startupFailureUnknownPhase": "startup migration",
+      "startupFailureUnknownCause": "No safe error detail is available. Review the migration log.",
+      "recommendationSupportBundle": "Create and retain a support bundle for diagnosis.",
+      "recommendationMigrationLog": "Review the migration log: {path}",
+      "recommendationCorrectCause": "Resolve the displayed cause. Do not manually delete or modify migration state files.",
+      "recommendationRestart": "Restart the plugin afterwards. The migration will be checked again.",
+      "recommendationPreserveState": "Back up /boot/config/borg-backup before making manual changes.",
+      "openImportExport": "Open Import / Export",
+      "severityCritical": "Critical",
+      "startupBlocked": "Startup migration failed",
       "check": "Check",
       "system": "System",
       "jobs": "Jobs",

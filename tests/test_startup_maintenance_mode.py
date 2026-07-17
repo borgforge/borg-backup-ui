@@ -9,7 +9,7 @@ for import_root in (ROOT, API_ROOT):
         sys.path.insert(0, str(import_root))
 
 import borg_backup_ui  # noqa: E402
-from startup_state import get_startup_state  # noqa: E402
+from startup_state import get_startup_state, normal_startup_state  # noqa: E402
 
 
 def _summary(*, status="ok", failed=None, results=None):
@@ -64,7 +64,25 @@ def test_failed_required_migration_selects_maintenance_and_skips_runtime_service
 
     assert ready is False
     assert returned["failed"] == ["required_v1"]
-    assert get_startup_state(config)["mode"] == "maintenance"
+    state = get_startup_state(config)
+    assert state["mode"] == "maintenance"
+    assert state["severity"] == "critical"
+    assert state["blocking"] is True
+    assert state["failures"] == [
+        {
+            "migration_id": "required_v1",
+            "phase": "apply",
+            "error_type": "RuntimeError",
+            "error": "migration failed",
+        }
+    ]
+    assert state["recommendation_codes"] == [
+        "create_support_bundle",
+        "review_migration_log",
+        "correct_failure",
+        "restart_plugin",
+        "preserve_migration_state",
+    ]
     assert borg_backup_ui._activate_runtime_services(
         config, ready, starter=lambda _config: started.append(True)
     ) is False
@@ -102,6 +120,26 @@ def test_runner_exception_and_invalid_result_fail_closed():
         assert state["reason_code"] == "startup_migration_runner_failed"
 
 
+def test_runner_exception_exposes_safe_diagnostic_without_secret():
+    config = {}
+
+    ready, _result = borg_backup_ui._evaluate_startup_migrations(
+        config,
+        migration_runner=lambda _config: (_ for _ in ()).throw(
+            RuntimeError("manual failure password=very-secret")
+        ),
+    )
+
+    assert ready is False
+    public = borg_backup_ui._public_startup_state(config)
+    assert public["severity"] == "critical"
+    assert public["blocking"] is True
+    assert public["failed_migrations"] == ["startup_migration_registry"]
+    assert public["failures"][0]["phase"] == "runner"
+    assert "manual failure" in public["failures"][0]["error"]
+    assert "very-secret" not in public["failures"][0]["error"]
+
+
 def test_later_successful_restart_returns_to_normal_operation():
     config = {}
     borg_backup_ui._evaluate_startup_migrations(
@@ -114,7 +152,20 @@ def test_later_successful_restart_returns_to_normal_operation():
     )
 
     assert ready is True
-    assert get_startup_state(config)["mode"] == "normal"
+    state = get_startup_state(config)
+    assert state["mode"] == "normal"
+    assert state["severity"] == "ok"
+    assert state["blocking"] is False
+    assert state["failures"] == []
+
+
+def test_default_normal_state_is_non_blocking():
+    state = normal_startup_state()
+
+    assert state["mode"] == "normal"
+    assert state["severity"] == "ok"
+    assert state["blocking"] is False
+    assert state["recommendation_codes"] == []
 
 
 def test_maintenance_blocks_operational_api_after_normal_authorization():
@@ -160,10 +211,19 @@ def test_maintenance_keeps_diagnostics_and_support_bundle_available():
 def test_ui_contains_global_localized_maintenance_notice():
     html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
     js = (ROOT / "ui" / "js" / "core" / "app-core.js").read_text(encoding="utf-8")
+    bindings = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(
+        encoding="utf-8"
+    )
+    settings = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
     de = (ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8")
     en = (ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8")
 
     assert 'id="startup-maintenance-banner"' in html
     assert "renderStartupMaintenanceBanner" in js
+    assert "maintenance-disabled" in js
+    assert "applyStartupMaintenanceNavigation" in js
+    assert "isStartupMaintenanceMode" in bindings
+    assert "startup-migration-critical" in settings
+    assert "maintenanceUnavailable" in settings
     assert '"maintenanceMode"' in de
     assert '"maintenanceMode"' in en
