@@ -35,7 +35,12 @@ Supported source states:
 
 ## Transaction and phase order
 
-The application completes startup migrations before starting the HTTP API.
+The application completes startup migrations before enabling normal API and
+runtime services. If a required migration fails, the HTTP server starts only
+in restricted maintenance mode so authenticated administrators can inspect the
+failure and create a support bundle. Backup, restore, scheduling, reminder,
+repository refresh and configuration-changing operations remain disabled.
+
 The baseline acquires the shared inventory lock and performs these internal
 transformation phases:
 
@@ -75,9 +80,31 @@ The snapshot contains only affected configuration inventories, job metadata,
 `backup.conf`, legacy settings and the persistent Borg key directory when it
 exists. It does not modify or copy Borg repository contents.
 
-If a transformation or final validation fails, all affected source files are
-restored. The application keeps the migration in `failed` state and does not
-start with a partially accepted model.
+If a transformation or final validation fails, the migration attempts to
+restore all affected source files. The application keeps the migration in
+`failed` state and does not start normal operation with a partially accepted
+model. Later migrations are recorded as `blocked` and are not executed during
+that startup.
+
+The snapshot is a data-recovery safeguard, not an automatic plugin rollback.
+The application cannot make Unraid install an older plugin package. Operators
+repair the reported input with the currently installed version or install a
+corrected version, then restart the plugin. Manual restoration from a migration
+snapshot is reserved for a documented recovery procedure.
+
+## Migration runner contract
+
+Every registered migration follows the same contract:
+
+- `detect(config)` returns a mapping containing a boolean `required` field.
+- `apply(config)` returns a mapping with one of the supported terminal statuses.
+- Detection, application and contract errors are attributed to the migration
+  ID and phase and are masked before they reach state, audit log or UI.
+- The first failed migration stops the ordered migration chain; later entries
+  are neither detected nor applied and are reported as blocked by the failed
+  migration in the central status.
+- A clean restart retries failed and blocked migrations after the underlying
+  problem has been corrected.
 
 ## Audit files
 

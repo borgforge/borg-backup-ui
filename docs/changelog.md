@@ -13,6 +13,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - A global bilingual UI notice identifies the failed migration and directs administrators to System Health & Migration; migration detection, application and runner failures are recorded without exposing secrets.
 - Restricted navigation now keeps only Settings and Help available, replaces raw HTTP 503 states and endless loading indicators with a maintenance explanation, and marks the sidebar state as critical.
 - System Health & Migration now shows the failed migration, failure phase, masked technical cause and prioritized recovery guidance while support bundle creation remains available.
+- The startup registry now validates every migration detection and apply result, attributes contract violations to the exact migration phase, and blocks all later migrations after the first failure.
+- Migration recovery documentation now distinguishes protected configuration snapshots from unsupported automatic plugin downgrades.
 
 ### Issue #242
 - Replaced the German and English user-manual screenshots with current light-theme captures from the present UI and restored the numbered guide callouts.

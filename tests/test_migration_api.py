@@ -255,6 +255,39 @@ def test_registry_exposes_failed_canonical_migration_with_details(tmp_path: Path
     assert registry["summary"]["failed"] == 1
 
 
+def test_registry_exposes_migration_blocked_by_previous_failure(tmp_path: Path):
+    cfg = _write_conf_tree(
+        tmp_path,
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+    )
+    state_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
+    state_file.write_text(
+        json.dumps({
+            "schema_version": 2,
+            "migrations": {
+                "later_v1": {
+                    "state": "blocked",
+                    "checked_at": "2026-07-17T12:00:00",
+                    "details": {
+                        "runner": "central_migration_registry",
+                        "introduced_in": "2026.07.17.0001",
+                        "blocked_by": "first_v1",
+                    },
+                },
+            },
+        }, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    registry = get_migration_registry_status(cfg)
+    item = _items_by_id(registry)["later_v1"]
+
+    assert item["status"] == "blocked"
+    assert "first_v1 failed" in item["reason"]
+    assert item["details"]["blocked_by"] == "first_v1"
+
+
 def test_registry_does_not_count_not_needed_cleanup_as_planned(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,

@@ -28,6 +28,11 @@ MIGRATIONS = [
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}
+APPLY_STATES = FINAL_STATES | {"failed"}
+
+
+class MigrationContractError(RuntimeError):
+    """Raised when a migration does not honor the registry return contract."""
 
 
 def _config_dir(config: dict):
@@ -64,6 +69,69 @@ def _result_details(result: dict[str, Any]) -> dict[str, Any]:
         "introduced_in": str(result.get("introduced_in") or details.get("introduced_in") or ""),
         "runner": str(result.get("runner") or details.get("runner") or "central_migration_registry"),
     }
+
+
+def _failure_result(migration: Any, phase: str, exc: Exception) -> dict[str, Any]:
+    return {
+        "migration_id": str(migration.MIGRATION_ID),
+        "introduced_in": str(migration.INTRODUCED_IN),
+        "runner": "central_migration_registry",
+        "status": "failed",
+        "details": {
+            "error_type": type(exc).__name__,
+            "error": mask_secrets(str(exc))[:500],
+            "failed_phase": phase,
+        },
+    }
+
+
+def _validate_detection(migration_id: str, detected: Any) -> dict[str, Any]:
+    if not isinstance(detected, dict):
+        raise MigrationContractError(
+            f"Migration {migration_id} detect() must return a mapping."
+        )
+    if not isinstance(detected.get("required"), bool):
+        raise MigrationContractError(
+            f"Migration {migration_id} detect() must return a boolean required field."
+        )
+    return detected
+
+
+def _validate_apply_result(migration: Any, result: Any) -> dict[str, Any]:
+    migration_id = str(migration.MIGRATION_ID)
+    if not isinstance(result, dict):
+        raise MigrationContractError(
+            f"Migration {migration_id} apply() must return a mapping."
+        )
+    status = str(result.get("status") or "").strip()
+    if status not in APPLY_STATES:
+        raise MigrationContractError(
+            f"Migration {migration_id} apply() returned unsupported status {status or '<empty>'}."
+        )
+    reported_migration_id = str(result.get("migration_id") or migration_id).strip()
+    if reported_migration_id != migration_id:
+        raise MigrationContractError(
+            f"Migration {migration_id} apply() reported mismatched migration_id "
+            f"{reported_migration_id or '<empty>'}."
+        )
+    normalized = {
+        **result,
+        "migration_id": migration_id,
+        "introduced_in": str(result.get("introduced_in") or migration.INTRODUCED_IN),
+        "runner": "central_migration_registry",
+        "status": status,
+    }
+    if status == "failed":
+        details = result.get("details") if isinstance(result.get("details"), dict) else {}
+        normalized["details"] = {
+            **details,
+            "error_type": str(details.get("error_type") or "MigrationReportedFailure"),
+            "error": mask_secrets(
+                str(details.get("error") or "Migration reported failure without error details.")
+            )[:500],
+            "failed_phase": str(details.get("failed_phase") or "apply"),
+        }
+    return normalized
 
 
 def _reason_for(results: dict[str, Any], applied: list[str], failed: list[str]) -> tuple[str, str]:
@@ -160,10 +228,27 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
     applied = []
     skipped = []
     failed = []
+    blocked = []
     messages = []
+    blocked_by = ""
 
     for migration in MIGRATIONS:
         migration_id = str(migration.MIGRATION_ID)
+        if blocked_by:
+            blocked.append(migration_id)
+            results[migration_id] = {
+                "migration_id": migration_id,
+                "introduced_in": str(migration.INTRODUCED_IN),
+                "runner": "central_migration_registry",
+                "status": "blocked",
+                "details": {
+                    "blocked_by": blocked_by,
+                    "reason": "A previous startup migration failed.",
+                },
+            }
+            messages.append(f"{migration_id}=blocked(previous_failure={blocked_by})")
+            continue
+
         previous = _migration_entry(state, migration_id)
         previous_state = str(previous.get("state") or "").strip()
         if previous_state in FINAL_STATES and _is_central_registry_result(previous):
@@ -180,21 +265,12 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
             continue
 
         try:
-            detected = migration.detect(config)
+            detected = _validate_detection(migration_id, migration.detect(config))
         except Exception as exc:
-            result = {
-                "migration_id": migration_id,
-                "introduced_in": str(migration.INTRODUCED_IN),
-                "runner": "central_migration_registry",
-                "status": "failed",
-                "details": {
-                    "error_type": type(exc).__name__,
-                    "error": mask_secrets(str(exc))[:500],
-                    "failed_phase": "detect",
-                },
-            }
+            result = _failure_result(migration, "detect", exc)
             results[migration_id] = result
             failed.append(migration_id)
+            blocked_by = migration_id
             messages.append(f"{migration_id}=failed")
             continue
         if not bool(detected.get("required")):
@@ -210,23 +286,14 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
             continue
 
         try:
-            result = migration.apply(config)
+            result = _validate_apply_result(migration, migration.apply(config))
         except Exception as exc:
-            result = {
-                "migration_id": migration_id,
-                "introduced_in": str(migration.INTRODUCED_IN),
-                "runner": "central_migration_registry",
-                "status": "failed",
-                "details": {
-                    "error_type": type(exc).__name__,
-                    "error": mask_secrets(str(exc))[:500],
-                    "failed_phase": "apply",
-                },
-            }
+            result = _failure_result(migration, "apply", exc)
         results[migration_id] = result
         status = str(result.get("status") or "")
         if status == "failed":
             failed.append(migration_id)
+            blocked_by = migration_id
         elif status == "applied":
             applied.append(migration_id)
         else:
@@ -238,6 +305,7 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
         "applied": applied,
         "skipped": skipped,
         "failed": failed,
+        "blocked": blocked,
         "messages": messages,
         "results": results,
     }

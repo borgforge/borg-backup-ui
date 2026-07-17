@@ -1641,6 +1641,7 @@ function _migrationRegistryStatusLabel(status) {
     applied: settingsT('health.statusApplied'),
     pending: settingsT('health.statusPending'),
     failed: settingsT('health.statusFailed'),
+    blocked: settingsT('health.statusBlocked'),
     not_needed: settingsT('health.statusNotNeeded'),
     not_required: settingsT('health.statusNotNeeded'),
     unknown: settingsT('health.statusUnknown'),

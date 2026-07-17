@@ -2154,6 +2154,7 @@
       "statusApplied": "angewendet",
       "statusPending": "offen",
       "statusFailed": "fehlerhaft",
+      "statusBlocked": "blockiert",
       "statusNotNeeded": "nicht nötig",
       "statusUnknown": "unbekannt",
       "planned": "geplant",

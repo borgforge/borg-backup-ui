@@ -2154,6 +2154,7 @@
       "statusApplied": "applied",
       "statusPending": "pending",
       "statusFailed": "failed",
+      "statusBlocked": "blocked",
       "statusNotNeeded": "not needed",
       "statusUnknown": "unknown",
       "planned": "planned",
