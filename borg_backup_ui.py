@@ -48,6 +48,13 @@ from api.auth_store import (
     write_users_store as _write_users_store,
 )
 from api.security_utils import mask_secrets as _mask_secrets
+from api.startup_state import (
+    get_startup_state as _get_startup_state,
+    is_maintenance_mode as _is_maintenance_mode,
+    migration_maintenance_state as _migration_maintenance_state,
+    normal_startup_state as _normal_startup_state,
+    set_startup_state as _set_startup_state,
+)
 
 class RateLimitExceeded(Exception):
     pass
@@ -670,7 +677,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
         if path == "/api/widget/summary":
             if self.command == "GET" and self._is_homepage_widget_authorized():
-                return True
+                return self._authorize_maintenance_request(path, request_id)
             self._send_api_error(
                 401,
                 "widget_unauthorized",
@@ -679,7 +686,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             )
             return False
 
-        auth_free_paths = {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin"}
+        auth_free_paths = {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin", "/api/version"}
         if self.command in {"POST", "PUT", "DELETE"}:
             if not self._has_valid_api_token_header() and not self._is_same_origin_request():
                 self._send_api_error(
@@ -708,7 +715,34 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     request_id=request_id,
                 )
                 return False
-        return True
+        return self._authorize_maintenance_request(path, request_id)
+
+    def _authorize_maintenance_request(self, path: str, request_id: str) -> bool:
+        if not _is_maintenance_mode(self.config):
+            return True
+        method = str(self.command or "").upper()
+        allowed = path in {
+            "/api/auth/login",
+            "/api/auth/logout",
+            "/api/auth/status",
+            "/api/auth/setup-admin",
+            "/api/version",
+            "/api/system-health",
+            "/api/setup-status",
+        }
+        allowed = allowed or (method == "GET" and path in {"/api/settings", "/api/settings/basic"})
+        allowed = allowed or (method == "POST" and path == "/api/settings/support-bundle")
+        if allowed:
+            return True
+        state = _get_startup_state(self.config)
+        failed = ", ".join(state.get("failed_migrations") or []) or "startup migration registry"
+        self._send_api_error(
+            503,
+            "maintenance_mode",
+            f"Normal operation is blocked because startup migration failed: {failed}. Review System Health & Migration or create a support bundle.",
+            request_id=request_id,
+        )
+        return False
 
     def _handle_direct_api(self, fn) -> None:
         request_id = uuid.uuid4().hex[:12]
@@ -780,6 +814,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     "borg_version": _get_borg_version(),
                     "contact_email": APP_CONTACT_EMAIL,
                     "repository_url": APP_REPOSITORY_URL,
+                    "startup_state": _public_startup_state(self.config),
                 },
                 "/api/status": self._get_status,
                 "/api/system-health": self._get_system_health,
@@ -3459,6 +3494,105 @@ def _apply_runtime_dirs_from_conf(config: dict) -> None:
         pass
 
 
+def _evaluate_startup_migrations(config: dict, migration_runner=None) -> tuple[bool, dict]:
+    """Run required startup migrations and select normal or restricted mode."""
+    _set_startup_state(config, _normal_startup_state())
+    try:
+        if migration_runner is None:
+            from migrations.registry import run_startup_migrations
+            migration_runner = run_startup_migrations
+        summary = migration_runner(config)
+    except Exception as exc:
+        state = _set_startup_state(config, _migration_maintenance_state(runner_error=exc))
+        _log(
+            "ERROR: Startup migration runner failed. Normal operation is blocked: "
+            f"{_mask_secrets(str(exc))}"
+        )
+        return False, {"status": "failed", "failed": state.get("failed_migrations", [])}
+
+    if not isinstance(summary, dict):
+        error = RuntimeError("Startup migration runner returned an invalid result")
+        state = _set_startup_state(config, _migration_maintenance_state(runner_error=error))
+        _log("ERROR: Startup migration runner returned an invalid result. Normal operation is blocked.")
+        return False, {"status": "failed", "failed": state.get("failed_migrations", [])}
+
+    status = str(summary.get("status") or "").strip().lower()
+    failed = [str(item) for item in summary.get("failed", []) if str(item).strip()]
+    results = summary.get("results") if isinstance(summary.get("results"), dict) else {}
+    for migration_id, result in results.items():
+        if isinstance(result, dict) and str(result.get("status") or "").strip().lower() == "failed":
+            migration_id_text = str(migration_id).strip()
+            if migration_id_text and migration_id_text not in failed:
+                failed.append(migration_id_text)
+    if status != "ok" or failed:
+        summary["status"] = "failed"
+        summary["failed"] = failed
+        state = _set_startup_state(config, _migration_maintenance_state(summary))
+        _log(
+            "ERROR: Required startup migration failed. Normal operation is blocked: "
+            f"{', '.join(state.get('failed_migrations', [])) or 'unknown migration'}"
+        )
+        return False, summary
+
+    _set_startup_state(config, _normal_startup_state(summary))
+    _log(
+        "Startup migrations: "
+        f"status={summary.get('status')}, applied={summary.get('applied')}, "
+        f"skipped={summary.get('skipped')}, failed={summary.get('failed')}"
+    )
+    return True, summary
+
+
+def _start_normal_runtime_services(config: dict) -> None:
+    """Start services which must remain disabled in migration maintenance mode."""
+    try:
+        from repositories_api import reconcile_repository_usage
+        repository_usage = reconcile_repository_usage(config)
+        changed = repository_usage.get("reconciled_repository_keys", [])
+        _log(
+            "Repository assignments: "
+            f"status={'ok' if repository_usage.get('ok') else 'attention'}, reconciled={len(changed)}, "
+            f"errors={len(repository_usage.get('errors', []))}"
+        )
+    except Exception as exc:
+        _log(f"WARNING: Repository assignments could not be reconciled: {_mask_secrets(str(exc))}")
+
+    try:
+        from schedule_api import apply_all_schedules, prune_orphaned_schedules
+        pruned = prune_orphaned_schedules(config, log_fn=_log)
+        if pruned.get("changed"):
+            _log(f"AUTO-PRUNE schedules.json completed: removed={len(pruned.get('removed_keys', []))}")
+        apply_all_schedules(config)
+        _log("Cron schedules applied.")
+    except Exception as exc:
+        _log(f"WARNING: Cron schedules could not be applied: {_mask_secrets(str(exc))}")
+
+    _start_notification_reminder_loop(config)
+    _start_repository_info_refresh_loop(config)
+
+
+def _activate_runtime_services(config: dict, startup_ready: bool, starter=None) -> bool:
+    if not startup_ready:
+        _log(
+            "Migration maintenance mode active: repository reconciliation, schedules, "
+            "reminders and repository refresh are disabled."
+        )
+        return False
+    (starter or _start_normal_runtime_services)(config)
+    return True
+
+
+def _public_startup_state(config: dict) -> dict:
+    state = _get_startup_state(config)
+    return {
+        "mode": str(state.get("mode") or "normal"),
+        "reason_code": str(state.get("reason_code") or ""),
+        "failed_migrations": [
+            str(item) for item in state.get("failed_migrations", []) if str(item).strip()
+        ],
+    }
+
+
 def main():
     dev_mode = "--dev" in sys.argv
 
@@ -3477,24 +3611,7 @@ def main():
     except Exception as exc:
         _log(f"WARNING: Bootstrap skipped: {exc}")
 
-    try:
-        from migrations.registry import run_startup_migrations
-        startup_mig = run_startup_migrations(config)
-        _log(f"Startup-Migrationen: status={startup_mig.get('status')}, applied={startup_mig.get('applied')}, skipped={startup_mig.get('skipped')}, failed={startup_mig.get('failed')}")
-    except Exception as exc:
-        _log(f"WARNING: Startup migrations skipped: {exc}")
-
-    try:
-        from repositories_api import reconcile_repository_usage
-        repository_usage = reconcile_repository_usage(config)
-        changed = repository_usage.get("reconciled_repository_keys", [])
-        _log(
-            "Repository-Zuordnungen: "
-            f"status={'ok' if repository_usage.get('ok') else 'attention'}, reconciled={len(changed)}, "
-            f"errors={len(repository_usage.get('errors', []))}"
-        )
-    except Exception as exc:
-        _log(f"WARNING: Repository assignments could not be reconciled: {exc}")
+    startup_ready, _startup_mig = _evaluate_startup_migrations(config)
 
     lib_found = setup_lib_path(config)
     if not lib_found:
@@ -3512,18 +3629,7 @@ def main():
 
     BackupUIHandler.config = config
 
-    try:
-        from schedule_api import apply_all_schedules, prune_orphaned_schedules
-        pruned = prune_orphaned_schedules(config, log_fn=_log)
-        if pruned.get("changed"):
-            _log(f"AUTO-PRUNE schedules.json completed: removed={len(pruned.get('removed_keys', []))}")
-        apply_all_schedules(config)
-        _log("Cron-Schedules angewendet.")
-    except Exception as exc:
-        _log(f"WARNING: Cron schedules could not be applied: {exc}")
-
-    _start_notification_reminder_loop(config)
-    _start_repository_info_refresh_loop(config)
+    _activate_runtime_services(config, startup_ready)
 
     port = int(config["PORT"])
     bind = config["BIND"]

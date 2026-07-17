@@ -17,6 +17,7 @@ let globalDataDirReady = true;
 let setupRequired = false;
 let setupStatusCache = { ts: 0, data: null };
 let systemHealthCache = { ts: 0, data: null, promise: null };
+let startupStateCache = { mode: 'normal', failed_migrations: [] };
 const coreActions = Object.create(null);
 
 function isStaleDate(dateStr) {
@@ -129,7 +130,28 @@ function _systemHealthAttentionCount(data) {
     ? data.runtime_recovery
     : {};
   const runtimeAttention = Number(runtimeRecovery.attention_count || 0);
-  return systemFailed + migrationFailed + registryAttention + jobFailed + runtimeAttention;
+  const startupAttention = String(data?.startup_state?.mode || '') === 'maintenance' ? 1 : 0;
+  return systemFailed + migrationFailed + registryAttention + jobFailed + runtimeAttention + startupAttention;
+}
+
+function renderStartupMaintenanceBanner(startupState = {}) {
+  const banner = document.getElementById('startup-maintenance-banner');
+  if (!banner) return;
+  startupStateCache = startupState && typeof startupState === 'object'
+    ? startupState
+    : { mode: 'normal', failed_migrations: [] };
+  const active = String(startupStateCache.mode || '') === 'maintenance';
+  banner.classList.toggle('hidden', !active);
+  if (!active) return;
+  const failures = Array.isArray(startupStateCache.failed_migrations)
+    ? startupStateCache.failed_migrations.filter(Boolean).join(', ')
+    : '';
+  const target = document.getElementById('startup-maintenance-failures');
+  if (target) {
+    target.textContent = failures
+      ? _sidebarTranslation('maintenanceMode.failed', { migrations: failures })
+      : _sidebarTranslation('maintenanceMode.action');
+  }
 }
 
 function _setSidebarSystemHealth(tone, text, title = '') {
@@ -151,6 +173,7 @@ async function fetchSystemHealthData(force = false) {
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      renderStartupMaintenanceBanner(data?.startup_state || {});
       systemHealthCache = { ts: Date.now(), data, promise: null };
       return data;
     })
@@ -326,8 +349,10 @@ window.BBUI.core.applyDataDirActionGates = applyDataDirActionGates;
 window.BBUI.core.invalidateSetupStatusCache = invalidateSetupStatusCache;
 window.BBUI.core.fetchSystemHealth = fetchSystemHealthData;
 window.BBUI.core.updateSidebarSystemHealth = updateSidebarSystemHealth;
+window.BBUI.core.renderStartupMaintenanceBanner = renderStartupMaintenanceBanner;
 
 window.addEventListener('bbui:language-changed', () => {
+  renderStartupMaintenanceBanner(startupStateCache);
   updateSidebarSystemHealth(true);
   updateDataDirWarning();
 });

@@ -155,6 +155,16 @@
       <span class="mobile-header-title">Borg Backup</span>
     </div>
 
+    <section id="startup-maintenance-banner" class="startup-maintenance-banner hidden" role="alert" aria-live="assertive">
+      <div class="startup-maintenance-icon" aria-hidden="true">!</div>
+      <div class="startup-maintenance-copy">
+        <strong data-i18n="maintenanceMode.title">Eingeschränkter Wartungsmodus</strong>
+        <span data-i18n="maintenanceMode.message">Eine erforderliche Startmigration ist fehlgeschlagen. Backups und Änderungen sind blockiert.</span>
+        <span id="startup-maintenance-failures" class="startup-maintenance-failures"></span>
+      </div>
+      <button class="btn btn-secondary" data-core-action="goto-settings" data-i18n="maintenanceMode.openSettings">Systemzustand öffnen</button>
+    </section>
+
     <!-- Dashboard Page -->
     <div id="page-dashboard" class="page active">
       <div class="page-header ui-page-header">

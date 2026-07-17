@@ -106,5 +106,38 @@ def test_registry_records_failed_migration(monkeypatch, tmp_path: Path):
     assert state["last_run"]["reason_code"] == "error"
     assert state["migrations"]["broken_v1"]["state"] == "failed"
     assert state["migrations"]["broken_v1"]["details"]["error"] == "boom"
+    assert state["migrations"]["broken_v1"]["details"]["failed_phase"] == "apply"
     assert len(logs) == 1
     assert logs[0]["success"] is False
+
+
+def test_registry_records_detection_failure_without_running_apply(monkeypatch, tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    apply_called = False
+
+    class BrokenDetection:
+        MIGRATION_ID = "broken_detection_v1"
+        INTRODUCED_IN = "2026.07.17.0000"
+
+        @staticmethod
+        def detect(_config: dict) -> dict:
+            raise RuntimeError('token="private-value"')
+
+        @staticmethod
+        def apply(_config: dict) -> dict:
+            nonlocal apply_called
+            apply_called = True
+            return {"status": "applied"}
+
+    monkeypatch.setattr(registry, "MIGRATIONS", [BrokenDetection])
+
+    result = registry.run_startup_migrations(config)
+    state = _state(config)
+
+    assert result["status"] == "failed"
+    assert result["failed"] == ["broken_detection_v1"]
+    assert apply_called is False
+    details = state["migrations"]["broken_detection_v1"]["details"]
+    assert details["failed_phase"] == "detect"
+    assert details["error_type"] == "RuntimeError"
+    assert "private-value" not in details["error"]

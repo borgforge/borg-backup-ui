@@ -338,7 +338,10 @@
     fetch('/api/version')
       .then(r => r.ok ? r.json() : null)
       .then(v => {
-        if (v) _applyVersionInfo(v.version, v.author, v.borg_version, v.contact_email, v.repository_url);
+        if (v) {
+          _applyVersionInfo(v.version, v.author, v.borg_version, v.contact_email, v.repository_url);
+          core()?.renderStartupMaintenanceBanner?.(v.startup_state || {});
+        }
       })
       .catch(() => {});
     fetch('/api/auth/status').then(r => r.ok ? r.json() : null).then((a) => {

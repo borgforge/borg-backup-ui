@@ -53,6 +53,13 @@
     "healthUnavailable": "Systemzustand konnte nicht geladen werden.",
     "logout": "Abmelden"
   },
+  "maintenanceMode": {
+    "title": "Eingeschränkter Wartungsmodus",
+    "message": "Eine erforderliche Startmigration ist fehlgeschlagen. Backups, Restore-Aktionen und Änderungen sind blockiert.",
+    "failed": "Fehlgeschlagene Migration: {migrations}",
+    "action": "Details unter Systemzustand & Migration prüfen oder ein Supportpaket erstellen.",
+    "openSettings": "Systemzustand öffnen"
+  },
   "common": {
     "close": "Schließen",
     "error": "Fehler",
@@ -105,6 +112,7 @@
       "not_found": "Der angeforderte Eintrag wurde nicht gefunden.",
       "restore_test_already_running": "Ein Restore-Test läuft bereits.",
       "inventory_unavailable": "Repository- oder Storage-Daten sind beschädigt oder nicht lesbar. Bitte Systemzustand und Migrations-Backup prüfen.",
+      "maintenance_mode": "Die Anwendung läuft wegen einer fehlgeschlagenen Startmigration im eingeschränkten Wartungsmodus. Bitte Systemzustand & Migration prüfen.",
       "internal_error": "Interner Serverfehler. Bitte Protokoll und Request-ID prüfen."
     },
     "messages": {

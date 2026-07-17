@@ -14,6 +14,11 @@ from . import (
 )
 from .audit import append_event, config_dir as audit_config_dir, read_state
 
+try:
+    from ..security_utils import mask_secrets
+except ImportError:  # Runtime/tests may import migrations directly from API_ROOT.
+    from security_utils import mask_secrets
+
 MIGRATIONS = [
     restore_history_v1,
     notification_events_v1,
@@ -184,7 +189,7 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
                 "status": "failed",
                 "details": {
                     "error_type": type(exc).__name__,
-                    "error": str(exc)[:500],
+                    "error": mask_secrets(str(exc))[:500],
                     "failed_phase": "detect",
                 },
             }
@@ -210,8 +215,13 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
             result = {
                 "migration_id": migration_id,
                 "introduced_in": str(migration.INTRODUCED_IN),
+                "runner": "central_migration_registry",
                 "status": "failed",
-                "details": {"error": str(exc)},
+                "details": {
+                    "error_type": type(exc).__name__,
+                    "error": mask_secrets(str(exc))[:500],
+                    "failed_phase": "apply",
+                },
             }
         results[migration_id] = result
         status = str(result.get("status") or "")

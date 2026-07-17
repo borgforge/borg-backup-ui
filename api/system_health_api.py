@@ -307,6 +307,12 @@ def _probe_cifs_support() -> tuple[bool, str]:
 
 
 def get_system_health_data(config: dict) -> Dict[str, Any]:
+    try:
+        from .startup_state import get_startup_state
+    except ImportError:  # Runtime imports api modules directly from API_ROOT.
+        from startup_state import get_startup_state
+
+    startup_state = get_startup_state(config)
     base = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
     root = base.parent if base.name == "scripts" else base
     jobs_dir = root / "config" / "jobs"
@@ -423,6 +429,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         }
     return {
         "checks": {
+            "normal_operation_available": startup_state.get("mode") == "normal",
             "data_root_ok": root.is_dir(),
             "jobs_path_ok": jobs_dir.is_dir(),
             "secrets_path_ok": secrets_dir.is_dir(),
@@ -450,6 +457,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "migration_log": migration_log,
         "migration_summary": migration_summary,
         "migration_registry": migration_registry,
+        "startup_state": startup_state,
         "job_health": job_health,
         "runtime_recovery": runtime_recovery,
         "secrets_permissions": {

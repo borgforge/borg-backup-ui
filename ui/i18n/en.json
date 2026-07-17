@@ -53,6 +53,13 @@
     "healthUnavailable": "System health could not be loaded.",
     "logout": "Log out"
   },
+  "maintenanceMode": {
+    "title": "Restricted maintenance mode",
+    "message": "A required startup migration failed. Backups, restore actions, and configuration changes are blocked.",
+    "failed": "Failed migration: {migrations}",
+    "action": "Review System Health & Migration or create a support bundle.",
+    "openSettings": "Open system health"
+  },
   "common": {
     "close": "Close",
     "error": "Error",
@@ -105,6 +112,7 @@
       "not_found": "The requested item was not found.",
       "restore_test_already_running": "A restore test is already running.",
       "inventory_unavailable": "Repository or storage data is corrupt or unreadable. Check System Health and the migration backup.",
+      "maintenance_mode": "The application is in restricted maintenance mode because a startup migration failed. Review System Health & Migration.",
       "internal_error": "Internal server error. Check the log and request ID."
     },
     "messages": {
