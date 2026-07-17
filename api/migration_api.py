@@ -300,6 +300,8 @@ def _migration_status_from_state(state: str) -> str:
     state_norm = str(state or "").strip()
     if state_norm == "failed":
         return "failed"
+    if state_norm == "blocked":
+        return "blocked"
     if state_norm in {"applied", "baseline_detected", "imported_from_legacy_marker"}:
         return "applied"
     if state_norm in {"not_required", "not_applicable", "skipped"}:
@@ -320,6 +322,9 @@ def _migration_reason_from_state(migration_id: str, state: str, details: Dict[st
         return "Migration skipped because a final state was already recorded."
     if state_norm == "failed":
         return "Migration failed."
+    if state_norm == "blocked":
+        blocked_by = str(details.get("blocked_by") or "a previous migration")
+        return f"Migration was not executed because {blocked_by} failed."
     return f"Migration state for {migration_id} has not reached a final state."
 
 

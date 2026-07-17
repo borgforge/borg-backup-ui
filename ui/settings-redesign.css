@@ -830,3 +830,74 @@
     border-bottom: 1px solid var(--ui-color-border);
   }
 }
+.startup-migration-critical {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  background: var(--state-error-dim);
+}
+
+.startup-migration-critical-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.startup-migration-critical-header > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.startup-migration-critical-header > div > span {
+  color: var(--text-secondary);
+}
+
+.startup-migration-critical-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--error);
+  color: #fff;
+  font-weight: 700;
+}
+
+.startup-migration-facts {
+  display: grid;
+  grid-template-columns: minmax(170px, .7fr) minmax(140px, .5fr) minmax(280px, 1.8fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.startup-migration-facts > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 12px;
+  border-right: 1px solid var(--border);
+}
+
+.startup-migration-facts > div:last-child { border-right: 0; }
+.startup-migration-facts span { color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+.startup-migration-facts strong { overflow-wrap: anywhere; }
+.startup-migration-recommendations { display: grid; gap: 8px; }
+.startup-migration-recommendations ol { margin: 0; padding-left: 22px; color: var(--text-secondary); }
+.startup-migration-recommendations li + li { margin-top: 4px; }
+.startup-migration-recommendations .btn { justify-self: start; }
+
+@media (max-width: 900px) {
+  .startup-migration-facts { grid-template-columns: 1fr; }
+  .startup-migration-facts > div { border-right: 0; border-bottom: 1px solid var(--border); }
+  .startup-migration-facts > div:last-child { border-bottom: 0; }
+}

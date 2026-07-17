@@ -344,9 +344,8 @@ def test_malformed_legacy_settings_is_audited_and_rolled_back_without_startup_cr
     assert failure["details"]["error_type"] == "RuntimeError"
     assert failure["details"]["rollback_status"] == "completed"
     assert failure["details"]["run_id"]
-    source_failure = result["results"][job_source_paths_v1.MIGRATION_ID]
-    assert source_failure["status"] == "failed"
-    assert source_failure["details"]["failed_phase"] == "detect"
-    assert "canonical data-model migration" in source_failure["details"]["error"]
+    source_result = result["results"][job_source_paths_v1.MIGRATION_ID]
+    assert source_result["status"] == "blocked"
+    assert source_result["details"]["blocked_by"] == canonical_data_model_v1.MIGRATION_ID
     assert job_file.read_bytes() == job_before
     assert (tmp_path / "config" / "settings.json").read_text(encoding="utf-8") == "{broken"

@@ -89,7 +89,7 @@ Wenn der Repository-Maintainer einen Architekturwechsel ausdruecklich freigibt:
   Migration vom aktuellen internen Stand auf das neue Modell vorzusehen.
 * Jede Migration muss nachvollziehbar sein:
   * eindeutige Migrations-ID
-  * Status `pending`, `applied`, `skipped`, `failed` oder `not_applicable`
+  * Status `pending`, `applied`, `skipped`, `failed`, `blocked` oder `not_applicable`
   * Zeitstempel
   * betroffene Dateien/Objekte
   * konkrete Aktionen
@@ -101,6 +101,22 @@ Wenn der Repository-Maintainer einen Architekturwechsel ausdruecklich freigibt:
   * erfolgreiche Anwendung
   * erneuter Lauf ohne doppelte Aenderungen
   * Fehlerfall, soweit sinnvoll simulierbar
+  * ungueltige oder unvollstaendige Rueckgaben des Migrationscodes
+  * keine Ausfuehrung nachfolgender Migrationen nach dem ersten Fehler
+* Der zentrale Runner erwartet einen festen Vertrag:
+  * `detect(config)` liefert ein Mapping mit dem booleschen Feld `required`.
+  * `apply(config)` liefert ein Mapping mit einem unterstuetzten Status.
+  * Fehler nennen Migrations-ID, Phase, maskierten Fehlertyp und maskierte
+    Ursache.
+* Nach dem ersten Fehler werden spaetere Migrationen als `blocked` erfasst und
+  nicht mehr erkannt oder angewendet. Normalbetrieb, Scheduler und schreibende
+  API-Aufrufe bleiben bis zu einem fehlerfreien Neustart gesperrt.
+* Migrations-Snapshots sichern betroffene Nutzerdaten und Konfigurationen. Sie
+  sind kein automatisches Downgrade des installierten Plugins. Unraid erlaubt
+  keinen durch die Anwendung gesteuerten Rollback auf ein altes Plugin-Paket.
+  Reparaturen erfolgen mit der installierten bzw. einer korrigierten Version;
+  eine manuelle Wiederherstellung aus dem Snapshot muss nachvollziehbar
+  dokumentiert werden.
 * Wenn praktikabel, sollen Migrationsstatus und Logdetails in der UI sichtbar
   sein, bevorzugt unter `Einstellungen > Systemzustand & Migration`.
 * Dauerhafte Fallbacks sind nur einzubauen, wenn sie fuer Datenerhalt,
