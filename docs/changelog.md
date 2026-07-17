@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #248
+- Restore tests now preserve repository encryption metadata and run repositories configured with `none` without a passphrase file.
+- Encrypted repositories continue to require their configured passphrase file.
+
 ### Issue #246
 - Bound the full preflight result to the exact pushed source commit.
 - Build test packages from an exported staging tree with embedded provenance.

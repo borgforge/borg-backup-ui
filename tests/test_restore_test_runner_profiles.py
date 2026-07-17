@@ -83,19 +83,107 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
     repos = runner.discover_repos({})
 
     assert [{key: row[key] for key in (
-        "job_key", "type", "location", "path", "passphrase_file", "profile_key",
+        "job_key", "type", "location", "path", "encryption", "passphrase_file", "profile_key",
         "mount_before_run", "unmount_after_run",
     )} for row in repos] == [{
         "job_key": "testjob_usb",
         "type": "testjob",
         "location": "usb",
         "path": "/mnt/disks/WCJ54TRQ/borg-backup-testjob",
+        "encryption": "none",
         "passphrase_file": "",
         "profile_key": "usb-5tb",
         "mount_before_run": True,
         "unmount_after_run": True,
     }]
     assert repos[0]["storage"]["storage_key"] == "storage_usb_test"
+
+
+def _restore_test_instance(runner, monkeypatch):
+    instance = object.__new__(runner.RestoreTest)
+    instance.args = SimpleNamespace(dry_run=False)
+    instance.test_level = 1
+    instance.conf = {}
+    monkeypatch.setattr(instance, "_should_test", lambda _key: True)
+    monkeypatch.setattr(instance, "_write", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(instance, "_cleanup_smb_mount", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(instance, "log", lambda *_args, **_kwargs: None)
+    return instance
+
+
+def test_restore_runner_tests_unencrypted_repository_without_passphrase(tmp_path, monkeypatch) -> None:
+    runner = _load_restore_runner()
+    instance = _restore_test_instance(runner, monkeypatch)
+    repository = tmp_path / "borg-backup-unencrypted"
+    repository.mkdir()
+    passphrases = []
+
+    def fake_env(passphrase, _storage, _repository):
+        passphrases.append(passphrase)
+        return {}
+
+    def fake_borg(args, _env, timeout=None):
+        if args[:3] == ["list", "--short", "--last"]:
+            return SimpleNamespace(returncode=0, stdout="archive-1\n", stderr="")
+        if args[:2] == ["info", "--json"]:
+            return SimpleNamespace(returncode=0, stdout=json.dumps({"archives": [{"stats": {}}]}), stderr="")
+        raise AssertionError(f"Unexpected Borg call: {args}, timeout={timeout}")
+
+    monkeypatch.setattr(instance, "_env", fake_env)
+    monkeypatch.setattr(instance, "_borg", fake_borg)
+    monkeypatch.setattr(
+        instance,
+        "_read_passphrase",
+        lambda _path: (_ for _ in ()).throw(AssertionError("unencrypted repository requested a passphrase")),
+    )
+
+    result = instance.test_repo({
+        "job_key": "testdata_local",
+        "type": "testdata",
+        "location": "local",
+        "path": str(repository),
+        "encryption": "none",
+        "passphrase_file": "",
+        "storage": {},
+    })
+
+    assert result == 0
+    assert passphrases == [None]
+
+
+def test_restore_runner_removes_inherited_passphrase_for_unencrypted_repository(tmp_path, monkeypatch) -> None:
+    runner = _load_restore_runner()
+    instance = object.__new__(runner.RestoreTest)
+    instance.conf = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "borg-backup" / "scripts")}
+    monkeypatch.setenv("BORG_PASSPHRASE", "must-not-leak")
+    monkeypatch.setenv("BORG_PASSCOMMAND", "must-not-run")
+
+    env = instance._env(None, {}, str(tmp_path / "repository"))
+
+    assert "BORG_PASSPHRASE" not in env
+    assert "BORG_PASSCOMMAND" not in env
+
+
+def test_restore_runner_keeps_passphrase_requirement_for_encrypted_repository(tmp_path, monkeypatch) -> None:
+    runner = _load_restore_runner()
+    instance = _restore_test_instance(runner, monkeypatch)
+    repository = tmp_path / "borg-backup-encrypted"
+    repository.mkdir()
+    messages = []
+    monkeypatch.setattr(instance, "log", messages.append)
+
+    result = instance.test_repo({
+        "job_key": "testdata_local",
+        "type": "testdata",
+        "location": "local",
+        "path": str(repository),
+        "encryption": "repokey-blake2",
+        "passphrase_file": str(tmp_path / "missing-passphrase"),
+        "storage": {},
+    })
+
+    assert result == 1
+    assert any("Passphrase file not found" in message for message in messages)
 
 
 def test_restore_runner_discovers_smb_profile_repository(tmp_path, monkeypatch) -> None:

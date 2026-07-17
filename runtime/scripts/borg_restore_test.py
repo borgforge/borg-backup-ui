@@ -159,6 +159,7 @@ def discover_repos(conf: dict) -> list:
             "type": btype,
             "location": location,
             "path": repo_path,
+            "encryption": str(context.get("encryption") or "").strip().lower(),
             "passphrase_file": str(context.get("passphrase_ref") or ""),
             "profile_key": profile_key,
             "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
@@ -266,13 +267,15 @@ class RestoreTest:
         except Exception as exc:
             self.log(f"  notification event failed: {exc}")
 
-    def _env(self, passphrase: str, storage: dict | None = None, repository: str = "") -> dict:
+    def _env(self, passphrase: str | None, storage: dict | None = None, repository: str = "") -> dict:
         from borg_key_store import apply_borg_key_environment
         from borg_ssh import configure_borg_ssh
 
         env = dict(os.environ)
-        env["BORG_PASSPHRASE"] = passphrase
+        env.pop("BORG_PASSPHRASE", None)
         env.pop("BORG_PASSCOMMAND", None)
+        if passphrase is not None:
+            env["BORG_PASSPHRASE"] = passphrase
         env = apply_borg_key_environment(env, self.conf)
         configure_borg_ssh(env, storage, repository)
         return env
@@ -507,6 +510,7 @@ class RestoreTest:
         btype    = repo["type"]
         location = repo["location"]
         path     = repo["path"]
+        encryption = str(repo.get("encryption") or "").strip().lower()
         pp_file  = repo["passphrase_file"]
         key      = str(repo.get("job_key") or f"{btype}_{location}")
 
@@ -560,11 +564,13 @@ class RestoreTest:
                             failure_hint="Repository is not mounted or reachable")
                 return 3
 
-            try:
-                passphrase = self._read_passphrase(pp_file)
-            except FileNotFoundError as exc:
-                self.log(f"  ERROR: {exc}")
-                return 1
+            passphrase = None
+            if encryption != "none":
+                try:
+                    passphrase = self._read_passphrase(pp_file)
+                except FileNotFoundError as exc:
+                    self.log(f"  ERROR: {exc}")
+                    return 1
 
             env = self._env(passphrase, repo.get("storage"), path)
             t0 = time.time()
