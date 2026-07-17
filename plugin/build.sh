@@ -1,17 +1,8 @@
 #!/bin/bash
 # build.sh – Erstellt das Unraid Plugin Package (.txz) für borg-backup-ui
 #
-# Verwendung:
-#   ./plugin/build.sh             # Version = jetzt (YYYY.MM.DD.HHMM)
-#   ./plugin/build.sh 2026.05.10  # explizite Version (nur bei Ausnahmen)
-#
-# Workflow vor dem Build:
-#   1. Änderungen unter ###NEXT### in borg-backup-ui.plg eintragen
-#   2. ./plugin/build.sh  (keine Version nötig)
-#   3. git add releases/<name>-<version>.txz borg-backup-ui.plg borg_backup_ui.py
-#   4. git commit -m "Release <version>"
-#   5. git push
-#   6. ./plugin/mr-preflight.sh   # verhindert "PR enthält keine Änderungen"
+# Internal package builder. Release metadata and provenance must already have
+# been prepared in an exported staging tree by deploy-test.sh.
 #
 # Das erzeugte .txz enthält:
 #   boot/config/plugins/borg-backup-ui/   → persistente App-Dateien (Flash)
@@ -25,82 +16,61 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 NAME="borg-backup-ui"
 VERSION="${1:-$(date +%Y.%m.%d.%H%M)}"
-BUILD_DIR="${SCRIPT_DIR}/build/pkg"
-PKG_FILE="${SCRIPT_DIR}/build/${NAME}-${VERSION}.txz"
+BUILD_OUTPUT_DIR="${BUILD_OUTPUT_DIR:-${SCRIPT_DIR}/build}"
+BUILD_RELEASES_DIR="${BUILD_RELEASES_DIR:-${REPO_DIR}/releases}"
+BUILD_PREPARED="${BUILD_PREPARED:-0}"
+BUILD_DIR="${BUILD_OUTPUT_DIR}/pkg"
+PKG_FILE="${BUILD_OUTPUT_DIR}/${NAME}-${VERSION}.txz"
 PLG_FILE="${REPO_DIR}/${NAME}.plg"
-MAX_NEXT_CHANGE_LINES="${MAX_NEXT_CHANGE_LINES:-30}"
 
 echo "==> Baue ${NAME} v${VERSION}"
 
-# ── Changelog pruefen, bevor Dateien veraendert werden ───────────────────
-if [ -f "${PLG_FILE}" ]; then
-  NEXT_COUNT=$(grep -F -x -c '###NEXT###' "${PLG_FILE}" || true)
-  VERSION_COUNT=$(grep -F -x -c "###${VERSION}###" "${PLG_FILE}" || true)
-
-  if [ "${NEXT_COUNT}" -gt 1 ]; then
-    echo "ERROR: Mehr als ein ###NEXT###-Block in ${NAME}.plg gefunden." >&2
+case "${BUILD_OUTPUT_DIR}" in
+  ""|"/"|"${REPO_DIR}")
+    echo "ERROR: Unsicheres BUILD_OUTPUT_DIR: ${BUILD_OUTPUT_DIR}" >&2
     exit 1
-  fi
+    ;;
+esac
 
-  if [ "${VERSION_COUNT}" -gt 1 ]; then
-    echo "ERROR: Mehr als ein ###${VERSION}###-Block in ${NAME}.plg gefunden." >&2
-    exit 1
-  fi
-
-  if [ "${NEXT_COUNT}" -eq 1 ] && [ "${VERSION_COUNT}" -gt 0 ]; then
-    echo "ERROR: ${NAME}.plg enthaelt bereits ###${VERSION}### und zusaetzlich ###NEXT###." >&2
-    echo "       Bitte Version pruefen, damit keine doppelten Changelog-Eintraege entstehen." >&2
-    exit 1
-  fi
-
-  if [ "${NEXT_COUNT}" -eq 0 ] && [ "${VERSION_COUNT}" -eq 0 ]; then
-    echo "ERROR: Kein ###NEXT###-Block und kein bestehender ###${VERSION}###-Block gefunden." >&2
-    echo "       Fuer neue Releases zuerst nutzerrelevante Release Notes unter ###NEXT### pflegen." >&2
-    echo "       Fuer Rebuilds dieselbe Version angeben, die bereits im Changelog steht." >&2
-    exit 1
-  fi
-
-  if [ "${NEXT_COUNT}" -eq 1 ]; then
-    NEXT_LINES=$(awk '
-      /^###NEXT###$/ { in_next=1; next }
-      in_next && /^###[^#]+###$/ { in_next=0 }
-      in_next && NF { count++ }
-      END { print count + 0 }
-    ' "${PLG_FILE}")
-    if [ "${NEXT_LINES}" -gt "${MAX_NEXT_CHANGE_LINES}" ]; then
-      echo "ERROR: ###NEXT### enthaelt ${NEXT_LINES} nicht-leere Zeilen, erlaubt sind ${MAX_NEXT_CHANGE_LINES}." >&2
-      echo "       Das Manifest-Changelog soll kurz bleiben; technische Details nach docs/changelog.md auslagern." >&2
-      exit 1
-    fi
-  else
-    echo "==> Rebuild einer bestehenden Version: ###${VERSION}### vorhanden, kein ###NEXT### noetig"
-  fi
+if [ "${BUILD_PREPARED}" != "1" ]; then
+  echo "ERROR: Direkte Paket-Builds sind deaktiviert." >&2
+  echo "       Zuerst den finalen Commit pushen und ./plugin/mr-preflight.sh ausfuehren." >&2
+  echo "       Testpakete anschliessend mit ./plugin/deploy-test.sh <version> bauen." >&2
+  exit 1
 fi
 
-# ── APP_VERSION in borg_backup_ui.py aktualisieren (VOR dem Kopieren!) ────────
-MAIN_PY="${REPO_DIR}/borg_backup_ui.py"
-if [ -f "${MAIN_PY}" ]; then
-  sed -i.bak "s|^APP_VERSION = \"[^\"]*\"|APP_VERSION = \"${VERSION}\"|" "${MAIN_PY}"
-  rm -f "${MAIN_PY}.bak"
-  echo "==> APP_VERSION in borg_backup_ui.py → ${VERSION}"
+PROVENANCE_FILE="${REPO_DIR}/build-provenance.json"
+if [ ! -f "${PROVENANCE_FILE}" ]; then
+  echo "ERROR: Vorbereiteter Build ohne build-provenance.json." >&2
+  exit 1
 fi
+python3 - "${PROVENANCE_FILE}" "${VERSION}" <<'PY'
+import json
+import pathlib
+import sys
 
-# ── ###NEXT### in CHANGES durch ###VERSION### ersetzen ───────────────────────
-if [ -f "${PLG_FILE}" ]; then
-  if grep -q "###NEXT###" "${PLG_FILE}"; then
-    sed -i.bak "s|###NEXT###|###${VERSION}###|" "${PLG_FILE}"
-    rm -f "${PLG_FILE}.bak"
-    echo "==> ###NEXT### → ###${VERSION}### in CHANGES ersetzt"
-  fi
-fi
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if payload.get("version") != sys.argv[2]:
+    raise SystemExit("ERROR: Version in build-provenance.json stimmt nicht mit dem Build ueberein.")
+if not payload.get("source_digest") or not payload.get("source_commit"):
+    raise SystemExit("ERROR: Unvollstaendige Build-Provenance.")
+PY
+grep -F -q "<!ENTITY version   \"${VERSION}\">" "${PLG_FILE}" || {
+  echo "ERROR: Vorbereitetes Manifest enthaelt nicht Version ${VERSION}." >&2
+  exit 1
+}
+grep -F -q "APP_VERSION = \"${VERSION}\"" "${REPO_DIR}/borg_backup_ui.py" || {
+  echo "ERROR: Vorbereiteter Quellbaum enthaelt nicht APP_VERSION ${VERSION}." >&2
+  exit 1
+}
 
 # ── Aufräumen ──────────────────────────────────────────────────────────────
 rm -rf "${BUILD_DIR}"
-mkdir -p "${SCRIPT_DIR}/build"
+mkdir -p "${BUILD_OUTPUT_DIR}"
 # Build-Ausgaben sind kurzlebig. Alte Pakete duerfen sich hier nicht bei jedem
 # Test-Deploy weiter ansammeln; stabile Release-Artefakte liegen separat unter
 # releases/ und werden von dieser Bereinigung nicht beruehrt.
-find "${SCRIPT_DIR}/build" -maxdepth 1 -type f -name "${NAME}-*.txz" -delete
+find "${BUILD_OUTPUT_DIR}" -maxdepth 1 -type f -name "${NAME}-*.txz" -delete
 mkdir -p "${BUILD_DIR}"
 
 # ── App-Dateien → /boot/config/plugins/borg-backup-ui/ ────────────────────
@@ -116,6 +86,7 @@ cp "${REPO_DIR}/docs/user-manual/de/user-manual.md" "${MANUAL_DST}/de/"
 cp "${REPO_DIR}/docs/user-manual/en/user-manual.md" "${MANUAL_DST}/en/"
 cp -r "${REPO_DIR}/docs/user-manual/assets" "${MANUAL_DST}/"
 [ -d "${REPO_DIR}/runtime" ] && cp -r "${REPO_DIR}/runtime" "${APP_DST}/"
+[ -f "${REPO_DIR}/build-provenance.json" ] && cp "${REPO_DIR}/build-provenance.json" "${APP_DST}/"
 # Legacy fallback packaging (older repo layout)
 [ -f "${REPO_DIR}/borg_restore_test.py" ] && install -m 0755 "${REPO_DIR}/borg_restore_test.py" "${APP_DST}/"
 [ -f "${REPO_DIR}/borg_restore_test.description" ] && cp "${REPO_DIR}/borg_restore_test.description" "${APP_DST}/"
@@ -186,16 +157,9 @@ if [ -f "${PLG_FILE}" ]; then
 fi
 
 # ── Release-Artefakt kopieren (ohne Löschung bestehender Releases) ────────
-RELEASES_DIR="${REPO_DIR}/releases"
+RELEASES_DIR="${BUILD_RELEASES_DIR}"
 mkdir -p "${RELEASES_DIR}"
 cp "${PKG_FILE}" "${RELEASES_DIR}/"
 echo "==> Kopiert nach: ${RELEASES_DIR}/$(basename "${PKG_FILE}")"
 
-echo ""
-echo "Fertig! Nächste Schritte:"
-echo "  1. Alles committen und pushen:"
-echo "     git add releases/${NAME}-${VERSION}.txz ${NAME}.plg borg_backup_ui.py"
-echo "     git commit -m 'Release ${VERSION} – <Kurzbeschreibung>'"
-echo "     git push"
-echo "  2. Plugin-URL in Unraid:"
-echo "     https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/${NAME}.plg"
+echo "==> Build abgeschlossen. Der Quellbaum wurde nicht als Release-Workflow mutiert."

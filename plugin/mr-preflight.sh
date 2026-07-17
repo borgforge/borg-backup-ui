@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Preflight check before creating/pushing a PR.
+# Full source preflight for feature/fix branches.
 # Usage:
 #   ./plugin/mr-preflight.sh
 
@@ -11,18 +11,26 @@ if [[ "$branch" == "main" || "$branch" == "master" ]]; then
   exit 1
 fi
 
+case "${branch}" in
+  codex/release-*|release-*)
+    echo "==> Release-Branch erkannt; pruefe nur Release-Artefakte"
+    exec "$(dirname "$0")/release-preflight.sh"
+    ;;
+esac
+
 echo "==> Hole origin/main"
 git fetch origin main >/dev/null 2>&1 || git fetch origin master >/dev/null 2>&1
-
-echo "==> Python-Syntax prüfen"
-python3 -m py_compile borg_backup_ui.py api/*.py runtime/lib/*.py runtime/scripts/*.py
-
-echo "==> Tests ausführen"
-pytest -q
 
 base_ref="origin/main"
 if ! git show-ref --verify --quiet refs/remotes/origin/main; then
   base_ref="origin/master"
+fi
+
+echo "==> Pruefe sauberen Arbeitsbaum"
+if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+  echo "Fehler: Der Arbeitsbaum ist nicht sauber. Preflight gilt nur fuer einen exakten Commit."
+  git status --short
+  exit 1
 fi
 
 echo "==> Prüfe Diff gegen ${base_ref}"
@@ -31,58 +39,23 @@ if git diff --quiet "${base_ref}...HEAD"; then
   exit 1
 fi
 
-echo "==> Prüfe Release-Regel für Plugin-Code"
+echo "==> Pruefe Trennung von Implementierung und Stable-Artefakten"
 changed_files="$(git diff --name-only "${base_ref}...HEAD")"
 plugin_code_changed=0
-release_manifest_changed=0
-release_artifact_changed=0
-release_pr=0
-case "${branch}" in
-  codex/release-*|release-*)
-    release_pr=1
-    ;;
-esac
 
 while IFS= read -r file; do
   case "${file}" in
-    borg_backup_ui.py|borg_backup_ui.conf.example|api/*.py|runtime/*|runtime/**|ui/*|ui/**|plugin/*.page|plugin/rc.borg_backup_ui|borg-backup-ui.plg)
+    borg_backup_ui.py|borg_backup_ui.conf.example|api/*.py|runtime/*|runtime/**|ui/*|ui/**|plugin/*.page|plugin/rc.borg_backup_ui)
       plugin_code_changed=1
-      ;;
-  esac
-  case "${file}" in
-    borg-backup-ui.plg)
-      release_manifest_changed=1
-      ;;
-    releases/borg-backup-ui-*.txz)
-      release_artifact_changed=1
       ;;
   esac
 done <<< "${changed_files}"
 
-release_build_changed=0
-if [[ "${release_manifest_changed}" -eq 1 && "${release_artifact_changed}" -eq 1 ]]; then
-  release_build_changed=1
-fi
+python3 "$(dirname "$0")/release_workflow.py" verify-implementation-delta \
+  --repo "$(git rev-parse --show-toplevel)" \
+  --base-ref "${base_ref}"
 
-if [[ "${release_pr}" -eq 0 && "${release_manifest_changed}" -eq 1 ]]; then
-  echo "Fehler: borg-backup-ui.plg darf nur in einem separaten Release-PR geaendert werden."
-  echo "Bitte Feature-/Fix-PR ohne Stable-Manifest erstellen und spaeter ./plugin/promote-release.sh <version> nutzen."
-  exit 1
-fi
-
-if [[ "${release_pr}" -eq 0 && "${release_artifact_changed}" -eq 1 ]]; then
-  echo "Fehler: releases/borg-backup-ui-*.txz darf nur in einem separaten Release-PR geaendert werden."
-  echo "Bitte Test-Channel-Artefakte nicht in Feature-/Fix-PRs committen."
-  exit 1
-fi
-
-if [[ "${release_pr}" -eq 1 && "${release_build_changed}" -eq 0 ]]; then
-  echo "Fehler: Release-PR ohne vollstaendige Stable-Artefakte."
-  echo "Erwartet werden borg-backup-ui.plg und releases/borg-backup-ui-<version>.txz."
-  exit 1
-fi
-
-if [[ "${plugin_code_changed}" -eq 1 && "${release_pr}" -eq 0 ]]; then
+if [[ "${plugin_code_changed}" -eq 1 ]]; then
   echo "Hinweis: Plugin-Code wurde geaendert. Stable-Artefakte gehoeren nicht in diesen PR."
   echo "        Test-Channel-Deploy separat verifizieren; Stable spaeter per eigenem Release-PR."
 fi
@@ -105,8 +78,24 @@ if [[ -z "${remote_sha}" || "${local_sha}" != "${remote_sha}" ]]; then
   exit 1
 fi
 
+echo "==> Guenstige Vorpruefungen bestanden"
+
+echo "==> Python-Syntax pruefen"
+python3 -m py_compile borg_backup_ui.py api/*.py runtime/lib/*.py runtime/scripts/*.py plugin/release_workflow.py
+
+echo "==> Tests ausfuehren"
+pytest -q
+
+echo "==> Commitgebundene Preflight-Attestierung schreiben"
+python3 "$(dirname "$0")/release_workflow.py" write-attestation \
+  --repo "$(git rev-parse --show-toplevel)" \
+  --base-ref "${base_ref}" >/dev/null
+attestation="$(git rev-parse --git-path borg-backup-ui/preflight.json)"
+
 echo "OK: Preflight bestanden."
 echo "- Branch: ${branch}"
 echo "- Base  : ${base_ref}"
 echo "- Delta : vorhanden"
 echo "- Push  : synchron"
+echo "- Test  : bestanden"
+echo "- Attest: ${attestation}"

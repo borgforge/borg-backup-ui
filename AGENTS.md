@@ -272,8 +272,15 @@ Wenn Plugin-Code geaendert wurde:
 
 1. Technische Historie bei Bedarf in `docs/changelog.md` pflegen
 2. Fokussierte Tests ausfuehren
-3. Eine Test-Channel-Version mit `./plugin/deploy-test.sh <version>` erstellen
-4. Test-Channel-Manifest und Paket verifizieren
+3. Finalen Stand committen und pushen
+4. `./plugin/mr-preflight.sh` genau einmal fuer diesen finalen Commit ausfuehren
+5. Eine Test-Channel-Version mit `./plugin/deploy-test.sh <version>` erstellen
+6. Test-Channel-Manifest und Paket verifizieren
+
+`mr-preflight.sh` erzeugt nach erfolgreichem Lauf eine commitgebundene lokale
+Attestierung unter `.git/`. `deploy-test.sh` akzeptiert nur den unveraenderten,
+gepushten und attestierten Commit und fuehrt die vollstaendigen Tests nicht
+erneut aus.
 
 Feature-, Fix- und Maintenance-PRs duerfen keine Stable-Release-Artefakte
 enthalten. Das gilt insbesondere fuer:
@@ -316,6 +323,11 @@ Das Skript erstellt bzw. aktualisiert einen Branch `codex/release-<version>`
 aus `origin/main`, kopiert das getestete Paket aus `test-channel` und erstellt
 einen eigenen Pull Request gegen `main`. Feature-/Fix-PRs werden dadurch nicht
 mit Stable-Artefakten vermischt.
+
+Das getestete Paket wird byte-identisch uebernommen und nicht neu gebaut. Der
+Release-PR verwendet `./plugin/release-preflight.sh`; dieser prueft nur
+Release-Artefakte, Provenance und Quell-Digest und startet die vollstaendigen
+Quelltests nicht erneut.
 
 Ausnahme fuer ausdruecklich freigegebene Umbrella-Features:
 
@@ -382,7 +394,11 @@ Empfohlene Labels/Tags:
 `borg-backup-ui.plg` enthaelt nur nutzerrelevante Release Notes fuer das
 Plugin-Manifest.
 
-Eintraege unter `###NEXT###` muessen kurz und installationsnah sein.
+Neue nutzerrelevante Release Notes werden als versionierte Fragmente unter
+`release-notes/pending/<issue>.md` gepflegt. Sie muessen vor dem finalen
+Preflight committed sein. Der Test-Channel-Build rendert und hasht diese
+Fragmente; die Stable-Promotion uebernimmt exakt diesen getesteten Text und
+loescht nur die im Paket nachgewiesenen Fragmente.
 
 In `borg-backup-ui.plg` gehoeren:
 

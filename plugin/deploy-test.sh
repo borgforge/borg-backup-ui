@@ -1,11 +1,5 @@
 #!/bin/bash
-# Deploy the current working tree as an installable Unraid test-channel build.
-#
-# This script builds the current tree, generates borg-backup-ui-test.plg, and
-# pushes only the test manifest plus release package to the test-channel branch.
-# The test-channel branch intentionally does not contain the full source tree or
-# history. Stable build files generated during the build are restored locally
-# before the script exits; stable promotion is handled by a separate release PR.
+# Publish the exact, preflight-attested source commit to test-channel.
 
 set -euo pipefail
 
@@ -16,76 +10,69 @@ TEST_BRANCH="${TEST_BRANCH:-test-channel}"
 VERSION="${1:-$(date +%Y.%m.%d.%H%M)}"
 CURRENT_BRANCH="$(git -C "$REPO_DIR" branch --show-current)"
 
-if [ -z "$CURRENT_BRANCH" ]; then
-  echo "ERROR: Kein aktueller Git-Branch gefunden." >&2
+if [[ ! "$VERSION" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{4}$ ]]; then
+  echo "ERROR: Version muss dem Format YYYY.MM.DD.HHMM entsprechen: ${VERSION}" >&2
+  exit 2
+fi
+if [ -z "$CURRENT_BRANCH" ] || [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "$TEST_BRANCH" ]; then
+  echo "ERROR: Test-Deploy erfordert einen Feature-/Fix-Branch." >&2
   exit 1
 fi
 
 echo "==> Test-Deploy ${NAME} ${VERSION}"
 echo "==> Source-Branch: ${CURRENT_BRANCH}"
-echo "==> Test-Branch  : ${TEST_BRANCH}"
 
-TMP_ROOT="${REPO_DIR}/.release-tmp"
-mkdir -p "$TMP_ROOT"
+echo "==> Pruefe commitgebundene Preflight-Attestierung"
+ATTEST_JSON="$(python3 "$SCRIPT_DIR/release_workflow.py" verify-attestation --repo "$REPO_DIR")"
+SOURCE_COMMIT="$(printf '%s' "$ATTEST_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["head_sha"])')"
+SOURCE_BASE_SHA="$(printf '%s' "$ATTEST_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["base_sha"])')"
+SOURCE_DIGEST="$(printf '%s' "$ATTEST_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["source_digest"])')"
 
-PLG_FILE="${REPO_DIR}/${NAME}.plg"
-APP_FILE="${REPO_DIR}/borg_backup_ui.py"
-PKG_FILE="${REPO_DIR}/releases/${NAME}-${VERSION}.txz"
-
-PLG_SNAPSHOT="$(mktemp "${TMP_ROOT}/${NAME}.plg.before.XXXXXX")"
-APP_SNAPSHOT="$(mktemp "${TMP_ROOT}/borg_backup_ui.py.before.XXXXXX")"
-PKG_SNAPSHOT="$(mktemp "${TMP_ROOT}/${NAME}-${VERSION}.txz.before.XXXXXX")"
-PKG_EXISTED=0
-cp "$PLG_FILE" "$PLG_SNAPSHOT"
-cp "$APP_FILE" "$APP_SNAPSHOT"
-if [ -f "$PKG_FILE" ]; then
-  cp "$PKG_FILE" "$PKG_SNAPSHOT"
-  PKG_EXISTED=1
-fi
-
-TMP_PLG=""
-
-restore_stable_files() {
-  cp "$PLG_SNAPSHOT" "$PLG_FILE"
-  cp "$APP_SNAPSHOT" "$APP_FILE"
-  if [ "$PKG_EXISTED" -eq 1 ]; then
-    cp "$PKG_SNAPSHOT" "$PKG_FILE"
-  else
-    rm -f "$PKG_FILE"
-  fi
-}
-
-cleanup() {
-  restore_stable_files || true
-  if [ -n "$TMP_PLG" ]; then
-    rm -f "$TMP_PLG"
-  fi
-  rm -f "$PLG_SNAPSHOT" "$APP_SNAPSHOT" "$PKG_SNAPSHOT"
-}
-trap cleanup EXIT
-
-"${SCRIPT_DIR}/build.sh" "$VERSION"
-
-if [ ! -f "$PKG_FILE" ]; then
-  echo "ERROR: Release-Paket fehlt: ${PKG_FILE}" >&2
+echo "==> Pruefe exakt gepushten Quellstand"
+REMOTE_SHA="$(git -C "$REPO_DIR" ls-remote --heads origin "$CURRENT_BRANCH" | awk '{print $1}')"
+if [ -z "$REMOTE_SHA" ] || [ "$REMOTE_SHA" != "$SOURCE_COMMIT" ]; then
+  echo "ERROR: Attestierter Commit ist nicht exakt auf origin/${CURRENT_BRANCH}." >&2
+  echo "  attestiert: ${SOURCE_COMMIT}" >&2
+  echo "  remote    : ${REMOTE_SHA:-<none>}" >&2
   exit 1
 fi
 
-require_pkg_entry() {
-  local entry="$1"
-  if ! tar -tf "$PKG_FILE" | sed 's|^\./||' | grep -Fx "$entry" >/dev/null; then
-    echo "ERROR: Paket ${PKG_FILE} enthaelt erwarteten Eintrag nicht: ${entry}" >&2
-    exit 1
-  fi
-}
+TMP_ROOT="${REPO_DIR}/.release-tmp"
+mkdir -p "$TMP_ROOT"
+RUN_DIR="$(mktemp -d "${TMP_ROOT}/test-${VERSION}.XXXXXX")"
+STAGE_DIR="${RUN_DIR}/source"
+OUTPUT_DIR="${RUN_DIR}/output"
+RELEASES_DIR="${RUN_DIR}/releases"
+mkdir -p "$STAGE_DIR" "$OUTPUT_DIR" "$RELEASES_DIR"
 
-echo "==> Pruefe Paketinhalt"
-require_pkg_entry "boot/config/plugins/${NAME}/borg_backup_ui.py"
-require_pkg_entry "boot/config/plugins/${NAME}/api/config_api.py"
-require_pkg_entry "boot/config/plugins/${NAME}/api/factory_reset_worker.py"
-require_pkg_entry "boot/config/plugins/${NAME}/ui/index.html"
-require_pkg_entry "boot/config/plugins/${NAME}/runtime/config/backup.conf.example"
-require_pkg_entry "etc/rc.d/rc.borg_backup_ui"
+cleanup() {
+  rm -rf "$RUN_DIR"
+}
+trap cleanup EXIT
+
+echo "==> Exportiere attestierten Commit in Repository-lokales Staging"
+git -C "$REPO_DIR" archive "$SOURCE_COMMIT" | tar -x -C "$STAGE_DIR"
+BUILT_AT="$(git -C "$REPO_DIR" show -s --format=%cI "$SOURCE_COMMIT")"
+python3 "$SCRIPT_DIR/release_workflow.py" prepare-build-tree \
+  --root "$STAGE_DIR" \
+  --version "$VERSION" \
+  --source-commit "$SOURCE_COMMIT" \
+  --base-sha "$SOURCE_BASE_SHA" \
+  --source-digest "$SOURCE_DIGEST" \
+  --built-at "$BUILT_AT" >/dev/null
+
+echo "==> Baue isoliertes Testpaket"
+BUILD_PREPARED=1 \
+BUILD_OUTPUT_DIR="$OUTPUT_DIR" \
+BUILD_RELEASES_DIR="$RELEASES_DIR" \
+  "$STAGE_DIR/plugin/build.sh" "$VERSION"
+
+PKG_FILE="${RELEASES_DIR}/${NAME}-${VERSION}.txz"
+PLG_FILE="${STAGE_DIR}/${NAME}.plg"
+python3 "$SCRIPT_DIR/release_workflow.py" package-provenance \
+  --package "$PKG_FILE" \
+  --expect-version "$VERSION" \
+  --expect-source-digest "$SOURCE_DIGEST" >/dev/null
 
 if command -v md5sum >/dev/null 2>&1; then
   MD5="$(md5sum "$PKG_FILE" | cut -d' ' -f1)"
@@ -93,20 +80,16 @@ else
   MD5="$(md5 -q "$PKG_FILE")"
 fi
 
-TMP_PLG="$(mktemp "${TMP_ROOT}/${NAME}-test.XXXXXX.plg")"
-cp "$PLG_FILE" "$TMP_PLG"
-sed -i.bak \
-  -e "s|<!ENTITY pluginURL \"[^\"]*\">|<!ENTITY pluginURL \"https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/\\&name;-test.plg\">|" \
-  -e "s|<!ENTITY pkgurl    \"[^\"]*\">|<!ENTITY pkgurl    \"https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/releases/\\&name;-\\&version;.txz\">|" \
+TEST_PLG="${RUN_DIR}/${NAME}-test.plg"
+cp "$PLG_FILE" "$TEST_PLG"
+sed -i \
+  -e "s|<!ENTITY pluginURL \"[^\"]*\">|<!ENTITY pluginURL \"https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/\&name;-test.plg\">|" \
+  -e "s|<!ENTITY pkgurl    \"[^\"]*\">|<!ENTITY pkgurl    \"https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_BRANCH}/releases/\&name;-\&version;.txz\">|" \
   -e "s|description=\"[^\"]*\"|description=\"TEST CHANNEL - Web UI for Borg Backup. Install this only on test systems.\"|" \
   -e "s|<MD5>[^<]*</MD5>|<MD5>${MD5}</MD5>|" \
-  "$TMP_PLG"
-rm -f "${TMP_PLG}.bak"
+  "$TEST_PLG"
 
-# Unraid opens the plugin icon on the existing Settings control panel. Keep
-# this in the generated test manifest so the navigation is tested before the
-# same attribute is promoted by the dedicated stable release PR.
-python3 - "$TMP_PLG" <<'PY'
+python3 - "$TEST_PLG" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -132,16 +115,23 @@ else:
 path.write_text(text, encoding="utf-8")
 PY
 
-echo "==> Pruefe Test-Manifest XML"
-python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$TMP_PLG"
+python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$TEST_PLG"
+
+# Recheck immediately before publishing so an outdated local attestation cannot
+# race with a subsequently pushed commit.
+REMOTE_SHA="$(git -C "$REPO_DIR" ls-remote --heads origin "$CURRENT_BRANCH" | awk '{print $1}')"
+if [ "$REMOTE_SHA" != "$SOURCE_COMMIT" ]; then
+  echo "ERROR: Source branch changed while building; test snapshot is not published." >&2
+  exit 1
+fi
 
 ORIGIN_URL="$(git -C "$REPO_DIR" remote get-url origin)"
 "${SCRIPT_DIR}/publish-test-snapshot.sh" \
   "$ORIGIN_URL" \
   "$TEST_BRANCH" \
-  "$TMP_PLG" \
+  "$TEST_PLG" \
   "$PKG_FILE" \
-  "Deploy test ${VERSION} from ${CURRENT_BRANCH}" \
+  "Deploy test ${VERSION} from ${CURRENT_BRANCH}@${SOURCE_COMMIT}" \
   "$TMP_ROOT"
 
 cat <<EOF
@@ -153,11 +143,10 @@ Test-Plugin-URL:
 Getestete Version:
   ${VERSION}
 
-Nach erfolgreichem Test:
-  Feature-PR mergen und danach nur mit ausdruecklicher Stable-Freigabe:
-  ./plugin/promote-release.sh ${VERSION}
+Quellcommit:
+  ${SOURCE_COMMIT}
 
-Hinweis:
-  Lokale Stable-Build-Dateien wurden wiederhergestellt. Feature-PRs duerfen
-  borg-backup-ui.plg und releases/*.txz nicht als Stable-Artefakte enthalten.
+Nach erfolgreichem Test:
+  Feature-PR mergen und erst nach ausdruecklicher Stable-Freigabe:
+  ./plugin/promote-release.sh ${VERSION}
 EOF
