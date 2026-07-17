@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.16.1604">
+<!ENTITY version   "2026.07.18.0057">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,9 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.18.0057###
+- Restore tests now support unencrypted Borg repositories without requiring a passphrase file.
+
 ###2026.07.16.1604###
 - Rebuilt the bilingual in-app help and complete German and English user manuals with searchable chapter navigation and offline access inside the application.
 - Running backup jobs can now be cancelled cooperatively from the Jobs page while Docker and VM recovery remains protected and visible.
@@ -352,7 +355,7 @@
 -->
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
 <URL>&pkgurl;</URL>
-<MD5>d0103c5a8fe7979cbcd2778f7275554f</MD5>
+<MD5>e47a1ee94f7b1ad66c2bce55efd02484</MD5>
 </FILE>
 
 <!--
