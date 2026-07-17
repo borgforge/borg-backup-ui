@@ -30,14 +30,15 @@ def test_plugin_manifest_uses_github_stable_channel_urls() -> None:
 
 def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     script = (ROOT / "plugin" / "deploy-test.sh").read_text(encoding="utf-8")
+    workflow = (ROOT / "plugin" / "release_workflow.py").read_text(encoding="utf-8")
 
-    assert "require_pkg_entry" in script
-    assert 'require_pkg_entry "boot/config/plugins/${NAME}/borg_backup_ui.py"' in script
-    assert 'require_pkg_entry "boot/config/plugins/${NAME}/api/config_api.py"' in script
-    assert 'require_pkg_entry "boot/config/plugins/${NAME}/api/factory_reset_worker.py"' in script
-    assert 'require_pkg_entry "boot/config/plugins/${NAME}/ui/index.html"' in script
-    assert 'require_pkg_entry "boot/config/plugins/${NAME}/runtime/config/backup.conf.example"' in script
-    assert 'require_pkg_entry "etc/rc.d/rc.borg_backup_ui"' in script
+    assert 'release_workflow.py" package-provenance' in script
+    assert 'f"boot/config/plugins/{NAME}/borg_backup_ui.py"' in workflow
+    assert 'f"boot/config/plugins/{NAME}/api/config_api.py"' in workflow
+    assert 'f"boot/config/plugins/{NAME}/api/factory_reset_worker.py"' in workflow
+    assert 'f"boot/config/plugins/{NAME}/ui/index.html"' in workflow
+    assert 'f"boot/config/plugins/{NAME}/runtime/config/backup.conf.example"' in workflow
+    assert '"etc/rc.d/rc.borg_backup_ui"' in workflow
     assert "ET.parse(sys.argv[1])" in script
     assert 'launch="Settings/borg-backup-ui"' in script
 
@@ -45,7 +46,7 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
 def test_build_removes_stale_generated_packages() -> None:
     script = (ROOT / "plugin" / "build.sh").read_text(encoding="utf-8")
 
-    assert 'find "${SCRIPT_DIR}/build"' in script
+    assert 'find "${BUILD_OUTPUT_DIR}"' in script
     assert '-name "${NAME}-*.txz" -delete' in script
 
 
@@ -130,5 +131,5 @@ def test_test_channel_publisher_uses_exact_force_with_lease() -> None:
 def test_release_promotion_copies_tested_settings_launch_target() -> None:
     script = (ROOT / "plugin" / "promote-release.sh").read_text(encoding="utf-8")
 
-    assert "Test manifest does not define the tested Unraid launch target" in script
+    assert "Test manifest has no tested launch target" in script
     assert "launch_target" in script

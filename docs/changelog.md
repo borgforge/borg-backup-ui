@@ -6,6 +6,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #246
+- Bound the full preflight result to the exact pushed source commit.
+- Build test packages from an exported staging tree with embedded provenance.
+- Promote the exact tested package to stable without rebuilding it.
+- Replaced mutable pending manifest notes with committed release-note fragments.
+- Added a dedicated artifact-only preflight for stable release PRs.
+
 ### Issue #216
 - Required startup migration failures now place the application in an explicit restricted maintenance mode instead of continuing normal processing.
 - Repository reconciliation, schedule application, notification reminders and repository information refresh remain disabled until a later clean restart completes all migrations successfully.

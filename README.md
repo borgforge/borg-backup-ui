@@ -128,17 +128,22 @@ Syntax check example:
 python3 -m py_compile borg_backup_ui.py api/*.py runtime/scripts/*.py
 ```
 
-Build a plugin package:
-
-```bash
-./plugin/build.sh
-```
-
-Run the merge-request preflight:
+Run focused tests while developing. After the final commit has been pushed,
+run the full source preflight exactly once:
 
 ```bash
 ./plugin/mr-preflight.sh
 ```
+
+Publish that attested commit to the test channel:
+
+```bash
+./plugin/deploy-test.sh <version>
+```
+
+`plugin/build.sh` is an internal staging-tree builder and must not be called
+directly. Stable releases promote the exact tested package through a separate
+release PR.
 
 See [docs/release-workflow.md](docs/release-workflow.md) before preparing
 plugin builds, test-channel deployments, or stable release promotions.

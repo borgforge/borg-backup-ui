@@ -89,19 +89,25 @@ The latest migration status is stored in:
 
 - `/boot/config/borg-backup/config/migration-state.json`
 
-## Build and Release
+## Build and test a package
 
-Build a release:
+Run focused tests during development. Commit and push the final source, then
+run the complete preflight exactly once:
 
 ```bash
-./plugin/build.sh
+./plugin/mr-preflight.sh
 ```
 
-The build:
+Publish the attested commit to the test channel:
 
-- sets `APP_VERSION` in `borg_backup_ui.py`
-- updates version and MD5 in `borg-backup-ui.plg`
-- creates `releases/borg-backup-ui-<version>.txz`
+```bash
+./plugin/deploy-test.sh <version>
+```
+
+The direct `plugin/build.sh` entry point is intentionally restricted to an
+exported staging tree. After explicit test approval, stable promotion copies
+the exact tested package into a separate release PR without rebuilding it.
+See [release-workflow.md](release-workflow.md).
 
 ## Development
 
