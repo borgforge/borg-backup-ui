@@ -19,6 +19,10 @@
 
 <CHANGES>
 <![CDATA[
+###NEXT###
+- Failed required startup migrations now place the application in a visible maintenance mode instead of starting schedules, background workers or normal backup and restore operations.
+- System Health & Migration, authentication, version information and support-bundle creation remain available for diagnosis while normal operation is blocked.
+
 ###2026.07.16.1604###
 - Rebuilt the bilingual in-app help and complete German and English user manuals with searchable chapter navigation and offline access inside the application.
 - Running backup jobs can now be cancelled cooperatively from the Jobs page while Docker and VM recovery remains protected and visible.
