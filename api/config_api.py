@@ -592,7 +592,12 @@ def test_repository(ui_config: dict, repository_key: str) -> dict:
     if str(repository.get("encryption") or "").strip().lower() != "none":
         if passphrase_file is None or not passphrase_file.is_file():
             raise ValueError("Repository passphrase file is missing")
-    env = _repo_env(storage, passphrase_file, ui_config)
+    env = _repo_env(
+        storage,
+        passphrase_file,
+        ui_config,
+        encryption=str(repository.get("encryption") or ""),
+    )
 
     try:
         result = subprocess.run(

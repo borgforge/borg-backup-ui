@@ -441,18 +441,28 @@ def test_repository_info_counts_archives_from_borg_list(tmp_path: Path, monkeypa
         "storage_key": "storage_local_test",
         "location": "local",
         "relative_path": "borg-backup-flash",
+        "encryption": "none",
     }]})
-    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
+    calls = []
+
+    def fake_info(_config, _storage, _repo_path, _passphrase_file, encryption=""):
+        calls.append(("info", encryption))
+        return {
         "repository": {"id": "flash-repo"},
         "encryption": {"mode": "repokey-blake2"},
         "cache": {"stats": {"total_size": 100, "total_csize": 90, "unique_csize": 10}},
-    })
-    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {
-        "archives": [{"name": f"flash-{index}"} for index in range(17)],
-    })
+        }
+
+    def fake_list(_config, _storage, _repo_path, _passphrase_file, encryption=""):
+        calls.append(("list", encryption))
+        return {"archives": [{"name": f"flash-{index}"} for index in range(17)]}
+
+    monkeypatch.setattr(repositories_api, "_borg_info", fake_info)
+    monkeypatch.setattr(repositories_api, "_borg_list", fake_list)
 
     result = refresh_repository_info(config, "repo_flash")
 
+    assert calls == [("info", "none"), ("list", "none")]
     assert result["repository"]["repository_stats"]["archives_count"] == 17
     stored = read_repository_store(config)["repositories"][0]
     assert stored["repository_stats"]["archives_count"] == 17
@@ -586,16 +596,22 @@ def test_repository_archives_are_loaded_by_repository_key(tmp_path: Path, monkey
         "display_name": "Flash",
         "storage_key": "storage_local_test",
         "relative_path": "borg-backup-flash",
+        "encryption": "none",
     }]})
-    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {
-        "archives": [
+    captured = {}
+
+    def fake_list(_config, _storage, _repo_path, _passphrase_file, encryption=""):
+        captured["encryption"] = encryption
+        return {"archives": [
             {"name": "flash-1", "id": "one", "start": "2026-07-09T09:00:00", "duration": 2.0},
             {"name": "flash-2", "id": "two", "start": "2026-07-10T09:00:00", "duration": 2.5},
-        ],
-    })
+        ]}
+
+    monkeypatch.setattr(repositories_api, "_borg_list", fake_list)
 
     result = get_repository_archives(config, "repo_flash", 1)
 
+    assert captured["encryption"] == "none"
     assert result["archive_count"] == 2
     assert result["archives"] == [{
         "name": "flash-2",

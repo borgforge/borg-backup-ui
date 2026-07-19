@@ -134,6 +134,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   - `storages.json` and `repositories.json` are the sole runtime authorities for storage targets and Borg repositories; `settings.json` and persistent schema copies are no longer runtime inputs.
   - Settings writes, restore-test configuration and SMTP defaults now use the same version-owned schema and reject unsupported keys.
   - Migration snapshots, atomic writes, verification, rollback and maintenance-mode handling protect existing installations during the cutover.
+  - Repository archive lists, background information refreshes, tests and maintenance now explicitly confirm access only for repository objects marked as unencrypted, while Borg's safety prompt remains active for unknown repositories.
 
 ### Issue #199
 - Backup jobs can define multiple concrete file or directory exclusion paths in the Job Wizard.
