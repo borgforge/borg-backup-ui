@@ -18,12 +18,14 @@ from storagebox_api import (
 
 
 def test_storagebox_profile_preserves_storagebox_base_path():
-    profile = _storagebox_profile({
-        "STORAGEBOX_HOST": "u123.your-storagebox.de",
-        "STORAGEBOX_PORT": "23",
-        "STORAGEBOX_USER": "u123",
-        "STORAGEBOX_BASE_PATH": "/./backup",
-        "BORG_SSH_KEY": "/root/.ssh/id_ed25519",
+    profile = _storagebox_profile(storage_profile={
+        "key": "storage-1",
+        "name": "Storagebox",
+        "host": "u123.your-storagebox.de",
+        "port": "23",
+        "user": "u123",
+        "base_path": "/./backup",
+        "ssh_key_path": "/root/.ssh/id_ed25519",
     })
 
     assert profile["host"] == "u123.your-storagebox.de"
@@ -32,7 +34,7 @@ def test_storagebox_profile_preserves_storagebox_base_path():
 
 
 def test_storagebox_profile_normalizes_generic_relative_base_path():
-    profile = _storagebox_profile({"STORAGEBOX_BASE_PATH": "volume1/backup"})
+    profile = _storagebox_profile(storage_profile={"base_path": "volume1/backup"})
 
     assert profile["base_path"] == "/volume1/backup"
 
@@ -104,7 +106,7 @@ def test_storagebox_setup_status_can_skip_remote_probe(monkeypatch, tmp_path):
     key.write_text("private", encoding="utf-8")
     monkeypatch.setattr(
         "storagebox_api._storage_context",
-        lambda _config, _profile_key="": ({}, {
+        lambda _config, _profile_key="": {
             "profile_key": "storage-1",
             "profile_name": "Storagebox",
             "host": "box.example.test",
@@ -113,7 +115,7 @@ def test_storagebox_setup_status_can_skip_remote_probe(monkeypatch, tmp_path):
             "base_path": "/backup",
             "ssh_key": str(key),
             "target_type": "generic",
-        }),
+        },
     )
     monkeypatch.setattr(
         "storagebox_api._storagebox_auth_test",

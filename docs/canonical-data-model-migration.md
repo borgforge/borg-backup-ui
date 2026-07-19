@@ -12,6 +12,29 @@ PR #189 changes the ownership of storage, repository and job data:
 - `backup.conf` owns global application settings.
 - `settings.json` is obsolete after the migration succeeds.
 
+## Configuration authority after Issue #143
+
+The runtime has one authoritative owner for each configuration class:
+
+| Configuration class | Authoritative file | Notes |
+| --- | --- | --- |
+| Storage targets and profiles | `config/storages.json` | Local, USB, SMB and SSH/Storagebox data is not duplicated in `backup.conf`. |
+| Borg repositories | `config/repositories.json` | Paths, encryption and secret/keyfile references are resolved from the repository and its storage target. |
+| Backup-job behavior | `config/jobs/*.json` | Each job references one repository by `repository_key`. |
+| Global application settings | `config/backup.conf` | Contains only keys declared by the installed version's schema. |
+| Global settings schema and defaults | `runtime/config/backup.conf.example` | Version-owned and read-only at runtime. It is not copied into persistent configuration. |
+
+`config/settings.json` and the persistent copy
+`config/backup.conf.example` have no runtime ownership role. The application
+does not maintain storage or repository compatibility values in
+`backup.conf`, and it does not read those values as fallbacks.
+
+Every normal settings write renders the complete persistent `backup.conf`
+from `runtime/config/backup.conf.example`. Missing schema keys receive the
+installed version's default, accepted updates replace their current value and
+unknown keys are removed. This makes the installed schema and the effective
+configuration directly comparable instead of accumulating obsolete keys.
+
 ## Baseline migration
 
 The only registered PR #189 model migration is:
@@ -67,6 +90,38 @@ the persistent canonical key directory.
 
 The phase implementation remains split into small internal Python modules for
 testability, but only the baseline migration is registered and visible.
+
+## Canonical backup.conf migration
+
+Issue #143 adds the ordered startup migration:
+
+```text
+canonical_backup_conf_v1
+```
+
+It runs after `canonical_data_model_v1` and performs the final configuration
+ownership cutover:
+
+1. Read the installed schema from `runtime/config/backup.conf.example`.
+2. Parse the existing persistent `config/backup.conf`.
+3. Preserve values for keys that still exist in the installed schema.
+4. Add missing schema keys with the installed defaults.
+5. Remove unknown keys, including obsolete storage and repository values.
+6. Atomically write and verify the canonical `backup.conf`.
+7. Remove the obsolete persistent `config/backup.conf.example` only after the
+   effective configuration is verified as canonical.
+
+Before writing, the migration stores the affected persistent files in its own
+protected snapshot below `config/migration-backups/`. Its manifest records
+which keys were added, removed or retained without recording their values.
+If writing, cleanup or verification fails, the original files are restored and
+the migration is reported as failed. The central startup runner then leaves
+the application in restricted maintenance mode; later migrations and normal
+write operations do not continue.
+
+The migration is idempotent. A repeated detection after successful application
+finds neither non-canonical keys nor an obsolete persistent schema copy and
+therefore performs no additional write.
 
 ## Backup and rollback
 

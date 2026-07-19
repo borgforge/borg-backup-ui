@@ -10,6 +10,29 @@ if str(API_ROOT) not in sys.path:
 from migrations import registry  # noqa: E402
 
 
+def _write_notification_config(config_dir: Path) -> Path:
+    config_dir.mkdir(parents=True)
+    (config_dir / "backup.conf").write_text(
+        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
+        encoding="utf-8",
+    )
+    schema_file = config_dir.parent / "plugin-backup.conf.example"
+    schema_file.write_text(
+        '\n'.join(
+            (
+                'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"',
+                'NOTIFY_EMAIL_EVENTS="backup_failed"',
+                'NOTIFY_UNRAID_EVENTS="backup_success,backup_warning,backup_failed,backup_skipped"',
+                'NOTIFY_REMINDER_INTERVAL_HOURS="24"',
+                'NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS="6"',
+                '',
+            )
+        ),
+        encoding="utf-8",
+    )
+    return schema_file
+
+
 def _state(config: dict) -> dict:
     state_file = Path(config["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
     return json.loads(state_file.read_text(encoding="utf-8"))
@@ -28,12 +51,8 @@ def _log_lines(config: dict) -> list[dict]:
 
 def test_registry_writes_central_state_and_log_for_applied_migration(tmp_path: Path):
     config_dir = tmp_path / "config"
-    config_dir.mkdir(parents=True)
-    (config_dir / "backup.conf").write_text(
-        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
-        encoding="utf-8",
-    )
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    schema_file = _write_notification_config(config_dir)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "BACKUP_CONF_SCHEMA_FILE": str(schema_file)}
 
     result = registry.run_startup_migrations(config)
     state = _state(config)
@@ -59,12 +78,8 @@ def test_registry_writes_central_state_and_log_for_applied_migration(tmp_path: P
 
 def test_registry_second_run_preserves_last_effective_migration(tmp_path: Path):
     config_dir = tmp_path / "config"
-    config_dir.mkdir(parents=True)
-    (config_dir / "backup.conf").write_text(
-        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
-        encoding="utf-8",
-    )
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    schema_file = _write_notification_config(config_dir)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "BACKUP_CONF_SCHEMA_FILE": str(schema_file)}
 
     first_result = registry.run_startup_migrations(config)
     first_state = _state(config)

@@ -218,19 +218,6 @@ def bootstrap_data_layout(config: dict) -> None:
             conf_file.write_text("", encoding="utf-8")
             _log(f"WARNING: backup.conf.example is missing; created empty backup.conf: {conf_file}")
 
-    # Schema sync: add missing keys, keep legacy keys in explicit block.
-    try:
-        from config_api import sync_backup_conf_schema
-        sync_result = sync_backup_conf_schema(config)
-        if sync_result.get("changed"):
-            _log(
-                "Applied backup.conf schema sync "
-                f"(missing={sync_result.get('missing_added', 0)}, legacy={sync_result.get('legacy_keys', 0)})"
-            )
-    except Exception as exc:
-        _log(f"WARNING: backup.conf schema sync failed: {exc}")
-
-
 def setup_borg_path() -> None:
     """Prefer bundled borg binary from plugin runtime when present."""
     for candidate in (BORG_BUNDLE_PLAIN, BORG_BUNDLE_VERSIONED):
@@ -901,7 +888,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/settings/profile-secrets-import": self._post_settings_profile_secrets_import,
             "/api/settings/support-bundle": self._post_settings_support_bundle,
             "/api/settings/factory-reset": self._post_factory_reset,
-            "/api/settings/legacy-cleanup-apply": self._post_settings_legacy_cleanup_apply,
             "/api/system-health/runtime-recovery/ack": self._post_runtime_recovery_ack,
             "/api/settings/usb-profiles-status": self._post_settings_usb_profiles_status,
             "/api/settings/smb-profiles-status": self._post_settings_smb_profiles_status,
@@ -2569,31 +2555,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             validate_storage_profiles_complete_before_save(normalized_storage)
             validate_storage_profile_usage_before_save(self.config, normalized_storage)
             replace_profile_storages(self.config, "storagebox", normalized_storage)
-        storage_keys = {"STORAGEBOX_HOST", "STORAGEBOX_PORT", "STORAGEBOX_USER", "STORAGEBOX_BASE_PATH"}
-        if storage_keys & set(updates.keys()):
-            rows = canonical_profiles.get("storage_profiles") if isinstance(canonical_profiles.get("storage_profiles"), list) else []
-            normalized_rows = []
-            normalized_rows = _normalize_storage_profile_rows(rows)
-            active = normalized_rows[0] if normalized_rows else {
-                "key": "storage-1",
-                "name": "Storagebox",
-                "host": "",
-                "port": "23",
-                "user": "",
-                "base_path": "/./backup",
-                "target_type": "storagebox",
-            }
-            if "STORAGEBOX_HOST" in updates:
-                active["host"] = str(updates.get("STORAGEBOX_HOST", "")).strip()
-            if "STORAGEBOX_PORT" in updates:
-                active["port"] = str(updates.get("STORAGEBOX_PORT", "23")).strip() or "23"
-            if "STORAGEBOX_USER" in updates:
-                active["user"] = str(updates.get("STORAGEBOX_USER", "")).strip()
-            if "STORAGEBOX_BASE_PATH" in updates:
-                active["base_path"] = str(updates.get("STORAGEBOX_BASE_PATH", "/./backup")).strip() or "/./backup"
-            next_storage_profiles = _normalize_storage_profile_rows([active] + [r for r in normalized_rows[1:] if isinstance(r, dict)])
-            validate_storage_profiles_complete_before_save(next_storage_profiles)
-            replace_profile_storages(self.config, "storagebox", next_storage_profiles)
         write_conf(self.config, updates, snapshot_reason="Manual change")
         created_paths = None
         if data_dir is not None:
@@ -2701,15 +2662,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise ValueError("name is required")
         context_lines = int((body or {}).get("context_lines", 3) or 3)
         return diff_conf_backup(self.config, name, context_lines=context_lines)
-
-    def _post_settings_legacy_cleanup_apply(self) -> dict:
-        from migration_api import apply_legacy_cleanup
-        body = self._read_json_body()
-        mode = str((body or {}).get("mode", "comment_out")).strip()
-        confirm = str((body or {}).get("confirm", "")).strip()
-        result = apply_legacy_cleanup(self.config, mode=mode, confirm=confirm)
-        _apply_runtime_dirs_from_conf(self.config)
-        return result
 
     def _post_settings_jobs_import(self) -> dict:
         from settings_transfer_api import import_jobs_bundle
@@ -3543,6 +3495,32 @@ def _evaluate_startup_migrations(config: dict, migration_runner=None) -> tuple[b
     return True, summary
 
 
+def _remove_obsolete_persistent_backup_conf_schema(config: dict) -> bool:
+    """Remove an installer-created schema copy after canonicalization succeeded."""
+    legacy_schema = Path(config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf.example"
+    if not legacy_schema.is_file():
+        return False
+    try:
+        from config_api import canonical_backup_conf_plan
+
+        plan = canonical_backup_conf_plan(config)
+        if plan["changed"]:
+            _log(
+                "WARNING: Obsolete persistent backup.conf.example retained because "
+                "backup.conf is not canonical."
+            )
+            return False
+        legacy_schema.unlink()
+        _log("Removed obsolete persistent backup.conf.example copy.")
+        return True
+    except Exception as exc:
+        _log(
+            "WARNING: Obsolete persistent backup.conf.example could not be removed: "
+            f"{_mask_secrets(str(exc))}"
+        )
+        return False
+
+
 def _start_normal_runtime_services(config: dict) -> None:
     """Start services which must remain disabled in migration maintenance mode."""
     try:
@@ -3629,6 +3607,8 @@ def main():
         _log(f"WARNING: Bootstrap skipped: {exc}")
 
     startup_ready, _startup_mig = _evaluate_startup_migrations(config)
+    if startup_ready:
+        _remove_obsolete_persistent_backup_conf_schema(config)
 
     lib_found = setup_lib_path(config)
     if not lib_found:

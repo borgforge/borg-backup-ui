@@ -153,37 +153,6 @@ def test_referenced_storage_profile_with_empty_host_is_blocked(tmp_path: Path, m
         config_api.validate_storage_profile_usage_before_save(cfg, next_rows)
 
 
-def test_storagebox_legacy_update_blocks_incomplete_referenced_profile(tmp_path: Path, monkeypatch):
-    import borg_backup_ui
-    import config_api
-
-    data_root = tmp_path / "data"
-    settings = {
-        "storage_profiles": [{
-            "key": "storage-1",
-            "name": "Storagebox",
-            "host": "u123.your-storagebox.de",
-            "port": "23",
-            "user": "u123",
-            "base_path": "/./backup",
-            "target_type": "storagebox",
-            "ssh_key_path": "",
-        }]
-    }
-    cfg = _write_storagebox_reference(data_root)
-
-    monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {"GLOBAL_DATA_DIR": "/mnt/user/backups"})
-    monkeypatch.setattr(config_api, "write_conf", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(borg_backup_ui, "_apply_runtime_dirs_from_conf", lambda _cfg: None)
-
-    handler = borg_backup_ui.BackupUIHandler.__new__(borg_backup_ui.BackupUIHandler)
-    handler.config = cfg
-    handler._read_json_body = lambda: {"updates": {"STORAGEBOX_HOST": ""}}
-
-    with pytest.raises(ValueError, match="Storage profile 'storage-1' is incomplete"):
-        handler._put_settings()
-
-
 def test_settings_save_blocks_new_incomplete_storage_profile(tmp_path: Path, monkeypatch):
     import borg_backup_ui
     import config_api

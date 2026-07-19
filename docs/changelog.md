@@ -127,6 +127,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Appdata and VM safety acknowledgements now use a compact inline layout, and the duplicated runtime heading was removed to leave more room for long container and VM lists.
 - The application page is locked while the Job Wizard is open; only the Wizard body or its nested selection list can scroll.
 
+### Issue #143
+- Canonical global configuration ownership:
+  - `backup.conf` now contains exactly the active global keys declared by the installed runtime schema.
+  - Obsolete storage and repository settings are removed by the audited `canonical_backup_conf_v1` startup migration instead of remaining as inactive compatibility data.
+  - `storages.json` and `repositories.json` are the sole runtime authorities for storage targets and Borg repositories; `settings.json` and persistent schema copies are no longer runtime inputs.
+  - Settings writes, restore-test configuration and SMTP defaults now use the same version-owned schema and reject unsupported keys.
+  - Migration snapshots, atomic writes, verification, rollback and maintenance-mode handling protect existing installations during the cutover.
+
 ### Issue #199
 - Backup jobs can define multiple concrete file or directory exclusion paths in the Job Wizard.
 - Exclusions must exist below a selected source root and are passed to Borg as safe path-prefix patterns.

@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from . import (
+    canonical_backup_conf_v1,
     canonical_data_model_v1,
     job_source_paths_v1,
     notification_events_v1,
@@ -25,6 +26,7 @@ MIGRATIONS = [
     canonical_data_model_v1,
     job_source_paths_v1,
     smb_protocol_auto_v1,
+    canonical_backup_conf_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}

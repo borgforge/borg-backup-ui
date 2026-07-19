@@ -61,7 +61,22 @@ except ImportError:
                 continue
             if "=" in line:
                 k, _, v = line.partition("=")
-                conf[k.strip()] = v.strip().strip('"').strip("'")
+                value = v.strip()
+                if value.startswith('"'):
+                    try:
+                        decoded, end = json.JSONDecoder().raw_decode(value)
+                        remainder = value[end:].strip()
+                        if isinstance(decoded, str) and (not remainder or remainder.startswith("#")):
+                            value = decoded
+                    except json.JSONDecodeError:
+                        value = value.strip('"')
+                elif len(value) >= 2 and value[0] == value[-1] == "'":
+                    value = value[1:-1]
+                else:
+                    comment_pos = value.find("  #")
+                    if comment_pos != -1:
+                        value = value[:comment_pos].rstrip()
+                conf[k.strip()] = value
         return conf
 
 

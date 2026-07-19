@@ -159,6 +159,42 @@ def test_later_successful_restart_returns_to_normal_operation():
     assert state["failures"] == []
 
 
+def test_successful_start_removes_installer_created_schema_copy(tmp_path: Path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    schema = tmp_path / "runtime-backup.conf.example"
+    schema.write_text('GLOBAL_DATA_DIR="/mnt/user/borg_backup_ui"\n', encoding="utf-8")
+    (config_dir / "backup.conf").write_text(
+        'GLOBAL_DATA_DIR="/mnt/user/borg_backup_ui"\n', encoding="utf-8"
+    )
+    legacy = config_dir / "backup.conf.example"
+    legacy.write_text('STALE_KEY="stale"\n', encoding="utf-8")
+    config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "BACKUP_CONF_SCHEMA_FILE": str(schema),
+    }
+
+    assert borg_backup_ui._remove_obsolete_persistent_backup_conf_schema(config) is True
+    assert not legacy.exists()
+
+
+def test_noncanonical_backup_conf_retains_installer_schema_copy(tmp_path: Path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    schema = tmp_path / "runtime-backup.conf.example"
+    schema.write_text('GLOBAL_DATA_DIR="/mnt/user/borg_backup_ui"\n', encoding="utf-8")
+    (config_dir / "backup.conf").write_text('STALE_KEY="stale"\n', encoding="utf-8")
+    legacy = config_dir / "backup.conf.example"
+    legacy.write_text('STALE_KEY="stale"\n', encoding="utf-8")
+    config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "BACKUP_CONF_SCHEMA_FILE": str(schema),
+    }
+
+    assert borg_backup_ui._remove_obsolete_persistent_backup_conf_schema(config) is False
+    assert legacy.is_file()
+
+
 def test_default_normal_state_is_non_blocking():
     state = normal_startup_state()
 

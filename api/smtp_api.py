@@ -10,11 +10,11 @@ def send_test_email(ui_config: dict, recipient: str = "") -> dict:
     import ssl
     from email.message import EmailMessage
 
-    from config_api import _DEFAULTS, read_raw_conf
+    from config_api import read_conf_defaults, read_raw_conf
 
     # raw_conf nutzen damit Sonderzeichen im Passwort nicht durch Bash-Expansion verfälscht werden
     conf = read_raw_conf(ui_config)
-    defaults = _DEFAULTS
+    defaults = read_conf_defaults(ui_config)
     host = (conf.get("GLOBAL_SMTP_HOST") or defaults.get("GLOBAL_SMTP_HOST", "")).strip()
     port = int((conf.get("GLOBAL_SMTP_PORT") or defaults.get("GLOBAL_SMTP_PORT", "587")).strip() or 587)
     user = (conf.get("GLOBAL_SMTP_USER") or defaults.get("GLOBAL_SMTP_USER", "")).strip()

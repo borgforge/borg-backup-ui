@@ -626,12 +626,7 @@ def load_config(config_file: Path) -> Dict[str, str]:
             continue
         key, _, value = line.partition("=")
         key = key.strip()
-        # Entferne Anführungszeichen und Inline-Kommentare
-        value = value.strip().strip('"').strip("'")
-        # Inline-Kommentar entfernen (nur außerhalb von Quotes)
-        comment_pos = value.find("  #")
-        if comment_pos != -1:
-            value = value[:comment_pos].strip()
+        value = decode_config_value(value)
         # Bash-Arrays überspringen (mehrzeilige Syntax: VALUE=(...))
         if value.startswith("("):
             continue
@@ -648,3 +643,33 @@ def load_config(config_file: Path) -> Dict[str, str]:
             config[key] = value
 
     return config
+
+
+def decode_config_value(raw_value: str) -> str:
+    """Decode a backup.conf value while preserving literal special chars."""
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+
+    if value.startswith('"'):
+        try:
+            decoded, end = json.JSONDecoder().raw_decode(value)
+            remainder = value[end:].strip()
+            if isinstance(decoded, str) and (not remainder or remainder.startswith("#")):
+                return decoded
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if value.startswith("'"):
+        end = value.rfind("'")
+        if end > 0:
+            remainder = value[end + 1:].strip()
+            if not remainder or remainder.startswith("#"):
+                return value[1:end]
+
+    comment_pos = value.find("  #")
+    if comment_pos != -1:
+        value = value[:comment_pos].rstrip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        value = value[1:-1]
+    return value
