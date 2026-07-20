@@ -1247,7 +1247,12 @@ function renderSettingsSystemHealth(data) {
             ${_renderMigrationRegistryGroups(registryItems)}
           </div>
         ` : ''}
-        ${migrationSummary.techMsg ? `<pre class="system-health-tech-msg">${escHtml(migrationSummary.techMsg)}</pre>` : ''}
+        ${migrationSummary.techMsg ? `
+          <details class="system-health-technical migration-startup-technical">
+            <summary>${escHtml(settingsT('health.technicalStartupSummary'))}</summary>
+            <pre class="system-health-tech-msg">${escHtml(migrationSummary.techMsg)}</pre>
+          </details>
+        ` : ''}
       </details>
     </div>`);
 }
@@ -1700,7 +1705,8 @@ function _renderMigrationRegistryItem(item) {
   const details = item?.details && typeof item.details === 'object' ? item.details : {};
   const candidates = Array.isArray(details.candidate_keys) ? details.candidate_keys : [];
   const updatedKeys = Array.isArray(details.updated_keys) ? details.updated_keys.map((key) => String(key || '').trim()).filter(Boolean) : [];
-  const checkedAt = String(details.checked_at || '').trim();
+  const appliedAt = String(details.applied_at || '').trim();
+  const lastCheckedAt = String(details.last_checked_at || '').trim();
   const introducedIn = String(details.introduced_in || '').trim();
   const failedPhase = String(details.failed_phase || '').trim();
   const failureReason = String(details.error || '').trim();
@@ -1713,6 +1719,23 @@ function _renderMigrationRegistryItem(item) {
       mode: plan.mode === 'remove' ? settingsT('health.removeKeys') : settingsT('health.commentKeys'),
     })
     : '';
+  const auditRows = [
+    [settingsT('health.migrationActions'), details.actions],
+    [settingsT('health.updatedKeys'), details.updated_keys],
+    [settingsT('health.addedKeys'), details.added_keys],
+    [settingsT('health.removedKeys'), details.removed_keys],
+    [settingsT('health.affectedFiles'), details.affected_files],
+    [settingsT('health.backupDirectory'), details.backup_directory],
+    [settingsT('health.runId'), details.run_id],
+  ].map(([label, value]) => {
+    const values = Array.isArray(value)
+      ? value.map((entry) => String(entry || '').trim()).filter(Boolean)
+      : (String(value || '').trim() ? [String(value).trim()] : []);
+    return values.length ? [label, values] : null;
+  }).filter(Boolean);
+  const appliedTimestamp = appliedAt
+    ? `<div class="migration-registry-id">${escHtml(settingsT('health.appliedAt'))}: ${escHtml(_formatHealthTimestamp(appliedAt) || appliedAt)}</div>`
+    : (status === 'applied' ? `<div class="migration-registry-id">${escHtml(settingsT('health.appliedAtUnknown'))}</div>` : '');
   return `
     <div class="migration-registry-item ${escHtml(status)}">
       <div class="migration-registry-head">
@@ -1723,12 +1746,24 @@ function _renderMigrationRegistryItem(item) {
       ${reason ? `<div>${escHtml(reason)}</div>` : ''}
       ${planText ? `<div class="migration-registry-plan">${escHtml(planText)}</div>` : ''}
       ${candidates.length ? `<div class="migration-registry-id">Deprecated: ${candidates.map((row) => escHtml(String(row?.key || ''))).filter(Boolean).join(', ')}</div>` : ''}
-      ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map(escHtml).join(', ')}</div>` : ''}
+      ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map((value) => escHtml(value)).join(', ')}</div>` : ''}
       ${failedPhase ? `<div class="migration-registry-id">${escHtml(settingsT('health.failedPhase'))}: ${escHtml(failedPhase)}</div>` : ''}
       ${failureReason ? `<div class="migration-registry-id">${escHtml(settingsT('health.failureReason'))}: ${escHtml(failureReason)}</div>` : ''}
       ${rollbackStatus ? `<div class="migration-registry-id">${escHtml(settingsT('health.rollbackStatus'))}: ${escHtml(settingsT(`health.rollback_${rollbackStatus}`))}</div>` : ''}
-      ${checkedAt ? `<div class="migration-registry-id">${escHtml(settingsT('health.checkedAt'))}: ${escHtml(_formatHealthTimestamp(checkedAt) || checkedAt)}</div>` : ''}
+      ${appliedTimestamp}
+      ${lastCheckedAt ? `<div class="migration-registry-id">${escHtml(settingsT('health.lastCheckedAt'))}: ${escHtml(_formatHealthTimestamp(lastCheckedAt) || lastCheckedAt)}</div>` : ''}
       ${introducedIn ? `<div class="migration-registry-id">${escHtml(settingsT('health.introducedIn'))}: ${escHtml(introducedIn)}</div>` : ''}
+      ${auditRows.length ? `
+        <details class="migration-registry-audit">
+          <summary>${escHtml(settingsT('health.auditDetails'))}</summary>
+          <dl>
+            ${auditRows.map(([label, values]) => `
+              <dt>${escHtml(label)}</dt>
+              <dd>${values.map((value) => escHtml(value)).join('<br>')}</dd>
+            `).join('')}
+          </dl>
+        </details>
+      ` : ''}
     </div>
   `;
 }

@@ -127,6 +127,8 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
         state = str(row.get("state") or "").strip()
         details = row.get("details") if isinstance(row.get("details"), dict) else {}
         checked_at = str(row.get("checked_at") or "").strip()
+        applied_at = str(row.get("applied_at") or "").strip()
+        last_checked_at = str(row.get("last_checked_at") or "").strip()
         items.append(_status_item(
             migration_id,
             migration_id,
@@ -137,6 +139,8 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
                 **details,
                 "state": state,
                 "checked_at": checked_at,
+                "applied_at": applied_at,
+                "last_checked_at": last_checked_at,
                 "updated_keys": details.get("updated_keys") if isinstance(details.get("updated_keys"), list) else [],
                 "runner": str(details.get("runner") or ""),
                 "introduced_in": str(details.get("introduced_in") or ""),

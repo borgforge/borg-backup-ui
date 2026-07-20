@@ -51,12 +51,13 @@ def write_pending_state(
 ) -> None:
     directory = config_dir(config)
     with inventory_lock(directory):
+        timestamp = now()
         previous = read_state(config)
         migrations = previous.get("migrations") if isinstance(previous.get("migrations"), dict) else {}
         payload = {
-            "schema_version": 2,
+            "schema_version": 3,
             "last_run": {
-                "timestamp": now(),
+                "timestamp": timestamp,
                 "success": False,
                 "message": f"{migration_id} is running",
                 "reason_code": "migration_pending",
@@ -67,7 +68,8 @@ def write_pending_state(
                 **migrations,
                 migration_id: {
                     "state": "pending",
-                    "checked_at": now(),
+                    "checked_at": timestamp,
+                    "last_checked_at": timestamp,
                     "source": "startup_registry",
                     "details": {
                         "migration_id": migration_id,
@@ -97,4 +99,3 @@ def append_event(config: dict, event: dict[str, Any]) -> None:
             os.fsync(fd)
         finally:
             os.close(fd)
-

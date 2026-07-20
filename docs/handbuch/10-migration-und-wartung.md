@@ -14,6 +14,24 @@ Umstellung auf das kanonische Storage-/Repository-Modell nennt der Audit unter
 anderem Lauf-ID, Ausgangszustand, Phasen, Backup-Verzeichnis, betroffene
 Objekte, Validierung und ein mögliches Rollback. Secrets werden nicht geloggt.
 
+Die Anzeige unter **Einstellungen > Systemzustand & Migration** unterscheidet:
+
+- **Ausgeführt**: Zeitpunkt, zu dem die Migration die Daten tatsächlich
+  geändert und den Status `angewendet` erreicht hat. Dieser Zeitpunkt bleibt
+  bei späteren Pluginstarts unverändert.
+- **Zuletzt geprüft**: Zeitpunkt des letzten Starts, bei dem der zentrale
+  Migrations-Runner den gespeicherten Status kontrolliert hat. Das ist keine
+  erneute Ausführung der Migration.
+- **Audit-Details**: Lesbare Zusammenfassung der protokollierten Aktionen,
+  geänderten Schlüssel, betroffenen Dateien und des Sicherungsverzeichnisses,
+  soweit die jeweilige Migration diese Angaben geliefert hat.
+
+Bei älteren Migrationsständen wird der Ausführungszeitpunkt nur übernommen,
+wenn ein erfolgreicher Eintrag im strukturierten Audit-Log ihn belegt. Fehlt
+dieser Nachweis, kennzeichnet die Oberfläche den historischen Zeitpunkt als
+nicht separat protokolliert, statt das Datum des aktuellen Pluginstarts
+anzuzeigen.
+
 ## Setup-Checks
 
 Setup-Checks beschreiben vorhandene Strukturen. Sie sind keine Migration, wenn nichts geändert werden muss.
@@ -53,7 +71,7 @@ Bestätigungstext `FACTORY RESET`.
 
 ## Ergebnis prüfen
 
-Der Migrationsbereich ist gesund, wenn der letzte Lauf erfolgreich war, keine fehlerhaften Migrationen offen sind und Wartungspunkte verständlich beschrieben werden.
+Der Migrationsbereich ist gesund, wenn der letzte Lauf erfolgreich war, keine fehlerhaften Migrationen offen sind und Wartungspunkte verständlich beschrieben werden. Ein neuer Wert bei **Zuletzt geprüft** ist nach einem Pluginstart normal; **Ausgeführt** darf sich dabei nicht ändern.
 
 ## Fehlerbilder
 

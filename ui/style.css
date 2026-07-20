@@ -770,6 +770,35 @@ body.wizard-modal-open {
 .migration-registry-id {
   margin-top: 3px;
 }
+.migration-registry-audit {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+.migration-registry-audit summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 650;
+}
+.migration-registry-audit dl {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 5px 10px;
+  margin: 8px 0 0;
+}
+.migration-registry-audit dt {
+  color: var(--text-muted);
+}
+.migration-registry-audit dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+.migration-startup-technical {
+  margin-top: 10px;
+}
 .system-health-technical {
   margin-top: 14px;
   color: var(--text-secondary);

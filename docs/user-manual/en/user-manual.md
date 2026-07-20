@@ -858,6 +858,18 @@ The area shows, among other things:
 - setup and maintenance notes
 - secret file checks
 
+For completed migrations, **Applied** is the immutable time at which the
+migration actually changed data. **Last checked** instead indicates when the
+migration state was verified during the latest plugin startup. A newer check
+time therefore does not mean that the migration ran again. **Audit details**
+provide a readable view of recorded actions, changed keys, affected files, and
+available migration backups.
+
+For older installations, the historical application time may be unavailable
+when earlier versions did not store it separately and no successful audit
+event can prove it. The application reports that limitation instead of showing
+the current startup time as the application time.
+
 Runtime recovery indicates that Docker containers or VMs were stopped during a backup and must be checked after a crash, abort, or restart.
 
 > **Warning:** Mark runtime recovery notes as resolved only after the affected containers or VMs have actually been checked or started manually.
