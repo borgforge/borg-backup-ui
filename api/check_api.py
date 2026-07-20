@@ -118,7 +118,12 @@ class CheckManager:
                 if mounted.get("message_code") == "smb_mount_success":
                     profile_key = str(storage.get("profile_key") or "")
                     cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
-            env = _repo_env(storage, passphrase_file, config)
+            env = _repo_env(
+                storage,
+                passphrase_file,
+                config,
+                encryption=str(repository.get("encryption") or ""),
+            )
             cmd = self._repository_command(config, repository, repo_path, action, mode)
         except Exception as exc:
             return False, f"Repository information is not readable: {exc}"

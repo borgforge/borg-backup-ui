@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
 
 from . import (
+    canonical_backup_conf_v1,
     canonical_data_model_v1,
     job_source_paths_v1,
     notification_events_v1,
     restore_history_v1,
     smb_protocol_auto_v1,
 )
-from .audit import append_event, config_dir as audit_config_dir, read_state
+from .audit import (
+    append_event,
+    config_dir as audit_config_dir,
+    log_file as audit_log_file,
+    read_state,
+)
 
 try:
     from ..security_utils import mask_secrets
@@ -25,10 +32,12 @@ MIGRATIONS = [
     canonical_data_model_v1,
     job_source_paths_v1,
     smb_protocol_auto_v1,
+    canonical_backup_conf_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}
 APPLY_STATES = FINAL_STATES | {"failed"}
+PROVEN_APPLIED_EVENTS = {"migration_applied", "migration_completed"}
 
 
 class MigrationContractError(RuntimeError):
@@ -158,6 +167,63 @@ def _result_is_effective(result: dict[str, Any]) -> bool:
     return True
 
 
+def _remember_earliest_timestamp(
+    applied_at: dict[str, str], migration_id: Any, timestamp: Any
+) -> None:
+    migration_id_text = str(migration_id or "").strip()
+    timestamp_text = str(timestamp or "").strip()
+    if not migration_id_text or not timestamp_text:
+        return
+    previous = applied_at.get(migration_id_text)
+    if not previous or timestamp_text < previous:
+        applied_at[migration_id_text] = timestamp_text
+
+
+def _read_proven_applied_times(config: dict) -> dict[str, str]:
+    """Read original application times only from explicit success audit events."""
+    path = audit_log_file(config)
+    if not path.is_file():
+        return {}
+
+    applied_at: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return {}
+
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+
+        event_name = str(event.get("event") or "").strip()
+        timestamp = event.get("timestamp")
+        details = event.get("details") if isinstance(event.get("details"), dict) else {}
+        if event_name in PROVEN_APPLIED_EVENTS:
+            _remember_earliest_timestamp(
+                applied_at,
+                event.get("migration_id") or details.get("migration_id"),
+                timestamp,
+            )
+            continue
+
+        if event_name != "startup_migration" or event.get("success") is not True:
+            continue
+        startup = details.get("startup_migrations")
+        if not isinstance(startup, dict):
+            continue
+        applied = startup.get("applied") if isinstance(startup.get("applied"), list) else []
+        for migration_id in applied:
+            _remember_earliest_timestamp(applied_at, migration_id, timestamp)
+
+    return applied_at
+
+
 def _write_state_and_log(config: dict, summary: dict[str, Any]) -> None:
     ts = datetime.now().isoformat(timespec="seconds")
     previous = read_central_migration_state(config)
@@ -167,6 +233,7 @@ def _write_state_and_log(config: dict, summary: dict[str, Any]) -> None:
     failed = [str(item) for item in (summary.get("failed") if isinstance(summary.get("failed"), list) else [])]
     reason_code, reason_text = _reason_for(results, applied, failed)
     messages = [str(item) for item in (summary.get("messages") if isinstance(summary.get("messages"), list) else [])]
+    proven_applied_times = _read_proven_applied_times(config)
 
     migrations = dict(previous_migrations)
     effective = bool(failed)
@@ -174,18 +241,30 @@ def _write_state_and_log(config: dict, summary: dict[str, Any]) -> None:
         if not isinstance(result, dict):
             continue
         migration_id_text = str(migration_id)
+        result_status = str(result.get("status") or "").strip()
         status = _normalize_status(result)
         details = _result_details(result)
         previous_entry = previous_migrations.get(migration_id_text) if isinstance(previous_migrations.get(migration_id_text), dict) else {}
-        if status in {"not_required", "skipped"} and str(previous_entry.get("state") or "").strip() in FINAL_STATES:
-            migrations[migration_id_text] = previous_entry
+        previous_state = str(previous_entry.get("state") or "").strip()
+        if result_status in {"not_required", "not_applicable", "skipped"} and previous_state in FINAL_STATES:
+            preserved_entry = dict(previous_entry)
+            if previous_state == "applied" and not str(preserved_entry.get("applied_at") or "").strip():
+                recovered = proven_applied_times.get(migration_id_text)
+                if recovered:
+                    preserved_entry["applied_at"] = recovered
+            preserved_entry["last_checked_at"] = ts
+            migrations[migration_id_text] = preserved_entry
         else:
-            migrations[migration_id_text] = {
+            entry = {
                 "state": status,
                 "checked_at": ts,
+                "last_checked_at": ts,
                 "source": "startup_registry",
                 "details": details,
             }
+            if status == "applied":
+                entry["applied_at"] = str(previous_entry.get("applied_at") or ts)
+            migrations[migration_id_text] = entry
         effective = effective or _result_is_effective(result)
 
     last_run = {
@@ -200,7 +279,7 @@ def _write_state_and_log(config: dict, summary: dict[str, Any]) -> None:
         last_run = previous["last_run"]
 
     payload: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "last_run": last_run,
         "migrations": migrations,
     }

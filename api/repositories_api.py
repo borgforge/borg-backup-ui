@@ -770,10 +770,17 @@ def _repo_env(
     config: dict | None = None,
     *,
     persistent_keys: bool = True,
+    encryption: str = "",
 ) -> dict[str, str]:
     env = dict(os.environ)
     env["LC_ALL"] = "C"
     env["LANG"] = "C"
+    # Never inherit this safety acknowledgement globally. Borg may access an
+    # unknown unencrypted repository only when the canonical repository object
+    # explicitly identifies it as unencrypted.
+    env.pop("BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK", None)
+    if str(encryption or "").strip().lower() == "none":
+        env["BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK"] = "yes"
     if passphrase_file is not None:
         env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(passphrase_file))}"
     from borg_ssh import configure_borg_ssh
@@ -839,14 +846,20 @@ def _repository_access(config: dict, repository: dict[str, Any]):
             cleanup()
 
 
-def _borg_info(config: dict, storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
+def _borg_info(
+    config: dict,
+    storage: dict[str, Any],
+    repo_path: str,
+    passphrase_file: Path | None,
+    encryption: str = "",
+) -> dict[str, Any]:
     try:
         proc = subprocess.run(
             ["borg", "info", "--json", repo_path],
             capture_output=True,
             text=True,
             timeout=60,
-            env=_repo_env(storage, passphrase_file, config),
+            env=_repo_env(storage, passphrase_file, config, encryption=encryption),
             check=False,
         )
     except FileNotFoundError as exc:
@@ -866,7 +879,10 @@ def _borg_info(config: dict, storage: dict[str, Any], repo_path: str, passphrase
 
 
 def _borg_info_with_default_keys(
-    storage: dict[str, Any], repo_path: str, passphrase_file: Path | None
+    storage: dict[str, Any],
+    repo_path: str,
+    passphrase_file: Path | None,
+    encryption: str = "",
 ) -> dict[str, Any]:
     """Probe Borg's legacy default key directory during an explicit import."""
     proc = subprocess.run(
@@ -874,7 +890,12 @@ def _borg_info_with_default_keys(
         capture_output=True,
         text=True,
         timeout=60,
-        env=_repo_env(storage, passphrase_file, persistent_keys=False),
+        env=_repo_env(
+            storage,
+            passphrase_file,
+            persistent_keys=False,
+            encryption=encryption,
+        ),
         check=False,
     )
     output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
@@ -895,6 +916,7 @@ def _import_exported_repository_key(
     repo_path: str,
     passphrase_file: Path | None,
     key_data: str,
+    encryption: str = "",
 ) -> None:
     from borg_key_store import ensure_borg_keys_dir, find_key_file
 
@@ -928,7 +950,7 @@ def _import_exported_repository_key(
             capture_output=True,
             text=True,
             timeout=120,
-            env=_repo_env(storage, passphrase_file, config),
+            env=_repo_env(storage, passphrase_file, config, encryption=encryption),
             check=False,
         )
         output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
@@ -942,14 +964,20 @@ def _import_exported_repository_key(
             temp_path.unlink(missing_ok=True)
 
 
-def _borg_list(config: dict, storage: dict[str, Any], repo_path: str, passphrase_file: Path | None) -> dict[str, Any]:
+def _borg_list(
+    config: dict,
+    storage: dict[str, Any],
+    repo_path: str,
+    passphrase_file: Path | None,
+    encryption: str = "",
+) -> dict[str, Any]:
     try:
         proc = subprocess.run(
             ["borg", "list", "--json", repo_path],
             capture_output=True,
             text=True,
             timeout=60,
-            env=_repo_env(storage, passphrase_file, config),
+            env=_repo_env(storage, passphrase_file, config, encryption=encryption),
             check=False,
         )
     except FileNotFoundError as exc:
@@ -1011,9 +1039,10 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if passphrase_file is not None and not passphrase_file.is_file():
         raise ValueError("Repository passphrase file is missing")
+    encryption = str(repository.get("encryption") or "").strip()
     try:
-        info_payload = _borg_info(config, storage, repo_path, passphrase_file)
-        archive_payload = _borg_list(config, storage, repo_path, passphrase_file)
+        info_payload = _borg_info(config, storage, repo_path, passphrase_file, encryption)
+        archive_payload = _borg_list(config, storage, repo_path, passphrase_file, encryption)
     except RepositoryBusyError:
         _record_repository_info_busy(config, key, _now())
         raise
@@ -1195,8 +1224,9 @@ def get_repository_archives(config: dict, repository_key: str, limit: int = 100)
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if passphrase_file is not None and not passphrase_file.is_file():
         raise ValueError("Repository passphrase file is missing")
+    encryption = str(repository.get("encryption") or "").strip()
     try:
-        payload = _borg_list(config, storage, repo_path, passphrase_file)
+        payload = _borg_list(config, storage, repo_path, passphrase_file, encryption)
     finally:
         if cleanup:
             cleanup()
@@ -1317,8 +1347,9 @@ def prepare_repository_lifecycle(config: dict, repository_key: str, mode: str) -
         return {"ok": True, "mode": requested_mode, **context}
 
     with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
-        info_payload = _borg_info(config, storage, repo_path, passphrase_file)
-        archive_payload = _borg_list(config, storage, repo_path, passphrase_file)
+        encryption = str(repository.get("encryption") or "").strip()
+        info_payload = _borg_info(config, storage, repo_path, passphrase_file, encryption)
+        archive_payload = _borg_list(config, storage, repo_path, passphrase_file, encryption)
     fields = _borg_info_fields(info_payload, archive_payload)
     live_stats = fields.get("repository_stats") if isinstance(fields.get("repository_stats"), dict) else {}
     context.update({
@@ -1415,8 +1446,9 @@ def apply_repository_lifecycle(
 
     try:
         with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
-            info_payload = _borg_info(config, storage, repo_path, passphrase_file)
-            archive_payload = _borg_list(config, storage, repo_path, passphrase_file)
+            encryption = str(repository.get("encryption") or "").strip()
+            info_payload = _borg_info(config, storage, repo_path, passphrase_file, encryption)
+            archive_payload = _borg_list(config, storage, repo_path, passphrase_file, encryption)
             live_fields = _borg_info_fields(info_payload, archive_payload)
             live_id = str(live_fields.get("borg_repository_id") or "").strip()
             live_stats = live_fields.get("repository_stats") if isinstance(live_fields.get("repository_stats"), dict) else {}
@@ -1426,7 +1458,7 @@ def apply_repository_lifecycle(
                     "Repository identity or archive count changed; repeat the deletion review",
                     code="repository_identity_changed",
                 )
-            env = _repo_env(storage, passphrase_file, config)
+            env = _repo_env(storage, passphrase_file, config, encryption=encryption)
             env["BORG_DELETE_I_KNOW_WHAT_I_AM_DOING"] = "YES"
             timeout_raw = str(config.get("REPOSITORY_DELETE_TIMEOUT_SECONDS") or "3600").strip()
             try:
@@ -1590,7 +1622,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
                 capture_output=True,
                 text=True,
                 timeout=120,
-                env=_repo_env(storage, passphrase_file, config),
+                env=_repo_env(storage, passphrase_file, config, encryption=encryption),
                 check=False,
             )
             exit_code = proc.returncode
@@ -1606,22 +1638,26 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
             _raise_borg_init_target_error(output, exit_code)
         initialized = True
         try:
-            info_fields = _borg_info_fields(_borg_info(config, storage, repo_path, passphrase_file))
+            info_fields = _borg_info_fields(
+                _borg_info(config, storage, repo_path, passphrase_file, encryption)
+            )
         except Exception:
             info_fields = {}
     else:
         try:
             if key_data:
                 _import_exported_repository_key(
-                    config, storage, repo_path, passphrase_file, key_data
+                    config, storage, repo_path, passphrase_file, key_data, encryption
                 )
             try:
-                info_payload = _borg_info(config, storage, repo_path, passphrase_file)
+                info_payload = _borg_info(config, storage, repo_path, passphrase_file, encryption)
             except Exception as persistent_error:
                 if key_data:
                     raise
                 try:
-                    legacy_payload = _borg_info_with_default_keys(storage, repo_path, passphrase_file)
+                    legacy_payload = _borg_info_with_default_keys(
+                        storage, repo_path, passphrase_file, encryption
+                    )
                     legacy_fields = _borg_info_fields(legacy_payload)
                     from borg_key_store import import_default_key_if_present
 
@@ -1630,7 +1666,9 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
                     )
                     if copied is None:
                         raise persistent_error
-                    info_payload = _borg_info(config, storage, repo_path, passphrase_file)
+                    info_payload = _borg_info(
+                        config, storage, repo_path, passphrase_file, encryption
+                    )
                 except Exception:
                     raise persistent_error
             info_fields = _borg_info_fields(info_payload)

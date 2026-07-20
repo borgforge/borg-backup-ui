@@ -29,6 +29,11 @@ try:
 except ImportError:  # pragma: no cover - direct api module imports in tests
     from security_utils import mask_secrets
 
+try:
+    from api.inventory_store import atomic_write_bytes, inventory_lock
+except ImportError:  # pragma: no cover - direct api module imports in tests
+    from inventory_store import atomic_write_bytes, inventory_lock
+
 from smb_profiles_api import (
     cleanup_removed_smb_mountpoints,
     cleanup_removed_smb_secrets,
@@ -69,75 +74,6 @@ _CONF_TYPE_MAP = {
     "SONSTIGES": "sonstiges",
 }
 
-# Defaults, falls backup.conf fehlt
-_DEFAULTS: Dict[str, str] = {
-    "GLOBAL_DATA_DIR": "",
-    "GLOBAL_LOG_DIR": "",
-    "GLOBAL_LOG_RETENTION_DAYS": "30",
-    "GLOBAL_BORG_CACHE_BASE": "/mnt/cache/borg-cache",
-    "GLOBAL_BORG_CHECKPOINT_INTERVAL": "1800",
-    "GLOBAL_BORG_CHECK_INTERVAL_DAYS": "30",
-    "BORG_MAX_RUNTIME_HOURS": "0",
-    "RESTORE_ALLOWED_ROOTS": "/mnt/user",
-    "GLOBAL_MAIL_RECIPIENT": "",
-    "GLOBAL_MAIL_SENDER": "",
-    "GLOBAL_SMTP_HOST": "",
-    "GLOBAL_SMTP_PORT": "587",
-    "GLOBAL_SMTP_USER": "",
-    "GLOBAL_SMTP_PASSWORD": "",
-    "GLOBAL_SMTP_USE_TLS": "true",
-    "NOTIFY_EMAIL_EVENTS": "backup_failed",
-    "NOTIFY_UNRAID_EVENTS": "backup_success,backup_warning,backup_failed,backup_skipped",
-    "NOTIFY_REMINDER_INTERVAL_HOURS": "24",
-    "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-    "NOTIFY_REMINDER_STARTUP_DELAY_SECONDS": "420",
-    "NTFY_ENABLED": "false",
-    "NTFY_PROFILE_NAME": "ntfy",
-    "NTFY_SERVER_URL": "",
-    "NTFY_TOPIC": "",
-    "NTFY_USERNAME": "",
-    "NTFY_PASSWORD_FILE": "/boot/config/borg-backup/secrets/.ntfy-password",
-    "NTFY_ACCESS_TOKEN_FILE": "/boot/config/borg-backup/secrets/.ntfy-token",
-    "NTFY_PRIORITY": "default",
-    "NTFY_TAGS": "",
-    "NTFY_CLICK_URL": "",
-    "NTFY_EVENTS": "backup_success,backup_failed,backup_skipped,restore_test_failed",
-    "NTFY_TIMEOUT_SECONDS": "15",
-    "BORG_SSH_KEY": "/root/.ssh/id_rsa",
-    "USB_MOUNT_PATH": "/mnt/disks/USB",
-    "STORAGEBOX_HOST": "",
-    "STORAGEBOX_PORT": "23",
-    "STORAGEBOX_USER": "",
-    "STORAGEBOX_BASE_PATH": "/./backup",
-    "VM_SHUTDOWN_TIMEOUT": "120",
-    "VM_SHUTDOWN_WARNING_MINUTES": "5",
-    "VM_STARTUP_WAIT": "60",
-    "DOCKER_STOP_TIMEOUT": "60",
-    "DOCKER_STOP_WAIT": "5",
-    "DOCKER_START_WAIT": "5",
-    "ABORT_ON_PARITY_CHECK": "true",
-    "UI_SESSION_TIMEOUT_MINUTES": "30",
-    "RESTORE_TEST_LEVEL": "2",
-    "RESTORE_TEST_INTERVAL_DAYS": "30",
-    "RESTORE_TEST_LOCATION": "local",
-    "RESTORE_TEST_FORCE_CHUNK_TYPES": "vms,photos",
-    "RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB": "500",
-    "RESTORE_TEST_MIN_COVERAGE": "5",
-    "RESTORE_TEST_MAX_ENTRIES": "1000",
-    "RESTORE_TEST_SAMPLE_SIZE": "5",
-    "RESTORE_TEST_BORG_TIMEOUT": "240",
-    "RESTORE_TEST_DRY_RUN_TIMEOUT": "0",
-    "RESTORE_TEST_DRY_RUN_CHUNK_SIZE": "100",
-    "RESTORE_TEST_DRY_RUN_MAX_FILES": "1000",
-    "RESTORE_TEST_LEVEL3_LEGACY_SAMPLING": "false",
-    "WEEKLY_REPORT_ENABLED": "false",
-    "WEEKLY_REPORT_DAY": "1",
-    "WEEKLY_REPORT_TIME": "09:00",
-    "WEEKLY_REPORT_RECIPIENT": "",
-}
-
-
-
 # ── Pfad-Hilfsfunktionen ─────────────────────────────────────────────────────
 
 def _is_unraid_array_started() -> bool:
@@ -176,14 +112,25 @@ def _is_unraid_array_started() -> bool:
     return mounted_user
 
 def get_conf_file(ui_config: dict) -> Path:
-    """Gibt den Pfad zu backup.conf zurück; fällt auf .example zurück."""
+    """Return the persistent user configuration file."""
     scripts_dir = Path(ui_config["BACKUP_SCRIPTS_DIR"])
-    conf = scripts_dir / "config" / "backup.conf"
-    if not conf.exists():
-        example = scripts_dir / "config" / "backup.conf.example"
-        if example.exists():
-            return example
-    return conf
+    return scripts_dir / "config" / "backup.conf"
+
+
+def get_backup_conf_schema_file(ui_config: dict) -> Path:
+    """Return the version-owned backup.conf schema shipped by the plugin."""
+    override = str(ui_config.get("BACKUP_CONF_SCHEMA_FILE") or "").strip()
+    if override:
+        schema_file = Path(override)
+    else:
+        runtime_scripts = str(ui_config.get("BORG_SCRIPTS_DIR") or "").strip()
+        if runtime_scripts:
+            schema_file = Path(runtime_scripts).resolve().parent / "config" / "backup.conf.example"
+        else:
+            schema_file = Path(__file__).resolve().parent.parent / "runtime" / "config" / "backup.conf.example"
+    if not schema_file.is_file():
+        raise FileNotFoundError(f"Plugin backup.conf schema is missing: {schema_file}")
+    return schema_file
 
 
 def conf_exists(ui_config: dict) -> bool:
@@ -262,8 +209,11 @@ def restore_conf_backup(ui_config: dict, name: str) -> dict:
         raise FileNotFoundError("Backup file not found")
     conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
     conf_file.parent.mkdir(parents=True, exist_ok=True)
-    backup_conf_snapshot(ui_config, keep=10, reason="Restore before recovery")
-    shutil.copy2(src, conf_file)
+    with inventory_lock(conf_file.parent):
+        restored_content = src.read_text(encoding="utf-8")
+        plan = canonical_backup_conf_plan(ui_config, source_content=restored_content)
+        backup_conf_snapshot(ui_config, keep=10, reason="Restore before recovery")
+        atomic_write_bytes(conf_file, plan["content"].encode("utf-8"))
     return {"restored": True, "name": name}
 
 
@@ -408,7 +358,7 @@ def diff_conf_backup(ui_config: dict, name: str, context_lines: int = 3) -> dict
 
 def read_expanded_conf(ui_config: dict) -> dict:
     """Liest backup.conf via load_config() (Variablen expandiert)."""
-    merged = dict(_DEFAULTS)
+    merged = read_conf_defaults(ui_config)
     try:
         from status import load_config
         conf_file = get_conf_file(ui_config)
@@ -421,7 +371,7 @@ def read_expanded_conf(ui_config: dict) -> dict:
 def read_raw_conf(ui_config: dict) -> dict:
     """
     Liest backup.conf OHNE Variablen-Expansion.
-    Gibt Original-Werte zurück (z.B. '${USB_MOUNT_PATH}/borg-backup-flash').
+    Gibt die in backup.conf gespeicherten Original-Werte zurück.
     """
     conf_file = get_conf_file(ui_config)
     result: Dict[str, str] = {}
@@ -436,14 +386,7 @@ def read_raw_conf(ui_config: dict) -> dict:
             continue
         key, _, value = clean.partition("=")
         key = key.strip()
-        value = value.strip()
-        # Inline-Kommentar zuerst entfernen (außerhalb von Quotes heuristisch via "  #")
-        comment_pos = value.find("  #")
-        if comment_pos != -1:
-            value = value[:comment_pos].strip()
-        # Danach nur paarige äußere Quotes entfernen (idempotent).
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-            value = value[1:-1]
+        value = _decode_conf_value(value)
         if value.startswith("("):
             continue
         if key:
@@ -468,119 +411,111 @@ def _iter_conf_assignment_keys(lines: List[str]) -> List[str]:
 
 def _quote_conf_value(val: str) -> str:
     txt = str(val)
-    if txt == "":
-        return '""'
-    if any(c in txt for c in (' ', '$', '/', ':')):
-        return f'"{txt}"'
-    return txt
+    if "\n" in txt or "\r" in txt:
+        raise ValueError("backup.conf values must not contain line breaks")
+    # JSON string quoting is a strict subset of the supported configuration
+    # syntax and gives quotes/backslashes an unambiguous round trip.
+    return json.dumps(txt, ensure_ascii=True)
 
 
-def _normalize_legacy_value(key: str, value: str) -> str:
-    """
-    Repariert historisch kaputte Legacy-Werte (Quote-Wachstum durch alten Parser-Bug).
-    Nur für bekannte Path-/URI-Keys anwenden.
-    """
-    path_like_legacy = {
-        "BORG_PASSPHRASE_FILE_LOCAL",
-        "BORG_PASSPHRASE_FILE_STORAGEBOX",
-        "STORAGEBOX_BASE",
-    }
-    v = str(value or "")
-    if key in path_like_legacy:
-        # Entferne nur einzelne, offensichtliche Rest-Quotes aus alten Migrationsläufen.
-        v = v.replace('"', "").replace("'", "")
-        v = v.strip()
-    return v
+def _decode_conf_value(raw_value: str) -> str:
+    """Decode one backup.conf value without expanding ${VAR} references."""
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+
+    if value.startswith('"'):
+        try:
+            decoded, end = json.JSONDecoder().raw_decode(value)
+            remainder = value[end:].strip()
+            if isinstance(decoded, str) and (not remainder or remainder.startswith("#")):
+                return decoded
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if value.startswith("'"):
+        end = value.rfind("'")
+        if end > 0:
+            remainder = value[end + 1:].strip()
+            if not remainder or remainder.startswith("#"):
+                return value[1:end]
+
+    comment_pos = value.find("  #")
+    if comment_pos != -1:
+        value = value[:comment_pos].rstrip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        value = value[1:-1]
+    return value
 
 
-def sync_backup_conf_schema(ui_config: dict) -> dict:
-    """
-    Synchronisiert backup.conf gegen backup.conf.example:
-      - fehlende Schema-Keys ergänzen
-      - Reihenfolge/Sektionen laut .example normalisieren
-      - unbekannte Keys als Legacy-Block aktiv anhängen (nicht auskommentieren)
-    Idempotent.
-    """
+def _parse_raw_conf_text(content: str) -> Dict[str, str]:
+    values: Dict[str, str] = {}
+    for line in str(content or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        clean = stripped.removeprefix("readonly ")
+        if "=" not in clean or clean.startswith("("):
+            continue
+        key, _, value = clean.partition("=")
+        key = key.strip()
+        value = _decode_conf_value(value)
+        if key and re.fullmatch(r"[A-Z0-9_]+", key):
+            values[key] = value
+    return values
+
+
+def read_conf_defaults(ui_config: dict) -> Dict[str, str]:
+    """Read defaults from the version-owned plugin schema."""
+    example_file = get_backup_conf_schema_file(ui_config)
+    return _parse_raw_conf_text(example_file.read_text(encoding="utf-8"))
+
+
+def canonical_backup_conf_plan(
+    ui_config: dict,
+    *,
+    source_content: Optional[str] = None,
+    updates: Optional[Dict[str, str]] = None,
+) -> dict:
+    """Build canonical backup.conf content from the version-owned schema."""
     config_dir = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config"
     conf_file = config_dir / "backup.conf"
-    example_file = config_dir / "backup.conf.example"
+    example_file = get_backup_conf_schema_file(ui_config)
 
-    if not example_file.exists():
-        return {"changed": False, "error": "backup.conf.example is missing"}
-
-    if not conf_file.exists():
-        shutil.copy2(example_file, conf_file)
-        return {
-            "changed": True,
-            "created": True,
-            "schema_keys": len(_iter_conf_assignment_keys(example_file.read_text(encoding="utf-8").splitlines())),
-            "missing_added": 0,
-            "legacy_keys": 0,
-        }
-
-    example_lines = example_file.read_text(encoding="utf-8").splitlines(keepends=True)
-    current_lines = conf_file.read_text(encoding="utf-8").splitlines(keepends=True)
-    current_map = read_raw_conf(ui_config)
-    schema_keys = _iter_conf_assignment_keys(example_lines)
+    example_content = example_file.read_text(encoding="utf-8")
+    if source_content is None:
+        source_content = conf_file.read_text(encoding="utf-8") if conf_file.exists() else ""
+    current_map = _parse_raw_conf_text(source_content)
+    example_map = _parse_raw_conf_text(example_content)
+    schema_keys = _iter_conf_assignment_keys(example_content.splitlines())
     schema_set = set(schema_keys)
+    requested = {str(key): str(value) for key, value in (updates or {}).items()}
+    unsupported = sorted(set(requested) - schema_set)
+    if unsupported:
+        raise ValueError("Unsupported backup.conf keys: " + ", ".join(unsupported))
 
-    # Render backup.conf in schema order with runtime values when available.
-    out: List[str] = []
-    for line in example_lines:
-        s = line.strip()
-        if not s or s.startswith("#"):
-            out.append(line if line.endswith("\n") else line + "\n")
+    effective = {key: current_map.get(key, example_map.get(key, "")) for key in schema_keys}
+    effective.update(requested)
+    output: List[str] = []
+    for line in example_content.splitlines(keepends=True):
+        stripped = line.strip()
+        clean = stripped.removeprefix("readonly ")
+        if not stripped or stripped.startswith("#") or "=" not in clean or clean.startswith("("):
+            output.append(line if line.endswith("\n") else line + "\n")
             continue
-        clean = s.removeprefix("readonly ")
-        if "=" not in clean or clean.startswith("("):
-            out.append(line if line.endswith("\n") else line + "\n")
+        key = clean.split("=", 1)[0].strip()
+        if key not in schema_set:
+            output.append(line if line.endswith("\n") else line + "\n")
             continue
-        key, _, val = clean.partition("=")
-        key = key.strip()
-        if not re.fullmatch(r"[A-Z0-9_]+", key):
-            out.append(line if line.endswith("\n") else line + "\n")
-            continue
-        effective = current_map.get(key, val.strip().strip('"').strip("'"))
-        out.append(f"{key}={_quote_conf_value(effective)}\n")
+        output.append(f"{key}={_quote_conf_value(effective[key])}\n")
 
-    # Keep legacy keys active (for compatibility), but grouped and marked.
-    deprecated_reasons = {
-        "BORG_PASSPHRASE_FILE_LOCAL": "deprecated: repository inventory owns the passphrase reference",
-        "BORG_PASSPHRASE_FILE_STORAGEBOX": "deprecated: repository inventory owns the passphrase reference",
-        "GLOBAL_DOCKER_STOP_TIMEOUT": "deprecated: use DOCKER_STOP_TIMEOUT",
-        "GLOBAL_DOCKER_STOP_WAIT": "deprecated: use DOCKER_STOP_WAIT",
-        "GLOBAL_DOCKER_START_WAIT": "deprecated: use DOCKER_START_WAIT",
-        "STORAGEBOX_BASE": "deprecated alias: use STORAGEBOX_BASE_PATH",
-    }
-    legacy_keys = sorted(k for k in current_map.keys() if k not in schema_set)
-    if legacy_keys:
-        if out and out[-1].strip():
-            out.append("\n")
-        out.append("################################################################################\n")
-        out.append("# LEGACY / DEPRECATED KEYS (auto-preserved for compatibility)\n")
-        out.append("# Remove after migration is fully completed.\n")
-        out.append("################################################################################\n")
-        for key in legacy_keys:
-            reason = deprecated_reasons.get(key, "")
-            suffix = f"  # {reason}" if reason else ""
-            normalized = _normalize_legacy_value(key, current_map[key])
-            out.append(f"{key}={_quote_conf_value(normalized)}{suffix}\n")
-
-    new_content = "".join(out)
-    old_content = "".join(current_lines)
-    changed = new_content != old_content
-    if changed:
-        backup_conf_snapshot(ui_config, keep=10, reason="Migration")
-        conf_file.write_text(new_content, encoding="utf-8")
-
-    missing_added = sum(1 for k in schema_keys if k not in current_map)
+    rendered = "".join(output)
     return {
-        "changed": changed,
-        "created": False,
-        "schema_keys": len(schema_keys),
-        "missing_added": missing_added,
-        "legacy_keys": len(legacy_keys),
-        "legacy_key_names": legacy_keys,
+        "content": rendered,
+        "changed": rendered != source_content,
+        "schema_keys": schema_keys,
+        "missing_keys": sorted(schema_set - set(current_map)),
+        "unknown_keys": sorted(set(current_map) - schema_set),
     }
 
 
@@ -588,97 +523,31 @@ def sync_backup_conf_schema(ui_config: dict) -> dict:
 
 def write_conf(ui_config: dict, updates: Dict[str, str], snapshot_reason: str = "") -> bool:
     """
-    Aktualisiert spezifische Keys in backup.conf.
-    Erhält alle Kommentare und Keys die nicht im updates-Dict sind.
-    Schreibt immer in backup.conf (nicht in .example).
+    Baut backup.conf aus dem versionsgebundenen kanonischen Schema neu auf.
+    Zulässige Updates werden übernommen, fehlende Schema-Keys ergänzt und
+    unbekannte beziehungsweise obsolete Keys entfernt.
     Gibt True zurück, wenn sich der Dateiinhalt geändert hat.
     """
     conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
     conf_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Wenn .example existiert aber .conf nicht → starte mit .example als Basis
-    if not conf_file.exists():
-        example = conf_file.with_name("backup.conf.example")
-        if example.exists():
-            import shutil
-            shutil.copy2(example, conf_file)
-        else:
-            conf_file.write_text("", encoding="utf-8")
-
-    old_content = conf_file.read_text(encoding="utf-8")
-    lines = old_content.splitlines(keepends=True)
-    updated_keys: set = set()
-    result: List[str] = []
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            result.append(line)
-            continue
-        clean = stripped.removeprefix("readonly ")
-        if "=" not in clean or clean.startswith("("):
-            result.append(line)
-            continue
-        key = clean.split("=", 1)[0].strip()
-        if key in updates:
-            val = str(updates[key])
-            result.append(f"{key}={_quote_conf_value(val)}\n")
-            updated_keys.add(key)
-        else:
-            result.append(line)
-
-    # Neue Keys anhängen
-    for key, val in updates.items():
-        if key not in updated_keys:
-            val_str = str(val)
-            result.append(f"{key}={_quote_conf_value(val_str)}\n")
-
-    new_content = "".join(result)
-    changed = new_content != old_content
-    if changed:
-        if snapshot_reason:
-            backup_conf_snapshot(ui_config, keep=10, reason=snapshot_reason)
-        conf_file.write_text(new_content, encoding="utf-8")
-    return changed
+    config_dir = conf_file.parent
+    with inventory_lock(config_dir):
+        old_content = conf_file.read_text(encoding="utf-8") if conf_file.exists() else ""
+        plan = canonical_backup_conf_plan(ui_config, source_content=old_content, updates=updates)
+        if plan["changed"]:
+            if snapshot_reason:
+                backup_conf_snapshot(ui_config, keep=10, reason=snapshot_reason)
+            atomic_write_bytes(conf_file, plan["content"].encode("utf-8"))
+        return bool(plan["changed"])
 
 
 # ── Repositories ──────────────────────────────────────────────────────────────
 
 def get_repositories_data(ui_config: dict) -> dict:
     """
-    Gibt alle REPO_* Einträge gruppiert nach Location zurück.
-    Nutzt expandierte Werte für Anzeige, rohe Werte für Editing.
+    Gibt die kanonischen Repository-Objekte gruppiert nach Location zurück.
     """
-    expanded = read_expanded_conf(ui_config)
-    raw = read_raw_conf(ui_config)
-
-    def _storagebox_user_from_conf() -> str:
-        user = str(expanded.get("STORAGEBOX_USER", "")).strip()
-        if user:
-            return user
-        host = str(expanded.get("STORAGEBOX_HOST", "")).strip()
-        if host and "." in host:
-            prefix = host.split(".", 1)[0].strip()
-            if prefix:
-                return prefix
-        return ""
-
-    def _inject_storagebox_user(uri: str) -> str:
-        text = str(uri or "").strip()
-        if not text.startswith("ssh://"):
-            return text
-        rest = text[6:]
-        if not rest or "@" in rest.split("/", 1)[0]:
-            return text
-        user = _storagebox_user_from_conf()
-        if not user:
-            return text
-        return f"ssh://{user}@{rest}"
-
-    usb_mount = expanded.get("USB_MOUNT_PATH", "")
-    storagebox_host = expanded.get("STORAGEBOX_HOST", "")
-    storagebox_port = expanded.get("STORAGEBOX_PORT", "23")
-
     groups: Dict[str, List[Dict]] = {"local": [], "usb": [], "smb": [], "storagebox": []}
     try:
         from repositories_api import build_repository_groups
@@ -700,9 +569,6 @@ def get_repositories_data(ui_config: dict) -> dict:
         "groups": groups,
         "storages": storages,
         "smb_profiles": get_smb_profiles_with_status(ui_config),
-        "usb_mount": usb_mount,
-        "storagebox_host": storagebox_host,
-        "storagebox_port": storagebox_port,
         "conf_file": str(get_conf_file(ui_config)),
         "conf_writable": conf_exists(ui_config),
     }
@@ -726,7 +592,12 @@ def test_repository(ui_config: dict, repository_key: str) -> dict:
     if str(repository.get("encryption") or "").strip().lower() != "none":
         if passphrase_file is None or not passphrase_file.is_file():
             raise ValueError("Repository passphrase file is missing")
-    env = _repo_env(storage, passphrase_file, ui_config)
+    env = _repo_env(
+        storage,
+        passphrase_file,
+        ui_config,
+        encryption=str(repository.get("encryption") or ""),
+    )
 
     try:
         result = subprocess.run(
@@ -886,15 +757,6 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "NTFY_EVENTS":        conf.get("NTFY_EVENTS", "backup_success,backup_failed,backup_skipped,restore_test_failed"),
             "NTFY_TIMEOUT_SECONDS": conf.get("NTFY_TIMEOUT_SECONDS", "15"),
         },
-        "credentials": {
-            "BORG_SSH_KEY":                    conf.get("BORG_SSH_KEY", ""),
-            "STORAGEBOX_HOST":                 conf.get("STORAGEBOX_HOST", ""),
-            "STORAGEBOX_PORT":                 conf.get("STORAGEBOX_PORT", "23"),
-            "STORAGEBOX_USER":                 conf.get("STORAGEBOX_USER", ""),
-            "STORAGEBOX_BASE_PATH":            conf.get("STORAGEBOX_BASE_PATH", "/./backup"),
-        },
-        "usb_profiles": [],
-        "smb_profiles": [],
         "per_repo_passphrases": _scan_per_repo_passphrases(),
         "docker": {
             "DOCKER_STOP_TIMEOUT": conf.get("DOCKER_STOP_TIMEOUT", "60"),
@@ -1138,14 +1000,6 @@ def validate_runtime_config(ui_config: dict) -> dict:
             "key": "GLOBAL_SMTP_PORT",
             "message": "GLOBAL_SMTP_PORT is outside 1..65535.",
             "message_code": "config_smtp_port",
-        })
-
-    storagebox_port = _as_int(conf.get("STORAGEBOX_PORT", "23"), -1)
-    if storagebox_port < 1 or storagebox_port > 65535:
-        warnings.append({
-            "key": "STORAGEBOX_PORT",
-            "message": "STORAGEBOX_PORT is outside 1..65535.",
-            "message_code": "config_storagebox_port",
         })
 
     rt_level = str(conf.get("RESTORE_TEST_LEVEL", "2")).strip()

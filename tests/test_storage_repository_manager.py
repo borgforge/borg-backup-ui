@@ -158,6 +158,21 @@ def test_repository_environment_combines_ssh_key_and_keepalives(tmp_path: Path):
     assert "TCPKeepAlive=yes" in env["BORG_RSH"]
 
 
+def test_repository_environment_confirms_only_explicit_unencrypted_repositories(
+    tmp_path: Path, monkeypatch,
+):
+    monkeypatch.setenv("BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK", "yes")
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    unencrypted = repositories_api._repo_env({}, None, config, encryption="none")
+    encrypted = repositories_api._repo_env({}, None, config, encryption="repokey-blake2")
+    unspecified = repositories_api._repo_env({}, None, config)
+
+    assert unencrypted["BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK"] == "yes"
+    assert "BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK" not in encrypted
+    assert "BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK" not in unspecified
+
+
 def test_repository_maintenance_persists_structured_prune_and_compact_results(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     write_storage_store(config, {"storages": [{

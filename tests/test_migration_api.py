@@ -9,9 +9,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-import pytest
-
-from migration_api import analyze_backup_conf_state, apply_legacy_cleanup, build_legacy_cleanup_plan, get_migration_registry_status
+from migration_api import analyze_backup_conf_state, get_migration_registry_status
 
 
 def _write_conf_tree(root: Path, backup_conf: str, example: str) -> dict:
@@ -19,69 +17,21 @@ def _write_conf_tree(root: Path, backup_conf: str, example: str) -> dict:
     config_dir = scripts / "config"
     config_dir.mkdir(parents=True)
     (config_dir / "backup.conf").write_text(backup_conf, encoding="utf-8")
-    (config_dir / "backup.conf.example").write_text(example, encoding="utf-8")
-    return {"BACKUP_SCRIPTS_DIR": str(scripts)}
+    schema_file = root / "plugin-backup.conf.example"
+    schema_file.write_text(example, encoding="utf-8")
+    return {"BACKUP_SCRIPTS_DIR": str(scripts), "BACKUP_CONF_SCHEMA_FILE": str(schema_file)}
 
 
 def _items_by_id(registry: dict) -> dict:
     return {item["id"]: item for item in registry["items"]}
 
 
-def test_registry_reports_deprecated_cleanup_candidates(tmp_path: Path):
+def test_analyze_backup_conf_state_reports_canonical_differences(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            'MIGRATION_STORAGE_PATHS_VERSION="1"',
-            'BORG_PASSPHRASE_FILE_LOCAL="/boot/config/old"',
-            'GLOBAL_DOCKER_STOP_WAIT="5"',
-            'STORAGEBOX_BASE="/./backup"',
+            'GLOBAL_DATA_DIR="/mnt/user/custom"',
             'REPO_FLASH_LOCAL="/mnt/backup/borg-backup-flash"',
-            "",
-        ]),
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            'MIGRATION_STORAGE_PATHS_VERSION="0"',
-            "",
-        ]),
-    )
-    config_dir = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config"
-    (config_dir / "jobs").mkdir()
-    (config_dir / "settings.json").write_text("{}\n", encoding="utf-8")
-    registry = get_migration_registry_status(cfg)
-    cleanup = _items_by_id(registry)["legacy_deprecated_keys_cleanup_v1"]
-
-    assert cleanup["title"] == "Deprecated backup.conf cleanup candidates"
-    assert "can be cleaned up" in cleanup["reason"]
-    assert cleanup["category"] == "planned_migration"
-    assert cleanup["stage"] == "planned"
-    assert cleanup["auto_apply"] is False
-    assert cleanup["destructive"] is True
-    assert cleanup["status"] == "pending"
-    assert cleanup["details"]["candidate_count"] == 4
-    assert {row["key"] for row in cleanup["details"]["candidate_keys"]} == {
-        "BORG_PASSPHRASE_FILE_LOCAL",
-        "GLOBAL_DOCKER_STOP_WAIT",
-        "REPO_FLASH_LOCAL",
-        "STORAGEBOX_BASE",
-    }
-    assert "MIGRATION_STORAGE_PATHS_VERSION" not in {row["key"] for row in cleanup["details"]["candidate_keys"]}
-    assert cleanup["details"]["unknown_legacy_count"] == 1
-    assert cleanup["details"]["dry_run_plan"]["dry_run"] is True
-    assert cleanup["details"]["dry_run_plan"]["mode"] == "comment_out"
-    assert cleanup["details"]["dry_run_plan"]["candidate_count"] == 4
-    assert registry["summary"]["pending"] == 1
-    assert registry["summary"]["deprecated_key_candidates"] == 4
-
-
-def test_analyze_backup_conf_state_separates_active_and_disabled_legacy_keys(tmp_path: Path):
-    cfg = _write_conf_tree(
-        tmp_path,
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            'REPO_FLASH_LOCAL="/mnt/backup/borg-backup-flash"',
-            '# LEGACY_CLEANUP_DISABLED STORAGEBOX_BASE="/./backup"',
-            '# LEGACY_CLEANUP_DISABLED MIGRATION_STORAGE_PATHS_VERSION=1',
             "",
         ]),
         "\n".join([
@@ -95,21 +45,23 @@ def test_analyze_backup_conf_state_separates_active_and_disabled_legacy_keys(tmp
 
     assert state["state"] == "pending"
     assert state["missing_keys"] == ["BORG_MAX_RUNTIME_HOURS"]
-    assert [row["key"] for row in state["deprecated_active_keys"]] == ["REPO_FLASH_LOCAL"]
-    assert state["deprecated_disabled_keys"] == ["STORAGEBOX_BASE"]
-    assert state["protected_internal_keys"]["disabled"] == ["MIGRATION_STORAGE_PATHS_VERSION"]
+    assert state["unknown_keys"] == ["REPO_FLASH_LOCAL"]
+    assert state["canonical_content_changed"] is True
 
 
-def test_active_ui_session_timeout_is_not_deprecated(tmp_path: Path):
+def test_analyze_backup_conf_state_accepts_exact_canonical_file(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
-        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\nUI_SESSION_TIMEOUT_MINUTES="30"\n',
-        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\nUI_SESSION_TIMEOUT_MINUTES="30"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/custom"\nUI_SESSION_TIMEOUT_MINUTES="30"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/custom"\nUI_SESSION_TIMEOUT_MINUTES="30"\n',
     )
 
     state = analyze_backup_conf_state(cfg)
 
-    assert state["deprecated_active_keys"] == []
+    assert state["state"] == "ok"
+    assert state["missing_keys"] == []
+    assert state["unknown_keys"] == []
+    assert state["canonical_content_changed"] is False
 
 
 def test_registry_reports_schema_missing_without_legacy_storage_marker_status(tmp_path: Path):
@@ -131,9 +83,9 @@ def test_registry_reports_schema_missing_without_legacy_storage_marker_status(tm
     items = _items_by_id(registry)
 
     assert "setup_runtime_paths" not in items
-    assert items["config_backup_conf_schema"]["title"] == "backup.conf schema from backup.conf.example"
+    assert items["config_backup_conf_schema"]["title"] == "Canonical backup.conf configuration"
     assert items["config_backup_conf_schema"]["category"] == "config"
-    assert "missing schema keys" in items["config_backup_conf_schema"]["reason"]
+    assert "does not match" in items["config_backup_conf_schema"]["reason"]
     assert items["config_backup_conf_schema"]["status"] == "pending"
     assert items["config_backup_conf_schema"]["details"]["missing_keys"] == ["BORG_MAX_RUNTIME_HOURS"]
     assert registry["summary"]["failed"] == 0
@@ -288,27 +240,6 @@ def test_registry_exposes_migration_blocked_by_previous_failure(tmp_path: Path):
     assert item["details"]["blocked_by"] == "first_v1"
 
 
-def test_registry_does_not_count_not_needed_cleanup_as_planned(tmp_path: Path):
-    cfg = _write_conf_tree(
-        tmp_path,
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            "",
-        ]),
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            "",
-        ]),
-    )
-
-    registry = get_migration_registry_status(cfg)
-    cleanup = _items_by_id(registry)["legacy_deprecated_keys_cleanup_v1"]
-
-    assert cleanup["status"] == "not_needed"
-    assert cleanup["details"]["dry_run_plan"]["candidate_count"] == 0
-    assert registry["summary"]["planned"] == 0
-
-
 def test_registry_reports_recorded_notification_events_migration(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
@@ -356,85 +287,41 @@ def test_registry_reports_recorded_notification_events_migration(tmp_path: Path)
     assert item["status"] == "applied"
     assert item["details"]["updated_keys"] == ["NTFY_EVENTS"]
     assert item["details"]["checked_at"] == "2026-06-29T22:23:59"
+    assert item["details"]["applied_at"] == ""
+    assert item["details"]["last_checked_at"] == ""
     assert item["details"]["introduced_in"] == "2026.06.29.2000"
 
 
-def test_legacy_cleanup_plan_is_dry_run(tmp_path: Path):
+def test_registry_exposes_separate_application_and_check_times(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            'REPO_FLASH_LOCAL="/mnt/backup/borg-backup-flash"',
-            "",
-        ]),
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            "",
-        ]),
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+    )
+    state_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
+    state_file.write_text(
+        json.dumps({
+            "schema_version": 3,
+            "migrations": {
+                "notification_events_v1": {
+                    "state": "applied",
+                    "checked_at": "2026-06-29T22:23:59Z",
+                    "applied_at": "2026-06-29T22:23:59Z",
+                    "last_checked_at": "2026-07-20T07:23:14Z",
+                    "source": "startup_registry",
+                    "details": {
+                        "migration_id": "notification_events_v1",
+                        "introduced_in": "2026.06.29.2000",
+                        "runner": "central_migration_registry",
+                        "updated_keys": ["NTFY_EVENTS"],
+                    },
+                },
+            },
+        }) + "\n",
+        encoding="utf-8",
     )
 
-    plan = build_legacy_cleanup_plan(cfg)
+    item = _items_by_id(get_migration_registry_status(cfg))["notification_events_v1"]
 
-    assert plan["dry_run"] is True
-    assert plan["mode"] == "comment_out"
-    assert plan["backup_required"] is True
-    assert plan["rollback"]["available"] is True
-    assert plan["candidate_count"] == 1
-    assert plan["planned_actions"] == [{
-        "key": "REPO_FLASH_LOCAL",
-        "action": "comment out",
-        "mode": "comment_out",
-        "reason": "no longer present in the current backup.conf.example",
-        "known": False,
-    }]
-    conf_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
-    assert 'REPO_FLASH_LOCAL="/mnt/backup/borg-backup-flash"' in conf_file.read_text(encoding="utf-8")
-
-
-def test_legacy_cleanup_apply_comments_lines_and_creates_snapshot(tmp_path: Path):
-    cfg = _write_conf_tree(
-        tmp_path,
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            'MIGRATION_STORAGE_PATHS_VERSION="1"',
-            'REPO_FLASH_LOCAL="/mnt/backup/borg-backup-flash"',
-            'STORAGEBOX_BASE="/./backup"',
-            "",
-        ]),
-        "\n".join([
-            'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
-            "",
-        ]),
-    )
-
-    result = apply_legacy_cleanup(cfg, confirm="AUSKOMMENTIEREN")
-
-    assert result["applied"] is True
-    assert result["changed"] is True
-    assert result["commented_count"] == 2
-    assert result["backup"]
-    conf_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
-    text = conf_file.read_text(encoding="utf-8")
-    assert 'MIGRATION_STORAGE_PATHS_VERSION="1"' in text
-    assert '# LEGACY_CLEANUP_DISABLED MIGRATION_STORAGE_PATHS_VERSION=' not in text
-    assert '# LEGACY_CLEANUP_DISABLED REPO_FLASH_LOCAL="/mnt/backup/borg-backup-flash"' in text
-    assert '# LEGACY_CLEANUP_DISABLED STORAGEBOX_BASE="/./backup"' in text
-    backup_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "backups" / result["backup"]
-    assert backup_file.exists()
-    assert 'REPO_FLASH_LOCAL="/mnt/backup/borg-backup-flash"' in backup_file.read_text(encoding="utf-8")
-
-    second = apply_legacy_cleanup(cfg, confirm="AUSKOMMENTIEREN")
-    assert second["applied"] is False
-    assert second["changed"] is False
-    assert second["commented_count"] == 0
-
-
-def test_legacy_cleanup_apply_requires_confirmation(tmp_path: Path):
-    cfg = _write_conf_tree(
-        tmp_path,
-        'REPO_FLASH_LOCAL="/mnt/backup/borg-backup-flash"\n',
-        "",
-    )
-
-    with pytest.raises(ValueError):
-        apply_legacy_cleanup(cfg, confirm="")
+    assert item["details"]["applied_at"] == "2026-06-29T22:23:59Z"
+    assert item["details"]["last_checked_at"] == "2026-07-20T07:23:14Z"

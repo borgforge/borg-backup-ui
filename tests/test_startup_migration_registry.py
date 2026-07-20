@@ -10,6 +10,29 @@ if str(API_ROOT) not in sys.path:
 from migrations import registry  # noqa: E402
 
 
+def _write_notification_config(config_dir: Path) -> Path:
+    config_dir.mkdir(parents=True)
+    (config_dir / "backup.conf").write_text(
+        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
+        encoding="utf-8",
+    )
+    schema_file = config_dir.parent / "plugin-backup.conf.example"
+    schema_file.write_text(
+        '\n'.join(
+            (
+                'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"',
+                'NOTIFY_EMAIL_EVENTS="backup_failed"',
+                'NOTIFY_UNRAID_EVENTS="backup_success,backup_warning,backup_failed,backup_skipped"',
+                'NOTIFY_REMINDER_INTERVAL_HOURS="24"',
+                'NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS="6"',
+                '',
+            )
+        ),
+        encoding="utf-8",
+    )
+    return schema_file
+
+
 def _state(config: dict) -> dict:
     state_file = Path(config["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
     return json.loads(state_file.read_text(encoding="utf-8"))
@@ -28,12 +51,8 @@ def _log_lines(config: dict) -> list[dict]:
 
 def test_registry_writes_central_state_and_log_for_applied_migration(tmp_path: Path):
     config_dir = tmp_path / "config"
-    config_dir.mkdir(parents=True)
-    (config_dir / "backup.conf").write_text(
-        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
-        encoding="utf-8",
-    )
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    schema_file = _write_notification_config(config_dir)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "BACKUP_CONF_SCHEMA_FILE": str(schema_file)}
 
     result = registry.run_startup_migrations(config)
     state = _state(config)
@@ -41,9 +60,11 @@ def test_registry_writes_central_state_and_log_for_applied_migration(tmp_path: P
 
     assert result["status"] == "ok"
     assert "notification_events_v1" in result["applied"]
-    assert state["schema_version"] == 2
+    assert state["schema_version"] == 3
     assert state["last_run"]["reason_code"] == "startup_migrations_applied"
     assert state["migrations"]["notification_events_v1"]["state"] == "applied"
+    assert state["migrations"]["notification_events_v1"]["applied_at"]
+    assert state["migrations"]["notification_events_v1"]["last_checked_at"]
     assert state["migrations"]["notification_events_v1"]["details"]["runner"] == "central_migration_registry"
     assert state["migrations"]["notification_events_v1"]["details"]["updated_keys"] == [
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS",
@@ -59,12 +80,8 @@ def test_registry_writes_central_state_and_log_for_applied_migration(tmp_path: P
 
 def test_registry_second_run_preserves_last_effective_migration(tmp_path: Path):
     config_dir = tmp_path / "config"
-    config_dir.mkdir(parents=True)
-    (config_dir / "backup.conf").write_text(
-        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
-        encoding="utf-8",
-    )
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    schema_file = _write_notification_config(config_dir)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "BACKUP_CONF_SCHEMA_FILE": str(schema_file)}
 
     first_result = registry.run_startup_migrations(config)
     first_state = _state(config)
@@ -76,7 +93,114 @@ def test_registry_second_run_preserves_last_effective_migration(tmp_path: Path):
     assert second_result["results"]["notification_events_v1"]["status"] in {"skipped", "not_required"}
     assert second_state["last_run"] == first_state["last_run"]
     assert second_state["migrations"]["notification_events_v1"]["state"] == "applied"
+    assert (
+        second_state["migrations"]["notification_events_v1"]["applied_at"]
+        == first_state["migrations"]["notification_events_v1"]["applied_at"]
+    )
+    assert (
+        second_state["migrations"]["notification_events_v1"]["checked_at"]
+        == first_state["migrations"]["notification_events_v1"]["checked_at"]
+    )
+    assert second_state["migrations"]["notification_events_v1"]["last_checked_at"]
     assert len(logs) == 1
+
+
+def test_registry_recovers_legacy_applied_at_from_success_audit(monkeypatch, tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    class ExistingMigration:
+        MIGRATION_ID = "existing_v1"
+        INTRODUCED_IN = "2026.07.01.0000"
+
+        @staticmethod
+        def detect(_config: dict) -> dict:
+            return {"required": False}
+
+        @staticmethod
+        def apply(_config: dict) -> dict:
+            raise AssertionError("apply must not run for a completed migration")
+
+    monkeypatch.setattr(registry, "MIGRATIONS", [ExistingMigration])
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "migration-state.json").write_text(
+        json.dumps({
+            "schema_version": 2,
+            "migrations": {
+                "existing_v1": {
+                    "state": "applied",
+                    "checked_at": "2026-07-20T07:23:14",
+                    "source": "startup_registry",
+                    "details": {
+                        "migration_id": "existing_v1",
+                        "runner": "central_migration_registry",
+                    },
+                },
+            },
+        }) + "\n",
+        encoding="utf-8",
+    )
+    (config_dir / "migrations.log.jsonl").write_text(
+        json.dumps({
+            "schema_version": 2,
+            "timestamp": "2026-07-11T18:03:24Z",
+            "event": "migration_completed",
+            "migration_id": "existing_v1",
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    registry.run_startup_migrations(config)
+    entry = _state(config)["migrations"]["existing_v1"]
+
+    assert entry["state"] == "applied"
+    assert entry["applied_at"] == "2026-07-11T18:03:24Z"
+    assert entry["checked_at"] == "2026-07-20T07:23:14"
+    assert entry["last_checked_at"]
+
+
+def test_registry_does_not_invent_legacy_applied_at_without_audit(monkeypatch, tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    class ExistingMigration:
+        MIGRATION_ID = "existing_v1"
+        INTRODUCED_IN = "2026.07.01.0000"
+
+        @staticmethod
+        def detect(_config: dict) -> dict:
+            return {"required": False}
+
+        @staticmethod
+        def apply(_config: dict) -> dict:
+            raise AssertionError("apply must not run for a completed migration")
+
+    monkeypatch.setattr(registry, "MIGRATIONS", [ExistingMigration])
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "migration-state.json").write_text(
+        json.dumps({
+            "schema_version": 2,
+            "migrations": {
+                "existing_v1": {
+                    "state": "applied",
+                    "checked_at": "2026-07-20T07:23:14",
+                    "source": "startup_registry",
+                    "details": {
+                        "migration_id": "existing_v1",
+                        "runner": "central_migration_registry",
+                    },
+                },
+            },
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    registry.run_startup_migrations(config)
+    entry = _state(config)["migrations"]["existing_v1"]
+
+    assert entry["state"] == "applied"
+    assert "applied_at" not in entry
+    assert entry["last_checked_at"]
 
 
 def test_registry_records_failed_migration(monkeypatch, tmp_path: Path):

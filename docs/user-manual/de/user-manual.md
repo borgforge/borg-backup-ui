@@ -858,6 +858,19 @@ Der Bereich zeigt unter anderem:
 - Setup- und Wartungshinweise
 - Secret-Dateiprüfungen
 
+Bei ausgeführten Migrationen zeigt **Ausgeführt** den unveränderlichen
+Zeitpunkt der tatsächlichen Datenänderung. **Zuletzt geprüft** zeigt dagegen,
+wann der Migrationsstatus beim letzten Pluginstart kontrolliert wurde. Ein
+neuer Prüfzeitpunkt bedeutet daher nicht, dass die Migration erneut ausgeführt
+wurde. Über **Audit-Details** lassen sich protokollierte Aktionen, geänderte
+Schlüssel, betroffene Dateien und vorhandene Migrationssicherungen lesbar
+einsehen.
+
+Bei älteren Installationen kann der historische Ausführungszeitpunkt fehlen,
+wenn frühere Versionen ihn nicht getrennt protokolliert haben und kein
+erfolgreicher Audit-Eintrag vorhanden ist. Die Anwendung weist dann darauf hin,
+statt das aktuelle Startdatum als Ausführungszeitpunkt auszugeben.
+
 Runtime-Recovery weist darauf hin, wenn Docker-Container oder VMs während eines Backups gestoppt wurden und nach einem Crash, Abbruch oder Neustart geprüft werden müssen.
 
 > **Warnung:** Markieren Sie Runtime-Recovery-Hinweise nur als erledigt, wenn die betroffenen Container oder VMs tatsächlich geprüft oder manuell gestartet wurden.

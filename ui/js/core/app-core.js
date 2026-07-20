@@ -141,7 +141,7 @@ function _systemHealthAttentionCount(data) {
     : {};
   const registryAttention = Number(registrySummary.pending || 0)
     + Number(registrySummary.failed || 0)
-    + Number(registrySummary.deprecated_key_candidates || 0);
+    + Number(registrySummary.blocked || 0);
   const jobSummary = data?.job_health?.summary && typeof data.job_health.summary === 'object'
     ? data.job_health.summary
     : {};

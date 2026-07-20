@@ -1136,7 +1136,7 @@ function renderSettingsSystemHealth(data) {
   const runtimeRecovery = data?.runtime_recovery && typeof data.runtime_recovery === 'object' ? data.runtime_recovery : {};
   const runtimeAttention = Number(runtimeRecovery.attention_count || 0);
   const failedChecks = checks.filter(([, ok]) => !ok).length;
-  const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.deprecated_key_candidates || 0);
+  const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.blocked || 0);
   const overallOk = !maintenanceActive && failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0 && runtimeAttention === 0;
   const jobTotal = Number(jobSummary.total || jobItems.length || 0);
   const jobsDetail = jobFailed
@@ -1247,7 +1247,12 @@ function renderSettingsSystemHealth(data) {
             ${_renderMigrationRegistryGroups(registryItems)}
           </div>
         ` : ''}
-        ${migrationSummary.techMsg ? `<pre class="system-health-tech-msg">${escHtml(migrationSummary.techMsg)}</pre>` : ''}
+        ${migrationSummary.techMsg ? `
+          <details class="system-health-technical migration-startup-technical">
+            <summary>${escHtml(settingsT('health.technicalStartupSummary'))}</summary>
+            <pre class="system-health-tech-msg">${escHtml(migrationSummary.techMsg)}</pre>
+          </details>
+        ` : ''}
       </details>
     </div>`);
 }
@@ -1442,9 +1447,8 @@ function _formatMigrationRegistrySummary(summary) {
     `${total} ${settingsT('common.entries')}`,
     `${Number(summary?.pending || 0)} ${settingsT('health.statusPending')}`,
     `${Number(summary?.failed || 0)} ${settingsT('health.statusFailed')}`,
+    `${Number(summary?.blocked || 0)} ${settingsT('health.statusBlocked')}`,
   ];
-  const deprecated = Number(summary?.deprecated_key_candidates || 0);
-  if (deprecated > 0) parts.push(`${deprecated} ${settingsT('health.cleanupCandidates')}`);
   return parts.join(', ');
 }
 
@@ -1574,7 +1578,7 @@ function _renderRuntimeRecoveryEntry(entry, tone = 'warn') {
 function _migrationRegistryActionItems(items) {
   return items.filter((item) => {
     const status = String(item?.status || '').trim();
-    return status === 'pending' || status === 'failed';
+    return status === 'pending' || status === 'failed' || status === 'blocked';
   });
 }
 
@@ -1583,18 +1587,18 @@ function _renderMigrationRegistryOverview(summary, actionItems) {
   if (!total) return `<div class="migration-action-empty">${settingsT('health.noRegistryData')}</div>`;
   const pending = Number(summary?.pending || 0);
   const failed = Number(summary?.failed || 0);
-  const cleanup = Number(summary?.deprecated_key_candidates || 0);
-  const hasAction = actionItems.length > 0 || cleanup > 0;
+  const blocked = Number(summary?.blocked || 0);
+  const hasAction = actionItems.length > 0;
   return `
     <div class="migration-overview-grid">
       ${_renderMigrationMetric(settingsT('common.entries'), total, 'neutral')}
       ${_renderMigrationMetric(settingsT('common.pending'), pending, pending > 0 ? 'warn' : 'ok')}
       ${_renderMigrationMetric(settingsT('common.failed'), failed, failed > 0 ? 'bad' : 'ok')}
-      ${_renderMigrationMetric(settingsT('health.cleanupCandidates'), cleanup, cleanup > 0 ? 'warn' : 'ok')}
+      ${_renderMigrationMetric(settingsT('health.statusBlocked'), blocked, blocked > 0 ? 'warn' : 'ok')}
     </div>
     <div class="migration-action-panel ${hasAction ? 'attention' : 'ok'}">
       <div class="migration-action-title">${hasAction ? settingsT('health.openItems') : settingsT('health.noActionRequired')}</div>
-      ${hasAction ? _renderMigrationActionList(actionItems, cleanup) : `<div class="migration-action-empty">${settingsT('health.registryOk')}</div>`}
+      ${hasAction ? _renderMigrationActionList(actionItems) : `<div class="migration-action-empty">${settingsT('health.registryOk')}</div>`}
     </div>
   `;
 }
@@ -1608,12 +1612,9 @@ function _renderMigrationMetric(label, value, tone) {
   `;
 }
 
-function _renderMigrationActionList(actionItems, cleanupCount) {
+function _renderMigrationActionList(actionItems) {
   const rows = actionItems.map((item) => _renderMigrationActionItem(item)).join('');
-  const cleanupHint = cleanupCount > 0 && !actionItems.some((item) => String(item?.id || '') === 'legacy_deprecated_keys_cleanup_v1')
-    ? `<div class="migration-action-row pending"><div><strong>${settingsT('health.cleanupTitle')}</strong><span>${settingsT('health.candidatesAvailable', { count: cleanupCount })}</span></div></div>`
-    : '';
-  return `<div class="migration-action-list">${rows}${cleanupHint}</div>`;
+  return `<div class="migration-action-list">${rows}</div>`;
 }
 
 function _renderMigrationActionItem(item) {
@@ -1623,14 +1624,12 @@ function _renderMigrationActionItem(item) {
   const details = item?.details && typeof item.details === 'object' ? item.details : {};
   const count = Number(details.candidate_count || details.missing_count || 0);
   const suffix = count > 0 ? ` · ${settingsT('health.affected', { count })}` : '';
-  const canApplyPlan = String(item?.id || '') === 'legacy_deprecated_keys_cleanup_v1' && count > 0;
   return `
     <div class="migration-action-row ${escHtml(status)}">
       <div>
         <strong>${escHtml(title)}</strong>
         <span>${escHtml(_migrationRegistryStatusLabel(status))}${escHtml(suffix)}${reason ? `: ${escHtml(reason)}` : ''}</span>
       </div>
-      ${canApplyPlan ? `<button class="btn btn-secondary btn-sm migration-action-button" data-settings-action="legacy-cleanup-apply" data-candidate-count="${Number(count || 0)}">${settingsT('health.commentCleanup')}</button>` : ''}
     </div>
   `;
 }
@@ -1664,10 +1663,6 @@ function _migrationRegistryText(item, field) {
     config_backup_conf_schema: {
       title: 'registrySchemaTitle',
       reason: status === 'applied' ? 'registrySchemaComplete' : 'registrySchemaMissing',
-    },
-    legacy_deprecated_keys_cleanup_v1: {
-      title: 'registryCleanupTitle',
-      reason: status === 'pending' ? 'registryCleanupPresent' : 'registryCleanupEmpty',
     },
     notification_events_v1: {
       title: 'registryNotificationEventsTitle',
@@ -1710,7 +1705,8 @@ function _renderMigrationRegistryItem(item) {
   const details = item?.details && typeof item.details === 'object' ? item.details : {};
   const candidates = Array.isArray(details.candidate_keys) ? details.candidate_keys : [];
   const updatedKeys = Array.isArray(details.updated_keys) ? details.updated_keys.map((key) => String(key || '').trim()).filter(Boolean) : [];
-  const checkedAt = String(details.checked_at || '').trim();
+  const appliedAt = String(details.applied_at || '').trim();
+  const lastCheckedAt = String(details.last_checked_at || '').trim();
   const introducedIn = String(details.introduced_in || '').trim();
   const failedPhase = String(details.failed_phase || '').trim();
   const failureReason = String(details.error || '').trim();
@@ -1723,6 +1719,23 @@ function _renderMigrationRegistryItem(item) {
       mode: plan.mode === 'remove' ? settingsT('health.removeKeys') : settingsT('health.commentKeys'),
     })
     : '';
+  const auditRows = [
+    [settingsT('health.migrationActions'), details.actions],
+    [settingsT('health.updatedKeys'), details.updated_keys],
+    [settingsT('health.addedKeys'), details.added_keys],
+    [settingsT('health.removedKeys'), details.removed_keys],
+    [settingsT('health.affectedFiles'), details.affected_files],
+    [settingsT('health.backupDirectory'), details.backup_directory],
+    [settingsT('health.runId'), details.run_id],
+  ].map(([label, value]) => {
+    const values = Array.isArray(value)
+      ? value.map((entry) => String(entry || '').trim()).filter(Boolean)
+      : (String(value || '').trim() ? [String(value).trim()] : []);
+    return values.length ? [label, values] : null;
+  }).filter(Boolean);
+  const appliedTimestamp = appliedAt
+    ? `<div class="migration-registry-id">${escHtml(settingsT('health.appliedAt'))}: ${escHtml(_formatHealthTimestamp(appliedAt) || appliedAt)}</div>`
+    : (status === 'applied' ? `<div class="migration-registry-id">${escHtml(settingsT('health.appliedAtUnknown'))}</div>` : '');
   return `
     <div class="migration-registry-item ${escHtml(status)}">
       <div class="migration-registry-head">
@@ -1733,12 +1746,24 @@ function _renderMigrationRegistryItem(item) {
       ${reason ? `<div>${escHtml(reason)}</div>` : ''}
       ${planText ? `<div class="migration-registry-plan">${escHtml(planText)}</div>` : ''}
       ${candidates.length ? `<div class="migration-registry-id">Deprecated: ${candidates.map((row) => escHtml(String(row?.key || ''))).filter(Boolean).join(', ')}</div>` : ''}
-      ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map(escHtml).join(', ')}</div>` : ''}
+      ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map((value) => escHtml(value)).join(', ')}</div>` : ''}
       ${failedPhase ? `<div class="migration-registry-id">${escHtml(settingsT('health.failedPhase'))}: ${escHtml(failedPhase)}</div>` : ''}
       ${failureReason ? `<div class="migration-registry-id">${escHtml(settingsT('health.failureReason'))}: ${escHtml(failureReason)}</div>` : ''}
       ${rollbackStatus ? `<div class="migration-registry-id">${escHtml(settingsT('health.rollbackStatus'))}: ${escHtml(settingsT(`health.rollback_${rollbackStatus}`))}</div>` : ''}
-      ${checkedAt ? `<div class="migration-registry-id">${escHtml(settingsT('health.checkedAt'))}: ${escHtml(_formatHealthTimestamp(checkedAt) || checkedAt)}</div>` : ''}
+      ${appliedTimestamp}
+      ${lastCheckedAt ? `<div class="migration-registry-id">${escHtml(settingsT('health.lastCheckedAt'))}: ${escHtml(_formatHealthTimestamp(lastCheckedAt) || lastCheckedAt)}</div>` : ''}
       ${introducedIn ? `<div class="migration-registry-id">${escHtml(settingsT('health.introducedIn'))}: ${escHtml(introducedIn)}</div>` : ''}
+      ${auditRows.length ? `
+        <details class="migration-registry-audit">
+          <summary>${escHtml(settingsT('health.auditDetails'))}</summary>
+          <dl>
+            ${auditRows.map(([label, values]) => `
+              <dt>${escHtml(label)}</dt>
+              <dd>${values.map((value) => escHtml(value)).join('<br>')}</dd>
+            `).join('')}
+          </dl>
+        </details>
+      ` : ''}
     </div>
   `;
 }
@@ -2663,37 +2688,6 @@ async function startFactoryReset() {
     setTimeout(() => waitForRestart(), 3000);
   } catch (err) {
     showMsg(messageId, 'error', settingsT('transfer.factoryResetFailed', { message: err.message }));
-  }
-}
-
-async function applyLegacyCleanupFromSettings(el) {
-  const count = Number(el?.dataset?.candidateCount || 0);
-  const confirm = await _openSettingsDialog({
-    title: settingsT('transfer.cleanupApplyTitle'),
-    html: settingsT('transfer.cleanupApplyHtml', { count: escHtml(String(count)) }),
-    confirmText: settingsT('transfer.commentOut'),
-    confirmClass: 'btn-danger',
-    input: {
-      label: settingsT('transfer.confirmation'),
-      placeholder: 'AUSKOMMENTIEREN',
-      validate: (value) => String(value || '').trim() === 'AUSKOMMENTIEREN',
-    },
-    resolveValue: ({ input }) => String(input.value || '').trim(),
-  });
-  if (confirm !== 'AUSKOMMENTIEREN') return;
-  try {
-    const res = await fetch('/api/settings/legacy-cleanup-apply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'comment_out', confirm }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
-    showMsg('settings-message', 'success', `${apiMessage(data, settingsT('transfer.cleanupApplied'))}${data.backup ? ` Backup: ${data.backup}` : ''}`);
-    await refreshSettings();
-    await refreshSettingsConfigBackups();
-  } catch (err) {
-    showMsg('settings-message', 'error', settingsT('transfer.cleanupFailed', { message: err.message }));
   }
 }
 
@@ -4034,7 +4028,6 @@ async function onSettingsContentClick(event) {
   if (action === 'export-support-bundle') return exportSupportBundle();
   if (action === 'factory-reset-start') return startFactoryReset();
   if (action === 'runtime-recovery-ack') return acknowledgeRuntimeRecoveryEntry(el);
-  if (action === 'legacy-cleanup-apply') return applyLegacyCleanupFromSettings(el);
   if (action === 'diff-config-backup') return diffSettingsConfigBackup(el.dataset.backupName || '');
   if (action === 'restore-config-backup') return restoreSettingsConfigBackup(el.dataset.backupName || '');
   if (action === 'delete-config-backup') return deleteSettingsConfigBackup(el.dataset.backupName || '');

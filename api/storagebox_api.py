@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-def _storagebox_profile(conf: dict, *, storage_profile: Optional[dict] = None) -> dict:
+def _storagebox_profile(*, storage_profile: Optional[dict] = None) -> dict:
     def _normalize_storagebox_base_path(raw: str) -> str:
         v = str(raw or "").strip()
         if not v:
@@ -32,15 +32,14 @@ def _storagebox_profile(conf: dict, *, storage_profile: Optional[dict] = None) -
         return f"/{v}"
 
     row = storage_profile if isinstance(storage_profile, dict) else {}
-    ssh_key = str(row.get("ssh_key_path", "")).strip() or str(conf.get("BORG_SSH_KEY", "")).strip()
     return {
         "profile_key": str(row.get("key", "")).strip(),
         "profile_name": str(row.get("name", "")).strip(),
-        "host": str(row.get("host", conf.get("STORAGEBOX_HOST", ""))).strip(),
-        "port": str(row.get("port", conf.get("STORAGEBOX_PORT", "23"))).strip() or "23",
-        "user": str(row.get("user", conf.get("STORAGEBOX_USER", ""))).strip(),
-        "base_path": _normalize_storagebox_base_path(row.get("base_path", conf.get("STORAGEBOX_BASE_PATH", "/./backup"))),
-        "ssh_key": ssh_key,
+        "host": str(row.get("host", "")).strip(),
+        "port": str(row.get("port", "23")).strip() or "23",
+        "user": str(row.get("user", "")).strip(),
+        "base_path": _normalize_storagebox_base_path(row.get("base_path", "/./backup")),
+        "ssh_key": str(row.get("ssh_key_path", "")).strip(),
     }
 
 
@@ -170,17 +169,15 @@ def _detect_storage_target_type(p: dict) -> dict:
     return {"target_type": "generic", "method": "heuristic", "hint": "No specific pattern detected"}
 
 
-def _storage_context(ui_config: dict, profile_key: str = "") -> tuple[dict, dict]:
-    from config_api import read_expanded_conf
+def _storage_context(ui_config: dict, profile_key: str = "") -> dict:
     from storage_profiles_api import resolve_storage_profile
 
-    conf = read_expanded_conf(ui_config)
     row = resolve_storage_profile(ui_config, profile_key)
-    return conf, _storagebox_profile(conf, storage_profile=row)
+    return _storagebox_profile(storage_profile=row)
 
 
 def get_storagebox_setup_status(ui_config: dict, profile_key: str = "", *, probe_auth: bool = True) -> dict:
-    _conf, p = _storage_context(ui_config, profile_key)
+    p = _storage_context(ui_config, profile_key)
     key_file = Path(p["ssh_key"]) if p.get("ssh_key") else Path("")
     pub_file = Path(str(key_file) + ".pub") if str(key_file) else Path("")
     key_exists = bool(str(key_file) and key_file.exists())
@@ -212,7 +209,7 @@ def get_storagebox_setup_status(ui_config: dict, profile_key: str = "", *, probe
 
 
 def storagebox_key_status(ui_config: dict, profile_key: str = "") -> dict:
-    _conf, p = _storage_context(ui_config, profile_key)
+    p = _storage_context(ui_config, profile_key)
     key_file = Path(p["ssh_key"]) if p.get("ssh_key") else Path("")
     pub_file = Path(str(key_file) + ".pub") if str(key_file) else Path("")
     return {
@@ -226,10 +223,11 @@ def storagebox_key_status(ui_config: dict, profile_key: str = "") -> dict:
 
 
 def storagebox_key_generate(ui_config: dict, profile_key: str = "") -> dict:
-    _conf, p = _storage_context(ui_config, profile_key)
-    key_path = Path(p["ssh_key"])
-    if not str(key_path):
-        raise ValueError("BORG_SSH_KEY is not set")
+    p = _storage_context(ui_config, profile_key)
+    raw_key_path = str(p.get("ssh_key") or "").strip()
+    if not raw_key_path:
+        raise ValueError("SSH key path is not configured for the selected storage profile")
+    key_path = Path(raw_key_path)
     key_path.parent.mkdir(parents=True, exist_ok=True)
     if key_path.exists():
         return {"generated": False, "message": f"SSH key already exists: {key_path}", "message_code": "storagebox_key_exists", "message_params": {"path": str(key_path)}}
@@ -245,7 +243,7 @@ def storagebox_key_generate(ui_config: dict, profile_key: str = "") -> dict:
 
 
 def storagebox_key_public(ui_config: dict, profile_key: str = "") -> dict:
-    _conf, p = _storage_context(ui_config, profile_key)
+    p = _storage_context(ui_config, profile_key)
     pub_path = Path(str(p["ssh_key"]) + ".pub")
     if not pub_path.exists():
         raise FileNotFoundError(f"Public key not found: {pub_path}")
@@ -254,7 +252,7 @@ def storagebox_key_public(ui_config: dict, profile_key: str = "") -> dict:
 
 
 def storagebox_key_deploy(ui_config: dict, password: str, profile_key: str = "") -> dict:
-    _conf, p = _storage_context(ui_config, profile_key)
+    p = _storage_context(ui_config, profile_key)
     if not _storagebox_is_profile_complete(p):
         raise ValueError("Storage Box profile is incomplete")
     pub = storagebox_key_public(ui_config, profile_key=profile_key).get("public_key", "")
@@ -271,7 +269,7 @@ def storagebox_key_deploy(ui_config: dict, password: str, profile_key: str = "")
 
 
 def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
-    _conf, p = _storage_context(ui_config, profile_key)
+    p = _storage_context(ui_config, profile_key)
     target = _detect_storage_target_type(p)
     if not _storagebox_is_profile_complete(p):
         raise ValueError("Storage Box profile is incomplete")
@@ -433,7 +431,7 @@ class _StorageKeyDeployManager:
         sess["updated_at"] = time.time()
 
     def start(self, ui_config: dict, target_override: str = "", profile_key: str = "") -> Dict[str, Any]:
-        _conf, p = _storage_context(ui_config, profile_key)
+        p = _storage_context(ui_config, profile_key)
         if not _storagebox_is_profile_complete(p):
             raise ValueError("Storage profile is incomplete")
         pub = storagebox_key_public(ui_config, profile_key=profile_key).get("public_key", "")
