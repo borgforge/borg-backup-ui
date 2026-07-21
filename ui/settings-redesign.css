@@ -772,13 +772,32 @@
 .apprise-provider-picker {
   display: grid;
   gap: var(--ui-space-3);
-  grid-column: 1 / -1;
   max-height: 22rem;
   overflow: auto;
   padding: var(--ui-space-2);
   border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-sm);
   background: var(--ui-color-surface-subtle);
+}
+
+.apprise-provider-advanced {
+  display: grid;
+  gap: var(--ui-space-3);
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-surface-subtle);
+}
+
+.apprise-provider-advanced > summary {
+  color: var(--ui-color-accent);
+  font-size: var(--ui-font-size-sm);
+  font-weight: var(--ui-font-weight-semibold);
+  cursor: pointer;
+}
+
+.apprise-provider-advanced[open] > summary {
+  margin-bottom: var(--ui-space-3);
 }
 
 .apprise-provider-group {

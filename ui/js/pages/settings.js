@@ -3657,7 +3657,32 @@ function _appriseProviderCategory(row) {
   return 'other';
 }
 
-function _renderAppriseProviderPicker(selectedProvider) {
+function _appriseRecommendedProviders(selectedProvider) {
+  const recommended = [
+    ['ntfy', 'ntfy'],
+    ['ntfys', 'ntfy (HTTPS)'],
+    ['mailtos', 'SMTP / E-Mail'],
+    ['discord', 'Discord'],
+    ['telegram', 'Telegram'],
+    ['gotify', 'Gotify'],
+    ['pushover', 'Pushover'],
+    ['slack', 'Slack'],
+    ['json', 'JSON webhook'],
+    ['apprise', settingsT('apprise.genericProvider')],
+  ];
+  if (selectedProvider && !recommended.some(([value]) => value === selectedProvider)) {
+    recommended.unshift([selectedProvider, _appriseProviderLabel({ provider: selectedProvider })]);
+  }
+  return recommended;
+}
+
+function _renderAppriseProviderOptions(selectedProvider) {
+  return _appriseRecommendedProviders(selectedProvider)
+    .map(([value, label]) => `<option value="${escAttr(value)}" ${selectedProvider === value ? 'selected' : ''}>${escHtml(label)}</option>`)
+    .join('');
+}
+
+function _renderAppriseProviderResults(selectedProvider) {
   const filter = String(settingsState.appriseProviderFilter || '').trim().toLowerCase();
   const rows = Array.isArray(settingsState.appriseProviders) ? settingsState.appriseProviders : [];
   const candidates = [];
@@ -3674,7 +3699,7 @@ function _renderAppriseProviderPicker(selectedProvider) {
     });
   });
   candidates.sort((a, b) => a.category.localeCompare(b.category) || a.service_name.localeCompare(b.service_name) || a.schema.localeCompare(b.schema));
-  const visible = candidates.slice(0, 48);
+  const visible = candidates.slice(0, 24);
   const grouped = visible.reduce((acc, item) => {
     acc[item.category] = acc[item.category] || [];
     acc[item.category].push(item);
@@ -3697,15 +3722,25 @@ function _renderAppriseProviderPicker(selectedProvider) {
   const empty = settingsState.appriseProvidersLoading
     ? settingsT('apprise.providersLoading')
     : (settingsState.appriseProvidersLoaded ? settingsT('apprise.noProviders') : settingsT('apprise.providersNotLoaded'));
+  const limited = candidates.length > visible.length
+    ? `<div class="form-help">${settingsT('apprise.providerResultsLimited', { shown: visible.length, count: candidates.length })}</div>`
+    : '';
+  return `${groups || `<div class="status-message empty-state">${escHtml(empty)}</div>`}${limited}`;
+}
+
+function _renderAppriseProviderAdvanced(selectedProvider) {
   return `
-    <div class="form-group" style="grid-column:1/-1">
-      <label class="form-label" for="apprise-provider-filter">${settingsT('apprise.providerSearch')}</label>
-      <input class="form-input" id="apprise-provider-filter" type="search" value="${escAttr(settingsState.appriseProviderFilter)}" placeholder="${escAttr(settingsT('apprise.providerSearchPlaceholder'))}" oninput="onAppriseProviderFilterChange(this.value)">
-      <div class="form-help">${settingsT('apprise.providerCount', { count: settingsState.appriseProviders.length || 0 })}</div>
-    </div>
-    <div class="apprise-provider-picker" id="apprise-provider-picker">
-      ${groups || `<div class="status-message empty-state">${escHtml(empty)}</div>`}
-    </div>`;
+    <details class="apprise-provider-advanced" style="grid-column:1/-1">
+      <summary>${settingsT('apprise.advancedProviders')}</summary>
+      <div class="form-group">
+        <label class="form-label" for="apprise-provider-filter">${settingsT('apprise.providerSearch')}</label>
+        <input class="form-input" id="apprise-provider-filter" type="search" value="${escAttr(settingsState.appriseProviderFilter)}" placeholder="${escAttr(settingsT('apprise.providerSearchPlaceholder'))}" oninput="onAppriseProviderFilterChange(this.value)">
+        <div class="form-help">${settingsT('apprise.providerCount', { count: settingsState.appriseProviders.length || 0 })}</div>
+      </div>
+      <div class="apprise-provider-picker" id="apprise-provider-picker">
+        ${_renderAppriseProviderResults(selectedProvider)}
+      </div>
+    </details>`;
 }
 
 function _renderAppriseEvents(events) {
@@ -3801,11 +3836,6 @@ function renderSettingsAppriseProfiles() {
           <div id="apprise-profiles-msg" class="status-message hidden"></div>
           <div class="settings-body two-col">
             <div class="form-group">
-              <label class="form-label" for="apprise-profile-id">${settingsT('apprise.profileId')}</label>
-              <input class="form-input mono" id="apprise-profile-id" type="text" data-apprise-field="id" value="${escAttr(current.id || '')}" ${editing && !current.original_id ? '' : 'disabled'}>
-              <div class="form-help">${settingsT('apprise.profileIdHint')}</div>
-            </div>
-            <div class="form-group">
               <label class="form-label" for="apprise-profile-name">${settingsT('apprise.profileName')}</label>
               <input class="form-input" id="apprise-profile-name" type="text" data-apprise-field="name" value="${escAttr(current.name || '')}" ${editing ? '' : 'disabled'}>
             </div>
@@ -3819,7 +3849,9 @@ function renderSettingsAppriseProfiles() {
             </label>
             <div class="form-group">
               <label class="form-label" for="apprise-profile-provider">${settingsT('apprise.provider')}</label>
-              <input class="form-input mono" id="apprise-profile-provider" type="text" data-apprise-field="provider" value="${escAttr(provider)}" ${editing ? '' : 'disabled'}>
+              <select class="form-select" id="apprise-profile-provider" data-apprise-field="provider" ${editing ? 'onchange="onAppriseProviderSelect(this.value)"' : 'disabled'}>
+                ${_renderAppriseProviderOptions(provider)}
+              </select>
               <div class="form-help">${settingsT('apprise.providerHint')}</div>
             </div>
             <div class="form-group">
@@ -3838,7 +3870,7 @@ function renderSettingsAppriseProfiles() {
               <label class="form-label" for="apprise-profile-backoff">${settingsT('apprise.retryBackoff')}</label>
               <input class="form-input" id="apprise-profile-backoff" type="number" min="0" max="3600" data-apprise-field="retry_backoff_seconds" value="${escAttr(current.retry_policy?.backoff_seconds || 0)}" ${editing ? '' : 'disabled'}>
             </div>
-            ${editing ? _renderAppriseProviderPicker(provider) : ''}
+            ${editing ? _renderAppriseProviderAdvanced(provider) : ''}
             ${editing ? _renderAppriseNtfyBuilder(provider) : ''}
             <div class="form-group" style="grid-column:1/-1">
               <label class="form-label" for="apprise-profile-url">${current.url_set ? settingsT('apprise.urlSet') : settingsT('apprise.url')}</label>
@@ -3970,7 +4002,7 @@ function onAppriseProviderFilterChange(value) {
   settingsState.appriseProviderFilter = String(value || '');
   const providerInput = document.querySelector('[data-apprise-field="provider"]');
   const picker = document.getElementById('apprise-provider-picker');
-  if (picker) picker.outerHTML = _renderAppriseProviderPicker(String(providerInput?.value || 'ntfy'));
+  if (picker) picker.innerHTML = _renderAppriseProviderResults(String(providerInput?.value || 'ntfy'));
   const filter = document.getElementById('apprise-provider-filter');
   if (filter) {
     filter.focus();
@@ -4003,17 +4035,26 @@ function _rerenderAppriseProviderPickerOnly() {
   const picker = document.getElementById('apprise-provider-picker');
   if (!picker) return;
   const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'ntfy');
-  picker.outerHTML = _renderAppriseProviderPicker(provider);
+  picker.innerHTML = _renderAppriseProviderResults(provider);
 }
 
 function _setAppriseDraftProvider(provider) {
   const value = String(provider || 'apprise').trim().toLowerCase();
   const input = document.querySelector('[data-apprise-field="provider"]');
-  if (input) input.value = value;
+  if (input) {
+    if (input.tagName === 'SELECT' && !Array.from(input.options || []).some((option) => option.value === value)) {
+      input.insertAdjacentHTML('afterbegin', `<option value="${escAttr(value)}">${escHtml(_appriseProviderLabel({ provider: value }))}</option>`);
+    }
+    input.value = value;
+  }
   const transport = document.querySelector('[data-apprise-ntfy-scheme]');
   if (transport && (value === 'ntfy' || value === 'ntfys')) transport.value = value;
   document.querySelector('.apprise-ntfy-builder')?.classList.toggle('hidden', !(value === 'ntfy' || value === 'ntfys'));
   _rerenderAppriseProviderPickerOnly();
+}
+
+function onAppriseProviderSelect(provider) {
+  _setAppriseDraftProvider(provider);
 }
 
 function _appriseSelectedEventsFromDom() {
@@ -4061,7 +4102,7 @@ function _collectAppriseProfilePayload({ forDelivery = false } = {}) {
   const explicitUrl = String(document.querySelector('[data-apprise-field="apprise_url"]')?.value || '').trim();
   const generatedUrl = (provider === 'ntfy' || provider === 'ntfys') ? _buildAppriseNtfyUrl() : '';
   const url = explicitUrl || generatedUrl;
-  const id = String(document.querySelector('[data-apprise-field="id"]')?.value || '').trim().toLowerCase();
+  const id = '';
   const payload = {
     id,
     profile_id: id || settingsState.appriseDraftProfile?.original_id || settingsState.appriseSelectedProfileId || '',
@@ -5516,3 +5557,4 @@ async function reloadSettingsDataAfterSave(profileType = '') {
 }
 
 window.onAppriseProviderFilterChange = onAppriseProviderFilterChange;
+window.onAppriseProviderSelect = onAppriseProviderSelect;

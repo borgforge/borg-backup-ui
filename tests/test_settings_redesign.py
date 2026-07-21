@@ -52,12 +52,18 @@ def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> 
         "/api/notification-profiles/test",
         "apprise-profile-duplicate",
         "apprise-provider-select",
+        "onAppriseProviderSelect",
+        "_renderAppriseProviderOptions",
+        "_renderAppriseProviderAdvanced",
         "_buildAppriseNtfyUrl",
-        "data-apprise-field=\"apprise_url\"",
+        'data-apprise-field="apprise_url"',
+        'data-apprise-field="provider"',
         "settingsState.appriseDraftProfile",
     ):
         assert contract in script
+    assert 'data-apprise-field="id"' not in script
     assert ".apprise-provider-picker" in css
+    assert ".apprise-provider-advanced" in css
     assert ".apprise-profile-manager" in css
 
 
