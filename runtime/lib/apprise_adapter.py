@@ -36,6 +36,18 @@ def _safe_error(value: BaseException | str) -> str:
     return text[:500] if text else "unknown error"
 
 
+@contextmanager
+def _suppress_apprise_info_logs() -> Iterator[None]:
+    """Keep provider-specific Apprise INFO lines out of backup logs."""
+    target = logging.getLogger("apprise")
+    previous_level = target.level
+    target.setLevel(logging.WARNING)
+    try:
+        yield
+    finally:
+        target.setLevel(previous_level)
+
+
 class _DiscoveryTimeoutError(TimeoutError):
     pass
 
@@ -158,6 +170,8 @@ def supported_providers(
                 "service_url": str(row.get("service_url") or "").strip(),
                 "setup_url": str(row.get("setup_url") or "").strip(),
                 "schemas": _schema_values(row),
+                "templates": _template_values(row),
+                "tokens": _token_summaries(row),
             }
         )
     providers.sort(key=lambda item: (item["service_name"].lower(), item["schemas"]))
@@ -177,6 +191,45 @@ def _schema_values(row: dict[str, Any]) -> list[str]:
         return sorted(str(item) for item in values if str(item).strip())
     value = str(values or "").strip()
     return [value] if value else []
+
+
+def _template_values(row: dict[str, Any]) -> list[str]:
+    details = row.get("details") if isinstance(row.get("details"), dict) else {}
+    values = details.get("templates") if isinstance(details.get("templates"), (list, tuple, set, frozenset)) else []
+    out = []
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            out.append(text)
+    return list(dict.fromkeys(out))
+
+
+def _token_summaries(row: dict[str, Any]) -> list[dict[str, Any]]:
+    details = row.get("details") if isinstance(row.get("details"), dict) else {}
+    tokens = details.get("tokens") if isinstance(details.get("tokens"), dict) else {}
+    out = []
+    for key, value in sorted(tokens.items()):
+        if key == "schema" or not isinstance(value, dict):
+            continue
+        name = str(value.get("name") or key).strip()
+        token_type = str(value.get("type") or "").strip()
+        required = bool(value.get("required"))
+        private = bool(value.get("private"))
+        prefix = str(value.get("prefix") or "").strip()
+        item = {
+            "key": str(key),
+            "name": name,
+            "type": token_type,
+            "required": required,
+            "private": private,
+        }
+        map_to = str(value.get("map_to") or "").strip()
+        if map_to:
+            item["map_to"] = map_to
+        if prefix:
+            item["prefix"] = prefix
+        out.append(item)
+    return out
 
 
 def validate_url(
@@ -208,18 +261,45 @@ def send_test_notification(
     apprise_module: ModuleType | Any | None = None,
 ) -> AppriseDeliveryResult:
     """Send one test notification through a generic Apprise URL."""
+    return send_notification(
+        url,
+        title=title,
+        body=body,
+        success_message="Apprise test notification sent.",
+        failure_message="Apprise test notification was not delivered.",
+        error_prefix="Apprise test notification failed",
+        vendor_dir=vendor_dir,
+        apprise_module=apprise_module,
+    )
+
+
+def send_notification(
+    url: str,
+    *,
+    title: str,
+    body: str,
+    success_message: str = "Apprise notification sent.",
+    failure_message: str = "Apprise notification was not delivered.",
+    error_prefix: str = "Apprise notification failed",
+    timeout_seconds: int | float | None = None,
+    vendor_dir: Path | str | None = None,
+    apprise_module: ModuleType | Any | None = None,
+) -> AppriseDeliveryResult:
+    """Send one notification through a generic Apprise URL."""
     text = str(url or "").strip()
     validation = validate_url(text, vendor_dir=vendor_dir, apprise_module=apprise_module)
     if not validation.ok:
         return validation
     module = load_bundled_apprise(vendor_dir=vendor_dir, apprise_module=apprise_module)
     try:
-        app = module.Apprise()
-        app.add(text)
-        ok = bool(app.notify(title=str(title or "Borg Backup UI"), body=str(body or "")))
+        with _operation_timeout(timeout_seconds, "Apprise notification delivery"):
+            with _suppress_apprise_info_logs():
+                app = module.Apprise()
+                app.add(text)
+                ok = bool(app.notify(title=str(title or "Borg Backup UI"), body=str(body or "")))
     except Exception as exc:  # noqa: BLE001
-        return AppriseDeliveryResult(False, f"Apprise test notification failed: {_safe_error(exc)}")
+        return AppriseDeliveryResult(False, f"{error_prefix}: {_safe_error(exc)}")
     return AppriseDeliveryResult(
         ok,
-        "Apprise test notification sent." if ok else "Apprise test notification was not delivered.",
+        success_message if ok else failure_message,
     )

@@ -24,6 +24,7 @@ PKG_FILE="${BUILD_OUTPUT_DIR}/${NAME}-${VERSION}.txz"
 PLG_FILE="${REPO_DIR}/${NAME}.plg"
 APPRISE_LOCK_FILE="${SCRIPT_DIR}/apprise-requirements.lock"
 APPRISE_VENDOR_DIR="${REPO_DIR}/runtime/vendor"
+APPRISE_VENDOR_VERSION=""
 
 echo "==> Baue ${NAME} v${VERSION}"
 
@@ -87,7 +88,7 @@ install_apprise_vendor() {
     --target "${APPRISE_VENDOR_DIR}" \
     -r "${APPRISE_LOCK_FILE}"
   find "${APPRISE_VENDOR_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-  python3 - "${APPRISE_VENDOR_DIR}" <<'PY'
+  APPRISE_VENDOR_VERSION="$(PYTHONDONTWRITEBYTECODE=1 python3 - "${APPRISE_VENDOR_DIR}" <<'PY'
 import sys
 from pathlib import Path
 
@@ -98,8 +99,57 @@ import apprise  # noqa: E402
 version = str(getattr(apprise, "__version__", "") or "")
 if not version:
     raise SystemExit("ERROR: Bundled Apprise import did not expose a version.")
-print(f"==> Apprise Runtime: {version}")
+print(version)
 PY
+)"
+  find "${APPRISE_VENDOR_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+  echo "==> Apprise Runtime: ${APPRISE_VENDOR_VERSION}"
+}
+
+create_apprise_vendor_bundle() {
+  if [ -z "${APPRISE_VENDOR_VERSION}" ]; then
+    echo "ERROR: Apprise vendor version is unknown." >&2
+    exit 1
+  fi
+  if [ ! -d "${APPRISE_VENDOR_DIR}/apprise" ]; then
+    echo "ERROR: Apprise vendor tree is missing." >&2
+    exit 1
+  fi
+
+  local bundle_dir="${APP_DST}/runtime/vendor-bundles"
+  local bundle_tmp="${BUILD_OUTPUT_DIR}/apprise-vendor.tar.xz"
+  local bundle_sha
+  local bundle_name
+  mkdir -p "${bundle_dir}"
+
+  # Keep the bundle hash stable across builds when the vendored dependency tree
+  # did not change. This lets Unraid upgrades skip re-extracting Apprise.
+  tar --create \
+      --xz \
+      --file="${bundle_tmp}" \
+      --directory="${APPRISE_VENDOR_DIR}" \
+      --sort=name \
+      --mtime='UTC 2024-01-01' \
+      --owner=0 --group=0 --numeric-owner \
+      .
+  bundle_sha="$(sha256sum "${bundle_tmp}" | awk '{print $1}')"
+  bundle_name="apprise-${APPRISE_VENDOR_VERSION}-${bundle_sha}.tar.xz"
+  mv -f "${bundle_tmp}" "${bundle_dir}/${bundle_name}"
+  python3 - "${bundle_dir}/apprise-vendor.json" "${APPRISE_VENDOR_VERSION}" "${bundle_sha}" "${bundle_name}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = {
+    "name": "apprise",
+    "version": sys.argv[2],
+    "sha256": sys.argv[3],
+    "bundle": sys.argv[4],
+}
+path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+  echo "==> Apprise Vendor-Bundle: ${bundle_name}"
 }
 
 install_apprise_vendor
@@ -125,7 +175,17 @@ mkdir -p "${MANUAL_DST}/de" "${MANUAL_DST}/en"
 cp "${REPO_DIR}/docs/user-manual/de/user-manual.md" "${MANUAL_DST}/de/"
 cp "${REPO_DIR}/docs/user-manual/en/user-manual.md" "${MANUAL_DST}/en/"
 cp -r "${REPO_DIR}/docs/user-manual/assets" "${MANUAL_DST}/"
-[ -d "${REPO_DIR}/runtime" ] && cp -r "${REPO_DIR}/runtime" "${APP_DST}/"
+if [ -d "${REPO_DIR}/runtime" ]; then
+  mkdir -p "${APP_DST}/runtime"
+  (
+    cd "${REPO_DIR}/runtime"
+    tar --create --exclude='./vendor' .
+  ) | (
+    cd "${APP_DST}/runtime"
+    tar --extract
+  )
+fi
+create_apprise_vendor_bundle
 [ -f "${REPO_DIR}/build-provenance.json" ] && cp "${REPO_DIR}/build-provenance.json" "${APP_DST}/"
 # Legacy fallback packaging (older repo layout)
 [ -f "${REPO_DIR}/borg_restore_test.py" ] && install -m 0755 "${REPO_DIR}/borg_restore_test.py" "${APP_DST}/"

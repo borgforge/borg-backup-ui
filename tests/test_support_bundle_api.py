@@ -106,6 +106,31 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
             "passphrase_ref": "/boot/config/borg-backup/secrets/.borg-passphrase-job1",
         }],
     }) + "\n", encoding="utf-8")
+    (config_dir / "apprise-profiles.json").write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [{
+            "id": "alerts-main",
+            "name": "Alerts",
+            "provider": "ntfy",
+            "selected_events": ["backup_failed"],
+        }],
+    }) + "\n", encoding="utf-8")
+    (config_dir / "notification-deliveries.json").write_text(json.dumps({
+        "schema_version": 1,
+        "deliveries": [{
+            "id": "delivery-1",
+            "status": "failed",
+            "profile_id": "alerts-main",
+            "profile_name": "Alerts",
+            "provider": "ntfy",
+            "event_type": "backup_failed",
+            "message": "https://ntfy.example.test rejected token abc123",
+        }],
+    }) + "\n", encoding="utf-8")
+    (root / "secrets" / ".apprise-profile-alerts-main.url").write_text(
+        "ntfy://token@example.test/borg\n",
+        encoding="utf-8",
+    )
     (config_dir / "migration-state.json").write_text(json.dumps({
         "schema_version": 2,
         "migrations": {"canonical_data_model_v1": {"state": "applied"}},
@@ -161,6 +186,8 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         assert "config/settings.sanitized.json" not in names
         assert "config/storages.sanitized.json" in names
         assert "config/repositories.sanitized.json" in names
+        assert "config/apprise-profiles.sanitized.json" in names
+        assert "config/notification-deliveries.sanitized.json" in names
         assert "config/migration-state.sanitized.json" in names
         assert "config/migrations.log.sanitized.jsonl" in names
         assert "jobs/job1.json" in names
@@ -185,6 +212,8 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
     assert "u123" not in all_text
     assert "your-storagebox.de" not in all_text
     assert "ntfy.example.test" not in all_text
+    assert "ntfy://token@example.test" not in all_text
     assert "/./backup/job1" not in all_text
+    assert "alerts-main" in all_text
     assert "ssh://[MASKED_SSH_REMOTE]" in all_text
     assert "[MASKED]" in all_text

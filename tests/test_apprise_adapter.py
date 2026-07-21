@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 import sys
@@ -40,7 +41,28 @@ class _FakeApprise:
                     "service_url": "https://example.test",
                     "setup_url": "https://setup.example.test",
                     "details": {
+                        "templates": [
+                            "{schema}://{token}@{host}",
+                        ],
                         "tokens": {
+                            "host": {
+                                "name": "Hostname",
+                                "type": "string",
+                                "required": True,
+                                "map_to": "host",
+                            },
+                            "token": {
+                                "name": "Token",
+                                "type": "string",
+                                "private": True,
+                                "map_to": "password",
+                            },
+                            "target_channel": {
+                                "name": "Target Channel",
+                                "type": "string",
+                                "prefix": "#",
+                                "map_to": "targets",
+                            },
                             "schema": {"values": ["example", "examples"]},
                         },
                     },
@@ -64,6 +86,34 @@ def test_supported_providers_uses_apprise_details() -> None:
         "service_url": "https://example.test",
         "setup_url": "https://setup.example.test",
         "schemas": ["example", "examples"],
+        "templates": ["{schema}://{token}@{host}"],
+        "tokens": [
+            {
+                "key": "host",
+                "name": "Hostname",
+                "type": "string",
+                "required": True,
+                "private": False,
+                "map_to": "host",
+            },
+            {
+                "key": "target_channel",
+                "name": "Target Channel",
+                "type": "string",
+                "required": False,
+                "private": False,
+                "map_to": "targets",
+                "prefix": "#",
+            },
+            {
+                "key": "token",
+                "name": "Token",
+                "type": "string",
+                "required": False,
+                "private": True,
+                "map_to": "password",
+            },
+        ],
     }]
 
 
@@ -98,6 +148,26 @@ def test_validate_and_send_test_notification_with_test_double() -> None:
     assert _FakeApprise.instances[-1].urls == ["example://token"]
     assert _FakeApprise.instances[-1].title == "Title"
     assert _FakeApprise.instances[-1].body == "Body"
+
+
+def test_send_notification_suppresses_provider_info_logs(caplog) -> None:
+    class LoggingApprise(_FakeApprise):
+        def notify(self, *, title: str, body: str) -> bool:
+            logging.getLogger("apprise.plugins.ntfy").info("Sent ntfy notification to 'https://ntfy.sh'.")
+            return super().notify(title=title, body=body)
+
+    module = SimpleNamespace(Apprise=LoggingApprise, __version__="1.2.3-test")
+
+    with caplog.at_level(logging.INFO):
+        result = apprise_adapter.send_notification(
+            "example://token",
+            title="Title",
+            body="Body",
+            apprise_module=module,
+        )
+
+    assert result.ok is True
+    assert "Sent ntfy notification" not in caplog.text
 
 
 def test_rejected_url_does_not_send() -> None:

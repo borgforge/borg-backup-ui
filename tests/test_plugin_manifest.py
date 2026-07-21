@@ -34,10 +34,12 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
 
     assert 'release_workflow.py" package-provenance' in script
     assert 'f"boot/config/plugins/{NAME}/borg_backup_ui.py"' in workflow
+    assert 'f"boot/config/plugins/{NAME}/api/apprise_profiles_api.py"' in workflow
     assert 'f"boot/config/plugins/{NAME}/api/config_api.py"' in workflow
     assert 'f"boot/config/plugins/{NAME}/api/factory_reset_worker.py"' in workflow
     assert 'f"boot/config/plugins/{NAME}/ui/index.html"' in workflow
     assert 'f"boot/config/plugins/{NAME}/runtime/config/backup.conf.example"' in workflow
+    assert 'f"boot/config/plugins/{NAME}/runtime/vendor-bundles/apprise-vendor.json"' in workflow
     assert '"etc/rc.d/rc.borg_backup_ui"' in workflow
     assert "ET.parse(sys.argv[1])" in script
     assert 'launch="Settings/borg-backup-ui"' in script

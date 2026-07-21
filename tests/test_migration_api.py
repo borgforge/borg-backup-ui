@@ -85,7 +85,8 @@ def test_registry_reports_schema_missing_without_legacy_storage_marker_status(tm
     assert "setup_runtime_paths" not in items
     assert items["config_backup_conf_schema"]["title"] == "Canonical backup.conf configuration"
     assert items["config_backup_conf_schema"]["category"] == "config"
-    assert "does not match" in items["config_backup_conf_schema"]["reason"]
+    assert "1 missing schema key(s): BORG_MAX_RUNTIME_HOURS" in items["config_backup_conf_schema"]["reason"]
+    assert "file content differs" in items["config_backup_conf_schema"]["reason"]
     assert items["config_backup_conf_schema"]["status"] == "pending"
     assert items["config_backup_conf_schema"]["details"]["missing_keys"] == ["BORG_MAX_RUNTIME_HOURS"]
     assert registry["summary"]["failed"] == 0

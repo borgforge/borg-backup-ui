@@ -613,19 +613,20 @@ Typical contents:
 - `GLOBAL_DATA_DIR` and derived runtime directories
 - default paths for logs, status, and restore status
 - general system parameters
-- email/SMTP configuration
-- Unraid notifications
-- ntfy push notifications
 - weekly report
 - Homepage widget for external dashboards
 
 #### Notifications
 
-Borg-Backup-UI can report events through several channels:
+Borg-Backup-UI manages notification channels under **Settings > Notifications**. Events can be reported through several channels:
 
 - Unraid notifications
 - email/SMTP
-- ntfy
+- Apprise profiles for ntfy, Rocket.Chat, Discord and other supported providers
+
+Apprise profiles can be created, edited, duplicated, enabled/disabled, tested and removed. The provider list is loaded from the bundled Apprise version. Provider URL formats are generated from Apprise metadata, and saved Apprise URLs are stored as secrets that are never rendered back into the page. Existing native ntfy settings are migrated into an Apprise profile during startup.
+
+Real backup, restore-test and reminder events are delivered through Apprise in the background. The originating job writes a queue entry and does not wait for the external provider. The UI service processes the queue regularly, honors the profile timeout, attempts and backoff settings, and continues with pending entries after a restart. Sanitized delivery status is available through System Health and support bundles; queued message bodies and Apprise secret URLs are not exported in support bundles.
 
 Configurable events can include:
 
@@ -946,11 +947,12 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 ### 11.5 Configure Notifications
 
 1. Open **Settings > General**.
-2. Configure Unraid, email, or ntfy channel.
-3. Select the desired events.
-4. Set reminder interval and backup tolerance.
-5. Send a test message.
-6. Check diagnostics under **Settings > Advanced > Notification reminders**.
+2. Open the **Notifications** area.
+3. Configure Unraid, email, or an Apprise profile.
+4. Select the desired events.
+5. Set reminder interval and backup tolerance.
+6. Send a test message.
+7. Check diagnostics under **Settings > Advanced > Notification reminders**.
 
 ## 12. Status, Warnings, and Best Practices
 
@@ -1021,13 +1023,13 @@ A lock normally means that another Borg process is using the repository or that 
 
 Depending on the protection rule, an unavailable managed target results in **Skipped** or **Failed**. The run log contains the exact reason.
 
-### 13.4 Email or ntfy Is Not Sent
+### 13.4 Email, ntfy, or Apprise Is Not Sent
 
 1. Send a test notification.
 2. Verify that the specific event is enabled for the channel.
-3. Check recipient, server, topic, and authentication.
+3. Check recipient, server, topic, provider URL, and authentication.
 4. Open **Settings > Advanced > Notification Reminders** to see whether a reminder was already sent and when the next one is allowed.
-5. Review the application log for SMTP errors. `WRONG_VERSION_NUMBER` usually indicates an invalid port and TLS-mode combination.
+5. Review the application log for SMTP or Apprise errors. `WRONG_VERSION_NUMBER` usually indicates an invalid port and TLS-mode combination.
 
 ### 13.5 Migration or System Check Failed
 

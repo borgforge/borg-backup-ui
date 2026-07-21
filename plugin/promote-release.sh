@@ -118,6 +118,19 @@ md5 = sys.argv[4]
 provenance = json.loads(sys.argv[5])
 stable_path = worktree / "borg-backup-ui.plg"
 app_path = worktree / "borg_backup_ui.py"
+package_install_begin = "<!-- BEGIN borg-backup-ui package installer -->"
+package_install_end = "<!-- END borg-backup-ui package installer -->"
+package_install_re = re.compile(
+    re.escape(package_install_begin) + r".*?" + re.escape(package_install_end),
+    re.DOTALL,
+)
+legacy_package_file_re = re.compile(
+    r'<FILE Name="&bootdir;/&name;-&version;\.txz" Run="upgradepkg --install-new">\s*'
+    r"<URL>&pkgurl;</URL>\s*"
+    r"<MD5>[^<]*</MD5>\s*"
+    r"</FILE>",
+    re.DOTALL,
+)
 
 stable = stable_path.read_text(encoding="utf-8")
 already_promoted = f"###{version}###" in stable
@@ -132,7 +145,16 @@ if not block_match:
 tested_block = block_match.group(0).strip() + "\n\n"
 
 stable = re.sub(r'<!ENTITY version\s+"[^"]*">', f'<!ENTITY version   "{version}">', stable, count=1)
-stable = re.sub(r"<MD5>[^<]*</MD5>", f"<MD5>{md5}</MD5>", stable, count=1)
+tested_package_install = package_install_re.search(test)
+if tested_package_install:
+    if package_install_re.search(stable):
+        stable = package_install_re.sub(tested_package_install.group(0), stable, count=1)
+    elif legacy_package_file_re.search(stable):
+        stable = legacy_package_file_re.sub(tested_package_install.group(0), stable, count=1)
+    else:
+        raise SystemExit("Stable manifest has no package install block to replace")
+else:
+    stable = re.sub(r"<MD5>[^<]*</MD5>", f"<MD5>{md5}</MD5>", stable, count=1)
 stable = re.sub(
     rf"###{re.escape(version)}###\n(?:.*?)(?=\n###|\n\]\]>|\Z)",
     "",

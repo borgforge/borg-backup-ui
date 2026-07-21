@@ -237,6 +237,25 @@ def test_system_health_surfaces_corrupt_canonical_inventory(tmp_path: Path) -> N
     assert "notification_reminders" not in health
 
 
+def test_system_health_checks_apprise_profile_secret_permissions(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    secrets_dir = tmp_path / "secrets"
+    jobs_dir = config_dir / "jobs"
+    config_dir.mkdir(parents=True)
+    jobs_dir.mkdir()
+    secrets_dir.mkdir()
+    (config_dir / "repositories.json").write_text('{"schema_version":1,"repositories":[]}', encoding="utf-8")
+    (config_dir / "storages.json").write_text('{"schema_version":1,"storages":[]}', encoding="utf-8")
+    secret = secrets_dir / ".apprise-profile-alerts-main.url"
+    secret.write_text("json://token@example.test\n", encoding="utf-8")
+    secret.chmod(0o644)
+
+    health = get_system_health_data({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+
+    assert health["checks"]["secrets_permissions_ok"] is False
+    assert any(row["path"].endswith(".apprise-profile-alerts-main.url") for row in health["secrets_permissions"]["bad_files"])
+
+
 def test_cifs_probe_uses_local_capabilities_without_external_process(monkeypatch) -> None:
     monkeypatch.setattr("system_health_api.shutil.which", lambda name: "/sbin/mount.cifs" if name == "mount.cifs" else None)
 

@@ -610,6 +610,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             or p.startswith("/api/schedules")
             or p.startswith("/api/storage")
             or p.startswith("/api/repositories")
+            or p.startswith("/api/notification-profiles")
             or p.startswith("/api/history")
             or p.startswith("/api/restore")
             or p.startswith("/api/reports")
@@ -811,6 +812,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/schedules": self._get_schedules,
                 "/api/storage": self._get_storage,
                 "/api/repositories": self._get_repositories,
+                "/api/notification-profiles": lambda: self._get_apprise_profiles(parsed.query),
+                "/api/notification-profiles/providers": self._get_apprise_profile_providers,
                 "/api/repositories/browse": lambda: self._get_repository_directories(parsed.query),
                 "/api/repositories/archives": lambda: self._get_repository_archives(parsed.query),
                 "/api/settings": self._get_settings,
@@ -862,6 +865,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/storages": self._post_storage_target,
             "/api/storages/test": self._post_storage_target_test,
             "/api/repositories": self._post_repository,
+            "/api/notification-profiles": self._post_apprise_profile,
+            "/api/notification-profiles/validate": self._post_apprise_profile_validate,
+            "/api/notification-profiles/test": self._post_apprise_profile_test,
             "/api/repositories/validate": self._post_repository_validate,
             "/api/repositories/info": self._post_repository_info,
             "/api/repositories/lifecycle": self._post_repository_lifecycle,
@@ -869,7 +875,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
             "/api/settings/test-smtp": self._post_test_smtp,
-            "/api/settings/test-ntfy": self._post_test_ntfy,
             "/api/settings/weekly-report/send": self._post_send_weekly_report,
             "/api/settings/backup-restore": self._post_settings_backup_restore,
             "/api/settings/backup-delete": self._post_settings_backup_delete,
@@ -927,6 +932,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/jobs/enabled": self._put_job_enabled,
             "/api/auth/users": self._put_auth_user_update,
             "/api/restore-tests/policy": self._put_restore_test_policy,
+            "/api/notification-profiles": self._put_apprise_profile,
         }
         fn = routes.get(path)
         if fn is None:
@@ -942,6 +948,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore-tests": self._delete_restore_test,
             "/api/restore/history": self._delete_restore_history,
             "/api/repositories": self._delete_repository,
+            "/api/notification-profiles": self._delete_apprise_profile,
             "/api/auth/users": self._delete_auth_user,
             "/api/settings/homepage-widget-token": self._delete_homepage_widget_token,
         }
@@ -960,6 +967,56 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_homepage_widget_summary(self) -> dict:
         from homepage_widget_api import build_homepage_widget_summary
         return build_homepage_widget_summary(self.config)
+
+    def _get_apprise_profiles(self, query: str = "") -> dict:
+        from apprise_profiles_api import get_profile, list_profiles
+
+        qs = parse_qs(query or "")
+        profile_id = (qs.get("id") or qs.get("profile_id") or [""])[0]
+        if str(profile_id or "").strip():
+            return get_profile(self.config, str(profile_id))
+        return list_profiles(self.config)
+
+    def _get_apprise_profile_providers(self) -> dict:
+        from apprise_profiles_api import get_supported_providers
+
+        return get_supported_providers(self.config)
+
+    def _post_apprise_profile(self) -> dict:
+        from apprise_profiles_api import create_profile
+
+        return create_profile(self.config, self._read_json_body())
+
+    def _put_apprise_profile(self) -> dict:
+        from apprise_profiles_api import update_profile
+
+        body = self._read_json_body()
+        profile_id = str(body.get("id") or body.get("profile_id") or "").strip()
+        if not profile_id:
+            raise ValueError("profile_id is required")
+        return update_profile(self.config, profile_id, body)
+
+    def _delete_apprise_profile(self) -> dict:
+        from apprise_profiles_api import AppriseProfileConflict, delete_profile
+
+        qs = parse_qs(urlparse(self.path).query)
+        profile_id = (qs.get("id") or qs.get("profile_id") or [""])[0]
+        if not str(profile_id or "").strip():
+            raise ValueError("profile_id is required")
+        try:
+            return delete_profile(self.config, str(profile_id))
+        except AppriseProfileConflict as exc:
+            raise ApiConflictError(str(exc), exc.code) from exc
+
+    def _post_apprise_profile_validate(self) -> dict:
+        from apprise_profiles_api import validate_profile_payload
+
+        return validate_profile_payload(self.config, self._read_json_body())
+
+    def _post_apprise_profile_test(self) -> dict:
+        from apprise_profiles_api import test_profile
+
+        return test_profile(self.config, self._read_json_body())
 
     def _get_factory_reset_status(self) -> dict:
         from factory_reset_api import factory_reset_status
@@ -2471,7 +2528,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cleanup_removed_smb_mountpoints,
             cleanup_removed_smb_secrets,
         )
-        from ntfy_api import prepare_ntfy_updates_for_save
         from storage_objects_api import replace_profile_storages, settings_profiles_from_storages
         body = self._read_json_body()
         updates = body.get("updates", {})
@@ -2513,8 +2569,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             existing_pw = str(prev_conf.get("GLOBAL_SMTP_PASSWORD", ""))
             if not incoming_pw.strip() and existing_pw.strip():
                 updates.pop("GLOBAL_SMTP_PASSWORD", None)
-        if {"NTFY_PASSWORD", "NTFY_ACCESS_TOKEN"} & set(updates.keys()):
-            updates = prepare_ntfy_updates_for_save(updates, prev_conf)
         updates.pop("UI_LOGIN_PASSWORD", None)
         updates.pop("UI_LOGIN_PASSWORD_CLEAR", None)
         data_dir = updates.get("GLOBAL_DATA_DIR")
@@ -2594,11 +2648,6 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         recipient = body.get("recipient", "")
         return send_test_email(self.config, recipient)
-
-    def _post_test_ntfy(self) -> dict:
-        from config_api import send_test_ntfy
-        body = self._read_json_body()
-        return send_test_ntfy(self.config, body)
 
     def _post_settings_support_bundle(self) -> dict:
         from support_bundle_api import create_support_bundle
@@ -3395,6 +3444,43 @@ def _start_notification_reminder_loop(config: dict) -> threading.Thread | None:
         return None
 
 
+def _start_notification_delivery_loop(config: dict) -> threading.Thread | None:
+    def _interval_seconds() -> int:
+        try:
+            from config_api import read_expanded_conf
+            conf = read_expanded_conf(config)
+            raw = str(conf.get("NOTIFY_APPRISE_DELIVERY_INTERVAL_SECONDS", "30") or "30")
+            return max(10, min(3600, int(raw.strip())))
+        except Exception:
+            return 30
+
+    def _run() -> None:
+        time.sleep(5)
+        while True:
+            try:
+                from lib.notification_events import drain_notification_queue
+
+                result = drain_notification_queue(config)
+                if int(result.get("checked") or 0) or int(result.get("remaining") or 0):
+                    _log(
+                        "Apprise notification queue checked: "
+                        f"checked={result.get('checked')} delivered={result.get('delivered')} "
+                        f"retrying={result.get('retrying')} failed={result.get('failed')} "
+                        f"remaining={result.get('remaining')}"
+                    )
+            except Exception as exc:
+                _log(f"WARNING: Apprise notification queue check failed: {_mask_secrets(str(exc))}")
+            time.sleep(_interval_seconds())
+
+    try:
+        thread = threading.Thread(target=_run, name="apprise-notification-delivery", daemon=True)
+        thread.start()
+        return thread
+    except Exception as exc:
+        _log(f"WARNING: Apprise notification delivery loop could not be started: {_mask_secrets(str(exc))}")
+        return None
+
+
 def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None:
     """Refresh cached Borg repository information without blocking UI requests."""
     startup_delay_seconds = 300
@@ -3422,6 +3508,40 @@ def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None
         return thread
     except Exception as exc:
         _log(f"WARNING: Repository information refresh loop could not be started: {_mask_secrets(str(exc))}")
+        return None
+
+
+def _start_apprise_runtime_warmup(config: dict) -> threading.Thread | None:
+    """Warm the bundled Apprise runtime so the first profile API call is not cold."""
+
+    def _run() -> None:
+        time.sleep(10)
+        started = perf_counter()
+        try:
+            from apprise_profiles_api import get_supported_providers
+
+            info = get_supported_providers(config)
+            elapsed_ms = int((perf_counter() - started) * 1000)
+            if info.get("success") is False:
+                _log(
+                    "WARNING: Apprise runtime warmup failed: "
+                    f"{_mask_secrets(str(info.get('message') or 'unknown error'))}"
+                )
+                return
+            _log(
+                "Apprise runtime warmed: "
+                f"version={_mask_secrets(str(info.get('version') or 'unknown'))}, "
+                f"providers={int(info.get('provider_count') or 0)}, duration_ms={elapsed_ms}"
+            )
+        except Exception as exc:
+            _log(f"WARNING: Apprise runtime warmup failed: {_mask_secrets(str(exc))}")
+
+    try:
+        thread = threading.Thread(target=_run, name="apprise-runtime-warmup", daemon=True)
+        thread.start()
+        return thread
+    except Exception as exc:
+        _log(f"WARNING: Apprise runtime warmup could not be started: {_mask_secrets(str(exc))}")
         return None
 
 
@@ -3546,7 +3666,9 @@ def _start_normal_runtime_services(config: dict) -> None:
         _log(f"WARNING: Cron schedules could not be applied: {_mask_secrets(str(exc))}")
 
     _start_notification_reminder_loop(config)
+    _start_notification_delivery_loop(config)
     _start_repository_info_refresh_loop(config)
+    _start_apprise_runtime_warmup(config)
 
 
 def _activate_runtime_services(config: dict, startup_ready: bool, starter=None) -> bool:

@@ -701,11 +701,6 @@ def send_test_email(ui_config: dict, recipient: str = "") -> dict:
     return _send_test_email(ui_config, recipient)
 
 
-def send_test_ntfy(ui_config: dict, payload: dict | None = None) -> dict:
-    from ntfy_api import send_test_ntfy as _send_test_ntfy
-    return _send_test_ntfy(ui_config, payload)
-
-
 def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) -> dict:
     """Gibt strukturierte Settings-Daten für die UI zurück."""
     conf = read_expanded_conf(ui_config)
@@ -740,22 +735,6 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "NOTIFY_UNRAID_EVENTS": conf.get("NOTIFY_UNRAID_EVENTS", "backup_success,backup_warning,backup_failed,backup_skipped"),
             "NOTIFY_REMINDER_INTERVAL_HOURS": conf.get("NOTIFY_REMINDER_INTERVAL_HOURS", "24"),
             "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": conf.get("NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS", "6"),
-        },
-        "ntfy": {
-            "NTFY_ENABLED":       conf.get("NTFY_ENABLED", "false"),
-            "NTFY_PROFILE_NAME":  conf.get("NTFY_PROFILE_NAME", "ntfy"),
-            "NTFY_SERVER_URL":    conf.get("NTFY_SERVER_URL", ""),
-            "NTFY_TOPIC":         conf.get("NTFY_TOPIC", ""),
-            "NTFY_USERNAME":      conf.get("NTFY_USERNAME", ""),
-            "NTFY_PASSWORD":      "",
-            "NTFY_PASSWORD_SET":  "true" if Path(str(conf.get("NTFY_PASSWORD_FILE", ""))).is_file() else "false",
-            "NTFY_ACCESS_TOKEN":  "",
-            "NTFY_ACCESS_TOKEN_SET": "true" if Path(str(conf.get("NTFY_ACCESS_TOKEN_FILE", ""))).is_file() else "false",
-            "NTFY_PRIORITY":      conf.get("NTFY_PRIORITY", "default"),
-            "NTFY_TAGS":          conf.get("NTFY_TAGS", ""),
-            "NTFY_CLICK_URL":     conf.get("NTFY_CLICK_URL", ""),
-            "NTFY_EVENTS":        conf.get("NTFY_EVENTS", "backup_success,backup_failed,backup_skipped,restore_test_failed"),
-            "NTFY_TIMEOUT_SECONDS": conf.get("NTFY_TIMEOUT_SECONDS", "15"),
         },
         "per_repo_passphrases": _scan_per_repo_passphrases(),
         "docker": {

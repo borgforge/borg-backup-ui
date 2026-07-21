@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from inventory_store import atomic_write_bytes
-from storage_objects_api import replace_profile_storages, storages_file
+from storage_objects_api import _safe_local_storage_path, replace_profile_storages, storages_file
 
 
 MIGRATION_ID = "canonical_storage_profiles_v1"
@@ -45,6 +45,36 @@ def _profile_counts(settings: dict[str, Any]) -> dict[str, int]:
         key: len(settings.get(key)) if isinstance(settings.get(key), list) else 0
         for key in ("usb_profiles", "smb_profiles", "storage_profiles")
     }
+
+
+def _managed_smb_mount_path(profile: dict[str, Any]) -> str:
+    key = str(profile.get("key") or profile.get("profile_key") or "").strip().lower()
+    if not key:
+        raise ValueError("SMB profile key is required")
+    return f"/mnt/borg-backup-ui/smb/{key}"
+
+
+def _normalize_legacy_smb_profiles(profiles: Any) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    normalized: list[dict[str, Any]] = []
+    rewrites: list[dict[str, str]] = []
+    for raw in profiles if isinstance(profiles, list) else []:
+        if not isinstance(raw, dict):
+            continue
+        profile = dict(raw)
+        original = str(profile.get("mount_path") or "").strip()
+        try:
+            _safe_local_storage_path(original, field="SMB mount path")
+        except ValueError as exc:
+            managed = _managed_smb_mount_path(profile)
+            profile["mount_path"] = managed
+            rewrites.append({
+                "profile_key": str(profile.get("key") or profile.get("profile_key") or "").strip(),
+                "old_mount_path": original,
+                "new_mount_path": managed,
+                "reason": str(exc),
+            })
+        normalized.append(profile)
+    return normalized, rewrites
 
 
 def detect(config: dict) -> dict[str, Any]:
@@ -91,6 +121,7 @@ def apply(config: dict) -> dict[str, Any]:
     if owns_backup and old_storages is not None:
         atomic_write_bytes(backup_dir / "storages.json", old_storages)
     updated: dict[str, list[str]] = {}
+    normalized_mount_paths: list[dict[str, str]] = []
     try:
         mapping = {
             "usb": settings.get("usb_profiles", []),
@@ -99,6 +130,9 @@ def apply(config: dict) -> dict[str, Any]:
         }
         for location, profiles in mapping.items():
             if isinstance(profiles, list) and profiles:
+                if location == "smb":
+                    profiles, rewrites = _normalize_legacy_smb_profiles(profiles)
+                    normalized_mount_paths.extend(rewrites)
                 updated[location] = replace_profile_storages(config, location, profiles)
         cleaned = {"schema_version": int(settings.get("schema_version") or 1)}
         atomic_write_bytes(settings_path, (json.dumps(cleaned, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
@@ -121,6 +155,7 @@ def apply(config: dict) -> dict[str, Any]:
         "details": {
             "profile_counts": counts,
             "updated_storage_keys": updated,
+            "normalized_mount_paths": normalized_mount_paths,
             "backup_directory": str(backup_dir),
             "settings_file": str(settings_path),
             "storage_file": str(storage_path),

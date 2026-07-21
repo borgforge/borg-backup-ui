@@ -22,14 +22,28 @@ PROVENANCE_NAME = "build-provenance.json"
 PROVENANCE_MEMBER = f"boot/config/plugins/{NAME}/{PROVENANCE_NAME}"
 EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/borg_backup_ui.py",
+    f"boot/config/plugins/{NAME}/api/apprise_profiles_api.py",
     f"boot/config/plugins/{NAME}/api/config_api.py",
     f"boot/config/plugins/{NAME}/api/factory_reset_worker.py",
     f"boot/config/plugins/{NAME}/ui/index.html",
     f"boot/config/plugins/{NAME}/runtime/config/backup.conf.example",
-    f"boot/config/plugins/{NAME}/runtime/vendor/apprise/__init__.py",
-    f"boot/config/plugins/{NAME}/runtime/vendor/certifi/__init__.py",
+    f"boot/config/plugins/{NAME}/runtime/vendor-bundles/apprise-vendor.json",
     "etc/rc.d/rc.borg_backup_ui",
     PROVENANCE_MEMBER,
+)
+
+PACKAGE_INSTALL_BEGIN = "<!-- BEGIN borg-backup-ui package installer -->"
+PACKAGE_INSTALL_END = "<!-- END borg-backup-ui package installer -->"
+PACKAGE_INSTALL_BLOCK_RE = re.compile(
+    rf"{re.escape(PACKAGE_INSTALL_BEGIN)}.*?{re.escape(PACKAGE_INSTALL_END)}",
+    re.DOTALL,
+)
+LEGACY_PACKAGE_FILE_RE = re.compile(
+    r'<FILE Name="&bootdir;/&name;-&version;\.txz" Run="upgradepkg --install-new">\s*'
+    r"<URL>&pkgurl;</URL>\s*"
+    r"<MD5>[^<]*</MD5>\s*"
+    r"</FILE>",
+    re.DOTALL,
 )
 
 
@@ -241,6 +255,211 @@ def replace_changelog_block(manifest: str, version: str, notes: str) -> str:
     return manifest.replace("<![CDATA[\n", "<![CDATA[\n" + block, 1)
 
 
+def package_install_block(md5: str) -> str:
+    md5 = str(md5 or "").strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", md5):
+        raise RuntimeError("Package MD5 must be a 32 character hexadecimal digest")
+    return f"""{PACKAGE_INSTALL_BEGIN}
+<FILE Name="/tmp/borg-backup-ui-package-install.sh" Run="/bin/bash">
+<INLINE>
+#!/bin/bash
+set -e
+
+NAME="borg-backup-ui"
+VERSION="&version;"
+PLUGIN_DIR="/boot/config/plugins/${{NAME}}"
+PACKAGE_FILE="${{PLUGIN_DIR}}/${{NAME}}-${{VERSION}}.txz"
+PACKAGE_TMP="${{PACKAGE_FILE}}.tmp"
+PACKAGE_URL="&pkgurl;"
+EXPECTED_MD5="{md5.lower()}"
+INSTALLED_MD5_FILE="${{PLUGIN_DIR}}/.installed-package-md5"
+VENDOR_DIR="${{PLUGIN_DIR}}/runtime/vendor"
+VENDOR_BUNDLE_DIR="${{PLUGIN_DIR}}/runtime/vendor-bundles"
+VENDOR_META="${{VENDOR_BUNDLE_DIR}}/apprise-vendor.json"
+VENDOR_MARKER="${{VENDOR_DIR}}/.apprise-vendor.json"
+VENDOR_TMP="${{PLUGIN_DIR}}/runtime/vendor.tmp.$$"
+
+file_md5() {{
+  if command -v md5sum >/dev/null 2>/dev/null; then
+    md5sum "$1" | awk '{{print $1}}'
+  else
+    md5 -q "$1"
+  fi
+}}
+
+file_sha256() {{
+  if command -v sha256sum >/dev/null 2>/dev/null; then
+    sha256sum "$1" | awk '{{print $1}}'
+  else
+    shasum -a 256 "$1" | awk '{{print $1}}'
+  fi
+}}
+
+json_value() {{
+  _json_file="$1"
+  _json_key="$2"
+  sed -n 's/^[[:space:]]*"'"${{_json_key}}"'"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "${{_json_file}}" | head -n 1
+}}
+
+package_registered() {{
+  for _package_log in "/var/log/packages/${{NAME}}-${{VERSION}}"*; do
+    if [ -e "${{_package_log}}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}}
+
+core_payload_present() {{
+  [ -f "${{PLUGIN_DIR}}/borg_backup_ui.py" ] || return 1
+  [ -f "/etc/rc.d/rc.borg_backup_ui" ] || return 1
+  return 0
+}}
+
+vendor_ready() {{
+  [ -f "${{VENDOR_META}}" ] || return 1
+  [ -f "${{VENDOR_MARKER}}" ] || return 1
+  [ -f "${{VENDOR_DIR}}/apprise/__init__.py" ] || return 1
+  expected_version="$(json_value "${{VENDOR_META}}" version)"
+  expected_sha="$(json_value "${{VENDOR_META}}" sha256)"
+  marker_version="$(json_value "${{VENDOR_MARKER}}" version)"
+  marker_sha="$(json_value "${{VENDOR_MARKER}}" sha256)"
+  [ -n "${{expected_version}}" ] || return 1
+  [ -n "${{expected_sha}}" ] || return 1
+  [ "${{expected_version}}" = "${{marker_version}}" ] || return 1
+  [ "${{expected_sha}}" = "${{marker_sha}}" ] || return 1
+  return 0
+}}
+
+ensure_apprise_vendor() {{
+  if vendor_ready; then
+    echo "Borg Backup UI: Apprise Runtime unveraendert, Extraktion wird uebersprungen."
+    return 0
+  fi
+
+  if [ ! -f "${{VENDOR_META}}" ]; then
+    echo "ERROR: Apprise Vendor-Metadaten fehlen: ${{VENDOR_META}}"
+    return 1
+  fi
+
+  bundle_name="$(json_value "${{VENDOR_META}}" bundle)"
+  expected_sha="$(json_value "${{VENDOR_META}}" sha256)"
+  expected_version="$(json_value "${{VENDOR_META}}" version)"
+  if [ -z "${{bundle_name}}" ] || [ -z "${{expected_sha}}" ] || [ -z "${{expected_version}}" ]; then
+    echo "ERROR: Apprise Vendor-Metadaten sind unvollstaendig."
+    return 1
+  fi
+
+  bundle_path="${{VENDOR_BUNDLE_DIR}}/${{bundle_name}}"
+  if [ ! -f "${{bundle_path}}" ]; then
+    echo "ERROR: Apprise Vendor-Bundle fehlt: ${{bundle_path}}"
+    return 1
+  fi
+
+  actual_sha="$(file_sha256 "${{bundle_path}}")"
+  if [ "${{actual_sha}}" != "${{expected_sha}}" ]; then
+    echo "ERROR: Apprise Vendor-Bundle SHA256 stimmt nicht."
+    echo "  erwartet: ${{expected_sha}}"
+    echo "  erhalten : ${{actual_sha}}"
+    return 1
+  fi
+
+  echo "Borg Backup UI: extrahiere Apprise Runtime ${{expected_version}} einmalig..."
+  rm -rf "${{VENDOR_TMP}}" 2>/dev/null || true
+  mkdir -p "${{VENDOR_TMP}}"
+  tar -xf "${{bundle_path}}" -C "${{VENDOR_TMP}}"
+  if [ ! -f "${{VENDOR_TMP}}/apprise/__init__.py" ]; then
+    echo "ERROR: Apprise Vendor-Bundle enthaelt keine lauffaehige Runtime."
+    rm -rf "${{VENDOR_TMP}}" 2>/dev/null || true
+    return 1
+  fi
+  rm -rf "${{VENDOR_DIR}}" 2>/dev/null || true
+  mv "${{VENDOR_TMP}}" "${{VENDOR_DIR}}"
+  cp "${{VENDOR_META}}" "${{VENDOR_MARKER}}"
+}}
+
+download_package() {{
+  echo "Borg Backup UI: lade Paket ${{VERSION}} herunter..."
+  rm -f "${{PACKAGE_TMP}}"
+  if command -v curl >/dev/null 2>/dev/null; then
+    curl -fL --retry 3 --connect-timeout 20 -o "${{PACKAGE_TMP}}" "${{PACKAGE_URL}}"
+  elif command -v wget >/dev/null 2>/dev/null; then
+    wget -O "${{PACKAGE_TMP}}" "${{PACKAGE_URL}}"
+  else
+    echo "ERROR: Weder curl noch wget ist verfuegbar, Paket kann nicht geladen werden."
+    return 1
+  fi
+
+  actual_md5="$(file_md5 "${{PACKAGE_TMP}}")"
+  if [ "${{actual_md5}}" != "${{EXPECTED_MD5}}" ]; then
+    echo "ERROR: Paket-MD5 stimmt nicht."
+    echo "  erwartet: ${{EXPECTED_MD5}}"
+    echo "  erhalten : ${{actual_md5}}"
+    rm -f "${{PACKAGE_TMP}}"
+    return 1
+  fi
+  mv -f "${{PACKAGE_TMP}}" "${{PACKAGE_FILE}}"
+}}
+
+ensure_package_file() {{
+  if [ -f "${{PACKAGE_FILE}}" ]; then
+    actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
+    if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
+      echo "Borg Backup UI: vorhandenes Paket passt zur MD5, Download wird uebersprungen."
+      return 0
+    fi
+    echo "Borg Backup UI: lokales Paket hat andere MD5, lade neu."
+  fi
+  download_package
+}}
+
+mkdir -p "${{PLUGIN_DIR}}"
+
+if package_registered; then
+  if core_payload_present; then
+    marker_md5="$(cat "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true)"
+    if [ "${{marker_md5}}" = "${{EXPECTED_MD5}}" ]; then
+      ensure_apprise_vendor
+      echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, Paketinstallation wird uebersprungen."
+      exit 0
+    fi
+    if [ -f "${{PACKAGE_FILE}}" ]; then
+      actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
+      if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
+        ensure_apprise_vendor
+        echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, MD5-Marker wird aktualisiert."
+        echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
+        exit 0
+      fi
+    else
+      echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, kein Download/Entpacken noetig."
+      ensure_apprise_vendor
+      echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
+      exit 0
+    fi
+  fi
+fi
+
+ensure_package_file
+echo "Borg Backup UI: installiere Paket ${{VERSION}}. Auf USB-Flash kann dieser Schritt etwas dauern..."
+upgradepkg --install-new "${{PACKAGE_FILE}}"
+ensure_apprise_vendor
+echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
+rm -f /tmp/borg-backup-ui-package-install.sh
+</INLINE>
+</FILE>
+{PACKAGE_INSTALL_END}"""
+
+
+def rewrite_package_installer(manifest: str, md5: str) -> str:
+    block = package_install_block(md5)
+    if PACKAGE_INSTALL_BLOCK_RE.search(manifest):
+        return PACKAGE_INSTALL_BLOCK_RE.sub(lambda _match: block, manifest, count=1)
+    if LEGACY_PACKAGE_FILE_RE.search(manifest):
+        return LEGACY_PACKAGE_FILE_RE.sub(lambda _match: block, manifest, count=1)
+    raise RuntimeError("Plugin manifest package install block was not found")
+
+
 def prepare_build_tree(
     root: Path,
     version: str,
@@ -290,6 +509,45 @@ def package_provenance(package: Path) -> dict[str, object]:
         missing = [name for name in EXPECTED_PACKAGE_MEMBERS if name not in members]
         if missing:
             raise RuntimeError("Package is missing required members: " + ", ".join(missing))
+        forbidden = [
+            name
+            for name in members
+            if name.startswith(f"boot/config/plugins/{NAME}/runtime/vendor/")
+        ]
+        if forbidden:
+            raise RuntimeError("Package must not contain expanded Apprise vendor files")
+        bundle_prefix = f"boot/config/plugins/{NAME}/runtime/vendor-bundles/"
+        bundle_members = [
+            name
+            for name, member in members.items()
+            if name.startswith(bundle_prefix)
+            and name.endswith(".tar.xz")
+            and member.isfile()
+        ]
+        if len(bundle_members) != 1:
+            raise RuntimeError("Package must contain exactly one Apprise vendor bundle")
+        meta_handle = archive.extractfile(
+            members[f"boot/config/plugins/{NAME}/runtime/vendor-bundles/apprise-vendor.json"]
+        )
+        if meta_handle is None:
+            raise RuntimeError("Apprise vendor metadata cannot be read")
+        meta = json.loads(meta_handle.read().decode("utf-8"))
+        bundle_name = str(meta.get("bundle", ""))
+        bundle_sha = str(meta.get("sha256", ""))
+        bundle_version = str(meta.get("version", ""))
+        expected_bundle = bundle_prefix + bundle_name
+        if not bundle_name or expected_bundle not in members:
+            raise RuntimeError("Apprise vendor metadata references a missing bundle")
+        if not bundle_version or not re.fullmatch(r"[0-9a-f]{64}", bundle_sha):
+            raise RuntimeError("Apprise vendor metadata is incomplete")
+        bundle_handle = archive.extractfile(members[expected_bundle])
+        if bundle_handle is None:
+            raise RuntimeError("Apprise vendor bundle cannot be read")
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: bundle_handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+        if digest.hexdigest() != bundle_sha:
+            raise RuntimeError("Apprise vendor bundle SHA256 does not match metadata")
         handle = archive.extractfile(members[PROVENANCE_MEMBER])
         if handle is None:
             raise RuntimeError("Package provenance cannot be read")
@@ -305,10 +563,13 @@ def manifest_version(manifest: Path) -> str:
 
 
 def manifest_md5(manifest: Path) -> str:
-    match = re.search(r"<MD5>([^<]+)</MD5>", manifest.read_text(encoding="utf-8"))
+    text = manifest.read_text(encoding="utf-8")
+    match = re.search(r"<MD5>([^<]+)</MD5>", text)
+    if not match:
+        match = re.search(r'EXPECTED_MD5="([0-9a-fA-F]{32})"', text)
     if not match:
         raise RuntimeError("Manifest MD5 is missing")
-    return match.group(1)
+    return match.group(1).lower()
 
 
 def file_md5(path: Path) -> str:
@@ -407,6 +668,12 @@ def command_verify_implementation_delta(args: argparse.Namespace) -> None:
     verify_implementation_delta(Path(args.repo).resolve(), args.base_ref)
 
 
+def command_rewrite_package_installer(args: argparse.Namespace) -> None:
+    path = Path(args.manifest).resolve()
+    text = path.read_text(encoding="utf-8")
+    path.write_text(rewrite_package_installer(text, args.md5), encoding="utf-8")
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser()
     subparsers = result.add_subparsers(dest="command", required=True)
@@ -449,6 +716,11 @@ def parser() -> argparse.ArgumentParser:
     item.add_argument("--repo", default=".")
     item.add_argument("--base-ref", required=True)
     item.set_defaults(func=command_verify_implementation_delta)
+
+    item = subparsers.add_parser("rewrite-package-installer")
+    item.add_argument("--manifest", required=True)
+    item.add_argument("--md5", required=True)
+    item.set_defaults(func=command_rewrite_package_installer)
     return result
 
 

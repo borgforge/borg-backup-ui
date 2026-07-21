@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 MIGRATION_ID = "notification_events_v1"
@@ -40,7 +41,8 @@ def detect(config: dict) -> dict[str, Any]:
         if key not in conf
     ]
     ntfy_events = _events(str(conf.get("NTFY_EVENTS", "")))
-    needs_warning_alias = "backup_failed" in ntfy_events and "backup_warning" not in ntfy_events
+    supports_ntfy_events = _schema_supports_key(config, "NTFY_EVENTS")
+    needs_warning_alias = supports_ntfy_events and "backup_failed" in ntfy_events and "backup_warning" not in ntfy_events
     return {
         "migration_id": MIGRATION_ID,
         "introduced_in": INTRODUCED_IN,
@@ -69,7 +71,7 @@ def apply(config: dict) -> dict[str, Any]:
         updates["NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS"] = DEFAULT_BACKUP_OVERDUE_TOLERANCE_HOURS
 
     ntfy_events = _events(str(conf.get("NTFY_EVENTS", "")))
-    if "backup_failed" in ntfy_events and "backup_warning" not in ntfy_events:
+    if _schema_supports_key(config, "NTFY_EVENTS") and "backup_failed" in ntfy_events and "backup_warning" not in ntfy_events:
         updates["NTFY_EVENTS"] = _join_events(ntfy_events + ["backup_warning"])
 
     changed = write_conf(config, updates, snapshot_reason="Notification events migration") if updates else False
@@ -85,3 +87,13 @@ def apply(config: dict) -> dict[str, Any]:
             "updated_keys": sorted(updates.keys()),
         },
     }
+
+
+def _schema_supports_key(config: dict, key: str) -> bool:
+    from config_api import get_backup_conf_schema_file
+
+    try:
+        content = get_backup_conf_schema_file(config).read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return re.search(rf"^\s*{re.escape(key)}=", content, flags=re.MULTILINE) is not None

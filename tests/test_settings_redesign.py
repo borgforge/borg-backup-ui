@@ -21,6 +21,7 @@ def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
     for key in (
         "general",
         "users",
+        "notifications",
         "backup",
         "restore",
         "usb",
@@ -35,6 +36,81 @@ def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
         assert f"group: '{group}'" in script
     assert "function renderSettingsMenu(tabs)" in script
     assert 'class="settings-redesign-layout"' in script
+
+
+def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> None:
+    script = _read("ui/js/pages/settings.js")
+    css = _read("ui/settings-redesign.css")
+    for contract in (
+        "key: 'notifications'",
+        'data-settings-panel="notifications"',
+        "renderSettingsNotifications(data)",
+        "renderSettingsAppriseProfiles()",
+        "/api/notification-profiles",
+        "/api/notification-profiles/providers",
+        "/api/notification-profiles/validate",
+        "/api/notification-profiles/test",
+        "apprise-profile-duplicate",
+        "apprise-provider-select",
+        "onAppriseProviderSelect",
+        "_renderAppriseProviderOptions",
+        "_renderAppriseProviderAdvanced",
+        "_appriseProviderTemplates",
+        "_renderAppriseUrlHelp",
+        "_renderAppriseProfileSummary",
+        "_appriseProviderSchema",
+        'data-apprise-field="apprise_url"',
+        'data-apprise-field="provider"',
+        "settingsState.appriseDraftProfile",
+    ):
+        assert contract in script
+    assert 'data-apprise-field="id"' not in script
+    assert ".apprise-provider-picker" in css
+    assert ".apprise-provider-advanced" in css
+    assert ".apprise-profile-manager" in css
+    assert ".apprise-profile-summary" in css
+    assert ".apprise-profile-summary-main" in css
+    assert ".apprise-provider-name" in css
+    assert ".apprise-url-help" in css
+
+
+def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_metadata() -> None:
+    script = _read("ui/js/pages/settings.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    assert "${editing ? `<div class=\"settings-body two-col\">" in script
+    assert ": _renderAppriseProfileSummary(current, events)" in script
+    assert "service.toLowerCase() === provider ? service" in script
+    assert "apprise-profile-summary-main" in script
+    assert "<dl>" in script
+    assert "templates.map((item)" in script
+    assert "_renderAppriseTokenSummary(tokens, (item) => item.required" in script
+    assert "_renderAppriseTokenSummary(tokens, (item) => item.private" in script
+    assert "_renderAppriseUrlBuilder(provider, current)" in script
+    assert "data-apprise-url-token" in script
+    assert "function _appriseTokenFieldExamples(provider, key)" in script
+    assert "settingsT('apprise.fieldExamples'" in script
+    assert "data-apprise-field=\"url_template\"" in script
+    assert "function _appriseTemplateSignature(template)" in script
+    assert "_appriseTemplateSignature(item) === signature" in script
+    assert "onAppriseTemplateSelect" in script
+    assert "payload.url_template" in script
+    assert "payload.url_fields = Object.fromEntries" in script
+    assert "const payload = _collectAppriseProfilePayload({ forDelivery: true });" in script
+    assert ".filter(Boolean);\n}" in script
+    assert "templates.slice(0, 5).map((template)" in script
+    assert "_appriseUrlPlaceholder(provider, current.url_set)" in script
+    assert "apprise-ntfy-builder" not in script
+    assert "_buildAppriseNtfyUrl" not in script
+    assert "einfaches Formular" not in german
+    assert "simple form" not in english
+    assert "dynamicUrlHint" in german
+    assert "dynamicUrlHint" in english
+    assert "urlFieldsHint" in german
+    assert "urlFieldsHint" in english
+    assert "fieldExamples" in german
+    assert "fieldExamples" in english
 
 
 def test_factory_reset_is_the_last_maintenance_area() -> None:
@@ -112,8 +188,16 @@ def test_local_profile_paths_are_validated_before_save_in_both_languages() -> No
         assert health["failedPhase"]
         assert health["failureReason"]
         assert health["rollbackStatus"]
+        assert health["missingKeys"]
+        assert health["unknownKeys"]
+        assert health["canonicalContentChanged"]
     assert "details.failed_phase" in script
     assert "details.rollback_status" in script
+    assert "reason: status === 'applied' ? 'registrySchemaComplete' : ''" in script
+    assert "function _migrationRegistryAffectedCount(details = {})" in script
+    assert "details.missing_keys" in script
+    assert "details.unknown_keys" in script
+    assert "details.canonical_content_changed === true" in script
 
 
 def test_settings_layout_is_sticky_and_responsive() -> None:

@@ -136,7 +136,7 @@ Cron verwendet fünf Felder: Minute, Stunde, Tag, Monat und Wochentag. `0 3 * * 
 
 ### Überfälligkeit
 
-Die Anwendung berechnet den erwarteten Lauf aus dem Zeitplan. Nach Ablauf der konfigurierten Toleranz kann sie über Unraid, E-Mail oder ntfy informieren. Das Reminder-Intervall verhindert sofortige Wiederholungen.
+Die Anwendung berechnet den erwarteten Lauf aus dem Zeitplan. Nach Ablauf der konfigurierten Toleranz kann sie ueber Unraid, E-Mail oder Apprise-Profile informieren. Das Reminder-Intervall verhindert sofortige Wiederholungen.
 
 ## 8. Docker und VMs
 
@@ -194,7 +194,7 @@ Restore-Tests prüfen automatisiert die Wiederherstellbarkeit. **Planung & Polic
 
 ### Allgemein
 
-Verwaltet Datenpfade, Theme, Log-Aufbewahrung, Borg-Cache, Parity-Schutz, Reminder, SMTP, Wochenbericht, Unraid-Benachrichtigungen, ntfy, Homepage-Widget und Anwendungsinformationen.
+Verwaltet Datenpfade, Theme, Log-Aufbewahrung, Borg-Cache, Parity-Schutz, SMTP, Wochenbericht, Homepage-Widget und Anwendungsinformationen. Benachrichtigungskanäle liegen in der eigenen Rubrik **Benachrichtigungen**.
 
 ### Benutzer
 

@@ -6,9 +6,40 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #255
+- Added a durable background queue for Apprise event delivery so provider network calls no longer block backup, restore-test or reminder processing.
+- Queued Apprise notifications keep per-profile retry/backoff settings, survive application restarts and write sanitized delivery status to `config/notification-deliveries.json`.
+- System Health and support bundles now include sanitized Apprise delivery status without exporting queued notification bodies or provider secret URLs.
+
+### Issue #263
+- Fixed the canonical storage profile migration so legacy SMB profiles with invalid old mount paths are normalized to the managed `/mnt/borg-backup-ui/smb/<profile-key>` path instead of failing startup migration.
+
+### Issue #262
+- Test and stable manifests now render a checksum-aware package installer that reuses a valid local package, skips reinstalling an already registered identical version and prints explicit progress messages before download or `upgradepkg`.
+- Apprise is now packaged as a deterministic, SHA256-verified vendor bundle. The expanded `runtime/vendor` tree is no longer owned by the plugin package and is only refreshed on install when the Apprise version or bundle hash changes.
+
+### Issue #256
+- Added a dedicated Settings > Notifications area with Apprise profile overview, editor, duplication, enable/default state, event selection, validation, test delivery and deletion.
+- Added searchable Apprise provider selection from the bundled runtime metadata while preserving the generic Apprise URL fallback.
+- Compacted saved Apprise profile details outside edit mode and added dynamic provider URL templates and token hints from Apprise metadata for all providers.
+- Added provider-specific URL field generation from Apprise templates. Non-secret URL fields and the selected template are stored with the profile, while password/token fields stay write-only and can be replaced during edits.
+- Exposed all provider URL formats in the Apprise URL-format selector so ntfy password/token templates are selectable even when they appear after the compact help examples.
+- Simplified saved Apprise profile summaries and suppressed duplicate provider labels when Apprise reports the same service name and schema.
+- Enabled Apprise profiles to receive their selected backup, restore-test and overdue reminder events, using the profile display name as the notification title prefix.
+- Added a startup cutover migration from native ntfy settings to an Apprise `ntfy` profile, removed native ntfy from the Settings UI and dropped native `NTFY_*` keys from the canonical backup configuration schema.
+- Fixed migrated Apprise ntfy profiles so the editor reopens the matching URL format and provider fields instead of falling back to the first ntfy template.
+- Removed the persistent ntfy migration hint from the Notifications settings area now that the cutover is handled automatically.
+- Cleaned up notification event logging so delivered Apprise profile names are listed and the inactive native ntfy channel no longer appears in normal Apprise-only summaries.
+- Updated German and English help/manual sections for the separate notification area and write-only Apprise URL secrets.
+
+### Issue #258
+- Added the canonical Apprise notification profile store with protected write-only URL secrets, atomic writes and cross-process locking.
+- Added profile CRUD, validation, test delivery and provider discovery API helpers.
+- Extended diagnostics to include sanitized Apprise profile metadata and permission checks for `.apprise-profile-*` secret files.
+
 ### Issue #257
 - Added a hash-pinned Apprise dependency lock and package-build vendor step for `runtime/vendor` without runtime `pip` usage on Unraid.
-- Introduced a provider-neutral Apprise adapter that loads only the bundled runtime, discovers supported providers and supports controlled validation/test delivery while native ntfy remains active.
+- Introduced a provider-neutral Apprise adapter that loads only the bundled runtime, discovers supported providers and supports controlled validation/test delivery.
 - Guarded provider discovery with a bounded timeout so Apprise provider metadata cannot block diagnostic or future UI flows indefinitely.
 
 ### Issue #248

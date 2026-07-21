@@ -613,21 +613,22 @@ Typische Inhalte:
 - `GLOBAL_DATA_DIR` und abgeleitete Laufzeitverzeichnisse
 - Standardpfade für Logs, Status und Restore-Status
 - allgemeine Systemparameter
-- E-Mail-/SMTP-Konfiguration
-- Unraid-Benachrichtigungen
-- ntfy-Push-Benachrichtigungen
 - Wochenbericht
 - Homepage-Widget für externe Dashboards
 
 #### Benachrichtigungen
 
-Borg-Backup-UI kann Ereignisse über mehrere Kanäle melden:
+Borg-Backup-UI verwaltet Benachrichtigungskanäle in **Einstellungen > Benachrichtigungen**. Ereignisse koennen ueber mehrere Kanaele gemeldet werden:
 
 - Unraid-Benachrichtigungen
 - E-Mail/SMTP
-- ntfy
+- Apprise-Profile fuer ntfy, Rocket.Chat, Discord und andere unterstuetzte Provider
 
-Konfigurierbare Ereignisse können unter anderem sein:
+Apprise-Profile koennen angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Die Providerliste wird aus der gebuendelten Apprise-Version geladen. Provider-URL-Formate werden aus Apprise-Metadaten erzeugt, und gespeicherte Apprise-URLs werden als Secret gespeichert und nie zurueck in die Seite gerendert. Bestehende native ntfy-Einstellungen werden beim Start in ein Apprise-Profil migriert.
+
+Echte Backup-, Restore-Test- und Reminder-Ereignisse werden fuer Apprise im Hintergrund zugestellt. Der ausloesende Job legt einen Queue-Eintrag ab und wartet nicht auf den externen Provider. Der UI-Dienst verarbeitet die Queue regelmaessig, beachtet Timeout, Versuche und Backoff des Profils und setzt nach einem Neustart mit noch offenen Eintraegen fort. Sanitizte Zustellstaende stehen im Systemzustand und im Support-Paket; die Queue mit Nachrichtentexten und die Apprise-Secret-URLs werden nicht in Support-Pakete exportiert.
+
+Konfigurierbare Ereignisse koennen unter anderem sein:
 
 - Backup erfolgreich
 - Backup fehlgeschlagen
@@ -947,11 +948,12 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 ### 11.5 Benachrichtigungen einrichten
 
 1. Öffnen Sie **Einstellungen > Allgemein**.
-2. Konfigurieren Sie Unraid-, E-Mail- oder ntfy-Kanal.
-3. Wählen Sie die gewünschten Ereignisse.
-4. Setzen Sie Reminder-Intervall und Backup-Toleranz.
-5. Senden Sie eine Testnachricht.
-6. Prüfen Sie unter **Einstellungen > Erweitert > Notification Reminder** die Diagnose.
+2. Öffnen Sie die Rubrik **Benachrichtigungen**.
+3. Konfigurieren Sie Unraid-, E-Mail- oder Apprise-Profil.
+4. Wählen Sie die gewünschten Ereignisse.
+5. Setzen Sie Reminder-Intervall und Backup-Toleranz.
+6. Senden Sie eine Testnachricht.
+7. Prüfen Sie unter **Einstellungen > Erweitert > Notification Reminder** die Diagnose.
 
 ## 12. Status, Warnungen und Best Practices
 
@@ -1022,13 +1024,13 @@ Bei `Connection reset by peer` oder `Broken pipe` wurde die SSH-Verbindung unter
 
 Ein nicht verfügbares verwaltetes Speicherziel führt je nach Schutzregel zu **Übersprungen** oder **Fehler**. Die Ursache steht im Laufprotokoll.
 
-### 13.4 E-Mail oder ntfy wird nicht gesendet
+### 13.4 E-Mail, ntfy oder Apprise wird nicht gesendet
 
 1. Senden Sie eine Testnachricht.
 2. Prüfen Sie, ob das konkrete Ereignis für den Kanal aktiviert ist.
-3. Prüfen Sie Empfänger, Server, Topic und Authentifizierung.
+3. Prüfen Sie Empfänger, Server, Topic, Provider-URL und Authentifizierung.
 4. Prüfen Sie unter **Einstellungen > Erweitert > Notification Reminder**, ob bereits ein Reminder gesendet wurde und wann der nächste möglich ist.
-5. Lesen Sie bei SMTP-Fehlern das Anwendungslog. `WRONG_VERSION_NUMBER` weist meist auf eine falsche Kombination aus Port und TLS-Modus hin.
+5. Lesen Sie bei SMTP- oder Apprise-Fehlern das Anwendungslog. `WRONG_VERSION_NUMBER` weist meist auf eine falsche Kombination aus Port und TLS-Modus hin.
 
 ### 13.5 Migration oder Systemprüfung ist fehlgeschlagen
 

@@ -16,6 +16,7 @@ from .audit import append_event, config_dir, write_pending_state
 
 MIGRATION_ID = "canonical_backup_conf_v1"
 INTRODUCED_IN = "2026.07.19.0000"
+RECHECK_AFTER_FINAL = True
 
 
 def _conf_file(config: dict):
