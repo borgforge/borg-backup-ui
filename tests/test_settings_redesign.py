@@ -89,6 +89,8 @@ def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_
     assert "_renderAppriseTokenSummary(tokens, (item) => item.private" in script
     assert "_renderAppriseUrlBuilder(provider, current)" in script
     assert "data-apprise-url-token" in script
+    assert "function _appriseTokenFieldExamples(provider, key)" in script
+    assert "settingsT('apprise.fieldExamples'" in script
     assert "data-apprise-field=\"url_template\"" in script
     assert "function _appriseTemplateSignature(template)" in script
     assert "_appriseTemplateSignature(item) === signature" in script
@@ -106,6 +108,8 @@ def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_
     assert "dynamicUrlHint" in english
     assert "urlFieldsHint" in german
     assert "urlFieldsHint" in english
+    assert "fieldExamples" in german
+    assert "fieldExamples" in english
 
 
 def test_factory_reset_is_the_last_maintenance_area() -> None:

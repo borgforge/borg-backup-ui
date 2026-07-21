@@ -223,6 +223,9 @@ def _token_summaries(row: dict[str, Any]) -> list[dict[str, Any]]:
             "required": required,
             "private": private,
         }
+        map_to = str(value.get("map_to") or "").strip()
+        if map_to:
+            item["map_to"] = map_to
         if prefix:
             item["prefix"] = prefix
         out.append(item)

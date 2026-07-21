@@ -2059,6 +2059,7 @@
       "urlTemplate": "URL-Format",
       "urlFieldsHint": "Nicht-Secret-Felder werden im Profil gespeichert. Passwort, Token und andere Secrets bleiben leer und können bei Bedarf ersetzt werden.",
       "urlPreview": "Vorschau",
+      "fieldExamples": "Apprise-Metadaten: {examples}",
       "secretField": "Secret",
       "secretPreservePlaceholder": "gesetzt - leer lassen zum Behalten",
       "requiredFieldPlaceholder": "erforderlich",

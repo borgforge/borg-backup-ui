@@ -3820,6 +3820,23 @@ function _appriseTokenLabel(token, key) {
   return String(token?.name || key || '').replaceAll('_', ' ') || String(key || '');
 }
 
+function _appriseTokenFieldExamples(provider, key) {
+  const metadata = _appriseProviderMetadata(provider);
+  const tokens = Array.isArray(metadata?.tokens) ? metadata.tokens : [];
+  const wanted = String(key || '').toLowerCase();
+  const rows = tokens
+    .filter((item) => String(item?.map_to || '').toLowerCase() === wanted && String(item?.key || '').toLowerCase() !== wanted)
+    .map((item) => {
+      const label = _appriseTokenLabel(item, item?.key || '');
+      const prefix = String(item?.prefix || '').trim();
+      return prefix ? `${label}: ${prefix}` : label;
+    })
+    .filter(Boolean)
+    .slice(0, 5);
+  if (!rows.length) return '';
+  return settingsT('apprise.fieldExamples', { examples: rows.join(', ') });
+}
+
 function _appriseUrlPlaceholder(provider, urlSet = false) {
   if (urlSet) return settingsT('apprise.urlPreservePlaceholder');
   const schema = String(provider || '').trim().toLowerCase();
@@ -3865,11 +3882,13 @@ function _renderAppriseUrlBuilder(provider, current = {}) {
     const placeholder = secret && current.url_set
       ? settingsT('apprise.secretPreservePlaceholder')
       : (required ? settingsT('apprise.requiredFieldPlaceholder') : '');
+    const examples = _appriseTokenFieldExamples(schema, key);
     return `<div class="form-group">
       <label class="form-label" for="apprise-url-token-${escAttr(key)}">
         ${escHtml(label)}${required ? ' *' : ''}${secret ? ` <span class="settings-muted">(${settingsT('apprise.secretField')})</span>` : ''}
       </label>
       <input class="form-input ${secret ? '' : 'mono'}" id="apprise-url-token-${escAttr(key)}" type="${secret ? 'password' : 'text'}" data-apprise-url-token="${escAttr(key)}" data-apprise-url-secret="${secret ? 'true' : 'false'}" data-apprise-url-required="${required ? 'true' : 'false'}" value="${escAttr(stored)}" placeholder="${escAttr(placeholder)}" autocomplete="off" oninput="onAppriseUrlFieldInput()">
+      ${examples ? `<div class="form-help">${escHtml(examples)}</div>` : ''}
     </div>`;
   }).join('');
   return `<fieldset class="settings-fieldset apprise-url-builder" style="grid-column:1/-1">
