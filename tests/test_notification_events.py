@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import datetime
 import importlib.util
 import json
+import logging
 import os
 import sys
 from types import SimpleNamespace
@@ -113,6 +114,65 @@ def test_send_event_routes_to_enabled_apprise_profiles(monkeypatch, tmp_path):
         "body": "done",
         "kwargs": {"timeout_seconds": 15},
     }]
+
+
+def test_send_event_logs_delivered_apprise_profiles(monkeypatch, tmp_path, caplog):
+    store = tmp_path / "config" / "apprise-profiles.json"
+    secrets = tmp_path / "secrets"
+    store.parent.mkdir(parents=True)
+    secrets.mkdir(parents=True)
+    store.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [
+            {
+                "id": "alerts-main",
+                "name": "Critical Alerts",
+                "enabled": True,
+                "provider": "ntfy",
+                "selected_events": ["backup_success"],
+                "timeout_seconds": 15,
+                "retry_policy": {"attempts": 1, "backoff_seconds": 0},
+                "url_set": True,
+            },
+            {
+                "id": "rocketchat",
+                "name": "Rocket.Chat",
+                "enabled": True,
+                "provider": "rocket",
+                "selected_events": ["backup_success"],
+                "timeout_seconds": 15,
+                "retry_policy": {"attempts": 1, "backoff_seconds": 0},
+                "url_set": True,
+            },
+        ],
+    }), encoding="utf-8")
+    (secrets / ".apprise-profile-alerts-main.url").write_text("json://one@example.test\n", encoding="utf-8")
+    (secrets / ".apprise-profile-rocketchat.url").write_text("json://two@example.test\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "lib.notification_events.send_notification",
+        lambda *args, **kwargs: SimpleNamespace(ok=True, message="sent"),
+    )
+
+    with caplog.at_level(logging.INFO, logger="lib.notification_events"):
+        result = send_event(
+            {
+                "BACKUP_SCRIPTS_DIR": str(tmp_path),
+                "NOTIFY_UNRAID_EVENTS": "",
+                "NOTIFY_EMAIL_EVENTS": "",
+            },
+            NotificationEvent(
+                event_type="backup_success",
+                title="Borg Backup UI: Backup OK",
+                message="done",
+                job_name="Job",
+            ),
+        )
+
+    assert result["apprise"] is True
+    assert "apprise_profiles=[\"Critical Alerts (alerts-main)\", \"Rocket.Chat (rocketchat)\"]" in caplog.text
+    assert " ntfy=False" not in caplog.text
+    assert "native_ntfy=" not in caplog.text
 
 
 def test_send_event_skips_apprise_profiles_without_matching_event(monkeypatch, tmp_path):

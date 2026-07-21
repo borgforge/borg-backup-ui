@@ -21,6 +21,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Added a startup cutover migration from native ntfy settings to an Apprise `ntfy` profile, removed native ntfy from the Settings UI and dropped native `NTFY_*` keys from the canonical backup configuration schema.
 - Fixed migrated Apprise ntfy profiles so the editor reopens the matching URL format and provider fields instead of falling back to the first ntfy template.
 - Removed the persistent ntfy migration hint from the Notifications settings area now that the cutover is handled automatically.
+- Cleaned up notification event logging so delivered Apprise profile names are listed and the inactive native ntfy channel no longer appears in normal Apprise-only summaries.
 - Updated German and English help/manual sections for the separate notification area and write-only Apprise URL secrets.
 
 ### Issue #258

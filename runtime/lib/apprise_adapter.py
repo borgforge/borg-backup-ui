@@ -36,6 +36,18 @@ def _safe_error(value: BaseException | str) -> str:
     return text[:500] if text else "unknown error"
 
 
+@contextmanager
+def _suppress_apprise_info_logs() -> Iterator[None]:
+    """Keep provider-specific Apprise INFO lines out of backup logs."""
+    target = logging.getLogger("apprise")
+    previous_level = target.level
+    target.setLevel(logging.WARNING)
+    try:
+        yield
+    finally:
+        target.setLevel(previous_level)
+
+
 class _DiscoveryTimeoutError(TimeoutError):
     pass
 
@@ -278,9 +290,10 @@ def send_notification(
     module = load_bundled_apprise(vendor_dir=vendor_dir, apprise_module=apprise_module)
     try:
         with _operation_timeout(timeout_seconds, "Apprise notification delivery"):
-            app = module.Apprise()
-            app.add(text)
-            ok = bool(app.notify(title=str(title or "Borg Backup UI"), body=str(body or "")))
+            with _suppress_apprise_info_logs():
+                app = module.Apprise()
+                app.add(text)
+                ok = bool(app.notify(title=str(title or "Borg Backup UI"), body=str(body or "")))
     except Exception as exc:  # noqa: BLE001
         return AppriseDeliveryResult(False, f"{error_prefix}: {_safe_error(exc)}")
     return AppriseDeliveryResult(

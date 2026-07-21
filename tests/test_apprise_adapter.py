@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 import sys
@@ -128,6 +129,26 @@ def test_validate_and_send_test_notification_with_test_double() -> None:
     assert _FakeApprise.instances[-1].urls == ["example://token"]
     assert _FakeApprise.instances[-1].title == "Title"
     assert _FakeApprise.instances[-1].body == "Body"
+
+
+def test_send_notification_suppresses_provider_info_logs(caplog) -> None:
+    class LoggingApprise(_FakeApprise):
+        def notify(self, *, title: str, body: str) -> bool:
+            logging.getLogger("apprise.plugins.ntfy").info("Sent ntfy notification to 'https://ntfy.sh'.")
+            return super().notify(title=title, body=body)
+
+    module = SimpleNamespace(Apprise=LoggingApprise, __version__="1.2.3-test")
+
+    with caplog.at_level(logging.INFO):
+        result = apprise_adapter.send_notification(
+            "example://token",
+            title="Title",
+            body="Body",
+            apprise_module=module,
+        )
+
+    assert result.ok is True
+    assert "Sent ntfy notification" not in caplog.text
 
 
 def test_rejected_url_does_not_send() -> None:

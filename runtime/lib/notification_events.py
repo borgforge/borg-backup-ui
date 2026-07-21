@@ -52,6 +52,12 @@ class NotificationEvent:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class AppriseEventResult:
+    delivered: bool = False
+    delivered_profiles: list[str] = field(default_factory=list)
+
+
 def event_set(config: dict, key: str, default: set[str]) -> set[str]:
     raw = str(config.get(key, "") or "").strip()
     if not raw:
@@ -94,17 +100,30 @@ def send_event(
     if ntfy_config is not None:
         results["ntfy"] = _send_event_ntfy(ntfy_config, event)
 
-    results["apprise"] = _send_event_apprise(config, event)
+    apprise_result = _send_event_apprise(config, event)
+    results["apprise"] = apprise_result.delivered
 
-    logger.info(
-        "Notification event processed (event=%s source=%s unraid=%s email=%s ntfy=%s apprise=%s)",
-        event_type,
-        event.source or "-",
-        results["unraid"],
-        results["email"],
-        results["ntfy"],
-        results["apprise"],
-    )
+    if ntfy_config is not None:
+        logger.info(
+            "Notification event processed (event=%s source=%s unraid=%s email=%s native_ntfy=%s apprise=%s apprise_profiles=%s)",
+            event_type,
+            event.source or "-",
+            results["unraid"],
+            results["email"],
+            results["ntfy"],
+            results["apprise"],
+            _log_list(apprise_result.delivered_profiles),
+        )
+    else:
+        logger.info(
+            "Notification event processed (event=%s source=%s unraid=%s email=%s apprise=%s apprise_profiles=%s)",
+            event_type,
+            event.source or "-",
+            results["unraid"],
+            results["email"],
+            results["apprise"],
+            _log_list(apprise_result.delivered_profiles),
+        )
     return results
 
 
@@ -165,17 +184,31 @@ def _ntfy_title(config: NtfyConfig, title: str) -> str:
     return f"{prefix} - {text}"
 
 
-def _send_event_apprise(config: dict, event: NotificationEvent) -> bool:
-    delivered = False
+def _send_event_apprise(config: dict, event: NotificationEvent) -> AppriseEventResult:
+    result = AppriseEventResult()
     for profile in apprise_event_profiles(config, event.event_type):
         profile_id = str(profile.get("id") or "").strip()
         url = _read_apprise_secret(config, profile_id)
         if not url:
             logger.info("Apprise event skipped because profile URL is missing: profile=%s", profile_id)
             continue
-        result = _notify_apprise_profile(config, profile, url, event)
-        delivered = delivered or result
-    return delivered
+        delivered = _notify_apprise_profile(config, profile, url, event)
+        result.delivered = result.delivered or delivered
+        if delivered:
+            result.delivered_profiles.append(_apprise_profile_log_name(profile))
+    return result
+
+
+def _apprise_profile_log_name(profile: dict[str, Any]) -> str:
+    profile_id = str(profile.get("id") or "").strip()
+    name = str(profile.get("name") or "").strip()
+    if name and profile_id and name != profile_id:
+        return f"{name} ({profile_id})"
+    return name or profile_id or "-"
+
+
+def _log_list(values: list[str]) -> str:
+    return json.dumps(values, ensure_ascii=False)
 
 
 def apprise_event_profiles(config: dict, event_type: str) -> list[dict[str, Any]]:
