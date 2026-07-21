@@ -757,9 +757,18 @@
   gap: var(--ui-space-2);
 }
 
+.apprise-profile-manager {
+  min-height: 0;
+}
+
 .apprise-profile-manager .settings-profile-list > header .btn {
   justify-content: center;
   width: 100%;
+}
+
+.apprise-profile-manager .settings-profile-list-item {
+  min-height: 4rem;
+  padding: var(--ui-space-2) var(--ui-space-3);
 }
 
 .apprise-editor-actions {
@@ -767,6 +776,61 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--ui-space-2);
+}
+
+.apprise-profile-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--ui-space-2);
+}
+
+.apprise-profile-summary > div,
+.apprise-url-help {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: var(--ui-space-2);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-surface-subtle);
+}
+
+.apprise-profile-summary > .wide {
+  grid-column: 1 / -1;
+}
+
+.apprise-profile-summary small,
+.apprise-url-help span {
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.35;
+}
+
+.apprise-profile-summary strong {
+  overflow: hidden;
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apprise-url-help {
+  margin-top: var(--ui-space-2);
+}
+
+.apprise-url-help code {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  padding: 2px 0;
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apprise-url-help a {
+  color: var(--ui-color-accent);
 }
 
 .apprise-provider-picker {

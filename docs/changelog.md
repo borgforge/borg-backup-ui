@@ -12,6 +12,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #256
 - Added a dedicated Settings > Notifications area with Apprise profile overview, editor, duplication, enable/default state, event selection, validation, test delivery and deletion.
 - Added searchable Apprise provider selection from the bundled runtime metadata plus a guided ntfy URL builder while preserving the generic Apprise URL fallback.
+- Compacted saved Apprise profile details outside edit mode and added provider-specific URL guidance, including Rocket.Chat webhook and basic-auth examples.
 - Updated German and English help/manual sections for the separate notification area and write-only Apprise URL secrets.
 
 ### Issue #258

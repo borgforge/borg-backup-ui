@@ -56,6 +56,8 @@ def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> 
         "_renderAppriseProviderOptions",
         "_renderAppriseProviderAdvanced",
         "_buildAppriseNtfyUrl",
+        "_renderAppriseUrlHelp",
+        "_renderAppriseProfileSummary",
         'data-apprise-field="apprise_url"',
         'data-apprise-field="provider"',
         "settingsState.appriseDraftProfile",
@@ -65,6 +67,23 @@ def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> 
     assert ".apprise-provider-picker" in css
     assert ".apprise-provider-advanced" in css
     assert ".apprise-profile-manager" in css
+    assert ".apprise-profile-summary" in css
+    assert ".apprise-url-help" in css
+
+
+def test_apprise_profiles_are_compact_until_edit_and_explain_rocketchat_urls() -> None:
+    script = _read("ui/js/pages/settings.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    assert "${editing ? `<div class=\"settings-body two-col\">" in script
+    assert ": _renderAppriseProfileSummary(current, events)" in script
+    assert "rockets://webhook@chat.example.local/#backups" in script
+    assert "integrationId%2Ftoken" in script
+    assert "https://appriseit.com/services/rocketchat/" in script
+    assert "_appriseUrlPlaceholder(provider, current.url_set)" in script
+    assert "rocketUrlHint" in german
+    assert "rocketUrlHint" in english
 
 
 def test_factory_reset_is_the_last_maintenance_area() -> None:

@@ -3789,6 +3789,86 @@ function _renderAppriseNtfyBuilder(provider) {
   </fieldset>`;
 }
 
+function _appriseProviderSetupUrl(provider) {
+  const schema = String(provider || '').trim().toLowerCase();
+  if (!schema) return '';
+  const row = (settingsState.appriseProviders || []).find((item) =>
+    Array.isArray(item?.schemas) && item.schemas.map((value) => String(value).toLowerCase()).includes(schema)
+  );
+  if (row?.setup_url) return String(row.setup_url);
+  if (schema === 'rocket' || schema === 'rockets') return 'https://appriseit.com/services/rocketchat/';
+  return '';
+}
+
+function _appriseUrlPlaceholder(provider, urlSet = false) {
+  if (urlSet) return settingsT('apprise.urlPreservePlaceholder');
+  const schema = String(provider || '').trim().toLowerCase();
+  if (schema === 'rocket' || schema === 'rockets') return 'rockets://webhook@chat.example.local/#backups';
+  if (schema && schema !== 'apprise') return `${schema}://...`;
+  return settingsT('apprise.urlPlaceholder');
+}
+
+function _renderAppriseUrlHelp(provider, urlSet = false) {
+  const schema = String(provider || '').trim().toLowerCase();
+  const setupUrl = _appriseProviderSetupUrl(schema);
+  const docLink = setupUrl
+    ? `<a href="${escAttr(setupUrl)}" target="_blank" rel="noopener noreferrer">${settingsT('apprise.urlDocs')}</a>`
+    : '';
+  if (schema === 'ntfy' || schema === 'ntfys') {
+    return `<div class="form-help">${settingsT('apprise.ntfyBuilderHint')}</div>`;
+  }
+  if (schema === 'rocket' || schema === 'rockets') {
+    const secure = schema === 'rocket' ? 'rocket' : 'rockets';
+    return `<div class="apprise-url-help">
+      <span>${settingsT('apprise.rocketUrlHint')}</span>
+      <code>${secure}://webhook@chat.example.local/#backups</code>
+      <code>${secure}://integrationId%2Ftoken@chat.example.local/#backups</code>
+      <code>${secure}://user:password@chat.example.local/#backups</code>
+      ${docLink ? `<span>${docLink}</span>` : ''}
+      ${urlSet ? `<span>${settingsT('apprise.urlSecretReplaceHint')}</span>` : ''}
+    </div>`;
+  }
+  return `<div class="apprise-url-help">
+    <span>${settingsT('apprise.genericUrlHint', { provider: schema || 'apprise' })}</span>
+    ${schema && schema !== 'apprise' ? `<code>${schema}://...</code>` : ''}
+    ${docLink ? `<span>${docLink}</span>` : ''}
+    ${urlSet ? `<span>${settingsT('apprise.urlSecretReplaceHint')}</span>` : `<span>${settingsT('apprise.urlHint')}</span>`}
+  </div>`;
+}
+
+function _renderAppriseProfileSummary(profile, events) {
+  const badges = [
+    profile.enabled === false ? settingsT('apprise.disabled') : settingsT('apprise.enabled'),
+    profile.default ? settingsT('apprise.defaultProfile') : '',
+    profile.url_set ? settingsT('apprise.secretSet') : settingsT('apprise.secretMissing'),
+  ].filter(Boolean);
+  const eventLabels = notificationEventOptions()
+    .filter(([key]) => (events || []).includes(key))
+    .map(([, label]) => label);
+  return `<div class="apprise-profile-summary">
+    <div>
+      <small>${settingsT('apprise.provider')}</small>
+      <strong>${escHtml(_appriseProviderLabel(profile))}</strong>
+    </div>
+    <div>
+      <small>${settingsT('apprise.summaryStatus')}</small>
+      <strong>${escHtml(badges.join(' / ') || settingsT('common.none'))}</strong>
+    </div>
+    <div>
+      <small>${settingsT('forms.ntfyPriority')}</small>
+      <strong>${escHtml(settingsT(`forms.ntfyPriority${String(profile.priority || 'default').charAt(0).toUpperCase()}${String(profile.priority || 'default').slice(1)}`))}</strong>
+    </div>
+    <div>
+      <small>${settingsT('apprise.summaryDelivery')}</small>
+      <strong>${escHtml(`${Number(profile.timeout_seconds || 15)}s / ${Number(profile.retry_policy?.attempts || 1)}x`)}</strong>
+    </div>
+    <div class="wide">
+      <small>${settingsT('forms.notifyEvents')}</small>
+      <strong>${escHtml(eventLabels.join(', ') || settingsT('common.none'))}</strong>
+    </div>
+  </div>`;
+}
+
 function renderSettingsAppriseProfiles() {
   const profiles = Array.isArray(settingsState.appriseProfiles) ? settingsState.appriseProfiles : [];
   const selected = _appriseSelectedProfile();
@@ -3834,7 +3914,7 @@ function renderSettingsAppriseProfiles() {
         </header>
         <div class="settings-profile-editor-body">
           <div id="apprise-profiles-msg" class="status-message hidden"></div>
-          <div class="settings-body two-col">
+          ${editing ? `<div class="settings-body two-col">
             <div class="form-group">
               <label class="form-label" for="apprise-profile-name">${settingsT('apprise.profileName')}</label>
               <input class="form-input" id="apprise-profile-name" type="text" data-apprise-field="name" value="${escAttr(current.name || '')}" ${editing ? '' : 'disabled'}>
@@ -3874,14 +3954,14 @@ function renderSettingsAppriseProfiles() {
             ${editing ? _renderAppriseNtfyBuilder(provider) : ''}
             <div class="form-group" style="grid-column:1/-1">
               <label class="form-label" for="apprise-profile-url">${current.url_set ? settingsT('apprise.urlSet') : settingsT('apprise.url')}</label>
-              <input class="form-input mono" id="apprise-profile-url" type="password" data-apprise-field="apprise_url" value="" placeholder="${escAttr(current.url_set ? settingsT('apprise.urlPreservePlaceholder') : settingsT('apprise.urlPlaceholder'))}" autocomplete="off" ${editing ? '' : 'disabled'}>
-              <div class="form-help">${settingsT('apprise.urlHint')}</div>
+              <input class="form-input mono" id="apprise-profile-url" type="password" data-apprise-field="apprise_url" value="" placeholder="${escAttr(_appriseUrlPlaceholder(provider, current.url_set))}" autocomplete="off" ${editing ? '' : 'disabled'}>
+              <div id="apprise-url-help">${_renderAppriseUrlHelp(provider, current.url_set)}</div>
             </div>
             <fieldset class="settings-fieldset" style="grid-column:1/-1">
               <legend>${settingsT('forms.notifyEvents')}</legend>
               <div class="settings-body two-col">${_renderAppriseEvents(events)}</div>
             </fieldset>
-          </div>
+          </div>` : _renderAppriseProfileSummary(current, events)}
         </div>
         <footer>
           ${editing ? `<button type="button" class="btn btn-secondary btn-sm" data-settings-action="apprise-profile-cancel">${settingsT('dialog.cancel')}</button>` : ''}
@@ -4049,6 +4129,11 @@ function _setAppriseDraftProvider(provider) {
   }
   const transport = document.querySelector('[data-apprise-ntfy-scheme]');
   if (transport && (value === 'ntfy' || value === 'ntfys')) transport.value = value;
+  const urlInput = document.querySelector('[data-apprise-field="apprise_url"]');
+  const urlSet = !!settingsState.appriseDraftProfile?.url_set;
+  if (urlInput) urlInput.placeholder = _appriseUrlPlaceholder(value, urlSet);
+  const urlHelp = document.getElementById('apprise-url-help');
+  if (urlHelp) urlHelp.innerHTML = _renderAppriseUrlHelp(value, urlSet);
   document.querySelector('.apprise-ntfy-builder')?.classList.toggle('hidden', !(value === 'ntfy' || value === 'ntfys'));
   _rerenderAppriseProviderPickerOnly();
 }
