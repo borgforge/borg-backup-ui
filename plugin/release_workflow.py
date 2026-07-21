@@ -664,6 +664,10 @@ def command_verify_release(args: argparse.Namespace) -> None:
     print(json.dumps(payload, sort_keys=True))
 
 
+def command_manifest_md5(args: argparse.Namespace) -> None:
+    print(manifest_md5(Path(args.manifest).resolve()))
+
+
 def command_verify_implementation_delta(args: argparse.Namespace) -> None:
     verify_implementation_delta(Path(args.repo).resolve(), args.base_ref)
 
@@ -711,6 +715,10 @@ def parser() -> argparse.ArgumentParser:
     item.add_argument("--repo", default=".")
     item.add_argument("--main-ref", default="HEAD")
     item.set_defaults(func=command_verify_release)
+
+    item = subparsers.add_parser("manifest-md5")
+    item.add_argument("--manifest", required=True)
+    item.set_defaults(func=command_manifest_md5)
 
     item = subparsers.add_parser("verify-implementation-delta")
     item.add_argument("--repo", default=".")

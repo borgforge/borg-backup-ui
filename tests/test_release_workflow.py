@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -172,6 +173,38 @@ def test_manifest_md5_accepts_rendered_package_installer(tmp_path: Path) -> None
     )
 
     assert release_workflow.manifest_md5(manifest) == "abcdef0123456789abcdef0123456789"
+
+
+def test_release_workflow_cli_reads_inline_installer_md5(tmp_path: Path) -> None:
+    manifest = tmp_path / "borg-backup-ui-test.plg"
+    manifest.write_text(
+        release_workflow.rewrite_package_installer(
+            """<PLUGIN>
+<FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<URL>&pkgurl;</URL>
+<MD5>00000000000000000000000000000000</MD5>
+</FILE>
+</PLUGIN>
+""",
+            "abcdef0123456789abcdef0123456789",
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "plugin" / "release_workflow.py"),
+            "manifest-md5",
+            "--manifest",
+            str(manifest),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == "abcdef0123456789abcdef0123456789"
 
 
 def test_source_preflight_is_fail_fast_and_runs_pytest_once() -> None:

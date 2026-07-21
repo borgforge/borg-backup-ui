@@ -67,7 +67,7 @@ else
   PKG_MD5="$(md5 -q "$TEST_PKG")"
   TEST_PACKAGE_SHA256="$(shasum -a 256 "$TEST_PKG" | cut -d' ' -f1)"
 fi
-MANIFEST_MD5="$(sed -n 's|.*<MD5>\([^<]*\)</MD5>.*|\1|p' "$TEST_PLG" | head -n1)"
+MANIFEST_MD5="$(python3 "$SCRIPT_DIR/release_workflow.py" manifest-md5 --manifest "$TEST_PLG")"
 if [[ "$PKG_MD5" != "$MANIFEST_MD5" ]]; then
   echo "ERROR: test-channel MD5 does not match the tested package." >&2
   exit 1
