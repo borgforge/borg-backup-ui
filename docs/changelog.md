@@ -10,7 +10,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Added the canonical Apprise notification profile store with protected write-only URL secrets, atomic writes and cross-process locking.
 - Added profile CRUD, validation, test delivery and provider discovery API helpers while keeping native ntfy delivery unchanged.
 - Extended diagnostics to include sanitized Apprise profile metadata and permission checks for `.apprise-profile-*` secret files.
-- Warm the bundled Apprise runtime in the background after normal startup to reduce the first profile API call latency.
+- Warm only the targeted Apprise ntfy parser in the background after normal startup to reduce the first profile API call latency without scanning every provider on `/boot`.
 
 ### Issue #257
 - Added a hash-pinned Apprise dependency lock and package-build vendor step for `runtime/vendor` without runtime `pip` usage on Unraid.

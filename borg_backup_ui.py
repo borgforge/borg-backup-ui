@@ -3490,20 +3490,19 @@ def _start_apprise_runtime_warmup(config: dict) -> threading.Thread | None:
         time.sleep(10)
         started = perf_counter()
         try:
-            from apprise_profiles_api import get_supported_providers
+            from apprise_profiles_api import validate_profile_url
 
-            info = get_supported_providers(config)
+            result = validate_profile_url("ntfy://borg-backup-ui-warmup")
             elapsed_ms = int((perf_counter() - started) * 1000)
-            if info.get("success") is False:
+            if result.get("success") is False:
                 _log(
                     "WARNING: Apprise runtime warmup failed: "
-                    f"{_mask_secrets(str(info.get('message') or 'unknown error'))}"
+                    f"{_mask_secrets(str(result.get('message') or 'unknown error'))}"
                 )
                 return
             _log(
                 "Apprise runtime warmed: "
-                f"version={_mask_secrets(str(info.get('version') or 'unknown'))}, "
-                f"providers={int(info.get('provider_count') or 0)}, duration_ms={elapsed_ms}"
+                f"mode=targeted-ntfy, duration_ms={elapsed_ms}"
             )
         except Exception as exc:
             _log(f"WARNING: Apprise runtime warmup failed: {_mask_secrets(str(exc))}")
