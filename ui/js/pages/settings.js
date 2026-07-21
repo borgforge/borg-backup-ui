@@ -3752,85 +3752,67 @@ function _renderAppriseEvents(events) {
     </label>`).join('');
 }
 
-function _renderAppriseNtfyBuilder(provider) {
-  const visible = provider === 'ntfy' || provider === 'ntfys';
-  return `<fieldset class="settings-fieldset apprise-ntfy-builder ${visible ? '' : 'hidden'}" style="grid-column:1/-1">
-    <legend>${settingsT('apprise.ntfyBuilder')}</legend>
-    <div class="settings-body two-col">
-      <div class="form-group">
-        <label class="form-label" for="apprise-ntfy-scheme">${settingsT('apprise.ntfyTransport')}</label>
-        <select class="form-select" id="apprise-ntfy-scheme" data-apprise-ntfy-scheme>
-          <option value="ntfy" ${provider === 'ntfys' ? '' : 'selected'}>${settingsT('apprise.ntfyHttp')}</option>
-          <option value="ntfys" ${provider === 'ntfys' ? 'selected' : ''}>${settingsT('apprise.ntfyHttps')}</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="apprise-ntfy-host">${settingsT('apprise.ntfyHost')}</label>
-        <input class="form-input" id="apprise-ntfy-host" type="text" data-apprise-ntfy-host placeholder="${escAttr(settingsT('apprise.ntfyHostPlaceholder'))}">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="apprise-ntfy-topic">${settingsT('apprise.ntfyTopic')}</label>
-        <input class="form-input" id="apprise-ntfy-topic" type="text" data-apprise-ntfy-topic>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="apprise-ntfy-token">${settingsT('apprise.ntfyToken')}</label>
-        <input class="form-input" id="apprise-ntfy-token" type="password" data-apprise-ntfy-token autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="apprise-ntfy-user">${settingsT('apprise.ntfyUser')}</label>
-        <input class="form-input" id="apprise-ntfy-user" type="text" data-apprise-ntfy-user autocomplete="username">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="apprise-ntfy-password">${settingsT('apprise.ntfyPassword')}</label>
-        <input class="form-input" id="apprise-ntfy-password" type="password" data-apprise-ntfy-password autocomplete="new-password">
-      </div>
-      <div class="form-help" style="grid-column:1/-1">${settingsT('apprise.ntfyBuilderHint')}</div>
-    </div>
-  </fieldset>`;
+function _appriseProviderMetadata(provider) {
+  const schema = String(provider || '').trim().toLowerCase();
+  if (!schema) return null;
+  return (settingsState.appriseProviders || []).find((item) =>
+    Array.isArray(item?.schemas) && item.schemas.map((value) => String(value).toLowerCase()).includes(schema)
+  ) || null;
 }
 
 function _appriseProviderSetupUrl(provider) {
+  const row = _appriseProviderMetadata(provider);
+  return row?.setup_url ? String(row.setup_url) : '';
+}
+
+function _appriseTemplateForSchema(template, schema) {
+  const value = String(template || '').trim();
+  if (!value) return '';
+  return value.replaceAll('{schema}', String(schema || '').trim().toLowerCase() || 'apprise');
+}
+
+function _appriseProviderTemplates(provider) {
   const schema = String(provider || '').trim().toLowerCase();
-  if (!schema) return '';
-  const row = (settingsState.appriseProviders || []).find((item) =>
-    Array.isArray(item?.schemas) && item.schemas.map((value) => String(value).toLowerCase()).includes(schema)
-  );
-  if (row?.setup_url) return String(row.setup_url);
-  if (schema === 'rocket' || schema === 'rockets') return 'https://appriseit.com/services/rocketchat/';
-  return '';
+  const row = _appriseProviderMetadata(schema);
+  const templates = Array.isArray(row?.templates) ? row.templates : [];
+  return templates
+    .map((template) => _appriseTemplateForSchema(template, schema))
+    .filter(Boolean)
+    .slice(0, 5);
 }
 
 function _appriseUrlPlaceholder(provider, urlSet = false) {
   if (urlSet) return settingsT('apprise.urlPreservePlaceholder');
   const schema = String(provider || '').trim().toLowerCase();
-  if (schema === 'rocket' || schema === 'rockets') return 'rockets://webhook@chat.example.local/#backups';
+  const template = _appriseProviderTemplates(schema)[0] || '';
+  if (template) return template;
   if (schema && schema !== 'apprise') return `${schema}://...`;
   return settingsT('apprise.urlPlaceholder');
 }
 
+function _renderAppriseTokenSummary(tokens, filterFn, labelKey) {
+  const rows = (Array.isArray(tokens) ? tokens : []).filter(filterFn).slice(0, 8);
+  if (!rows.length) return '';
+  return `<span>${settingsT(labelKey)}: ${escHtml(rows.map((item) => item.name || item.key).join(', '))}</span>`;
+}
+
 function _renderAppriseUrlHelp(provider, urlSet = false) {
   const schema = String(provider || '').trim().toLowerCase();
+  const metadata = _appriseProviderMetadata(schema);
+  const templates = _appriseProviderTemplates(schema);
+  const tokens = Array.isArray(metadata?.tokens) ? metadata.tokens : [];
   const setupUrl = _appriseProviderSetupUrl(schema);
   const docLink = setupUrl
     ? `<a href="${escAttr(setupUrl)}" target="_blank" rel="noopener noreferrer">${settingsT('apprise.urlDocs')}</a>`
     : '';
-  if (schema === 'ntfy' || schema === 'ntfys') {
-    return `<div class="form-help">${settingsT('apprise.ntfyBuilderHint')}</div>`;
-  }
-  if (schema === 'rocket' || schema === 'rockets') {
-    const secure = schema === 'rocket' ? 'rocket' : 'rockets';
-    return `<div class="apprise-url-help">
-      <span>${settingsT('apprise.rocketUrlHint')}</span>
-      <code>${secure}://webhook@chat.example.local/#backups</code>
-      <code>${secure}://integrationId%2Ftoken@chat.example.local/#backups</code>
-      <code>${secure}://user:password@chat.example.local/#backups</code>
-      ${docLink ? `<span>${docLink}</span>` : ''}
-      ${urlSet ? `<span>${settingsT('apprise.urlSecretReplaceHint')}</span>` : ''}
-    </div>`;
-  }
+  const templateRows = templates.length
+    ? templates.map((template) => `<code>${escHtml(template)}</code>`).join('')
+    : (schema && schema !== 'apprise' ? `<code>${escHtml(`${schema}://...`)}</code>` : '');
   return `<div class="apprise-url-help">
-    <span>${settingsT('apprise.genericUrlHint', { provider: schema || 'apprise' })}</span>
-    ${schema && schema !== 'apprise' ? `<code>${schema}://...</code>` : ''}
+    <span>${settingsT(templates.length ? 'apprise.dynamicUrlHint' : 'apprise.genericUrlHint', { provider: schema || 'apprise' })}</span>
+    ${templateRows}
+    ${_renderAppriseTokenSummary(tokens, (item) => item.required, 'apprise.requiredTokens')}
+    ${_renderAppriseTokenSummary(tokens, (item) => item.private, 'apprise.secretTokens')}
     ${docLink ? `<span>${docLink}</span>` : ''}
     ${urlSet ? `<span>${settingsT('apprise.urlSecretReplaceHint')}</span>` : `<span>${settingsT('apprise.urlHint')}</span>`}
   </div>`;
@@ -3951,7 +3933,6 @@ function renderSettingsAppriseProfiles() {
               <input class="form-input" id="apprise-profile-backoff" type="number" min="0" max="3600" data-apprise-field="retry_backoff_seconds" value="${escAttr(current.retry_policy?.backoff_seconds || 0)}" ${editing ? '' : 'disabled'}>
             </div>
             ${editing ? _renderAppriseProviderAdvanced(provider) : ''}
-            ${editing ? _renderAppriseNtfyBuilder(provider) : ''}
             <div class="form-group" style="grid-column:1/-1">
               <label class="form-label" for="apprise-profile-url">${current.url_set ? settingsT('apprise.urlSet') : settingsT('apprise.url')}</label>
               <input class="form-input mono" id="apprise-profile-url" type="password" data-apprise-field="apprise_url" value="" placeholder="${escAttr(_appriseUrlPlaceholder(provider, current.url_set))}" autocomplete="off" ${editing ? '' : 'disabled'}>
@@ -4127,14 +4108,11 @@ function _setAppriseDraftProvider(provider) {
     }
     input.value = value;
   }
-  const transport = document.querySelector('[data-apprise-ntfy-scheme]');
-  if (transport && (value === 'ntfy' || value === 'ntfys')) transport.value = value;
   const urlInput = document.querySelector('[data-apprise-field="apprise_url"]');
   const urlSet = !!settingsState.appriseDraftProfile?.url_set;
   if (urlInput) urlInput.placeholder = _appriseUrlPlaceholder(value, urlSet);
   const urlHelp = document.getElementById('apprise-url-help');
   if (urlHelp) urlHelp.innerHTML = _renderAppriseUrlHelp(value, urlSet);
-  document.querySelector('.apprise-ntfy-builder')?.classList.toggle('hidden', !(value === 'ntfy' || value === 'ntfys'));
   _rerenderAppriseProviderPickerOnly();
 }
 
@@ -4150,43 +4128,10 @@ function _appriseSelectedEventsFromDom() {
   return selected.length ? selected : _appriseDefaultEvents();
 }
 
-function _cleanAppriseHost(value) {
-  return String(value || '')
-    .trim()
-    .replace(/^https?:\/\//i, '')
-    .replace(/^ntfys?:\/\//i, '')
-    .replace(/\/+$/, '');
-}
-
-function _buildAppriseNtfyUrl() {
-  const topic = String(document.querySelector('[data-apprise-ntfy-topic]')?.value || '').trim();
-  if (!topic) return '';
-  const scheme = String(document.querySelector('[data-apprise-ntfy-scheme]')?.value || 'ntfy') === 'ntfys' ? 'ntfys' : 'ntfy';
-  const host = _cleanAppriseHost(document.querySelector('[data-apprise-ntfy-host]')?.value || '');
-  const token = String(document.querySelector('[data-apprise-ntfy-token]')?.value || '').trim();
-  const user = String(document.querySelector('[data-apprise-ntfy-user]')?.value || '').trim();
-  const password = String(document.querySelector('[data-apprise-ntfy-password]')?.value || '');
-  const topicPath = topic.split('/').map((part) => encodeURIComponent(part.trim())).filter(Boolean).join('/');
-  if (!topicPath) return '';
-  let auth = '';
-  if (token) {
-    auth = `${encodeURIComponent(token)}@`;
-  } else if (user) {
-    auth = `${encodeURIComponent(user)}${password ? `:${encodeURIComponent(password)}` : ''}@`;
-  }
-  const base = host ? `${scheme}://${auth}${host}/${topicPath}` : `${scheme}://${topicPath}`;
-  const params = new URLSearchParams();
-  const priority = String(document.querySelector('[data-apprise-field="priority"]')?.value || 'default');
-  if (priority && priority !== 'default') params.set('priority', priority === 'urgent' ? 'max' : priority);
-  const suffix = params.toString();
-  return suffix ? `${base}?${suffix}` : base;
-}
-
 function _collectAppriseProfilePayload({ forDelivery = false } = {}) {
   const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'apprise').trim().toLowerCase();
   const explicitUrl = String(document.querySelector('[data-apprise-field="apprise_url"]')?.value || '').trim();
-  const generatedUrl = (provider === 'ntfy' || provider === 'ntfys') ? _buildAppriseNtfyUrl() : '';
-  const url = explicitUrl || generatedUrl;
+  const url = explicitUrl;
   const id = '';
   const payload = {
     id,

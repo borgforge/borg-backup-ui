@@ -55,7 +55,7 @@ def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> 
         "onAppriseProviderSelect",
         "_renderAppriseProviderOptions",
         "_renderAppriseProviderAdvanced",
-        "_buildAppriseNtfyUrl",
+        "_appriseProviderTemplates",
         "_renderAppriseUrlHelp",
         "_renderAppriseProfileSummary",
         'data-apprise-field="apprise_url"',
@@ -71,19 +71,21 @@ def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> 
     assert ".apprise-url-help" in css
 
 
-def test_apprise_profiles_are_compact_until_edit_and_explain_rocketchat_urls() -> None:
+def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_metadata() -> None:
     script = _read("ui/js/pages/settings.js")
     german = _read("ui/i18n/de.json")
     english = _read("ui/i18n/en.json")
 
     assert "${editing ? `<div class=\"settings-body two-col\">" in script
     assert ": _renderAppriseProfileSummary(current, events)" in script
-    assert "rockets://webhook@chat.example.local/#backups" in script
-    assert "integrationId%2Ftoken" in script
-    assert "https://appriseit.com/services/rocketchat/" in script
+    assert "templates.map((template)" in script
+    assert "_renderAppriseTokenSummary(tokens, (item) => item.required" in script
+    assert "_renderAppriseTokenSummary(tokens, (item) => item.private" in script
     assert "_appriseUrlPlaceholder(provider, current.url_set)" in script
-    assert "rocketUrlHint" in german
-    assert "rocketUrlHint" in english
+    assert "apprise-ntfy-builder" not in script
+    assert "_buildAppriseNtfyUrl" not in script
+    assert "dynamicUrlHint" in german
+    assert "dynamicUrlHint" in english
 
 
 def test_factory_reset_is_the_last_maintenance_area() -> None:

@@ -40,7 +40,20 @@ class _FakeApprise:
                     "service_url": "https://example.test",
                     "setup_url": "https://setup.example.test",
                     "details": {
+                        "templates": [
+                            "{schema}://{token}@{host}",
+                        ],
                         "tokens": {
+                            "host": {
+                                "name": "Hostname",
+                                "type": "string",
+                                "required": True,
+                            },
+                            "token": {
+                                "name": "Token",
+                                "type": "string",
+                                "private": True,
+                            },
                             "schema": {"values": ["example", "examples"]},
                         },
                     },
@@ -64,6 +77,23 @@ def test_supported_providers_uses_apprise_details() -> None:
         "service_url": "https://example.test",
         "setup_url": "https://setup.example.test",
         "schemas": ["example", "examples"],
+        "templates": ["{schema}://{token}@{host}"],
+        "tokens": [
+            {
+                "key": "host",
+                "name": "Hostname",
+                "type": "string",
+                "required": True,
+                "private": False,
+            },
+            {
+                "key": "token",
+                "name": "Token",
+                "type": "string",
+                "required": False,
+                "private": True,
+            },
+        ],
     }]
 
 

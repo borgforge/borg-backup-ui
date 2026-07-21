@@ -158,6 +158,8 @@ def supported_providers(
                 "service_url": str(row.get("service_url") or "").strip(),
                 "setup_url": str(row.get("setup_url") or "").strip(),
                 "schemas": _schema_values(row),
+                "templates": _template_values(row),
+                "tokens": _token_summaries(row),
             }
         )
     providers.sort(key=lambda item: (item["service_name"].lower(), item["schemas"]))
@@ -177,6 +179,42 @@ def _schema_values(row: dict[str, Any]) -> list[str]:
         return sorted(str(item) for item in values if str(item).strip())
     value = str(values or "").strip()
     return [value] if value else []
+
+
+def _template_values(row: dict[str, Any]) -> list[str]:
+    details = row.get("details") if isinstance(row.get("details"), dict) else {}
+    values = details.get("templates") if isinstance(details.get("templates"), (list, tuple, set, frozenset)) else []
+    out = []
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            out.append(text)
+    return list(dict.fromkeys(out))
+
+
+def _token_summaries(row: dict[str, Any]) -> list[dict[str, Any]]:
+    details = row.get("details") if isinstance(row.get("details"), dict) else {}
+    tokens = details.get("tokens") if isinstance(details.get("tokens"), dict) else {}
+    out = []
+    for key, value in sorted(tokens.items()):
+        if key == "schema" or not isinstance(value, dict):
+            continue
+        name = str(value.get("name") or key).strip()
+        token_type = str(value.get("type") or "").strip()
+        required = bool(value.get("required"))
+        private = bool(value.get("private"))
+        prefix = str(value.get("prefix") or "").strip()
+        item = {
+            "key": str(key),
+            "name": name,
+            "type": token_type,
+            "required": required,
+            "private": private,
+        }
+        if prefix:
+            item["prefix"] = prefix
+        out.append(item)
+    return out
 
 
 def validate_url(
