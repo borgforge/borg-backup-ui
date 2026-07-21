@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #256
+- Added a dedicated Settings > Notifications area with Apprise profile overview, editor, duplication, enable/default state, event selection, validation, test delivery and deletion.
+- Added searchable Apprise provider selection from the bundled runtime metadata plus a guided ntfy URL builder while preserving the generic Apprise URL fallback.
+- Updated German and English help/manual sections for the separate notification area and write-only Apprise URL secrets.
+
 ### Issue #258
 - Added the canonical Apprise notification profile store with protected write-only URL secrets, atomic writes and cross-process locking.
 - Added profile CRUD, validation, test delivery and provider discovery API helpers while keeping native ntfy delivery unchanged.

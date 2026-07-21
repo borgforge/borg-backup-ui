@@ -136,7 +136,7 @@ Cron uses five fields: minute, hour, day, month, and weekday. `0 3 * * *` starts
 
 ### Overdue Runs
 
-The application calculates the expected run from the schedule. After the configured tolerance expires, it can notify through Unraid, email, or ntfy. The reminder interval prevents immediate repetitions.
+The application calculates the expected run from the schedule. After the configured tolerance expires, it can notify through Unraid, email, ntfy, or Apprise. The reminder interval prevents immediate repetitions.
 
 ## 8. Docker and VMs
 
@@ -194,7 +194,7 @@ Restore tests automatically verify recoverability. **Planning & Policy** defines
 
 ### General
 
-Manages data paths, theme, log retention, Borg cache, parity protection, reminders, SMTP, weekly report, Unraid notifications, ntfy, Homepage widget, and application information.
+Manages data paths, theme, log retention, Borg cache, parity protection, SMTP, weekly report, Homepage widget, and application information. Notification channels live in the separate **Notifications** area.
 
 ### Users
 

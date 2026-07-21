@@ -37,6 +37,14 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   authUsers: [],
   homepageWidgetToken: '',
   appInfo: null,
+  appriseProfiles: [],
+  appriseProviders: [],
+  appriseProvidersLoaded: false,
+  appriseProvidersLoading: false,
+  appriseProviderFilter: '',
+  appriseSelectedProfileId: '',
+  appriseDraftProfile: null,
+  appriseLastResult: null,
   data: null,
   systemHealth: null,
 };
@@ -62,6 +70,7 @@ function getSettingsTabs() {
   const tabs = [
   { key: 'general', label: settingsT('tabs.general'), group: 'system', description: settingsT('menu.generalDescription'), icon: settingsMenuIcon('general') },
   { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: settingsMenuIcon('users') },
+  { key: 'notifications', label: settingsT('tabs.notifications'), group: 'operations', description: settingsT('menu.notificationsDescription'), icon: settingsMenuIcon('notifications') },
   { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: settingsMenuIcon('backup') },
   { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: settingsMenuIcon('restore') },
   { key: 'local', label: settingsT('tabs.localProfiles'), group: 'storage', description: settingsT('menu.localDescription'), icon: locationIcon('local') },
@@ -84,6 +93,7 @@ function settingsMenuIcon(key) {
   const icons = {
     general: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3v-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1 2.8-2.8.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3h4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.2v4h-.2a1.7 1.7 0 0 0-1.4 1z"/></svg>',
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M3 21v-2a6 6 0 0 1 12 0v2"/><path d="M16 4.5a4 4 0 0 1 0 7"/><path d="M18 15a5 5 0 0 1 3 4.6V21"/></svg>',
+    notifications: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M20 3l-3 3"/><path d="M4 3l3 3"/></svg>',
     backup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v13H4z"/><path d="M7 3h10v4H7z"/><path d="M8 12h8M8 16h5"/></svg>',
     restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
     transfer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h13l-3-3M17 17H4l3 3"/><path d="M20 7l-3 3M4 17l3-3"/></svg>',
@@ -97,12 +107,13 @@ async function refreshSettings() {
   hideEl('settings-message');
   _renderSettingsLoading();
   try {
-    const [res, verRes, healthRes, authRes, reminderRes] = await Promise.all([
+    const [res, verRes, healthRes, authRes, reminderRes, appriseProfilesRes] = await Promise.all([
       fetch('/api/settings'),
       fetch('/api/version'),
       window.BBUI.core.fetchSystemHealth(true).catch(() => null),
       fetch('/api/auth/status'),
       fetch('/api/notification-reminders/diagnostics').catch(() => null),
+      fetch('/api/notification-profiles').catch(() => null),
     ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -127,6 +138,13 @@ async function refreshSettings() {
     settingsState.homepageWidgetToken = '';
     settingsState.data = data;
     settingsState.systemHealth = health;
+    if (appriseProfilesRes?.ok) {
+      const apprisePayload = await appriseProfilesRes.json();
+      settingsState.appriseProfiles = Array.isArray(apprisePayload?.profiles) ? apprisePayload.profiles : [];
+      if (!settingsState.appriseProfiles.some((profile) => profile.id === settingsState.appriseSelectedProfileId)) {
+        settingsState.appriseSelectedProfileId = settingsState.appriseProfiles[0]?.id || '';
+      }
+    }
     renderSettings(data, health);
     settingsState.smbCleanupKeys = [];
     settingsState.smbSecretCleanupKeys = [];
@@ -173,6 +191,7 @@ function _renderSettingsLoading() {
 window.addEventListener?.('bbui:language-changed', () => {
   if (settingsState.loaded && settingsState.data) {
     renderSettings(settingsState.data, settingsState.systemHealth);
+    if (settingsState.activeTab === 'notifications') maybeLoadAppriseProviders();
   }
 });
 
@@ -230,11 +249,10 @@ function renderSettings(data, systemHealth) {
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
       ${renderSettingsHomepageWidget(data.homepage_widget || {})}
-      ${renderSettingsNotificationReminders(data.unraid_notifications || {})}
-      ${renderSettingsSMTP(data.smtp || {})}
-      ${renderSettingsUnraidNotifications(data.unraid_notifications || {})}
-      ${renderSettingsNtfy(data.ntfy || {})}
       ${renderSettingsAbout()}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'notifications' ? '' : 'hidden'}" data-settings-panel="notifications">
+      ${renderSettingsNotifications(data)}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'usb' ? '' : 'hidden'}" data-settings-panel="usb">
       ${renderSettingsUsbProfiles(data.usb_profiles || [])}
@@ -288,6 +306,7 @@ function renderSettings(data, systemHealth) {
   }
   refreshSettingsConfigBackups();
   initializeSettingsProfileManagers();
+  if (settingsState.activeTab === 'notifications') maybeLoadAppriseProviders();
   _updateUnsavedChangesUi();
 }
 
@@ -334,9 +353,10 @@ function activateSettingsTab(tabKey) {
   if (description) description.textContent = active.description;
 
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(active.key);
-  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab);
+  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || active.key === 'factory-reset');
   if (SETTINGS_PROFILE_CONFIG[previousTab]) syncSettingsProfileManager(previousTab);
   if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
+  if (active.key === 'notifications') maybeLoadAppriseProviders();
   _updateUnsavedChangesUi();
 }
 
@@ -3558,6 +3578,301 @@ function renderSettingsUnraidNotifications(s) {
     </div>`);
 }
 
+function renderSettingsNotifications(data) {
+  return `
+    ${renderSettingsNotificationReminders(data.unraid_notifications || {})}
+    ${renderSettingsSMTP(data.smtp || {})}
+    ${renderSettingsUnraidNotifications(data.unraid_notifications || {})}
+    ${renderSettingsAppriseProfiles()}
+    ${renderSettingsNtfy(data.ntfy || {})}`;
+}
+
+function _appriseDefaultEvents() {
+  return ['backup_success', 'backup_warning', 'backup_failed', 'backup_skipped', 'restore_test_failed'];
+}
+
+function _appriseProfileName(profile) {
+  return String(profile?.name || profile?.id || settingsT('apprise.newProfile')).trim();
+}
+
+function _appriseProviderLabel(profile) {
+  const provider = String(profile?.provider || '').trim();
+  if (!provider) return settingsT('apprise.genericProvider');
+  const row = settingsState.appriseProviders.find((item) => (item.schemas || []).includes(provider));
+  return row?.service_name ? `${row.service_name} (${provider})` : provider;
+}
+
+function _appriseSelectedProfile() {
+  const profiles = Array.isArray(settingsState.appriseProfiles) ? settingsState.appriseProfiles : [];
+  return profiles.find((profile) => profile.id === settingsState.appriseSelectedProfileId) || profiles[0] || null;
+}
+
+function _appriseDraftFromProfile(profile, duplicate = false) {
+  const source = profile || {};
+  const id = duplicate
+    ? `${String(source.id || 'apprise').replace(/-copy(?:-\\d+)?$/, '')}-copy`
+    : String(source.id || '');
+  return {
+    id,
+    original_id: duplicate ? '' : String(source.id || ''),
+    name: duplicate ? settingsT('apprise.copyName', { name: _appriseProfileName(source) }) : _appriseProfileName(source),
+    enabled: source.enabled !== false,
+    provider: String(source.provider || 'ntfy'),
+    selected_events: Array.isArray(source.selected_events) && source.selected_events.length
+      ? [...source.selected_events]
+      : _appriseDefaultEvents(),
+    timeout_seconds: Number(source.timeout_seconds || 15),
+    retry_policy: {
+      attempts: Number(source.retry_policy?.attempts || 1),
+      backoff_seconds: Number(source.retry_policy?.backoff_seconds || 0),
+    },
+    priority: String(source.priority || 'default') || 'default',
+    default: !!source.default,
+    url_set: !!source.url_set,
+    apprise_url: '',
+  };
+}
+
+function _appriseEmptyDraft() {
+  return _appriseDraftFromProfile({
+    id: '',
+    name: settingsT('apprise.newProfile'),
+    provider: 'ntfy',
+    enabled: true,
+    default: !settingsState.appriseProfiles.length,
+    selected_events: _appriseDefaultEvents(),
+    timeout_seconds: 15,
+    retry_policy: { attempts: 1, backoff_seconds: 0 },
+    priority: 'default',
+    url_set: false,
+  });
+}
+
+function _appriseProviderCategory(row) {
+  const haystack = `${row.service_name || ''} ${(row.schemas || []).join(' ')}`.toLowerCase();
+  if (haystack.includes('mail') || haystack.includes('smtp')) return 'email';
+  if (haystack.includes('discord') || haystack.includes('slack') || haystack.includes('telegram') || haystack.includes('matrix')) return 'chat';
+  if (haystack.includes('ntfy') || haystack.includes('gotify') || haystack.includes('pushover') || haystack.includes('pushbullet')) return 'push';
+  if (haystack.includes('json') || haystack.includes('webhook') || haystack.includes('http')) return 'webhook';
+  return 'other';
+}
+
+function _renderAppriseProviderPicker(selectedProvider) {
+  const filter = String(settingsState.appriseProviderFilter || '').trim().toLowerCase();
+  const rows = Array.isArray(settingsState.appriseProviders) ? settingsState.appriseProviders : [];
+  const candidates = [];
+  rows.forEach((row) => {
+    (row.schemas || []).forEach((schema) => {
+      const item = {
+        schema,
+        service_name: row.service_name || schema,
+        setup_url: row.setup_url || '',
+        category: _appriseProviderCategory(row),
+      };
+      const text = `${item.schema} ${item.service_name}`.toLowerCase();
+      if (!filter || text.includes(filter)) candidates.push(item);
+    });
+  });
+  candidates.sort((a, b) => a.category.localeCompare(b.category) || a.service_name.localeCompare(b.service_name) || a.schema.localeCompare(b.schema));
+  const visible = candidates.slice(0, 48);
+  const grouped = visible.reduce((acc, item) => {
+    acc[item.category] = acc[item.category] || [];
+    acc[item.category].push(item);
+    return acc;
+  }, {});
+  const groups = ['push', 'chat', 'email', 'webhook', 'other']
+    .filter((key) => grouped[key])
+    .map((key) => `
+      <section class="apprise-provider-group">
+        <h4>${settingsT(`apprise.categories.${key}`)}</h4>
+        <div>
+          ${grouped[key].map((item) => `
+            <button type="button" class="apprise-provider-choice ${item.schema === selectedProvider ? 'active' : ''}" data-settings-action="apprise-provider-select" data-apprise-provider="${escAttr(item.schema)}">
+              <strong>${escHtml(item.service_name)}</strong>
+              <small>${escHtml(item.schema)}</small>
+            </button>`).join('')}
+        </div>
+      </section>`)
+    .join('');
+  const empty = settingsState.appriseProvidersLoading
+    ? settingsT('apprise.providersLoading')
+    : (settingsState.appriseProvidersLoaded ? settingsT('apprise.noProviders') : settingsT('apprise.providersNotLoaded'));
+  return `
+    <div class="form-group" style="grid-column:1/-1">
+      <label class="form-label" for="apprise-provider-filter">${settingsT('apprise.providerSearch')}</label>
+      <input class="form-input" id="apprise-provider-filter" type="search" value="${escAttr(settingsState.appriseProviderFilter)}" placeholder="${escAttr(settingsT('apprise.providerSearchPlaceholder'))}" oninput="onAppriseProviderFilterChange(this.value)">
+      <div class="form-help">${settingsT('apprise.providerCount', { count: settingsState.appriseProviders.length || 0 })}</div>
+    </div>
+    <div class="apprise-provider-picker" id="apprise-provider-picker">
+      ${groups || `<div class="status-message empty-state">${escHtml(empty)}</div>`}
+    </div>`;
+}
+
+function _renderAppriseEvents(events) {
+  const selected = Array.isArray(events) ? events : _appriseDefaultEvents();
+  return notificationEventOptions().map(([key, label]) => `
+    <label class="form-checkbox-row">
+      <input type="checkbox" data-apprise-event="${escAttr(key)}" ${selected.includes(key) ? 'checked' : ''}>
+      ${label}
+    </label>`).join('');
+}
+
+function _renderAppriseNtfyBuilder(provider) {
+  const visible = provider === 'ntfy' || provider === 'ntfys';
+  return `<fieldset class="settings-fieldset apprise-ntfy-builder ${visible ? '' : 'hidden'}" style="grid-column:1/-1">
+    <legend>${settingsT('apprise.ntfyBuilder')}</legend>
+    <div class="settings-body two-col">
+      <div class="form-group">
+        <label class="form-label" for="apprise-ntfy-scheme">${settingsT('apprise.ntfyTransport')}</label>
+        <select class="form-select" id="apprise-ntfy-scheme" data-apprise-ntfy-scheme>
+          <option value="ntfy" ${provider === 'ntfys' ? '' : 'selected'}>${settingsT('apprise.ntfyHttp')}</option>
+          <option value="ntfys" ${provider === 'ntfys' ? 'selected' : ''}>${settingsT('apprise.ntfyHttps')}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="apprise-ntfy-host">${settingsT('apprise.ntfyHost')}</label>
+        <input class="form-input" id="apprise-ntfy-host" type="text" data-apprise-ntfy-host placeholder="${escAttr(settingsT('apprise.ntfyHostPlaceholder'))}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="apprise-ntfy-topic">${settingsT('apprise.ntfyTopic')}</label>
+        <input class="form-input" id="apprise-ntfy-topic" type="text" data-apprise-ntfy-topic>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="apprise-ntfy-token">${settingsT('apprise.ntfyToken')}</label>
+        <input class="form-input" id="apprise-ntfy-token" type="password" data-apprise-ntfy-token autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="apprise-ntfy-user">${settingsT('apprise.ntfyUser')}</label>
+        <input class="form-input" id="apprise-ntfy-user" type="text" data-apprise-ntfy-user autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="apprise-ntfy-password">${settingsT('apprise.ntfyPassword')}</label>
+        <input class="form-input" id="apprise-ntfy-password" type="password" data-apprise-ntfy-password autocomplete="new-password">
+      </div>
+      <div class="form-help" style="grid-column:1/-1">${settingsT('apprise.ntfyBuilderHint')}</div>
+    </div>
+  </fieldset>`;
+}
+
+function renderSettingsAppriseProfiles() {
+  const profiles = Array.isArray(settingsState.appriseProfiles) ? settingsState.appriseProfiles : [];
+  const selected = _appriseSelectedProfile();
+  const draft = settingsState.appriseDraftProfile;
+  const editing = !!draft;
+  const current = draft || selected;
+  const hasCurrent = !!current;
+  const provider = String(current?.provider || 'ntfy');
+  const events = Array.isArray(current?.selected_events) ? current.selected_events : _appriseDefaultEvents();
+  const priorities = ['default', 'min', 'low', 'high', 'urgent']
+    .map((value) => `<option value="${value}" ${(current?.priority || 'default') === value ? 'selected' : ''}>${settingsT(`forms.ntfyPriority${value.charAt(0).toUpperCase()}${value.slice(1)}`)}</option>`)
+    .join('');
+  const profileRows = profiles.map((profile) => {
+    const active = profile.id === settingsState.appriseSelectedProfileId && !editing;
+    const badges = [
+      profile.enabled === false ? settingsT('apprise.disabled') : settingsT('apprise.enabled'),
+      profile.default ? settingsT('apprise.defaultProfile') : '',
+      profile.url_set ? settingsT('apprise.secretSet') : settingsT('apprise.secretMissing'),
+    ].filter(Boolean);
+    return `<button type="button" class="settings-profile-list-item ${active ? 'active' : ''}" data-settings-action="apprise-profile-select" data-apprise-profile-id="${escAttr(profile.id)}">
+      <span class="settings-profile-symbol notifications">${settingsMenuIcon('notifications')}</span>
+      <span><strong>${escHtml(_appriseProfileName(profile))}</strong><small>${escHtml(_appriseProviderLabel(profile))}</small><em>${escHtml(badges.join(' / '))}</em></span>
+      <b>›</b>
+    </button>`;
+  }).join('');
+  const body = hasCurrent ? `
+    <div class="settings-profile-manager apprise-profile-manager">
+      <aside class="settings-profile-list">
+        <header>
+          <strong>${settingsT('apprise.savedProfiles')}</strong>
+          <small>${settingsT('menu.profileCount', { count: profiles.length })}</small>
+          <button type="button" class="btn btn-secondary btn-sm" data-settings-action="apprise-profile-add">${settingsT('apprise.addProfile')}</button>
+        </header>
+        <nav>${profileRows || `<div class="apprise-profile-empty">${settingsT('apprise.noProfiles')}</div>`}</nav>
+      </aside>
+      <section class="settings-profile-editor ${editing ? '' : 'readonly'}">
+        <header>
+          <div><small>${settingsT(editing ? 'apprise.editor' : 'menu.selectedProfile')}</small><h3>${escHtml(_appriseProfileName(current))}</h3><span>${escHtml(_appriseProviderLabel(current))}</span></div>
+          <div class="apprise-editor-actions">
+            ${editing ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-settings-action="apprise-profile-duplicate">${settingsT('apprise.duplicate')}</button>`}
+            ${editing ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-settings-action="apprise-profile-edit">${settingsT('menu.edit')}</button>`}
+          </div>
+        </header>
+        <div class="settings-profile-editor-body">
+          <div id="apprise-profiles-msg" class="status-message hidden"></div>
+          <div class="settings-body two-col">
+            <div class="form-group">
+              <label class="form-label" for="apprise-profile-id">${settingsT('apprise.profileId')}</label>
+              <input class="form-input mono" id="apprise-profile-id" type="text" data-apprise-field="id" value="${escAttr(current.id || '')}" ${editing && !current.original_id ? '' : 'disabled'}>
+              <div class="form-help">${settingsT('apprise.profileIdHint')}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="apprise-profile-name">${settingsT('apprise.profileName')}</label>
+              <input class="form-input" id="apprise-profile-name" type="text" data-apprise-field="name" value="${escAttr(current.name || '')}" ${editing ? '' : 'disabled'}>
+            </div>
+            <label class="form-checkbox-row">
+              <input type="checkbox" data-apprise-field="enabled" ${current.enabled === false ? '' : 'checked'} ${editing ? '' : 'disabled'}>
+              ${settingsT('apprise.enabled')}
+            </label>
+            <label class="form-checkbox-row">
+              <input type="checkbox" data-apprise-field="default" ${current.default ? 'checked' : ''} ${editing ? '' : 'disabled'}>
+              ${settingsT('apprise.defaultProfile')}
+            </label>
+            <div class="form-group">
+              <label class="form-label" for="apprise-profile-provider">${settingsT('apprise.provider')}</label>
+              <input class="form-input mono" id="apprise-profile-provider" type="text" data-apprise-field="provider" value="${escAttr(provider)}" ${editing ? '' : 'disabled'}>
+              <div class="form-help">${settingsT('apprise.providerHint')}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="apprise-profile-priority">${settingsT('forms.ntfyPriority')}</label>
+              <select class="form-select" id="apprise-profile-priority" data-apprise-field="priority" ${editing ? '' : 'disabled'}>${priorities}</select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="apprise-profile-timeout">${settingsT('forms.ntfyTimeout')}</label>
+              <input class="form-input" id="apprise-profile-timeout" type="number" min="1" max="300" data-apprise-field="timeout_seconds" value="${escAttr(current.timeout_seconds || 15)}" ${editing ? '' : 'disabled'}>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="apprise-profile-attempts">${settingsT('apprise.retryAttempts')}</label>
+              <input class="form-input" id="apprise-profile-attempts" type="number" min="1" max="5" data-apprise-field="retry_attempts" value="${escAttr(current.retry_policy?.attempts || 1)}" ${editing ? '' : 'disabled'}>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="apprise-profile-backoff">${settingsT('apprise.retryBackoff')}</label>
+              <input class="form-input" id="apprise-profile-backoff" type="number" min="0" max="3600" data-apprise-field="retry_backoff_seconds" value="${escAttr(current.retry_policy?.backoff_seconds || 0)}" ${editing ? '' : 'disabled'}>
+            </div>
+            ${editing ? _renderAppriseProviderPicker(provider) : ''}
+            ${editing ? _renderAppriseNtfyBuilder(provider) : ''}
+            <div class="form-group" style="grid-column:1/-1">
+              <label class="form-label" for="apprise-profile-url">${current.url_set ? settingsT('apprise.urlSet') : settingsT('apprise.url')}</label>
+              <input class="form-input mono" id="apprise-profile-url" type="password" data-apprise-field="apprise_url" value="" placeholder="${escAttr(current.url_set ? settingsT('apprise.urlPreservePlaceholder') : settingsT('apprise.urlPlaceholder'))}" autocomplete="off" ${editing ? '' : 'disabled'}>
+              <div class="form-help">${settingsT('apprise.urlHint')}</div>
+            </div>
+            <fieldset class="settings-fieldset" style="grid-column:1/-1">
+              <legend>${settingsT('forms.notifyEvents')}</legend>
+              <div class="settings-body two-col">${_renderAppriseEvents(events)}</div>
+            </fieldset>
+          </div>
+        </div>
+        <footer>
+          ${editing ? `<button type="button" class="btn btn-secondary btn-sm" data-settings-action="apprise-profile-cancel">${settingsT('dialog.cancel')}</button>` : ''}
+          ${editing ? `<button type="button" class="btn btn-secondary btn-sm" data-settings-action="apprise-profile-validate">${settingsT('apprise.validate')}</button>` : ''}
+          <button type="button" class="btn btn-secondary btn-sm" data-settings-action="apprise-profile-test">${settingsT('apprise.sendTest')}</button>
+          ${editing ? `<button type="button" class="btn btn-primary btn-sm" data-settings-action="apprise-profile-save">${settingsT('menu.saveProfile')}</button>` : ''}
+          ${!editing && selected ? `<button type="button" class="btn btn-danger btn-sm" data-settings-action="apprise-profile-delete">${settingsT('common.remove')}</button>` : ''}
+        </footer>
+      </section>
+    </div>` : `
+      <div class="settings-body">
+        <div id="apprise-profiles-msg" class="status-message hidden"></div>
+        <div class="status-message empty-state">${settingsT('apprise.noProfiles')}</div>
+        <button type="button" class="btn btn-primary btn-sm" data-settings-action="apprise-profile-add">${settingsT('apprise.addProfile')}</button>
+      </div>`;
+  return settingsCard(settingsT('apprise.title'),
+    settingsMenuIcon('notifications'),
+    `<div class="settings-body">
+      <div class="status-message info">${settingsT('apprise.hint')}</div>
+      ${body}
+    </div>`);
+}
+
 function renderSettingsNtfy(n) {
   const enabled = String(n.NTFY_ENABLED || 'false') === 'true';
   const passwordSet = String(n.NTFY_PASSWORD_SET || 'false') === 'true';
@@ -3648,6 +3963,228 @@ async function sendTestNtfy() {
     result.style.color = 'var(--error)';
   } finally {
     btn.classList.remove('loading');
+  }
+}
+
+function onAppriseProviderFilterChange(value) {
+  settingsState.appriseProviderFilter = String(value || '');
+  const providerInput = document.querySelector('[data-apprise-field="provider"]');
+  const picker = document.getElementById('apprise-provider-picker');
+  if (picker) picker.outerHTML = _renderAppriseProviderPicker(String(providerInput?.value || 'ntfy'));
+  const filter = document.getElementById('apprise-provider-filter');
+  if (filter) {
+    filter.focus();
+    const len = filter.value.length;
+    filter.setSelectionRange(len, len);
+  }
+}
+
+async function maybeLoadAppriseProviders() {
+  if (settingsState.appriseProvidersLoaded || settingsState.appriseProvidersLoading) return;
+  settingsState.appriseProvidersLoading = true;
+  _rerenderAppriseProviderPickerOnly();
+  try {
+    const res = await fetch('/api/notification-profiles/providers');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(apiErrorMessage(data, res.status));
+    settingsState.appriseProviders = Array.isArray(data.providers) ? data.providers : [];
+    settingsState.appriseProvidersLoaded = true;
+  } catch (err) {
+    settingsState.appriseProviders = [];
+    settingsState.appriseProvidersLoaded = true;
+    showMsg('apprise-profiles-msg', 'error', settingsT('apprise.providersLoadFailed', { message: err.message }));
+  } finally {
+    settingsState.appriseProvidersLoading = false;
+    _rerenderAppriseProviderPickerOnly();
+  }
+}
+
+function _rerenderAppriseProviderPickerOnly() {
+  const picker = document.getElementById('apprise-provider-picker');
+  if (!picker) return;
+  const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'ntfy');
+  picker.outerHTML = _renderAppriseProviderPicker(provider);
+}
+
+function _setAppriseDraftProvider(provider) {
+  const value = String(provider || 'apprise').trim().toLowerCase();
+  const input = document.querySelector('[data-apprise-field="provider"]');
+  if (input) input.value = value;
+  const transport = document.querySelector('[data-apprise-ntfy-scheme]');
+  if (transport && (value === 'ntfy' || value === 'ntfys')) transport.value = value;
+  document.querySelector('.apprise-ntfy-builder')?.classList.toggle('hidden', !(value === 'ntfy' || value === 'ntfys'));
+  _rerenderAppriseProviderPickerOnly();
+}
+
+function _appriseSelectedEventsFromDom() {
+  const selected = Array.from(document.querySelectorAll('[data-apprise-event]'))
+    .filter((el) => el.checked)
+    .map((el) => el.getAttribute('data-apprise-event'))
+    .filter(Boolean);
+  return selected.length ? selected : _appriseDefaultEvents();
+}
+
+function _cleanAppriseHost(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^ntfys?:\/\//i, '')
+    .replace(/\/+$/, '');
+}
+
+function _buildAppriseNtfyUrl() {
+  const topic = String(document.querySelector('[data-apprise-ntfy-topic]')?.value || '').trim();
+  if (!topic) return '';
+  const scheme = String(document.querySelector('[data-apprise-ntfy-scheme]')?.value || 'ntfy') === 'ntfys' ? 'ntfys' : 'ntfy';
+  const host = _cleanAppriseHost(document.querySelector('[data-apprise-ntfy-host]')?.value || '');
+  const token = String(document.querySelector('[data-apprise-ntfy-token]')?.value || '').trim();
+  const user = String(document.querySelector('[data-apprise-ntfy-user]')?.value || '').trim();
+  const password = String(document.querySelector('[data-apprise-ntfy-password]')?.value || '');
+  const topicPath = topic.split('/').map((part) => encodeURIComponent(part.trim())).filter(Boolean).join('/');
+  if (!topicPath) return '';
+  let auth = '';
+  if (token) {
+    auth = `${encodeURIComponent(token)}@`;
+  } else if (user) {
+    auth = `${encodeURIComponent(user)}${password ? `:${encodeURIComponent(password)}` : ''}@`;
+  }
+  const base = host ? `${scheme}://${auth}${host}/${topicPath}` : `${scheme}://${topicPath}`;
+  const params = new URLSearchParams();
+  const priority = String(document.querySelector('[data-apprise-field="priority"]')?.value || 'default');
+  if (priority && priority !== 'default') params.set('priority', priority === 'urgent' ? 'max' : priority);
+  const suffix = params.toString();
+  return suffix ? `${base}?${suffix}` : base;
+}
+
+function _collectAppriseProfilePayload({ forDelivery = false } = {}) {
+  const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'apprise').trim().toLowerCase();
+  const explicitUrl = String(document.querySelector('[data-apprise-field="apprise_url"]')?.value || '').trim();
+  const generatedUrl = (provider === 'ntfy' || provider === 'ntfys') ? _buildAppriseNtfyUrl() : '';
+  const url = explicitUrl || generatedUrl;
+  const id = String(document.querySelector('[data-apprise-field="id"]')?.value || '').trim().toLowerCase();
+  const payload = {
+    id,
+    profile_id: id || settingsState.appriseDraftProfile?.original_id || settingsState.appriseSelectedProfileId || '',
+    name: String(document.querySelector('[data-apprise-field="name"]')?.value || '').trim(),
+    enabled: !!document.querySelector('[data-apprise-field="enabled"]')?.checked,
+    provider,
+    selected_events: _appriseSelectedEventsFromDom(),
+    timeout_seconds: Number(document.querySelector('[data-apprise-field="timeout_seconds"]')?.value || 15),
+    retry_policy: {
+      attempts: Number(document.querySelector('[data-apprise-field="retry_attempts"]')?.value || 1),
+      backoff_seconds: Number(document.querySelector('[data-apprise-field="retry_backoff_seconds"]')?.value || 0),
+    },
+    priority: String(document.querySelector('[data-apprise-field="priority"]')?.value || 'default'),
+    default: !!document.querySelector('[data-apprise-field="default"]')?.checked,
+  };
+  if (url) payload.apprise_url = url;
+  if (forDelivery && !url && payload.profile_id) {
+    delete payload.apprise_url;
+  }
+  return payload;
+}
+
+async function refreshAppriseProfiles({ keepSelection = true } = {}) {
+  const res = await fetch('/api/notification-profiles');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+  const profiles = Array.isArray(data.profiles) ? data.profiles : [];
+  settingsState.appriseProfiles = profiles;
+  if (!keepSelection || !profiles.some((profile) => profile.id === settingsState.appriseSelectedProfileId)) {
+    settingsState.appriseSelectedProfileId = profiles[0]?.id || '';
+  }
+  settingsState.appriseDraftProfile = null;
+  renderSettings(settingsState.data || {}, settingsState.systemHealth);
+}
+
+async function saveAppriseProfile() {
+  const btn = document.querySelector('[data-settings-action="apprise-profile-save"]');
+  btn?.classList.add('loading');
+  hideEl('apprise-profiles-msg');
+  try {
+    const draft = settingsState.appriseDraftProfile || {};
+    const payload = _collectAppriseProfilePayload();
+    const isUpdate = !!draft.original_id;
+    const res = await fetch('/api/notification-profiles', {
+      method: isUpdate ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(isUpdate ? { ...payload, profile_id: draft.original_id, id: draft.original_id } : payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    settingsState.appriseSelectedProfileId = data.profile?.id || payload.profile_id || payload.id || '';
+    await refreshAppriseProfiles({ keepSelection: true });
+    showMsg('apprise-profiles-msg', 'success', settingsT(isUpdate ? 'apprise.saved' : 'apprise.created'));
+  } catch (err) {
+    showMsg('apprise-profiles-msg', 'error', settingsT('apprise.saveFailed', { message: err.message }));
+  } finally {
+    btn?.classList.remove('loading');
+  }
+}
+
+async function validateAppriseProfile() {
+  const btn = document.querySelector('[data-settings-action="apprise-profile-validate"]');
+  btn?.classList.add('loading');
+  hideEl('apprise-profiles-msg');
+  try {
+    const payload = _collectAppriseProfilePayload();
+    const res = await fetch('/api/notification-profiles/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(apiMessage(data, settingsT('apprise.urlInvalid')));
+    showMsg('apprise-profiles-msg', 'success', apiMessage(data, settingsT('apprise.urlValid')));
+  } catch (err) {
+    showMsg('apprise-profiles-msg', 'error', settingsT('apprise.validateFailed', { message: err.message }));
+  } finally {
+    btn?.classList.remove('loading');
+  }
+}
+
+async function testAppriseProfile() {
+  const btn = document.querySelector('[data-settings-action="apprise-profile-test"]');
+  btn?.classList.add('loading');
+  hideEl('apprise-profiles-msg');
+  try {
+    const payload = settingsState.appriseDraftProfile
+      ? _collectAppriseProfilePayload({ forDelivery: true })
+      : { profile_id: settingsState.appriseSelectedProfileId };
+    const res = await fetch('/api/notification-profiles/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(apiMessage(data, settingsT('apprise.testFailedGeneric')));
+    showMsg('apprise-profiles-msg', 'success', apiMessage(data, settingsT('apprise.testSent')));
+  } catch (err) {
+    showMsg('apprise-profiles-msg', 'error', settingsT('apprise.testFailed', { message: err.message }));
+  } finally {
+    btn?.classList.remove('loading');
+  }
+}
+
+async function deleteAppriseProfile() {
+  const profile = _appriseSelectedProfile();
+  if (!profile?.id) return;
+  const ok = await _openSettingsDialog({
+    title: settingsT('apprise.deleteTitle'),
+    message: settingsT('apprise.deleteMessage', { name: _appriseProfileName(profile) }),
+    confirmText: settingsT('common.remove'),
+    confirmClass: 'btn-danger',
+  });
+  if (!ok) return;
+  hideEl('apprise-profiles-msg');
+  try {
+    const res = await fetch(`/api/notification-profiles?profile_id=${encodeURIComponent(profile.id)}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    await refreshAppriseProfiles({ keepSelection: false });
+    showMsg('apprise-profiles-msg', 'success', settingsT('apprise.deleted'));
+  } catch (err) {
+    showMsg('apprise-profiles-msg', 'error', settingsT('apprise.deleteFailed', { message: err.message }));
   }
 }
 
@@ -4033,6 +4570,44 @@ async function onSettingsContentClick(event) {
   if (action === 'delete-config-backup') return deleteSettingsConfigBackup(el.dataset.backupName || '');
   if (action === 'send-test-email') return sendTestEmail();
   if (action === 'send-test-ntfy') return sendTestNtfy();
+  if (action === 'apprise-profile-select') {
+    if (settingsState.appriseDraftProfile) return;
+    settingsState.appriseSelectedProfileId = el.dataset.appriseProfileId || '';
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    return;
+  }
+  if (action === 'apprise-provider-select') {
+    _setAppriseDraftProvider(el.dataset.appriseProvider || '');
+    return;
+  }
+  if (action === 'apprise-profile-add') {
+    settingsState.appriseDraftProfile = _appriseEmptyDraft();
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    return;
+  }
+  if (action === 'apprise-profile-edit') {
+    const profile = _appriseSelectedProfile();
+    if (!profile) return;
+    settingsState.appriseDraftProfile = _appriseDraftFromProfile(profile);
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    return;
+  }
+  if (action === 'apprise-profile-duplicate') {
+    const profile = _appriseSelectedProfile();
+    if (!profile) return;
+    settingsState.appriseDraftProfile = _appriseDraftFromProfile(profile, true);
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    return;
+  }
+  if (action === 'apprise-profile-cancel') {
+    settingsState.appriseDraftProfile = null;
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    return;
+  }
+  if (action === 'apprise-profile-save') return saveAppriseProfile();
+  if (action === 'apprise-profile-validate') return validateAppriseProfile();
+  if (action === 'apprise-profile-test') return testAppriseProfile();
+  if (action === 'apprise-profile-delete') return deleteAppriseProfile();
   if (action === 'send-weekly-report') return sendWeeklyReport();
   if (action === 'homepage-widget-rotate') return rotateHomepageWidgetToken();
   if (action === 'homepage-widget-revoke') return revokeHomepageWidgetToken();
@@ -4939,3 +5514,5 @@ async function reloadSettingsDataAfterSave(profileType = '') {
     if (profileType) syncSettingsProfileManager(profileType);
   }
 }
+
+window.onAppriseProviderFilterChange = onAppriseProviderFilterChange;

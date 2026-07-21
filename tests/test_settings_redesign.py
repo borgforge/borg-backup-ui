@@ -21,6 +21,7 @@ def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
     for key in (
         "general",
         "users",
+        "notifications",
         "backup",
         "restore",
         "usb",
@@ -35,6 +36,29 @@ def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
         assert f"group: '{group}'" in script
     assert "function renderSettingsMenu(tabs)" in script
     assert 'class="settings-redesign-layout"' in script
+
+
+def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> None:
+    script = _read("ui/js/pages/settings.js")
+    css = _read("ui/settings-redesign.css")
+    for contract in (
+        "key: 'notifications'",
+        'data-settings-panel="notifications"',
+        "renderSettingsNotifications(data)",
+        "renderSettingsAppriseProfiles()",
+        "/api/notification-profiles",
+        "/api/notification-profiles/providers",
+        "/api/notification-profiles/validate",
+        "/api/notification-profiles/test",
+        "apprise-profile-duplicate",
+        "apprise-provider-select",
+        "_buildAppriseNtfyUrl",
+        "data-apprise-field=\"apprise_url\"",
+        "settingsState.appriseDraftProfile",
+    ):
+        assert contract in script
+    assert ".apprise-provider-picker" in css
+    assert ".apprise-profile-manager" in css
 
 
 def test_factory_reset_is_the_last_maintenance_area() -> None:
