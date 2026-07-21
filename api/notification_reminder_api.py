@@ -16,6 +16,7 @@ def get_notification_reminder_diagnostics(config: dict) -> dict[str, Any]:
     from lib.notification_events import (
         DEFAULT_EMAIL_EVENTS,
         DEFAULT_UNRAID_EVENTS,
+        apprise_event_profiles,
         event_set,
         read_notification_state,
         reminder_interval_hours,
@@ -39,6 +40,8 @@ def get_notification_reminder_diagnostics(config: dict) -> dict[str, Any]:
         ntfy_cfg = NtfyConfig.from_config(effective)
         if ntfy_cfg.enabled and ntfy_cfg.server_url and ntfy_cfg.topic and event_type in set(ntfy_cfg.events or set()):
             channels.append("ntfy")
+        if apprise_event_profiles(effective, event_type):
+            channels.append("apprise")
         return channels
 
     now = datetime.now()

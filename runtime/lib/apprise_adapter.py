@@ -246,18 +246,44 @@ def send_test_notification(
     apprise_module: ModuleType | Any | None = None,
 ) -> AppriseDeliveryResult:
     """Send one test notification through a generic Apprise URL."""
+    return send_notification(
+        url,
+        title=title,
+        body=body,
+        success_message="Apprise test notification sent.",
+        failure_message="Apprise test notification was not delivered.",
+        error_prefix="Apprise test notification failed",
+        vendor_dir=vendor_dir,
+        apprise_module=apprise_module,
+    )
+
+
+def send_notification(
+    url: str,
+    *,
+    title: str,
+    body: str,
+    success_message: str = "Apprise notification sent.",
+    failure_message: str = "Apprise notification was not delivered.",
+    error_prefix: str = "Apprise notification failed",
+    timeout_seconds: int | float | None = None,
+    vendor_dir: Path | str | None = None,
+    apprise_module: ModuleType | Any | None = None,
+) -> AppriseDeliveryResult:
+    """Send one notification through a generic Apprise URL."""
     text = str(url or "").strip()
     validation = validate_url(text, vendor_dir=vendor_dir, apprise_module=apprise_module)
     if not validation.ok:
         return validation
     module = load_bundled_apprise(vendor_dir=vendor_dir, apprise_module=apprise_module)
     try:
-        app = module.Apprise()
-        app.add(text)
-        ok = bool(app.notify(title=str(title or "Borg Backup UI"), body=str(body or "")))
+        with _operation_timeout(timeout_seconds, "Apprise notification delivery"):
+            app = module.Apprise()
+            app.add(text)
+            ok = bool(app.notify(title=str(title or "Borg Backup UI"), body=str(body or "")))
     except Exception as exc:  # noqa: BLE001
-        return AppriseDeliveryResult(False, f"Apprise test notification failed: {_safe_error(exc)}")
+        return AppriseDeliveryResult(False, f"{error_prefix}: {_safe_error(exc)}")
     return AppriseDeliveryResult(
         ok,
-        "Apprise test notification sent." if ok else "Apprise test notification was not delivered.",
+        success_message if ok else failure_message,
     )

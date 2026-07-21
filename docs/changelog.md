@@ -17,6 +17,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Added provider-specific URL field generation from Apprise templates. Non-secret URL fields and the selected template are stored with the profile, while password/token fields stay write-only and can be replaced during edits.
 - Exposed all provider URL formats in the Apprise URL-format selector so ntfy password/token templates are selectable even when they appear after the compact help examples.
 - Simplified saved Apprise profile summaries and suppressed duplicate provider labels when Apprise reports the same service name and schema.
+- Enabled Apprise profiles to receive their selected backup, restore-test and overdue reminder events, using the profile display name as the notification title prefix.
 - Updated German and English help/manual sections for the separate notification area and write-only Apprise URL secrets.
 
 ### Issue #258

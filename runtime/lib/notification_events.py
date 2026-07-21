@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from lib.apprise_adapter import AppriseAdapterError, send_notification
 from lib.notifications import MailConfig, NtfyConfig, notify, send_mail, send_ntfy
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ DEFAULT_REMINDER_INTERVAL_HOURS = 24
 DEFAULT_REMINDER_STATE_RETENTION_DAYS = 90
 MAX_EMAIL_LOG_CHARS = 40_000
 
-NTFY_EVENT_ALIASES = {
+EVENT_ALIASES = {
     # Existing ntfy installs used backup_failed for Borg warnings.
     "backup_warning": {"backup_warning", "backup_failed"},
 }
@@ -74,7 +75,7 @@ def send_event(
     ntfy_config: Optional[NtfyConfig] = None,
 ) -> dict[str, bool]:
     """Send one logical event to all configured channels, best-effort."""
-    results = {"unraid": False, "email": False, "ntfy": False}
+    results = {"unraid": False, "email": False, "ntfy": False, "apprise": False}
     event_type = str(event.event_type or "").strip()
     if not event_type:
         return results
@@ -93,13 +94,16 @@ def send_event(
     if ntfy_config is not None:
         results["ntfy"] = _send_event_ntfy(ntfy_config, event)
 
+    results["apprise"] = _send_event_apprise(config, event)
+
     logger.info(
-        "Notification event processed (event=%s source=%s unraid=%s email=%s ntfy=%s)",
+        "Notification event processed (event=%s source=%s unraid=%s email=%s ntfy=%s apprise=%s)",
         event_type,
         event.source or "-",
         results["unraid"],
         results["email"],
         results["ntfy"],
+        results["apprise"],
     )
     return results
 
@@ -140,7 +144,7 @@ def _read_log_excerpt(log_file: Path) -> str:
 
 def _send_event_ntfy(config: NtfyConfig, event: NotificationEvent) -> bool:
     allowed = set(config.events or set())
-    aliases = NTFY_EVENT_ALIASES.get(event.event_type, {event.event_type})
+    aliases = EVENT_ALIASES.get(event.event_type, {event.event_type})
     if allowed and not (allowed & aliases):
         logger.info("ntfy event skipped by configuration: %s", event.event_type)
         return False
@@ -159,6 +163,170 @@ def _ntfy_title(config: NtfyConfig, title: str) -> str:
     if text.lower().startswith(prefix.lower()):
         return text
     return f"{prefix} - {text}"
+
+
+def _send_event_apprise(config: dict, event: NotificationEvent) -> bool:
+    delivered = False
+    for profile in apprise_event_profiles(config, event.event_type):
+        profile_id = str(profile.get("id") or "").strip()
+        url = _read_apprise_secret(config, profile_id)
+        if not url:
+            logger.info("Apprise event skipped because profile URL is missing: profile=%s", profile_id)
+            continue
+        result = _notify_apprise_profile(config, profile, url, event)
+        delivered = delivered or result
+    return delivered
+
+
+def apprise_event_profiles(config: dict, event_type: str) -> list[dict[str, Any]]:
+    """Return enabled Apprise profiles ready to receive the given event."""
+    event = str(event_type or "").strip()
+    if not event:
+        return []
+    aliases = EVENT_ALIASES.get(event, {event})
+    profiles = []
+    for row in _read_apprise_profiles(config):
+        if not isinstance(row, dict):
+            continue
+        profile_id = str(row.get("id") or "").strip()
+        if not profile_id or not bool(row.get("enabled", True)):
+            continue
+        selected = _profile_event_set(row.get("selected_events"))
+        if selected and not (selected & aliases):
+            continue
+        if not _apprise_secret_path(config, profile_id).is_file():
+            continue
+        profiles.append(row)
+    return profiles
+
+
+def _profile_event_set(value: Any) -> set[str]:
+    if isinstance(value, str):
+        raw = value.split(",")
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        raw = value
+    else:
+        raw = []
+    return {str(item or "").strip() for item in raw if str(item or "").strip()}
+
+
+def _notify_apprise_profile(config: dict, profile: dict[str, Any], url: str, event: NotificationEvent) -> bool:
+    profile_id = str(profile.get("id") or "").strip()
+    name = str(profile.get("name") or profile_id or "Borg Backup UI").strip()
+    timeout_seconds = _apprise_timeout(profile.get("timeout_seconds"))
+    retry_policy = profile.get("retry_policy") if isinstance(profile.get("retry_policy"), dict) else {}
+    attempts = _apprise_attempts(retry_policy.get("attempts") if isinstance(retry_policy, dict) else None)
+    backoff = _apprise_backoff(retry_policy.get("backoff_seconds") if isinstance(retry_policy, dict) else None)
+
+    for attempt in range(1, attempts + 1):
+        try:
+            result = send_notification(
+                url,
+                title=_apprise_title(name, event.title),
+                body=event.message,
+                timeout_seconds=timeout_seconds,
+            )
+        except AppriseAdapterError as exc:
+            logger.warning(
+                "Apprise notification failed to load runtime (profile=%s event=%s): %s",
+                profile_id,
+                event.event_type,
+                _safe_error(exc),
+            )
+            return False
+        except Exception as exc:  # noqa: BLE001 - channel delivery is best-effort
+            logger.warning(
+                "Apprise notification failed (profile=%s event=%s): %s",
+                profile_id,
+                event.event_type,
+                _safe_error(exc),
+            )
+            result = None
+
+        if result is not None and result.ok:
+            return True
+
+        message = _safe_error(getattr(result, "message", "") if result is not None else "")
+        logger.warning(
+            "Apprise notification was not delivered (profile=%s event=%s attempt=%s/%s timeout=%ss): %s",
+            profile_id,
+            event.event_type,
+            attempt,
+            attempts,
+            timeout_seconds,
+            message,
+        )
+        if attempt < attempts and backoff > 0:
+            time.sleep(backoff)
+    return False
+
+
+def _apprise_title(profile_name: str, title: str) -> str:
+    return _ntfy_title(NtfyConfig(name=profile_name), title)
+
+
+def _apprise_timeout(value: Any) -> int:
+    try:
+        return max(1, min(300, int(str(value or "15").strip())))
+    except (TypeError, ValueError):
+        return 15
+
+
+def _apprise_attempts(value: Any) -> int:
+    try:
+        return max(1, min(5, int(str(value or "1").strip())))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _apprise_backoff(value: Any) -> int:
+    try:
+        return max(0, min(3600, int(str(value or "0").strip())))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _apprise_profile_store_path(config: dict) -> Path:
+    root = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
+    return root / "config" / "apprise-profiles.json"
+
+
+def _apprise_secret_path(config: dict, profile_id: str) -> Path:
+    root = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
+    return root / "secrets" / f".apprise-profile-{profile_id}.url"
+
+
+def _read_apprise_profiles(config: dict) -> list[dict[str, Any]]:
+    path = _apprise_profile_store_path(config)
+    if not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError) as exc:
+        logger.warning("Apprise profiles are not readable: %s", _safe_error(exc))
+        return []
+    rows = payload.get("profiles") if isinstance(payload, dict) else []
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _read_apprise_secret(config: dict, profile_id: str) -> str:
+    if not profile_id:
+        return ""
+    path = _apprise_secret_path(config, profile_id)
+    try:
+        if path.is_file():
+            return path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError as exc:
+        logger.warning("Apprise profile secret is not readable: %s", path.name)
+        logger.debug("Apprise secret read error: %s", _safe_error(exc))
+    return ""
+
+
+def _safe_error(value: BaseException | str) -> str:
+    text = str(value or "").strip()
+    return text[:500] if text else "unknown error"
 
 
 def notification_state_path(config: dict) -> Path:

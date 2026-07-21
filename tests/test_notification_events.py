@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import sys
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "runtime"))
@@ -58,8 +59,104 @@ def test_send_event_routes_to_configured_channels(monkeypatch):
         ntfy_config=NtfyConfig(enabled=True, server_url="https://ntfy.example.test", topic="borg", events={"backup_success"}),
     )
 
-    assert result == {"unraid": True, "email": False, "ntfy": True}
+    assert result == {"unraid": True, "email": False, "ntfy": True, "apprise": False}
     assert [c[0] for c in calls] == ["unraid", "ntfy"]
+
+
+def test_send_event_routes_to_enabled_apprise_profiles(monkeypatch, tmp_path):
+    calls = []
+    store = tmp_path / "config" / "apprise-profiles.json"
+    secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
+    store.parent.mkdir(parents=True)
+    secret.parent.mkdir(parents=True)
+    store.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [{
+            "id": "alerts-main",
+            "name": "Critical Alerts",
+            "enabled": True,
+            "provider": "ntfy",
+            "selected_events": ["backup_success"],
+            "timeout_seconds": 15,
+            "retry_policy": {"attempts": 1, "backoff_seconds": 0},
+            "priority": "default",
+            "default": True,
+            "url_set": True,
+        }],
+    }), encoding="utf-8")
+    secret.write_text("json://token@example.test\n", encoding="utf-8")
+
+    def fake_send(url, *, title, body, **kwargs):
+        calls.append({"url": url, "title": title, "body": body, "kwargs": kwargs})
+        return SimpleNamespace(ok=True, message="sent")
+
+    monkeypatch.setattr("lib.notification_events.send_notification", fake_send)
+
+    result = send_event(
+        {
+            "BACKUP_SCRIPTS_DIR": str(tmp_path),
+            "NOTIFY_UNRAID_EVENTS": "none",
+            "NOTIFY_EMAIL_EVENTS": "",
+        },
+        NotificationEvent(
+            event_type="backup_success",
+            title="Borg Backup UI: Backup OK",
+            message="done",
+            job_name="Job",
+        ),
+    )
+
+    assert result["apprise"] is True
+    assert calls == [{
+        "url": "json://token@example.test",
+        "title": "Critical Alerts - Backup OK",
+        "body": "done",
+        "kwargs": {"timeout_seconds": 15},
+    }]
+
+
+def test_send_event_skips_apprise_profiles_without_matching_event(monkeypatch, tmp_path):
+    store = tmp_path / "config" / "apprise-profiles.json"
+    secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
+    store.parent.mkdir(parents=True)
+    secret.parent.mkdir(parents=True)
+    store.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [{
+            "id": "alerts-main",
+            "name": "Critical Alerts",
+            "enabled": True,
+            "provider": "ntfy",
+            "selected_events": ["backup_failed"],
+            "timeout_seconds": 15,
+            "retry_policy": {"attempts": 1, "backoff_seconds": 0},
+            "priority": "default",
+            "default": True,
+            "url_set": True,
+        }],
+    }), encoding="utf-8")
+    secret.write_text("json://token@example.test\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "lib.notification_events.send_notification",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Apprise must not be called")),
+    )
+
+    result = send_event(
+        {
+            "BACKUP_SCRIPTS_DIR": str(tmp_path),
+            "NOTIFY_UNRAID_EVENTS": "none",
+            "NOTIFY_EMAIL_EVENTS": "",
+        },
+        NotificationEvent(
+            event_type="backup_success",
+            title="Borg Backup UI: Backup OK",
+            message="done",
+            job_name="Job",
+        ),
+    )
+
+    assert result["apprise"] is False
 
 
 def test_send_event_routes_restore_test_success_to_email_when_selected(monkeypatch):
@@ -429,6 +526,44 @@ def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeyp
     assert item["state"] == "current"
     assert item["sent"] is False
     assert old_key in read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["last_sent"]
+
+
+def test_notification_reminder_diagnostics_reports_apprise_channel(monkeypatch, tmp_path):
+    store = tmp_path / "config" / "apprise-profiles.json"
+    secret = tmp_path / "secrets" / ".apprise-profile-reminders.url"
+    store.parent.mkdir(parents=True)
+    secret.parent.mkdir(parents=True)
+    store.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [{
+            "id": "reminders",
+            "name": "Reminder Alerts",
+            "enabled": True,
+            "provider": "ntfy",
+            "selected_events": ["backup_overdue"],
+            "timeout_seconds": 15,
+            "retry_policy": {"attempts": 1, "backoff_seconds": 0},
+            "priority": "default",
+            "default": True,
+            "url_set": True,
+        }],
+    }), encoding="utf-8")
+    secret.write_text("json://token@example.test\n", encoding="utf-8")
+    monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {})
+    monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [])
+    monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": []})
+    monkeypatch.setattr("restore_tests_api.list_restore_test_plan", lambda cfg: {"jobs": []})
+
+    result = notification_reminder_api.get_notification_reminder_diagnostics({
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "none",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NTFY_ENABLED": "false",
+    })
+
+    assert result["enabled"] is True
+    assert result["backup_overdue"]["channels"] == ["apprise"]
+    assert result["restore_test_overdue"]["channels"] == []
 
 
 def test_notification_reminder_diagnostics_distinguishes_missed_and_next_backup_run(monkeypatch, tmp_path):
