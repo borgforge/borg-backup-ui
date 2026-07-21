@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 import sys
+import time
 
 import pytest
 
@@ -64,6 +65,21 @@ def test_supported_providers_uses_apprise_details() -> None:
         "setup_url": "https://setup.example.test",
         "schemas": ["example", "examples"],
     }]
+
+
+def test_supported_providers_times_out_blocking_discovery() -> None:
+    class BlockingApprise:
+        def details(self) -> dict:
+            time.sleep(5)
+            return {}
+
+    module = SimpleNamespace(Apprise=BlockingApprise, __version__="1.2.3-test")
+
+    with pytest.raises(apprise_adapter.AppriseAdapterError, match="exceeded"):
+        apprise_adapter.supported_providers(
+            apprise_module=module,
+            timeout_seconds=0.01,
+        )
 
 
 def test_validate_and_send_test_notification_with_test_double() -> None:

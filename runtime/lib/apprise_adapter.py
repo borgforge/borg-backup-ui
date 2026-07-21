@@ -5,11 +5,14 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import logging
+import signal
 import sys
+import threading
 from dataclasses import dataclass
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, Iterator
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +34,36 @@ class AppriseDeliveryResult:
 def _safe_error(value: BaseException | str) -> str:
     text = str(value or "").strip()
     return text[:500] if text else "unknown error"
+
+
+class _DiscoveryTimeoutError(TimeoutError):
+    pass
+
+
+@contextmanager
+def _operation_timeout(seconds: int | float | None, label: str) -> Iterator[None]:
+    if not seconds or seconds <= 0 or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    if not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, 0)
+
+    def _timeout_handler(signum: int, frame: object) -> None:
+        raise _DiscoveryTimeoutError(f"{label} exceeded {seconds:g} seconds.")
+
+    signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.setitimer(signal.ITIMER_REAL, float(seconds))
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0] > 0:
+            signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
 
 
 def load_bundled_apprise(
@@ -102,11 +135,15 @@ def supported_providers(
     *,
     vendor_dir: Path | str | None = None,
     apprise_module: ModuleType | Any | None = None,
+    timeout_seconds: int | float | None = 5,
 ) -> dict[str, Any]:
     """Return provider metadata exposed by the bundled Apprise version."""
     module = load_bundled_apprise(vendor_dir=vendor_dir, apprise_module=apprise_module)
     try:
-        details = module.Apprise().details()
+        with _operation_timeout(timeout_seconds, "Apprise provider discovery"):
+            details = module.Apprise().details()
+    except _DiscoveryTimeoutError as exc:
+        raise AppriseAdapterError(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise AppriseAdapterError(f"Apprise provider discovery failed: {_safe_error(exc)}") from exc
 
