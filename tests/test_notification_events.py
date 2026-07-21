@@ -14,7 +14,9 @@ sys.path.insert(0, str(ROOT / "api"))
 from lib.notification_events import (  # noqa: E402
     NotificationEvent,
     cleanup_reminder_state,
+    drain_notification_queue,
     mark_reminder_sent,
+    read_notification_delivery_status,
     read_notification_state,
     reminder_allowed,
     send_event,
@@ -98,6 +100,7 @@ def test_send_event_routes_to_enabled_apprise_profiles(monkeypatch, tmp_path):
             "BACKUP_SCRIPTS_DIR": str(tmp_path),
             "NOTIFY_UNRAID_EVENTS": "none",
             "NOTIFY_EMAIL_EVENTS": "",
+            "NOTIFY_APPRISE_ASYNC": "false",
         },
         NotificationEvent(
             event_type="backup_success",
@@ -160,6 +163,7 @@ def test_send_event_logs_delivered_apprise_profiles(monkeypatch, tmp_path, caplo
                 "BACKUP_SCRIPTS_DIR": str(tmp_path),
                 "NOTIFY_UNRAID_EVENTS": "",
                 "NOTIFY_EMAIL_EVENTS": "",
+                "NOTIFY_APPRISE_ASYNC": "false",
             },
             NotificationEvent(
                 event_type="backup_success",
@@ -173,6 +177,152 @@ def test_send_event_logs_delivered_apprise_profiles(monkeypatch, tmp_path, caplo
     assert "apprise_profiles=[\"Critical Alerts (alerts-main)\", \"Rocket.Chat (rocketchat)\"]" in caplog.text
     assert " ntfy=False" not in caplog.text
     assert "native_ntfy=" not in caplog.text
+
+
+def test_send_event_queues_apprise_profiles_by_default(monkeypatch, tmp_path):
+    store = tmp_path / "config" / "apprise-profiles.json"
+    secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
+    store.parent.mkdir(parents=True)
+    secret.parent.mkdir(parents=True)
+    store.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [{
+            "id": "alerts-main",
+            "name": "Critical Alerts",
+            "enabled": True,
+            "provider": "ntfy",
+            "selected_events": ["backup_success"],
+            "timeout_seconds": 15,
+            "retry_policy": {"attempts": 2, "backoff_seconds": 5},
+            "url_set": True,
+        }],
+    }), encoding="utf-8")
+    secret.write_text("json://token@example.test\n", encoding="utf-8")
+    calls = []
+
+    def fake_send(url, *, title, body, **kwargs):
+        calls.append({"url": url, "title": title, "body": body, "kwargs": kwargs})
+        return SimpleNamespace(ok=True, message="sent")
+
+    monkeypatch.setattr("lib.notification_events.send_notification", fake_send)
+
+    result = send_event(
+        {
+            "BACKUP_SCRIPTS_DIR": str(tmp_path),
+            "NOTIFY_UNRAID_EVENTS": "none",
+            "NOTIFY_EMAIL_EVENTS": "",
+        },
+        NotificationEvent(
+            event_type="backup_success",
+            title="Borg Backup UI: Backup OK",
+            message="done",
+            job_name="Job",
+            job_key="job-a",
+            source="backup_job",
+        ),
+    )
+
+    assert result["apprise"] is True
+    assert calls == []
+    queue = json.loads((tmp_path / "config" / "notification-queue.json").read_text(encoding="utf-8"))
+    assert len(queue["queue"]) == 1
+    assert queue["queue"][0]["profile_id"] == "alerts-main"
+    assert queue["queue"][0]["max_attempts"] == 2
+    assert "json://token" not in json.dumps(queue)
+
+    drained = drain_notification_queue({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+
+    assert drained == {"checked": 1, "delivered": 1, "failed": 0, "retrying": 0, "remaining": 0}
+    assert calls == [{
+        "url": "json://token@example.test",
+        "title": "Critical Alerts - Backup OK",
+        "body": "done",
+        "kwargs": {"timeout_seconds": 15},
+    }]
+    status = read_notification_delivery_status({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert status["deliveries"][-1]["status"] == "delivered"
+    assert status["deliveries"][-1]["profile_id"] == "alerts-main"
+    assert "json://token" not in json.dumps(status)
+
+
+def test_queued_apprise_delivery_retries_without_sleeping(monkeypatch, tmp_path):
+    store = tmp_path / "config" / "apprise-profiles.json"
+    secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
+    store.parent.mkdir(parents=True)
+    secret.parent.mkdir(parents=True)
+    store.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [{
+            "id": "alerts-main",
+            "name": "Critical Alerts",
+            "enabled": True,
+            "provider": "ntfy",
+            "selected_events": ["backup_success"],
+            "timeout_seconds": 15,
+            "retry_policy": {"attempts": 2, "backoff_seconds": 60},
+            "url_set": True,
+        }],
+    }), encoding="utf-8")
+    secret.write_text("json://token@example.test\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "lib.notification_events.send_notification",
+        lambda *args, **kwargs: SimpleNamespace(ok=False, message="provider unavailable"),
+    )
+
+    send_event(
+        {
+            "BACKUP_SCRIPTS_DIR": str(tmp_path),
+            "NOTIFY_UNRAID_EVENTS": "none",
+            "NOTIFY_EMAIL_EVENTS": "",
+        },
+        NotificationEvent(event_type="backup_success", title="Backup OK", message="done"),
+    )
+
+    drained = drain_notification_queue({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+
+    assert drained["retrying"] == 1
+    assert drained["remaining"] == 1
+    queue = json.loads((tmp_path / "config" / "notification-queue.json").read_text(encoding="utf-8"))
+    assert queue["queue"][0]["attempts_made"] == 1
+    status = read_notification_delivery_status({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert status["deliveries"][-1]["status"] == "retrying"
+    assert status["deliveries"][-1]["message"] == "provider unavailable"
+
+
+def test_apprise_queue_records_dropped_entries_when_full(tmp_path):
+    store = tmp_path / "config" / "apprise-profiles.json"
+    secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
+    store.parent.mkdir(parents=True)
+    secret.parent.mkdir(parents=True)
+    store.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [{
+            "id": "alerts-main",
+            "name": "Critical Alerts",
+            "enabled": True,
+            "provider": "ntfy",
+            "selected_events": ["backup_success"],
+            "timeout_seconds": 15,
+            "retry_policy": {"attempts": 1, "backoff_seconds": 0},
+            "url_set": True,
+        }],
+    }), encoding="utf-8")
+    secret.write_text("json://token@example.test\n", encoding="utf-8")
+    cfg = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "NOTIFY_UNRAID_EVENTS": "none",
+        "NOTIFY_EMAIL_EVENTS": "",
+        "NOTIFY_APPRISE_QUEUE_MAX_ENTRIES": "1",
+    }
+
+    send_event(cfg, NotificationEvent(event_type="backup_success", title="One", message="one"))
+    send_event(cfg, NotificationEvent(event_type="backup_success", title="Two", message="two"))
+
+    queue = json.loads((tmp_path / "config" / "notification-queue.json").read_text(encoding="utf-8"))
+    assert len(queue["queue"]) == 1
+    assert queue["queue"][0]["body"] == "two"
+    status = read_notification_delivery_status({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert [row["status"] for row in status["deliveries"]] == ["dropped", "queued"]
 
 
 def test_send_event_skips_apprise_profiles_without_matching_event(monkeypatch, tmp_path):
@@ -207,6 +357,7 @@ def test_send_event_skips_apprise_profiles_without_matching_event(monkeypatch, t
             "BACKUP_SCRIPTS_DIR": str(tmp_path),
             "NOTIFY_UNRAID_EVENTS": "none",
             "NOTIFY_EMAIL_EVENTS": "",
+            "NOTIFY_APPRISE_ASYNC": "false",
         },
         NotificationEvent(
             event_type="backup_success",

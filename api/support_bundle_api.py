@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 
 SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
 SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
+SECRET_WORD_RE = re.compile(r"(?i)\b(password|passphrase|token|secret)\s+([^\s\"'<>]+)")
 PRIVACY_KEY_RE = re.compile(
     r"(?i)(mail|email|recipient|sender|smtp_(host|user)|ntfy_(server_url|username|click_url)|storagebox_(host|user)|"
     r"\bhost\b|\buser(name)?\b|\burl\b)"
@@ -46,6 +47,7 @@ def _sanitize_scalar(value: Any) -> Any:
     text = HTTP_URI_RE.sub(lambda m: "https://[MASKED_URL]" if m.group(0).lower().startswith("https://") else "http://[MASKED_URL]", text)
     text = EMAIL_RE.sub("[MASKED_EMAIL]", text)
     text = SECRET_LINE_RE.sub(lambda m: f"{m.group(1)}=[MASKED]", text)
+    text = SECRET_WORD_RE.sub(lambda m: f"{m.group(1)} [MASKED]", text)
     text = PRIVACY_LINE_RE.sub(lambda m: f"{m.group(1)}=[MASKED]", text)
     return text
 
@@ -193,7 +195,13 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         _add_json(zf, "config/expanded-conf.sanitized.json", expanded)
         _record_added("config/expanded-conf.sanitized.json")
-        for filename in ("storages.json", "repositories.json", "apprise-profiles.json", "migration-state.json"):
+        for filename in (
+            "storages.json",
+            "repositories.json",
+            "apprise-profiles.json",
+            "notification-deliveries.json",
+            "migration-state.json",
+        ):
             source = root / "config" / filename
             if source.is_file():
                 arcname = f"config/{source.stem}.sanitized.json"

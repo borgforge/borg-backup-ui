@@ -626,6 +626,8 @@ Borg-Backup-UI manages notification channels under **Settings > Notifications**.
 
 Apprise profiles can be created, edited, duplicated, enabled/disabled, tested and removed. The provider list is loaded from the bundled Apprise version. Provider URL formats are generated from Apprise metadata, and saved Apprise URLs are stored as secrets that are never rendered back into the page. Existing native ntfy settings are migrated into an Apprise profile during startup.
 
+Real backup, restore-test and reminder events are delivered through Apprise in the background. The originating job writes a queue entry and does not wait for the external provider. The UI service processes the queue regularly, honors the profile timeout, attempts and backoff settings, and continues with pending entries after a restart. Sanitized delivery status is available through System Health and support bundles; queued message bodies and Apprise secret URLs are not exported in support bundles.
+
 Configurable events can include:
 
 - backup successful

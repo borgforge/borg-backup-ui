@@ -306,6 +306,43 @@ def _probe_cifs_support() -> tuple[bool, str]:
     return False, "missing"
 
 
+def _notification_delivery_summary(config: dict, root: Path) -> dict[str, Any]:
+    queue_file = root / "config" / "notification-queue.json"
+    status_file = root / "config" / "notification-deliveries.json"
+    summary: dict[str, Any] = {
+        "queue_file": str(queue_file),
+        "status_file": str(status_file),
+        "queued_count": 0,
+        "counts": {},
+        "last_deliveries": [],
+    }
+    try:
+        runtime_dir = Path(__file__).resolve().parents[1] / "runtime"
+        runtime_lib = runtime_dir / "lib"
+        for path in (runtime_lib, runtime_dir):
+            if str(path) not in sys.path:
+                sys.path.insert(0, str(path))
+        from lib.notification_events import read_notification_delivery_status
+
+        if queue_file.is_file():
+            payload = json.loads(queue_file.read_text(encoding="utf-8", errors="replace"))
+            rows = payload.get("queue") if isinstance(payload, dict) else []
+            summary["queued_count"] = len(rows) if isinstance(rows, list) else 0
+        status = read_notification_delivery_status(config)
+        rows = status.get("deliveries") if isinstance(status.get("deliveries"), list) else []
+        counts: dict[str, int] = {}
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            state = str(row.get("status") or "unknown")
+            counts[state] = counts.get(state, 0) + 1
+        summary["counts"] = counts
+        summary["last_deliveries"] = rows[-10:] if isinstance(rows, list) else []
+    except Exception as exc:
+        summary["error"] = str(exc)[:500]
+    return summary
+
+
 def get_system_health_data(config: dict) -> Dict[str, Any]:
     try:
         from .startup_state import get_startup_state
@@ -430,6 +467,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "entries": [],
             "error": str(exc),
         }
+    notification_delivery = _notification_delivery_summary(config, root)
     return {
         "checks": {
             "normal_operation_available": startup_state.get("mode") == "normal",
@@ -463,6 +501,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "startup_state": startup_state,
         "job_health": job_health,
         "runtime_recovery": runtime_recovery,
+        "notification_delivery": notification_delivery,
         "secrets_permissions": {
             "ok": secrets_permissions_ok,
             "message": perm_msg,

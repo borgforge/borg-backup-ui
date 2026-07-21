@@ -115,6 +115,18 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
             "selected_events": ["backup_failed"],
         }],
     }) + "\n", encoding="utf-8")
+    (config_dir / "notification-deliveries.json").write_text(json.dumps({
+        "schema_version": 1,
+        "deliveries": [{
+            "id": "delivery-1",
+            "status": "failed",
+            "profile_id": "alerts-main",
+            "profile_name": "Alerts",
+            "provider": "ntfy",
+            "event_type": "backup_failed",
+            "message": "https://ntfy.example.test rejected token abc123",
+        }],
+    }) + "\n", encoding="utf-8")
     (root / "secrets" / ".apprise-profile-alerts-main.url").write_text(
         "ntfy://token@example.test/borg\n",
         encoding="utf-8",
@@ -175,6 +187,7 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         assert "config/storages.sanitized.json" in names
         assert "config/repositories.sanitized.json" in names
         assert "config/apprise-profiles.sanitized.json" in names
+        assert "config/notification-deliveries.sanitized.json" in names
         assert "config/migration-state.sanitized.json" in names
         assert "config/migrations.log.sanitized.jsonl" in names
         assert "jobs/job1.json" in names

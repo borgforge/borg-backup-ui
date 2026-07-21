@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
+import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+import fcntl
 
 from lib.apprise_adapter import AppriseAdapterError, send_notification
 from lib.notifications import MailConfig, NtfyConfig, notify, send_mail, send_ntfy
@@ -56,6 +60,7 @@ class NotificationEvent:
 class AppriseEventResult:
     delivered: bool = False
     delivered_profiles: list[str] = field(default_factory=list)
+    mode: str = "sync"
 
 
 def event_set(config: dict, key: str, default: set[str]) -> set[str]:
@@ -100,28 +105,33 @@ def send_event(
     if ntfy_config is not None:
         results["ntfy"] = _send_event_ntfy(ntfy_config, event)
 
-    apprise_result = _send_event_apprise(config, event)
+    if _apprise_async_enabled(config):
+        apprise_result = enqueue_event_apprise(config, event)
+    else:
+        apprise_result = _send_event_apprise(config, event)
     results["apprise"] = apprise_result.delivered
 
     if ntfy_config is not None:
         logger.info(
-            "Notification event processed (event=%s source=%s unraid=%s email=%s native_ntfy=%s apprise=%s apprise_profiles=%s)",
+            "Notification event processed (event=%s source=%s unraid=%s email=%s native_ntfy=%s apprise=%s apprise_mode=%s apprise_profiles=%s)",
             event_type,
             event.source or "-",
             results["unraid"],
             results["email"],
             results["ntfy"],
             results["apprise"],
+            apprise_result.mode,
             _log_list(apprise_result.delivered_profiles),
         )
     else:
         logger.info(
-            "Notification event processed (event=%s source=%s unraid=%s email=%s apprise=%s apprise_profiles=%s)",
+            "Notification event processed (event=%s source=%s unraid=%s email=%s apprise=%s apprise_mode=%s apprise_profiles=%s)",
             event_type,
             event.source or "-",
             results["unraid"],
             results["email"],
             results["apprise"],
+            apprise_result.mode,
             _log_list(apprise_result.delivered_profiles),
         )
     return results
@@ -185,7 +195,7 @@ def _ntfy_title(config: NtfyConfig, title: str) -> str:
 
 
 def _send_event_apprise(config: dict, event: NotificationEvent) -> AppriseEventResult:
-    result = AppriseEventResult()
+    result = AppriseEventResult(mode="sync")
     for profile in apprise_event_profiles(config, event.event_type):
         profile_id = str(profile.get("id") or "").strip()
         url = _read_apprise_secret(config, profile_id)
@@ -197,6 +207,230 @@ def _send_event_apprise(config: dict, event: NotificationEvent) -> AppriseEventR
         if delivered:
             result.delivered_profiles.append(_apprise_profile_log_name(profile))
     return result
+
+
+def enqueue_event_apprise(config: dict, event: NotificationEvent) -> AppriseEventResult:
+    """Queue Apprise delivery durably so provider I/O does not block the source operation."""
+    result = AppriseEventResult(mode="queued")
+    for profile in apprise_event_profiles(config, event.event_type):
+        profile_id = str(profile.get("id") or "").strip()
+        item = _queue_item_from_event(profile, event)
+        try:
+            _append_queue_item(config, item)
+            _record_delivery_status(config, item, status="queued", message="Queued for background delivery.")
+        except Exception as exc:  # noqa: BLE001 - notifications are best-effort
+            logger.warning(
+                "Apprise notification could not be queued (profile=%s event=%s): %s",
+                profile_id,
+                event.event_type,
+                _safe_error(exc),
+            )
+            continue
+        result.delivered = True
+        result.delivered_profiles.append(_apprise_profile_log_name(profile))
+    return result
+
+
+def drain_notification_queue(config: dict, *, max_items: int = 20) -> dict[str, Any]:
+    """Deliver due queued Apprise notifications.
+
+    Returns a compact status dictionary for background worker logs and tests.
+    """
+    now_ts = time.time()
+    due: list[dict[str, Any]] = []
+    with _notification_lock(config):
+        store = _read_queue_store_unlocked(config)
+        rows = store.get("queue") if isinstance(store.get("queue"), list) else []
+        pending: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            next_attempt = _float(row.get("next_attempt_at"), default=0.0)
+            if next_attempt <= now_ts and len(due) < max_items:
+                due.append(row)
+            else:
+                pending.append(row)
+        store["queue"] = pending
+        _write_json(_queue_path(config), store)
+
+    delivered = 0
+    failed = 0
+    retried = 0
+    for item in due:
+        status = _deliver_queue_item(config, item)
+        if status == "delivered":
+            delivered += 1
+        elif status == "retrying":
+            retried += 1
+        else:
+            failed += 1
+
+    remaining = len(_read_queue_store(config).get("queue") or [])
+    return {
+        "checked": len(due),
+        "delivered": delivered,
+        "failed": failed,
+        "retrying": retried,
+        "remaining": remaining,
+    }
+
+
+def read_notification_delivery_status(config: dict) -> dict[str, Any]:
+    with _notification_lock(config):
+        return _read_status_store_unlocked(config)
+
+
+def _deliver_queue_item(config: dict, item: dict[str, Any]) -> str:
+    profile_id = str(item.get("profile_id") or "").strip()
+    event_type = str(item.get("event_type") or "").strip()
+    attempts_made = _int(item.get("attempts_made"), default=0) + 1
+    max_attempts = max(1, _int(item.get("max_attempts"), default=1))
+    timeout_seconds = _apprise_timeout(item.get("timeout_seconds"))
+    url = _read_apprise_secret(config, profile_id)
+    if not url:
+        item["attempts_made"] = attempts_made
+        _record_delivery_status(config, item, status="failed", message="Apprise profile URL is missing.")
+        logger.warning("Queued Apprise notification failed (profile=%s event=%s): profile URL is missing", profile_id, event_type)
+        return "failed"
+
+    try:
+        delivery = send_notification(
+            url,
+            title=str(item.get("title") or "Borg Backup UI"),
+            body=str(item.get("body") or ""),
+            timeout_seconds=timeout_seconds,
+        )
+    except AppriseAdapterError as exc:
+        delivery = None
+        message = f"Apprise runtime unavailable: {_safe_error(exc)}"
+    except Exception as exc:  # noqa: BLE001 - background delivery is best-effort
+        delivery = None
+        message = f"Apprise notification failed: {_safe_error(exc)}"
+    else:
+        message = _safe_error(getattr(delivery, "message", ""))
+
+    item["attempts_made"] = attempts_made
+    if delivery is not None and delivery.ok:
+        _record_delivery_status(config, item, status="delivered", message=message or "Delivered.")
+        logger.info(
+            "Queued Apprise notification delivered (profile=%s event=%s id=%s attempt=%s/%s)",
+            profile_id,
+            event_type,
+            str(item.get("id") or ""),
+            attempts_made,
+            max_attempts,
+        )
+        return "delivered"
+
+    if attempts_made < max_attempts:
+        backoff = _apprise_backoff(item.get("backoff_seconds"))
+        item["next_attempt_at"] = time.time() + backoff
+        _requeue_item(config, item)
+        _record_delivery_status(config, item, status="retrying", message=message)
+        logger.warning(
+            "Queued Apprise notification will retry (profile=%s event=%s id=%s attempt=%s/%s): %s",
+            profile_id,
+            event_type,
+            str(item.get("id") or ""),
+            attempts_made,
+            max_attempts,
+            message,
+        )
+        return "retrying"
+
+    _record_delivery_status(config, item, status="failed", message=message)
+    logger.warning(
+        "Queued Apprise notification failed permanently (profile=%s event=%s id=%s attempts=%s): %s",
+        profile_id,
+        event_type,
+        str(item.get("id") or ""),
+        attempts_made,
+        message,
+    )
+    return "failed"
+
+
+def _queue_item_from_event(profile: dict[str, Any], event: NotificationEvent) -> dict[str, Any]:
+    profile_id = str(profile.get("id") or "").strip()
+    name = str(profile.get("name") or profile_id or "Borg Backup UI").strip()
+    retry_policy = profile.get("retry_policy") if isinstance(profile.get("retry_policy"), dict) else {}
+    created = _utc_now()
+    return {
+        "id": uuid.uuid4().hex,
+        "created_at": created,
+        "updated_at": created,
+        "next_attempt_at": time.time(),
+        "attempts_made": 0,
+        "max_attempts": _apprise_attempts(retry_policy.get("attempts") if isinstance(retry_policy, dict) else None),
+        "backoff_seconds": _apprise_backoff(retry_policy.get("backoff_seconds") if isinstance(retry_policy, dict) else None),
+        "timeout_seconds": _apprise_timeout(profile.get("timeout_seconds")),
+        "profile_id": profile_id,
+        "profile_name": name,
+        "provider": str(profile.get("provider") or "").strip(),
+        "event_type": str(event.event_type or "").strip(),
+        "source": str(event.source or "").strip(),
+        "job_key": str(event.job_key or "").strip(),
+        "severity": str(event.severity or "").strip(),
+        "title": _apprise_title(name, event.title),
+        "body": str(event.message or ""),
+    }
+
+
+def _append_queue_item(config: dict, item: dict[str, Any]) -> None:
+    with _notification_lock(config):
+        store = _read_queue_store_unlocked(config)
+        rows = store.get("queue") if isinstance(store.get("queue"), list) else []
+        rows.append(item)
+        max_entries = _queue_max_entries(config)
+        dropped = rows[:-max_entries] if len(rows) > max_entries else []
+        rows = rows[-max_entries:]
+        store["queue"] = rows
+        store["updated_at"] = _utc_now()
+        _write_json(_queue_path(config), store)
+        for old in dropped:
+            if isinstance(old, dict):
+                _record_delivery_status_unlocked(config, old, status="dropped", message="Notification queue was full.")
+
+
+def _requeue_item(config: dict, item: dict[str, Any]) -> None:
+    item["updated_at"] = _utc_now()
+    with _notification_lock(config):
+        store = _read_queue_store_unlocked(config)
+        rows = store.get("queue") if isinstance(store.get("queue"), list) else []
+        rows.append(item)
+        store["queue"] = rows[-_queue_max_entries(config):]
+        store["updated_at"] = _utc_now()
+        _write_json(_queue_path(config), store)
+
+
+def _record_delivery_status(config: dict, item: dict[str, Any], *, status: str, message: str) -> None:
+    with _notification_lock(config):
+        _record_delivery_status_unlocked(config, item, status=status, message=message)
+
+
+def _record_delivery_status_unlocked(config: dict, item: dict[str, Any], *, status: str, message: str) -> None:
+    store = _read_status_store_unlocked(config)
+    rows = store.get("deliveries") if isinstance(store.get("deliveries"), list) else []
+    item_id = str(item.get("id") or "").strip()
+    rows = [row for row in rows if not (isinstance(row, dict) and str(row.get("id") or "") == item_id)]
+    rows.append({
+        "id": item_id,
+        "status": str(status or "unknown"),
+        "message": _safe_error(message),
+        "profile_id": str(item.get("profile_id") or ""),
+        "profile_name": str(item.get("profile_name") or ""),
+        "provider": str(item.get("provider") or ""),
+        "event_type": str(item.get("event_type") or ""),
+        "source": str(item.get("source") or ""),
+        "job_key": str(item.get("job_key") or ""),
+        "attempts_made": _int(item.get("attempts_made"), default=0),
+        "max_attempts": _int(item.get("max_attempts"), default=1),
+        "created_at": str(item.get("created_at") or ""),
+        "updated_at": _utc_now(),
+    })
+    store["deliveries"] = rows[-_status_history_limit(config):]
+    store["updated_at"] = _utc_now()
+    _write_json(_delivery_status_path(config), store)
 
 
 def _apprise_profile_log_name(profile: dict[str, Any]) -> str:
@@ -360,6 +594,108 @@ def _read_apprise_secret(config: dict, profile_id: str) -> str:
 def _safe_error(value: BaseException | str) -> str:
     text = str(value or "").strip()
     return text[:500] if text else "unknown error"
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _data_root(config: dict) -> Path:
+    root = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
+    return root.parent if root.name == "scripts" else root
+
+
+def _queue_path(config: dict) -> Path:
+    return _data_root(config) / "config" / "notification-queue.json"
+
+
+def _delivery_status_path(config: dict) -> Path:
+    return _data_root(config) / "config" / "notification-deliveries.json"
+
+
+def _notification_lock_path(config: dict) -> Path:
+    return _data_root(config) / "locks" / "notification-delivery.lock"
+
+
+@contextmanager
+def _notification_lock(config: dict):
+    path = _notification_lock_path(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+", encoding="utf-8") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
+def _read_json_file(path: Path, fallback: dict[str, Any]) -> dict[str, Any]:
+    if not path.exists():
+        return dict(fallback)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return dict(fallback)
+    return payload if isinstance(payload, dict) else dict(fallback)
+
+
+def _read_queue_store(config: dict) -> dict[str, Any]:
+    with _notification_lock(config):
+        return _read_queue_store_unlocked(config)
+
+
+def _read_queue_store_unlocked(config: dict) -> dict[str, Any]:
+    store = _read_json_file(_queue_path(config), {"schema_version": 1, "queue": []})
+    if not isinstance(store.get("queue"), list):
+        store["queue"] = []
+    store.setdefault("schema_version", 1)
+    return store
+
+
+def _read_status_store_unlocked(config: dict) -> dict[str, Any]:
+    store = _read_json_file(_delivery_status_path(config), {"schema_version": 1, "deliveries": []})
+    if not isinstance(store.get("deliveries"), list):
+        store["deliveries"] = []
+    store.setdefault("schema_version", 1)
+    return store
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    try:
+        tmp.chmod(0o600)
+    except OSError:
+        pass
+    tmp.replace(path)
+
+
+def _apprise_async_enabled(config: dict) -> bool:
+    raw = str(config.get("NOTIFY_APPRISE_ASYNC", "true") or "true").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _queue_max_entries(config: dict) -> int:
+    return max(1, min(5000, _int(config.get("NOTIFY_APPRISE_QUEUE_MAX_ENTRIES"), default=500)))
+
+
+def _status_history_limit(config: dict) -> int:
+    return max(1, min(5000, _int(config.get("NOTIFY_APPRISE_STATUS_HISTORY"), default=200)))
+
+
+def _int(value: Any, *, default: int) -> int:
+    try:
+        return int(str(value if value is not None else default).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _float(value: Any, *, default: float) -> float:
+    try:
+        return float(str(value if value is not None else default).strip())
+    except (TypeError, ValueError):
+        return default
 
 
 def notification_state_path(config: dict) -> Path:

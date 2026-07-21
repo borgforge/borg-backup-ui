@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #255
+- Added a durable background queue for Apprise event delivery so provider network calls no longer block backup, restore-test or reminder processing.
+- Queued Apprise notifications keep per-profile retry/backoff settings, survive application restarts and write sanitized delivery status to `config/notification-deliveries.json`.
+- System Health and support bundles now include sanitized Apprise delivery status without exporting queued notification bodies or provider secret URLs.
+
 ### Issue #263
 - Fixed the canonical storage profile migration so legacy SMB profiles with invalid old mount paths are normalized to the managed `/mnt/borg-backup-ui/smb/<profile-key>` path instead of failing startup migration.
 

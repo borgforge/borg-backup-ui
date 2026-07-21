@@ -3444,6 +3444,43 @@ def _start_notification_reminder_loop(config: dict) -> threading.Thread | None:
         return None
 
 
+def _start_notification_delivery_loop(config: dict) -> threading.Thread | None:
+    def _interval_seconds() -> int:
+        try:
+            from config_api import read_expanded_conf
+            conf = read_expanded_conf(config)
+            raw = str(conf.get("NOTIFY_APPRISE_DELIVERY_INTERVAL_SECONDS", "30") or "30")
+            return max(10, min(3600, int(raw.strip())))
+        except Exception:
+            return 30
+
+    def _run() -> None:
+        time.sleep(5)
+        while True:
+            try:
+                from lib.notification_events import drain_notification_queue
+
+                result = drain_notification_queue(config)
+                if int(result.get("checked") or 0) or int(result.get("remaining") or 0):
+                    _log(
+                        "Apprise notification queue checked: "
+                        f"checked={result.get('checked')} delivered={result.get('delivered')} "
+                        f"retrying={result.get('retrying')} failed={result.get('failed')} "
+                        f"remaining={result.get('remaining')}"
+                    )
+            except Exception as exc:
+                _log(f"WARNING: Apprise notification queue check failed: {_mask_secrets(str(exc))}")
+            time.sleep(_interval_seconds())
+
+    try:
+        thread = threading.Thread(target=_run, name="apprise-notification-delivery", daemon=True)
+        thread.start()
+        return thread
+    except Exception as exc:
+        _log(f"WARNING: Apprise notification delivery loop could not be started: {_mask_secrets(str(exc))}")
+        return None
+
+
 def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None:
     """Refresh cached Borg repository information without blocking UI requests."""
     startup_delay_seconds = 300
@@ -3629,6 +3666,7 @@ def _start_normal_runtime_services(config: dict) -> None:
         _log(f"WARNING: Cron schedules could not be applied: {_mask_secrets(str(exc))}")
 
     _start_notification_reminder_loop(config)
+    _start_notification_delivery_loop(config)
     _start_repository_info_refresh_loop(config)
     _start_apprise_runtime_warmup(config)
 
