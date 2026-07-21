@@ -1690,7 +1690,7 @@ function _migrationRegistryText(item, field) {
     },
     config_backup_conf_schema: {
       title: 'registrySchemaTitle',
-      reason: status === 'applied' ? 'registrySchemaComplete' : 'registrySchemaMissing',
+      reason: status === 'applied' ? 'registrySchemaComplete' : '',
     },
     notification_events_v1: {
       title: 'registryNotificationEventsTitle',

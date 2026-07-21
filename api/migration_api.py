@@ -43,6 +43,27 @@ def analyze_backup_conf_state(ui_config: dict) -> Dict[str, Any]:
     }
 
 
+def _backup_conf_schema_reason(schema_ok: bool, missing_keys: list[str], unknown_keys: list[str], schema_changed: bool) -> str:
+    if schema_ok:
+        return "backup.conf matches the current canonical schema."
+    parts: list[str] = []
+    if missing_keys:
+        parts.append(
+            f"{len(missing_keys)} missing schema key(s): "
+            + ", ".join(missing_keys[:8])
+            + (" ..." if len(missing_keys) > 8 else "")
+        )
+    if unknown_keys:
+        parts.append(
+            f"{len(unknown_keys)} unknown or obsolete key(s): "
+            + ", ".join(unknown_keys[:8])
+            + (" ..." if len(unknown_keys) > 8 else "")
+        )
+    if schema_changed:
+        parts.append("file content differs from the canonical rendering")
+    return "; ".join(parts) or "backup.conf does not match the current canonical schema."
+
+
 def _status_item(
     item_id: str,
     title: str,
@@ -191,9 +212,7 @@ def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:
             "config_backup_conf_schema",
             "Canonical backup.conf configuration",
             "applied" if schema_ok else "pending",
-            "backup.conf matches the current canonical schema."
-            if schema_ok
-            else "backup.conf does not match the current canonical schema.",
+            _backup_conf_schema_reason(schema_ok, schema_missing, unknown_keys, schema_changed),
             category="config",
             details={
                 "conf_file": config_state.get("conf_file") or str(conf_file),

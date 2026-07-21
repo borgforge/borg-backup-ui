@@ -192,6 +192,7 @@ def test_local_profile_paths_are_validated_before_save_in_both_languages() -> No
         assert health["canonicalContentChanged"]
     assert "details.failed_phase" in script
     assert "details.rollback_status" in script
+    assert "reason: status === 'applied' ? 'registrySchemaComplete' : ''" in script
     assert "function _migrationRegistryAffectedCount(details = {})" in script
     assert "details.missing_keys" in script
     assert "details.unknown_keys" in script
