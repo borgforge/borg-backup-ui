@@ -3596,10 +3596,16 @@ function _appriseProfileName(profile) {
 }
 
 function _appriseProviderLabel(profile) {
-  const provider = String(profile?.provider || '').trim();
+  const provider = String(profile?.provider || '').trim().toLowerCase();
   if (!provider) return settingsT('apprise.genericProvider');
   const row = settingsState.appriseProviders.find((item) => (item.schemas || []).includes(provider));
-  return row?.service_name ? `${row.service_name} (${provider})` : provider;
+  const service = String(row?.service_name || '').trim();
+  if (!service) return provider;
+  return service.toLowerCase() === provider ? service : `${service} (${provider})`;
+}
+
+function _appriseProviderSchema(profile) {
+  return String(profile?.provider || '').trim().toLowerCase();
 }
 
 function _appriseSelectedProfile() {
@@ -3994,27 +4000,22 @@ function _renderAppriseProfileSummary(profile, events) {
   const eventLabels = notificationEventOptions()
     .filter(([key]) => (events || []).includes(key))
     .map(([, label]) => label);
+  const priority = settingsT(`forms.ntfyPriority${String(profile.priority || 'default').charAt(0).toUpperCase()}${String(profile.priority || 'default').slice(1)}`);
+  const providerLabel = _appriseProviderLabel(profile);
+  const schema = _appriseProviderSchema(profile);
+  const urlTemplate = String(profile.url_template || '').trim();
   return `<div class="apprise-profile-summary">
-    <div>
-      <small>${settingsT('apprise.provider')}</small>
-      <strong>${escHtml(_appriseProviderLabel(profile))}</strong>
+    <div class="apprise-profile-summary-main">
+      <span class="apprise-provider-name">${escHtml(providerLabel)}</span>
+      ${schema && schema !== providerLabel.toLowerCase() ? `<code>${escHtml(schema)}</code>` : ''}
+      ${badges.map((badge) => `<em>${escHtml(badge)}</em>`).join('')}
     </div>
-    <div>
-      <small>${settingsT('apprise.summaryStatus')}</small>
-      <strong>${escHtml(badges.join(' / ') || settingsT('common.none'))}</strong>
-    </div>
-    <div>
-      <small>${settingsT('forms.ntfyPriority')}</small>
-      <strong>${escHtml(settingsT(`forms.ntfyPriority${String(profile.priority || 'default').charAt(0).toUpperCase()}${String(profile.priority || 'default').slice(1)}`))}</strong>
-    </div>
-    <div>
-      <small>${settingsT('apprise.summaryDelivery')}</small>
-      <strong>${escHtml(`${Number(profile.timeout_seconds || 15)}s / ${Number(profile.retry_policy?.attempts || 1)}x`)}</strong>
-    </div>
-    <div class="wide">
-      <small>${settingsT('forms.notifyEvents')}</small>
-      <strong>${escHtml(eventLabels.join(', ') || settingsT('common.none'))}</strong>
-    </div>
+    <dl>
+      <div><dt>${settingsT('forms.ntfyPriority')}</dt><dd>${escHtml(priority)}</dd></div>
+      <div><dt>${settingsT('apprise.summaryDelivery')}</dt><dd>${escHtml(`${Number(profile.timeout_seconds || 15)}s / ${Number(profile.retry_policy?.attempts || 1)}x`)}</dd></div>
+      ${urlTemplate ? `<div><dt>${settingsT('apprise.urlTemplate')}</dt><dd><code>${escHtml(urlTemplate)}</code></dd></div>` : ''}
+      <div class="wide"><dt>${settingsT('forms.notifyEvents')}</dt><dd>${escHtml(eventLabels.join(', ') || settingsT('common.none'))}</dd></div>
+    </dl>
   </div>`;
 }
 

@@ -780,11 +780,9 @@
 
 .apprise-profile-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: var(--ui-space-2);
+  gap: var(--ui-space-3);
 }
 
-.apprise-profile-summary > div,
 .apprise-url-help {
   display: grid;
   gap: 3px;
@@ -795,23 +793,69 @@
   background: var(--ui-color-surface-subtle);
 }
 
-.apprise-profile-summary > .wide {
-  grid-column: 1 / -1;
+.apprise-profile-summary-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ui-space-2);
+  min-width: 0;
 }
 
-.apprise-profile-summary small,
-.apprise-url-help span {
+.apprise-provider-name {
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-md);
+  font-weight: var(--ui-font-weight-semibold);
+}
+
+.apprise-profile-summary-main code,
+.apprise-profile-summary-main em {
+  padding: 2px var(--ui-space-2);
+  border: 1px solid var(--ui-color-border);
+  border-radius: 999px;
+  background: var(--ui-color-surface-subtle);
   color: var(--ui-color-text-subtle);
   font-size: var(--ui-font-size-xs);
-  line-height: 1.35;
+  font-style: normal;
 }
 
-.apprise-profile-summary strong {
+.apprise-profile-summary dl {
+  display: grid;
+  gap: var(--ui-space-2);
+  margin: 0;
+}
+
+.apprise-profile-summary dl > div {
+  display: grid;
+  gap: var(--ui-space-2);
+  grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr);
+  align-items: baseline;
+  min-width: 0;
+  padding-top: var(--ui-space-2);
+  border-top: 1px solid var(--ui-color-border);
+}
+
+.apprise-profile-summary dt {
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+}
+
+.apprise-profile-summary dd {
   overflow: hidden;
+  margin: 0;
   color: var(--ui-color-text);
   font-size: var(--ui-font-size-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.apprise-profile-summary dd code {
+  font-size: var(--ui-font-size-xs);
+}
+
+.apprise-url-help span {
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.35;
 }
 
 .apprise-url-help {

@@ -58,6 +58,7 @@ def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> 
         "_appriseProviderTemplates",
         "_renderAppriseUrlHelp",
         "_renderAppriseProfileSummary",
+        "_appriseProviderSchema",
         'data-apprise-field="apprise_url"',
         'data-apprise-field="provider"',
         "settingsState.appriseDraftProfile",
@@ -68,6 +69,8 @@ def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> 
     assert ".apprise-provider-advanced" in css
     assert ".apprise-profile-manager" in css
     assert ".apprise-profile-summary" in css
+    assert ".apprise-profile-summary-main" in css
+    assert ".apprise-provider-name" in css
     assert ".apprise-url-help" in css
 
 
@@ -78,6 +81,9 @@ def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_
 
     assert "${editing ? `<div class=\"settings-body two-col\">" in script
     assert ": _renderAppriseProfileSummary(current, events)" in script
+    assert "service.toLowerCase() === provider ? service" in script
+    assert "apprise-profile-summary-main" in script
+    assert "<dl>" in script
     assert "templates.map((item)" in script
     assert "_renderAppriseTokenSummary(tokens, (item) => item.required" in script
     assert "_renderAppriseTokenSummary(tokens, (item) => item.private" in script
