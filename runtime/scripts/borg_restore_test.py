@@ -235,8 +235,8 @@ class RestoreTest:
 
     def _load_notification_config(self):
         try:
-            from lib.notifications import MailConfig, NtfyConfig
-            return MailConfig.from_config(self.conf), NtfyConfig.from_config(self.conf)
+            from lib.notifications import MailConfig
+            return MailConfig.from_config(self.conf), None
         except Exception as exc:
             self.log(f"  notification setup skipped: {exc}")
             return None, None

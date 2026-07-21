@@ -18,16 +18,17 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Exposed all provider URL formats in the Apprise URL-format selector so ntfy password/token templates are selectable even when they appear after the compact help examples.
 - Simplified saved Apprise profile summaries and suppressed duplicate provider labels when Apprise reports the same service name and schema.
 - Enabled Apprise profiles to receive their selected backup, restore-test and overdue reminder events, using the profile display name as the notification title prefix.
+- Added a startup cutover migration from native ntfy settings to an Apprise `ntfy` profile, removed native ntfy from the Settings UI and dropped native `NTFY_*` keys from the canonical backup configuration schema.
 - Updated German and English help/manual sections for the separate notification area and write-only Apprise URL secrets.
 
 ### Issue #258
 - Added the canonical Apprise notification profile store with protected write-only URL secrets, atomic writes and cross-process locking.
-- Added profile CRUD, validation, test delivery and provider discovery API helpers while keeping native ntfy delivery unchanged.
+- Added profile CRUD, validation, test delivery and provider discovery API helpers.
 - Extended diagnostics to include sanitized Apprise profile metadata and permission checks for `.apprise-profile-*` secret files.
 
 ### Issue #257
 - Added a hash-pinned Apprise dependency lock and package-build vendor step for `runtime/vendor` without runtime `pip` usage on Unraid.
-- Introduced a provider-neutral Apprise adapter that loads only the bundled runtime, discovers supported providers and supports controlled validation/test delivery while native ntfy remains active.
+- Introduced a provider-neutral Apprise adapter that loads only the bundled runtime, discovers supported providers and supports controlled validation/test delivery.
 - Guarded provider discovery with a bounded timeout so Apprise provider metadata cannot block diagnostic or future UI flows indefinitely.
 
 ### Issue #248

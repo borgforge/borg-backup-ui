@@ -22,7 +22,7 @@ def get_notification_reminder_diagnostics(config: dict) -> dict[str, Any]:
         reminder_interval_hours,
         reminder_key,
     )
-    from lib.notifications import MailConfig, NtfyConfig
+    from lib.notifications import MailConfig
 
     effective = {**read_expanded_conf(config), **config}
     interval_hours = reminder_interval_hours(effective)
@@ -37,9 +37,6 @@ def get_notification_reminder_diagnostics(config: dict) -> dict[str, Any]:
         mail_cfg = MailConfig.from_config(effective)
         if mail_cfg.recipient and event_type in event_set(effective, "NOTIFY_EMAIL_EVENTS", DEFAULT_EMAIL_EVENTS):
             channels.append("email")
-        ntfy_cfg = NtfyConfig.from_config(effective)
-        if ntfy_cfg.enabled and ntfy_cfg.server_url and ntfy_cfg.topic and event_type in set(ntfy_cfg.events or set()):
-            channels.append("ntfy")
         if apprise_event_profiles(effective, event_type):
             channels.append("apprise")
         return channels
@@ -102,7 +99,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
     """Send configured overdue reminders without starting backup or restore jobs."""
     from config_api import read_expanded_conf
     from restore_tests_api import list_restore_test_plan
-    from lib.notifications import MailConfig, NtfyConfig, build_restore_test_ntfy_message
+    from lib.notifications import MailConfig, build_restore_test_ntfy_message
     from lib.notification_events import (
         NotificationEvent,
         cleanup_reminder_state,
@@ -115,7 +112,6 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
     effective = {**read_expanded_conf(config), **config}
     cleanup_result = cleanup_reminder_state(effective)
     mail_config = MailConfig.from_config(effective)
-    ntfy_config = NtfyConfig.from_config(effective)
     plan = list_restore_test_plan(effective)
 
     checked = 0
@@ -123,7 +119,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
     skipped = 0
     rows = []
 
-    backup_result = _send_backup_overdue_reminders(effective, mail_config, ntfy_config)
+    backup_result = _send_backup_overdue_reminders(effective, mail_config)
     checked += int(backup_result.get("checked") or 0)
     sent += int(backup_result.get("sent") or 0)
     skipped += int(backup_result.get("skipped") or 0)
@@ -175,7 +171,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
             source="scheduled_reminder",
             extra={"due_marker": due_marker},
         )
-        results = send_event(effective, event, mail_config=mail_config, ntfy_config=ntfy_config)
+        results = send_event(effective, event, mail_config=mail_config, ntfy_config=None)
         if any(results.values()):
             mark_reminder_sent(effective, key)
             sent += 1
@@ -193,7 +189,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
     }
 
 
-def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) -> dict[str, Any]:
+def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, Any]:
     from jobs_api import list_jobs
     from schedule_api import get_schedules
     from status_api import get_status_data
@@ -285,7 +281,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config, ntfy_config) ->
             source="scheduled_reminder",
             extra={"cron": str(item.get("cron") or ""), "expected_run": due_marker, "last_timestamp": str(item.get("latest_status_at_raw") or "")},
         )
-        results = send_event(effective, event, mail_config=mail_config, ntfy_config=ntfy_config)
+        results = send_event(effective, event, mail_config=mail_config, ntfy_config=None)
         if any(results.values()):
             mark_reminder_sent(effective, str(item.get("reminder_key") or reminder_key("backup_overdue", str(job_key), due_marker)))
             sent += 1

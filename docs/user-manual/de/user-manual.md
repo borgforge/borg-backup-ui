@@ -622,10 +622,9 @@ Borg-Backup-UI verwaltet Benachrichtigungskanäle in **Einstellungen > Benachric
 
 - Unraid-Benachrichtigungen
 - E-Mail/SMTP
-- natives ntfy
-- Apprise-Profile
+- Apprise-Profile fuer ntfy, Rocket.Chat, Discord und andere unterstuetzte Provider
 
-Apprise-Profile koennen angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Die Providerliste wird aus der gebuendelten Apprise-Version geladen. Fuer ntfy steht ein gefuehrtes Formular zur Verfuegung; fuer alle anderen unterstuetzten Provider kann eine generische Apprise-URL eingetragen und vor dem Speichern validiert werden. Gespeicherte Apprise-URLs werden als Secret gespeichert und nie zurueck in die Seite gerendert.
+Apprise-Profile koennen angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Die Providerliste wird aus der gebuendelten Apprise-Version geladen. Provider-URL-Formate werden aus Apprise-Metadaten erzeugt, und gespeicherte Apprise-URLs werden als Secret gespeichert und nie zurueck in die Seite gerendert. Bestehende native ntfy-Einstellungen werden beim Start in ein Apprise-Profil migriert.
 
 Konfigurierbare Ereignisse koennen unter anderem sein:
 
@@ -948,7 +947,7 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 
 1. Öffnen Sie **Einstellungen > Allgemein**.
 2. Öffnen Sie die Rubrik **Benachrichtigungen**.
-3. Konfigurieren Sie Unraid-, E-Mail-, natives ntfy- oder Apprise-Profil.
+3. Konfigurieren Sie Unraid-, E-Mail- oder Apprise-Profil.
 4. Wählen Sie die gewünschten Ereignisse.
 5. Setzen Sie Reminder-Intervall und Backup-Toleranz.
 6. Senden Sie eine Testnachricht.

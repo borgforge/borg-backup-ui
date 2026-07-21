@@ -622,10 +622,9 @@ Borg-Backup-UI manages notification channels under **Settings > Notifications**.
 
 - Unraid notifications
 - email/SMTP
-- native ntfy
-- Apprise profiles
+- Apprise profiles for ntfy, Rocket.Chat, Discord and other supported providers
 
-Apprise profiles can be created, edited, duplicated, enabled/disabled, tested and removed. The provider list is loaded from the bundled Apprise version. ntfy has a guided form; every other supported provider can use a generic Apprise URL that is validated before saving. Saved Apprise URLs are stored as secrets and are never rendered back into the page.
+Apprise profiles can be created, edited, duplicated, enabled/disabled, tested and removed. The provider list is loaded from the bundled Apprise version. Provider URL formats are generated from Apprise metadata, and saved Apprise URLs are stored as secrets that are never rendered back into the page. Existing native ntfy settings are migrated into an Apprise profile during startup.
 
 Configurable events can include:
 
@@ -947,7 +946,7 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 
 1. Open **Settings > General**.
 2. Open the **Notifications** area.
-3. Configure Unraid, email, native ntfy, or an Apprise profile.
+3. Configure Unraid, email, or an Apprise profile.
 4. Select the desired events.
 5. Set reminder interval and backup tolerance.
 6. Send a test message.

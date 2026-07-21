@@ -600,7 +600,7 @@ def main() -> int:
         RequiredSourcePathsMissing,
     )
     from lib.borg_runner import BorgConfig, BorgRunner, parse_borg_stats  # type: ignore
-    from lib.notifications import MailConfig, NtfyConfig  # type: ignore
+    from lib.notifications import MailConfig  # type: ignore
     from lib.docker_manager import DockerConfig, DockerManager  # type: ignore
     from lib.vm_manager import VmConfig, VmManager  # type: ignore
 
@@ -608,7 +608,6 @@ def main() -> int:
     _setup_full_logging(job_config.log_file)
     borg_config = BorgConfig.from_config(env)
     mail_config = MailConfig.from_config(env)
-    ntfy_config = NtfyConfig.from_config(env)
 
     data_root = Path(str(env.get("BACKUP_SCRIPTS_DIR") or backup_scripts_dir))
     if data_root.name == "scripts":
@@ -655,7 +654,7 @@ def main() -> int:
             docker_manager=docker_mgr,
             vm_manager=vm_mgr,
             mail_config=mail_config,
-            ntfy_config=ntfy_config,
+            ntfy_config=None,
             notification_config=env,
             phase_callback=set_phase,
         ) as job:

@@ -10,6 +10,7 @@ from . import (
     canonical_backup_conf_v1,
     canonical_data_model_v1,
     job_source_paths_v1,
+    ntfy_apprise_cutover_v1,
     notification_events_v1,
     restore_history_v1,
     smb_protocol_auto_v1,
@@ -28,6 +29,7 @@ except ImportError:  # Runtime/tests may import migrations directly from API_ROO
 
 MIGRATIONS = [
     restore_history_v1,
+    ntfy_apprise_cutover_v1,
     notification_events_v1,
     canonical_data_model_v1,
     job_source_paths_v1,

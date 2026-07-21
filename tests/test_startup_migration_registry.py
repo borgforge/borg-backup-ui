@@ -66,13 +66,8 @@ def test_registry_writes_central_state_and_log_for_applied_migration(tmp_path: P
     assert state["migrations"]["notification_events_v1"]["applied_at"]
     assert state["migrations"]["notification_events_v1"]["last_checked_at"]
     assert state["migrations"]["notification_events_v1"]["details"]["runner"] == "central_migration_registry"
-    assert state["migrations"]["notification_events_v1"]["details"]["updated_keys"] == [
-        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS",
-        "NOTIFY_EMAIL_EVENTS",
-        "NOTIFY_REMINDER_INTERVAL_HOURS",
-        "NOTIFY_UNRAID_EVENTS",
-        "NTFY_EVENTS",
-    ]
+    assert "ntfy_apprise_cutover_v1" in result["applied"]
+    assert state["migrations"]["notification_events_v1"]["details"]["updated_keys"] == ["NTFY_EVENTS"]
     assert len(logs) == 1
     assert logs[0]["event"] == "startup_migration"
     assert "notification_events_v1" in logs[0]["details"]["startup_migrations"]["applied"]

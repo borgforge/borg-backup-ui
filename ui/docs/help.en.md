@@ -136,7 +136,7 @@ Cron uses five fields: minute, hour, day, month, and weekday. `0 3 * * *` starts
 
 ### Overdue Runs
 
-The application calculates the expected run from the schedule. After the configured tolerance expires, it can notify through Unraid, email, ntfy, or Apprise. The reminder interval prevents immediate repetitions.
+The application calculates the expected run from the schedule. After the configured tolerance expires, it can notify through Unraid, email, or Apprise profiles. The reminder interval prevents immediate repetitions.
 
 ## 8. Docker and VMs
 

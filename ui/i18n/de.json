@@ -1881,7 +1881,7 @@
       "sendTestEmail": "Test-E-Mail senden",
       "saveBeforeTestEmail": "Bitte SMTP- und E-Mail-Einstellungen zuerst speichern, bevor eine Test-E-Mail gesendet wird.",
       "notificationReminderTitle": "Reminder & Überfälligkeit",
-      "notificationReminderHint": "Diese Einstellungen gelten kanalübergreifend für Unraid, E-Mail und ntfy.",
+      "notificationReminderHint": "Diese Einstellungen gelten kanalübergreifend für Unraid, E-Mail und Apprise-Profile.",
       "unraidNotifyTitle": "Unraid-Benachrichtigungen",
       "unraidNotifyHint": "Unraid-Systembenachrichtigungen werden lokal im Unraid-Webinterface angezeigt.",
       "notifyEvents": "Ereignisse",
@@ -2011,7 +2011,7 @@
     },
     "apprise": {
       "title": "Benachrichtigungsprofile (Apprise)",
-      "hint": "Apprise-Profile erweitern die bisherigen Benachrichtigungskanäle. Native ntfy bleibt bis zur Cutover-Migration separat aktiv.",
+      "hint": "Apprise-Profile bündeln Push- und Webhook-Benachrichtigungen. Bestehende native ntfy-Einstellungen werden beim Start automatisch in ein Apprise-Profil übernommen.",
       "savedProfiles": "Apprise-Profile",
       "addProfile": "Profil hinzufügen",
       "noProfiles": "Noch kein Apprise-Profil vorhanden.",
