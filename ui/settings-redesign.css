@@ -818,6 +818,29 @@
   margin-top: var(--ui-space-2);
 }
 
+.apprise-url-builder {
+  margin-bottom: var(--ui-space-2);
+}
+
+.apprise-url-preview {
+  display: grid;
+  gap: 3px;
+  margin-top: var(--ui-space-2);
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-xs);
+}
+
+.apprise-url-preview code {
+  overflow: hidden;
+  padding: var(--ui-space-2);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-surface-subtle);
+  color: var(--ui-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .apprise-url-help code {
   display: block;
   overflow: hidden;

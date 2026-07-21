@@ -45,6 +45,8 @@ def test_create_profile_writes_secret_and_returns_masked_metadata(tmp_path: Path
         "retry_policy": {"attempts": 2, "backoff_seconds": 30},
         "priority": "high",
         "default": True,
+        "url_template": "ntfy://{token}@{host}/{targets}",
+        "url_fields": {"host": "example.test", "targets": "borg"},
         "apprise_url": "ntfy://token@example.test/borg",
     })
 
@@ -54,6 +56,8 @@ def test_create_profile_writes_secret_and_returns_masked_metadata(tmp_path: Path
     assert profile["url_set"] is True
     assert "apprise_url" not in profile
     assert "ntfy://token" not in json.dumps(profile)
+    assert profile["url_template"] == "ntfy://{token}@{host}/{targets}"
+    assert profile["url_fields"] == {"host": "example.test", "targets": "borg"}
 
     secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
     assert secret.read_text(encoding="utf-8").strip() == "ntfy://token@example.test/borg"
@@ -62,6 +66,8 @@ def test_create_profile_writes_secret_and_returns_masked_metadata(tmp_path: Path
     store_text = (tmp_path / "config" / "apprise-profiles.json").read_text(encoding="utf-8")
     assert "ntfy://token" not in store_text
     assert json.loads(store_text)["profiles"][0]["provider"] == "ntfy"
+    assert json.loads(store_text)["profiles"][0]["url_template"] == "ntfy://{token}@{host}/{targets}"
+    assert json.loads(store_text)["profiles"][0]["url_fields"] == {"host": "example.test", "targets": "borg"}
 
 
 def test_update_profile_preserves_write_only_secret_when_url_omitted(
@@ -79,13 +85,45 @@ def test_update_profile_preserves_write_only_secret_when_url_omitted(
     updated = apprise_profiles_api.update_profile(config, "alerts-main", {
         "name": "New Alerts",
         "enabled": False,
+        "url_template": "json://{token}@{host}",
+        "url_fields": {"host": "example.test", "targets": "borg"},
     })
 
     assert updated["profile"]["name"] == "New Alerts"
     assert updated["profile"]["enabled"] is False
     assert updated["profile"]["url_set"] is True
+    assert updated["profile"]["url_template"] == "json://{token}@{host}"
+    assert updated["profile"]["url_fields"] == {"host": "example.test", "targets": "borg"}
     secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
     assert secret.read_text(encoding="utf-8").strip() == "json://old-token@example.test"
+
+
+def test_profile_url_fields_are_sanitized_without_exposing_secret_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ok_validation(monkeypatch)
+    config = _cfg(tmp_path)
+
+    result = apprise_profiles_api.create_profile(config, {
+        "id": "alerts-main",
+        "name": "Alerts",
+        "provider": "ntfy",
+        "url_template": "ntfy://{token}@{host}/{targets}",
+        "url_fields": {
+            "host": "ntfy.example.test",
+            "targets": "borg",
+            "token": "",
+        },
+        "apprise_url": "ntfy://secret-token@ntfy.example.test/borg",
+    })
+
+    profile = result["profile"]
+    assert profile["url_template"] == "ntfy://{token}@{host}/{targets}"
+    assert profile["url_fields"] == {"host": "ntfy.example.test", "targets": "borg"}
+    assert "secret-token" not in json.dumps(profile)
+    store_text = (tmp_path / "config" / "apprise-profiles.json").read_text(encoding="utf-8")
+    assert "secret-token" not in store_text
 
 
 def test_delete_referenced_profile_returns_conflict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

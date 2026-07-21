@@ -166,6 +166,28 @@ def _provider(value: Any) -> str:
     return text
 
 
+def _url_fields(value: Any) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("url_fields must be an object")
+    result: dict[str, str] = {}
+    for raw_key, raw_value in value.items():
+        key = _clean_string(raw_key, max_len=64).lower()
+        if not key:
+            continue
+        if not re.fullmatch(r"^[a-z0-9][a-z0-9_.-]{0,63}$", key):
+            raise ValueError("url_fields keys must use a-z, 0-9, ., _, -")
+        text = _clean_string(raw_value, max_len=1024)
+        if text:
+            result[key] = text
+    return result
+
+
+def _url_template(value: Any) -> str:
+    return _clean_string(value, max_len=512)
+
+
 def _read_store(config: dict[str, Any]) -> dict[str, Any]:
     return read_inventory(profile_store_path(config), collection_key=COLLECTION_KEY, schema_version=SCHEMA_VERSION)
 
@@ -194,6 +216,8 @@ def _sanitize_profile(row: dict[str, Any], config: dict[str, Any]) -> dict[str, 
         "retry_policy": _retry_policy(row.get("retry_policy")),
         "priority": _clean_string(row.get("priority") or "", max_len=40),
         "default": _bool(row.get("default"), False),
+        "url_template": _url_template(row.get("url_template")),
+        "url_fields": _url_fields(row.get("url_fields")),
         "created_at": _clean_string(row.get("created_at") or _utc_now(), max_len=40),
         "updated_at": _clean_string(row.get("updated_at") or _utc_now(), max_len=40),
         "url_set": profile_secret_path(config, profile_id).is_file(),

@@ -14,6 +14,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Added a dedicated Settings > Notifications area with Apprise profile overview, editor, duplication, enable/default state, event selection, validation, test delivery and deletion.
 - Added searchable Apprise provider selection from the bundled runtime metadata while preserving the generic Apprise URL fallback.
 - Compacted saved Apprise profile details outside edit mode and added dynamic provider URL templates and token hints from Apprise metadata for all providers.
+- Added provider-specific URL field generation from Apprise templates. Non-secret URL fields and the selected template are stored with the profile, while password/token fields stay write-only and can be replaced during edits.
 - Updated German and English help/manual sections for the separate notification area and write-only Apprise URL secrets.
 
 ### Issue #258

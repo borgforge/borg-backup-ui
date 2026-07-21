@@ -3628,7 +3628,9 @@ function _appriseDraftFromProfile(profile, duplicate = false) {
     },
     priority: String(source.priority || 'default') || 'default',
     default: !!source.default,
+    url_template: String(source.url_template || ''),
     url_set: !!source.url_set,
+    url_fields: source.url_fields && typeof source.url_fields === 'object' ? { ...source.url_fields } : {},
     apprise_url: '',
   };
 }
@@ -3781,6 +3783,36 @@ function _appriseProviderTemplates(provider) {
     .slice(0, 5);
 }
 
+function _appriseTemplateTokenKeys(template) {
+  const keys = [];
+  const seen = new Set();
+  String(template || '').replace(/\{([a-zA-Z0-9_.-]+)\}/g, (_match, key) => {
+    const value = String(key || '').trim().toLowerCase();
+    if (value && value !== 'schema' && !seen.has(value)) {
+      seen.add(value);
+      keys.push(value);
+    }
+    return _match;
+  });
+  return keys;
+}
+
+function _appriseTokenMeta(provider, key) {
+  const metadata = _appriseProviderMetadata(provider);
+  const tokens = Array.isArray(metadata?.tokens) ? metadata.tokens : [];
+  const wanted = String(key || '').toLowerCase();
+  return tokens.find((item) => String(item.key || '').toLowerCase() === wanted) || { key: wanted, name: wanted };
+}
+
+function _appriseTokenIsSecret(token) {
+  const text = `${token?.key || ''} ${token?.name || ''}`.toLowerCase();
+  return !!token?.private || /\b(pass|password|token|secret|apikey|api_key|key)\b/.test(text);
+}
+
+function _appriseTokenLabel(token, key) {
+  return String(token?.name || key || '').replaceAll('_', ' ') || String(key || '');
+}
+
 function _appriseUrlPlaceholder(provider, urlSet = false) {
   if (urlSet) return settingsT('apprise.urlPreservePlaceholder');
   const schema = String(provider || '').trim().toLowerCase();
@@ -3790,10 +3822,146 @@ function _appriseUrlPlaceholder(provider, urlSet = false) {
   return settingsT('apprise.urlPlaceholder');
 }
 
+function _appriseSelectedTemplate(provider, current = {}) {
+  const templates = _appriseProviderTemplates(provider);
+  const selected = String(current?.url_template || '').trim();
+  if (selected && templates.includes(selected)) return selected;
+  return templates[0] || '';
+}
+
+function _renderAppriseUrlBuilder(provider, current = {}) {
+  const schema = String(provider || '').trim().toLowerCase();
+  const templates = _appriseProviderTemplates(schema);
+  const template = _appriseSelectedTemplate(schema, current);
+  const keys = _appriseTemplateTokenKeys(template);
+  if (!template || !keys.length) return '';
+  const values = current?.url_fields && typeof current.url_fields === 'object' ? current.url_fields : {};
+  const templateSelect = templates.length > 1
+    ? `<div class="form-group" style="grid-column:1/-1">
+      <label class="form-label" for="apprise-url-template">${settingsT('apprise.urlTemplate')}</label>
+      <select class="form-select mono" id="apprise-url-template" data-apprise-field="url_template" onchange="onAppriseTemplateSelect(this.value)">
+        ${templates.map((item) => `<option value="${escAttr(item)}" ${item === template ? 'selected' : ''}>${escHtml(item)}</option>`).join('')}
+      </select>
+    </div>`
+    : `<input type="hidden" data-apprise-field="url_template" value="${escAttr(template)}">`;
+  const rows = keys.map((key) => {
+    const token = _appriseTokenMeta(schema, key);
+    const secret = _appriseTokenIsSecret(token);
+    const required = !!token.required;
+    const label = _appriseTokenLabel(token, key);
+    const stored = secret ? '' : String(values[key] || '');
+    const placeholder = secret && current.url_set
+      ? settingsT('apprise.secretPreservePlaceholder')
+      : (required ? settingsT('apprise.requiredFieldPlaceholder') : '');
+    return `<div class="form-group">
+      <label class="form-label" for="apprise-url-token-${escAttr(key)}">
+        ${escHtml(label)}${required ? ' *' : ''}${secret ? ` <span class="settings-muted">(${settingsT('apprise.secretField')})</span>` : ''}
+      </label>
+      <input class="form-input ${secret ? '' : 'mono'}" id="apprise-url-token-${escAttr(key)}" type="${secret ? 'password' : 'text'}" data-apprise-url-token="${escAttr(key)}" data-apprise-url-secret="${secret ? 'true' : 'false'}" data-apprise-url-required="${required ? 'true' : 'false'}" value="${escAttr(stored)}" placeholder="${escAttr(placeholder)}" autocomplete="off" oninput="onAppriseUrlFieldInput()">
+    </div>`;
+  }).join('');
+  return `<fieldset class="settings-fieldset apprise-url-builder" style="grid-column:1/-1">
+    <legend>${settingsT('apprise.urlFields')}</legend>
+    <div class="settings-body two-col">${templateSelect}${rows}</div>
+    <div class="form-help">${settingsT('apprise.urlFieldsHint')}</div>
+    <div class="apprise-url-preview"><span>${settingsT('apprise.urlPreview')}</span><code id="apprise-url-preview">${escHtml(_apprisePreviewUrlFromValues(schema, template, values))}</code></div>
+  </fieldset>`;
+}
+
+function _apprisePreviewUrlFromValues(provider, template, values = {}) {
+  const schema = String(provider || '').trim().toLowerCase();
+  return String(template || '').replace(/\{([a-zA-Z0-9_.-]+)\}/g, (match, key) => {
+    const tokenKey = String(key || '').toLowerCase();
+    if (tokenKey === 'schema') return schema || 'apprise';
+    const token = _appriseTokenMeta(schema, tokenKey);
+    if (_appriseTokenIsSecret(token)) return values[tokenKey] ? '***' : `{${tokenKey}}`;
+    return String(values[tokenKey] || match);
+  });
+}
+
+function _appriseBuildUrlFromFields() {
+  const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'apprise').trim().toLowerCase();
+  const template = String(document.querySelector('[data-apprise-field="url_template"]')?.value || '').trim() || _appriseSelectedTemplate(provider);
+  const inputs = Array.from(document.querySelectorAll('[data-apprise-url-token]'));
+  if (!template || !inputs.length) return { url: '', fields: {}, complete: false, hasBuilder: false };
+  const fields = {};
+  let complete = true;
+  inputs.forEach((input) => {
+    const key = String(input.dataset.appriseUrlToken || '').toLowerCase();
+    const value = String(input.value || '').trim();
+    if (value) fields[key] = value;
+    if (!value) complete = false;
+  });
+  if (!complete) return { url: '', fields, complete: false, hasBuilder: true };
+  const url = template.replace(/\{([a-zA-Z0-9_.-]+)\}/g, (match, key) => {
+    const tokenKey = String(key || '').toLowerCase();
+    if (tokenKey === 'schema') return provider || 'apprise';
+    return fields[tokenKey] || match;
+  });
+  return { url, fields, complete: true, hasBuilder: true };
+}
+
+function _updateAppriseUrlPreview() {
+  const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'apprise').trim().toLowerCase();
+  const template = String(document.querySelector('[data-apprise-field="url_template"]')?.value || '').trim() || _appriseSelectedTemplate(provider);
+  const preview = document.getElementById('apprise-url-preview');
+  if (!preview || !template) return;
+  const values = {};
+  Array.from(document.querySelectorAll('[data-apprise-url-token]')).forEach((input) => {
+    const key = String(input.dataset.appriseUrlToken || '').toLowerCase();
+    const value = String(input.value || '').trim();
+    if (value) values[key] = value;
+  });
+  preview.textContent = _apprisePreviewUrlFromValues(provider, template, values);
+}
+
+function onAppriseUrlFieldInput() {
+  _updateAppriseUrlPreview();
+}
+
+function _appriseCurrentUrlFieldValues() {
+  const values = {};
+  Array.from(document.querySelectorAll('[data-apprise-url-token]')).forEach((input) => {
+    const key = String(input.dataset.appriseUrlToken || '').toLowerCase();
+    const value = String(input.value || '').trim();
+    if (key && value && input.dataset.appriseUrlSecret !== 'true') values[key] = value;
+  });
+  return values;
+}
+
+function onAppriseTemplateSelect(template) {
+  const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'apprise').trim().toLowerCase();
+  const urlConfig = document.getElementById('apprise-url-config');
+  if (!urlConfig) return;
+  const current = {
+    ...(settingsState.appriseDraftProfile || {}),
+    url_template: String(template || ''),
+    url_fields: {
+      ...(settingsState.appriseDraftProfile?.url_fields || {}),
+      ..._appriseCurrentUrlFieldValues(),
+    },
+  };
+  settingsState.appriseDraftProfile = current;
+  urlConfig.innerHTML = _renderAppriseUrlConfig(provider, current, true);
+  _updateAppriseUrlPreview();
+}
+
 function _renderAppriseTokenSummary(tokens, filterFn, labelKey) {
   const rows = (Array.isArray(tokens) ? tokens : []).filter(filterFn).slice(0, 8);
   if (!rows.length) return '';
   return `<span>${settingsT(labelKey)}: ${escHtml(rows.map((item) => item.name || item.key).join(', '))}</span>`;
+}
+
+function _renderAppriseUrlConfig(provider, current = {}, editing = false) {
+  const builder = editing ? _renderAppriseUrlBuilder(provider, current) : '';
+  const hasBuilder = !!builder;
+  const urlLabel = hasBuilder ? settingsT('apprise.urlOverride') : (current.url_set ? settingsT('apprise.urlSet') : settingsT('apprise.url'));
+  return `${builder}
+    <div class="form-group" style="grid-column:1/-1">
+      <label class="form-label" for="apprise-profile-url">${urlLabel}</label>
+      <input class="form-input mono" id="apprise-profile-url" type="password" data-apprise-field="apprise_url" value="" placeholder="${escAttr(_appriseUrlPlaceholder(provider, current.url_set))}" autocomplete="off" ${editing ? '' : 'disabled'}>
+      <div id="apprise-url-help">${_renderAppriseUrlHelp(provider, current.url_set)}</div>
+    </div>`;
 }
 
 function _renderAppriseUrlHelp(provider, urlSet = false) {
@@ -3933,11 +4101,7 @@ function renderSettingsAppriseProfiles() {
               <input class="form-input" id="apprise-profile-backoff" type="number" min="0" max="3600" data-apprise-field="retry_backoff_seconds" value="${escAttr(current.retry_policy?.backoff_seconds || 0)}" ${editing ? '' : 'disabled'}>
             </div>
             ${editing ? _renderAppriseProviderAdvanced(provider) : ''}
-            <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label" for="apprise-profile-url">${current.url_set ? settingsT('apprise.urlSet') : settingsT('apprise.url')}</label>
-              <input class="form-input mono" id="apprise-profile-url" type="password" data-apprise-field="apprise_url" value="" placeholder="${escAttr(_appriseUrlPlaceholder(provider, current.url_set))}" autocomplete="off" ${editing ? '' : 'disabled'}>
-              <div id="apprise-url-help">${_renderAppriseUrlHelp(provider, current.url_set)}</div>
-            </div>
+            <div id="apprise-url-config" style="grid-column:1/-1">${_renderAppriseUrlConfig(provider, current, editing)}</div>
             <fieldset class="settings-fieldset" style="grid-column:1/-1">
               <legend>${settingsT('forms.notifyEvents')}</legend>
               <div class="settings-body two-col">${_renderAppriseEvents(events)}</div>
@@ -4094,9 +4258,13 @@ async function maybeLoadAppriseProviders() {
 
 function _rerenderAppriseProviderPickerOnly() {
   const picker = document.getElementById('apprise-provider-picker');
-  if (!picker) return;
   const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'ntfy');
-  picker.innerHTML = _renderAppriseProviderResults(provider);
+  if (picker) picker.innerHTML = _renderAppriseProviderResults(provider);
+  const urlConfig = document.getElementById('apprise-url-config');
+  if (urlConfig && settingsState.appriseDraftProfile) {
+    urlConfig.innerHTML = _renderAppriseUrlConfig(provider, settingsState.appriseDraftProfile, true);
+    _updateAppriseUrlPreview();
+  }
 }
 
 function _setAppriseDraftProvider(provider) {
@@ -4113,6 +4281,9 @@ function _setAppriseDraftProvider(provider) {
   if (urlInput) urlInput.placeholder = _appriseUrlPlaceholder(value, urlSet);
   const urlHelp = document.getElementById('apprise-url-help');
   if (urlHelp) urlHelp.innerHTML = _renderAppriseUrlHelp(value, urlSet);
+  const urlConfig = document.getElementById('apprise-url-config');
+  if (urlConfig) urlConfig.innerHTML = _renderAppriseUrlConfig(value, settingsState.appriseDraftProfile || {}, true);
+  _updateAppriseUrlPreview();
   _rerenderAppriseProviderPickerOnly();
 }
 
@@ -4131,7 +4302,8 @@ function _appriseSelectedEventsFromDom() {
 function _collectAppriseProfilePayload({ forDelivery = false } = {}) {
   const provider = String(document.querySelector('[data-apprise-field="provider"]')?.value || 'apprise').trim().toLowerCase();
   const explicitUrl = String(document.querySelector('[data-apprise-field="apprise_url"]')?.value || '').trim();
-  const url = explicitUrl;
+  const built = _appriseBuildUrlFromFields();
+  const url = explicitUrl || built.url;
   const id = '';
   const payload = {
     id,
@@ -4149,6 +4321,16 @@ function _collectAppriseProfilePayload({ forDelivery = false } = {}) {
     default: !!document.querySelector('[data-apprise-field="default"]')?.checked,
   };
   if (url) payload.apprise_url = url;
+  if (built.hasBuilder && built.url) {
+    payload.url_template = String(document.querySelector('[data-apprise-field="url_template"]')?.value || '').trim();
+    payload.url_fields = Object.fromEntries(
+      Object.entries(built.fields).filter(([key]) => {
+        const input = Array.from(document.querySelectorAll('[data-apprise-url-token]'))
+          .find((item) => String(item.dataset.appriseUrlToken || '').toLowerCase() === String(key).toLowerCase());
+        return input?.dataset.appriseUrlSecret !== 'true';
+      })
+    );
+  }
   if (forDelivery && !url && payload.profile_id) {
     delete payload.apprise_url;
   }
