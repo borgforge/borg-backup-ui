@@ -198,6 +198,62 @@ def test_registry_does_not_invent_legacy_applied_at_without_audit(monkeypatch, t
     assert entry["last_checked_at"]
 
 
+def test_registry_rechecks_completed_migration_when_declared(monkeypatch, tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    apply_calls = 0
+
+    class RecheckMigration:
+        MIGRATION_ID = "recheck_v1"
+        INTRODUCED_IN = "2026.07.21.0000"
+        RECHECK_AFTER_FINAL = True
+
+        @staticmethod
+        def detect(_config: dict) -> dict:
+            return {"required": True, "missing_keys": ["NEW_KEY"]}
+
+        @staticmethod
+        def apply(_config: dict) -> dict:
+            nonlocal apply_calls
+            apply_calls += 1
+            return {
+                "migration_id": "recheck_v1",
+                "introduced_in": "2026.07.21.0000",
+                "status": "applied",
+                "details": {"updated_keys": ["NEW_KEY"]},
+            }
+
+    monkeypatch.setattr(registry, "MIGRATIONS", [RecheckMigration])
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "migration-state.json").write_text(
+        json.dumps({
+            "schema_version": 3,
+            "migrations": {
+                "recheck_v1": {
+                    "state": "applied",
+                    "checked_at": "2026-07-20T07:23:14",
+                    "applied_at": "2026-07-20T07:23:14",
+                    "source": "startup_registry",
+                    "details": {
+                        "migration_id": "recheck_v1",
+                        "runner": "central_migration_registry",
+                    },
+                },
+            },
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    result = registry.run_startup_migrations(config)
+    entry = _state(config)["migrations"]["recheck_v1"]
+
+    assert apply_calls == 1
+    assert result["applied"] == ["recheck_v1"]
+    assert entry["state"] == "applied"
+    assert entry["applied_at"] == "2026-07-20T07:23:14"
+    assert entry["details"]["updated_keys"] == ["NEW_KEY"]
+
+
 def test_registry_records_failed_migration(monkeypatch, tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
 

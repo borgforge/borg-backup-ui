@@ -1642,7 +1642,7 @@ function _renderMigrationActionItem(item) {
   const title = _migrationRegistryText(item, 'title');
   const reason = _migrationRegistryText(item, 'reason');
   const details = item?.details && typeof item.details === 'object' ? item.details : {};
-  const count = Number(details.candidate_count || details.missing_count || 0);
+  const count = _migrationRegistryAffectedCount(details);
   const suffix = count > 0 ? ` · ${settingsT('health.affected', { count })}` : '';
   return `
     <div class="migration-action-row ${escHtml(status)}">
@@ -1652,6 +1652,14 @@ function _renderMigrationActionItem(item) {
       </div>
     </div>
   `;
+}
+
+function _migrationRegistryAffectedCount(details = {}) {
+  const missing = Number(details.missing_count || 0);
+  const unknown = Number(details.unknown_count || 0);
+  const candidates = Number(details.candidate_count || 0);
+  const changed = details.canonical_content_changed === true ? 1 : 0;
+  return Math.max(candidates, missing + unknown + changed);
 }
 
 function _migrationRegistryStatusLabel(status) {
@@ -1731,6 +1739,9 @@ function _renderMigrationRegistryItem(item) {
   const failedPhase = String(details.failed_phase || '').trim();
   const failureReason = String(details.error || '').trim();
   const rollbackStatus = String(details.rollback_status || '').trim();
+  const missingKeys = Array.isArray(details.missing_keys) ? details.missing_keys.map((key) => String(key || '').trim()).filter(Boolean) : [];
+  const unknownKeys = Array.isArray(details.unknown_keys) ? details.unknown_keys.map((key) => String(key || '').trim()).filter(Boolean) : [];
+  const canonicalChanged = details.canonical_content_changed === true;
   const plan = details?.dry_run_plan && typeof details.dry_run_plan === 'object' ? details.dry_run_plan : null;
   const planCandidateCount = Number(plan?.candidate_count || 0);
   const planText = plan && planCandidateCount > 0
@@ -1744,6 +1755,8 @@ function _renderMigrationRegistryItem(item) {
     [settingsT('health.updatedKeys'), details.updated_keys],
     [settingsT('health.addedKeys'), details.added_keys],
     [settingsT('health.removedKeys'), details.removed_keys],
+    [settingsT('health.missingKeys'), details.missing_keys],
+    [settingsT('health.unknownKeys'), details.unknown_keys],
     [settingsT('health.affectedFiles'), details.affected_files],
     [settingsT('health.backupDirectory'), details.backup_directory],
     [settingsT('health.runId'), details.run_id],
@@ -1767,6 +1780,9 @@ function _renderMigrationRegistryItem(item) {
       ${planText ? `<div class="migration-registry-plan">${escHtml(planText)}</div>` : ''}
       ${candidates.length ? `<div class="migration-registry-id">Deprecated: ${candidates.map((row) => escHtml(String(row?.key || ''))).filter(Boolean).join(', ')}</div>` : ''}
       ${updatedKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.updatedKeys'))}: ${updatedKeys.map((value) => escHtml(value)).join(', ')}</div>` : ''}
+      ${missingKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.missingKeys'))}: ${missingKeys.map((value) => escHtml(value)).join(', ')}</div>` : ''}
+      ${unknownKeys.length ? `<div class="migration-registry-id">${escHtml(settingsT('health.unknownKeys'))}: ${unknownKeys.map((value) => escHtml(value)).join(', ')}</div>` : ''}
+      ${canonicalChanged ? `<div class="migration-registry-id">${escHtml(settingsT('health.canonicalContentChanged'))}</div>` : ''}
       ${failedPhase ? `<div class="migration-registry-id">${escHtml(settingsT('health.failedPhase'))}: ${escHtml(failedPhase)}</div>` : ''}
       ${failureReason ? `<div class="migration-registry-id">${escHtml(settingsT('health.failureReason'))}: ${escHtml(failureReason)}</div>` : ''}
       ${rollbackStatus ? `<div class="migration-registry-id">${escHtml(settingsT('health.rollbackStatus'))}: ${escHtml(settingsT(`health.rollback_${rollbackStatus}`))}</div>` : ''}

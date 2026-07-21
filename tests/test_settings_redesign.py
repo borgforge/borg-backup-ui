@@ -187,8 +187,15 @@ def test_local_profile_paths_are_validated_before_save_in_both_languages() -> No
         assert health["failedPhase"]
         assert health["failureReason"]
         assert health["rollbackStatus"]
+        assert health["missingKeys"]
+        assert health["unknownKeys"]
+        assert health["canonicalContentChanged"]
     assert "details.failed_phase" in script
     assert "details.rollback_status" in script
+    assert "function _migrationRegistryAffectedCount(details = {})" in script
+    assert "details.missing_keys" in script
+    assert "details.unknown_keys" in script
+    assert "details.canonical_content_changed === true" in script
 
 
 def test_settings_layout_is_sticky_and_responsive() -> None:

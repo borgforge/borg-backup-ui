@@ -332,7 +332,8 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
 
         previous = _migration_entry(state, migration_id)
         previous_state = str(previous.get("state") or "").strip()
-        if previous_state in FINAL_STATES and _is_central_registry_result(previous):
+        recheck_after_final = bool(getattr(migration, "RECHECK_AFTER_FINAL", False))
+        if previous_state in FINAL_STATES and _is_central_registry_result(previous) and not recheck_after_final:
             skipped.append(migration_id)
             results[migration_id] = {
                 "migration_id": migration_id,
