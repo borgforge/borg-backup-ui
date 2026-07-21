@@ -88,7 +88,7 @@ install_apprise_vendor() {
     --target "${APPRISE_VENDOR_DIR}" \
     -r "${APPRISE_LOCK_FILE}"
   find "${APPRISE_VENDOR_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-  APPRISE_VENDOR_VERSION="$(python3 - "${APPRISE_VENDOR_DIR}" <<'PY'
+  APPRISE_VENDOR_VERSION="$(PYTHONDONTWRITEBYTECODE=1 python3 - "${APPRISE_VENDOR_DIR}" <<'PY'
 import sys
 from pathlib import Path
 
@@ -102,6 +102,7 @@ if not version:
 print(version)
 PY
 )"
+  find "${APPRISE_VENDOR_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   echo "==> Apprise Runtime: ${APPRISE_VENDOR_VERSION}"
 }
 

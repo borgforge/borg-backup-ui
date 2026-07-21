@@ -26,6 +26,7 @@ def test_build_installs_apprise_and_packages_vendor_bundle() -> None:
     assert "apprise-${APPRISE_VENDOR_VERSION}-${bundle_sha}.tar.xz" in script
     assert "--exclude='./vendor'" in script
     assert "--sort=name" in script
+    assert "PYTHONDONTWRITEBYTECODE=1" in script
     assert "sha256sum" in script
     assert "--require-hashes" in script
     assert "python3 -m pip install" in script
