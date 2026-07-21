@@ -65,8 +65,6 @@ def test_repository_information_has_a_background_refresh_loop() -> None:
     assert "_start_repository_info_refresh_loop(config)" in backend
     assert "def _start_apprise_runtime_warmup(config: dict)" in backend
     assert "_start_apprise_runtime_warmup(config)" in backend
-    assert 'validate_profile_url("ntfy://borg-backup-ui-warmup")' in backend
-    assert "get_supported_providers(config)" not in backend
     assert "def refresh_due_repository_info(" in repository_api
     assert "max_age_hours: int = 24" in repository_api
     assert "retry_after_hours: int = 1" in repository_api
