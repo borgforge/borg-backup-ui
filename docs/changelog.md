@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #257
+- Added a hash-pinned Apprise dependency lock and package-build vendor step for `runtime/vendor` without runtime `pip` usage on Unraid.
+- Introduced a provider-neutral Apprise adapter that loads only the bundled runtime, discovers supported providers and supports controlled validation/test delivery while native ntfy remains active.
+- Guarded provider discovery with a bounded timeout so Apprise provider metadata cannot block diagnostic or future UI flows indefinitely.
+
 ### Issue #248
 - Restore tests now preserve repository encryption metadata and run repositories configured with `none` without a passphrase file.
 - Encrypted repositories continue to require their configured passphrase file.
