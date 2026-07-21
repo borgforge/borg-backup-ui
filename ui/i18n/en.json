@@ -2011,7 +2011,6 @@
     },
     "apprise": {
       "title": "Notification profiles (Apprise)",
-      "hint": "Apprise profiles bundle push and webhook notifications. Existing native ntfy settings are migrated into an Apprise profile during startup.",
       "savedProfiles": "Apprise profiles",
       "addProfile": "Add profile",
       "noProfiles": "No Apprise profile exists yet.",

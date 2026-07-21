@@ -4132,7 +4132,6 @@ function renderSettingsAppriseProfiles() {
   return settingsCard(settingsT('apprise.title'),
     settingsMenuIcon('notifications'),
     `<div class="settings-body">
-      <div class="status-message info">${settingsT('apprise.hint')}</div>
       ${body}
     </div>`);
 }

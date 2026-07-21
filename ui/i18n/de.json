@@ -2011,7 +2011,6 @@
     },
     "apprise": {
       "title": "Benachrichtigungsprofile (Apprise)",
-      "hint": "Apprise-Profile bündeln Push- und Webhook-Benachrichtigungen. Bestehende native ntfy-Einstellungen werden beim Start automatisch in ein Apprise-Profil übernommen.",
       "savedProfiles": "Apprise-Profile",
       "addProfile": "Profil hinzufügen",
       "noProfiles": "Noch kein Apprise-Profil vorhanden.",
