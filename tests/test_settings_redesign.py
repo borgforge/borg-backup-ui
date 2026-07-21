@@ -78,7 +78,7 @@ def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_
 
     assert "${editing ? `<div class=\"settings-body two-col\">" in script
     assert ": _renderAppriseProfileSummary(current, events)" in script
-    assert "templates.map((template)" in script
+    assert "templates.map((item)" in script
     assert "_renderAppriseTokenSummary(tokens, (item) => item.required" in script
     assert "_renderAppriseTokenSummary(tokens, (item) => item.private" in script
     assert "_renderAppriseUrlBuilder(provider, current)" in script
@@ -87,6 +87,8 @@ def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_
     assert "onAppriseTemplateSelect" in script
     assert "payload.url_template" in script
     assert "payload.url_fields = Object.fromEntries" in script
+    assert ".filter(Boolean);\n}" in script
+    assert "templates.slice(0, 5).map((template)" in script
     assert "_appriseUrlPlaceholder(provider, current.url_set)" in script
     assert "apprise-ntfy-builder" not in script
     assert "_buildAppriseNtfyUrl" not in script

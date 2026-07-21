@@ -3779,8 +3779,7 @@ function _appriseProviderTemplates(provider) {
   const templates = Array.isArray(row?.templates) ? row.templates : [];
   return templates
     .map((template) => _appriseTemplateForSchema(template, schema))
-    .filter(Boolean)
-    .slice(0, 5);
+    .filter(Boolean);
 }
 
 function _appriseTemplateTokenKeys(template) {
@@ -3974,7 +3973,7 @@ function _renderAppriseUrlHelp(provider, urlSet = false) {
     ? `<a href="${escAttr(setupUrl)}" target="_blank" rel="noopener noreferrer">${settingsT('apprise.urlDocs')}</a>`
     : '';
   const templateRows = templates.length
-    ? templates.map((template) => `<code>${escHtml(template)}</code>`).join('')
+    ? templates.slice(0, 5).map((template) => `<code>${escHtml(template)}</code>`).join('')
     : (schema && schema !== 'apprise' ? `<code>${escHtml(`${schema}://...`)}</code>` : '');
   return `<div class="apprise-url-help">
     <span>${settingsT(templates.length ? 'apprise.dynamicUrlHint' : 'apprise.genericUrlHint', { provider: schema || 'apprise' })}</span>
