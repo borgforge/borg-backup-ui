@@ -103,6 +103,39 @@ def test_canonical_profile_migration_is_auditable_and_idempotent(tmp_path: Path)
     assert canonical_storage_profiles_v1.detect(config)["required"] is False
 
 
+def test_canonical_profile_migration_normalizes_invalid_legacy_smb_mount_path(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    settings_path = tmp_path / "config" / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(json.dumps({
+        "schema_version": 1,
+        "smb_profiles": [{
+            "key": "smb-a",
+            "name": "NAS A",
+            "server": "nas.local",
+            "share": "backup",
+            "mount_path": "/boot/config/plugins/borg-backup-ui/smb-a",
+            "username": "backup",
+            "password_file": "/boot/config/borg-backup/secrets/.smb-smb-a.cred",
+            "vers": "3.0",
+        }],
+    }, indent=2) + "\n", encoding="utf-8")
+    write_storage_store(config, {"storages": []})
+
+    result = canonical_storage_profiles_v1.apply(config)
+
+    assert result["status"] == "applied"
+    assert result["details"]["normalized_mount_paths"] == [{
+        "profile_key": "smb-a",
+        "old_mount_path": "/boot/config/plugins/borg-backup-ui/smb-a",
+        "new_mount_path": "/mnt/borg-backup-ui/smb/smb-a",
+        "reason": "SMB mount path must be a dedicated directory below /mnt",
+    }]
+    profile = settings_profiles_from_storages(config)["smb_profiles"][0]
+    assert profile["mount_path"] == "/mnt/borg-backup-ui/smb/smb-a"
+    assert json.loads(settings_path.read_text(encoding="utf-8")) == {"schema_version": 1}
+
+
 def test_canonical_profile_migration_rejects_malformed_settings(tmp_path: Path) -> None:
     config = _config(tmp_path)
     path = tmp_path / "config" / "settings.json"

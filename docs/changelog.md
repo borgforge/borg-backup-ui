@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #263
+- Fixed the canonical storage profile migration so legacy SMB profiles with invalid old mount paths are normalized to the managed `/mnt/borg-backup-ui/smb/<profile-key>` path instead of failing startup migration.
+
 ### Issue #262
 - Test and stable manifests now render a checksum-aware package installer that reuses a valid local package, skips reinstalling an already registered identical version and prints explicit progress messages before download or `upgradepkg`.
 - Apprise is now packaged as a deterministic, SHA256-verified vendor bundle. The expanded `runtime/vendor` tree is no longer owned by the plugin package and is only refreshed on install when the Apprise version or bundle hash changes.
