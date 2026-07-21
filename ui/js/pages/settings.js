@@ -3774,6 +3774,13 @@ function _appriseTemplateForSchema(template, schema) {
   return value.replaceAll('{schema}', String(schema || '').trim().toLowerCase() || 'apprise');
 }
 
+function _appriseTemplateSignature(template) {
+  const value = String(template || '').trim().toLowerCase();
+  return value
+    .replace(/^[a-z0-9+.-]+:\/\//, '{schema}://')
+    .replaceAll('{schema}', '{schema}');
+}
+
 function _appriseProviderTemplates(provider) {
   const schema = String(provider || '').trim().toLowerCase();
   const row = _appriseProviderMetadata(schema);
@@ -3826,6 +3833,11 @@ function _appriseSelectedTemplate(provider, current = {}) {
   const templates = _appriseProviderTemplates(provider);
   const selected = String(current?.url_template || '').trim();
   if (selected && templates.includes(selected)) return selected;
+  if (selected) {
+    const signature = _appriseTemplateSignature(selected);
+    const compatible = templates.find((item) => _appriseTemplateSignature(item) === signature);
+    if (compatible) return compatible;
+  }
   return templates[0] || '';
 }
 
@@ -4223,7 +4235,7 @@ function _collectAppriseProfilePayload({ forDelivery = false } = {}) {
     default: !!document.querySelector('[data-apprise-field="default"]')?.checked,
   };
   if (url) payload.apprise_url = url;
-  if (built.hasBuilder && built.url) {
+  if (built.hasBuilder) {
     payload.url_template = String(document.querySelector('[data-apprise-field="url_template"]')?.value || '').trim();
     payload.url_fields = Object.fromEntries(
       Object.entries(built.fields).filter(([key]) => {

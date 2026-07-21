@@ -19,6 +19,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Simplified saved Apprise profile summaries and suppressed duplicate provider labels when Apprise reports the same service name and schema.
 - Enabled Apprise profiles to receive their selected backup, restore-test and overdue reminder events, using the profile display name as the notification title prefix.
 - Added a startup cutover migration from native ntfy settings to an Apprise `ntfy` profile, removed native ntfy from the Settings UI and dropped native `NTFY_*` keys from the canonical backup configuration schema.
+- Fixed migrated Apprise ntfy profiles so the editor reopens the matching URL format and provider fields instead of falling back to the first ntfy template.
 - Updated German and English help/manual sections for the separate notification area and write-only Apprise URL secrets.
 
 ### Issue #258

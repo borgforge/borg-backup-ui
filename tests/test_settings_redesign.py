@@ -90,6 +90,8 @@ def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_
     assert "_renderAppriseUrlBuilder(provider, current)" in script
     assert "data-apprise-url-token" in script
     assert "data-apprise-field=\"url_template\"" in script
+    assert "function _appriseTemplateSignature(template)" in script
+    assert "_appriseTemplateSignature(item) === signature" in script
     assert "onAppriseTemplateSelect" in script
     assert "payload.url_template" in script
     assert "payload.url_fields = Object.fromEntries" in script

@@ -126,13 +126,13 @@ def _profile_from_native_ntfy(config: dict, conf: dict[str, str]) -> tuple[dict[
     events = _events(str(conf.get("NTFY_EVENTS", "") or "backup_success,backup_failed,backup_skipped,restore_test_failed"))
     if "backup_failed" in events and "backup_warning" not in events:
         events.append("backup_warning")
-    url, template, fields = _native_ntfy_url(conf)
+    url, template, fields, provider = _native_ntfy_url(conf)
     enabled = str(conf.get("NTFY_ENABLED", "false") or "").strip().lower() in {"1", "true", "yes", "on"}
     profile = {
         "id": profile_id,
         "name": str(conf.get("NTFY_PROFILE_NAME", "") or "ntfy").strip() or "ntfy",
         "enabled": bool(enabled and url),
-        "provider": "ntfy",
+        "provider": provider,
         "selected_events": events,
         "timeout_seconds": _int_range(conf.get("NTFY_TIMEOUT_SECONDS"), default=15, minimum=1, maximum=300),
         "retry_policy": {"attempts": 1, "backoff_seconds": 0},
@@ -152,43 +152,44 @@ def _profile_from_native_ntfy(config: dict, conf: dict[str, str]) -> tuple[dict[
     return profile, url
 
 
-def _native_ntfy_url(conf: dict[str, str]) -> tuple[str, str, dict[str, str]]:
+def _native_ntfy_url(conf: dict[str, str]) -> tuple[str, str, dict[str, str], str]:
     server_url = str(conf.get("NTFY_SERVER_URL", "") or "").strip()
     topic = str(conf.get("NTFY_TOPIC", "") or "").strip().strip("/")
     if not server_url or not topic:
-        return "", "", _fields_from_native(conf)
+        return "", "", _fields_from_native(conf), "ntfy"
 
     parsed = urlsplit(server_url if "://" in server_url else f"https://{server_url}")
     scheme = "ntfys" if parsed.scheme == "https" else "ntfy"
     host = parsed.hostname or parsed.netloc or parsed.path.strip("/")
     if not host:
-        return "", "", _fields_from_native(conf)
+        return "", "", _fields_from_native(conf), scheme
     if parsed.port:
         host = f"{host}:{parsed.port}"
 
     username = str(conf.get("NTFY_USERNAME", "") or "").strip()
     password = _read_secret(conf.get("NTFY_PASSWORD_FILE", ""))
     token = _read_secret(conf.get("NTFY_ACCESS_TOKEN_FILE", ""))
-    query = _ntfy_query(conf, auth="token" if token else ("basic" if username else ""))
+    auth_mode = "token" if token else ("basic" if username else "")
+    query = _ntfy_query(conf, auth=auth_mode)
     target = quote(topic, safe="")
 
     if token:
-        template = "{schema}://{token}@{host}/{targets}"
+        template = f"{scheme}://{{token}}@{{host}}/{{targets}}"
         auth = f"{quote(token, safe='')}@"
     elif username and password:
-        template = "{schema}://{user}:{password}@{host}/{targets}"
+        template = f"{scheme}://{{user}}:{{password}}@{{host}}/{{targets}}"
         auth = f"{quote(username, safe='')}:{quote(password, safe='')}@"
     elif username:
-        template = "{schema}://{user}@{host}/{targets}"
+        template = f"{scheme}://{{user}}@{{host}}/{{targets}}"
         auth = f"{quote(username, safe='')}@"
     else:
-        template = "{schema}://{host}/{targets}"
+        template = f"{scheme}://{{host}}/{{targets}}"
         auth = ""
 
     url = f"{scheme}://{auth}{host}/{target}"
     if query:
         url = f"{url}?{query}"
-    return url, template, _fields_from_native(conf)
+    return url, template, _fields_from_native(conf, include_user=auth_mode != "token"), scheme
 
 
 def _ntfy_query(conf: dict[str, str], *, auth: str) -> str:
@@ -207,7 +208,7 @@ def _ntfy_query(conf: dict[str, str], *, auth: str) -> str:
     return urlencode(params)
 
 
-def _fields_from_native(conf: dict[str, str]) -> dict[str, str]:
+def _fields_from_native(conf: dict[str, str], *, include_user: bool = True) -> dict[str, str]:
     fields: dict[str, str] = {}
     server_url = str(conf.get("NTFY_SERVER_URL", "") or "").strip()
     topic = str(conf.get("NTFY_TOPIC", "") or "").strip().strip("/")
@@ -221,7 +222,7 @@ def _fields_from_native(conf: dict[str, str]) -> dict[str, str]:
             fields["host"] = host
     if topic:
         fields["targets"] = topic
-    if username:
+    if username and include_user:
         fields["user"] = username
     return fields
 

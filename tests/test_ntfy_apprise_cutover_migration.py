@@ -67,10 +67,10 @@ def test_ntfy_cutover_migrates_enabled_native_profile_and_removes_keys(tmp_path:
     assert profile["id"] == "ntfy-migrated"
     assert profile["name"] == "Server Alerts"
     assert profile["enabled"] is True
-    assert profile["provider"] == "ntfy"
+    assert profile["provider"] == "ntfys"
     assert profile["default"] is True
     assert profile["timeout_seconds"] == 25
-    assert profile["url_template"] == "{schema}://{token}@{host}/{targets}"
+    assert profile["url_template"] == "ntfys://{token}@{host}/{targets}"
     assert profile["url_fields"] == {"host": "ntfy.example.test", "targets": "borg"}
     assert profile["migration"]["source"] == "native_ntfy"
     assert "backup_warning" in profile["selected_events"]
