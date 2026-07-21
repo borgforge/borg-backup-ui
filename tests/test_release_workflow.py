@@ -36,6 +36,10 @@ def init_repo(tmp_path: Path) -> Path:
     )
     (repo / "ui").mkdir()
     (repo / "ui" / "index.html").write_text("<html>one</html>\n", encoding="utf-8")
+    (repo / "plugin").mkdir()
+    (repo / "plugin" / "apprise-requirements.lock").write_text(
+        "apprise==1.12.0 --hash=sha256:old\n", encoding="utf-8"
+    )
     (repo / "README.md").write_text("not deployable\n", encoding="utf-8")
     git(repo, "add", ".")
     git(repo, "commit", "-m", "Initial source")
@@ -58,6 +62,19 @@ def test_source_digest_ignores_version_but_tracks_deployable_source(tmp_path: Pa
     )
     git(repo, "add", "borg_backup_ui.py")
     git(repo, "commit", "-m", "Deployable change")
+    assert release_workflow.source_digest(repo, "HEAD") != initial
+
+
+def test_source_digest_tracks_apprise_lock_as_package_input(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    initial = release_workflow.source_digest(repo, "HEAD")
+
+    (repo / "plugin" / "apprise-requirements.lock").write_text(
+        "apprise==1.12.0 --hash=sha256:new\n", encoding="utf-8"
+    )
+    git(repo, "add", "plugin/apprise-requirements.lock")
+    git(repo, "commit", "-m", "Update Apprise lock")
+
     assert release_workflow.source_digest(repo, "HEAD") != initial
 
 

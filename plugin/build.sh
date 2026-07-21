@@ -22,6 +22,8 @@ BUILD_PREPARED="${BUILD_PREPARED:-0}"
 BUILD_DIR="${BUILD_OUTPUT_DIR}/pkg"
 PKG_FILE="${BUILD_OUTPUT_DIR}/${NAME}-${VERSION}.txz"
 PLG_FILE="${REPO_DIR}/${NAME}.plg"
+APPRISE_LOCK_FILE="${SCRIPT_DIR}/apprise-requirements.lock"
+APPRISE_VENDOR_DIR="${REPO_DIR}/runtime/vendor"
 
 echo "==> Baue ${NAME} v${VERSION}"
 
@@ -63,6 +65,44 @@ grep -F -q "APP_VERSION = \"${VERSION}\"" "${REPO_DIR}/borg_backup_ui.py" || {
   echo "ERROR: Vorbereiteter Quellbaum enthaelt nicht APP_VERSION ${VERSION}." >&2
   exit 1
 }
+
+install_apprise_vendor() {
+  if [ ! -f "${APPRISE_LOCK_FILE}" ]; then
+    echo "ERROR: Apprise dependency lock is missing: ${APPRISE_LOCK_FILE}" >&2
+    exit 1
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: python3 is required to vendor Apprise." >&2
+    exit 1
+  fi
+
+  echo "==> Installiere hash-gepruefte Apprise Runtime nach runtime/vendor"
+  rm -rf "${APPRISE_VENDOR_DIR}"
+  mkdir -p "${APPRISE_VENDOR_DIR}"
+  python3 -m pip install \
+    --disable-pip-version-check \
+    --no-cache-dir \
+    --only-binary=:all: \
+    --require-hashes \
+    --target "${APPRISE_VENDOR_DIR}" \
+    -r "${APPRISE_LOCK_FILE}"
+  find "${APPRISE_VENDOR_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+  python3 - "${APPRISE_VENDOR_DIR}" <<'PY'
+import sys
+from pathlib import Path
+
+vendor = Path(sys.argv[1])
+sys.path.insert(0, str(vendor))
+import apprise  # noqa: E402
+
+version = str(getattr(apprise, "__version__", "") or "")
+if not version:
+    raise SystemExit("ERROR: Bundled Apprise import did not expose a version.")
+print(f"==> Apprise Runtime: {version}")
+PY
+}
+
+install_apprise_vendor
 
 # ── Aufräumen ──────────────────────────────────────────────────────────────
 rm -rf "${BUILD_DIR}"

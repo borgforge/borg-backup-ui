@@ -26,6 +26,8 @@ EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/api/factory_reset_worker.py",
     f"boot/config/plugins/{NAME}/ui/index.html",
     f"boot/config/plugins/{NAME}/runtime/config/backup.conf.example",
+    f"boot/config/plugins/{NAME}/runtime/vendor/apprise/__init__.py",
+    f"boot/config/plugins/{NAME}/runtime/vendor/certifi/__init__.py",
     "etc/rc.d/rc.borg_backup_ui",
     PROVENANCE_MEMBER,
 )
@@ -54,6 +56,8 @@ def is_deployable_path(path: str) -> bool:
     if path.startswith(("api/", "ui/", "runtime/", "docs/user-manual/")):
         return True
     if path in {
+        "plugin/apprise-requirements.lock",
+        "plugin/build.sh",
         "plugin/borg-backup-ui.page",
         "plugin/rc.borg_backup_ui",
         "plugin/plugin-icon.png",
