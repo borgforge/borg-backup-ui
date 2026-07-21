@@ -8,6 +8,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #262
 - Test and stable manifests now render a checksum-aware package installer that reuses a valid local package, skips reinstalling an already registered identical version and prints explicit progress messages before download or `upgradepkg`.
+- Apprise is now packaged as a deterministic, SHA256-verified vendor bundle. The expanded `runtime/vendor` tree is no longer owned by the plugin package and is only refreshed on install when the Apprise version or bundle hash changes.
 
 ### Issue #256
 - Added a dedicated Settings > Notifications area with Apprise profile overview, editor, duplication, enable/default state, event selection, validation, test delivery and deletion.
