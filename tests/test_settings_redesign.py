@@ -97,6 +97,7 @@ def test_apprise_profiles_are_compact_until_edit_and_explain_urls_from_provider_
     assert "onAppriseTemplateSelect" in script
     assert "payload.url_template" in script
     assert "payload.url_fields = Object.fromEntries" in script
+    assert "const payload = _collectAppriseProfilePayload({ forDelivery: true });" in script
     assert ".filter(Boolean);\n}" in script
     assert "templates.slice(0, 5).map((template)" in script
     assert "_appriseUrlPlaceholder(provider, current.url_set)" in script

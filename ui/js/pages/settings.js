@@ -4328,7 +4328,7 @@ async function validateAppriseProfile() {
   btn?.classList.add('loading');
   hideEl('apprise-profiles-msg');
   try {
-    const payload = _collectAppriseProfilePayload();
+    const payload = _collectAppriseProfilePayload({ forDelivery: true });
     const res = await fetch('/api/notification-profiles/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

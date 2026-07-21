@@ -215,6 +215,33 @@ def test_validate_and_test_profile_do_not_return_secret(tmp_path: Path, monkeypa
     assert "json://token" not in json.dumps(tested)
 
 
+def test_validate_profile_uses_stored_secret_when_url_is_omitted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ok_validation(monkeypatch)
+    config = _cfg(tmp_path)
+    apprise_profiles_api.create_profile(config, {
+        "id": "alerts-main",
+        "name": "Alerts",
+        "apprise_url": "json://token@example.test",
+    })
+    captured = {}
+
+    def fake_validate(url: str):
+        captured["url"] = url
+        return type("Result", (), {"ok": bool(url), "message": "ok" if url else "empty"})()
+
+    monkeypatch.setattr(apprise_profiles_api, "validate_url", fake_validate)
+
+    validation = apprise_profiles_api.validate_profile_payload(config, {"profile_id": "alerts-main"})
+
+    assert validation["success"] is True
+    assert validation["url_set"] is True
+    assert captured["url"] == "json://token@example.test"
+    assert "json://token" not in json.dumps(validation)
+
+
 def test_apprise_profile_http_routes_are_wired() -> None:
     source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
 

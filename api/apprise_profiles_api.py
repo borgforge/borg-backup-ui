@@ -406,6 +406,10 @@ def validate_profile_payload(config: dict[str, Any], payload: dict[str, Any]) ->
     if not isinstance(payload, dict):
         raise ValueError("payload must be an object")
     url = _clean_string(payload.get("apprise_url") or payload.get("url"), max_len=4096)
+    pid = str(payload.get("id") or payload.get("profile_id") or "").strip()
+    if not url and pid:
+        _ = get_profile(config, pid)["profile"]
+        url = _read_secret(config, pid)
     result = validate_profile_url(url)
     return {**result, "url_set": bool(url)}
 
