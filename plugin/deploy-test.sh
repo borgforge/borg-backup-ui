@@ -89,6 +89,10 @@ sed -i \
   -e "s|<MD5>[^<]*</MD5>|<MD5>${MD5}</MD5>|" \
   "$TEST_PLG"
 
+python3 "$SCRIPT_DIR/release_workflow.py" rewrite-package-installer \
+  --manifest "$TEST_PLG" \
+  --md5 "$MD5"
+
 python3 - "$TEST_PLG" <<'PY'
 import re
 import sys

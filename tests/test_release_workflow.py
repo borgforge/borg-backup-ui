@@ -133,6 +133,47 @@ def test_release_note_fragments_are_ordered_and_hashed(tmp_path: Path) -> None:
     assert len(digest) == 64
 
 
+def test_package_installer_rewrite_adds_checksum_and_skip_logic() -> None:
+    manifest = """<PLUGIN>
+<FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<URL>&pkgurl;</URL>
+<MD5>00000000000000000000000000000000</MD5>
+</FILE>
+</PLUGIN>
+"""
+
+    rendered = release_workflow.rewrite_package_installer(
+        manifest,
+        "ABCDEF0123456789ABCDEF0123456789",
+    )
+
+    assert "borg-backup-ui package installer" in rendered
+    assert 'EXPECTED_MD5="abcdef0123456789abcdef0123456789"' in rendered
+    assert "vorhandenes Paket passt zur MD5" in rendered
+    assert "Version ${VERSION} ist bereits installiert" in rendered
+    assert "upgradepkg --install-new" in rendered
+    assert "<MD5>" not in rendered
+
+
+def test_manifest_md5_accepts_rendered_package_installer(tmp_path: Path) -> None:
+    manifest = tmp_path / "borg-backup-ui-test.plg"
+    manifest.write_text(
+        release_workflow.rewrite_package_installer(
+            """<PLUGIN>
+<FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<URL>&pkgurl;</URL>
+<MD5>00000000000000000000000000000000</MD5>
+</FILE>
+</PLUGIN>
+""",
+            "abcdef0123456789abcdef0123456789",
+        ),
+        encoding="utf-8",
+    )
+
+    assert release_workflow.manifest_md5(manifest) == "abcdef0123456789abcdef0123456789"
+
+
 def test_source_preflight_is_fail_fast_and_runs_pytest_once() -> None:
     script = (ROOT / "plugin" / "mr-preflight.sh").read_text(encoding="utf-8")
 
@@ -147,6 +188,7 @@ def test_test_deploy_requires_attestation_and_exact_commit() -> None:
     script = (ROOT / "plugin" / "deploy-test.sh").read_text(encoding="utf-8")
 
     assert "verify-attestation" in script
+    assert "rewrite-package-installer" in script
     assert 'git -C "$REPO_DIR" archive "$SOURCE_COMMIT"' in script
     assert 'REMOTE_SHA" != "$SOURCE_COMMIT' in script
     assert "pytest -q" not in script
@@ -160,6 +202,7 @@ def test_stable_promotion_reuses_exact_package_from_clean_current_main() -> None
     assert 'LOCAL_SHA" != "$MAIN_SHA' in script
     assert 'cp "$TEST_PKG"' in script
     assert 'if [[ "$RELEASE_PACKAGE_SHA256" != "$TEST_PACKAGE_SHA256" ]]' in script
+    assert "tested_package_install" in script
     assert "plugin/build.sh" not in script
 
 

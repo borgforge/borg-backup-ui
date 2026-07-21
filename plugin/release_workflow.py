@@ -33,6 +33,20 @@ EXPECTED_PACKAGE_MEMBERS = (
     PROVENANCE_MEMBER,
 )
 
+PACKAGE_INSTALL_BEGIN = "<!-- BEGIN borg-backup-ui package installer -->"
+PACKAGE_INSTALL_END = "<!-- END borg-backup-ui package installer -->"
+PACKAGE_INSTALL_BLOCK_RE = re.compile(
+    rf"{re.escape(PACKAGE_INSTALL_BEGIN)}.*?{re.escape(PACKAGE_INSTALL_END)}",
+    re.DOTALL,
+)
+LEGACY_PACKAGE_FILE_RE = re.compile(
+    r'<FILE Name="&bootdir;/&name;-&version;\.txz" Run="upgradepkg --install-new">\s*'
+    r"<URL>&pkgurl;</URL>\s*"
+    r"<MD5>[^<]*</MD5>\s*"
+    r"</FILE>",
+    re.DOTALL,
+)
+
 
 def run_git(repo: Path, *args: str, text: bool = True) -> str | bytes:
     result = subprocess.run(
@@ -242,6 +256,127 @@ def replace_changelog_block(manifest: str, version: str, notes: str) -> str:
     return manifest.replace("<![CDATA[\n", "<![CDATA[\n" + block, 1)
 
 
+def package_install_block(md5: str) -> str:
+    md5 = str(md5 or "").strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", md5):
+        raise RuntimeError("Package MD5 must be a 32 character hexadecimal digest")
+    return f"""{PACKAGE_INSTALL_BEGIN}
+<FILE Name="/tmp/borg-backup-ui-package-install.sh" Run="/bin/bash">
+<INLINE>
+#!/bin/bash
+set -e
+
+NAME="borg-backup-ui"
+VERSION="&version;"
+PLUGIN_DIR="/boot/config/plugins/${{NAME}}"
+PACKAGE_FILE="${{PLUGIN_DIR}}/${{NAME}}-${{VERSION}}.txz"
+PACKAGE_TMP="${{PACKAGE_FILE}}.tmp"
+PACKAGE_URL="&pkgurl;"
+EXPECTED_MD5="{md5.lower()}"
+INSTALLED_MD5_FILE="${{PLUGIN_DIR}}/.installed-package-md5"
+
+file_md5() {{
+  if command -v md5sum >/dev/null 2>/dev/null; then
+    md5sum "$1" | awk '{{print $1}}'
+  else
+    md5 -q "$1"
+  fi
+}}
+
+package_registered() {{
+  for _package_log in "/var/log/packages/${{NAME}}-${{VERSION}}"*; do
+    if [ -e "${{_package_log}}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}}
+
+payload_present() {{
+  [ -f "${{PLUGIN_DIR}}/borg_backup_ui.py" ] || return 1
+  [ -f "/etc/rc.d/rc.borg_backup_ui" ] || return 1
+  [ -d "${{PLUGIN_DIR}}/runtime/vendor/apprise" ] || return 1
+  return 0
+}}
+
+download_package() {{
+  echo "Borg Backup UI: lade Paket ${{VERSION}} herunter..."
+  rm -f "${{PACKAGE_TMP}}"
+  if command -v curl >/dev/null 2>/dev/null; then
+    curl -fL --retry 3 --connect-timeout 20 -o "${{PACKAGE_TMP}}" "${{PACKAGE_URL}}"
+  elif command -v wget >/dev/null 2>/dev/null; then
+    wget -O "${{PACKAGE_TMP}}" "${{PACKAGE_URL}}"
+  else
+    echo "ERROR: Weder curl noch wget ist verfuegbar, Paket kann nicht geladen werden."
+    return 1
+  fi
+
+  actual_md5="$(file_md5 "${{PACKAGE_TMP}}")"
+  if [ "${{actual_md5}}" != "${{EXPECTED_MD5}}" ]; then
+    echo "ERROR: Paket-MD5 stimmt nicht."
+    echo "  erwartet: ${{EXPECTED_MD5}}"
+    echo "  erhalten : ${{actual_md5}}"
+    rm -f "${{PACKAGE_TMP}}"
+    return 1
+  fi
+  mv -f "${{PACKAGE_TMP}}" "${{PACKAGE_FILE}}"
+}}
+
+ensure_package_file() {{
+  if [ -f "${{PACKAGE_FILE}}" ]; then
+    actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
+    if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
+      echo "Borg Backup UI: vorhandenes Paket passt zur MD5, Download wird uebersprungen."
+      return 0
+    fi
+    echo "Borg Backup UI: lokales Paket hat andere MD5, lade neu."
+  fi
+  download_package
+}}
+
+mkdir -p "${{PLUGIN_DIR}}"
+
+if package_registered; then
+  if payload_present; then
+    marker_md5="$(cat "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true)"
+    if [ "${{marker_md5}}" = "${{EXPECTED_MD5}}" ]; then
+      echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, Paketinstallation wird uebersprungen."
+      exit 0
+    fi
+    if [ -f "${{PACKAGE_FILE}}" ]; then
+      actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
+      if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
+        echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, MD5-Marker wird aktualisiert."
+        echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
+        exit 0
+      fi
+    else
+      echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, kein Download/Entpacken noetig."
+      echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
+      exit 0
+    fi
+  fi
+fi
+
+ensure_package_file
+echo "Borg Backup UI: installiere Paket ${{VERSION}}. Auf USB-Flash kann dieser Schritt etwas dauern..."
+upgradepkg --install-new "${{PACKAGE_FILE}}"
+echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
+rm -f /tmp/borg-backup-ui-package-install.sh
+</INLINE>
+</FILE>
+{PACKAGE_INSTALL_END}"""
+
+
+def rewrite_package_installer(manifest: str, md5: str) -> str:
+    block = package_install_block(md5)
+    if PACKAGE_INSTALL_BLOCK_RE.search(manifest):
+        return PACKAGE_INSTALL_BLOCK_RE.sub(block, manifest, count=1)
+    if LEGACY_PACKAGE_FILE_RE.search(manifest):
+        return LEGACY_PACKAGE_FILE_RE.sub(block, manifest, count=1)
+    raise RuntimeError("Plugin manifest package install block was not found")
+
+
 def prepare_build_tree(
     root: Path,
     version: str,
@@ -306,10 +441,13 @@ def manifest_version(manifest: Path) -> str:
 
 
 def manifest_md5(manifest: Path) -> str:
-    match = re.search(r"<MD5>([^<]+)</MD5>", manifest.read_text(encoding="utf-8"))
+    text = manifest.read_text(encoding="utf-8")
+    match = re.search(r"<MD5>([^<]+)</MD5>", text)
+    if not match:
+        match = re.search(r'EXPECTED_MD5="([0-9a-fA-F]{32})"', text)
     if not match:
         raise RuntimeError("Manifest MD5 is missing")
-    return match.group(1)
+    return match.group(1).lower()
 
 
 def file_md5(path: Path) -> str:
@@ -408,6 +546,12 @@ def command_verify_implementation_delta(args: argparse.Namespace) -> None:
     verify_implementation_delta(Path(args.repo).resolve(), args.base_ref)
 
 
+def command_rewrite_package_installer(args: argparse.Namespace) -> None:
+    path = Path(args.manifest).resolve()
+    text = path.read_text(encoding="utf-8")
+    path.write_text(rewrite_package_installer(text, args.md5), encoding="utf-8")
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser()
     subparsers = result.add_subparsers(dest="command", required=True)
@@ -450,6 +594,11 @@ def parser() -> argparse.ArgumentParser:
     item.add_argument("--repo", default=".")
     item.add_argument("--base-ref", required=True)
     item.set_defaults(func=command_verify_implementation_delta)
+
+    item = subparsers.add_parser("rewrite-package-installer")
+    item.add_argument("--manifest", required=True)
+    item.add_argument("--md5", required=True)
+    item.set_defaults(func=command_rewrite_package_installer)
     return result
 
 

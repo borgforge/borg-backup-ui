@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #262
+- Test and stable manifests now render a checksum-aware package installer that reuses a valid local package, skips reinstalling an already registered identical version and prints explicit progress messages before download or `upgradepkg`.
+
 ### Issue #256
 - Added a dedicated Settings > Notifications area with Apprise profile overview, editor, duplication, enable/default state, event selection, validation, test delivery and deletion.
 - Added searchable Apprise provider selection from the bundled runtime metadata plus a guided ntfy URL builder while preserving the generic Apprise URL fallback.
@@ -15,7 +18,6 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Added the canonical Apprise notification profile store with protected write-only URL secrets, atomic writes and cross-process locking.
 - Added profile CRUD, validation, test delivery and provider discovery API helpers while keeping native ntfy delivery unchanged.
 - Extended diagnostics to include sanitized Apprise profile metadata and permission checks for `.apprise-profile-*` secret files.
-- Warm the bundled Apprise runtime in the background after normal startup to reduce the first profile API call latency.
 
 ### Issue #257
 - Added a hash-pinned Apprise dependency lock and package-build vendor step for `runtime/vendor` without runtime `pip` usage on Unraid.
