@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #258
+- Added the canonical Apprise notification profile store with protected write-only URL secrets, atomic writes and cross-process locking.
+- Added profile CRUD, validation, test delivery and provider discovery API helpers while keeping native ntfy delivery unchanged.
+- Extended diagnostics to include sanitized Apprise profile metadata and permission checks for `.apprise-profile-*` secret files.
+
 ### Issue #257
 - Added a hash-pinned Apprise dependency lock and package-build vendor step for `runtime/vendor` without runtime `pip` usage on Unraid.
 - Introduced a provider-neutral Apprise adapter that loads only the bundled runtime, discovers supported providers and supports controlled validation/test delivery while native ntfy remains active.

@@ -193,7 +193,7 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         _add_json(zf, "config/expanded-conf.sanitized.json", expanded)
         _record_added("config/expanded-conf.sanitized.json")
-        for filename in ("storages.json", "repositories.json", "migration-state.json"):
+        for filename in ("storages.json", "repositories.json", "apprise-profiles.json", "migration-state.json"):
             source = root / "config" / filename
             if source.is_file():
                 arcname = f"config/{source.stem}.sanitized.json"

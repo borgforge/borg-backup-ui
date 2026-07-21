@@ -22,6 +22,7 @@ PROVENANCE_NAME = "build-provenance.json"
 PROVENANCE_MEMBER = f"boot/config/plugins/{NAME}/{PROVENANCE_NAME}"
 EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/borg_backup_ui.py",
+    f"boot/config/plugins/{NAME}/api/apprise_profiles_api.py",
     f"boot/config/plugins/{NAME}/api/config_api.py",
     f"boot/config/plugins/{NAME}/api/factory_reset_worker.py",
     f"boot/config/plugins/{NAME}/ui/index.html",

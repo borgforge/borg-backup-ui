@@ -610,6 +610,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             or p.startswith("/api/schedules")
             or p.startswith("/api/storage")
             or p.startswith("/api/repositories")
+            or p.startswith("/api/notification-profiles")
             or p.startswith("/api/history")
             or p.startswith("/api/restore")
             or p.startswith("/api/reports")
@@ -811,6 +812,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/schedules": self._get_schedules,
                 "/api/storage": self._get_storage,
                 "/api/repositories": self._get_repositories,
+                "/api/notification-profiles": lambda: self._get_apprise_profiles(parsed.query),
+                "/api/notification-profiles/providers": self._get_apprise_profile_providers,
                 "/api/repositories/browse": lambda: self._get_repository_directories(parsed.query),
                 "/api/repositories/archives": lambda: self._get_repository_archives(parsed.query),
                 "/api/settings": self._get_settings,
@@ -862,6 +865,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/storages": self._post_storage_target,
             "/api/storages/test": self._post_storage_target_test,
             "/api/repositories": self._post_repository,
+            "/api/notification-profiles": self._post_apprise_profile,
+            "/api/notification-profiles/validate": self._post_apprise_profile_validate,
+            "/api/notification-profiles/test": self._post_apprise_profile_test,
             "/api/repositories/validate": self._post_repository_validate,
             "/api/repositories/info": self._post_repository_info,
             "/api/repositories/lifecycle": self._post_repository_lifecycle,
@@ -927,6 +933,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/jobs/enabled": self._put_job_enabled,
             "/api/auth/users": self._put_auth_user_update,
             "/api/restore-tests/policy": self._put_restore_test_policy,
+            "/api/notification-profiles": self._put_apprise_profile,
         }
         fn = routes.get(path)
         if fn is None:
@@ -942,6 +949,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore-tests": self._delete_restore_test,
             "/api/restore/history": self._delete_restore_history,
             "/api/repositories": self._delete_repository,
+            "/api/notification-profiles": self._delete_apprise_profile,
             "/api/auth/users": self._delete_auth_user,
             "/api/settings/homepage-widget-token": self._delete_homepage_widget_token,
         }
@@ -960,6 +968,56 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_homepage_widget_summary(self) -> dict:
         from homepage_widget_api import build_homepage_widget_summary
         return build_homepage_widget_summary(self.config)
+
+    def _get_apprise_profiles(self, query: str = "") -> dict:
+        from apprise_profiles_api import get_profile, list_profiles
+
+        qs = parse_qs(query or "")
+        profile_id = (qs.get("id") or qs.get("profile_id") or [""])[0]
+        if str(profile_id or "").strip():
+            return get_profile(self.config, str(profile_id))
+        return list_profiles(self.config)
+
+    def _get_apprise_profile_providers(self) -> dict:
+        from apprise_profiles_api import get_supported_providers
+
+        return get_supported_providers(self.config)
+
+    def _post_apprise_profile(self) -> dict:
+        from apprise_profiles_api import create_profile
+
+        return create_profile(self.config, self._read_json_body())
+
+    def _put_apprise_profile(self) -> dict:
+        from apprise_profiles_api import update_profile
+
+        body = self._read_json_body()
+        profile_id = str(body.get("id") or body.get("profile_id") or "").strip()
+        if not profile_id:
+            raise ValueError("profile_id is required")
+        return update_profile(self.config, profile_id, body)
+
+    def _delete_apprise_profile(self) -> dict:
+        from apprise_profiles_api import AppriseProfileConflict, delete_profile
+
+        qs = parse_qs(urlparse(self.path).query)
+        profile_id = (qs.get("id") or qs.get("profile_id") or [""])[0]
+        if not str(profile_id or "").strip():
+            raise ValueError("profile_id is required")
+        try:
+            return delete_profile(self.config, str(profile_id))
+        except AppriseProfileConflict as exc:
+            raise ApiConflictError(str(exc), exc.code) from exc
+
+    def _post_apprise_profile_validate(self) -> dict:
+        from apprise_profiles_api import validate_profile_payload
+
+        return validate_profile_payload(self.config, self._read_json_body())
+
+    def _post_apprise_profile_test(self) -> dict:
+        from apprise_profiles_api import test_profile
+
+        return test_profile(self.config, self._read_json_body())
 
     def _get_factory_reset_status(self) -> dict:
         from factory_reset_api import factory_reset_status
