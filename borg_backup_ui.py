@@ -3483,6 +3483,40 @@ def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None
         return None
 
 
+def _start_apprise_runtime_warmup(config: dict) -> threading.Thread | None:
+    """Warm the bundled Apprise runtime so the first profile API call is not cold."""
+
+    def _run() -> None:
+        time.sleep(10)
+        started = perf_counter()
+        try:
+            from apprise_profiles_api import get_supported_providers
+
+            info = get_supported_providers(config)
+            elapsed_ms = int((perf_counter() - started) * 1000)
+            if info.get("success") is False:
+                _log(
+                    "WARNING: Apprise runtime warmup failed: "
+                    f"{_mask_secrets(str(info.get('message') or 'unknown error'))}"
+                )
+                return
+            _log(
+                "Apprise runtime warmed: "
+                f"version={_mask_secrets(str(info.get('version') or 'unknown'))}, "
+                f"providers={int(info.get('provider_count') or 0)}, duration_ms={elapsed_ms}"
+            )
+        except Exception as exc:
+            _log(f"WARNING: Apprise runtime warmup failed: {_mask_secrets(str(exc))}")
+
+    try:
+        thread = threading.Thread(target=_run, name="apprise-runtime-warmup", daemon=True)
+        thread.start()
+        return thread
+    except Exception as exc:
+        _log(f"WARNING: Apprise runtime warmup could not be started: {_mask_secrets(str(exc))}")
+        return None
+
+
 def _apply_runtime_dirs_from_conf(config: dict) -> None:
     """Synchronisiert runtime-pfade aus backup.conf in die laufende UI-Konfiguration."""
     try:
@@ -3605,6 +3639,7 @@ def _start_normal_runtime_services(config: dict) -> None:
 
     _start_notification_reminder_loop(config)
     _start_repository_info_refresh_loop(config)
+    _start_apprise_runtime_warmup(config)
 
 
 def _activate_runtime_services(config: dict, startup_ready: bool, starter=None) -> bool:
