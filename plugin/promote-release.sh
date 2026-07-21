@@ -147,10 +147,11 @@ tested_block = block_match.group(0).strip() + "\n\n"
 stable = re.sub(r'<!ENTITY version\s+"[^"]*">', f'<!ENTITY version   "{version}">', stable, count=1)
 tested_package_install = package_install_re.search(test)
 if tested_package_install:
+    package_install_replacement = tested_package_install.group(0)
     if package_install_re.search(stable):
-        stable = package_install_re.sub(tested_package_install.group(0), stable, count=1)
+        stable = package_install_re.sub(lambda _match: package_install_replacement, stable, count=1)
     elif legacy_package_file_re.search(stable):
-        stable = legacy_package_file_re.sub(tested_package_install.group(0), stable, count=1)
+        stable = legacy_package_file_re.sub(lambda _match: package_install_replacement, stable, count=1)
     else:
         raise SystemExit("Stable manifest has no package install block to replace")
 else:

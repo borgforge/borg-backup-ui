@@ -236,6 +236,8 @@ def test_stable_promotion_reuses_exact_package_from_clean_current_main() -> None
     assert 'cp "$TEST_PKG"' in script
     assert 'if [[ "$RELEASE_PACKAGE_SHA256" != "$TEST_PACKAGE_SHA256" ]]' in script
     assert "tested_package_install" in script
+    assert "package_install_re.sub(lambda _match: package_install_replacement" in script
+    assert "legacy_package_file_re.sub(lambda _match: package_install_replacement" in script
     assert "plugin/build.sh" not in script
 
 
