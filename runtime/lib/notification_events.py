@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 import fcntl
+import subprocess
+import sys
 
 from lib.apprise_adapter import AppriseAdapterError, send_notification
 from lib.notifications import MailConfig, NtfyConfig, notify, send_mail, send_ntfy
@@ -228,6 +230,8 @@ def enqueue_event_apprise(config: dict, event: NotificationEvent) -> AppriseEven
             continue
         result.delivered = True
         result.delivered_profiles.append(_apprise_profile_log_name(profile))
+    if result.delivered:
+        _kick_notification_delivery(config)
     return result
 
 
@@ -674,6 +678,50 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 def _apprise_async_enabled(config: dict) -> bool:
     raw = str(config.get("NOTIFY_APPRISE_ASYNC", "true") or "true").strip().lower()
     return raw not in {"0", "false", "no", "off"}
+
+
+def _apprise_immediate_kick_enabled(config: dict) -> bool:
+    raw = str(config.get("NOTIFY_APPRISE_IMMEDIATE_KICK", "true") or "true").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _kick_notification_delivery(config: dict) -> None:
+    if not _apprise_immediate_kick_enabled(config):
+        return
+    data_root = str(config.get("BACKUP_SCRIPTS_DIR", "") or _data_root(config))
+    runtime_dir = Path(__file__).resolve().parents[1]
+    runtime_lib = runtime_dir / "lib"
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "LANG": os.environ.get("LANG", "C.UTF-8"),
+        "LC_ALL": os.environ.get("LC_ALL", os.environ.get("LANG", "C.UTF-8")),
+    }
+    env["BBUI_BACKUP_SCRIPTS_DIR"] = data_root
+    for key in ("NOTIFY_APPRISE_STATUS_HISTORY",):
+        if key in config:
+            env[f"BBUI_{key}"] = str(config.get(key) or "")
+    code = (
+        "import os, sys\n"
+        f"sys.path.insert(0, {str(runtime_lib)!r})\n"
+        f"sys.path.insert(0, {str(runtime_dir)!r})\n"
+        "from lib.notification_events import drain_notification_queue\n"
+        "cfg = {'BACKUP_SCRIPTS_DIR': os.environ.get('BBUI_BACKUP_SCRIPTS_DIR', '')}\n"
+        "if os.environ.get('BBUI_NOTIFY_APPRISE_STATUS_HISTORY'):\n"
+        "    cfg['NOTIFY_APPRISE_STATUS_HISTORY'] = os.environ['BBUI_NOTIFY_APPRISE_STATUS_HISTORY']\n"
+        "drain_notification_queue(cfg, max_items=20)\n"
+    )
+    try:
+        subprocess.Popen(  # noqa: S603 - fixed interpreter and inline code without secrets.
+            [sys.executable or "python3", "-c", code],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=env,
+            close_fds=True,
+            start_new_session=True,
+        )
+    except Exception as exc:  # noqa: BLE001 - queued notification still remains for the periodic worker
+        logger.warning("Apprise notification immediate delivery kick failed: %s", _safe_error(exc))
 
 
 def _queue_max_entries(config: dict) -> int:

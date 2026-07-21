@@ -211,6 +211,7 @@ def test_send_event_queues_apprise_profiles_by_default(monkeypatch, tmp_path):
             "BACKUP_SCRIPTS_DIR": str(tmp_path),
             "NOTIFY_UNRAID_EVENTS": "none",
             "NOTIFY_EMAIL_EVENTS": "",
+            "NOTIFY_APPRISE_IMMEDIATE_KICK": "false",
         },
         NotificationEvent(
             event_type="backup_success",
@@ -245,6 +246,59 @@ def test_send_event_queues_apprise_profiles_by_default(monkeypatch, tmp_path):
     assert "json://token" not in json.dumps(status)
 
 
+def test_send_event_kicks_queued_apprise_delivery_immediately(monkeypatch, tmp_path):
+    store = tmp_path / "config" / "apprise-profiles.json"
+    secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
+    store.parent.mkdir(parents=True)
+    secret.parent.mkdir(parents=True)
+    store.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [{
+            "id": "alerts-main",
+            "name": "Critical Alerts",
+            "enabled": True,
+            "provider": "ntfy",
+            "selected_events": ["backup_success"],
+            "timeout_seconds": 15,
+            "retry_policy": {"attempts": 2, "backoff_seconds": 5},
+            "url_set": True,
+        }],
+    }), encoding="utf-8")
+    secret.write_text("json://token@example.test\n", encoding="utf-8")
+    popen_calls = []
+
+    class FakePopen:
+        def __init__(self, args, **kwargs):
+            popen_calls.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr("lib.notification_events.subprocess.Popen", FakePopen)
+
+    result = send_event(
+        {
+            "BACKUP_SCRIPTS_DIR": str(tmp_path),
+            "NOTIFY_UNRAID_EVENTS": "none",
+            "NOTIFY_EMAIL_EVENTS": "",
+        },
+        NotificationEvent(
+            event_type="backup_success",
+            title="Borg Backup UI: Backup OK",
+            message="done",
+            job_name="Job",
+            job_key="job-a",
+            source="backup_job",
+        ),
+    )
+
+    assert result["apprise"] is True
+    assert len(popen_calls) == 1
+    assert popen_calls[0]["args"][1] == "-c"
+    assert "drain_notification_queue" in popen_calls[0]["args"][2]
+    assert "json://token" not in " ".join(map(str, popen_calls[0]["args"]))
+    assert popen_calls[0]["kwargs"]["env"]["BBUI_BACKUP_SCRIPTS_DIR"] == str(tmp_path)
+    assert "json://token" not in json.dumps(popen_calls[0]["kwargs"]["env"])
+    assert popen_calls[0]["kwargs"]["start_new_session"] is True
+
+
 def test_queued_apprise_delivery_retries_without_sleeping(monkeypatch, tmp_path):
     store = tmp_path / "config" / "apprise-profiles.json"
     secret = tmp_path / "secrets" / ".apprise-profile-alerts-main.url"
@@ -274,6 +328,7 @@ def test_queued_apprise_delivery_retries_without_sleeping(monkeypatch, tmp_path)
             "BACKUP_SCRIPTS_DIR": str(tmp_path),
             "NOTIFY_UNRAID_EVENTS": "none",
             "NOTIFY_EMAIL_EVENTS": "",
+            "NOTIFY_APPRISE_IMMEDIATE_KICK": "false",
         },
         NotificationEvent(event_type="backup_success", title="Backup OK", message="done"),
     )
@@ -313,6 +368,7 @@ def test_apprise_queue_records_dropped_entries_when_full(tmp_path):
         "NOTIFY_UNRAID_EVENTS": "none",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_APPRISE_QUEUE_MAX_ENTRIES": "1",
+        "NOTIFY_APPRISE_IMMEDIATE_KICK": "false",
     }
 
     send_event(cfg, NotificationEvent(event_type="backup_success", title="One", message="one"))
