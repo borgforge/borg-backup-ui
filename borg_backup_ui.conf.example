@@ -39,3 +39,12 @@ STATUS_DIR=/mnt/user/backup-status
 
 # Session-Timeout in Minuten (Users-Auth)
 # UI_SESSION_TIMEOUT_MINUTES=30
+
+# ── Logging ─────────────────────────────────────────────────────────────────
+
+# Im Normalmodus werden erfolgreiche Routine-Polling-Requests im Support-Log
+# unterdrueckt. Schreibende API-Aufrufe, Fehler, langsame GETs und grosse
+# Antworten bleiben sichtbar.
+# LOG_VERBOSE_ACCESS=false
+# LOG_SLOW_GET_THRESHOLD_MS=500
+# LOG_LARGE_GET_THRESHOLD_BYTES=262144

@@ -12,12 +12,30 @@ BORG_STAGE_BIN="/usr/local/bin/borg"
 BORG_LINK_BIN="/usr/bin/borg"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=10
+PYTHON_WAIT_SECONDS="${PYTHON_WAIT_SECONDS:-60}"
+PYTHON_WAIT_STEP_SECONDS="${PYTHON_WAIT_STEP_SECONDS:-3}"
+
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 python_runtime_status() {
+  waited=0
+  logged_wait=0
   PY_BIN="$(command -v python3 || true)"
+  while [ -z "$PY_BIN" ] && [ "$waited" -lt "$PYTHON_WAIT_SECONDS" ]; do
+    if [ "$logged_wait" -eq 0 ]; then
+      echo "Python Runtime noch nicht verfuegbar, warte bis zu ${PYTHON_WAIT_SECONDS}s..." >> "$LOGFILE"
+      logged_wait=1
+    fi
+    sleep "$PYTHON_WAIT_STEP_SECONDS"
+    waited=$((waited + PYTHON_WAIT_STEP_SECONDS))
+    PY_BIN="$(command -v python3 || true)"
+  done
   if [ -z "$PY_BIN" ]; then
     echo "FEHLER: python3 nicht gefunden. Bitte Plugin 'Python 3 for Unraid' installieren." >> "$LOGFILE"
     return 1
+  fi
+  if [ "$waited" -gt 0 ]; then
+    echo "Python Runtime bereit nach ${waited}s: ${PY_BIN}" >> "$LOGFILE"
   fi
   if [ ! -x "$PY_BIN" ]; then
     echo "FEHLER: python3 ist nicht ausfuehrbar: $PY_BIN" >> "$LOGFILE"

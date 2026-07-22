@@ -216,6 +216,70 @@ def test_static_file_serving_allows_regular_ui_asset(tmp_path: Path):
     assert h.wfile.getvalue() == b"console.log('ok');"
 
 
+def test_api_success_logging_suppresses_routine_fast_gets():
+    h = _make_handler()
+    h.config = {}
+
+    assert h._should_log_api_success("GET", "/api/status", 20, 100) is False
+    assert h._should_log_api_success("GET", "/api/system-health", 120, 94735) is False
+    assert h._should_log_api_success("GET", "/api/jobs?x=1", 120, 18000) is False
+
+
+def test_api_success_logging_keeps_write_slow_large_and_nonroutine_gets():
+    h = _make_handler()
+    h.config = {}
+
+    assert h._should_log_api_success("POST", "/api/jobs/run", 20, 100) is True
+    assert h._should_log_api_success("GET", "/api/status", 500, 100) is True
+    assert h._should_log_api_success("GET", "/api/status", 20, 262144) is True
+    assert h._should_log_api_success("GET", "/api/custom", 20, 100) is True
+
+
+def test_raw_http_access_logging_is_suppressed_except_errors(monkeypatch):
+    calls = []
+    monkeypatch.setattr("borg_backup_ui._log", calls.append)
+    h = _make_handler()
+    h.config = {}
+
+    h.log_message('"GET /api/status HTTP/1.1" 200 -')
+    assert calls == []
+
+    h.log_message('"GET /missing HTTP/1.1" 404 -')
+    assert calls == ['"GET /missing HTTP/1.1" 404 -']
+
+
+def test_verbose_access_log_keeps_raw_http_and_api_success(monkeypatch):
+    calls = []
+    monkeypatch.setattr("borg_backup_ui._log", calls.append)
+    h = _make_handler()
+    h.config = {"LOG_VERBOSE_ACCESS": "true"}
+
+    assert h._should_log_api_success("GET", "/api/status", 1, 10) is True
+    h.log_message('"GET /api/status HTTP/1.1" 200 -')
+
+    assert calls == ['"GET /api/status HTTP/1.1" 200 -']
+
+
+def test_security_audit_can_log_fresh_login_actor_without_existing_session(monkeypatch):
+    calls = []
+    monkeypatch.setattr("borg_backup_ui._log", calls.append)
+    h = _make_handler()
+    h.headers = {}
+    h.client_address = ("192.0.2.10", 12345)
+    h.path = "/api/auth/login"
+    h._current_request_id = "req-login"
+    h._get_current_session_meta = lambda: None
+
+    h._security_audit("auth_login", "ok", actor_user="admin", actor_role="admin")
+
+    assert len(calls) == 1
+    assert "SECURITY event=auth_login result=ok" in calls[0]
+    assert "user=admin" in calls[0]
+    assert "role=admin" in calls[0]
+    assert "endpoint=/api/auth/login" in calls[0]
+    assert "target= " in calls[0]
+
+
 @pytest.mark.parametrize(
     ("path", "handler_name"),
     [
