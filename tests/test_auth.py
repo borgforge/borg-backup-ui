@@ -260,6 +260,26 @@ def test_verbose_access_log_keeps_raw_http_and_api_success(monkeypatch):
     assert calls == ['"GET /api/status HTTP/1.1" 200 -']
 
 
+def test_security_audit_can_log_fresh_login_actor_without_existing_session(monkeypatch):
+    calls = []
+    monkeypatch.setattr("borg_backup_ui._log", calls.append)
+    h = _make_handler()
+    h.headers = {}
+    h.client_address = ("192.0.2.10", 12345)
+    h.path = "/api/auth/login"
+    h._current_request_id = "req-login"
+    h._get_current_session_meta = lambda: None
+
+    h._security_audit("auth_login", "ok", actor_user="admin", actor_role="admin")
+
+    assert len(calls) == 1
+    assert "SECURITY event=auth_login result=ok" in calls[0]
+    assert "user=admin" in calls[0]
+    assert "role=admin" in calls[0]
+    assert "endpoint=/api/auth/login" in calls[0]
+    assert "target= " in calls[0]
+
+
 @pytest.mark.parametrize(
     ("path", "handler_name"),
     [

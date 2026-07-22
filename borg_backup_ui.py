@@ -321,11 +321,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         "/api/storage",
     )
 
-    def _security_audit(self, event: str, result: str, *, target: str = "", detail: str = "") -> None:
+    def _security_audit(
+        self,
+        event: str,
+        result: str,
+        *,
+        target: str = "",
+        detail: str = "",
+        actor_user: str = "",
+        actor_role: str = "",
+    ) -> None:
         req_id = str(getattr(self, "_current_request_id", "") or "")
         session = self._get_current_session_meta() or {}
-        actor = _mask_secrets(str(session.get("username", "") or ""))
-        role = _mask_secrets(str(session.get("role", "") or ""))
+        actor = _mask_secrets(str(actor_user or session.get("username", "") or ""))
+        role = _mask_secrets(str(actor_role or session.get("role", "") or ""))
         ip = _mask_secrets(self.headers.get("X-Forwarded-For", "") or self.client_address[0] or "")
         endpoint = _mask_secrets(urlparse(self.path).path)
         tgt = _mask_secrets(str(target or ""))
@@ -1185,7 +1194,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._extra_response_headers.append(
             ("Set-Cookie", self._session_cookie_header(sid, idle_sec))
         )
-        self._security_audit("auth_login", "ok", target=session_user)
+        self._security_audit("auth_login", "ok", actor_user=session_user, actor_role=session_role)
         return {"ok": True, "auth_enabled": True, "auth_mode": "users", "username": session_user, "role": session_role}
 
     def _post_auth_logout(self) -> dict:
