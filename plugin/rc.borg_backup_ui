@@ -4,6 +4,7 @@
 
 PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
 PIDFILE="/var/run/borg_backup_ui.pid"
+WAIT_PIDFILE="/var/run/borg_backup_ui_start_wait.pid"
 LOGFILE="/var/log/borg_backup_ui.log"
 BORG_BUNDLE_DIR="${PLUGIN_DIR}/runtime/bin/borg"
 BORG_BUNDLE_VERSIONED="${BORG_BUNDLE_DIR}/borg-linux-glibc231-x86_64-1.4.4"
@@ -12,7 +13,7 @@ BORG_STAGE_BIN="/usr/local/bin/borg"
 BORG_LINK_BIN="/usr/bin/borg"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=10
-PYTHON_WAIT_SECONDS="${PYTHON_WAIT_SECONDS:-60}"
+PYTHON_WAIT_SECONDS="${PYTHON_WAIT_SECONDS:-300}"
 PYTHON_WAIT_STEP_SECONDS="${PYTHON_WAIT_STEP_SECONDS:-3}"
 
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
@@ -23,7 +24,7 @@ python_runtime_status() {
   PY_BIN="$(command -v python3 || true)"
   while [ -z "$PY_BIN" ] && [ "$waited" -lt "$PYTHON_WAIT_SECONDS" ]; do
     if [ "$logged_wait" -eq 0 ]; then
-      echo "Python Runtime noch nicht verfuegbar, warte bis zu ${PYTHON_WAIT_SECONDS}s..." >> "$LOGFILE"
+      echo "Python Runtime noch nicht verfuegbar, warte bis zu ${PYTHON_WAIT_SECONDS}s auf Unraid-Plugin-Initialisierung..." >> "$LOGFILE"
       logged_wait=1
     fi
     sleep "$PYTHON_WAIT_STEP_SECONDS"
@@ -31,7 +32,7 @@ python_runtime_status() {
     PY_BIN="$(command -v python3 || true)"
   done
   if [ -z "$PY_BIN" ]; then
-    echo "FEHLER: python3 nicht gefunden. Bitte Plugin 'Python 3 for Unraid' installieren." >> "$LOGFILE"
+    echo "FEHLER: python3 nach ${PYTHON_WAIT_SECONDS}s nicht gefunden. Bitte Plugin 'Python 3 for Unraid' installieren oder Boot-Reihenfolge pruefen." >> "$LOGFILE"
     return 1
   fi
   if [ "$waited" -gt 0 ]; then
@@ -51,15 +52,36 @@ python_runtime_status() {
   return 0
 }
 
+defer_start_until_python_ready() {
+  if [ -f "$WAIT_PIDFILE" ] && kill -0 "$(cat "$WAIT_PIDFILE")" 2>/dev/null; then
+    echo "Borg Backup UI wartet bereits im Hintergrund auf Python Runtime (PID: $(cat "$WAIT_PIDFILE"))"
+    return 0
+  fi
+  echo "Python Runtime noch nicht verfuegbar, starte Borg Backup UI Warteprozess im Hintergrund (bis zu ${PYTHON_WAIT_SECONDS}s)." >> "$LOGFILE"
+  BBUI_DEFERRED_START=1 "$0" start >> "$LOGFILE" 2>&1 &
+  echo $! > "$WAIT_PIDFILE"
+  echo "Borg Backup UI Warteprozess gestartet (PID: $!)"
+  return 0
+}
+
 start() {
   if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
     echo "Borg Backup UI bereits gestartet (PID: $(cat "$PIDFILE"))"
+    return 0
+  fi
+  if [ "${BBUI_DEFERRED_START:-0}" != "1" ] && [ -f "$WAIT_PIDFILE" ] && kill -0 "$(cat "$WAIT_PIDFILE")" 2>/dev/null; then
+    echo "Borg Backup UI wartet bereits im Hintergrund auf Python Runtime (PID: $(cat "$WAIT_PIDFILE"))"
     return 0
   fi
 
   if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
     echo "FEHLER: ${PLUGIN_DIR}/borg_backup_ui.py nicht gefunden" >&2
     return 1
+  fi
+
+  if [ "${BBUI_DEFERRED_START:-0}" != "1" ] && ! command -v python3 >/dev/null 2>&1; then
+    defer_start_until_python_ready
+    return 0
   fi
 
   # Prefer bundled Borg binary when available (no symlink requirement on flash FS).
@@ -111,15 +133,25 @@ start() {
   echo "Starte Borg Backup UI..."
   PY_BIN="$(python_runtime_status)"
   if [ -z "$PY_BIN" ]; then
+    [ "${BBUI_DEFERRED_START:-0}" = "1" ] && rm -f "$WAIT_PIDFILE"
     return 1
   fi
   echo "Python Runtime: ${PY_BIN}" >> "$LOGFILE"
   "$PY_BIN" "${PLUGIN_DIR}/borg_backup_ui.py" >> "$LOGFILE" 2>&1 &
   echo $! > "$PIDFILE"
+  [ "${BBUI_DEFERRED_START:-0}" = "1" ] && rm -f "$WAIT_PIDFILE"
   echo "Borg Backup UI gestartet (PID: $!)"
 }
 
 stop() {
+  if [ -f "$WAIT_PIDFILE" ]; then
+    WAIT_PID=$(cat "$WAIT_PIDFILE")
+    if kill -0 "$WAIT_PID" 2>/dev/null; then
+      kill "$WAIT_PID" 2>/dev/null || true
+      echo "Borg Backup UI Warteprozess gestoppt"
+    fi
+    rm -f "$WAIT_PIDFILE"
+  fi
   if [ -f "$PIDFILE" ]; then
     PID=$(cat "$PIDFILE")
     if kill -0 "$PID" 2>/dev/null; then
@@ -139,6 +171,8 @@ stop() {
 status() {
   if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
     echo "Borg Backup UI läuft (PID: $(cat "$PIDFILE"))"
+  elif [ -f "$WAIT_PIDFILE" ] && kill -0 "$(cat "$WAIT_PIDFILE")" 2>/dev/null; then
+    echo "Borg Backup UI wartet auf Python Runtime (PID: $(cat "$WAIT_PIDFILE"))"
   else
     echo "Borg Backup UI läuft nicht"
   fi
