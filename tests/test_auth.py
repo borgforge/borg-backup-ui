@@ -1,4 +1,5 @@
 from io import BytesIO
+import json
 from pathlib import Path
 import sys
 import time
@@ -24,6 +25,7 @@ from api.auth_store import (
 )
 from borg_backup_ui import BackupUIHandler
 from api.restore_api import _validate_target_dir
+from startup_state import migration_maintenance_state, set_startup_state
 
 
 def _make_handler() -> BackupUIHandler:
@@ -356,6 +358,7 @@ def test_is_api_authorized_ignores_api_token_cookie_for_automation_auth():
 def test_repository_request_context_contains_safe_lifecycle_fields():
     h = _make_handler()
     h.path = "/api/repositories"
+    h.command = "DELETE"
     h._last_json_body = {
         "repository_key": "repo_photos_local_12345678",
         "mode": "delete",
@@ -376,9 +379,165 @@ def test_repository_request_context_contains_safe_lifecycle_fields():
 
     assert context["repository_key"] == "repo_photos_local_12345678"
     assert context["repository_mode"] == "delete"
+    assert context["phase"] == "delete"
+    assert context["source"] == "manual"
     assert context["repository_deleted"] is True
     assert context["secret_deleted"] is True
     assert "confirmation_phrase" not in context
+
+
+def test_job_run_request_context_contains_action_source_and_response_run_id():
+    h = _make_handler()
+    h.path = "/api/jobs/run"
+    h.command = "POST"
+    h._last_json_body = {"job_key": "appdata_local"}
+
+    context = h._extract_request_context()
+    context = h._augment_context_from_response(
+        h.path,
+        {"started": True, "job_key": "appdata_local", "run_id": "run-123"},
+        context,
+    )
+
+    assert context == {
+        "job_key": "appdata_local",
+        "phase": "run",
+        "source": "manual",
+        "run_id": "run-123",
+    }
+
+
+def test_auth_login_request_context_contains_safe_username_only():
+    h = _make_handler()
+    h.path = "/api/auth/login"
+    h.command = "POST"
+    h._last_json_body = {"username": "tsteinbe", "password": "super-secret"}
+
+    context = h._extract_request_context()
+
+    assert context == {
+        "source": "manual",
+        "auth_user": "tsteinbe",
+    }
+    assert "password" not in context
+    assert "super-secret" not in json.dumps(context)
+
+
+def test_slow_restore_repo_stats_context_contains_job_and_phase():
+    h = _make_handler()
+    h.path = "/api/restore/repo-stats?job=flash_local"
+    h.command = "GET"
+    h._last_json_body = {}
+
+    context = h._extract_request_context()
+
+    assert context == {
+        "job_key": "flash_local",
+        "phase": "repo-stats",
+        "source": "manual",
+    }
+
+
+def test_restore_test_request_context_contains_selected_jobs_and_level():
+    h = _make_handler()
+    h.path = "/api/restore-tests/run"
+    h.command = "POST"
+    h._last_json_body = {"job_keys": ["photos_local", "appdata_local"], "level": "2", "scheduled": True}
+
+    context = h._extract_request_context()
+
+    assert context["selected_jobs"] == ["photos_local", "appdata_local"]
+    assert context["level"] == "2"
+    assert context["phase"] == "restore-test-run"
+    assert context["source"] == "schedule"
+
+
+def test_apprise_profile_request_context_loads_safe_profile_metadata(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "apprise-profiles.json").write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": [
+            {
+                "id": "alerts-main",
+                "name": "Critical Alerts",
+                "enabled": True,
+                "provider": "ntfy",
+                "selected_events": ["backup_failed"],
+                "timeout_seconds": 15,
+                "retry_policy": {"attempts": 1, "backoff_seconds": 0},
+                "priority": "default",
+                "default": True,
+                "created_at": "2026-07-22T00:00:00Z",
+                "updated_at": "2026-07-22T00:00:00Z",
+            }
+        ],
+    }), encoding="utf-8")
+    h = _make_handler()
+    h.config = cfg
+    h.path = "/api/notification-profiles/test"
+    h.command = "POST"
+    h._last_json_body = {"profile_id": "alerts-main"}
+
+    context = h._extract_request_context()
+
+    assert context["profile_id"] == "alerts-main"
+    assert context["profile_name"] == "Critical Alerts"
+    assert context["provider"] == "ntfy"
+    assert context["phase"] == "test"
+    assert "apprise_url" not in context
+    assert "secret-token" not in json.dumps(context)
+
+
+def test_storage_and_repository_context_contains_operation_identifiers():
+    h = _make_handler()
+    h.path = "/api/storage/check/run"
+    h.command = "POST"
+    h._last_json_body = {
+        "repository_key": "repo_photos_smb",
+        "storage_key": "nas-smb",
+        "storage_type": "smb",
+        "action": "check",
+        "mode": "verify_data",
+        "password": "super-secret",
+    }
+
+    context = h._extract_request_context()
+
+    assert context["repository_key"] == "repo_photos_smb"
+    assert context["storage_key"] == "nas-smb"
+    assert context["storage_type"] == "smb"
+    assert context["action"] == "check"
+    assert context["mode"] == "verify_data"
+    assert context["phase"] == "check"
+    assert "password" not in context
+    assert "super-secret" not in json.dumps(context)
+
+
+def test_migration_maintenance_error_context_contains_failure_details():
+    cfg = {}
+    set_startup_state(cfg, migration_maintenance_state({
+        "failed": ["canonical_data_model_v1"],
+        "results": {
+            "canonical_data_model_v1": {
+                "details": {
+                    "failed_phase": "canonical_storage_profiles_v1",
+                    "error_type": "ValueError",
+                    "error": "SMB mount path must be a dedicated directory below /mnt",
+                }
+            }
+        },
+    }))
+    h = _make_handler()
+    h.config = cfg
+
+    context = h._startup_migration_context()
+
+    assert context["migration_id"] == "canonical_data_model_v1"
+    assert context["phase"] == "canonical_storage_profiles_v1"
+    assert context["status"] == "startup_migration_failed"
+    assert context["reason"] == "SMB mount path must be a dedicated directory below /mnt"
 
 
 def test_repository_delete_passes_authenticated_actor_to_audit(monkeypatch):

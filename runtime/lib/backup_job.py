@@ -838,10 +838,26 @@ class BackupJob:
                 exit_code,
             )
 
-        self._save_status(duration)
+        status_file = self._save_status(duration)
+        self._emit_lifecycle_finished(
+            status=self._result_status(exit_code),
+            exit_code=exit_code,
+            duration=duration,
+            status_file=status_file,
+            reason=self._extract_error_message(exit_code) if exit_code != 0 else "",
+        )
 
         logger.info("End: %s", self.config.job_name)
         _log_section("BACKUP COMPLETED")
+
+    def _result_status(self, exit_code: int) -> str:
+        if self._cancelled:
+            return "cancelled"
+        if exit_code == 0:
+            return "success"
+        if exit_code == 1:
+            return "warning"
+        return "failed"
 
     def _save_skip_status(self) -> None:
         """Speichert Skip-Läufe als Warning in den normalen Status-Dateien (History sichtbar)."""
@@ -882,10 +898,19 @@ class BackupJob:
             repository_next_check="unknown",
         )
         try:
-            bs.save(self.config.status_dir)
+            status_file = bs.save(self.config.status_dir)
             self._skip_status_written = True
         except OSError as exc:
             logger.warning("Could not save skipped status: %s", exc)
+            status_file = None
+        self._emit_lifecycle_finished(
+            status="skipped",
+            exit_code=0,
+            duration=duration,
+            status_file=status_file,
+            reason=reason,
+            failure_code=reason_code,
+        )
 
     def _persist_skip_status_once(self) -> None:
         if self._skip_status_written:
@@ -948,7 +973,7 @@ class BackupJob:
         except Exception as exc:  # noqa: BLE001 - notifications are best-effort
             logger.warning("Notification event failed: %s", exc)
 
-    def _save_status(self, duration: int) -> None:
+    def _save_status(self, duration: int) -> Path | None:
         """Erstellt und speichert BackupStatus-JSON-Datei."""
         from lib.status import BackupStatus
 
@@ -1003,9 +1028,42 @@ class BackupJob:
         )
 
         try:
-            bs.save(self.config.status_dir)
+            return bs.save(self.config.status_dir)
         except OSError as exc:
             logger.warning("Could not save status: %s", exc)
+            return None
+
+    def _emit_lifecycle_finished(
+        self,
+        *,
+        status: str,
+        exit_code: int,
+        duration: int,
+        status_file: Path | None,
+        reason: str = "",
+        failure_code: str = "",
+    ) -> None:
+        try:
+            from lifecycle_log import emit_lifecycle
+
+            emit_lifecycle(
+                "JOB",
+                "finished",
+                request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
+                source=os.environ.get("BORG_UI_REQUEST_SOURCE", "backup_job"),
+                actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
+                job_key=os.environ.get("BORG_UI_JOB_KEY", f"{self.config.backup_type}_{self.config.backup_location}"),
+                run_id=os.environ.get("BORG_UI_RUN_ID", ""),
+                status=status,
+                exit_code=exit_code,
+                duration_seconds=duration,
+                log_file=str(self.config.log_file),
+                status_file=str(status_file or ""),
+                failure_code=failure_code or self._failure_code,
+                reason=reason,
+            )
+        except Exception:
+            return
 
     def _get_repository_size(self) -> int:
         """

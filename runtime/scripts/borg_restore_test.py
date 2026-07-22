@@ -41,6 +41,7 @@ if _API_DIR.is_dir() and str(_API_DIR) not in sys.path:
     sys.path.insert(0, str(_API_DIR))
 
 from smb_protocol import build_smb_mount_options, classify_smb_mount_error, sanitize_smb_error
+from lifecycle_log import emit_lifecycle
 
 # Lib-Pfad: ausschließlich plugin runtime/lib (kein Fallback)
 _LIB_DIR = SCRIPT_DIR.parent / "lib"
@@ -995,12 +996,41 @@ def main() -> None:
 
     conf  = load_conf()
     tester = RestoreTest(conf, args)
+    run_id = os.environ.get("BORG_UI_RUN_ID", "").strip()
+    request_id = os.environ.get("BORG_UI_REQUEST_ID", "").strip()
+    source = os.environ.get("BORG_UI_REQUEST_SOURCE", "").strip() or ("schedule" if args.scheduled else "manual")
+    actor = os.environ.get("BORG_UI_REQUEST_ACTOR", "").strip()
+    started_at = time.time()
 
     tester.log(f"{'='*60}")
     tester.log(f"Borg Restore Test v{VERSION}")
     tester.log(f"Level: {args.level} | Location: {args.location} | Force: {args.force}")
     tester.log(f"Log: {tester.log_path}")
     tester.log(f"{'='*60}")
+    if not request_id:
+        emit_lifecycle(
+            "RESTORE_TEST",
+            "requested",
+            source=source,
+            actor=actor,
+            run_id=run_id,
+            level=args.level,
+            location=args.location,
+            selected_jobs=args.job_keys,
+        )
+    emit_lifecycle(
+        "RESTORE_TEST",
+        "process_started",
+        request_id=request_id,
+        source=source,
+        actor=actor,
+        run_id=run_id,
+        pid=os.getpid(),
+        level=args.level,
+        location=args.location,
+        log_file=str(tester.log_path),
+        selected_jobs=args.job_keys,
+    )
 
     repos = discover_repos(conf)
     if args.job_keys:
@@ -1011,6 +1041,19 @@ def main() -> None:
 
     if not repos:
         tester.log("No repositories configured; check job metadata, profile settings and backup.conf")
+        emit_lifecycle(
+            "RESTORE_TEST",
+            "finished",
+            request_id=request_id,
+            source=source,
+            actor=actor,
+            run_id=run_id,
+            status="skipped",
+            exit_code=0,
+            duration_seconds=max(0, int(time.time() - started_at)),
+            log_file=str(tester.log_path),
+            reason="no_repositories",
+        )
         tester.close()
         sys.exit(0)
 
@@ -1028,6 +1071,23 @@ def main() -> None:
 
     tester.log(f"{'='*60}")
     tester.log(f"Summary: {ok} OK | {fail} failed | {unavail} unavailable | {skipped} skipped")
+    status = "failed" if fail else ("unavailable" if unavail else ("skipped" if not ok and skipped else "success"))
+    emit_lifecycle(
+        "RESTORE_TEST",
+        "finished",
+        request_id=request_id,
+        source=source,
+        actor=actor,
+        run_id=run_id,
+        status=status,
+        exit_code=0 if fail == 0 else 1,
+        duration_seconds=max(0, int(time.time() - started_at)),
+        log_file=str(tester.log_path),
+        ok_count=ok,
+        failed_count=fail,
+        unavailable_count=unavail,
+        skipped_count=skipped,
+    )
     tester.close()
     sys.exit(0 if fail == 0 else 1)
 
