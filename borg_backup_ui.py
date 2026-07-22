@@ -176,6 +176,9 @@ def load_ui_config() -> dict:
         "STATUS_DIR": "/mnt/user/backup-status",
         "DEV_MODE": "false",
         "UI_SESSION_TIMEOUT_MINUTES": "30",
+        "LOG_VERBOSE_ACCESS": "false",
+        "LOG_SLOW_GET_THRESHOLD_MS": "500",
+        "LOG_LARGE_GET_THRESHOLD_BYTES": "262144",
     }
     conf_file = SCRIPT_DIR / "borg_backup_ui.conf"
     if conf_file.exists():
@@ -295,6 +298,28 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     _extra_response_headers: list[tuple[str, str]] = []
     _refreshed_session_cookie: str = ""
     _ROLE_ORDER = {"viewer": 10, "operator": 20, "admin": 30}
+    _ROUTINE_GET_PATHS = {
+        "/api/auth/status",
+        "/api/jobs",
+        "/api/jobs/running",
+        "/api/setup-status",
+        "/api/status",
+        "/api/system-health",
+        "/api/version",
+    }
+    _ROUTINE_GET_PREFIXES = (
+        "/api/help",
+        "/api/history",
+        "/api/notification-profiles",
+        "/api/notification-reminders",
+        "/api/reports",
+        "/api/repositories",
+        "/api/restore",
+        "/api/restore-tests",
+        "/api/schedules",
+        "/api/settings/basic",
+        "/api/storage",
+    )
 
     def _security_audit(self, event: str, result: str, *, target: str = "", detail: str = "") -> None:
         req_id = str(getattr(self, "_current_request_id", "") or "")
@@ -3278,10 +3303,11 @@ btn.addEventListener('click',doSetup);
             ctx = self._extract_request_context()
             if isinstance(data, dict):
                 ctx = self._augment_context_from_response(parsed_path, data, ctx)
-            _log(
-                f"API ok request_id={request_id} status=200 method={self.command} path={self.path} "
-                f"duration_ms={elapsed_ms} bytes={len(content)} context={json.dumps(ctx, ensure_ascii=False)}"
-            )
+            if self._should_log_api_success(self.command, self.path, elapsed_ms, len(content)):
+                _log(
+                    f"API ok request_id={request_id} status=200 method={self.command} path={self.path} "
+                    f"duration_ms={elapsed_ms} bytes={len(content)} context={json.dumps(ctx, ensure_ascii=False)}"
+                )
         except FileNotFoundError as exc:
             self._send_api_error(404, "not_found", str(exc), request_id=request_id)
         except PermissionError as exc:
@@ -3392,8 +3418,54 @@ btn.addEventListener('click',doSetup);
                     out[key] = data[key]
         return out
 
+    def _verbose_access_log_enabled(self) -> bool:
+        raw = str(
+            os.environ.get("BBUI_VERBOSE_ACCESS_LOG")
+            or self.config.get("LOG_VERBOSE_ACCESS", "")
+            or ""
+        ).strip().lower()
+        return raw in {"1", "true", "yes", "on"}
+
+    def _slow_get_threshold_ms(self) -> int:
+        raw = str(self.config.get("LOG_SLOW_GET_THRESHOLD_MS", "500") or "500").strip()
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            return 500
+
+    def _large_get_threshold_bytes(self) -> int:
+        raw = str(self.config.get("LOG_LARGE_GET_THRESHOLD_BYTES", "262144") or "262144").strip()
+        try:
+            return max(1024, int(raw))
+        except ValueError:
+            return 262144
+
+    def _is_routine_success_get_path(self, path: str) -> bool:
+        parsed_path = urlparse(str(path or "")).path
+        if parsed_path in self._ROUTINE_GET_PATHS:
+            return True
+        return any(parsed_path.startswith(prefix) for prefix in self._ROUTINE_GET_PREFIXES)
+
+    def _should_log_api_success(self, method: str, path: str, duration_ms: int, bytes_out: int) -> bool:
+        if self._verbose_access_log_enabled():
+            return True
+        if str(method or "").upper() != "GET":
+            return True
+        if int(duration_ms) >= self._slow_get_threshold_ms():
+            return True
+        if int(bytes_out) >= self._large_get_threshold_bytes():
+            return True
+        return not self._is_routine_success_get_path(path)
+
     def log_message(self, fmt, *args):
-        _log(fmt % args)
+        msg = fmt % args
+        match = re.match(r'^"[A-Z]+ [^"]+ HTTP/[0-9.]+"\s+([0-9]{3})\b', msg)
+        if match:
+            status = int(match.group(1))
+            if self._verbose_access_log_enabled() or status >= 400:
+                _log(msg)
+            return
+        _log(msg)
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
