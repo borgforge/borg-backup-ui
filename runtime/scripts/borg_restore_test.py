@@ -384,6 +384,8 @@ class RestoreTest:
         if not bool(repo.get("unmount_after_run", True)):
             return
         storage = repo.get("storage") if isinstance(repo.get("storage"), dict) else {}
+        if bool(storage.get("keep_mounted", False)):
+            return
         mount_path = str(storage.get("mount_path") or storage.get("base_path") or "").strip()
         if not mount_path:
             return

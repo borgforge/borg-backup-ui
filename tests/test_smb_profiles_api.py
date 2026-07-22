@@ -12,6 +12,8 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from smb_profiles_api import (
+    generate_smb_mount_path,
+    mount_startup_smb_profiles,
     normalize_smb_profile_rows,
     run_smb_profile_action,
     test_smb_profiles_status as check_smb_profiles_status,
@@ -47,7 +49,42 @@ def test_smb_profile_normalization_derives_key_from_secret_path(tmp_path: Path):
         "password_file": str(cred),
         "smb_password": "",
         "password_set": "true",
+        "mount_at_start": False,
+        "keep_mounted": False,
     }]
+
+
+def test_smb_profile_generates_managed_mount_path(tmp_path: Path, monkeypatch):
+    import smb_profiles_api
+
+    monkeypatch.setattr(smb_profiles_api, "SMB_MANAGED_MOUNT_BASE", tmp_path / "smb")
+    monkeypatch.setattr(smb_profiles_api.uuid, "uuid4", lambda: type("Uuid", (), {"hex": "a4f9c2ffeedd"})())
+
+    path = generate_smb_mount_path("Borg VM")
+
+    assert path == str(tmp_path / "smb" / "Borg-VM-smb-a4f9c2")
+    assert (tmp_path / "smb").is_dir()
+
+
+def test_smb_profile_normalization_generates_missing_mount_path(tmp_path: Path, monkeypatch):
+    import smb_profiles_api
+
+    monkeypatch.setattr(smb_profiles_api, "SMB_MANAGED_MOUNT_BASE", tmp_path / "smb")
+    monkeypatch.setattr(smb_profiles_api.uuid, "uuid4", lambda: type("Uuid", (), {"hex": "112233445566"})())
+
+    rows = normalize_smb_profile_rows([{
+        "name": "Borg VM",
+        "server": "192.0.2.10",
+        "share": "backup",
+        "username": "backup",
+        "mount_at_start": True,
+        "keep_mounted": True,
+        "password_set": True,
+    }])
+
+    assert rows[0]["mount_path"] == str(tmp_path / "smb" / "Borg-VM-smb-112233")
+    assert rows[0]["mount_at_start"] is True
+    assert rows[0]["keep_mounted"] is True
 
 
 def test_smb_protocol_auto_omits_fixed_dialect_and_rejects_smb1():
@@ -144,6 +181,28 @@ def test_manual_smb_mount_uses_same_safe_diagnostics(tmp_path: Path, monkeypatch
     assert result["failure_code"] == "SMB_AUTH_OR_PERMISSION_FAILED"
     assert "top-secret" not in result["technical_details"]
     assert "password=***" in result["technical_details"]
+
+
+def test_startup_smb_mounts_only_profiles_marked_for_start(monkeypatch):
+    import smb_profiles_api
+
+    actions = []
+    monkeypatch.setattr(smb_profiles_api, "get_smb_profiles_with_status", lambda _config: [
+        {"key": "nas-a", "mount_at_start": True},
+        {"key": "nas-b", "mount_at_start": False},
+    ])
+
+    def fake_action(_config, key, action):
+        actions.append((key, action))
+        return {"ok": True, "message_code": "smb_mount_success"}
+
+    monkeypatch.setattr(smb_profiles_api, "run_smb_profile_action", fake_action)
+
+    result = mount_startup_smb_profiles({})
+
+    assert actions == [("nas-a", "mount")]
+    assert result["mounted"] == ["nas-a"]
+    assert result["failed"] == []
 
 
 def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: Path, monkeypatch):

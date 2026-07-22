@@ -246,3 +246,38 @@ def test_wizard_runner_auto_smb_mount_does_not_force_protocol(tmp_path: Path, mo
     assert session.mounted_by_runner is True
     mount_command = next(command for command in calls if command[0] == "mount")
     assert "vers=" not in mount_command[-1]
+
+
+def test_wizard_runner_respects_keep_mounted_profile_flag(tmp_path: Path, monkeypatch) -> None:
+    mount_path = tmp_path / "smb-mount"
+    secret = tmp_path / ".smb-nas.cred"
+    secret.write_text("username=backup\npassword=secret\n", encoding="utf-8")
+    metadata = {
+        "location": "smb",
+        "mount_before_run": True,
+        "unmount_after_run": True,
+        "_resolved_storage": {
+            "storage_key": "storage_smb_nas",
+            "profile_key": "smb-nas",
+            "server": "nas.example.test",
+            "share": "backup",
+            "mount_path": str(mount_path),
+            "username": "backup",
+            "password_file": str(secret),
+            "vers": "auto",
+            "keep_mounted": True,
+        },
+    }
+
+    def fake_run(command, **_kwargs):
+        return type("Result", (), {
+            "returncode": 1 if command[0] == "findmnt" else 0,
+            "stdout": "",
+            "stderr": "",
+        })()
+
+    monkeypatch.setattr(wizard_runner.subprocess, "run", fake_run)
+    session = wizard_runner._ensure_smb_mount({}, metadata)
+
+    assert session.mounted_by_runner is True
+    assert session.unmount_after_run is False

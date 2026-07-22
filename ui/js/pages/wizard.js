@@ -11,6 +11,7 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   selectedStorageKey: '',
   repositories: [],
   selectedRepositoryKey: '',
+  temporarySmbMounts: {},
   loadingPromise: null,
   sourcePaths: [],
   sourceSuggest: [],
@@ -288,6 +289,13 @@ function wizardSetRepositoryOptions() {
   wizardApplySelectedRepository();
 }
 
+function wizardSmbMountStatus(message = '', type = '') {
+  const el = document.getElementById('wiz-smb-mount-status');
+  if (!el) return;
+  el.textContent = message;
+  el.className = type ? `form-hint text-${type}` : 'form-hint';
+}
+
 function wizardSelectedRepository() {
   const key = String(document.getElementById('wiz-repository-key')?.value || wizardState.selectedRepositoryKey || '').trim();
   wizardState.selectedRepositoryKey = key;
@@ -342,6 +350,7 @@ function openWizard() {
   document.getElementById('wiz-location').value = 'local';
   wizardState.selectedStorageKey = '';
   wizardState.selectedRepositoryKey = '';
+  wizardState.temporarySmbMounts = {};
   wizardState.remoteRepoStatus = null;
   wizardState.selectedDockerContainers = [];
   wizardState.selectedVms = [];
@@ -497,6 +506,7 @@ function wizardNeedsScriptRegeneration(params) {
 }
 
 function closeWizard() {
+  void wizardCleanupTemporarySmbMounts();
   document.getElementById('wizard-modal').classList.add('hidden');
   document.body.classList.remove('wizard-modal-open');
 }
@@ -562,6 +572,15 @@ function wizardAutoFill() {
   if (smbMountOptionsEl) smbMountOptionsEl.classList.toggle('hidden', location !== 'smb');
   wizardSetStorageOptions();
   const storage = wizardSelectedStorage();
+  const unmountAfter = document.getElementById('wiz-smb-unmount-after-run');
+  if (unmountAfter && location === 'smb') {
+    const keepMounted = !!storage?.keep_mounted;
+    if (keepMounted) unmountAfter.checked = false;
+    unmountAfter.disabled = keepMounted;
+  } else if (unmountAfter) {
+    unmountAfter.disabled = false;
+  }
+  if (location !== 'smb') wizardSmbMountStatus('');
   const hint = document.getElementById('wiz-storage-target-hint');
   if (hint) {
     hint.textContent = storage ? '' : wizardT('wizard.noStorageTargetSelectedHint');
@@ -602,6 +621,53 @@ function wizardUpdateIconPreview() {
   ]);
   box.className = `type-icon type-icon-${iconKey || 'sonstiges'}${knownColor.has(colorKey) ? ` type-icon-color-${colorKey}` : ''}`;
   label.textContent = iconKey || wizardT('wizard.automatic');
+}
+
+async function wizardMountSelectedSmbProfile() {
+  const storage = wizardSelectedStorage();
+  const profileKey = String(storage?.profile_key || '').trim();
+  if (!profileKey || String(storage?.location || storage?.storage_type || '').toLowerCase() !== 'smb') {
+    wizardSmbMountStatus(wizardT('wizard.smbMountSelectProfile'), 'danger');
+    return;
+  }
+  const btn = document.getElementById('wiz-smb-mount-now-btn');
+  btn?.classList.add('loading');
+  wizardSmbMountStatus(wizardT('wizard.smbMountRunning'));
+  try {
+    const res = await fetch('/api/storage/smb-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile_key: profileKey, action: 'mount' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(wizardApiErrorMessage(data, res.status));
+    if (data.mounted_by_action === true) wizardState.temporarySmbMounts[profileKey] = true;
+    const selectedStorage = wizardState.selectedStorageKey;
+    const selectedRepository = wizardState.selectedRepositoryKey;
+    await Promise.all([wizardLoadStorageTargets(), wizardLoadRepositories()]);
+    wizardState.selectedStorageKey = selectedStorage;
+    wizardState.selectedRepositoryKey = selectedRepository;
+    wizardSetStorageOptions();
+    wizardSmbMountStatus(apiMessage(data, wizardT('wizard.smbMountOk')), 'success');
+  } catch (err) {
+    wizardSmbMountStatus(wizardT('wizard.smbMountFailed', { message: err.message }), 'danger');
+  } finally {
+    btn?.classList.remove('loading');
+  }
+}
+
+async function wizardCleanupTemporarySmbMounts() {
+  const keys = Object.keys(wizardState.temporarySmbMounts || {}).filter(Boolean);
+  wizardState.temporarySmbMounts = {};
+  await Promise.all(keys.map(async (profileKey) => {
+    try {
+      await fetch('/api/storage/smb-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_key: profileKey, action: 'unmount' }),
+      });
+    } catch (_) {}
+  }));
 }
 
 function wizardClearError(step) {

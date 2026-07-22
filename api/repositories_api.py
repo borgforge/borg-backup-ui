@@ -622,19 +622,40 @@ def _managed_repository_paths(config: dict, storage_key: str) -> dict[str, dict[
     return managed
 
 
+def _smb_storage_cleanup(config: dict, storage: dict[str, Any], mounted: dict[str, Any]):
+    """Return cleanup for a temporary SMB mount unless the profile should stay mounted."""
+    if mounted.get("message_code") != "smb_mount_success":
+        return None
+    if bool(storage.get("keep_mounted", False)):
+        return None
+    profile_key = str(storage.get("profile_key") or "")
+    if not profile_key:
+        return None
+    from smb_profiles_api import run_smb_profile_action
+
+    return lambda: run_smb_profile_action(config, profile_key, "unmount")
+
+
+def _mount_smb_storage_if_needed(
+    config: dict,
+    storage: dict[str, Any],
+    *,
+    error_type: type[Exception] = RuntimeError,
+):
+    if str(storage.get("location") or storage.get("storage_type") or "").strip().lower() != "smb":
+        return None
+    from smb_profiles_api import run_smb_profile_action
+
+    mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
+    if not mounted.get("ok"):
+        raise error_type(str(mounted.get("message") or "SMB mount failed"))
+    return _smb_storage_cleanup(config, storage, mounted)
+
+
 @contextmanager
 def _local_storage_browse_path(config: dict, storage: dict[str, Any]):
     """Yield a mounted local base path and undo only mounts created here."""
-    cleanup = None
-    if str(storage.get("location") or storage.get("storage_type") or "").strip().lower() == "smb":
-        from smb_profiles_api import run_smb_profile_action
-
-        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
-        if not mounted.get("ok"):
-            raise ValueError(str(mounted.get("message") or "SMB mount failed"))
-        if mounted.get("message_code") == "smb_mount_success":
-            profile_key = str(storage.get("profile_key") or "")
-            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+    cleanup = _mount_smb_storage_if_needed(config, storage, error_type=ValueError)
 
     raw_base = str(storage.get("base_path") or storage.get("mount_path") or "").strip()
     if not raw_base:
@@ -779,6 +800,11 @@ def _repo_env(
     # unknown unencrypted repository only when the canonical repository object
     # explicitly identifies it as unencrypted.
     env.pop("BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK", None)
+    # Managed storage paths may legitimately change, for example when an SMB
+    # profile receives a generated mount path. The repository identity still
+    # has to match Borg's cache; this only acknowledges that changed location.
+    env.pop("BORG_RELOCATED_REPO_ACCESS_IS_OK", None)
+    env["BORG_RELOCATED_REPO_ACCESS_IS_OK"] = "yes"
     if str(encryption or "").strip().lower() == "none":
         env["BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK"] = "yes"
     if passphrase_file is not None:
@@ -811,6 +837,14 @@ def _raise_borg_command_error(output: str, fallback: str) -> None:
     lowered = safe_output.lower()
     if "failed to create/acquire the lock" in lowered or "lock.exclusive" in lowered:
         raise RepositoryBusyError("Repository is currently in use by another Borg operation.")
+    if "previously located at" in lowered or "relocated repository" in lowered:
+        exc = ValueError(
+            "Borg reports that this repository was previously accessed through another path. "
+            "Mount the configured storage profile and retry the repository action."
+        )
+        exc.api_code = "repository_relocated"  # type: ignore[attr-defined]
+        exc.api_status = 409  # type: ignore[attr-defined]
+        raise exc
     if "no key file for repository" in lowered or "key file" in lowered and "not found" in lowered:
         raise RuntimeError(
             "The Borg keyfile is missing. Import a matching Borg key export for this repository."
@@ -825,16 +859,7 @@ def _repository_access(config: dict, repository: dict[str, Any]):
     if not storage:
         raise ValueError("Repository storage target was not found")
     repo_path = effective_repository_path(storage, str(repository.get("relative_path") or ""))
-    cleanup = None
-    if str(storage.get("location") or "").lower() == "smb":
-        from smb_profiles_api import run_smb_profile_action
-
-        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
-        if not mounted.get("ok"):
-            raise RuntimeError(str(mounted.get("message") or "SMB mount failed"))
-        if mounted.get("message_code") == "smb_mount_success":
-            profile_key = str(storage.get("profile_key") or "")
-            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+    cleanup = _mount_smb_storage_if_needed(config, storage)
     passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if passphrase_file is not None and not passphrase_file.is_file():
@@ -1026,15 +1051,7 @@ def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]
     if is_resource_active(config, f"repo:{repo_path}"):
         _record_repository_info_busy(config, key, _now())
         raise RepositoryBusyError("Repository is currently in use by a backup job.")
-    cleanup = None
-    if str(storage.get("location") or "").lower() == "smb":
-        from smb_profiles_api import run_smb_profile_action
-        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
-        if not mounted.get("ok"):
-            raise RuntimeError(str(mounted.get("message") or "SMB mount failed"))
-        if mounted.get("message_code") == "smb_mount_success":
-            profile_key = str(storage.get("profile_key") or "")
-            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+    cleanup = _mount_smb_storage_if_needed(config, storage)
     passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None
     if passphrase_file is not None and not passphrase_file.is_file():
@@ -1210,15 +1227,7 @@ def get_repository_archives(config: dict, repository_key: str, limit: int = 100)
     if not repository:
         raise ValueError("Repository not found")
     storage = _storage_by_key(config).get(str(repository.get("storage_key") or ""), {})
-    cleanup = None
-    if str(storage.get("location") or "").lower() == "smb":
-        from smb_profiles_api import run_smb_profile_action
-        mounted = run_smb_profile_action(config, str(storage.get("profile_key") or ""), "mount")
-        if not mounted.get("ok"):
-            raise RuntimeError(str(mounted.get("message") or "SMB mount failed"))
-        if mounted.get("message_code") == "smb_mount_success":
-            profile_key = str(storage.get("profile_key") or "")
-            cleanup = lambda: run_smb_profile_action(config, profile_key, "unmount")
+    cleanup = _mount_smb_storage_if_needed(config, storage)
     repo_path = effective_repository_path(storage, str(repository.get("relative_path") or ""))
     passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
     passphrase_file = Path(passphrase_ref) if passphrase_ref else None

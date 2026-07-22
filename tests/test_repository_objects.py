@@ -657,6 +657,79 @@ def test_repository_archives_unmounts_smb_only_when_api_mounted_it(tmp_path: Pat
     assert calls == [("smb-1", "mount"), ("smb-1", "unmount")]
 
 
+def test_repository_info_keeps_smb_mounted_when_profile_requests_keep(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_smb_test",
+        "display_name": "NAS",
+        "storage_type": "smb",
+        "location": "smb",
+        "profile_key": "smb-1",
+        "mount_path": "/mnt/borg-backup-ui/smb/smb-1",
+        "base_path": "/mnt/borg-backup-ui/smb/smb-1",
+        "keep_mounted": True,
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_smb_test",
+        "display_name": "SMB Test",
+        "storage_key": "storage_smb_test",
+        "location": "smb",
+        "relative_path": "borg-test",
+        "encryption": "none",
+    }]})
+    calls = []
+
+    def fake_action(_config, profile_key, action):
+        calls.append((profile_key, action))
+        return {"ok": True, "message_code": "smb_mount_success"}
+
+    monkeypatch.setattr(smb_profiles_api, "run_smb_profile_action", fake_action)
+    monkeypatch.setattr(repositories_api, "_borg_info", lambda *_args: {
+        "repository": {"id": "smb-test"},
+        "encryption": {"mode": "none"},
+        "cache": {"stats": {"total_size": 10}},
+    })
+    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {"archives": []})
+    monkeypatch.setattr("jobs_api.is_resource_active", lambda *_args: False)
+
+    result = refresh_repository_info(config, "repo_smb_test")
+
+    assert result["ok"] is True
+    assert calls == [("smb-1", "mount")]
+
+
+def test_repository_archives_keep_smb_mounted_when_profile_requests_keep(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_smb_test",
+        "display_name": "NAS",
+        "storage_type": "smb",
+        "location": "smb",
+        "profile_key": "smb-1",
+        "mount_path": "/mnt/borg-backup-ui/smb/smb-1",
+        "keep_mounted": True,
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_smb_test",
+        "display_name": "SMB Test",
+        "storage_key": "storage_smb_test",
+        "location": "smb",
+        "relative_path": "borg-test",
+    }]})
+    calls = []
+
+    def fake_action(_config, profile_key, action):
+        calls.append((profile_key, action))
+        return {"ok": True, "message_code": "smb_mount_success"}
+
+    monkeypatch.setattr(smb_profiles_api, "run_smb_profile_action", fake_action)
+    monkeypatch.setattr(repositories_api, "_borg_list", lambda *_args: {"archives": []})
+
+    get_repository_archives(config, "repo_smb_test")
+
+    assert calls == [("smb-1", "mount")]
+
+
 def test_repository_browser_lists_safe_local_directories_and_managed_state(tmp_path: Path):
     base = tmp_path / "storage"
     (base / "borg-backup-appdata").mkdir(parents=True)
@@ -772,6 +845,32 @@ def test_repository_browser_keeps_preexisting_smb_mount(tmp_path: Path, monkeypa
     def fake_action(_config, profile_key, action):
         calls.append((profile_key, action))
         return {"ok": True, "message_code": "smb_already_mounted"}
+
+    monkeypatch.setattr(smb_profiles_api, "run_smb_profile_action", fake_action)
+
+    browse_repository_directories(config, "storage_smb_test")
+
+    assert calls == [("smb-1", "mount")]
+
+
+def test_repository_browser_keeps_smb_mounted_when_profile_requests_keep(tmp_path: Path, monkeypatch):
+    base = tmp_path / "smb"
+    (base / "borg-existing").mkdir(parents=True)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_smb_test",
+        "display_name": "NAS",
+        "storage_type": "smb",
+        "location": "smb",
+        "profile_key": "smb-1",
+        "base_path": str(base),
+        "keep_mounted": True,
+    }]})
+    calls = []
+
+    def fake_action(_config, profile_key, action):
+        calls.append((profile_key, action))
+        return {"ok": True, "message_code": "smb_mount_success"}
 
     monkeypatch.setattr(smb_profiles_api, "run_smb_profile_action", fake_action)
 

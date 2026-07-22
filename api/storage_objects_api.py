@@ -160,6 +160,8 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
             "password_file": str(row.get("password_file") or "").strip(),
             "vers": normalize_smb_version(row.get("vers")),
             "sec": str(row.get("sec") or "").strip(),
+            "mount_at_start": bool(row.get("mount_at_start", False)),
+            "keep_mounted": bool(row.get("keep_mounted", False)),
             "target_type": str(row.get("target_type") or "").strip(),
             "ssh_key_path": str(row.get("ssh_key_path") or "").strip(),
             "created_by": str(row.get("created_by") or "migration").strip(),
@@ -273,6 +275,8 @@ def settings_profiles_from_storages(config: dict) -> dict[str, list[dict[str, An
                 "password_file": str(row.get("password_file") or ""),
                 "vers": normalize_smb_version(row.get("vers")),
                 "sec": str(row.get("sec") or ""),
+                "mount_at_start": bool(row.get("mount_at_start", False)),
+                "keep_mounted": bool(row.get("keep_mounted", False)),
             })
         elif location == "storagebox" or str(row.get("storage_type") or "") == "ssh":
             result["storage_profiles"].append({
@@ -293,11 +297,14 @@ def _replace_profile_storages_locked(config: dict, location: str, profiles: list
     if target_location not in {"local", "usb", "smb", "storagebox"}:
         raise ValueError("Unsupported storage profile type")
     from repositories_api import read_repository_store
-    referenced = {
-        str(row.get("storage_key") or "")
-        for row in read_repository_store(config).get("repositories", [])
-        if str(row.get("storage_key") or "")
-    }
+    repository_refs_by_storage: dict[str, list[str]] = {}
+    for row in read_repository_store(config).get("repositories", []):
+        storage_key = str(row.get("storage_key") or "")
+        if not storage_key:
+            continue
+        label = str(row.get("display_name") or row.get("repository_key") or storage_key).strip()
+        repository_refs_by_storage.setdefault(storage_key, []).append(label)
+    referenced = set(repository_refs_by_storage.keys())
     current = read_storage_store(config)
     existing_rows = current.get("storages", [])
     existing_by_key = {str(row.get("storage_key") or ""): row for row in existing_rows}
@@ -332,7 +339,13 @@ def _replace_profile_storages_locked(config: dict, location: str, profiles: list
                 mount_path = _safe_local_storage_path(raw.get("mount_path", ""), field="USB mount path")
                 values = {"base_path": mount_path, "mount_path": mount_path}
             elif target_location == "smb":
-                mount_path = _safe_local_storage_path(raw.get("mount_path", ""), field="SMB mount path")
+                raw_mount_path = str(raw.get("mount_path") or "").strip()
+                if not raw_mount_path:
+                    raw_mount_path = str(existing_by_key.get(key, {}).get("mount_path") or "").strip()
+                if not raw_mount_path:
+                    from smb_profiles_api import generate_smb_mount_path
+                    raw_mount_path = generate_smb_mount_path(name)
+                mount_path = _safe_local_storage_path(raw_mount_path, field="SMB mount path")
                 values = {
                     "base_path": mount_path,
                     "mount_path": mount_path,
@@ -342,6 +355,8 @@ def _replace_profile_storages_locked(config: dict, location: str, profiles: list
                     "password_file": str(raw.get("password_file") or "").strip(),
                     "vers": normalize_smb_version(raw.get("vers")),
                     "sec": str(raw.get("sec") or "").strip(),
+                    "mount_at_start": bool(raw.get("mount_at_start", False)),
+                    "keep_mounted": bool(raw.get("keep_mounted", False)),
                 }
                 if not values["server"] or not values["share"] or not values["username"]:
                     raise ValueError("SMB server, share and username are required")
@@ -379,7 +394,22 @@ def _replace_profile_storages_locked(config: dict, location: str, profiles: list
     ]
     blocked = [str(row.get("display_name") or row.get("storage_key") or "") for row in removed if str(row.get("storage_key") or "") in referenced]
     if blocked:
-        raise ValueError(f"Storage profiles are still used by repositories: {', '.join(blocked)}")
+        repository_refs = sorted({
+            ref
+            for row in removed
+            for ref in repository_refs_by_storage.get(str(row.get("storage_key") or ""), [])
+            if str(row.get("storage_key") or "") in referenced
+        })
+        profiles = ", ".join(blocked)
+        repositories = ", ".join(repository_refs)
+        message = f"Storage profiles are still used by repositories: {profiles}"
+        if repositories:
+            message = f"{message}; repositories: {repositories}"
+        exc = ValueError(message)
+        setattr(exc, "api_code", "storage_profile_in_use")
+        setattr(exc, "api_status", 409)
+        setattr(exc, "api_message_params", {"profiles": profiles, "repositories": repositories})
+        raise exc
     kept = [
         row for row in existing_rows
         if str(row.get("location") or row.get("storage_type") or "").lower() != target_location
@@ -479,7 +509,8 @@ def _create_storage_target_locked(config: dict, payload: dict[str, Any]) -> dict
         password = str(payload.get("password") or "")
         if not server or not share or not username or not password:
             raise ValueError("SMB server, share, username and password are required")
-        mount_path = f"/mnt/borg-backup-ui/smb/{key}"
+        from smb_profiles_api import generate_smb_mount_path
+        mount_path = generate_smb_mount_path(display_name)
         profile = {
             "key": key,
             "name": display_name,
@@ -490,6 +521,8 @@ def _create_storage_target_locked(config: dict, payload: dict[str, Any]) -> dict
             "smb_password": password,
             "vers": normalize_smb_version(payload.get("vers")),
             "sec": str(payload.get("sec") or "").strip(),
+            "mount_at_start": bool(payload.get("mount_at_start", False)),
+            "keep_mounted": bool(payload.get("keep_mounted", False)),
         }
         from smb_profiles_api import prepare_smb_profiles_for_save
         profiles = prepare_smb_profiles_for_save(json.dumps([*profiles, profile], ensure_ascii=False))
@@ -785,6 +818,8 @@ def upsert_storages_from_settings(config: dict, settings: dict[str, Any] | None)
             "endpoint": "/".join(part for part in (server, share) if part),
             "server": server,
             "share": share,
+            "mount_at_start": bool(profile.get("mount_at_start", False)),
+            "keep_mounted": bool(profile.get("keep_mounted", False)),
             "source": "smb_profile",
             "created_by": "settings",
         })
