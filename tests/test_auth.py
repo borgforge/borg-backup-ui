@@ -407,6 +407,37 @@ def test_job_run_request_context_contains_action_source_and_response_run_id():
     }
 
 
+def test_auth_login_request_context_contains_safe_username_only():
+    h = _make_handler()
+    h.path = "/api/auth/login"
+    h.command = "POST"
+    h._last_json_body = {"username": "tsteinbe", "password": "super-secret"}
+
+    context = h._extract_request_context()
+
+    assert context == {
+        "source": "manual",
+        "auth_user": "tsteinbe",
+    }
+    assert "password" not in context
+    assert "super-secret" not in json.dumps(context)
+
+
+def test_slow_restore_repo_stats_context_contains_job_and_phase():
+    h = _make_handler()
+    h.path = "/api/restore/repo-stats?job=flash_local"
+    h.command = "GET"
+    h._last_json_body = {}
+
+    context = h._extract_request_context()
+
+    assert context == {
+        "job_key": "flash_local",
+        "phase": "repo-stats",
+        "source": "manual",
+    }
+
+
 def test_restore_test_request_context_contains_selected_jobs_and_level():
     h = _make_handler()
     h.path = "/api/restore-tests/run"

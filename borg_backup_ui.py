@@ -3412,6 +3412,8 @@ btn.addEventListener('click',doSetup);
         self._add_context_value(context, "action", pick("action"))
         self._add_context_value(context, "phase", self._phase_for_request(getattr(self, "command", ""), path, body))
         self._add_context_value(context, "source", self._request_source(body))
+        if path.startswith("/api/auth/"):
+            self._add_context_value(context, "auth_user", pick("username"))
         if path.startswith("/api/notification-profiles") and context.get("profile_id"):
             self._add_apprise_profile_context(context, str(context.get("profile_id") or ""))
         return context
@@ -3502,6 +3504,28 @@ btn.addEventListener('click',doSetup);
             return "precheck"
         if path == "/api/restore/start":
             return "restore-start"
+        if path == "/api/restore/repo-stats":
+            return "repo-stats"
+        if path == "/api/restore/archives":
+            return "restore-archives"
+        if path == "/api/restore/files":
+            return "restore-files"
+        if path == "/api/restore/download-check":
+            return "download-check"
+        if path == "/api/restore/state":
+            return "restore-state"
+        if path == "/api/restore/history":
+            return "restore-history"
+        if path == "/api/restore/history/detail":
+            return "restore-history-detail"
+        if path == "/api/reports/data":
+            return "report-data"
+        if path == "/api/reports/jobs":
+            return "report-jobs"
+        if path == "/api/history":
+            return "history-list"
+        if path == "/api/history/log":
+            return "history-log"
         if path == "/api/storage/check/run":
             return str(body.get("action") or "check")
         if path == "/api/storage/smb-action":
