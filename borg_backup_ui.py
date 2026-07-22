@@ -3348,6 +3348,8 @@ btn.addEventListener('click',doSetup);
             "error": safe_message,  # backward-compatible field
         }
         ctx = self._extract_request_context()
+        if code == "maintenance_mode":
+            ctx.update(self._startup_migration_context())
         _log(
             f'API error request_id={request_id} status={status} method={self.command} path={self.path} code={code} '
             f'context={json.dumps(ctx, ensure_ascii=False)}'
@@ -3373,38 +3375,45 @@ btn.addEventListener('click',doSetup);
         body = self._last_json_body if isinstance(self._last_json_body, dict) else {}
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
+        path = parsed.path
 
-        job_key_raw = (
-            body.get("job_key")
-            or (qs.get("job_key") or [""])[0]
-            or (qs.get("job") or [""])[0]
-            or ""
-        )
-        profile_key_raw = (
-            body.get("profile_key")
-            or (qs.get("profile_key") or [""])[0]
-            or ""
-        )
-        location_raw = body.get("location") or (qs.get("location") or [""])[0] or ""
-        repository_key_raw = (
-            body.get("repository_key")
-            or (qs.get("repository_key") or [""])[0]
-            or ""
-        )
-        repository_mode_raw = body.get("mode") or ""
+        def pick(*keys: str) -> object:
+            for key in keys:
+                value = body.get(key)
+                if self._context_value_present(value):
+                    return value
+                query_value = (qs.get(key) or [""])[0]
+                if self._context_value_present(query_value):
+                    return query_value
+            return ""
 
-        job_key = _mask_secrets(str(job_key_raw))
-        profile_key = _mask_secrets(str(profile_key_raw))
-        location = _mask_secrets(str(location_raw))
-        context = {
-            "job_key": job_key,
-            "profile_key": profile_key,
-            "location": location,
-        }
-        if repository_key_raw:
-            context["repository_key"] = _mask_secrets(str(repository_key_raw))
-        if repository_mode_raw:
-            context["repository_mode"] = _mask_secrets(str(repository_mode_raw))
+        context: dict[str, object] = {}
+        self._add_context_value(context, "job_key", pick("job_key", "job"))
+        job_keys = body.get("job_keys")
+        if not context.get("job_key") and isinstance(job_keys, list) and len(job_keys) == 1:
+            self._add_context_value(context, "job_key", job_keys[0])
+        elif isinstance(job_keys, list) and job_keys:
+            self._add_context_value(context, "selected_jobs", job_keys[:10])
+        self._add_context_value(context, "backup_type", pick("backup_type"))
+        self._add_context_value(context, "location", pick("location"))
+        self._add_context_value(context, "profile_key", pick("profile_key"))
+        self._add_context_value(context, "storage_key", pick("storage_key"))
+        self._add_context_value(context, "storage_type", pick("storage_type", "type", "location"))
+        self._add_context_value(context, "repository_key", pick("repository_key"))
+        self._add_context_value(context, "repository_mode", pick("mode"))
+        self._add_context_value(context, "profile_id", pick("profile_id", "id"))
+        self._add_context_value(context, "provider", pick("provider"))
+        self._add_context_value(context, "event", pick("event", "event_type"))
+        self._add_context_value(context, "restore_id", pick("restore_id"))
+        self._add_context_value(context, "run_id", pick("run_id"))
+        self._add_context_value(context, "archive", pick("archive"))
+        self._add_context_value(context, "level", pick("level"))
+        self._add_context_value(context, "mode", pick("mode"))
+        self._add_context_value(context, "action", pick("action"))
+        self._add_context_value(context, "phase", self._phase_for_request(getattr(self, "command", ""), path, body))
+        self._add_context_value(context, "source", self._request_source(body))
+        if path.startswith("/api/notification-profiles") and context.get("profile_id"):
+            self._add_apprise_profile_context(context, str(context.get("profile_id") or ""))
         return context
 
     @staticmethod
@@ -3425,7 +3434,128 @@ btn.addEventListener('click',doSetup);
             for key in ("repository_deleted", "secret_deleted"):
                 if isinstance(data.get(key), bool):
                     out[key] = data[key]
+        if isinstance(data, dict):
+            for key in ("run_id", "restore_id", "repository_key", "profile_id", "provider"):
+                if data.get(key):
+                    BackupUIHandler._add_context_value(out, key, data.get(key))
+            profile = data.get("profile") if isinstance(data.get("profile"), dict) else {}
+            if profile:
+                BackupUIHandler._add_context_value(out, "profile_id", profile.get("id"))
+                BackupUIHandler._add_context_value(out, "profile_name", profile.get("name"))
+                BackupUIHandler._add_context_value(out, "provider", profile.get("provider"))
+            if path in {"/api/jobs/run", "/api/restore-tests/run", "/api/restore-tests/run-job"}:
+                BackupUIHandler._add_context_value(out, "selected_jobs", data.get("selected_jobs"))
         return out
+
+    @staticmethod
+    def _context_value_present(value: object) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (list, tuple, set)):
+            return any(BackupUIHandler._context_value_present(item) for item in value)
+        return True
+
+    @staticmethod
+    def _safe_context_value(value: object, *, max_len: int = 160) -> str:
+        text = _mask_secrets(str(value or "").replace("\r", " ").replace("\n", " ").strip())
+        if len(text) > max_len:
+            return text[: max_len - 3] + "..."
+        return text
+
+    @staticmethod
+    def _add_context_value(context: dict, key: str, value: object) -> None:
+        if not BackupUIHandler._context_value_present(value):
+            return
+        if isinstance(value, (list, tuple, set)):
+            cleaned = [
+                BackupUIHandler._safe_context_value(item, max_len=80)
+                for item in value
+                if BackupUIHandler._context_value_present(item)
+            ]
+            if cleaned:
+                context[key] = cleaned
+            return
+        context[key] = BackupUIHandler._safe_context_value(value)
+
+    def _request_source(self, body: dict) -> str:
+        if bool(body.get("scheduled")):
+            return "schedule"
+        try:
+            if self._has_valid_api_token_header():
+                return "api-token"
+        except Exception:
+            pass
+        return "manual"
+
+    @staticmethod
+    def _phase_for_request(method: str, path: str, body: dict) -> str:
+        method = str(method or "").upper()
+        if path == "/api/jobs/run":
+            return "run"
+        if path == "/api/jobs/cancel":
+            return "cancel"
+        if path == "/api/restore-tests/run" or path == "/api/restore-tests/run-job":
+            return "restore-test-run"
+        if path == "/api/restore/precheck":
+            return "precheck"
+        if path == "/api/restore/start":
+            return "restore-start"
+        if path == "/api/storage/check/run":
+            return str(body.get("action") or "check")
+        if path == "/api/storage/smb-action":
+            return str(body.get("action") or "smb-action")
+        if path == "/api/storages/test" or path == "/api/storage/test":
+            return "test"
+        if path == "/api/storages":
+            return "save"
+        if path == "/api/repositories/validate":
+            return "validate"
+        if path == "/api/repositories/info":
+            return "refresh-info"
+        if path == "/api/repositories/lifecycle" or path == "/api/repositories":
+            if method == "DELETE":
+                return str(body.get("mode") or "delete")
+            if method == "PUT":
+                return "update"
+            return str(body.get("mode") or "save")
+        if path == "/api/notification-profiles/validate":
+            return "validate"
+        if path == "/api/notification-profiles/test":
+            return "test"
+        if path == "/api/notification-profiles":
+            if method == "POST":
+                return "create"
+            if method == "PUT":
+                return "update"
+            if method == "DELETE":
+                return "delete"
+            return "save"
+        return ""
+
+    def _add_apprise_profile_context(self, context: dict, profile_id: str) -> None:
+        if context.get("provider") and context.get("profile_name"):
+            return
+        try:
+            from apprise_profiles_api import get_profile
+            profile = get_profile(self.config, profile_id).get("profile", {})
+        except Exception:
+            return
+        if isinstance(profile, dict):
+            self._add_context_value(context, "profile_name", profile.get("name"))
+            self._add_context_value(context, "provider", profile.get("provider"))
+
+    def _startup_migration_context(self) -> dict:
+        state = _public_startup_state(self.config)
+        context: dict[str, object] = {}
+        failures = state.get("failures") if isinstance(state.get("failures"), list) else []
+        first = failures[0] if failures and isinstance(failures[0], dict) else {}
+        self._add_context_value(context, "migration_id", first.get("migration_id") or ",".join(state.get("failed_migrations") or []))
+        self._add_context_value(context, "phase", first.get("phase"))
+        self._add_context_value(context, "status", state.get("reason_code") or state.get("severity"))
+        self._add_context_value(context, "reason", first.get("error") or state.get("message"))
+        return context
 
     def _verbose_access_log_enabled(self) -> bool:
         raw = str(
