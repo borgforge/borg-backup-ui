@@ -138,7 +138,7 @@ def apply_all_schedules(config: dict) -> dict:
             body = json.dumps({"scheduled": True}, separators=(",", ":"))
         else:
             url  = f"http://127.0.0.1:{port}/api/jobs/run"
-            body = json.dumps({"job_key": job_key}, separators=(",", ":"))
+            body = json.dumps({"job_key": job_key, "scheduled": True}, separators=(",", ":"))
         line = f"{cron} {_build_schedule_command(url, body, token_file)} >/dev/null 2>&1"
         lines.append(line)
 

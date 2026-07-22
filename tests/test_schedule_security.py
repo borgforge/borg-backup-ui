@@ -67,6 +67,7 @@ def test_apply_all_schedules_writes_quoted_shell_wrapper(monkeypatch, tmp_path: 
     assert "data-binary" in cron_text
     assert "job_key" in cron_text
     assert "appdata_local" in cron_text
+    assert "scheduled" in cron_text
     assert f"token_file={tmp_path}/config/.api-token" in cron_text
 
 

@@ -136,7 +136,40 @@ def send_event(
             apprise_result.mode,
             _log_list(apprise_result.delivered_profiles),
         )
+    _emit_lifecycle_notification(event, results, apprise_result)
     return results
+
+
+def _emit_lifecycle_notification(event: NotificationEvent, results: dict[str, bool], apprise_result: AppriseEventResult) -> None:
+    event_type = str(event.event_type or "").strip()
+    source = str(event.source or "").strip()
+    if source == "backup_job" or event_type.startswith("backup_"):
+        component = "JOB"
+    elif source == "restore_test" or event_type.startswith("restore_test_"):
+        component = "RESTORE_TEST"
+    else:
+        return
+    try:
+        from lifecycle_log import emit_lifecycle
+
+        emit_lifecycle(
+            component,
+            "notification",
+            job_key=event.job_key,
+            event=event_type,
+            source=source,
+            status=event.status,
+            duration_seconds=event.duration_seconds,
+            exit_code=event.exit_code,
+            unraid=bool(results.get("unraid")),
+            email=bool(results.get("email")),
+            native_ntfy=bool(results.get("ntfy")),
+            apprise=bool(results.get("apprise")),
+            apprise_mode=apprise_result.mode,
+            apprise_profiles=apprise_result.delivered_profiles,
+        )
+    except Exception:
+        return
 
 
 def _send_event_mail(config: MailConfig, event: NotificationEvent) -> bool:

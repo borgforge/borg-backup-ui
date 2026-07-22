@@ -2285,6 +2285,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from jobs_api import JobManager
         from jobs_api import list_jobs
         from config_api import read_expanded_conf
+        from lifecycle_log import emit_lifecycle
         from restore_tests_api import list_restore_test_plan
         if not isinstance(body, dict):
             body = {}
@@ -2359,11 +2360,24 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cmd.append("--force")
         for job_key in clean_job_keys:
             cmd.extend(["--job-key", job_key])
+        request_id = str(getattr(self, "_current_request_id", "") or "")
+        session = self._get_current_session_meta() or {}
+        actor = _normalize_username(session.get("username", ""))
+        source = "schedule" if scheduled else ("api-token" if self._has_valid_api_token_header() else "manual")
+        if not actor and source == "schedule":
+            actor = "scheduler"
+        if not actor and source == "api-token":
+            actor = "api-token"
         ok, err = JobManager.get().start(
             "restore_test",
             cmd,
             backup_scripts_dir,
-            extra_env={"BORG_UI_DATA_ROOT": str(backup_scripts_dir)},
+            extra_env={
+                "BORG_UI_DATA_ROOT": str(backup_scripts_dir),
+                "BORG_UI_REQUEST_ID": request_id,
+                "BORG_UI_REQUEST_SOURCE": source,
+                "BORG_UI_REQUEST_ACTOR": actor,
+            },
         )
         if not ok:
             if "already running" in str(err or "").lower():
@@ -2372,11 +2386,25 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     "restore_test_already_running",
                 )
             raise RuntimeError(err)
+        state = JobManager.get().get_state("restore_test")
+        emit_lifecycle(
+            "RESTORE_TEST",
+            "requested",
+            request_id=request_id,
+            source=source,
+            actor=actor,
+            run_id=state.get("run_id", ""),
+            level=level,
+            location=location,
+            selected_jobs=clean_job_keys,
+            auto_selected=auto_selected,
+        )
         return {
             "started": True,
             "scheduled": scheduled,
             "auto_selected": auto_selected,
             "selected_jobs": clean_job_keys,
+            "run_id": state.get("run_id", ""),
             "skipped_jobs": skipped,
         }
 
@@ -2960,6 +2988,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_run_job(self) -> dict:
         self._require_data_dir_ready()
         from jobs_api import JobManager, discover_jobs, get_job_runtime_state, resolve_data_root, resolve_scripts_dir
+        from lifecycle_log import emit_lifecycle
         body = self._read_json_body()
         job_key = body.get("job_key", "")
         if not job_key:
@@ -2984,9 +3013,22 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if info.standard != "wizard":
             raise RuntimeError(f"Unsupported job standard: {info.standard}")
         runner = Path(__file__).resolve().parent / "api" / "wizard_runner.py"
+        request_id = str(getattr(self, "_current_request_id", "") or "")
+        session = self._get_current_session_meta() or {}
+        actor = _normalize_username(session.get("username", ""))
+        source = "schedule" if bool(body.get("scheduled")) else (
+            "api-token" if self._has_valid_api_token_header() else "manual"
+        )
+        if not actor and source == "schedule":
+            actor = "scheduler"
+        if not actor and source == "api-token":
+            actor = "api-token"
         extra_env = {
             "BORG_UI_BORG_SCRIPTS_DIR": str(borg_scripts_dir),
             "BORG_UI_JOB_KEY": job_key,
+            "BORG_UI_REQUEST_ID": request_id,
+            "BORG_UI_REQUEST_SOURCE": source,
+            "BORG_UI_REQUEST_ACTOR": actor,
             "PYTHONPATH": merged_pp,
         }
         ok, err = JobManager.get().start(
@@ -2998,6 +3040,17 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if not ok:
             raise RuntimeError(err)
         state = JobManager.get().get_state(job_key)
+        emit_lifecycle(
+            "JOB",
+            "requested",
+            request_id=request_id,
+            source=source,
+            actor=actor,
+            job_key=job_key,
+            backup_type=info.backup_type,
+            location=info.location,
+            run_id=state.get("run_id", ""),
+        )
         return {"started": True, "job_key": job_key, "run_id": state.get("run_id", "")}
 
     def _post_cancel_job(self) -> dict:

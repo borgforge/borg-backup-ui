@@ -606,6 +606,7 @@ def main() -> int:
 
     job_config = BackupJobConfig.from_config(env)
     _setup_full_logging(job_config.log_file)
+    from lifecycle_log import emit_lifecycle
     borg_config = BorgConfig.from_config(env)
     mail_config = MailConfig.from_config(env)
 
@@ -629,9 +630,36 @@ def main() -> int:
     resources = _build_resources(env, meta)
     ok, reason = lock_set.acquire(resources)
     if not ok:
+        emit_lifecycle(
+            "JOB",
+            "finished",
+            request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
+            source=os.environ.get("BORG_UI_REQUEST_SOURCE", "manual"),
+            actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
+            job_key=job_key,
+            run_id=run_id,
+            status="skipped",
+            exit_code=2,
+            duration_seconds=0,
+            log_file=str(job_config.log_file),
+            reason=reason,
+            failure_code="resource_lock_unavailable",
+        )
         logging.warning("Job is being skipped: %s", reason)
         control.update_phase("failed", cancel_allowed=False, finished=True, exit_code=2)
         return 2
+    emit_lifecycle(
+        "JOB",
+        "process_started",
+        request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
+        source=os.environ.get("BORG_UI_REQUEST_SOURCE", "manual"),
+        actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
+        job_key=job_key,
+        run_id=run_id,
+        pid=os.getpid(),
+        log_file=str(job_config.log_file),
+        status_dir=str(job_config.status_dir),
+    )
 
     smb_session = SmbMountSession()
     result_code = 2
