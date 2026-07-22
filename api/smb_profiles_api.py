@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +18,9 @@ from smb_protocol import (
 )
 
 
+SMB_MANAGED_MOUNT_BASE = Path("/mnt/borg-backup-ui/smb")
+
+
 def _smb_secret_path(profile_key: str) -> Path:
     safe_key = re.sub(r"[^a-z0-9_-]+", "-", str(profile_key or "").strip().lower()).strip("-")
     if not safe_key:
@@ -24,8 +28,33 @@ def _smb_secret_path(profile_key: str) -> Path:
     return Path("/boot/config/borg-backup/secrets") / f".smb-{safe_key}.cred"
 
 
-def normalize_smb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    out: List[Dict[str, str]] = []
+def _truthy(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value or "").strip().lower()
+    if not text:
+        return default
+    return text in {"1", "true", "yes", "on"}
+
+
+def _profile_slug(value: str, *, fallback: str = "smb") -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", str(value or "").strip()).strip("-")
+    return slug or fallback
+
+
+def generate_smb_mount_path(profile_name: str, *, suffix: str = "") -> str:
+    """Return a managed SMB mount path for a new profile."""
+    SMB_MANAGED_MOUNT_BASE.mkdir(parents=True, exist_ok=True)
+    clean_suffix = re.sub(r"[^a-z0-9]+", "", str(suffix or "").strip().lower())[:8]
+    if not clean_suffix:
+        clean_suffix = uuid.uuid4().hex[:6]
+    slug = _profile_slug(profile_name, fallback="")
+    leaf = f"{slug}-smb-{clean_suffix}" if slug else f"smb-{clean_suffix}"
+    return str(SMB_MANAGED_MOUNT_BASE / leaf)
+
+
+def normalize_smb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
     seen: set = set()
     for idx, row in enumerate(rows or []):
         if not isinstance(row, dict):
@@ -38,7 +67,7 @@ def normalize_smb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str
         smb_password = str(row.get("smb_password", row.get("password", ""))).strip()
         vers = normalize_smb_version(row.get("vers"))
         sec = str(row.get("sec", "")).strip()
-        if not name or not server or not share or not mount_path or not username:
+        if not name or not server or not share or not username:
             continue
         key = str(row.get("key", "")).strip().lower()
         if not key:
@@ -51,6 +80,8 @@ def normalize_smb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str
         while key in seen:
             key = f"{key}-{idx + 1}"
         seen.add(key)
+        if not mount_path:
+            mount_path = generate_smb_mount_path(name)
         password_file = str(row.get("password_file", "")).strip() or str(_smb_secret_path(key))
         password_set = bool(row.get("password_set", False))
         if not password_set:
@@ -70,11 +101,13 @@ def normalize_smb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str
             "password_file": password_file,
             "smb_password": smb_password,
             "password_set": "true" if password_set else "false",
+            "mount_at_start": _truthy(row.get("mount_at_start"), default=False),
+            "keep_mounted": _truthy(row.get("keep_mounted"), default=False),
         })
     return out
 
 
-def validate_smb_profiles_json(raw_value: str) -> List[Dict[str, str]]:
+def validate_smb_profiles_json(raw_value: str) -> List[Dict[str, Any]]:
     try:
         decoded = json.loads(str(raw_value or "[]"))
     except (json.JSONDecodeError, TypeError, ValueError):
@@ -83,7 +116,7 @@ def validate_smb_profiles_json(raw_value: str) -> List[Dict[str, str]]:
         raise ValueError("SMB profile data must be a list.")
     normalized = normalize_smb_profile_rows(decoded)
     if len(normalized) != len([x for x in decoded if isinstance(x, dict)]):
-        raise ValueError("SMB profiles are incomplete. Required: name, server, share, mount path, username.")
+        raise ValueError("SMB profiles are incomplete. Required: name, server, share and username.")
     for row in normalized:
         pf = str(row.get("password_file", "")).strip()
         if not pf.startswith("/"):
@@ -91,34 +124,40 @@ def validate_smb_profiles_json(raw_value: str) -> List[Dict[str, str]]:
     return normalized
 
 
-def prepare_smb_profiles_for_save(raw_value: str) -> List[Dict[str, str]]:
+def prepare_smb_profiles_for_save(raw_value: str) -> List[Dict[str, Any]]:
     normalized = validate_smb_profiles_json(raw_value)
+    if not normalized:
+        return []
     secrets_dir = Path("/boot/config/borg-backup/secrets")
     secrets_dir.mkdir(parents=True, exist_ok=True)
 
-    final_rows: List[Dict[str, str]] = []
+    final_rows: List[Dict[str, Any]] = []
     for row in normalized:
         key = str(row.get("key", "")).strip()
         username = str(row.get("username", "")).strip()
         smb_password = str(row.get("smb_password", "")).strip()
         secret_file = _smb_secret_path(key)
+        mount_path = str(row.get("mount_path", "")).strip()
 
         if smb_password:
             secret_file.write_text(f"username={username}\npassword={smb_password}\n", encoding="utf-8")
             secret_file.chmod(0o600)
         elif not secret_file.is_file():
             raise ValueError(f"SMB profile '{row.get('name','')}' requires a password when first saved.")
+        Path(mount_path).mkdir(parents=True, exist_ok=True)
 
         final_rows.append({
             "key": key,
             "name": str(row.get("name", "")).strip(),
             "server": str(row.get("server", "")).strip(),
             "share": str(row.get("share", "")).strip(),
-            "mount_path": str(row.get("mount_path", "")).strip(),
+            "mount_path": mount_path,
             "username": username,
             "vers": normalize_smb_version(row.get("vers")),
             "sec": str(row.get("sec", "")).strip(),
             "password_file": str(secret_file),
+            "mount_at_start": bool(row.get("mount_at_start", False)),
+            "keep_mounted": bool(row.get("keep_mounted", False)),
         })
     return final_rows
 
@@ -160,6 +199,8 @@ def get_smb_profiles_with_status(ui_config: dict) -> List[Dict[str, Any]]:
             "vers": normalize_smb_version(row.get("vers")),
             "sec": str(row.get("sec", "")).strip(),
             "is_mounted": mounted,
+            "mount_at_start": bool(row.get("mount_at_start", False)),
+            "keep_mounted": bool(row.get("keep_mounted", False)),
             "jobs_count": len(refs.get(key, [])),
             "job_refs": refs.get(key, [])[:10],
         })
@@ -171,7 +212,7 @@ def run_smb_profile_action(ui_config: dict, profile_key: str, action: str) -> Di
     act = str(action or "").strip().lower()
     if not key:
         raise ValueError("profile_key is missing")
-    if act not in {"mount", "unmount", "test"}:
+    if act not in {"mount", "unmount", "test", "status"}:
         raise ValueError("Invalid action")
 
     profiles = {str(p.get("key") or "").strip().lower(): p for p in get_smb_profiles_with_status(ui_config)}
@@ -212,9 +253,25 @@ def run_smb_profile_action(ui_config: dict, profile_key: str, action: str) -> Di
         except Exception:
             return False
 
+    if act == "status":
+        mounted = _mounted()
+        return {
+            "ok": True,
+            "action": "status",
+            "is_mounted": mounted,
+            "message": "Mounted" if mounted else "Not mounted",
+            "message_code": "smb_mounted" if mounted else "smb_unmounted",
+        }
+
     if act == "mount":
         if _mounted():
-            return {"ok": True, "action": "mount", "message": "Already mounted", "message_code": "smb_already_mounted"}
+            return {
+                "ok": True,
+                "action": "mount",
+                "message": "Already mounted",
+                "message_code": "smb_already_mounted",
+                "mounted_by_action": False,
+            }
         opts = build_smb_mount_options(profile, cred)
         res = subprocess.run(
             ["mount", "-t", "cifs", src, mount_path, "-o", ",".join(opts)],
@@ -227,6 +284,7 @@ def run_smb_profile_action(ui_config: dict, profile_key: str, action: str) -> Di
                 "action": "mount",
                 "message": "Mount OK",
                 "message_code": "smb_mount_success",
+                "mounted_by_action": True,
             }
         technical = sanitize_smb_error(res.stderr or res.stdout or "Mount failed")
         failure_code, failure_hint = classify_smb_mount_error(technical)
@@ -246,6 +304,33 @@ def run_smb_profile_action(ui_config: dict, profile_key: str, action: str) -> Di
     ok = res.returncode == 0
     msg = "Unmount OK" if ok else (res.stderr or res.stdout or "Unmount failed").strip()
     return {"ok": ok, "action": "unmount", "message": msg, "message_code": "smb_unmount_success" if ok else "smb_unmount_failed"}
+
+
+def mount_startup_smb_profiles(ui_config: dict) -> Dict[str, Any]:
+    """Mount SMB profiles explicitly configured for plugin startup."""
+    rows = get_smb_profiles_with_status(ui_config)
+    selected = [
+        str(row.get("key") or "").strip().lower()
+        for row in rows
+        if bool(row.get("mount_at_start", False)) and str(row.get("key") or "").strip()
+    ]
+    result: Dict[str, Any] = {"requested": selected, "mounted": [], "already_mounted": [], "failed": []}
+    for key in selected:
+        try:
+            action = run_smb_profile_action(ui_config, key, "mount")
+            if action.get("ok") and action.get("message_code") == "smb_already_mounted":
+                result["already_mounted"].append(key)
+            elif action.get("ok"):
+                result["mounted"].append(key)
+            else:
+                result["failed"].append({
+                    "key": key,
+                    "message": str(action.get("message") or "SMB mount failed"),
+                    "failure_code": str(action.get("failure_code") or ""),
+                })
+        except Exception as exc:
+            result["failed"].append({"key": key, "message": str(exc), "failure_code": ""})
+    return result
 
 
 def validate_smb_profile_usage_before_save(ui_config: dict, new_rows: List[Dict[str, str]]) -> None:

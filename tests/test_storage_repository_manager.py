@@ -162,6 +162,7 @@ def test_repository_environment_confirms_only_explicit_unencrypted_repositories(
     tmp_path: Path, monkeypatch,
 ):
     monkeypatch.setenv("BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK", "yes")
+    monkeypatch.setenv("BORG_RELOCATED_REPO_ACCESS_IS_OK", "no")
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
 
     unencrypted = repositories_api._repo_env({}, None, config, encryption="none")
@@ -171,6 +172,20 @@ def test_repository_environment_confirms_only_explicit_unencrypted_repositories(
     assert unencrypted["BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK"] == "yes"
     assert "BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK" not in encrypted
     assert "BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK" not in unspecified
+    assert unencrypted["BORG_RELOCATED_REPO_ACCESS_IS_OK"] == "yes"
+    assert encrypted["BORG_RELOCATED_REPO_ACCESS_IS_OK"] == "yes"
+    assert unspecified["BORG_RELOCATED_REPO_ACCESS_IS_OK"] == "yes"
+
+
+def test_relocated_repository_warning_becomes_api_conflict() -> None:
+    with pytest.raises(ValueError) as error:
+        repositories_api._raise_borg_command_error(
+            "Warning: The repository at location /mnt/new/repo was previously located at /mnt/old/repo",
+            "borg info failed",
+        )
+
+    assert getattr(error.value, "api_code") == "repository_relocated"
+    assert getattr(error.value, "api_status") == 409
 
 
 def test_repository_maintenance_persists_structured_prune_and_compact_results(tmp_path: Path):

@@ -530,24 +530,33 @@ function syncSettingsProfileManager(type, selectLast = false) {
   });
   const footer = manager.querySelector('.settings-profile-editor > footer');
   if (footer) footer.classList.toggle('hidden', !editing);
+  if (type === 'smb' && selectedRow && !editing && settingsState.activeTab === 'smb') {
+    refreshSelectedSmbProfileMountStatus(selectedRow);
+  }
 }
 
 async function blockProfileRemovalIfInUse(row, type) {
   const jobsCount = Number(row?.dataset?.[`${type}JobsCount`] || 0);
-  if (jobsCount <= 0) return false;
+  const repositoriesCount = Number(row?.dataset?.[`${type}RepositoriesCount`] || 0);
+  if (jobsCount <= 0 && repositoriesCount <= 0) return false;
   const refs = String(row?.dataset?.[`${type}JobRefs`] || '').trim();
+  const repositoryRefs = String(row?.dataset?.[`${type}RepositoryRefs`] || '').trim();
   const titleKey = type === 'local'
     ? 'profiles.cannotRemoveLocal'
     : (type === 'usb' ? 'profiles.cannotRemoveUsb' : (type === 'smb' ? 'profiles.cannotRemoveSmb' : 'profiles.cannotRemoveStorage'));
   const msgId = type === 'local'
     ? 'local-profiles-msg'
     : (type === 'usb' ? 'usb-profiles-msg' : (type === 'smb' ? 'smb-profiles-msg' : 'storage-profiles-msg'));
+  const details = [
+    refs ? `\n\nJobs:\n${refs}` : '',
+    repositoryRefs ? `\n\nRepositorys:\n${repositoryRefs}` : '',
+  ].join('');
   await _openSettingsDialog({
     title: settingsT(titleKey),
-    message: settingsT('profiles.profileInUseDialog', { count: jobsCount, refs: refs ? `\n\nJobs:\n${refs}` : '' }),
+    message: settingsT('profiles.profileInUseResourcesDialog', { jobs: jobsCount, repositories: repositoriesCount, refs: details }),
     confirmText: 'OK',
   });
-  showMsg(msgId, 'warning', settingsT('profiles.profileInUse', { count: jobsCount, refs: refs ? ` (${refs})` : '' }));
+  showMsg(msgId, 'warning', settingsT('profiles.profileInUseResources', { jobs: jobsCount, repositories: repositoriesCount, refs: '' }));
   return true;
 }
 
@@ -891,22 +900,73 @@ function normalizeSmbProfileRows(rows) {
     const name = String(r?.name || '').trim();
     const server = String(r?.server || '').trim();
     const share = String(r?.share || '').trim();
-    const mount_path = String(r?.mount_path || '').trim();
+    let mount_path = String(r?.mount_path || '').trim();
     const username = String(r?.username || '').trim();
     const vers = String(r?.vers || '').trim() || 'auto';
     const sec = String(r?.sec || '').trim();
     const smb_password = String(r?.smb_password || '').trim();
     const password_set = !!r?.password_set;
+    const mount_at_start = !!r?.mount_at_start;
+    const keep_mounted = !!r?.keep_mounted;
+    const is_mounted = !!r?.is_mounted;
     const jobs_count = Number(r?.jobs_count || 0);
     const job_refs = Array.isArray(r?.job_refs) ? r.job_refs.map((v) => String(v || '')).filter(Boolean) : [];
-    if (!name || !server || !share || !mount_path || !username) return;
+    if (!name || !server || !share || !username) return;
+    if (!mount_path) mount_path = generateSmbManagedMountPath(name);
     let key = String(r?.key || '').trim().toLowerCase();
     if (!key) key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `smb-${idx + 1}`;
     while (seen.has(key)) key = `${key}-${idx + 1}`;
     seen.add(key);
-    out.push({ key, name, server, share, mount_path, username, vers, sec, smb_password, password_set, jobs_count, job_refs });
+    out.push({
+      key,
+      name,
+      server,
+      share,
+      mount_path,
+      username,
+      vers,
+      sec,
+      smb_password,
+      password_set,
+      mount_at_start,
+      keep_mounted,
+      is_mounted,
+      jobs_count,
+      job_refs,
+      repositories_count: Number(r?.repositories_count || 0),
+      repository_refs: Array.isArray(r?.repository_refs) ? r.repository_refs.map((v) => String(v || '')).filter(Boolean) : [],
+    });
   });
   return out;
+}
+
+function generateSmbManagedMountPath(name = '') {
+  return generateSmbManagedMountPathWithSuffix(name).path;
+}
+
+function generateSmbManagedMountPathWithSuffix(name = '', suffix = '') {
+  const slug = String(name || '')
+    .trim()
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  let cleanSuffix = String(suffix || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 8);
+  try {
+    if (!cleanSuffix) {
+      const values = new Uint8Array(3);
+      window.crypto.getRandomValues(values);
+      cleanSuffix = Array.from(values).map((v) => v.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (_) {
+    if (!cleanSuffix) cleanSuffix = Math.random().toString(16).slice(2, 8).padEnd(6, '0');
+  }
+  const leaf = slug ? `${slug}-smb-${cleanSuffix}` : `smb-${cleanSuffix}`;
+  return { path: `/mnt/borg-backup-ui/smb/${leaf}`, suffix: cleanSuffix };
+}
+
+function extractSmbManagedPathSuffix(path = '') {
+  const match = String(path || '').trim().match(/(?:^|-)smb-([a-z0-9]{6,8})$/i)
+    || String(path || '').trim().match(/-([a-z0-9]{6,8})$/i);
+  return match ? match[1].toLowerCase() : '';
 }
 
 function getSmbProfilesFromDom() {
@@ -923,6 +983,8 @@ function getSmbProfilesFromDom() {
       sec: row.querySelector('[data-smb-profile-sec]')?.value || '',
       smb_password: row.querySelector('[data-smb-profile-password]')?.value || '',
       password_set: row.querySelector('[data-smb-profile-password-set]')?.value === 'true',
+      mount_at_start: !!row.querySelector('[data-smb-profile-mount-at-start]')?.checked,
+      keep_mounted: !!row.querySelector('[data-smb-profile-keep-mounted]')?.checked,
     });
   });
   return normalizeSmbProfileRows(rows);
@@ -934,7 +996,25 @@ function syncSmbProfilesHiddenInput() {
   hidden.value = JSON.stringify(getSmbProfilesFromDom());
 }
 
-function onSmbProfileInputChanged() {
+function updateSmbAutoMountPath(row) {
+  if (!row || row.dataset.smbProfileAutoPath !== 'true') return;
+  const nameInput = row.querySelector('[data-smb-profile-name]');
+  const pathInput = row.querySelector('[data-smb-profile-path]');
+  if (!pathInput) return;
+  const suffix = row.dataset.smbProfilePathSuffix || extractSmbManagedPathSuffix(pathInput.value);
+  const generated = generateSmbManagedMountPathWithSuffix(nameInput?.value || '', suffix);
+  row.dataset.smbProfilePathSuffix = generated.suffix;
+  pathInput.value = generated.path;
+}
+
+function onSmbProfileInputChanged(event) {
+  const target = event?.target || null;
+  const row = target?.closest?.('.smb-profile-row') || null;
+  if (target?.matches?.('[data-smb-profile-path]')) {
+    if (row) row.dataset.smbProfileAutoPath = 'false';
+  } else if (target?.matches?.('[data-smb-profile-name]')) {
+    updateSmbAutoMountPath(row);
+  }
   syncSmbProfilesHiddenInput();
   markSettingsDirty();
 }
@@ -948,7 +1028,7 @@ function _smbVersionSelectHtml(value) {
     ['2.1', 'SMB 2.1'],
     ['2.0', 'SMB 2.0'],
   ];
-  return `<select class="form-select mono" data-smb-profile-vers onchange="onSmbProfileInputChanged()">
+  return `<select class="form-select mono" data-smb-profile-vers onchange="onSmbProfileInputChanged(event)">
     ${options.map(([raw, label]) => `<option value="${escHtml(raw)}"${selected === raw ? ' selected' : ''}>${escHtml(label)}</option>`).join('')}
   </select>`;
 }
@@ -960,30 +1040,41 @@ function addSmbProfileRow(row = {}) {
   const name = String(row.name || '').trim();
   const server = String(row.server || '').trim();
   const share = String(row.share || '').trim();
-  const path = String(row.mount_path || '').trim();
+  const suppliedPath = String(row.mount_path || '').trim();
+  const generated = suppliedPath ? { path: suppliedPath, suffix: extractSmbManagedPathSuffix(suppliedPath) } : generateSmbManagedMountPathWithSuffix(name || '');
+  const path = generated.path;
   const username = String(row.username || '').trim();
   const vers = String(row.vers || '').trim() || 'auto';
   const sec = String(row.sec || '').trim();
   const passwordSet = !!row.password_set;
+  const mountAtStart = !!row.mount_at_start;
+  const keepMounted = !!row.keep_mounted;
   const jobsCount = Number(row.jobs_count || 0);
   const wrap = document.createElement('div');
   wrap.className = 'smb-profile-row';
+  wrap.dataset.smbProfileAutoPath = suppliedPath ? 'false' : 'true';
+  if (generated.suffix) wrap.dataset.smbProfilePathSuffix = generated.suffix;
   if (key) wrap.dataset.profileKey = key;
   wrap.innerHTML = `
     <div class="smb-profile-main">
-      <input class="form-input" type="text" data-smb-profile-name placeholder="${settingsT('profiles.profileNamePlaceholder')}" value="${escHtml(name)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="text" data-smb-profile-server placeholder="${settingsT('profiles.hostPlaceholder')}" value="${escHtml(server)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="text" data-smb-profile-share placeholder="${settingsT('profiles.sharePlaceholder')}" value="${escHtml(share)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(path)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="text" data-smb-profile-username placeholder="${settingsT('profiles.usernamePlaceholder')}" value="${escHtml(username)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-      <input class="form-input mono" type="password" data-smb-profile-password placeholder="${passwordSet ? settingsT('profiles.passwordSetPlaceholder') : settingsT('profiles.passwordPlaceholder')}" value="" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input" type="text" data-smb-profile-name placeholder="${settingsT('profiles.profileNamePlaceholder')}" value="${escHtml(name)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+      <input class="form-input mono" type="text" data-smb-profile-server placeholder="${settingsT('profiles.hostPlaceholder')}" value="${escHtml(server)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+      <input class="form-input mono" type="text" data-smb-profile-share placeholder="${settingsT('profiles.sharePlaceholder')}" value="${escHtml(share)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+      <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(path)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+      <input class="form-input mono" type="text" data-smb-profile-username placeholder="${settingsT('profiles.usernamePlaceholder')}" value="${escHtml(username)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+      <input class="form-input mono" type="password" data-smb-profile-password placeholder="${passwordSet ? settingsT('profiles.passwordSetPlaceholder') : settingsT('profiles.passwordPlaceholder')}" value="" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
       <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">${settingsT('profiles.options')}</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-status">${settingsT('profiles.mountStatusNow')}</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-mount">${settingsT('profiles.mountNow')}</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-unmount">${settingsT('profiles.unmountNow')}</button>
       <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">${settingsT('common.remove')}</button>
       <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: jobsCount })}</span>
     </div>
     <div class="smb-profile-optional hidden" data-smb-profile-optional>
       ${_smbVersionSelectHtml(vers)}
-      <input class="form-input mono" type="text" data-smb-profile-sec placeholder="${settingsT('profiles.securityPlaceholder')}" value="${escHtml(sec)}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+      <input class="form-input mono" type="text" data-smb-profile-sec placeholder="${settingsT('profiles.securityPlaceholder')}" value="${escHtml(sec)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+      <label class="form-checkbox-row"><input type="checkbox" data-smb-profile-mount-at-start ${mountAtStart ? 'checked' : ''} onchange="onSmbProfileInputChanged(event)"> <span>${settingsT('profiles.mountAtStart')}</span></label>
+      <label class="form-checkbox-row"><input type="checkbox" data-smb-profile-keep-mounted ${keepMounted ? 'checked' : ''} onchange="onSmbProfileInputChanged(event)"> <span>${settingsT('profiles.keepMounted')}</span></label>
     </div>
     <div class="smb-profile-checks hidden" data-smb-profile-checks></div>
     <input type="hidden" data-smb-profile-password-set value="${passwordSet ? 'true' : 'false'}">
@@ -994,21 +1085,27 @@ function addSmbProfileRow(row = {}) {
 function renderSettingsSmbProfiles(rows) {
   const normalized = normalizeSmbProfileRows(rows);
   const content = normalized.map((r) => `
-    <div class="smb-profile-row" data-profile-key="${escHtml(r.key || '')}" data-smb-jobs-count="${Number(r.jobs_count || 0)}" data-smb-job-refs="${escHtml((r.job_refs || []).join(', '))}">
+    <div class="smb-profile-row" data-profile-key="${escHtml(r.key || '')}" data-smb-jobs-count="${Number(r.jobs_count || 0)}" data-smb-job-refs="${escHtml((r.job_refs || []).join(', '))}" data-smb-repositories-count="${Number(r.repositories_count || 0)}" data-smb-repository-refs="${escHtml((r.repository_refs || []).join(', '))}">
       <div class="smb-profile-main">
-        <input class="form-input" type="text" data-smb-profile-name placeholder="${settingsT('profiles.profileNamePlaceholder')}" value="${escHtml(r.name || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="text" data-smb-profile-server placeholder="${settingsT('profiles.hostPlaceholder')}" value="${escHtml(r.server || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="text" data-smb-profile-share placeholder="${settingsT('profiles.sharePlaceholder')}" value="${escHtml(r.share || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(r.mount_path || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="text" data-smb-profile-username placeholder="${settingsT('profiles.usernamePlaceholder')}" value="${escHtml(r.username || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
-        <input class="form-input mono" type="password" data-smb-profile-password placeholder="${r.password_set ? settingsT('profiles.passwordSetPlaceholder') : settingsT('profiles.passwordPlaceholder')}" value="" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input" type="text" data-smb-profile-name placeholder="${settingsT('profiles.profileNamePlaceholder')}" value="${escHtml(r.name || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+        <input class="form-input mono" type="text" data-smb-profile-server placeholder="${settingsT('profiles.hostPlaceholder')}" value="${escHtml(r.server || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+        <input class="form-input mono" type="text" data-smb-profile-share placeholder="${settingsT('profiles.sharePlaceholder')}" value="${escHtml(r.share || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+        <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(r.mount_path || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+        <input class="form-input mono" type="text" data-smb-profile-username placeholder="${settingsT('profiles.usernamePlaceholder')}" value="${escHtml(r.username || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+        <input class="form-input mono" type="password" data-smb-profile-password placeholder="${r.password_set ? settingsT('profiles.passwordSetPlaceholder') : settingsT('profiles.passwordPlaceholder')}" value="" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">${settingsT('profiles.options')}</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-status">${settingsT('profiles.mountStatusNow')}</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-mount">${settingsT('profiles.mountNow')}</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-unmount">${settingsT('profiles.unmountNow')}</button>
         <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">${settingsT('common.remove')}</button>
+        <span class="text-muted" data-smb-profile-mount-status style="font-size:12px">${r.is_mounted ? settingsT('profiles.mounted') : settingsT('profiles.notMounted')}</span>
         <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(r.jobs_count || 0) })}</span>
       </div>
       <div class="smb-profile-optional hidden" data-smb-profile-optional>
         ${_smbVersionSelectHtml(r.vers || 'auto')}
-        <input class="form-input mono" type="text" data-smb-profile-sec placeholder="${settingsT('profiles.securityPlaceholder')}" value="${escHtml(r.sec || '')}" onchange="onSmbProfileInputChanged()" oninput="onSmbProfileInputChanged()">
+        <input class="form-input mono" type="text" data-smb-profile-sec placeholder="${settingsT('profiles.securityPlaceholder')}" value="${escHtml(r.sec || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+        <label class="form-checkbox-row"><input type="checkbox" data-smb-profile-mount-at-start ${r.mount_at_start ? 'checked' : ''} onchange="onSmbProfileInputChanged(event)"> <span>${settingsT('profiles.mountAtStart')}</span></label>
+        <label class="form-checkbox-row"><input type="checkbox" data-smb-profile-keep-mounted ${r.keep_mounted ? 'checked' : ''} onchange="onSmbProfileInputChanged(event)"> <span>${settingsT('profiles.keepMounted')}</span></label>
       </div>
       <div class="smb-profile-checks hidden" data-smb-profile-checks></div>
       <input type="hidden" data-smb-profile-password-set value="${r.password_set ? 'true' : 'false'}">
@@ -4882,6 +4979,13 @@ async function onSettingsContentClick(event) {
     return;
   }
   if (action === 'smb-profile-check') return checkSmbProfilesStatus();
+  if (action === 'smb-profile-status' || action === 'smb-profile-mount' || action === 'smb-profile-unmount') {
+    const row = event.target.closest('.smb-profile-row');
+    const smbAction = action === 'smb-profile-mount'
+      ? 'mount'
+      : (action === 'smb-profile-unmount' ? 'unmount' : 'status');
+    return runSmbProfileAction(row, smbAction);
+  }
   if (action === 'smb-profile-toggle-options') {
     const row = event.target.closest('.smb-profile-row');
     const opts = row?.querySelector('[data-smb-profile-optional]');
@@ -5253,6 +5357,52 @@ async function checkSmbProfilesStatus() {
     showMsg('smb-profiles-msg', failCount ? 'warning' : 'success', settingsT('profiles.checkComplete', { ok: okCount, failed: failCount }));
   } catch (err) {
     if (msgEl) showMsg('smb-profiles-msg', 'error', settingsT('profiles.checkErrorMessage', { message: err.message }));
+  }
+}
+
+function refreshSelectedSmbProfileMountStatus(row = null) {
+  const selectedRow = row || document.querySelector('#smb-profiles-rows .smb-profile-row:not(.hidden)');
+  if (!selectedRow || settingsState.profileEditing === 'smb') return;
+  const profileKey = String(selectedRow.dataset?.profileKey || '').trim().toLowerCase();
+  if (!profileKey) return;
+  runSmbProfileAction(selectedRow, 'status', { silent: true });
+}
+
+async function runSmbProfileAction(row, action, options = {}) {
+  const profileKey = String(row?.dataset?.profileKey || '').trim().toLowerCase();
+  if (!profileKey) {
+    if (!options.silent) showMsg('smb-profiles-msg', 'warning', settingsT('profiles.saveBeforeMountAction'));
+    return;
+  }
+  const statusEl = row.querySelector('[data-smb-profile-mount-status]');
+  const requestId = `${profileKey}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  row.dataset.smbMountStatusRequest = requestId;
+  if (action === 'status' && statusEl) {
+    statusEl.textContent = settingsT('profiles.mountStatusChecking');
+  }
+  try {
+    const res = await fetch('/api/storage/smb-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile_key: profileKey, action }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(apiErrorMessage(data, res.status));
+    const label = action === 'mount'
+      ? settingsT('profiles.mountActionOk')
+      : (action === 'unmount' ? settingsT('profiles.unmountActionOk') : settingsT('profiles.statusActionOk'));
+    if (!options.silent) showMsg('smb-profiles-msg', 'success', apiMessage(data, label));
+    const mounted = action === 'mount'
+      ? true
+      : (action === 'unmount' ? false : (typeof data.is_mounted === 'boolean' ? data.is_mounted : null));
+    if (mounted !== null && row.isConnected && row.dataset.smbMountStatusRequest === requestId) {
+      if (statusEl) statusEl.textContent = mounted ? settingsT('profiles.mounted') : settingsT('profiles.notMounted');
+    }
+  } catch (err) {
+    if (statusEl && action === 'status' && row.isConnected && row.dataset.smbMountStatusRequest === requestId) {
+      statusEl.textContent = settingsT('profiles.mountStatusUnknown');
+    }
+    if (!options.silent) showMsg('smb-profiles-msg', 'error', settingsT('profiles.mountActionFailed', { message: err.message }));
   }
 }
 

@@ -1035,6 +1035,7 @@ function repositoryManagerErrorMessage(data, status = 0) {
     repository_target_missing: 'storage.repositoryTargetMissing',
     repository_target_not_directory: 'storage.repositoryTargetNotDirectory',
     repository_target_inaccessible: 'storage.repositoryTargetInaccessible',
+    repository_relocated: 'storage.repositoryRelocated',
   };
   if (code === 'repository_target_borg_exists') {
     const action = document.getElementById('repository-manager-action');

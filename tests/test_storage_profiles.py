@@ -19,7 +19,7 @@ from storage_profiles_api import (
     validate_storage_profile_usage_before_save,
 )
 from repositories_api import write_repository_store
-from storage_objects_api import write_storage_store
+from storage_objects_api import read_storage_store, replace_profile_storages, write_storage_store
 
 
 def _write_storagebox_reference(data_root: Path) -> dict:
@@ -120,6 +120,25 @@ def test_resolve_storage_profile_returns_requested_canonical_profile(tmp_path: P
     assert row["base_path"] == "/volume1/backup-b"
 
 
+def test_smb_profile_mount_policy_persists_to_storage_object(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts")}
+
+    replace_profile_storages(config, "smb", [{
+        "key": "smb-1",
+        "name": "Borg VM",
+        "server": "192.0.2.10",
+        "share": "backup",
+        "mount_path": "/mnt/borg-backup-ui/smb/Borg-VM-smb-123456",
+        "username": "backup",
+        "mount_at_start": True,
+        "keep_mounted": True,
+    }])
+
+    row = read_storage_store(config)["storages"][0]
+    assert row["mount_at_start"] is True
+    assert row["keep_mounted"] is True
+
+
 def test_unreferenced_storage_profile_with_empty_host_is_blocked():
     next_rows = normalize_storage_profile_rows([{
         "key": "storage-1",
@@ -180,3 +199,85 @@ def test_settings_save_blocks_new_incomplete_storage_profile(tmp_path: Path, mon
 
     with pytest.raises(ValueError, match="Storage profile 'storage-1' is incomplete"):
         handler._put_settings()
+
+
+def test_storage_profile_delete_reports_repository_blocker(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "data")}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_smb_test",
+        "display_name": "Borg-VM",
+        "storage_type": "smb",
+        "location": "smb",
+        "identity": "smb-profile:smb-1",
+        "profile_key": "smb-1",
+        "base_path": "/mnt/borg-backup-ui/smb/Borg-VM-smb-123456",
+        "mount_path": "/mnt/borg-backup-ui/smb/Borg-VM-smb-123456",
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_borg_vm",
+        "display_name": "Borg VM Repository",
+        "storage_key": "storage_smb_test",
+        "relative_path": "borg-backup",
+        "encryption": "none",
+        "used_by": [],
+    }]})
+
+    with pytest.raises(ValueError, match="Storage profiles are still used by repositories") as exc_info:
+        replace_profile_storages(config, "smb", [])
+
+    assert getattr(exc_info.value, "api_code") == "storage_profile_in_use"
+    assert getattr(exc_info.value, "api_status") == 409
+    assert getattr(exc_info.value, "api_message_params") == {
+        "profiles": "Borg-VM",
+        "repositories": "Borg VM Repository",
+    }
+
+
+def test_settings_smb_profile_delete_cleans_storage_secret_and_mountpoint(tmp_path: Path, monkeypatch):
+    import borg_backup_ui
+    import config_api
+
+    data_root = tmp_path / "data"
+    mount_path = tmp_path / "Borg-VM-smb-123456"
+    mount_path.mkdir()
+    secret = tmp_path / ".smb-smb-1.cred"
+    secret.write_text("username=tsteinbe\npassword=secret\n", encoding="utf-8")
+    config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_smb_test",
+        "display_name": "Borg-VM",
+        "storage_type": "smb",
+        "location": "smb",
+        "identity": "smb-profile:smb-1",
+        "profile_key": "smb-1",
+        "base_path": str(mount_path),
+        "mount_path": str(mount_path),
+        "server": "192.0.2.10",
+        "share": "borg",
+        "username": "tsteinbe",
+        "password_file": str(secret),
+        "vers": "auto",
+    }]})
+    write_repository_store(config, {"repositories": []})
+
+    monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {"GLOBAL_DATA_DIR": "/mnt/user/backups"})
+    monkeypatch.setattr(config_api, "write_conf", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(borg_backup_ui, "_apply_runtime_dirs_from_conf", lambda _cfg: None)
+
+    handler = borg_backup_ui.BackupUIHandler.__new__(borg_backup_ui.BackupUIHandler)
+    handler.config = config
+    handler._read_json_body = lambda: {
+        "updates": {},
+        "profile_updates": {"smb": []},
+        "smb_cleanup_keys": ["smb-1"],
+        "smb_secret_cleanup_keys": ["smb-1"],
+    }
+
+    result = handler._put_settings()
+
+    assert result["saved"] is True
+    assert result["smb_cleanup"]["removed"] == [{"key": "smb-1", "path": str(mount_path)}]
+    assert result["smb_secret_cleanup"]["removed"] == [{"key": "smb-1", "path": str(secret)}]
+    assert read_storage_store(config)["storages"] == []
+    assert not secret.exists()
+    assert not mount_path.exists()

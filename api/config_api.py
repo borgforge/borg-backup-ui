@@ -786,8 +786,12 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
     from repositories_api import read_repository_store
     repository_rows = read_repository_store(ui_config).get("repositories", [])
     refs_by_storage: Dict[str, List[str]] = {}
+    repositories_by_storage: Dict[str, List[str]] = {}
     for repository in repository_rows:
         storage_key = str(repository.get("storage_key") or "")
+        if storage_key:
+            label = str(repository.get("display_name") or repository.get("repository_key") or storage_key).strip()
+            repositories_by_storage.setdefault(storage_key, []).append(label)
         refs = [str(value) for value in repository.get("used_by", []) if str(value)]
         refs_by_storage.setdefault(storage_key, []).extend(refs)
     data["local_profiles"] = [
@@ -795,6 +799,8 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             **row,
             "jobs_count": len(set(refs_by_storage.get(str(row.get("storage_key") or ""), []))),
             "job_refs": sorted(set(refs_by_storage.get(str(row.get("storage_key") or ""), [])))[:10],
+            "repositories_count": len(set(repositories_by_storage.get(str(row.get("storage_key") or ""), []))),
+            "repository_refs": sorted(set(repositories_by_storage.get(str(row.get("storage_key") or ""), [])))[:10],
         }
         for row in canonical_profiles.get("local_profiles", [])
     ]
@@ -809,6 +815,8 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "storage_key": usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""),
             "jobs_count": len(set(refs_by_storage.get(usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), []))),
             "job_refs": sorted(set(refs_by_storage.get(usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), [])))[:10],
+            "repositories_count": len(set(repositories_by_storage.get(usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), []))),
+            "repository_refs": sorted(set(repositories_by_storage.get(usb_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), [])))[:10],
         }
         for row in data["usb_profiles"]
     ]
@@ -823,6 +831,8 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "storage_key": ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""),
             "jobs_count": len(set(refs_by_storage.get(ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), []))),
             "job_refs": sorted(set(refs_by_storage.get(ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), [])))[:10],
+            "repositories_count": len(set(repositories_by_storage.get(ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), []))),
+            "repository_refs": sorted(set(repositories_by_storage.get(ssh_storage_keys.get(str(row.get("key") or "").strip().lower(), ""), [])))[:10],
         }
         for row in data["storage_profiles"]
     ]
@@ -841,6 +851,7 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             key = str(row.get("key", "")).strip()
             storage_key = smb_storage_keys.get(key.lower(), "")
             refs = sorted(set(refs_by_storage.get(storage_key, [])))
+            repository_refs = sorted(set(repositories_by_storage.get(storage_key, [])))
             smb_profiles.append({
                 "key": key,
                 "storage_key": storage_key,
@@ -854,6 +865,8 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
                 "password_set": bool(pf and Path(pf).is_file()),
                 "jobs_count": len(refs),
                 "job_refs": refs[:10],
+                "repositories_count": len(repository_refs),
+                "repository_refs": repository_refs[:10],
             })
     except ValueError:
         smb_profiles = []

@@ -481,7 +481,7 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
     sess.enabled = True
     sess.profile_key = profile_key
     sess.mount_path = mount_path
-    sess.unmount_after_run = bool(meta.get("unmount_after_run", True))
+    sess.unmount_after_run = bool(meta.get("unmount_after_run", True)) and not bool(storage.get("keep_mounted", False))
 
     if _is_smb_mounted(mount_path):
         logging.info("SMB is already mounted: %s", mount_path)

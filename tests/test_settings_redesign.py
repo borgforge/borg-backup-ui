@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import re
 
 
@@ -210,6 +211,33 @@ def test_settings_layout_is_sticky_and_responsive() -> None:
     assert ".settings-workspace-header" in css
 
 
+def test_smb_profiles_expose_mount_workflow_controls() -> None:
+    script = _read("ui/js/pages/settings.js")
+    german = json.loads(_read("ui/i18n/de.json"))
+    english = json.loads(_read("ui/i18n/en.json"))
+
+    assert "generateSmbManagedMountPath" in script
+    assert "generateSmbManagedMountPathWithSuffix" in script
+    assert "extractSmbManagedPathSuffix" in script
+    assert "updateSmbAutoMountPath" in script
+    assert "dataset.smbProfileAutoPath" in script
+    assert "onSmbProfileInputChanged(event)" in script
+    assert "refreshSelectedSmbProfileMountStatus" in script
+    assert "profiles.mountStatusNow" in script
+    assert "${slug}-smb-${cleanSuffix}" in script
+    assert "data-settings-action=\"smb-profile-status\"" in script
+    assert "data-settings-action=\"smb-profile-mount\"" in script
+    assert "data-settings-action=\"smb-profile-unmount\"" in script
+    assert "data-smb-profile-mount-status" in script
+    assert "data-smb-profile-mount-at-start" in script
+    assert "data-smb-profile-keep-mounted" in script
+    assert "await loadSettings()" not in script
+    assert german["settings"]["profiles"]["mountStatusNow"] == "Mountstatus aktualisieren"
+    assert english["settings"]["profiles"]["mountStatusNow"] == "Refresh mount status"
+    assert german["settings"]["profiles"]["mountAtStart"]
+    assert english["settings"]["profiles"]["keepMounted"]
+
+
 def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() -> None:
     script = _read("ui/js/pages/settings.js")
     css = _read("ui/settings-redesign.css")
@@ -354,6 +382,10 @@ def test_profile_pages_keep_local_save_and_block_in_use_deletes() -> None:
     assert "if (await blockProfileRemovalIfInUse(row, 'usb')) return;" in script
     assert "if (await blockProfileRemovalIfInUse(row, 'smb')) return;" in script
     assert "if (await blockProfileRemovalIfInUse(row, 'storage')) return;" in script
+    assert "Repositorys:" in script
+    assert "data-smb-repositories-count" in script
+    assert "data-smb-repository-refs" in script
+    assert "profileInUseResourcesDialog" in script
 
 
 def test_profile_save_uses_live_dom_payload_and_dynamic_empty_state() -> None:

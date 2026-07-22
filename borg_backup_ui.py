@@ -3378,7 +3378,12 @@ btn.addEventListener('click',doSetup);
             self._send_api_error(429, "rate_limited", str(exc), request_id=request_id)
         except ValueError as exc:
             error_code = str(getattr(exc, "api_code", "") or "bad_request")
-            self._send_api_error(400, error_code, str(exc), request_id=request_id)
+            self._current_error_message_params = getattr(exc, "api_message_params", {}) if isinstance(getattr(exc, "api_message_params", {}), dict) else {}
+            try:
+                error_status = int(getattr(exc, "api_status", 400) or 400)
+            except (TypeError, ValueError):
+                error_status = 400
+            self._send_api_error(error_status, error_code, str(exc), request_id=request_id)
         except ApiConflictError as exc:
             self._send_api_error(409, exc.code, str(exc), request_id=request_id)
         except Exception as exc:
@@ -3388,6 +3393,7 @@ btn.addEventListener('click',doSetup);
                 self._send_api_error(500, "internal_error", str(exc), request_id=request_id)
         finally:
             self._current_request_id = ""
+            self._current_error_message_params = {}
             self._last_json_body = {}
             self._extra_response_headers = []
 
@@ -3400,9 +3406,14 @@ btn.addEventListener('click',doSetup);
             "request_id": request_id,
             "error": safe_message,  # backward-compatible field
         }
+        params = getattr(self, "_current_error_message_params", {})
+        if isinstance(params, dict) and params:
+            body["message_params"] = params
         ctx = self._extract_request_context()
         if code == "maintenance_mode":
             ctx.update(self._startup_migration_context())
+        elif safe_message:
+            self._add_context_value(ctx, "reason", safe_message[:240])
         _log(
             f'API error request_id={request_id} status={status} method={self.command} path={self.path} code={code} '
             f'context={json.dumps(ctx, ensure_ascii=False)}'
@@ -3952,6 +3963,20 @@ def _start_normal_runtime_services(config: dict) -> None:
         _log("Cron schedules applied.")
     except Exception as exc:
         _log(f"WARNING: Cron schedules could not be applied: {_mask_secrets(str(exc))}")
+
+    try:
+        from smb_profiles_api import mount_startup_smb_profiles
+        smb_mounts = mount_startup_smb_profiles(config)
+        requested = len(smb_mounts.get("requested", []))
+        if requested:
+            _log(
+                "Startup SMB mounts: "
+                f"requested={requested}, mounted={len(smb_mounts.get('mounted', []))}, "
+                f"already_mounted={len(smb_mounts.get('already_mounted', []))}, "
+                f"failed={len(smb_mounts.get('failed', []))}"
+            )
+    except Exception as exc:
+        _log(f"WARNING: Startup SMB mounts could not be processed: {_mask_secrets(str(exc))}")
 
     _start_notification_reminder_loop(config)
     _start_notification_delivery_loop(config)
