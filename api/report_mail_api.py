@@ -277,7 +277,6 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
 
     now = generated_at.strftime("%Y-%m-%d %H:%M")
     rows_html = _render_grouped_job_rows(grouped_rows, group_stats) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
-    location_summary_html = _render_location_summary(group_stats)
     oldest_latest_fmt = oldest_latest.strftime("%Y-%m-%d %H:%M") if oldest_latest else "—"
     issue_html = _render_issue_list(issues)
     log_html = _render_log_notes(log_notes)
@@ -318,11 +317,9 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
 
       {issue_html}
 
-      {location_summary_html}
-
       <h2 style="margin:22px 0 10px;font-size:15px;color:#0f172a">Job Overview</h2>
       <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:980px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:880px">
         <thead>
           <tr style="background:#f1f5f9">
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Job</th>
@@ -400,15 +397,11 @@ def _derived_job_label(st: Any) -> str:
     return ""
 
 
-def _job_secondary_line(key: str, archive_name: str) -> str:
-    parts = []
-    key_text = str(key or "").strip()
+def _job_secondary_line(_key: str, archive_name: str) -> str:
     archive_text = str(archive_name or "").strip()
-    if key_text:
-        parts.append(f"Key: {key_text}")
     if archive_text and archive_text != "—":
-        parts.append(f"Archive: {archive_text}")
-    return " · ".join(parts) if parts else "—"
+        return f"Archive: {archive_text}"
+    return "—"
 
 
 def _location_key(st: Any) -> str:
@@ -466,30 +459,6 @@ def _render_grouped_job_rows(grouped_rows: dict[str, list[str]], group_stats: di
         </tr>""")
         blocks.extend(grouped_rows.get(location, []))
     return "".join(blocks)
-
-
-def _render_location_summary(group_stats: dict[str, dict[str, int]]) -> str:
-    if not group_stats:
-        return ""
-    cells = []
-    for location in sorted(group_stats, key=_location_order):
-        stats = group_stats[location]
-        total = int(stats.get("total") or 0)
-        success = int(stats.get("success") or 0)
-        warning = int(stats.get("warning") or 0)
-        error = int(stats.get("error") or 0)
-        color = "#16a34a" if error == 0 and warning == 0 else ("#d97706" if error == 0 else "#dc2626")
-        cells.append(f"""
-        <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;vertical-align:top">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.03em">{_he(_location_label(location))}</div>
-          <div style="font-size:17px;color:{color};font-weight:900;margin-top:4px">{success}/{total} OK</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:3px">{warning} warnings · {error} errors</div>
-        </td>""")
-    return f"""
-      <h2 style="margin:22px 0 8px;font-size:15px;color:#0f172a">Locations</h2>
-      <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:8px;margin:0 -8px 18px">
-        <tr>{''.join(cells)}</tr>
-      </table>"""
 
 
 def _app_icon_img_html() -> str:

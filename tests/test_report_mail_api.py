@@ -71,11 +71,10 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
     assert "Total repository size" in html
     assert "Total duration" in html
     assert "Job Overview" in html
-    assert "Locations" in html
     assert ">Local<" in html
     assert "Appdata Lokal" in html
-    assert "appdata_local" in html
-    assert "Key: appdata_local" in html
+    assert "appdata_local" not in html
+    assert "Key: appdata_local" not in html
     assert "appdata-backup-2026-06-11_23-00-00" in html
     assert "Runs 7d" in html
     assert "Success 7d" in html
@@ -168,8 +167,8 @@ def test_weekly_report_sorts_jobs_by_location(tmp_path: Path):
 
     assert html.index(">Local<") < html.index(">USB<")
     assert html.index(">USB<") < html.index(">Storagebox<")
-    assert html.index("photos_local") < html.index("flash_usb")
-    assert html.index("flash_usb") < html.index("appdata_storagebox")
+    assert html.index("Photos - Local") < html.index("Flash - USB")
+    assert html.index("Flash - USB") < html.index("Appdata - Storagebox")
 
 
 def test_weekly_report_ignores_non_error_log_hints(tmp_path: Path):
