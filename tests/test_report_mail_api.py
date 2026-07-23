@@ -84,8 +84,9 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
     assert "appdata_local" not in html
     assert "Key: appdata_local" not in html
     assert "appdata-backup-2026-06-11_23-00-00" in html
-    assert "Runs 7d" in html
-    assert "Success 7d" in html
+    assert "Growth 7d" in html
+    assert "Runs 7d" not in html
+    assert "Success 7d" not in html
     assert "Exit</th>" not in html
     assert "No issues detected" in html
 
@@ -155,28 +156,30 @@ def test_weekly_report_treats_unsupported_cron_as_manual_activity(tmp_path: Path
     assert "expected run missing" not in html
 
 
-def test_weekly_report_success_rate_uses_recent_runs(tmp_path: Path):
+def test_weekly_report_job_details_show_repository_growth(tmp_path: Path):
     status_dir = tmp_path / "status"
     status_dir.mkdir()
 
-    _write_status(status_dir, "2026-05-01_22-00-00_appdata_storagebox.status", {
+    _write_status(status_dir, "2026-06-05_22-00-00_appdata_storagebox.status", {
         "backup_type": "appdata",
         "location": "storagebox",
-        "timestamp": "2026-05-01 22:00:00",
-        "status": "error",
+        "timestamp": "2026-06-05 22:00:00",
+        "status": "success",
+        "repository_size": 1024 ** 3,
     })
     _write_status(status_dir, "2026-06-11_22-00-00_appdata_storagebox.status", {
         "backup_type": "appdata",
         "location": "storagebox",
         "timestamp": "2026-06-11 22:00:00",
         "status": "success",
+        "repository_size": 2 * 1024 ** 3,
     })
 
     html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
-    assert "Success 7d" in html
-    assert "100%" in html
-    assert "50%" not in html
+    assert "Growth 7d" in html
+    assert "+1.0 GB" in html
+    assert "Success 7d" not in html
 
 
 def test_weekly_report_surfaces_issues_and_log_hints(tmp_path: Path):

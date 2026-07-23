@@ -223,12 +223,16 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
         repo_fmt = format_bytes(st.repository_size) if st.repository_size else "—"
         dur_fmt  = format_duration(st.duration_seconds) if st.duration_seconds else "—"
         files_fmt = f"{st.files_count:,}" if st.files_count else "—"
+        growth_value = _repo_growth_7d(all_statuses, key, period_start_dt, period_end_dt)
+        if growth_value is None:
+            growth_fmt = "—"
+            growth_color = "#64748b"
+        else:
+            prefix = "+" if growth_value > 0 else ("-" if growth_value < 0 else "")
+            growth_fmt = f"{prefix}{format_bytes(abs(growth_value))}"
+            growth_color = "#d97706" if growth_value > 0 else ("#16a34a" if growth_value < 0 else "#64748b")
         check_label = _repo_check_label(st.repository_check_status)
         check_color = "#16a34a" if st.repository_check_status == "ok" else ("#d97706" if st.repository_check_status == "overdue" else "#64748b")
-        week_cutoff = generated_at - timedelta(days=7)
-        week_runs = _count_recent_runs(all_statuses, key, week_cutoff)
-        week_success_rate = _recent_success_rate(all_statuses, key, week_cutoff)
-        success_rate = f"{week_success_rate:.0f}%" if week_success_rate is not None else "—"
 
         if key in planned_job_keys:
             note = _status_note(st)
@@ -267,8 +271,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{dur_fmt}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{repo_fmt}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{files_fmt}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{week_runs}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{success_rate}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:{growth_color};font-weight:700;white-space:nowrap">{growth_fmt}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:{check_color};white-space:nowrap">{check_label}</td>
         </tr>"""
         grouped_rows.setdefault(location_key, []).append(row_html)
@@ -283,7 +286,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     )
 
     now = generated_at.strftime("%Y-%m-%d %H:%M")
-    rows_html = _render_grouped_job_rows(grouped_rows, group_stats) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
+    rows_html = _render_grouped_job_rows(grouped_rows, group_stats) if rows else "<tr><td colspan='8' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
     oldest_latest_fmt = oldest_latest.strftime("%Y-%m-%d %H:%M") if oldest_latest else "—"
     week_activity_html = _render_week_activity(all_statuses, latest, job_meta, schedules, generated_at, period_start_dt, period_end_dt)
     issue_html = _render_issue_list(issues)
@@ -330,7 +333,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
       <h2 style="margin:22px 0 4px;font-size:15px;color:#0f172a">Job Details</h2>
       <div style="font-size:12px;color:#64748b;margin-bottom:10px">Latest known status and repository details. The weekly activity matrix above is the primary week summary.</div>
       <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:880px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:820px">
         <thead>
           <tr style="background:#f1f5f9">
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Job</th>
@@ -339,8 +342,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Duration</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Repo</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Files</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Runs 7d</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Success 7d</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Growth 7d</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Repo Check</th>
           </tr>
         </thead>
@@ -494,7 +496,7 @@ def _render_grouped_job_rows(grouped_rows: dict[str, list[str]], group_stats: di
                 summary += "s"
         blocks.append(f"""
         <tr>
-          <td colspan="9" style="padding:10px 12px;background:#eaf1f8;border-top:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee">
+          <td colspan="8" style="padding:10px 12px;background:#eaf1f8;border-top:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee">
             <span style="font-size:12px;color:#0f172a;font-weight:900;text-transform:uppercase;letter-spacing:.04em">{_he(_location_label(location))}</span>
             <span style="font-size:12px;color:#64748b;margin-left:10px">{_he(summary)}</span>
           </td>
@@ -644,7 +646,7 @@ def _render_week_manual_rows(rows: list[str]) -> str:
         <thead>
           <tr style="background:#f8fafc">
             <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Manual jobs</th>
-            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Runs 7d</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Runs</th>
             <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Last run</th>
             <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Result</th>
           </tr>
@@ -721,6 +723,25 @@ def _statuses_for_key_in_window(statuses: list, key: str, start: datetime, end: 
         if start <= st.timestamp_dt <= end:
             result.append(st)
     return result
+
+
+def _repo_growth_7d(statuses: list, key: str, period_start: datetime, period_end: datetime) -> int | None:
+    baseline = None
+    current = None
+    for st in sorted(statuses, key=lambda item: item.timestamp_dt or datetime.min):
+        if getattr(st, "key", "") != key or st.timestamp_dt is None:
+            continue
+        size = int(getattr(st, "repository_size", 0) or 0)
+        if size <= 0:
+            continue
+        if st.timestamp_dt < period_start:
+            baseline = size
+            continue
+        if st.timestamp_dt <= period_end:
+            current = size
+    if baseline is None or current is None:
+        return None
+    return current - baseline
 
 
 def _cron_expected_dates(cron: str, start: datetime, end: datetime) -> set | None:
@@ -917,32 +938,6 @@ def _status_note(st) -> str:
     if st.status == "skipped":
         return st.skip_reason_text or st.skip_reason_code or "Backup was skipped."
     return ""
-
-
-def _count_recent_runs(statuses: list, key: str, cutoff: datetime) -> int:
-    count = 0
-    for st in statuses:
-        if st.key != key or st.timestamp_dt is None:
-            continue
-        if st.timestamp_dt >= cutoff:
-            count += 1
-    return count
-
-
-def _recent_success_rate(statuses: list, key: str, cutoff: datetime) -> float | None:
-    total = 0
-    success = 0
-    for st in statuses:
-        if st.key != key or st.timestamp_dt is None:
-            continue
-        if st.timestamp_dt < cutoff:
-            continue
-        total += 1
-        if st.status == "success":
-            success += 1
-    if total == 0:
-        return None
-    return success / total * 100
 
 
 def _render_issue_list(issues: list) -> str:
