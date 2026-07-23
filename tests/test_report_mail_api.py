@@ -40,6 +40,12 @@ def _write_job_meta(root: Path, key: str, *, name: str, backup_type: str, locati
     }), encoding="utf-8")
 
 
+def _write_schedules(root: Path, schedules: dict) -> None:
+    config_dir = root / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "schedules.json").write_text(json.dumps(schedules), encoding="utf-8")
+
+
 def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
     status_dir = tmp_path / "status"
     status_dir.mkdir()
@@ -70,6 +76,7 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
     assert "Server: Tower" in html
     assert "Total repository size" in html
     assert "Total duration" in html
+    assert "Weekly Activity" in html
     assert "Job Overview" in html
     assert ">Local<" in html
     assert "Appdata Lokal" in html
@@ -80,6 +87,71 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
     assert "Success 7d" in html
     assert "Exit</th>" not in html
     assert "No issues detected" in html
+
+
+def test_weekly_report_renders_planned_activity_matrix_and_manual_jobs(tmp_path: Path):
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+
+    _write_job_meta(tmp_path, "appdata_local", name="Appdata Lokal", backup_type="appdata", location="local")
+    _write_job_meta(tmp_path, "photos_local", name="Fotos Lokal", backup_type="photos", location="local")
+    _write_job_meta(tmp_path, "vms_local", name="VMs Lokal", backup_type="vms", location="local")
+    _write_schedules(tmp_path / "scripts", {
+        "appdata_local": {"enabled": True, "cron": "0 9 * * *"},
+        "vms_local": {"enabled": True, "cron": "0 6 * * 1"},
+    })
+    _write_status(status_dir, "2026-06-12_09-04-00_appdata_local.status", {
+        "backup_type": "appdata",
+        "location": "local",
+        "timestamp": "2026-06-12 09:04:00",
+        "status": "success",
+    })
+    _write_status(status_dir, "2026-06-11_20-00-00_photos_local.status", {
+        "backup_type": "photos",
+        "location": "local",
+        "timestamp": "2026-06-11 20:00:00",
+        "status": "success",
+    })
+
+    html = _build_html_report({
+        "STATUS_DIR": str(status_dir),
+        "BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts"),
+    }, now=REPORT_NOW)
+
+    assert "Weekly Activity" in html
+    assert "Planned jobs" in html
+    assert "Manual jobs" in html
+    assert "Appdata Lokal" in html
+    assert "VMs Lokal" in html
+    assert "Fotos Lokal" in html
+    assert "Expected but not run" in html
+    assert "expected run missing" in html
+    assert "Manual" in html
+
+
+def test_weekly_report_treats_unsupported_cron_as_manual_activity(tmp_path: Path):
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+
+    _write_job_meta(tmp_path, "custom_local", name="Custom Lokal", backup_type="custom", location="local")
+    _write_schedules(tmp_path / "scripts", {
+        "custom_local": {"enabled": True, "cron": "*/15 * * * *"},
+    })
+    _write_status(status_dir, "2026-06-12_10-00-00_custom_local.status", {
+        "backup_type": "custom",
+        "location": "local",
+        "timestamp": "2026-06-12 10:00:00",
+        "status": "success",
+    })
+
+    html = _build_html_report({
+        "STATUS_DIR": str(status_dir),
+        "BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts"),
+    }, now=REPORT_NOW)
+
+    assert "Custom Lokal" in html
+    assert "Custom schedule" in html
+    assert "expected run missing" not in html
 
 
 def test_weekly_report_success_rate_uses_recent_runs(tmp_path: Path):

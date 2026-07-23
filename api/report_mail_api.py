@@ -177,6 +177,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     grouped_rows: dict[str, list[str]] = {}
     group_stats: dict[str, dict[str, int]] = {}
     job_meta = _job_metadata_by_key(config)
+    schedules = _report_schedules(config)
     success_total = 0
     total_repo_size = 0
     total_duration = 0
@@ -278,6 +279,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     now = generated_at.strftime("%Y-%m-%d %H:%M")
     rows_html = _render_grouped_job_rows(grouped_rows, group_stats) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
     oldest_latest_fmt = oldest_latest.strftime("%Y-%m-%d %H:%M") if oldest_latest else "—"
+    week_activity_html = _render_week_activity(all_statuses, latest, job_meta, schedules, generated_at)
     issue_html = _render_issue_list(issues)
     log_html = _render_log_notes(log_notes)
     logo_html = _app_icon_img_html()
@@ -314,6 +316,8 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
           {_metric_card("Oldest run", oldest_latest_fmt, "among latest job statuses")}
         </tr>
       </table>
+
+      {week_activity_html}
 
       {issue_html}
 
@@ -372,8 +376,21 @@ def _job_metadata_by_key(config: dict) -> dict[str, dict[str, str]]:
             "name": str(getattr(info, "name", "") or "").strip(),
             "display_name": str(getattr(info, "display_name", "") or "").strip(),
             "description": str(getattr(info, "description", "") or "").strip(),
+            "backup_type": str(getattr(info, "backup_type", "") or "").strip(),
+            "location": str(getattr(info, "location", "") or "").strip().lower(),
+            "enabled": bool(getattr(info, "enabled", True)),
         }
     return result
+
+
+def _report_schedules(config: dict) -> dict:
+    try:
+        from schedule_api import get_schedules
+
+        schedules = get_schedules(config)
+    except Exception:
+        return {}
+    return schedules if isinstance(schedules, dict) else {}
 
 
 def _job_label(key: str, st: Any, meta: dict[str, str]) -> str:
@@ -459,6 +476,333 @@ def _render_grouped_job_rows(grouped_rows: dict[str, list[str]], group_stats: di
         </tr>""")
         blocks.extend(grouped_rows.get(location, []))
     return "".join(blocks)
+
+
+def _render_week_activity(statuses: list, latest: dict[str, Any], job_meta: dict[str, dict[str, Any]], schedules: dict, generated_at: datetime) -> str:
+    keys = sorted(set(latest.keys()) | set(job_meta.keys()), key=lambda key: _report_key_sort(key, latest, job_meta))
+    if not keys:
+        return ""
+
+    period_start = generated_at.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=6)
+    period_end = generated_at
+    days = [period_start.date() + timedelta(days=offset) for offset in range(7)]
+    headers = "".join(
+        f"<th style='padding:8px 7px;text-align:center;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap'>{_he(day.strftime('%a'))}<div style='font-size:10px;color:#94a3b8;font-weight:600;text-transform:none'>{day.strftime('%m-%d')}</div></th>"
+        for day in days
+    )
+
+    planned_groups: dict[str, list[str]] = {}
+    manual_rows = []
+    for key in keys:
+        meta = job_meta.get(key, {})
+        if meta.get("enabled") is False and key not in latest:
+            continue
+        st = latest.get(key)
+        location = _report_location(key, st, meta)
+        label = _report_job_label(key, st, meta)
+        runs = _statuses_for_key_in_window(statuses, key, period_start, period_end)
+        schedule = schedules.get(key) if isinstance(schedules.get(key), dict) else {}
+        cron = str(schedule.get("cron") or "").strip()
+        schedule_enabled = bool(schedule.get("enabled", True))
+        expected_dates = _cron_expected_dates(cron, period_start, period_end) if cron and schedule_enabled else None
+
+        if cron and schedule_enabled and expected_dates is not None:
+            row = _render_planned_week_row(label, runs, days, expected_dates)
+            planned_groups.setdefault(location, []).append(row)
+        else:
+            reason = "Custom schedule" if cron and schedule_enabled else "Manual"
+            manual_rows.append(_render_manual_week_row(label, st, runs, reason, generated_at))
+
+    planned_html = _render_week_planned_groups(planned_groups, headers, len(days))
+    manual_html = _render_week_manual_rows(manual_rows)
+    if not planned_html and not manual_html:
+        return ""
+
+    legend = """
+      <div style="font-size:11px;color:#64748b;margin:6px 0 10px">
+        <span style="display:inline-block;margin-right:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#22c55e;vertical-align:-1px"></span> Success</span>
+        <span style="display:inline-block;margin-right:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#f59e0b;vertical-align:-1px"></span> Warning/skipped</span>
+        <span style="display:inline-block;margin-right:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#ef4444;vertical-align:-1px"></span> Error</span>
+        <span style="display:inline-block;margin-right:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;border:2px solid #f97316;vertical-align:-3px"></span> Expected but not run</span>
+        <span style="display:inline-block"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#e2e8f0;vertical-align:-1px"></span> Not scheduled</span>
+      </div>"""
+    return f"""
+      <h2 style="margin:22px 0 4px;font-size:15px;color:#0f172a">Weekly Activity</h2>
+      <div style="font-size:12px;color:#64748b;margin-bottom:4px">Scheduled jobs are compared with their cron plan. Manual jobs only show activity in the report period.</div>
+      {legend}
+      {planned_html}
+      {manual_html}
+    """
+
+
+def _render_week_planned_groups(planned_groups: dict[str, list[str]], headers: str, day_count: int) -> str:
+    if not planned_groups:
+        return ""
+    body = []
+    colspan = day_count + 2
+    for location in sorted(planned_groups, key=_location_order):
+        body.append(f"""
+        <tr>
+          <td colspan="{colspan}" style="padding:9px 10px;background:#eaf1f8;border-top:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee">
+            <span style="font-size:12px;color:#0f172a;font-weight:900;text-transform:uppercase;letter-spacing:.04em">{_he(_location_label(location))}</span>
+          </td>
+        </tr>""")
+        body.extend(planned_groups[location])
+    return f"""
+      <div style="overflow-x:auto;margin-bottom:14px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:760px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Planned jobs</th>
+            {headers}
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Week</th>
+          </tr>
+        </thead>
+        <tbody>{''.join(body)}</tbody>
+      </table>
+      </div>"""
+
+
+def _render_planned_week_row(label: str, runs: list, days: list, expected_dates: set) -> str:
+    runs_by_day: dict[Any, list] = {}
+    for st in runs:
+        if st.timestamp_dt is None:
+            continue
+        runs_by_day.setdefault(st.timestamp_dt.date(), []).append(st)
+
+    expected_count = len(expected_dates)
+    ok_expected = 0
+    missed = 0
+    cells = []
+    for day in days:
+        day_runs = runs_by_day.get(day, [])
+        state = _aggregate_day_state(day_runs)
+        expected = day in expected_dates
+        if state:
+            if expected and state == "success":
+                ok_expected += 1
+            cells.append(_week_dot_cell(state, _day_status_title(day, state, expected)))
+        elif expected:
+            missed += 1
+            cells.append(_week_dot_cell("missed", f"{day.isoformat()}: expected run missing"))
+        else:
+            cells.append(_week_dot_cell("idle", f"{day.isoformat()}: not scheduled"))
+
+    if expected_count <= 0:
+        summary = f"{len(runs)} run" + ("" if len(runs) == 1 else "s")
+        summary_color = "#64748b"
+    elif missed:
+        summary = f"{missed}/{expected_count} missed"
+        summary_color = "#f97316"
+    else:
+        summary = f"{ok_expected}/{expected_count} OK"
+        summary_color = "#16a34a"
+    return f"""
+        <tr>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;font-weight:800;color:#0f172a;white-space:nowrap">{_he(label)}</td>
+          {''.join(cells)}
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;color:{summary_color};font-weight:800;white-space:nowrap">{_he(summary)}</td>
+        </tr>"""
+
+
+def _render_week_manual_rows(rows: list[str]) -> str:
+    if not rows:
+        return ""
+    return f"""
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:4px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Manual jobs</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Runs 7d</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Last run</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Result</th>
+          </tr>
+        </thead>
+        <tbody>{''.join(rows)}</tbody>
+      </table>"""
+
+
+def _render_manual_week_row(label: str, st: Any, runs: list, reason: str, generated_at: datetime) -> str:
+    status = str(getattr(st, "status", "") or "unknown")
+    color = {
+        "success": "#16a34a",
+        "warning": "#d97706",
+        "skipped": "#d97706",
+        "error": "#dc2626",
+    }.get(status, "#64748b")
+    result = {
+        "success": "OK",
+        "warning": "Warning",
+        "skipped": "Skipped",
+        "error": "Error",
+        "unknown": "No status",
+    }.get(status, status or "No status")
+    last_run = _time_ago(st.timestamp, generated_at) if st is not None and getattr(st, "timestamp", "") else "never"
+    return f"""
+        <tr>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap">
+            <div style="font-weight:800;color:#0f172a">{_he(label)}</div>
+            <div style="font-size:11px;color:#64748b">{_he(reason)}</div>
+          </td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap">{len(runs)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;color:#475569;white-space:nowrap">{_he(last_run)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;color:{color};font-weight:800;white-space:nowrap">{_he(result)}</td>
+        </tr>"""
+
+
+def _week_dot_cell(state: str, title: str) -> str:
+    if state == "missed":
+        dot = '<span style="display:inline-block;width:11px;height:11px;border-radius:999px;border:2px solid #f97316;background:#fff7ed"></span>'
+    else:
+        color = {
+            "success": "#22c55e",
+            "warning": "#f59e0b",
+            "error": "#ef4444",
+            "idle": "#e2e8f0",
+        }.get(state, "#94a3b8")
+        dot = f'<span style="display:inline-block;width:13px;height:13px;border-radius:999px;background:{color}"></span>'
+    return f"<td title=\"{_he(title)}\" style=\"padding:9px 7px;border-bottom:1px solid #e5e7eb;text-align:center;white-space:nowrap\">{dot}</td>"
+
+
+def _day_status_title(day: Any, state: str, expected: bool) -> str:
+    suffix = "scheduled" if expected else "extra run"
+    return f"{day.isoformat()}: {state} ({suffix})"
+
+
+def _aggregate_day_state(day_runs: list) -> str:
+    statuses = {str(getattr(st, "status", "") or "").strip().lower() for st in day_runs}
+    if not statuses:
+        return ""
+    if "error" in statuses:
+        return "error"
+    if statuses & {"warning", "skipped", "cancelled"}:
+        return "warning"
+    if "success" in statuses:
+        return "success"
+    return "warning"
+
+
+def _statuses_for_key_in_window(statuses: list, key: str, start: datetime, end: datetime) -> list:
+    result = []
+    for st in statuses:
+        if getattr(st, "key", "") != key or st.timestamp_dt is None:
+            continue
+        if start <= st.timestamp_dt <= end:
+            result.append(st)
+    return result
+
+
+def _cron_expected_dates(cron: str, start: datetime, end: datetime) -> set | None:
+    parts = str(cron or "").split()
+    if len(parts) != 5:
+        return None
+    minute, hour, dom, month, dow = parts
+    if month != "*":
+        return None
+    try:
+        minute_value = int(minute)
+        hour_value = int(hour)
+    except ValueError:
+        return None
+    if minute_value < 0 or minute_value > 59 or hour_value < 0 or hour_value > 23:
+        return None
+    if dom != "*" and dow != "*":
+        return None
+
+    dow_values = _parse_report_cron_dow_values(dow) if dow != "*" else set(range(7))
+    if not dow_values:
+        return None
+    dom_value = None
+    if dom != "*":
+        try:
+            dom_value = int(dom)
+        except ValueError:
+            return None
+        if dom_value < 1 or dom_value > 31:
+            return None
+
+    dates = set()
+    current = start.date()
+    last = end.date()
+    while current <= last:
+        candidate = datetime(current.year, current.month, current.day, hour_value, minute_value)
+        if start <= candidate <= end:
+            if dom_value is not None:
+                if current.day == dom_value:
+                    dates.add(current)
+            elif _cron_dow_for_report_datetime(candidate) in dow_values:
+                dates.add(current)
+        current += timedelta(days=1)
+    return dates
+
+
+def _parse_report_cron_dow_values(raw: str) -> set[int]:
+    values: set[int] = set()
+    text = str(raw or "").strip()
+    if not text or text == "*":
+        return set(range(7))
+    for part in text.split(","):
+        item = part.strip()
+        if not item or "/" in item:
+            return set()
+        if "-" in item:
+            start_raw, end_raw = item.split("-", 1)
+            try:
+                start = int(start_raw)
+                end = int(end_raw)
+            except ValueError:
+                return set()
+            if start > end:
+                return set()
+            for value in range(start, end + 1):
+                normalized = 0 if value == 7 else value
+                if normalized < 0 or normalized > 6:
+                    return set()
+                values.add(normalized)
+            continue
+        try:
+            value = int(item)
+        except ValueError:
+            return set()
+        normalized = 0 if value == 7 else value
+        if normalized < 0 or normalized > 6:
+            return set()
+        values.add(normalized)
+    return values
+
+
+def _cron_dow_for_report_datetime(value: datetime) -> int:
+    return (value.weekday() + 1) % 7
+
+
+def _report_key_sort(key: str, latest: dict[str, Any], job_meta: dict[str, dict[str, Any]]) -> tuple:
+    meta = job_meta.get(key, {})
+    st = latest.get(key)
+    location = _report_location(key, st, meta)
+    backup_type = str(getattr(st, "backup_type", "") or meta.get("backup_type") or "unknown")
+    return (*_location_order(location), backup_type.lower(), _report_job_label(key, st, meta).lower(), key.lower())
+
+
+def _report_location(key: str, st: Any, meta: dict[str, Any]) -> str:
+    value = str(meta.get("location") or getattr(st, "location", "") or "").strip().lower()
+    if value:
+        return value
+    if "_" in key:
+        return key.rsplit("_", 1)[1].lower()
+    return "unknown"
+
+
+def _report_job_label(key: str, st: Any, meta: dict[str, Any]) -> str:
+    for value in (
+        meta.get("name"),
+        meta.get("display_name"),
+        _derived_job_label(st) if st is not None else "",
+        key.replace("_", " ").title(),
+    ):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return "Unknown job"
 
 
 def _app_icon_img_html() -> str:
