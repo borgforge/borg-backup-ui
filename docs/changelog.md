@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #284
+- Added consistent required-field markers to the Job Wizard, Restore Wizard, Repository Manager, profile settings, Apprise profile editor, user creation and confirmation dialogs.
+- Kept optional fields unmarked and wired conditional repository passphrase state so encryption `none` does not show a required passphrase marker.
+
 ### Issue #282
 - Improved the weekly HTML report layout before beta by grouping jobs by location, preferring user-facing job names and keeping archive names as secondary context.
 - Added a weekly activity view that renders scheduled jobs as a seven-day status matrix and separates manual or unsupported custom-cron jobs from schedule-based missed-run evaluation.

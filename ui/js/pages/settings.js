@@ -368,8 +368,8 @@ const SETTINGS_PROFILE_CONFIG = {
     endpointSelector: '[data-local-profile-path]',
     icon: locationIcon('local'),
     fields: [
-      ['[data-local-profile-name]', 'profiles.name'],
-      ['[data-local-profile-path]', 'profiles.basePath'],
+      ['[data-local-profile-name]', 'profiles.name', { required: true }],
+      ['[data-local-profile-path]', 'profiles.basePath', { required: true }],
     ],
   },
   usb: {
@@ -379,8 +379,8 @@ const SETTINGS_PROFILE_CONFIG = {
     endpointSelector: '[data-usb-profile-path]',
     icon: locationIcon('usb'),
     fields: [
-      ['[data-usb-profile-name]', 'profiles.name'],
-      ['[data-usb-profile-path]', 'profiles.mountPath'],
+      ['[data-usb-profile-name]', 'profiles.name', { required: true }],
+      ['[data-usb-profile-path]', 'profiles.mountPath', { required: true }],
     ],
   },
   smb: {
@@ -390,12 +390,12 @@ const SETTINGS_PROFILE_CONFIG = {
     endpointSelector: '[data-smb-profile-server]',
     icon: locationIcon('smb'),
     fields: [
-      ['[data-smb-profile-name]', 'profiles.name'],
-      ['[data-smb-profile-server]', 'profiles.host'],
-      ['[data-smb-profile-share]', 'profiles.share'],
-      ['[data-smb-profile-path]', 'profiles.mountPath'],
-      ['[data-smb-profile-username]', 'profiles.username'],
-      ['[data-smb-profile-password]', 'profiles.password'],
+      ['[data-smb-profile-name]', 'profiles.name', { required: true }],
+      ['[data-smb-profile-server]', 'profiles.host', { required: true }],
+      ['[data-smb-profile-share]', 'profiles.share', { required: true }],
+      ['[data-smb-profile-path]', 'profiles.mountPath', { required: true }],
+      ['[data-smb-profile-username]', 'profiles.username', { required: true }],
+      ['[data-smb-profile-password]', 'profiles.password', { required: (row) => row.querySelector('[data-smb-profile-password-set]')?.value !== 'true' }],
       ['[data-smb-profile-vers]', 'profiles.smbVersion'],
       ['[data-smb-profile-sec]', 'profiles.security'],
     ],
@@ -407,11 +407,11 @@ const SETTINGS_PROFILE_CONFIG = {
     endpointSelector: '[data-storage-profile-host]',
     icon: locationIcon('storagebox'),
     fields: [
-      ['[data-storage-profile-name]', 'profiles.name'],
-      ['[data-storage-profile-host]', 'profiles.host'],
+      ['[data-storage-profile-name]', 'profiles.name', { required: true }],
+      ['[data-storage-profile-host]', 'profiles.host', { required: true }],
       ['[data-storage-profile-port]', 'profiles.port'],
-      ['[data-storage-profile-user]', 'profiles.username'],
-      ['[data-storage-profile-base-path]', 'profiles.basePath'],
+      ['[data-storage-profile-user]', 'profiles.username', { required: true }],
+      ['[data-storage-profile-base-path]', 'profiles.basePath', { required: true }],
       ['[data-storage-profile-ssh-key]', 'profiles.sshKey'],
       ['[data-storage-profile-target-type]', 'profiles.targetType'],
     ],
@@ -560,13 +560,27 @@ async function blockProfileRemovalIfInUse(row, type) {
   return true;
 }
 
+function requiredMarkerHtml() {
+  return '<span class="form-required-marker" aria-hidden="true">*</span>';
+}
+
+function formLabelHtml(label, required = false) {
+  return `${required ? `${requiredMarkerHtml()} ` : ''}<span>${escHtml(label)}</span>`;
+}
+
+function settingsFieldRequired(row, control, options = {}) {
+  if (typeof options.required === 'function') return !!options.required(row, control);
+  return !!options.required;
+}
+
 function decorateSettingsProfileFields(row, fields) {
-  fields.forEach(([selector, labelKey]) => {
+  fields.forEach(([selector, labelKey, options = {}]) => {
     const control = row.querySelector(selector);
     if (!control || control.closest('.settings-profile-field')) return;
+    const required = settingsFieldRequired(row, control, options);
     const wrapper = document.createElement('label');
-    wrapper.className = 'settings-profile-field';
-    wrapper.innerHTML = `<span>${escHtml(settingsT(labelKey))}</span>`;
+    wrapper.className = `settings-profile-field${required ? ' form-label-required' : ''}`;
+    wrapper.innerHTML = `<span>${formLabelHtml(settingsT(labelKey), required)}</span>`;
     control.parentNode.insertBefore(wrapper, control);
     wrapper.appendChild(control);
   });
@@ -2023,7 +2037,7 @@ function renderSettingsGeneral(g) {
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
     `<div class="settings-body two-col">
       ${hint}
-      ${fmono('GLOBAL_DATA_DIR', settingsT('general.dataDir'), g.GLOBAL_DATA_DIR, g.GLOBAL_DATA_DIR_SUGGESTION || '/mnt/user/borg-backup-ui')}
+      ${fmono('GLOBAL_DATA_DIR', settingsT('general.dataDir'), g.GLOBAL_DATA_DIR, g.GLOBAL_DATA_DIR_SUGGESTION || '/mnt/user/borg-backup-ui', { required: true })}
       ${fmonoRO(settingsT('general.derived', { name: 'GLOBAL_LOG_DIR' }), g.GLOBAL_LOG_DIR || '')}
       ${fmonoRO(settingsT('general.derived', { name: 'STATUS_DIR' }), g.STATUS_DIR || '')}
       ${fmonoRO(settingsT('general.derived', { name: 'RESTORE_TEST_STATUS_DIR' }), g.RESTORE_TEST_STATUS_DIR || '')}
@@ -2186,9 +2200,9 @@ function renderSettingsUsers() {
         </div>
       </div>
       <div style="display:grid;grid-template-columns:2fr 1.2fr 1fr auto;gap:8px;align-items:end">
-        <div class="form-group"><label class="form-label">${settingsT('users.username')}</label><input id="user-new-name" class="form-input" type="text" placeholder="newuser"></div>
+        <div class="form-group"><label class="form-label form-label-required">${formLabelHtml(settingsT('users.username'), true)}</label><input id="user-new-name" class="form-input" type="text" placeholder="newuser"></div>
         <div class="form-group"><label class="form-label">${settingsT('users.role')}</label><select id="user-new-role" class="form-select"><option value="viewer">viewer</option><option value="operator">operator</option><option value="admin">admin</option></select></div>
-        <div class="form-group"><label class="form-label">${settingsT('users.password')}</label><input id="user-new-password" class="form-input" type="password" placeholder="${settingsT('users.passwordMin')}"></div>
+        <div class="form-group"><label class="form-label form-label-required">${formLabelHtml(settingsT('users.password'), true)}</label><input id="user-new-password" class="form-input" type="password" placeholder="${settingsT('users.passwordMin')}"></div>
         <button class="btn btn-secondary btn-sm" data-settings-action="user-create">${settingsT('users.create')}</button>
       </div>
       <div id="users-msg" class="status-message hidden" style="margin-top:8px"></div>
@@ -2590,8 +2604,10 @@ function _openSettingsDialog(cfg) {
       desc.textContent = cfg?.message || '';
     }
     const needInput = !!cfg?.input;
+    const inputRequired = needInput && cfg?.input?.required !== false;
     inputWrap.classList.toggle('hidden', !needInput);
-    inputLabel.textContent = cfg?.input?.label || '';
+    inputLabel.classList.toggle('form-label-required', inputRequired);
+    inputLabel.innerHTML = needInput ? formLabelHtml(cfg?.input?.label || '', inputRequired) : '';
     input.type = cfg?.input?.type || 'text';
     input.value = cfg?.input?.value || '';
     input.placeholder = cfg?.input?.placeholder || '';
@@ -2758,8 +2774,8 @@ async function startFactoryReset() {
         <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-data"> ${settingsT('transfer.factoryResetAckData')}</label>
         <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-secrets"> ${settingsT('transfer.factoryResetAckSecrets')}</label>
         <label class="form-checkbox-row" style="margin-top:8px"><input type="checkbox" id="factory-reset-ack-repositories"> ${settingsT('transfer.factoryResetAckRepositories')}</label>
-        <div class="form-group" style="margin-top:12px"><label class="form-label">${settingsT('transfer.factoryResetServerName', { name: server })}</label><input class="form-input" id="factory-reset-server-name" autocomplete="off"></div>
-        <div class="form-group"><label class="form-label">${settingsT('transfer.factoryResetPassword')}</label><input class="form-input" type="password" id="factory-reset-password" autocomplete="current-password"></div>`,
+        <div class="form-group" style="margin-top:12px"><label class="form-label form-label-required">${formLabelHtml(settingsT('transfer.factoryResetServerName', { name: server }), true)}</label><input class="form-input" id="factory-reset-server-name" autocomplete="off"></div>
+        <div class="form-group"><label class="form-label form-label-required">${formLabelHtml(settingsT('transfer.factoryResetPassword'), true)}</label><input class="form-input" type="password" id="factory-reset-password" autocomplete="current-password"></div>`,
       input: {
         label: settingsT('transfer.factoryResetPhrase', { phrase: status.confirmation_phrase || 'FACTORY RESET' }),
         placeholder: status.confirmation_phrase || 'FACTORY RESET',
@@ -3977,8 +3993,8 @@ function _renderAppriseUrlBuilder(provider, current = {}) {
       : (required ? settingsT('apprise.requiredFieldPlaceholder') : '');
     const examples = _appriseTokenFieldExamples(schema, key);
     return `<div class="form-group">
-      <label class="form-label" for="apprise-url-token-${escAttr(key)}">
-        ${escHtml(label)}${required ? ' *' : ''}${secret ? ` <span class="settings-muted">(${settingsT('apprise.secretField')})</span>` : ''}
+      <label class="form-label${required ? ' form-label-required' : ''}" for="apprise-url-token-${escAttr(key)}">
+        ${formLabelHtml(label, required)}${secret ? ` <span class="settings-muted">(${settingsT('apprise.secretField')})</span>` : ''}
       </label>
       <input class="form-input ${secret ? '' : 'mono'}" id="apprise-url-token-${escAttr(key)}" type="${secret ? 'password' : 'text'}" data-apprise-url-token="${escAttr(key)}" data-apprise-url-secret="${secret ? 'true' : 'false'}" data-apprise-url-required="${required ? 'true' : 'false'}" value="${escAttr(stored)}" placeholder="${escAttr(placeholder)}" autocomplete="off" oninput="onAppriseUrlFieldInput()">
       ${examples ? `<div class="form-help">${escHtml(examples)}</div>` : ''}
@@ -4185,7 +4201,7 @@ function renderSettingsAppriseProfiles() {
           <div id="apprise-profiles-msg" class="status-message hidden"></div>
           ${editing ? `<div class="settings-body two-col">
             <div class="form-group">
-              <label class="form-label" for="apprise-profile-name">${settingsT('apprise.profileName')}</label>
+              <label class="form-label form-label-required" for="apprise-profile-name">${formLabelHtml(settingsT('apprise.profileName'), true)}</label>
               <input class="form-input" id="apprise-profile-name" type="text" data-apprise-field="name" value="${escAttr(current.name || '')}" ${editing ? '' : 'disabled'}>
             </div>
             <label class="form-checkbox-row">
@@ -4197,7 +4213,7 @@ function renderSettingsAppriseProfiles() {
               ${settingsT('apprise.defaultProfile')}
             </label>
             <div class="form-group">
-              <label class="form-label" for="apprise-profile-provider">${settingsT('apprise.provider')}</label>
+              <label class="form-label form-label-required" for="apprise-profile-provider">${formLabelHtml(settingsT('apprise.provider'), true)}</label>
               <select class="form-select" id="apprise-profile-provider" data-apprise-field="provider" ${editing ? 'onchange="onAppriseProviderSelect(this.value)"' : 'disabled'}>
                 ${_renderAppriseProviderOptions(provider)}
               </select>
@@ -5641,33 +5657,37 @@ function settingsCard(title, icon, body) {
   </div>`;
 }
 
-function ftext(key, label, value) {
+function ftext(key, label, value, options = {}) {
+  const required = !!options.required;
   return `<div class="form-group">
-    <label class="form-label">${label}</label>
+    <label class="form-label${required ? ' form-label-required' : ''}">${formLabelHtml(label, required)}</label>
     <input class="form-input" type="text" data-key="${key}"
       value="${escHtml(value || '')}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
   </div>`;
 }
 
-function fpwd(key, label, value) {
+function fpwd(key, label, value, options = {}) {
+  const required = !!options.required;
   return `<div class="form-group">
-    <label class="form-label">${label}</label>
+    <label class="form-label${required ? ' form-label-required' : ''}">${formLabelHtml(label, required)}</label>
     <input class="form-input" type="password" data-key="${key}"
       value="${escHtml(value || '')}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
   </div>`;
 }
 
-function fnum(key, label, value) {
+function fnum(key, label, value, options = {}) {
+  const required = !!options.required;
   return `<div class="form-group">
-    <label class="form-label">${label}</label>
+    <label class="form-label${required ? ' form-label-required' : ''}">${formLabelHtml(label, required)}</label>
     <input class="form-input" type="number" min="0" data-key="${key}"
       value="${escHtml(value || '')}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
   </div>`;
 }
 
-function fmono(key, label, value, placeholder = '') {
+function fmono(key, label, value, placeholder = '', options = {}) {
+  const required = !!options.required;
   return `<div class="form-group" style="grid-column:1/-1">
-    <label class="form-label">${label}</label>
+    <label class="form-label${required ? ' form-label-required' : ''}">${formLabelHtml(label, required)}</label>
     <input class="form-input mono" type="text" data-key="${key}"
       value="${escHtml(value || '')}" placeholder="${escHtml(placeholder || '')}" onchange="markSettingsDirty()" oninput="markSettingsDirty()">
   </div>`;

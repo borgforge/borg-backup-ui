@@ -602,7 +602,7 @@
         <div class="settings-body two-col" style="padding-top:10px">
           <div class="form-group" style="grid-column:1/-1" id="restore-step-panel-1">
             <header class="restore-workspace-header"><div><small data-i18n="restore.stepOne">Schritt 1</small><h2 data-i18n="restore.selectJob">Backup-Job auswählen</h2><p data-i18n="restore.jobSidebarHint">Die verfügbaren Jobs sind links nach Standort gruppiert.</p></div><span id="restore-job-ready-badge" class="ui-badge"></span></header>
-            <label class="form-label" data-i18n="restore.selectJob">1. Job auswählen</label>
+            <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.selectJob">1. Job auswählen</span></label>
             <select id="restore-job-sel" class="restore-select">
               <option value="" data-i18n="restore.chooseJob">— Job wählen —</option>
             </select>
@@ -611,7 +611,7 @@
 
           <div class="form-group" style="grid-column:1/-1; display:none" id="restore-step-panel-2">
             <header class="restore-workspace-header"><div><small data-i18n="restore.stepTwo">Schritt 2</small><h2 data-i18n="restore.selectArchive">Archiv auswählen</h2><p id="restore-archive-context"></p></div><span id="restore-archive-count" class="ui-badge"></span></header>
-            <label class="form-label" data-i18n="restore.selectArchive">2. Archiv auswählen</label>
+            <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.selectArchive">2. Archiv auswählen</span></label>
             <select id="restore-archive-sel" class="restore-select">
               <option value="" data-i18n="restore.chooseArchive">— Archiv wählen —</option>
             </select>
@@ -645,11 +645,11 @@
             <div class="restore-target-grid">
             <section class="restore-form-section"><header data-i18n="restore.sourceTarget">Quell- und Zielpfad</header>
             <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label" data-i18n="restore.sourcePath">Quellpfad (Archiv)</label>
+              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.sourcePath">Quellpfad (Archiv)</span></label>
               <input id="restore-source-path" class="form-input mono" type="text" readonly value="">
             </div>
             <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label" data-i18n="restore.targetDirectory">Zielordner</label>
+              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.targetDirectory">Zielordner</span></label>
               <input id="restore-target-path" class="form-input mono" type="text" placeholder="/mnt/user/" list="restore-target-suggestions" autocomplete="off">
               <datalist id="restore-target-suggestions"></datalist>
               <div class="text-muted" style="font-size:12px;margin-top:6px" data-i18n="restore.targetSuggestion">Vorschlag: /mnt/user/restore</div>
@@ -1107,7 +1107,7 @@
         <input class="form-input" type="text" id="repository-lifecycle-name-input" autocomplete="off">
       </div>
       <div class="form-group repository-lifecycle-confirm-field hidden" id="repository-lifecycle-phrase-group">
-        <label class="form-label" for="repository-lifecycle-phrase-input" data-i18n="storage.repositoryConfirmDeletePhrase">Zur Bestätigung DELETE eingeben</label>
+        <label class="form-label form-label-required" for="repository-lifecycle-phrase-input"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="storage.repositoryConfirmDeletePhrase">Zur Bestätigung DELETE eingeben</span></label>
         <input class="form-input mono" type="text" id="repository-lifecycle-phrase-input" autocomplete="off" placeholder="DELETE" data-i18n-placeholder="storage.repositoryConfirmDeletePlaceholder">
       </div>
     </div>
@@ -1145,7 +1145,7 @@
           <h4 data-i18n="storage.repositoryStepStorageTitle">Vorhandenes Speicherziel auswählen</h4>
           <div class="settings-grid repository-manager-form-grid">
             <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label" data-i18n="storage.storageTargetExistingLabel">Vorhandenes Speicherziel</label>
+              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="storage.storageTargetExistingLabel">Vorhandenes Speicherziel</span></label>
               <select class="form-select" id="repository-manager-storage"></select>
               <div class="form-hint" data-i18n="storage.repositoryStorageManagedHint">Speicherziele werden zentral unter Einstellungen angelegt und geprüft.</div>
             </div>
@@ -1169,12 +1169,12 @@
             <h4 data-i18n="storage.repositorySectionIdentity">Name und Pfad</h4>
             <div class="settings-grid repository-manager-form-grid">
               <div class="form-group">
-                <label class="form-label" data-i18n="storage.repositoryDisplayName">Anzeigename</label>
+                <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="storage.repositoryDisplayName">Anzeigename</span></label>
                 <input class="form-input" type="text" id="repository-manager-display-name" placeholder="Appdata - USB" data-i18n-placeholder="storage.repositoryDisplayNamePlaceholder">
               </div>
               <input type="hidden" id="repository-manager-repository-name" value="">
               <div class="form-group" style="grid-column:1/-1">
-                <label class="form-label" data-i18n="storage.repositoryRelativePath">Repository-Pfad im Speicherziel</label>
+                <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="storage.repositoryRelativePath">Repository-Pfad im Speicherziel</span></label>
                 <div class="repository-manager-path-control">
                   <input class="form-input mono" type="text" id="repository-manager-relative-path" placeholder="borg-backup-appdata" data-i18n-placeholder="storage.repositoryRelativePathPlaceholder" aria-controls="repository-manager-browser" aria-expanded="false">
                   <button class="btn btn-secondary hidden" type="button" id="repository-manager-browser-btn" data-i18n="storage.repositoryBrowse">Durchsuchen</button>
@@ -1213,12 +1213,12 @@
                 <div class="form-hint" id="repository-manager-encryption-description"></div>
               </div>
               <div class="form-group" id="repository-manager-passphrase-group">
-                <label class="form-label" data-i18n="storage.repositoryPassphrase">Passphrase</label>
+                <label class="form-label form-label-required"><span class="form-required-marker" id="repository-manager-passphrase-required-marker" aria-hidden="true">*</span><span data-i18n="storage.repositoryPassphrase">Passphrase</span></label>
                 <input class="form-input" type="password" id="repository-manager-passphrase" autocomplete="new-password">
                 <div class="form-hint" data-i18n="storage.repositoryPassphraseHint">Beim Erstellen erforderlich, beim Import optional zum Speichern der Repository-Passphrase.</div>
               </div>
               <div class="form-group hidden" id="repository-manager-key-data-group" style="grid-column:1/-1">
-                <label class="form-label" data-i18n="storage.repositoryKeyExport">Borg-Key-Export</label>
+                <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="storage.repositoryKeyExport">Borg-Key-Export</span></label>
                 <textarea class="form-input mono" id="repository-manager-key-data" rows="6" autocomplete="off" spellcheck="false"></textarea>
                 <div class="form-hint" data-i18n="storage.repositoryKeyExportHint">Nur beim Import eines Keyfile-Repositories erforderlich, falls der passende Schlüssel nicht bereits auf diesem System vorhanden ist.</div>
               </div>
@@ -1322,12 +1322,12 @@
         <div id="wizard-error-1" class="status-message error hidden"></div>
         <div class="settings-body two-col wizard-step1-layout">
           <div class="form-group" style="grid-column:1/-1">
-            <label class="form-label"><span data-i18n="wizard.jobName">Job-Name</span> <span class="form-hint" data-i18n="wizard.displayNameHint">(Anzeigename)</span></label>
+            <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.jobName">Job-Name</span> <span class="form-hint" data-i18n="wizard.displayNameHint">(Anzeigename)</span></label>
             <input class="form-input" type="text" id="wiz-job-name"
               placeholder="z.B. Borg Backup (Meine Daten)" data-i18n-placeholder="wizard.jobNamePlaceholder">
           </div>
           <div class="form-group">
-            <label class="form-label"><span data-i18n="wizard.typeId">Typ-ID</span> <span class="form-hint" data-i18n="wizard.typeIdHint">(nur a–z, 0–9, _)</span></label>
+            <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.typeId">Typ-ID</span> <span class="form-hint" data-i18n="wizard.typeIdHint">(nur a–z, 0–9, _)</span></label>
             <input class="form-input mono" type="text" id="wiz-type-id"
               placeholder="z.B. meinedaten" data-i18n-placeholder="wizard.typeIdPlaceholder">
           </div>
@@ -1412,7 +1412,7 @@
               <span data-i18n="wizard.sourcesSectionHint">Daten auswählen und optionale Unterpfade auslassen.</span>
             </header>
             <div class="form-group">
-              <label class="form-label"><span data-i18n="wizard.sourcePaths">Quellpfade</span> <span class="form-hint" data-i18n="wizard.sourcePathsHint">(ab /mnt: ↑/↓ auswählen, → Verzeichnis öffnen, Enter übernehmen)</span></label>
+              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.sourcePaths">Quellpfade</span> <span class="form-hint" data-i18n="wizard.sourcePathsHint">(ab /mnt: ↑/↓ auswählen, → Verzeichnis öffnen, Enter übernehmen)</span></label>
               <div class="wizard-path-control">
                 <input class="form-input mono" type="text" id="wiz-source-path-input" placeholder="/mnt/user/...">
                 <div id="wiz-source-path-suggest" class="wizard-path-suggest hidden"></div>
@@ -1447,7 +1447,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label" data-i18n="wizard.storageTarget">Speicherziel</label>
+              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.storageTarget">Speicherziel</span></label>
               <select class="form-select" id="wiz-storage-key"></select>
               <div id="wiz-storage-target-hint" class="form-hint wizard-step2-field-hint"></div>
             </div>
@@ -1469,7 +1469,7 @@
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label" data-i18n="wizard.repositorySelect">Repository</label>
+              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.repositorySelect">Repository</span></label>
               <select class="form-select" id="wiz-repository-key"></select>
               <div id="wiz-repository-hint" class="form-hint wizard-step2-field-hint"></div>
             </div>
