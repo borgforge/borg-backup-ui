@@ -280,7 +280,6 @@
     });
     document.getElementById('wiz-location')?.addEventListener('change', wizardAutoFill);
     document.getElementById('wiz-storage-key')?.addEventListener('change', wizardAutoFill);
-    document.getElementById('wiz-smb-mount-now-btn')?.addEventListener('click', wizardMountSelectedSmbProfile);
     document.getElementById('wiz-repository-key')?.addEventListener('change', wizardApplySelectedRepository);
     document.getElementById('wiz-icon')?.addEventListener('change', wizardUpdateIconPreview);
     document.getElementById('wiz-icon-color')?.addEventListener('change', wizardUpdateIconPreview);

@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #283
+- Removed direct SMB mount controls from the Job Wizard so job creation only selects storage targets and repositories already present in the canonical inventory.
+- Kept manual SMB mount and unmount actions in Settings > SMB Profiles, and left repository creation/import responsible for direct storage access when needed.
+- Preserved backend SMB job mount metadata defaults for existing jobs and runtime execution while no longer exposing those controls during job creation.
+
 ### Issue #282
 - Improved the weekly HTML report layout before beta by grouping jobs by location, preferring user-facing job names and keeping archive names as secondary context.
 - Added a weekly activity view that renders scheduled jobs as a seven-day status matrix and separates manual or unsupported custom-cron jobs from schedule-based missed-run evaluation.
