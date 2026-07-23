@@ -24,6 +24,22 @@ def _write_status(status_dir: Path, name: str, data: dict) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
+def _write_job_meta(root: Path, key: str, *, name: str, backup_type: str, location: str) -> None:
+    scripts_dir = root / "scripts"
+    jobs_dir = root / "config" / "jobs"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    (jobs_dir / f"{key}.json").write_text(json.dumps({
+        "schema_version": 3,
+        "job_key": key,
+        "name": name,
+        "backup_type": backup_type,
+        "location": location,
+        "repository_key": f"repo_{key}",
+        "source_paths": ["/mnt/user/appdata"],
+    }), encoding="utf-8")
+
+
 def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
     status_dir = tmp_path / "status"
     status_dir.mkdir()
@@ -41,7 +57,13 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
         "repository_check_status": "ok",
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir), "HOSTNAME": "Tower"}, now=REPORT_NOW)
+    _write_job_meta(tmp_path, "appdata_local", name="Appdata Lokal", backup_type="appdata", location="local")
+
+    html = _build_html_report({
+        "STATUS_DIR": str(status_dir),
+        "BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts"),
+        "HOSTNAME": "Tower",
+    }, now=REPORT_NOW)
 
     assert "Weekly Report" in html
     assert "data:image/png;base64" in html
@@ -49,7 +71,11 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
     assert "Total repository size" in html
     assert "Total duration" in html
     assert "Job Overview" in html
+    assert "Locations" in html
+    assert ">Local<" in html
+    assert "Appdata Lokal" in html
     assert "appdata_local" in html
+    assert "Key: appdata_local" in html
     assert "appdata-backup-2026-06-11_23-00-00" in html
     assert "Runs 7d" in html
     assert "Success 7d" in html
@@ -140,8 +166,10 @@ def test_weekly_report_sorts_jobs_by_location(tmp_path: Path):
 
     html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
-    assert html.index("photos_local") < html.index("appdata_storagebox")
-    assert html.index("appdata_storagebox") < html.index("flash_usb")
+    assert html.index(">Local<") < html.index(">USB<")
+    assert html.index(">USB<") < html.index(">Storagebox<")
+    assert html.index("photos_local") < html.index("flash_usb")
+    assert html.index("flash_usb") < html.index("appdata_storagebox")
 
 
 def test_weekly_report_ignores_non_error_log_hints(tmp_path: Path):

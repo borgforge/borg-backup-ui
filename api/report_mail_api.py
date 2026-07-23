@@ -10,7 +10,7 @@ import re
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 
 _REPORT_CRON_BEGIN = "# --- BORG-BACKUP-UI WEEKLY-REPORT BEGIN ---"
@@ -174,6 +174,9 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     hostname = str(config.get("HOSTNAME") or config.get("SERVER_NAME") or "").strip() or "Unraid"
 
     rows = []
+    grouped_rows: dict[str, list[str]] = {}
+    group_stats: dict[str, dict[str, int]] = {}
+    job_meta = _job_metadata_by_key(config)
     success_total = 0
     total_repo_size = 0
     total_duration = 0
@@ -183,6 +186,11 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     log_notes = []
 
     for key, st in sorted(latest.items(), key=lambda item: _status_sort_key(item[1], item[0])):
+        location_key = _location_key(st)
+        meta = job_meta.get(key, {})
+        job_label = _job_label(key, st, meta)
+        archive_fmt = st.archive_name or "—"
+        secondary = _job_secondary_line(key, archive_fmt)
         status_color = {
             "success": "#22c55e",
             "skipped": "#f59e0b",
@@ -209,7 +217,6 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
         repo_fmt = format_bytes(st.repository_size) if st.repository_size else "—"
         dur_fmt  = format_duration(st.duration_seconds) if st.duration_seconds else "—"
         files_fmt = f"{st.files_count:,}" if st.files_count else "—"
-        archive_fmt = st.archive_name or "—"
         check_label = _repo_check_label(st.repository_check_status)
         check_color = "#16a34a" if st.repository_check_status == "ok" else ("#d97706" if st.repository_check_status == "overdue" else "#64748b")
         week_cutoff = generated_at - timedelta(days=7)
@@ -219,22 +226,31 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
 
         note = _status_note(st)
         if note:
-            issues.append((key, note, status_color))
+            issues.append((job_label, note, status_color))
         if st.timestamp_dt and (generated_at - st.timestamp_dt) > timedelta(days=7):
-            issues.append((key, f"Last run was {_time_ago(st.timestamp, generated_at)}.", "#d97706"))
+            issues.append((job_label, f"Last run was {_time_ago(st.timestamp, generated_at)}.", "#d97706"))
         if st.repository_check_status == "overdue":
-            issues.append((key, "Repository check is overdue.", "#d97706"))
+            issues.append((job_label, "Repository check is overdue.", "#d97706"))
 
         if st.status == "error":
             log_summary = _summarize_log(st.log_file)
             if log_summary:
-                log_notes.append((key, st, log_summary))
+                log_notes.append((job_label, st, log_summary))
 
-        rows.append(f"""
+        group = group_stats.setdefault(location_key, {"total": 0, "success": 0, "warning": 0, "error": 0})
+        group["total"] += 1
+        if st.status == "success":
+            group["success"] += 1
+        elif st.status in {"warning", "skipped"}:
+            group["warning"] += 1
+        elif st.status == "error":
+            group["error"] += 1
+
+        row_html = f"""
         <tr>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;white-space:nowrap">
-            <div style="font-weight:700;color:#0f172a;white-space:nowrap">{_he(key)}</div>
-            <div style="font-size:12px;color:#64748b;white-space:nowrap">{_he(archive_fmt)}</div>
+            <div style="font-weight:800;color:#0f172a;white-space:nowrap">{_he(job_label)}</div>
+            <div style="font-size:12px;color:#64748b;white-space:nowrap">{_he(secondary)}</div>
           </td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:{status_color};font-weight:700;white-space:nowrap">{status_label}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#475569;font-size:13px;white-space:nowrap">
@@ -247,7 +263,9 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{week_runs}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{success_rate}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:{check_color};white-space:nowrap">{check_label}</td>
-        </tr>""")
+        </tr>"""
+        grouped_rows.setdefault(location_key, []).append(row_html)
+        rows.append(row_html)
 
     total = len(latest)
     error_total = sum(1 for st in latest.values() if st.status == "error")
@@ -258,7 +276,8 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     )
 
     now = generated_at.strftime("%Y-%m-%d %H:%M")
-    rows_html = "".join(rows) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
+    rows_html = _render_grouped_job_rows(grouped_rows, group_stats) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
+    location_summary_html = _render_location_summary(group_stats)
     oldest_latest_fmt = oldest_latest.strftime("%Y-%m-%d %H:%M") if oldest_latest else "—"
     issue_html = _render_issue_list(issues)
     log_html = _render_log_notes(log_notes)
@@ -299,12 +318,14 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
 
       {issue_html}
 
+      {location_summary_html}
+
       <h2 style="margin:22px 0 10px;font-size:15px;color:#0f172a">Job Overview</h2>
       <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:980px">
         <thead>
           <tr style="background:#f1f5f9">
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Job / Archive</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Job</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Status</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Last Run</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Duration</th>
@@ -333,6 +354,144 @@ def _he(s: str) -> str:
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _job_metadata_by_key(config: dict) -> dict[str, dict[str, str]]:
+    if not config.get("BACKUP_SCRIPTS_DIR"):
+        return {}
+    try:
+        from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
+
+        data_root = resolve_data_root(config)
+        scripts_dir = resolve_scripts_dir(config)
+        jobs = discover_jobs(scripts_dir, data_root)
+    except Exception:
+        return {}
+
+    result: dict[str, dict[str, str]] = {}
+    for info in jobs:
+        key = str(getattr(info, "key", "") or "").strip()
+        if not key:
+            continue
+        result[key] = {
+            "name": str(getattr(info, "name", "") or "").strip(),
+            "display_name": str(getattr(info, "display_name", "") or "").strip(),
+            "description": str(getattr(info, "description", "") or "").strip(),
+        }
+    return result
+
+
+def _job_label(key: str, st: Any, meta: dict[str, str]) -> str:
+    for value in (
+        meta.get("name"),
+        meta.get("display_name"),
+        _derived_job_label(st),
+        key,
+    ):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return "Unknown job"
+
+
+def _derived_job_label(st: Any) -> str:
+    backup_type = str(getattr(st, "backup_type", "") or "").strip()
+    location = str(getattr(st, "location", "") or "").strip()
+    if backup_type and backup_type != "unknown":
+        return f"{backup_type.replace('_', ' ').title()} - {_location_label(location)}"
+    return ""
+
+
+def _job_secondary_line(key: str, archive_name: str) -> str:
+    parts = []
+    key_text = str(key or "").strip()
+    archive_text = str(archive_name or "").strip()
+    if key_text:
+        parts.append(f"Key: {key_text}")
+    if archive_text and archive_text != "—":
+        parts.append(f"Archive: {archive_text}")
+    return " · ".join(parts) if parts else "—"
+
+
+def _location_key(st: Any) -> str:
+    raw = str(getattr(st, "location", "") or "unknown").strip().lower()
+    return raw or "unknown"
+
+
+def _location_label(location: str) -> str:
+    return {
+        "local": "Local",
+        "usb": "USB",
+        "smb": "SMB",
+        "storagebox": "Storagebox",
+        "custom": "Custom",
+        "unknown": "Unknown",
+    }.get(str(location or "unknown").strip().lower(), str(location or "Unknown").strip().title())
+
+
+def _location_order(location: str) -> tuple[int, str]:
+    order = {
+        "local": 0,
+        "usb": 1,
+        "smb": 2,
+        "storagebox": 3,
+        "custom": 4,
+        "unknown": 9,
+    }
+    key = str(location or "unknown").strip().lower() or "unknown"
+    return (order.get(key, 8), key)
+
+
+def _render_grouped_job_rows(grouped_rows: dict[str, list[str]], group_stats: dict[str, dict[str, int]]) -> str:
+    blocks = []
+    for location in sorted(grouped_rows, key=_location_order):
+        stats = group_stats.get(location, {})
+        total = int(stats.get("total") or 0)
+        success = int(stats.get("success") or 0)
+        warning = int(stats.get("warning") or 0)
+        error = int(stats.get("error") or 0)
+        summary = f"{success}/{total} OK"
+        if warning:
+            summary += f" · {warning} warning"
+            if warning != 1:
+                summary += "s"
+        if error:
+            summary += f" · {error} error"
+            if error != 1:
+                summary += "s"
+        blocks.append(f"""
+        <tr>
+          <td colspan="9" style="padding:10px 12px;background:#eaf1f8;border-top:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee">
+            <span style="font-size:12px;color:#0f172a;font-weight:900;text-transform:uppercase;letter-spacing:.04em">{_he(_location_label(location))}</span>
+            <span style="font-size:12px;color:#64748b;margin-left:10px">{_he(summary)}</span>
+          </td>
+        </tr>""")
+        blocks.extend(grouped_rows.get(location, []))
+    return "".join(blocks)
+
+
+def _render_location_summary(group_stats: dict[str, dict[str, int]]) -> str:
+    if not group_stats:
+        return ""
+    cells = []
+    for location in sorted(group_stats, key=_location_order):
+        stats = group_stats[location]
+        total = int(stats.get("total") or 0)
+        success = int(stats.get("success") or 0)
+        warning = int(stats.get("warning") or 0)
+        error = int(stats.get("error") or 0)
+        color = "#16a34a" if error == 0 and warning == 0 else ("#d97706" if error == 0 else "#dc2626")
+        cells.append(f"""
+        <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;vertical-align:top">
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;font-weight:800;letter-spacing:.03em">{_he(_location_label(location))}</div>
+          <div style="font-size:17px;color:{color};font-weight:900;margin-top:4px">{success}/{total} OK</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:3px">{warning} warnings · {error} errors</div>
+        </td>""")
+    return f"""
+      <h2 style="margin:22px 0 8px;font-size:15px;color:#0f172a">Locations</h2>
+      <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:8px;margin:0 -8px 18px">
+        <tr>{''.join(cells)}</tr>
+      </table>"""
+
+
 def _app_icon_img_html() -> str:
     icon_path = Path(__file__).resolve().parents[1] / "ui" / "assets" / "app-icon.png"
     try:
@@ -347,13 +506,6 @@ def _app_icon_img_html() -> str:
 
 
 def _status_sort_key(st, fallback_key: str) -> tuple:
-    location_order = {
-        "local": 0,
-        "storagebox": 1,
-        "usb": 2,
-        "smb": 3,
-        "unknown": 9,
-    }
     backup_type_order = {
         "appdata": 0,
         "flash": 1,
@@ -366,8 +518,7 @@ def _status_sort_key(st, fallback_key: str) -> tuple:
     location = str(getattr(st, "location", "") or "unknown")
     backup_type = str(getattr(st, "backup_type", "") or "unknown")
     return (
-        location_order.get(location.lower(), 8),
-        location.lower(),
+        *_location_order(location),
         backup_type_order.get(backup_type, backup_type_order.get(backup_type.lower(), 8)),
         backup_type.lower(),
         fallback_key.lower(),

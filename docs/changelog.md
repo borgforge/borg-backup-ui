@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #282
+- Improved the weekly HTML report layout before beta by grouping jobs by location, preferring user-facing job names and keeping job keys/archive names as secondary context.
+
 ### Issue #264
 - Removed the native ntfy API module, direct ntfy delivery client and native ntfy dispatch plumbing before the beta baseline.
 - Renamed reusable notification message builders away from ntfy-specific names while keeping Apprise, mail, restore-test and reminder message formatting intact.
