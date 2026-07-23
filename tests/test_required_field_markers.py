@@ -20,10 +20,17 @@ def _assert_required_i18n_label(html: str, key: str) -> None:
 
 def test_required_marker_has_shared_visual_style() -> None:
     css = _read("ui/style.css")
+    settings_css = _read("ui/settings-redesign.css")
 
     assert ".form-label.form-label-required" in css
     assert ".form-required-marker" in css
     assert "color: var(--error)" in css
+    assert ".settings-profile-editor.readonly .settings-profile-field .form-required-marker" in settings_css
+    readonly_rule = settings_css.split(
+        ".settings-profile-editor.readonly .settings-profile-field .form-required-marker",
+        1,
+    )[1].split("}", 1)[0]
+    assert "display: none" in readonly_rule
 
 
 def test_restore_job_and_repository_wizards_mark_required_fields() -> None:
