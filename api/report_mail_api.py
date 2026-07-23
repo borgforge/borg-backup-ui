@@ -167,10 +167,9 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     all_statuses = store.load()
     latest = store.get_latest_per_key(all_statuses)
     generated_at = now or datetime.now()
-
-    run_dates = [st.timestamp_dt for st in all_statuses if st.timestamp_dt is not None]
-    period_start = min(run_dates).strftime("%Y-%m-%d %H:%M") if run_dates else "no data"
-    period_end = max(run_dates).strftime("%Y-%m-%d %H:%M") if run_dates else "no data"
+    period_start_dt, period_end_dt = _weekly_report_period(generated_at)
+    period_start = period_start_dt.strftime("%Y-%m-%d %H:%M")
+    period_end = period_end_dt.strftime("%Y-%m-%d %H:%M")
     hostname = str(config.get("HOSTNAME") or config.get("SERVER_NAME") or "").strip() or "Unraid"
 
     rows = []
@@ -178,6 +177,12 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     group_stats: dict[str, dict[str, int]] = {}
     job_meta = _job_metadata_by_key(config)
     schedules = _report_schedules(config)
+    planned_job_keys = _planned_job_keys_for_period(
+        set(latest.keys()) | set(job_meta.keys()),
+        schedules,
+        period_start_dt,
+        period_end_dt,
+    )
     success_total = 0
     total_repo_size = 0
     total_duration = 0
@@ -225,13 +230,14 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
         week_success_rate = _recent_success_rate(all_statuses, key, week_cutoff)
         success_rate = f"{week_success_rate:.0f}%" if week_success_rate is not None else "—"
 
-        note = _status_note(st)
-        if note:
-            issues.append((job_label, note, status_color))
-        if st.timestamp_dt and (generated_at - st.timestamp_dt) > timedelta(days=7):
-            issues.append((job_label, f"Last run was {_time_ago(st.timestamp, generated_at)}.", "#d97706"))
-        if st.repository_check_status == "overdue":
-            issues.append((job_label, "Repository check is overdue.", "#d97706"))
+        if key in planned_job_keys:
+            note = _status_note(st)
+            if note:
+                issues.append((job_label, note, status_color))
+            if st.timestamp_dt and st.timestamp_dt < period_start_dt:
+                issues.append((job_label, f"No run in this report period; last run was {_time_ago(st.timestamp, generated_at)}.", "#d97706"))
+            if st.repository_check_status == "overdue":
+                issues.append((job_label, "Repository check is overdue.", "#d97706"))
 
         if st.status == "error":
             log_summary = _summarize_log(st.log_file)
@@ -279,7 +285,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     now = generated_at.strftime("%Y-%m-%d %H:%M")
     rows_html = _render_grouped_job_rows(grouped_rows, group_stats) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
     oldest_latest_fmt = oldest_latest.strftime("%Y-%m-%d %H:%M") if oldest_latest else "—"
-    week_activity_html = _render_week_activity(all_statuses, latest, job_meta, schedules, generated_at)
+    week_activity_html = _render_week_activity(all_statuses, latest, job_meta, schedules, generated_at, period_start_dt, period_end_dt)
     issue_html = _render_issue_list(issues)
     log_html = _render_log_notes(log_notes)
     logo_html = _app_icon_img_html()
@@ -321,7 +327,8 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
 
       {issue_html}
 
-      <h2 style="margin:22px 0 10px;font-size:15px;color:#0f172a">Job Overview</h2>
+      <h2 style="margin:22px 0 4px;font-size:15px;color:#0f172a">Job Details</h2>
+      <div style="font-size:12px;color:#64748b;margin-bottom:10px">Latest known status and repository details. The weekly activity matrix above is the primary week summary.</div>
       <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:880px">
         <thead>
@@ -391,6 +398,24 @@ def _report_schedules(config: dict) -> dict:
     except Exception:
         return {}
     return schedules if isinstance(schedules, dict) else {}
+
+
+def _weekly_report_period(generated_at: datetime) -> tuple[datetime, datetime]:
+    start = generated_at.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=6)
+    return start, generated_at
+
+
+def _planned_job_keys_for_period(keys: set[str], schedules: dict, period_start: datetime, period_end: datetime) -> set[str]:
+    planned: set[str] = set()
+    for key in keys:
+        schedule = schedules.get(key) if isinstance(schedules.get(key), dict) else {}
+        cron = str(schedule.get("cron") or "").strip()
+        if not cron or not bool(schedule.get("enabled", True)):
+            continue
+        expected_dates = _cron_expected_dates(cron, period_start, period_end)
+        if expected_dates is not None:
+            planned.add(key)
+    return planned
 
 
 def _job_label(key: str, st: Any, meta: dict[str, str]) -> str:
@@ -478,13 +503,19 @@ def _render_grouped_job_rows(grouped_rows: dict[str, list[str]], group_stats: di
     return "".join(blocks)
 
 
-def _render_week_activity(statuses: list, latest: dict[str, Any], job_meta: dict[str, dict[str, Any]], schedules: dict, generated_at: datetime) -> str:
+def _render_week_activity(
+    statuses: list,
+    latest: dict[str, Any],
+    job_meta: dict[str, dict[str, Any]],
+    schedules: dict,
+    generated_at: datetime,
+    period_start: datetime,
+    period_end: datetime,
+) -> str:
     keys = sorted(set(latest.keys()) | set(job_meta.keys()), key=lambda key: _report_key_sort(key, latest, job_meta))
     if not keys:
         return ""
 
-    period_start = generated_at.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=6)
-    period_end = generated_at
     days = [period_start.date() + timedelta(days=offset) for offset in range(7)]
     headers = "".join(
         f"<th style='padding:8px 7px;text-align:center;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap'>{_he(day.strftime('%a'))}<div style='font-size:10px;color:#94a3b8;font-weight:600;text-transform:none'>{day.strftime('%m-%d')}</div></th>"

@@ -74,10 +74,11 @@ def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
     assert "Weekly Report" in html
     assert "data:image/png;base64" in html
     assert "Server: Tower" in html
+    assert "Period: 2026-06-06 00:00 to 2026-06-12 12:00" in html
     assert "Total repository size" in html
     assert "Total duration" in html
     assert "Weekly Activity" in html
-    assert "Job Overview" in html
+    assert "Job Details" in html
     assert ">Local<" in html
     assert "Appdata Lokal" in html
     assert "appdata_local" not in html
@@ -181,6 +182,9 @@ def test_weekly_report_success_rate_uses_recent_runs(tmp_path: Path):
 def test_weekly_report_surfaces_issues_and_log_hints(tmp_path: Path):
     status_dir = tmp_path / "status"
     status_dir.mkdir()
+    _write_schedules(tmp_path / "scripts", {
+        "flash_storagebox": {"enabled": True, "cron": "0 22 * * *"},
+    })
     log_file = tmp_path / "backup.log"
     log_file.write_text(
         "2026-06-11 INFO Start\n"
@@ -203,13 +207,63 @@ def test_weekly_report_surfaces_issues_and_log_hints(tmp_path: Path):
         "repository_check_status": "overdue",
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
+    html = _build_html_report({
+        "STATUS_DIR": str(status_dir),
+        "BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts"),
+    }, now=REPORT_NOW)
 
     assert "Issues" in html
     assert "Repository nicht erreichbar" in html
     assert "Repository check is overdue" in html
     assert "Log Details" in html
     assert "Borg compact fehlgeschlagen" in html
+
+
+def test_weekly_report_does_not_flag_manual_old_runs_as_issues(tmp_path: Path):
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+
+    _write_job_meta(tmp_path, "vms_local", name="VMs Lokal", backup_type="vms", location="local")
+    _write_status(status_dir, "2026-05-20_03-00-00_vms_local.status", {
+        "backup_type": "vms",
+        "location": "local",
+        "timestamp": "2026-05-20 03:00:00",
+        "status": "success",
+    })
+
+    html = _build_html_report({
+        "STATUS_DIR": str(status_dir),
+        "BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts"),
+    }, now=REPORT_NOW)
+
+    assert "Manual jobs" in html
+    assert "VMs Lokal" in html
+    assert "No issues detected" in html
+    assert "No run in this report period" not in html
+
+
+def test_weekly_report_flags_planned_old_runs_as_issues(tmp_path: Path):
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+
+    _write_job_meta(tmp_path, "vms_local", name="VMs Lokal", backup_type="vms", location="local")
+    _write_schedules(tmp_path / "scripts", {
+        "vms_local": {"enabled": True, "cron": "0 3 * * 1"},
+    })
+    _write_status(status_dir, "2026-05-20_03-00-00_vms_local.status", {
+        "backup_type": "vms",
+        "location": "local",
+        "timestamp": "2026-05-20 03:00:00",
+        "status": "success",
+    })
+
+    html = _build_html_report({
+        "STATUS_DIR": str(status_dir),
+        "BACKUP_SCRIPTS_DIR": str(tmp_path / "scripts"),
+    }, now=REPORT_NOW)
+
+    assert "Issues" in html
+    assert "No run in this report period" in html
 
 
 def test_weekly_report_sorts_jobs_by_location(tmp_path: Path):

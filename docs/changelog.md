@@ -9,6 +9,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #282
 - Improved the weekly HTML report layout before beta by grouping jobs by location, preferring user-facing job names and keeping archive names as secondary context.
 - Added a weekly activity view that renders scheduled jobs as a seven-day status matrix and separates manual or unsupported custom-cron jobs from schedule-based missed-run evaluation.
+- Limited the report header period and stale-run issues to the displayed seven-day report window, and kept manual jobs out of the issue summary.
 
 ### Issue #264
 - Removed the native ntfy API module, direct ntfy delivery client and native ntfy dispatch plumbing before the beta baseline.
