@@ -38,9 +38,11 @@ nicht separat protokolliert, statt das Datum des aktuellen Pluginstarts
 anzuzeigen.
 
 Die Oberfläche zeigt fehlerhafte, blockierte oder offene Migrationen immer an.
-Erfolgreiche oder nicht mehr notwendige Migrationshistorie wird standardmäßig
-auf die letzten fünf Einträge begrenzt; vollständige Details bleiben im
-Migrationslog für Diagnosezwecke erhalten.
+Erfolgreiche oder nicht mehr notwendige Migrationshistorie für aktive oder
+zukünftige Migrationen wird standardmäßig auf die letzten fünf Einträge
+begrenzt. Erfolgreiche Einträge entfernter interner Vor-Beta-Migrationen werden
+nicht mehr angezeigt; vollständige Details bleiben im Migrationslog für
+Diagnosezwecke erhalten.
 
 ## Setup-Checks
 

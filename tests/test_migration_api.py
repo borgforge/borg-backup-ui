@@ -134,7 +134,7 @@ def test_registry_shows_recent_completed_migration_state(tmp_path: Path):
     assert items["completed_history_v1"]["details"]["imported"] == 5
 
 
-def test_registry_shows_recent_completed_legacy_state_without_special_mapping(tmp_path: Path):
+def test_registry_hides_completed_removed_pre_beta_migrations_but_keeps_actionable(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
@@ -152,12 +152,21 @@ def test_registry_shows_recent_completed_legacy_state_without_special_mapping(tm
         "runner": "legacy_startup_state"
       }
     },
-    "completed_events_v1": {
+    "ntfy_apprise_cutover_v1": {
       "state": "applied",
       "checked_at": "2026-06-29T22:55:18",
       "details": {
         "runner": "central_migration_registry",
-        "updated_keys": ["CENTRAL_EVENTS"]
+        "updated_keys": ["NTFY"]
+      }
+    },
+    "job_source_paths_v1": {
+      "state": "failed",
+      "checked_at": "2026-06-30T22:55:18",
+      "details": {
+        "runner": "central_migration_registry",
+        "failed_phase": "apply",
+        "error": "legacy failure remains visible"
       }
     }
   }
@@ -169,8 +178,10 @@ def test_registry_shows_recent_completed_legacy_state_without_special_mapping(tm
     registry = get_migration_registry_status(cfg)
     items = _items_by_id(registry)
 
-    assert items["storage_paths_v1"]["status"] == "applied"
-    assert items["completed_events_v1"]["details"]["updated_keys"] == ["CENTRAL_EVENTS"]
+    assert "storage_paths_v1" not in items
+    assert "ntfy_apprise_cutover_v1" not in items
+    assert items["job_source_paths_v1"]["status"] == "failed"
+    assert items["job_source_paths_v1"]["details"]["failed_phase"] == "apply"
 
 
 def test_registry_exposes_failed_recorded_migration_with_details(tmp_path: Path):

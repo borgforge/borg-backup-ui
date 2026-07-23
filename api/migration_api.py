@@ -104,6 +104,30 @@ def _migration_status_from_state(state: str) -> str:
     return "pending"
 
 
+REMOVED_PRE_BETA_MIGRATION_IDS = {
+    "canonical_data_model_v1",
+    "canonical_storage_profiles_v1",
+    "job_source_paths_v1",
+    "notification_events_v1",
+    "ntfy_apprise_cutover_v1",
+    "repository_contract_cleanup_v1",
+    "repository_objects_v1",
+    "repository_objects_v2",
+    "repository_objects_v3",
+    "repository_objects_v4",
+    "repository_runtime_v1",
+    "restore_history_v1",
+    "smb_protocol_auto_v1",
+    "storage_objects_v1",
+    "storage_objects_v2",
+    "storage_paths_v1",
+}
+
+
+def _is_actionable_migration_status(status: str) -> bool:
+    return status in {"failed", "blocked", "pending", "unknown"}
+
+
 def _migration_reason_from_state(migration_id: str, state: str, details: Dict[str, Any]) -> str:
     state_norm = str(state or "").strip()
     if state_norm == "applied":
@@ -136,6 +160,8 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
         applied_at = str(row.get("applied_at") or "").strip()
         last_checked_at = str(row.get("last_checked_at") or "").strip()
         status = _migration_status_from_state(state)
+        if migration_id in REMOVED_PRE_BETA_MIGRATION_IDS and not _is_actionable_migration_status(status):
+            continue
         item = _status_item(
             migration_id,
             migration_id,
@@ -153,7 +179,7 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
                 "introduced_in": str(details.get("introduced_in") or ""),
             },
         )
-        if status in {"failed", "blocked", "pending", "unknown"}:
+        if _is_actionable_migration_status(status):
             actionable.append(item)
         else:
             completed.append(item)

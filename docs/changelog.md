@@ -11,7 +11,8 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Renamed reusable notification message builders away from ntfy-specific names while keeping Apprise, mail, restore-test and reminder message formatting intact.
 - Removed pre-beta native ntfy cutover and NTFY event migration modules and their native-only tests from the active codebase.
 - Removed internal pre-beta data-model, repository, storage, restore-history, source-path and SMB-protocol migration modules from the beta startup baseline.
-- Limited ordinary completed migration history in System Health & Migration to the latest five entries while always keeping failed, blocked or pending entries visible.
+- Removed successful historical entries for retired pre-beta migrations from System Health & Migration while still showing failed, blocked or pending entries.
+- Limited ordinary completed migration history for active/future migrations to the latest five entries while always keeping failed, blocked or pending entries visible.
 - Documented the beta as the new initial supported state for notification and migration behavior.
 
 ### Issue #255
