@@ -14,6 +14,11 @@ Umstellung auf das kanonische Storage-/Repository-Modell nennt der Audit unter
 anderem Lauf-ID, Ausgangszustand, Phasen, Backup-Verzeichnis, betroffene
 Objekte, Validierung und ein mögliches Rollback. Secrets werden nicht geloggt.
 
+Die Beta-Version gilt als neuer initialer unterstützter Stand. Direkte
+Upgrades von alten internen Testversionen vor dem Beta-Stand sind nicht als
+öffentlicher Upgrade-Pfad vorgesehen. Ab der Beta werden neue Migrationen als
+unterstützte Upgrade-Schritte versioniert und langfristiger behandelt.
+
 Die Anzeige unter **Einstellungen > Systemzustand & Migration** unterscheidet:
 
 - **Ausgeführt**: Zeitpunkt, zu dem die Migration die Daten tatsächlich
@@ -31,6 +36,11 @@ wenn ein erfolgreicher Eintrag im strukturierten Audit-Log ihn belegt. Fehlt
 dieser Nachweis, kennzeichnet die Oberfläche den historischen Zeitpunkt als
 nicht separat protokolliert, statt das Datum des aktuellen Pluginstarts
 anzuzeigen.
+
+Die Oberfläche zeigt fehlerhafte, blockierte oder offene Migrationen immer an.
+Erfolgreiche oder nicht mehr notwendige Migrationshistorie wird standardmäßig
+auf die letzten fünf Einträge begrenzt; vollständige Details bleiben im
+Migrationslog für Diagnosezwecke erhalten.
 
 ## Setup-Checks
 

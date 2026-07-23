@@ -167,51 +167,21 @@ Repository-Objekt kann ausdrücken:
 Dashboard, Reports, Restore, Repository-Checks und Wizard könnten langfristig
 auf dieselbe Repository-Auflösung zugreifen.
 
-## 6. Umgesetzte Migration
+## 6. Beta-Ausgangsmodell
 
-Da die Anwendung noch nicht öffentlich über Community Apps veröffentlicht ist,
-sollte keine dauerhafte Legacy-Parallelwelt aufgebaut werden. Trotzdem dürfen
-vorhandene Tester-Daten nicht verloren gehen.
+Ab der Beta ist das Repository-Objektmodell der initial unterstützte
+Datenzustand. Interne Test-Channel-Migrationen, die ältere Vorabstände auf
+dieses Modell gehoben haben, sind nicht mehr Teil des aktiven Startpfads.
 
-Die Baseline-Migration `canonical_data_model_v1` führt folgende Schritte
-idempotent aus:
+Eine unterstützte Installation enthält:
 
-1. Alle Job-Metadaten lesen.
-2. Für jeden eindeutigen Repository-Pfad oder jede eindeutige URI ein
-   Repository-Objekt erzeugen.
-3. Storage-Typ und Profil aus Job-Location, Profil-Key und Repo-URI ableiten.
-4. Job um `repository_key` ergänzen.
-5. Alte Repository-, Passphrase-, Verschlüsselungs- und Profilfelder aus den
-   Job-Metadaten entfernen.
-6. Übergangsfelder aus dem Repository-Inventar entfernen, nachdem Storage- und
-   Repository-Objekte vollständig verknüpft sind.
-7. Das Endmodell vollständig validieren.
-8. Erst nach erfolgreicher Validierung die obsolete `settings.json` entfernen.
-9. Migration und Cleanup im zentralen Migrationslog protokollieren.
+1. Storage-Ziele und Profile in `storages.json`.
+2. Repository-Objekte in `repositories.json`.
+3. Job-Metadaten mit `schema_version` 3, `repository_key` und `source_paths`.
+4. Globale Einstellungen in der kanonischen `backup.conf`.
 
-Beispiel:
-
-```json
-{
-  "migration_id": "canonical_data_model_v1",
-  "status": "applied",
-  "actions": [
-    "created repository repo_appdata_usb_7f3c45ab from job appdata_usb",
-    "linked job appdata_usb to repo_appdata_usb_7f3c45ab"
-  ]
-}
-```
-
-Unterstützte Ausgangszustände sind der aktuelle Stable-Stand mit Legacy-Jobs,
-teilweise migrierte Testinstallationen und bereits kanonische Installationen.
-Bestehende kanonische Storage- und Repository-IDs bleiben erhalten. Vor der
-ersten Änderung wird unter `config/migration-backups/` ein Lauf-Backup erstellt.
-Schlägt eine Phase oder die Abschlussvalidierung fehl, werden die betroffenen
-Dateien zurückgespielt und der Fehler samt Phase und Rollback-Ergebnis im Audit
-protokolliert.
-
-Wichtig: Die Migration darf keine Borg-Repositories initialisieren, löschen oder
-verändern. Sie erstellt und bereinigt nur UI-Metadaten.
+Neue Migrationen nach der Beta müssen wieder regulär versioniert, auditiert und
+als unterstützter Upgrade-Pfad gepflegt werden.
 
 ## 7. Datenablage
 

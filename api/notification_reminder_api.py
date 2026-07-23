@@ -99,7 +99,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
     """Send configured overdue reminders without starting backup or restore jobs."""
     from config_api import read_expanded_conf
     from restore_tests_api import list_restore_test_plan
-    from lib.notifications import MailConfig, build_restore_test_ntfy_message
+    from lib.notifications import MailConfig, build_restore_test_notification_message
     from lib.notification_events import (
         NotificationEvent,
         cleanup_reminder_state,
@@ -152,7 +152,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
             continue
 
         display_name = str(row.get("display_name") or job_key)
-        message = build_restore_test_ntfy_message(
+        message = build_restore_test_notification_message(
             job_name=display_name,
             status="Overdue",
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -171,7 +171,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
             source="scheduled_reminder",
             extra={"due_marker": due_marker},
         )
-        results = send_event(effective, event, mail_config=mail_config, ntfy_config=None)
+        results = send_event(effective, event, mail_config=mail_config)
         if any(results.values()):
             mark_reminder_sent(effective, key)
             sent += 1
@@ -193,7 +193,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, An
     from jobs_api import list_jobs
     from schedule_api import get_schedules
     from status_api import get_status_data
-    from lib.notifications import build_backup_ntfy_message
+    from lib.notifications import build_backup_notification_message
     from lib.notification_events import (
         NotificationEvent,
         clear_reminder_prefix,
@@ -261,7 +261,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, An
 
         display_name = str(job.get("display_name") or job.get("name") or job_key)
         due_marker = str(item.get("expected_run_marker") or "")
-        message = build_backup_ntfy_message(
+        message = build_backup_notification_message(
             job_name=display_name,
             status="Overdue",
             timestamp=now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -281,7 +281,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, An
             source="scheduled_reminder",
             extra={"cron": str(item.get("cron") or ""), "expected_run": due_marker, "last_timestamp": str(item.get("latest_status_at_raw") or "")},
         )
-        results = send_event(effective, event, mail_config=mail_config, ntfy_config=None)
+        results = send_event(effective, event, mail_config=mail_config)
         if any(results.values()):
             mark_reminder_sent(effective, str(item.get("reminder_key") or reminder_key("backup_overdue", str(job_key), due_marker)))
             sent += 1

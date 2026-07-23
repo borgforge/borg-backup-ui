@@ -124,24 +124,9 @@ def _migration_reason_from_state(migration_id: str, state: str, details: Dict[st
 
 
 def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[str, Any]]:
-    items: List[Dict[str, Any]] = []
-    hidden_legacy_ids = {
-        "storage_paths_v1",
-        "restore_history_v1",
-        "repository_objects_v1",
-        "repository_objects_v2",
-        "repository_objects_v3",
-        "repository_objects_v4",
-        "storage_objects_v1",
-        "storage_objects_v2",
-        "repository_runtime_v1",
-        "borg_keyfiles_v1",
-        "canonical_storage_profiles_v1",
-        "repository_contract_cleanup_v1",
-    }
+    completed: List[Dict[str, Any]] = []
+    actionable: List[Dict[str, Any]] = []
     for migration_id in sorted(str(key) for key in migrations.keys()):
-        if migration_id in hidden_legacy_ids:
-            continue
         row = migrations.get(migration_id)
         if not isinstance(row, dict):
             continue
@@ -150,10 +135,11 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
         checked_at = str(row.get("checked_at") or "").strip()
         applied_at = str(row.get("applied_at") or "").strip()
         last_checked_at = str(row.get("last_checked_at") or "").strip()
-        items.append(_status_item(
+        status = _migration_status_from_state(state)
+        item = _status_item(
             migration_id,
             migration_id,
-            _migration_status_from_state(state),
+            status,
             _migration_reason_from_state(migration_id, state, details),
             category="migration",
             details={
@@ -166,8 +152,25 @@ def _recorded_startup_migration_items(migrations: Dict[str, Any]) -> List[Dict[s
                 "runner": str(details.get("runner") or ""),
                 "introduced_in": str(details.get("introduced_in") or ""),
             },
-        ))
-    return items
+        )
+        if status in {"failed", "blocked", "pending", "unknown"}:
+            actionable.append(item)
+        else:
+            completed.append(item)
+
+    completed.sort(key=_migration_item_sort_key, reverse=True)
+    actionable.sort(key=_migration_item_sort_key, reverse=True)
+    return actionable + completed[:5]
+
+
+def _migration_item_sort_key(item: Dict[str, Any]) -> tuple[str, str]:
+    details = item.get("details") if isinstance(item.get("details"), dict) else {}
+    timestamp = (
+        str(details.get("applied_at") or "").strip()
+        or str(details.get("last_checked_at") or "").strip()
+        or str(details.get("checked_at") or "").strip()
+    )
+    return (timestamp, str(item.get("id") or ""))
 
 
 def get_migration_registry_status(ui_config: dict) -> Dict[str, Any]:

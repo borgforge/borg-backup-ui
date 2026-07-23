@@ -183,9 +183,8 @@ def test_local_profile_paths_are_validated_before_save_in_both_languages() -> No
     assert english["settings"]["profiles"]["invalidLocalPath"]
     for payload in (german, english):
         health = payload["settings"]["health"]
-        assert health["registryCanonicalModelTitle"]
-        assert health["registryCanonicalModelFailed"]
         assert health["registryStorageInventoryTitle"]
+        assert health["registrySchemaTitle"]
         assert health["failedPhase"]
         assert health["failureReason"]
         assert health["rollbackStatus"]

@@ -1789,29 +1789,9 @@ function _migrationRegistryText(item, field) {
       title: 'registrySchemaTitle',
       reason: status === 'applied' ? 'registrySchemaComplete' : '',
     },
-    notification_events_v1: {
-      title: 'registryNotificationEventsTitle',
-      reason: status === 'applied' ? 'registryNotificationEventsApplied' : (status === 'not_needed' ? 'registryNotificationEventsCurrent' : 'registryNotificationEventsPending'),
-    },
-    canonical_data_model_v1: {
-      title: 'registryCanonicalModelTitle',
-      reason: status === 'applied' ? 'registryCanonicalModelApplied' : (status === 'not_needed' ? 'registryCanonicalModelCurrent' : (status === 'failed' ? 'registryCanonicalModelFailed' : 'registryCanonicalModelPending')),
-    },
-    job_source_paths_v1: {
-      title: 'registryJobSourcePathsTitle',
-      reason: status === 'applied' ? 'registryJobSourcePathsApplied' : (status === 'not_needed' ? 'registryJobSourcePathsCurrent' : (status === 'failed' ? 'registryJobSourcePathsFailed' : 'registryJobSourcePathsPending')),
-    },
-    smb_protocol_auto_v1: {
-      title: 'registrySmbProtocolTitle',
-      reason: status === 'applied' ? 'registrySmbProtocolApplied' : (['not_needed', 'not_required'].includes(status) ? 'registrySmbProtocolCurrent' : (status === 'failed' ? 'registrySmbProtocolFailed' : 'registrySmbProtocolPending')),
-    },
     borg_keyfiles_v1: {
       title: 'registryBorgKeyfilesTitle',
       reason: status === 'applied' ? 'registryBorgKeyfilesApplied' : (status === 'not_needed' ? 'registryBorgKeyfilesCurrent' : 'registryBorgKeyfilesPending'),
-    },
-    canonical_storage_profiles_v1: {
-      title: 'registryCanonicalStoragesTitle',
-      reason: status === 'applied' ? 'registryCanonicalStoragesApplied' : (status === 'not_needed' ? 'registryCanonicalStoragesCurrent' : 'registryCanonicalStoragesPending'),
     },
   };
   const key = keys[id]?.[field];
@@ -4139,7 +4119,7 @@ function _renderAppriseProfileSummary(profile, events) {
   const eventLabels = notificationEventOptions()
     .filter(([key]) => (events || []).includes(key))
     .map(([, label]) => label);
-  const priority = settingsT(`forms.ntfyPriority${String(profile.priority || 'default').charAt(0).toUpperCase()}${String(profile.priority || 'default').slice(1)}`);
+  const priority = settingsT(`forms.notificationPriority${String(profile.priority || 'default').charAt(0).toUpperCase()}${String(profile.priority || 'default').slice(1)}`);
   const providerLabel = _appriseProviderLabel(profile);
   const schema = _appriseProviderSchema(profile);
   const urlTemplate = String(profile.url_template || '').trim();
@@ -4150,7 +4130,7 @@ function _renderAppriseProfileSummary(profile, events) {
       ${badges.map((badge) => `<em>${escHtml(badge)}</em>`).join('')}
     </div>
     <dl>
-      <div><dt>${settingsT('forms.ntfyPriority')}</dt><dd>${escHtml(priority)}</dd></div>
+      <div><dt>${settingsT('forms.notificationPriority')}</dt><dd>${escHtml(priority)}</dd></div>
       <div><dt>${settingsT('apprise.summaryDelivery')}</dt><dd>${escHtml(`${Number(profile.timeout_seconds || 15)}s / ${Number(profile.retry_policy?.attempts || 1)}x`)}</dd></div>
       ${urlTemplate ? `<div><dt>${settingsT('apprise.urlTemplate')}</dt><dd><code>${escHtml(urlTemplate)}</code></dd></div>` : ''}
       <div class="wide"><dt>${settingsT('forms.notifyEvents')}</dt><dd>${escHtml(eventLabels.join(', ') || settingsT('common.none'))}</dd></div>
@@ -4168,7 +4148,7 @@ function renderSettingsAppriseProfiles() {
   const provider = String(current?.provider || 'ntfy');
   const events = Array.isArray(current?.selected_events) ? current.selected_events : _appriseDefaultEvents();
   const priorities = ['default', 'min', 'low', 'high', 'urgent']
-    .map((value) => `<option value="${value}" ${(current?.priority || 'default') === value ? 'selected' : ''}>${settingsT(`forms.ntfyPriority${value.charAt(0).toUpperCase()}${value.slice(1)}`)}</option>`)
+    .map((value) => `<option value="${value}" ${(current?.priority || 'default') === value ? 'selected' : ''}>${settingsT(`forms.notificationPriority${value.charAt(0).toUpperCase()}${value.slice(1)}`)}</option>`)
     .join('');
   const profileRows = profiles.map((profile) => {
     const active = profile.id === settingsState.appriseSelectedProfileId && !editing;
@@ -4224,11 +4204,11 @@ function renderSettingsAppriseProfiles() {
               <div class="form-help">${settingsT('apprise.providerHint')}</div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="apprise-profile-priority">${settingsT('forms.ntfyPriority')}</label>
+              <label class="form-label" for="apprise-profile-priority">${settingsT('forms.notificationPriority')}</label>
               <select class="form-select" id="apprise-profile-priority" data-apprise-field="priority" ${editing ? '' : 'disabled'}>${priorities}</select>
             </div>
             <div class="form-group">
-              <label class="form-label" for="apprise-profile-timeout">${settingsT('forms.ntfyTimeout')}</label>
+              <label class="form-label" for="apprise-profile-timeout">${settingsT('forms.notificationTimeout')}</label>
               <input class="form-input" id="apprise-profile-timeout" type="number" min="1" max="300" data-apprise-field="timeout_seconds" value="${escAttr(current.timeout_seconds || 15)}" ${editing ? '' : 'disabled'}>
             </div>
             <div class="form-group">

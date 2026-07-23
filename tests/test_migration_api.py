@@ -93,7 +93,7 @@ def test_registry_reports_schema_missing_without_legacy_storage_marker_status(tm
     assert registry["summary"]["pending"] >= 1
 
 
-def test_registry_hides_obsolete_restore_history_migration_state(tmp_path: Path):
+def test_registry_shows_recent_completed_migration_state(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         "\n".join([
@@ -110,12 +110,12 @@ def test_registry_hides_obsolete_restore_history_migration_state(tmp_path: Path)
         """{
   "schema_version": 2,
   "migrations": {
-    "restore_history_v1": {
+    "completed_history_v1": {
       "state": "applied",
       "checked_at": "2026-06-29T15:54:20",
       "source": "startup_registry",
       "details": {
-        "migration_id": "restore_history_v1",
+        "migration_id": "completed_history_v1",
         "introduced_in": "2026.06.29.1544",
         "runner": "central_migration_registry",
         "imported": 5
@@ -130,10 +130,11 @@ def test_registry_hides_obsolete_restore_history_migration_state(tmp_path: Path)
     registry = get_migration_registry_status(cfg)
     items = _items_by_id(registry)
 
-    assert "restore_history_v1" not in items
+    assert items["completed_history_v1"]["status"] == "applied"
+    assert items["completed_history_v1"]["details"]["imported"] == 5
 
 
-def test_registry_hides_obsolete_storage_paths_migration_state(tmp_path: Path):
+def test_registry_shows_recent_completed_legacy_state_without_special_mapping(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
@@ -151,12 +152,12 @@ def test_registry_hides_obsolete_storage_paths_migration_state(tmp_path: Path):
         "runner": "legacy_startup_state"
       }
     },
-    "notification_events_v1": {
+    "completed_events_v1": {
       "state": "applied",
       "checked_at": "2026-06-29T22:55:18",
       "details": {
         "runner": "central_migration_registry",
-        "updated_keys": ["NTFY_EVENTS"]
+        "updated_keys": ["CENTRAL_EVENTS"]
       }
     }
   }
@@ -168,11 +169,11 @@ def test_registry_hides_obsolete_storage_paths_migration_state(tmp_path: Path):
     registry = get_migration_registry_status(cfg)
     items = _items_by_id(registry)
 
-    assert "storage_paths_v1" not in items
-    assert "notification_events_v1" in items
+    assert items["storage_paths_v1"]["status"] == "applied"
+    assert items["completed_events_v1"]["details"]["updated_keys"] == ["CENTRAL_EVENTS"]
 
 
-def test_registry_exposes_failed_canonical_migration_with_details(tmp_path: Path):
+def test_registry_exposes_failed_recorded_migration_with_details(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
@@ -183,7 +184,7 @@ def test_registry_exposes_failed_canonical_migration_with_details(tmp_path: Path
         json.dumps({
             "schema_version": 2,
             "migrations": {
-                "canonical_data_model_v1": {
+                "beta_upgrade_v1": {
                     "state": "failed",
                     "checked_at": "2026-07-12T09:00:00",
                     "details": {
@@ -200,7 +201,7 @@ def test_registry_exposes_failed_canonical_migration_with_details(tmp_path: Path
     )
 
     registry = get_migration_registry_status(cfg)
-    item = _items_by_id(registry)["canonical_data_model_v1"]
+    item = _items_by_id(registry)["beta_upgrade_v1"]
 
     assert item["status"] == "failed"
     assert item["details"]["failed_phase"] == "validation"
@@ -241,7 +242,50 @@ def test_registry_exposes_migration_blocked_by_previous_failure(tmp_path: Path):
     assert item["details"]["blocked_by"] == "first_v1"
 
 
-def test_registry_reports_recorded_notification_events_migration(tmp_path: Path):
+def test_registry_limits_completed_history_but_keeps_actionable_entries(tmp_path: Path):
+    cfg = _write_conf_tree(
+        tmp_path,
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"\n',
+    )
+    migrations = {
+        f"completed_{idx}_v1": {
+            "state": "applied",
+            "checked_at": f"2026-07-{idx:02d}T12:00:00Z",
+            "applied_at": f"2026-07-{idx:02d}T12:00:00Z",
+            "details": {
+                "runner": "central_migration_registry",
+                "introduced_in": f"2026.07.{idx:02d}.0000",
+            },
+        }
+        for idx in range(1, 8)
+    }
+    migrations["failed_old_v1"] = {
+        "state": "failed",
+        "checked_at": "2026-06-01T12:00:00Z",
+        "details": {
+            "runner": "central_migration_registry",
+            "introduced_in": "2026.06.01.0000",
+            "failed_phase": "apply",
+            "error": "boom",
+        },
+    }
+    state_file = Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-state.json"
+    state_file.write_text(json.dumps({"schema_version": 3, "migrations": migrations}) + "\n", encoding="utf-8")
+
+    items = _items_by_id(get_migration_registry_status(cfg))
+
+    assert "failed_old_v1" in items
+    assert "completed_7_v1" in items
+    assert "completed_6_v1" in items
+    assert "completed_5_v1" in items
+    assert "completed_4_v1" in items
+    assert "completed_3_v1" in items
+    assert "completed_2_v1" not in items
+    assert "completed_1_v1" not in items
+
+
+def test_registry_reports_recorded_completed_migration(tmp_path: Path):
     cfg = _write_conf_tree(
         tmp_path,
         "\n".join([
@@ -264,15 +308,15 @@ def test_registry_reports_recorded_notification_events_migration(tmp_path: Path)
         """{
   "schema_version": 2,
   "migrations": {
-    "notification_events_v1": {
+    "completed_events_v1": {
       "state": "applied",
       "checked_at": "2026-06-29T22:23:59",
       "source": "startup_check",
       "details": {
-        "migration_id": "notification_events_v1",
+        "migration_id": "completed_events_v1",
         "introduced_in": "2026.06.29.2000",
         "runner": "central_migration_registry",
-        "updated_keys": ["NTFY_EVENTS"]
+        "updated_keys": ["CENTRAL_EVENTS"]
       }
     }
   }
@@ -282,11 +326,11 @@ def test_registry_reports_recorded_notification_events_migration(tmp_path: Path)
     )
 
     registry = get_migration_registry_status(cfg)
-    item = _items_by_id(registry)["notification_events_v1"]
+    item = _items_by_id(registry)["completed_events_v1"]
 
     assert item["category"] == "migration"
     assert item["status"] == "applied"
-    assert item["details"]["updated_keys"] == ["NTFY_EVENTS"]
+    assert item["details"]["updated_keys"] == ["CENTRAL_EVENTS"]
     assert item["details"]["checked_at"] == "2026-06-29T22:23:59"
     assert item["details"]["applied_at"] == ""
     assert item["details"]["last_checked_at"] == ""
@@ -304,17 +348,17 @@ def test_registry_exposes_separate_application_and_check_times(tmp_path: Path):
         json.dumps({
             "schema_version": 3,
             "migrations": {
-                "notification_events_v1": {
+                "completed_events_v1": {
                     "state": "applied",
                     "checked_at": "2026-06-29T22:23:59Z",
                     "applied_at": "2026-06-29T22:23:59Z",
                     "last_checked_at": "2026-07-20T07:23:14Z",
                     "source": "startup_registry",
                     "details": {
-                        "migration_id": "notification_events_v1",
+                        "migration_id": "completed_events_v1",
                         "introduced_in": "2026.06.29.2000",
                         "runner": "central_migration_registry",
-                        "updated_keys": ["NTFY_EVENTS"],
+                        "updated_keys": ["CENTRAL_EVENTS"],
                     },
                 },
             },
@@ -322,7 +366,7 @@ def test_registry_exposes_separate_application_and_check_times(tmp_path: Path):
         encoding="utf-8",
     )
 
-    item = _items_by_id(get_migration_registry_status(cfg))["notification_events_v1"]
+    item = _items_by_id(get_migration_registry_status(cfg))["completed_events_v1"]
 
     assert item["details"]["applied_at"] == "2026-06-29T22:23:59Z"
     assert item["details"]["last_checked_at"] == "2026-07-20T07:23:14Z"

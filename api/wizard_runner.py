@@ -682,7 +682,6 @@ def main() -> int:
             docker_manager=docker_mgr,
             vm_manager=vm_mgr,
             mail_config=mail_config,
-            ntfy_config=None,
             notification_config=env,
             phase_callback=set_phase,
         ) as job:

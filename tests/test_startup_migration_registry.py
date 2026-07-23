@@ -10,27 +10,25 @@ if str(API_ROOT) not in sys.path:
 from migrations import registry  # noqa: E402
 
 
-def _write_notification_config(config_dir: Path) -> Path:
-    config_dir.mkdir(parents=True)
-    (config_dir / "backup.conf").write_text(
-        'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"\n',
-        encoding="utf-8",
-    )
-    schema_file = config_dir.parent / "plugin-backup.conf.example"
-    schema_file.write_text(
-        '\n'.join(
-            (
-                'NTFY_EVENTS="backup_success,backup_failed,backup_skipped"',
-                'NOTIFY_EMAIL_EVENTS="backup_failed"',
-                'NOTIFY_UNRAID_EVENTS="backup_success,backup_warning,backup_failed,backup_skipped"',
-                'NOTIFY_REMINDER_INTERVAL_HOURS="24"',
-                'NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS="6"',
-                '',
-            )
-        ),
-        encoding="utf-8",
-    )
-    return schema_file
+class DummyMigration:
+    MIGRATION_ID = "dummy_v1"
+    INTRODUCED_IN = "2026.07.23.0000"
+
+    @staticmethod
+    def detect(config: dict) -> dict:
+        marker = Path(config["BACKUP_SCRIPTS_DIR"]) / "config" / "dummy-applied"
+        return {"required": not marker.exists()}
+
+    @staticmethod
+    def apply(config: dict) -> dict:
+        marker = Path(config["BACKUP_SCRIPTS_DIR"]) / "config" / "dummy-applied"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("ok\n", encoding="utf-8")
+        return {
+            "migration_id": "dummy_v1",
+            "status": "applied",
+            "details": {"updated_keys": ["DUMMY_KEY"]},
+        }
 
 
 def _state(config: dict) -> dict:
@@ -49,34 +47,31 @@ def _log_lines(config: dict) -> list[dict]:
     ]
 
 
-def test_registry_writes_central_state_and_log_for_applied_migration(tmp_path: Path):
-    config_dir = tmp_path / "config"
-    schema_file = _write_notification_config(config_dir)
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "BACKUP_CONF_SCHEMA_FILE": str(schema_file)}
+def test_registry_writes_central_state_and_log_for_applied_migration(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(registry, "MIGRATIONS", [DummyMigration])
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
 
     result = registry.run_startup_migrations(config)
     state = _state(config)
     logs = _log_lines(config)
 
     assert result["status"] == "ok"
-    assert "notification_events_v1" in result["applied"]
+    assert "dummy_v1" in result["applied"]
     assert state["schema_version"] == 3
     assert state["last_run"]["reason_code"] == "startup_migrations_applied"
-    assert state["migrations"]["notification_events_v1"]["state"] == "applied"
-    assert state["migrations"]["notification_events_v1"]["applied_at"]
-    assert state["migrations"]["notification_events_v1"]["last_checked_at"]
-    assert state["migrations"]["notification_events_v1"]["details"]["runner"] == "central_migration_registry"
-    assert "ntfy_apprise_cutover_v1" in result["applied"]
-    assert state["migrations"]["notification_events_v1"]["details"]["updated_keys"] == ["NTFY_EVENTS"]
+    assert state["migrations"]["dummy_v1"]["state"] == "applied"
+    assert state["migrations"]["dummy_v1"]["applied_at"]
+    assert state["migrations"]["dummy_v1"]["last_checked_at"]
+    assert state["migrations"]["dummy_v1"]["details"]["runner"] == "central_migration_registry"
+    assert state["migrations"]["dummy_v1"]["details"]["updated_keys"] == ["DUMMY_KEY"]
     assert len(logs) == 1
     assert logs[0]["event"] == "startup_migration"
-    assert "notification_events_v1" in logs[0]["details"]["startup_migrations"]["applied"]
+    assert "dummy_v1" in logs[0]["details"]["startup_migrations"]["applied"]
 
 
-def test_registry_second_run_preserves_last_effective_migration(tmp_path: Path):
-    config_dir = tmp_path / "config"
-    schema_file = _write_notification_config(config_dir)
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "BACKUP_CONF_SCHEMA_FILE": str(schema_file)}
+def test_registry_second_run_preserves_last_effective_migration(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(registry, "MIGRATIONS", [DummyMigration])
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
 
     first_result = registry.run_startup_migrations(config)
     first_state = _state(config)
@@ -84,19 +79,19 @@ def test_registry_second_run_preserves_last_effective_migration(tmp_path: Path):
     second_state = _state(config)
     logs = _log_lines(config)
 
-    assert first_result["results"]["notification_events_v1"]["status"] == "applied"
-    assert second_result["results"]["notification_events_v1"]["status"] in {"skipped", "not_required"}
+    assert first_result["results"]["dummy_v1"]["status"] == "applied"
+    assert second_result["results"]["dummy_v1"]["status"] in {"skipped", "not_required"}
     assert second_state["last_run"] == first_state["last_run"]
-    assert second_state["migrations"]["notification_events_v1"]["state"] == "applied"
+    assert second_state["migrations"]["dummy_v1"]["state"] == "applied"
     assert (
-        second_state["migrations"]["notification_events_v1"]["applied_at"]
-        == first_state["migrations"]["notification_events_v1"]["applied_at"]
+        second_state["migrations"]["dummy_v1"]["applied_at"]
+        == first_state["migrations"]["dummy_v1"]["applied_at"]
     )
     assert (
-        second_state["migrations"]["notification_events_v1"]["checked_at"]
-        == first_state["migrations"]["notification_events_v1"]["checked_at"]
+        second_state["migrations"]["dummy_v1"]["checked_at"]
+        == first_state["migrations"]["dummy_v1"]["checked_at"]
     )
-    assert second_state["migrations"]["notification_events_v1"]["last_checked_at"]
+    assert second_state["migrations"]["dummy_v1"]["last_checked_at"]
     assert len(logs) == 1
 
 

@@ -6,6 +6,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #264
+- Removed the native ntfy API module, direct ntfy delivery client and native ntfy dispatch plumbing before the beta baseline.
+- Renamed reusable notification message builders away from ntfy-specific names while keeping Apprise, mail, restore-test and reminder message formatting intact.
+- Removed pre-beta native ntfy cutover and NTFY event migration modules and their native-only tests from the active codebase.
+- Removed internal pre-beta data-model, repository, storage, restore-history, source-path and SMB-protocol migration modules from the beta startup baseline.
+- Limited ordinary completed migration history in System Health & Migration to the latest five entries while always keeping failed, blocked or pending entries visible.
+- Documented the beta as the new initial supported state for notification and migration behavior.
+
 ### Issue #255
 - Added a durable background queue for Apprise event delivery so provider network calls no longer block backup, restore-test or reminder processing.
 - Queued Apprise notifications keep per-profile retry/backoff settings, survive application restarts and write sanitized delivery status to `config/notification-deliveries.json`.

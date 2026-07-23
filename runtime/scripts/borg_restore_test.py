@@ -221,7 +221,7 @@ class RestoreTest:
         date_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.log_path = self.log_dir / f"Borg-Restore-Test--{date_tag}.log"
         self._fh = open(self.log_path, "w", buffering=1, encoding="utf-8")
-        self.mail_config, self.ntfy_config = self._load_notification_config()
+        self.mail_config = self._load_notification_config()
 
     def log(self, msg: str = "") -> None:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -237,10 +237,10 @@ class RestoreTest:
     def _load_notification_config(self):
         try:
             from lib.notifications import MailConfig
-            return MailConfig.from_config(self.conf), None
+            return MailConfig.from_config(self.conf)
         except Exception as exc:
             self.log(f"  notification setup skipped: {exc}")
-            return None, None
+            return None
 
     def _notify_event(self, event_type: str, repo: dict, result: str, duration: int = 0,
                      coverage: str = "", error_message: str = "") -> None:
@@ -248,10 +248,10 @@ class RestoreTest:
             return
         try:
             from lib.notification_events import NotificationEvent, clear_reminder_prefix, send_event
-            from lib.notifications import build_restore_test_ntfy_message
+            from lib.notifications import build_restore_test_notification_message
             job_name = str(repo.get("job_key") or repo.get("type") or "restore_test")
             title = f"Borg Backup UI: Restore test {result}"
-            message = build_restore_test_ntfy_message(
+            message = build_restore_test_notification_message(
                 job_name=job_name,
                 status=result,
                 timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -276,7 +276,6 @@ class RestoreTest:
                     source="restore_test",
                 ),
                 mail_config=self.mail_config,
-                ntfy_config=self.ntfy_config,
             )
             if event_type == "restore_test_success":
                 clear_reminder_prefix(self.conf, f"restore_test_overdue:{job_name}:")
