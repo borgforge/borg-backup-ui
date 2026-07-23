@@ -6,15 +6,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from . import (
-    canonical_backup_conf_v1,
-    canonical_data_model_v1,
-    job_source_paths_v1,
-    ntfy_apprise_cutover_v1,
-    notification_events_v1,
-    restore_history_v1,
-    smb_protocol_auto_v1,
-)
+from . import canonical_backup_conf_v1
 from .audit import (
     append_event,
     config_dir as audit_config_dir,
@@ -28,12 +20,6 @@ except ImportError:  # Runtime/tests may import migrations directly from API_ROO
     from security_utils import mask_secrets
 
 MIGRATIONS = [
-    restore_history_v1,
-    ntfy_apprise_cutover_v1,
-    notification_events_v1,
-    canonical_data_model_v1,
-    job_source_paths_v1,
-    smb_protocol_auto_v1,
     canonical_backup_conf_v1,
 ]
 

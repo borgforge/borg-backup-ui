@@ -10,7 +10,7 @@ import re
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 
 _REPORT_CRON_BEGIN = "# --- BORG-BACKUP-UI WEEKLY-REPORT BEGIN ---"
@@ -167,13 +167,22 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     all_statuses = store.load()
     latest = store.get_latest_per_key(all_statuses)
     generated_at = now or datetime.now()
-
-    run_dates = [st.timestamp_dt for st in all_statuses if st.timestamp_dt is not None]
-    period_start = min(run_dates).strftime("%Y-%m-%d %H:%M") if run_dates else "no data"
-    period_end = max(run_dates).strftime("%Y-%m-%d %H:%M") if run_dates else "no data"
+    period_start_dt, period_end_dt = _weekly_report_period(generated_at)
+    period_start = period_start_dt.strftime("%Y-%m-%d %H:%M")
+    period_end = period_end_dt.strftime("%Y-%m-%d %H:%M")
     hostname = str(config.get("HOSTNAME") or config.get("SERVER_NAME") or "").strip() or "Unraid"
 
     rows = []
+    grouped_rows: dict[str, list[str]] = {}
+    group_stats: dict[str, dict[str, int]] = {}
+    job_meta = _job_metadata_by_key(config)
+    schedules = _report_schedules(config)
+    planned_job_keys = _planned_job_keys_for_period(
+        set(latest.keys()) | set(job_meta.keys()),
+        schedules,
+        period_start_dt,
+        period_end_dt,
+    )
     success_total = 0
     total_repo_size = 0
     total_duration = 0
@@ -183,6 +192,11 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     log_notes = []
 
     for key, st in sorted(latest.items(), key=lambda item: _status_sort_key(item[1], item[0])):
+        location_key = _location_key(st)
+        meta = job_meta.get(key, {})
+        job_label = _job_label(key, st, meta)
+        archive_fmt = st.archive_name or "—"
+        secondary = _job_secondary_line(key, archive_fmt)
         status_color = {
             "success": "#22c55e",
             "skipped": "#f59e0b",
@@ -209,32 +223,45 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
         repo_fmt = format_bytes(st.repository_size) if st.repository_size else "—"
         dur_fmt  = format_duration(st.duration_seconds) if st.duration_seconds else "—"
         files_fmt = f"{st.files_count:,}" if st.files_count else "—"
-        archive_fmt = st.archive_name or "—"
+        growth_value = _repo_growth_7d(all_statuses, key, period_start_dt, period_end_dt)
+        if growth_value is None:
+            growth_fmt = "—"
+            growth_color = "#64748b"
+        else:
+            prefix = "+" if growth_value > 0 else ("-" if growth_value < 0 else "")
+            growth_fmt = f"{prefix}{format_bytes(abs(growth_value))}"
+            growth_color = "#d97706" if growth_value > 0 else ("#16a34a" if growth_value < 0 else "#64748b")
         check_label = _repo_check_label(st.repository_check_status)
         check_color = "#16a34a" if st.repository_check_status == "ok" else ("#d97706" if st.repository_check_status == "overdue" else "#64748b")
-        week_cutoff = generated_at - timedelta(days=7)
-        week_runs = _count_recent_runs(all_statuses, key, week_cutoff)
-        week_success_rate = _recent_success_rate(all_statuses, key, week_cutoff)
-        success_rate = f"{week_success_rate:.0f}%" if week_success_rate is not None else "—"
 
-        note = _status_note(st)
-        if note:
-            issues.append((key, note, status_color))
-        if st.timestamp_dt and (generated_at - st.timestamp_dt) > timedelta(days=7):
-            issues.append((key, f"Last run was {_time_ago(st.timestamp, generated_at)}.", "#d97706"))
-        if st.repository_check_status == "overdue":
-            issues.append((key, "Repository check is overdue.", "#d97706"))
+        if key in planned_job_keys:
+            note = _status_note(st)
+            if note:
+                issues.append((job_label, note, status_color))
+            if st.timestamp_dt and st.timestamp_dt < period_start_dt:
+                issues.append((job_label, f"No run in this report period; last run was {_time_ago(st.timestamp, generated_at)}.", "#d97706"))
+            if st.repository_check_status == "overdue":
+                issues.append((job_label, "Repository check is overdue.", "#d97706"))
 
         if st.status == "error":
             log_summary = _summarize_log(st.log_file)
             if log_summary:
-                log_notes.append((key, st, log_summary))
+                log_notes.append((job_label, st, log_summary))
 
-        rows.append(f"""
+        group = group_stats.setdefault(location_key, {"total": 0, "success": 0, "warning": 0, "error": 0})
+        group["total"] += 1
+        if st.status == "success":
+            group["success"] += 1
+        elif st.status in {"warning", "skipped"}:
+            group["warning"] += 1
+        elif st.status == "error":
+            group["error"] += 1
+
+        row_html = f"""
         <tr>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;white-space:nowrap">
-            <div style="font-weight:700;color:#0f172a;white-space:nowrap">{_he(key)}</div>
-            <div style="font-size:12px;color:#64748b;white-space:nowrap">{_he(archive_fmt)}</div>
+            <div style="font-weight:800;color:#0f172a;white-space:nowrap">{_he(job_label)}</div>
+            <div style="font-size:12px;color:#64748b;white-space:nowrap">{_he(secondary)}</div>
           </td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:{status_color};font-weight:700;white-space:nowrap">{status_label}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#475569;font-size:13px;white-space:nowrap">
@@ -244,10 +271,11 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{dur_fmt}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{repo_fmt}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{files_fmt}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{week_runs}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap">{success_rate}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:{growth_color};font-weight:700;white-space:nowrap">{growth_fmt}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:{check_color};white-space:nowrap">{check_label}</td>
-        </tr>""")
+        </tr>"""
+        grouped_rows.setdefault(location_key, []).append(row_html)
+        rows.append(row_html)
 
     total = len(latest)
     error_total = sum(1 for st in latest.values() if st.status == "error")
@@ -258,8 +286,9 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     )
 
     now = generated_at.strftime("%Y-%m-%d %H:%M")
-    rows_html = "".join(rows) if rows else "<tr><td colspan='9' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
+    rows_html = _render_grouped_job_rows(grouped_rows, group_stats) if rows else "<tr><td colspan='8' style='padding:16px;color:#6b7280'>No backup data available.</td></tr>"
     oldest_latest_fmt = oldest_latest.strftime("%Y-%m-%d %H:%M") if oldest_latest else "—"
+    week_activity_html = _render_week_activity(all_statuses, latest, job_meta, schedules, generated_at, period_start_dt, period_end_dt)
     issue_html = _render_issue_list(issues)
     log_html = _render_log_notes(log_notes)
     logo_html = _app_icon_img_html()
@@ -297,21 +326,23 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
         </tr>
       </table>
 
+      {week_activity_html}
+
       {issue_html}
 
-      <h2 style="margin:22px 0 10px;font-size:15px;color:#0f172a">Job Overview</h2>
+      <h2 style="margin:22px 0 4px;font-size:15px;color:#0f172a">Job Details</h2>
+      <div style="font-size:12px;color:#64748b;margin-bottom:10px">Latest known status and repository details. The weekly activity matrix above is the primary week summary.</div>
       <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:980px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:820px">
         <thead>
           <tr style="background:#f1f5f9">
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Job / Archive</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Job</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Status</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Last Run</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Duration</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Repo</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Files</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Runs 7d</th>
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Success 7d</th>
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Growth 7d</th>
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:2px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Repo Check</th>
           </tr>
         </thead>
@@ -333,6 +364,499 @@ def _he(s: str) -> str:
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _job_metadata_by_key(config: dict) -> dict[str, dict[str, str]]:
+    if not config.get("BACKUP_SCRIPTS_DIR"):
+        return {}
+    try:
+        from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
+
+        data_root = resolve_data_root(config)
+        scripts_dir = resolve_scripts_dir(config)
+        jobs = discover_jobs(scripts_dir, data_root)
+    except Exception:
+        return {}
+
+    result: dict[str, dict[str, str]] = {}
+    for info in jobs:
+        key = str(getattr(info, "key", "") or "").strip()
+        if not key:
+            continue
+        result[key] = {
+            "name": str(getattr(info, "name", "") or "").strip(),
+            "display_name": str(getattr(info, "display_name", "") or "").strip(),
+            "description": str(getattr(info, "description", "") or "").strip(),
+            "backup_type": str(getattr(info, "backup_type", "") or "").strip(),
+            "location": str(getattr(info, "location", "") or "").strip().lower(),
+            "enabled": bool(getattr(info, "enabled", True)),
+        }
+    return result
+
+
+def _report_schedules(config: dict) -> dict:
+    try:
+        from schedule_api import get_schedules
+
+        schedules = get_schedules(config)
+    except Exception:
+        return {}
+    return schedules if isinstance(schedules, dict) else {}
+
+
+def _weekly_report_period(generated_at: datetime) -> tuple[datetime, datetime]:
+    start = generated_at.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=6)
+    return start, generated_at
+
+
+def _planned_job_keys_for_period(keys: set[str], schedules: dict, period_start: datetime, period_end: datetime) -> set[str]:
+    planned: set[str] = set()
+    for key in keys:
+        schedule = schedules.get(key) if isinstance(schedules.get(key), dict) else {}
+        cron = str(schedule.get("cron") or "").strip()
+        if not cron or not bool(schedule.get("enabled", True)):
+            continue
+        expected_dates = _cron_expected_dates(cron, period_start, period_end)
+        if expected_dates is not None:
+            planned.add(key)
+    return planned
+
+
+def _job_label(key: str, st: Any, meta: dict[str, str]) -> str:
+    for value in (
+        meta.get("name"),
+        meta.get("display_name"),
+        _derived_job_label(st),
+        key,
+    ):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return "Unknown job"
+
+
+def _derived_job_label(st: Any) -> str:
+    backup_type = str(getattr(st, "backup_type", "") or "").strip()
+    location = str(getattr(st, "location", "") or "").strip()
+    if backup_type and backup_type != "unknown":
+        return f"{backup_type.replace('_', ' ').title()} - {_location_label(location)}"
+    return ""
+
+
+def _job_secondary_line(_key: str, archive_name: str) -> str:
+    archive_text = str(archive_name or "").strip()
+    if archive_text and archive_text != "—":
+        return f"Archive: {archive_text}"
+    return "—"
+
+
+def _location_key(st: Any) -> str:
+    raw = str(getattr(st, "location", "") or "unknown").strip().lower()
+    return raw or "unknown"
+
+
+def _location_label(location: str) -> str:
+    return {
+        "local": "Local",
+        "usb": "USB",
+        "smb": "SMB",
+        "storagebox": "Storagebox",
+        "custom": "Custom",
+        "unknown": "Unknown",
+    }.get(str(location or "unknown").strip().lower(), str(location or "Unknown").strip().title())
+
+
+def _location_order(location: str) -> tuple[int, str]:
+    order = {
+        "local": 0,
+        "usb": 1,
+        "smb": 2,
+        "storagebox": 3,
+        "custom": 4,
+        "unknown": 9,
+    }
+    key = str(location or "unknown").strip().lower() or "unknown"
+    return (order.get(key, 8), key)
+
+
+def _render_grouped_job_rows(grouped_rows: dict[str, list[str]], group_stats: dict[str, dict[str, int]]) -> str:
+    blocks = []
+    for location in sorted(grouped_rows, key=_location_order):
+        stats = group_stats.get(location, {})
+        total = int(stats.get("total") or 0)
+        success = int(stats.get("success") or 0)
+        warning = int(stats.get("warning") or 0)
+        error = int(stats.get("error") or 0)
+        summary = f"{success}/{total} OK"
+        if warning:
+            summary += f" · {warning} warning"
+            if warning != 1:
+                summary += "s"
+        if error:
+            summary += f" · {error} error"
+            if error != 1:
+                summary += "s"
+        blocks.append(f"""
+        <tr>
+          <td colspan="8" style="padding:10px 12px;background:#eaf1f8;border-top:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee">
+            <span style="font-size:12px;color:#0f172a;font-weight:900;text-transform:uppercase;letter-spacing:.04em">{_he(_location_label(location))}</span>
+            <span style="font-size:12px;color:#64748b;margin-left:10px">{_he(summary)}</span>
+          </td>
+        </tr>""")
+        blocks.extend(grouped_rows.get(location, []))
+    return "".join(blocks)
+
+
+def _render_week_activity(
+    statuses: list,
+    latest: dict[str, Any],
+    job_meta: dict[str, dict[str, Any]],
+    schedules: dict,
+    generated_at: datetime,
+    period_start: datetime,
+    period_end: datetime,
+) -> str:
+    keys = sorted(set(latest.keys()) | set(job_meta.keys()), key=lambda key: _report_key_sort(key, latest, job_meta))
+    if not keys:
+        return ""
+
+    days = [period_start.date() + timedelta(days=offset) for offset in range(7)]
+    headers = "".join(
+        f"<th style='padding:8px 7px;text-align:center;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap'>{_he(day.strftime('%a'))}<div style='font-size:10px;color:#94a3b8;font-weight:600;text-transform:none'>{day.strftime('%m-%d')}</div></th>"
+        for day in days
+    )
+
+    planned_groups: dict[str, list[str]] = {}
+    manual_rows = []
+    for key in keys:
+        meta = job_meta.get(key, {})
+        if meta.get("enabled") is False and key not in latest:
+            continue
+        st = latest.get(key)
+        location = _report_location(key, st, meta)
+        label = _report_job_label(key, st, meta)
+        runs = _statuses_for_key_in_window(statuses, key, period_start, period_end)
+        schedule = schedules.get(key) if isinstance(schedules.get(key), dict) else {}
+        cron = str(schedule.get("cron") or "").strip()
+        schedule_enabled = bool(schedule.get("enabled", True))
+        expected_dates = _cron_expected_dates(cron, period_start, period_end) if cron and schedule_enabled else None
+
+        if cron and schedule_enabled and expected_dates is not None:
+            row = _render_planned_week_row(label, runs, days, expected_dates)
+            planned_groups.setdefault(location, []).append(row)
+        else:
+            reason = "Custom schedule" if cron and schedule_enabled else "Manual"
+            manual_rows.append(_render_manual_week_row(label, st, runs, reason, generated_at))
+
+    planned_html = _render_week_planned_groups(planned_groups, headers, len(days))
+    manual_html = _render_week_manual_rows(manual_rows)
+    if not planned_html and not manual_html:
+        return ""
+
+    legend = """
+      <div style="font-size:11px;color:#64748b;margin:6px 0 10px">
+        <span style="display:inline-block;margin-right:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#22c55e;vertical-align:-1px"></span> Success</span>
+        <span style="display:inline-block;margin-right:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#f59e0b;vertical-align:-1px"></span> Warning/skipped</span>
+        <span style="display:inline-block;margin-right:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#ef4444;vertical-align:-1px"></span> Error</span>
+        <span style="display:inline-block;margin-right:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;border:2px solid #f97316;vertical-align:-3px"></span> Expected but not run</span>
+        <span style="display:inline-block"><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#e2e8f0;vertical-align:-1px"></span> Not scheduled</span>
+      </div>"""
+    return f"""
+      <h2 style="margin:22px 0 4px;font-size:15px;color:#0f172a">Weekly Activity</h2>
+      <div style="font-size:12px;color:#64748b;margin-bottom:4px">Scheduled jobs are compared with their cron plan. Manual jobs only show activity in the report period.</div>
+      {legend}
+      {planned_html}
+      {manual_html}
+    """
+
+
+def _render_week_planned_groups(planned_groups: dict[str, list[str]], headers: str, day_count: int) -> str:
+    if not planned_groups:
+        return ""
+    body = []
+    colspan = day_count + 2
+    for location in sorted(planned_groups, key=_location_order):
+        body.append(f"""
+        <tr>
+          <td colspan="{colspan}" style="padding:9px 10px;background:#eaf1f8;border-top:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee">
+            <span style="font-size:12px;color:#0f172a;font-weight:900;text-transform:uppercase;letter-spacing:.04em">{_he(_location_label(location))}</span>
+          </td>
+        </tr>""")
+        body.extend(planned_groups[location])
+    return f"""
+      <div style="overflow-x:auto;margin-bottom:14px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:760px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Planned jobs</th>
+            {headers}
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Week</th>
+          </tr>
+        </thead>
+        <tbody>{''.join(body)}</tbody>
+      </table>
+      </div>"""
+
+
+def _render_planned_week_row(label: str, runs: list, days: list, expected_dates: set) -> str:
+    runs_by_day: dict[Any, list] = {}
+    for st in runs:
+        if st.timestamp_dt is None:
+            continue
+        runs_by_day.setdefault(st.timestamp_dt.date(), []).append(st)
+
+    expected_count = len(expected_dates)
+    ok_expected = 0
+    missed = 0
+    cells = []
+    for day in days:
+        day_runs = runs_by_day.get(day, [])
+        state = _aggregate_day_state(day_runs)
+        expected = day in expected_dates
+        if state:
+            if expected and state == "success":
+                ok_expected += 1
+            cells.append(_week_dot_cell(state, _day_status_title(day, state, expected)))
+        elif expected:
+            missed += 1
+            cells.append(_week_dot_cell("missed", f"{day.isoformat()}: expected run missing"))
+        else:
+            cells.append(_week_dot_cell("idle", f"{day.isoformat()}: not scheduled"))
+
+    if expected_count <= 0:
+        summary = f"{len(runs)} run" + ("" if len(runs) == 1 else "s")
+        summary_color = "#64748b"
+    elif missed:
+        summary = f"{missed}/{expected_count} missed"
+        summary_color = "#f97316"
+    else:
+        summary = f"{ok_expected}/{expected_count} OK"
+        summary_color = "#16a34a"
+    return f"""
+        <tr>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;font-weight:800;color:#0f172a;white-space:nowrap">{_he(label)}</td>
+          {''.join(cells)}
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;color:{summary_color};font-weight:800;white-space:nowrap">{_he(summary)}</td>
+        </tr>"""
+
+
+def _render_week_manual_rows(rows: list[str]) -> str:
+    if not rows:
+        return ""
+    return f"""
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:4px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Manual jobs</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Runs</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Last run</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;font-weight:800;border-bottom:1px solid #dbe3ee;text-transform:uppercase;white-space:nowrap">Result</th>
+          </tr>
+        </thead>
+        <tbody>{''.join(rows)}</tbody>
+      </table>"""
+
+
+def _render_manual_week_row(label: str, st: Any, runs: list, reason: str, generated_at: datetime) -> str:
+    status = str(getattr(st, "status", "") or "unknown")
+    color = {
+        "success": "#16a34a",
+        "warning": "#d97706",
+        "skipped": "#d97706",
+        "error": "#dc2626",
+    }.get(status, "#64748b")
+    result = {
+        "success": "OK",
+        "warning": "Warning",
+        "skipped": "Skipped",
+        "error": "Error",
+        "unknown": "No status",
+    }.get(status, status or "No status")
+    last_run = _time_ago(st.timestamp, generated_at) if st is not None and getattr(st, "timestamp", "") else "never"
+    return f"""
+        <tr>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap">
+            <div style="font-weight:800;color:#0f172a">{_he(label)}</div>
+            <div style="font-size:11px;color:#64748b">{_he(reason)}</div>
+          </td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap">{len(runs)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;color:#475569;white-space:nowrap">{_he(last_run)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e5e7eb;color:{color};font-weight:800;white-space:nowrap">{_he(result)}</td>
+        </tr>"""
+
+
+def _week_dot_cell(state: str, title: str) -> str:
+    if state == "missed":
+        dot = '<span style="display:inline-block;width:11px;height:11px;border-radius:999px;border:2px solid #f97316;background:#fff7ed"></span>'
+    else:
+        color = {
+            "success": "#22c55e",
+            "warning": "#f59e0b",
+            "error": "#ef4444",
+            "idle": "#e2e8f0",
+        }.get(state, "#94a3b8")
+        dot = f'<span style="display:inline-block;width:13px;height:13px;border-radius:999px;background:{color}"></span>'
+    return f"<td title=\"{_he(title)}\" style=\"padding:9px 7px;border-bottom:1px solid #e5e7eb;text-align:center;white-space:nowrap\">{dot}</td>"
+
+
+def _day_status_title(day: Any, state: str, expected: bool) -> str:
+    suffix = "scheduled" if expected else "extra run"
+    return f"{day.isoformat()}: {state} ({suffix})"
+
+
+def _aggregate_day_state(day_runs: list) -> str:
+    statuses = {str(getattr(st, "status", "") or "").strip().lower() for st in day_runs}
+    if not statuses:
+        return ""
+    if "error" in statuses:
+        return "error"
+    if statuses & {"warning", "skipped", "cancelled"}:
+        return "warning"
+    if "success" in statuses:
+        return "success"
+    return "warning"
+
+
+def _statuses_for_key_in_window(statuses: list, key: str, start: datetime, end: datetime) -> list:
+    result = []
+    for st in statuses:
+        if getattr(st, "key", "") != key or st.timestamp_dt is None:
+            continue
+        if start <= st.timestamp_dt <= end:
+            result.append(st)
+    return result
+
+
+def _repo_growth_7d(statuses: list, key: str, period_start: datetime, period_end: datetime) -> int | None:
+    baseline = None
+    current = None
+    for st in sorted(statuses, key=lambda item: item.timestamp_dt or datetime.min):
+        if getattr(st, "key", "") != key or st.timestamp_dt is None:
+            continue
+        size = int(getattr(st, "repository_size", 0) or 0)
+        if size <= 0:
+            continue
+        if st.timestamp_dt < period_start:
+            baseline = size
+            continue
+        if st.timestamp_dt <= period_end:
+            current = size
+    if baseline is None or current is None:
+        return None
+    return current - baseline
+
+
+def _cron_expected_dates(cron: str, start: datetime, end: datetime) -> set | None:
+    parts = str(cron or "").split()
+    if len(parts) != 5:
+        return None
+    minute, hour, dom, month, dow = parts
+    if month != "*":
+        return None
+    try:
+        minute_value = int(minute)
+        hour_value = int(hour)
+    except ValueError:
+        return None
+    if minute_value < 0 or minute_value > 59 or hour_value < 0 or hour_value > 23:
+        return None
+    if dom != "*" and dow != "*":
+        return None
+
+    dow_values = _parse_report_cron_dow_values(dow) if dow != "*" else set(range(7))
+    if not dow_values:
+        return None
+    dom_value = None
+    if dom != "*":
+        try:
+            dom_value = int(dom)
+        except ValueError:
+            return None
+        if dom_value < 1 or dom_value > 31:
+            return None
+
+    dates = set()
+    current = start.date()
+    last = end.date()
+    while current <= last:
+        candidate = datetime(current.year, current.month, current.day, hour_value, minute_value)
+        if start <= candidate <= end:
+            if dom_value is not None:
+                if current.day == dom_value:
+                    dates.add(current)
+            elif _cron_dow_for_report_datetime(candidate) in dow_values:
+                dates.add(current)
+        current += timedelta(days=1)
+    return dates
+
+
+def _parse_report_cron_dow_values(raw: str) -> set[int]:
+    values: set[int] = set()
+    text = str(raw or "").strip()
+    if not text or text == "*":
+        return set(range(7))
+    for part in text.split(","):
+        item = part.strip()
+        if not item or "/" in item:
+            return set()
+        if "-" in item:
+            start_raw, end_raw = item.split("-", 1)
+            try:
+                start = int(start_raw)
+                end = int(end_raw)
+            except ValueError:
+                return set()
+            if start > end:
+                return set()
+            for value in range(start, end + 1):
+                normalized = 0 if value == 7 else value
+                if normalized < 0 or normalized > 6:
+                    return set()
+                values.add(normalized)
+            continue
+        try:
+            value = int(item)
+        except ValueError:
+            return set()
+        normalized = 0 if value == 7 else value
+        if normalized < 0 or normalized > 6:
+            return set()
+        values.add(normalized)
+    return values
+
+
+def _cron_dow_for_report_datetime(value: datetime) -> int:
+    return (value.weekday() + 1) % 7
+
+
+def _report_key_sort(key: str, latest: dict[str, Any], job_meta: dict[str, dict[str, Any]]) -> tuple:
+    meta = job_meta.get(key, {})
+    st = latest.get(key)
+    location = _report_location(key, st, meta)
+    backup_type = str(getattr(st, "backup_type", "") or meta.get("backup_type") or "unknown")
+    return (*_location_order(location), backup_type.lower(), _report_job_label(key, st, meta).lower(), key.lower())
+
+
+def _report_location(key: str, st: Any, meta: dict[str, Any]) -> str:
+    value = str(meta.get("location") or getattr(st, "location", "") or "").strip().lower()
+    if value:
+        return value
+    if "_" in key:
+        return key.rsplit("_", 1)[1].lower()
+    return "unknown"
+
+
+def _report_job_label(key: str, st: Any, meta: dict[str, Any]) -> str:
+    for value in (
+        meta.get("name"),
+        meta.get("display_name"),
+        _derived_job_label(st) if st is not None else "",
+        key.replace("_", " ").title(),
+    ):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return "Unknown job"
+
+
 def _app_icon_img_html() -> str:
     icon_path = Path(__file__).resolve().parents[1] / "ui" / "assets" / "app-icon.png"
     try:
@@ -347,13 +871,6 @@ def _app_icon_img_html() -> str:
 
 
 def _status_sort_key(st, fallback_key: str) -> tuple:
-    location_order = {
-        "local": 0,
-        "storagebox": 1,
-        "usb": 2,
-        "smb": 3,
-        "unknown": 9,
-    }
     backup_type_order = {
         "appdata": 0,
         "flash": 1,
@@ -366,8 +883,7 @@ def _status_sort_key(st, fallback_key: str) -> tuple:
     location = str(getattr(st, "location", "") or "unknown")
     backup_type = str(getattr(st, "backup_type", "") or "unknown")
     return (
-        location_order.get(location.lower(), 8),
-        location.lower(),
+        *_location_order(location),
         backup_type_order.get(backup_type, backup_type_order.get(backup_type.lower(), 8)),
         backup_type.lower(),
         fallback_key.lower(),
@@ -422,32 +938,6 @@ def _status_note(st) -> str:
     if st.status == "skipped":
         return st.skip_reason_text or st.skip_reason_code or "Backup was skipped."
     return ""
-
-
-def _count_recent_runs(statuses: list, key: str, cutoff: datetime) -> int:
-    count = 0
-    for st in statuses:
-        if st.key != key or st.timestamp_dt is None:
-            continue
-        if st.timestamp_dt >= cutoff:
-            count += 1
-    return count
-
-
-def _recent_success_rate(statuses: list, key: str, cutoff: datetime) -> float | None:
-    total = 0
-    success = 0
-    for st in statuses:
-        if st.key != key or st.timestamp_dt is None:
-            continue
-        if st.timestamp_dt < cutoff:
-            continue
-        total += 1
-        if st.status == "success":
-            success += 1
-    if total == 0:
-        return None
-    return success / total * 100
 
 
 def _render_issue_list(issues: list) -> str:

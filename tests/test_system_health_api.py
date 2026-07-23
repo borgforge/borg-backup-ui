@@ -98,24 +98,24 @@ def test_migration_summary_extracts_actions_and_errors():
     assert "broken_v1: 1 error(s)" in summary["errors"]
 
 
-def test_migration_summary_extracts_restore_history_migration():
+def test_migration_summary_extracts_imported_migration_details():
     event = {
         "success": True,
         "timestamp": "2026-06-29T13:45:00",
-        "reason_code": "restore_history_migrated",
+        "reason_code": "migration_data_imported",
         "reason_text": "Restore-History aus restore-runs.json migriert",
-        "message": "restore_history_v1=applied",
+        "message": "history_import_v1=applied",
         "details": {
             "startup_migrations": {
                 "status": "ok",
-                "applied": ["restore_history_v1"],
+                "applied": ["history_import_v1"],
                 "failed": [],
                 "results": {
-                    "restore_history_v1": {
-                        "migration_id": "restore_history_v1",
+                    "history_import_v1": {
+                        "migration_id": "history_import_v1",
                         "status": "applied",
                         "details": {
-                            "migration_id": "restore_history_v1",
+                            "migration_id": "history_import_v1",
                             "runner": "central_migration_registry",
                             "imported": 5,
                         },
@@ -128,8 +128,8 @@ def test_migration_summary_extracts_restore_history_migration():
     summary = _build_migration_summary(event, {"last_event": event, "last_effective_event": event})
 
     assert summary["status"] == "success"
-    assert summary["reason_code"] == "restore_history_migrated"
-    assert "restore_history_v1 applied" in summary["actions"]
+    assert summary["reason_code"] == "migration_data_imported"
+    assert "history_import_v1 applied" in summary["actions"]
     assert "5 restore run(s) migrated" in summary["actions"]
     assert summary["errors"] == []
 
@@ -140,18 +140,18 @@ def test_migration_summary_extracts_startup_migration_actions():
         "timestamp": "2026-06-29T22:41:34",
         "reason_code": "startup_migrations_applied",
         "reason_text": "Startup-Migrationen angewendet",
-        "message": "notification_events_v1=applied",
+        "message": "completed_events_v1=applied",
         "details": {
             "startup_migrations": {
                 "status": "ok",
-                "applied": ["notification_events_v1"],
+                "applied": ["completed_events_v1"],
                 "skipped": [],
                 "failed": [],
                 "results": {
-                    "notification_events_v1": {
+                    "completed_events_v1": {
                         "status": "applied",
                         "details": {
-                            "updated_keys": ["NTFY_EVENTS"],
+                            "updated_keys": ["CENTRAL_EVENTS"],
                         },
                     },
                 },
@@ -165,8 +165,8 @@ def test_migration_summary_extracts_startup_migration_actions():
     assert summary["reason_code"] == "startup_migrations_applied"
     assert summary["last_run"] == "2026-06-29T22:41:34"
     assert summary["last_effective_run"] == "2026-06-29T22:41:34"
-    assert "notification_events_v1 applied" in summary["actions"]
-    assert "Updated keys: NTFY_EVENTS" in summary["actions"]
+    assert "completed_events_v1 applied" in summary["actions"]
+    assert "Updated keys: CENTRAL_EVENTS" in summary["actions"]
     assert summary["errors"] == []
 
 

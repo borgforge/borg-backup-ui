@@ -17,6 +17,7 @@ from typing import Any, Dict, List
 SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
 SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
 SECRET_WORD_RE = re.compile(r"(?i)\b(password|passphrase|token|secret)\s+([^\s\"'<>]+)")
+# Keep legacy native ntfy keys in the sanitizer so old support snippets remain safe.
 PRIVACY_KEY_RE = re.compile(
     r"(?i)(mail|email|recipient|sender|smtp_(host|user)|ntfy_(server_url|username|click_url)|storagebox_(host|user)|"
     r"\bhost\b|\buser(name)?\b|\burl\b)"

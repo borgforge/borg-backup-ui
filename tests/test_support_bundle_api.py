@@ -133,11 +133,11 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
     )
     (config_dir / "migration-state.json").write_text(json.dumps({
         "schema_version": 2,
-        "migrations": {"canonical_data_model_v1": {"state": "applied"}},
+        "migrations": {"beta_upgrade_v1": {"state": "applied"}},
     }) + "\n", encoding="utf-8")
     (config_dir / "migrations.log.jsonl").write_text(json.dumps({
         "event": "migration_completed",
-        "migration_id": "canonical_data_model_v1",
+        "migration_id": "beta_upgrade_v1",
         "host": "u123.your-storagebox.de",
     }) + "\n", encoding="utf-8")
     (jobs_dir / "job1.json").write_text(

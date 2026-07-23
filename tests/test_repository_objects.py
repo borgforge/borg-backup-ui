@@ -16,7 +16,6 @@ import config_api  # noqa: E402
 import repositories_api  # noqa: E402
 import smb_profiles_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
-from migrations.registry import run_startup_migrations  # noqa: E402
 from repositories_api import browse_repository_directories, create_or_import_repository, get_repository_archives, read_repository_store, refresh_due_repository_info, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
 from restore_tests_api import list_restore_test_plan  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
@@ -33,121 +32,56 @@ def _write_job(
     encryption: str = "repokey-blake2",
 ) -> Path:
     jobs_dir = root / "config" / "jobs"
-    jobs_dir.mkdir(parents=True)
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    config = {"BACKUP_SCRIPTS_DIR": str(root)}
     secret = root / "secrets" / f".borg-passphrase-{job_key}"
     secret.parent.mkdir(parents=True, exist_ok=True)
     secret.write_text("secret\n", encoding="utf-8")
+    repo_name = Path(repo_path).name
+    base_path = str(Path(repo_path).parent)
+    storage_key = storage_key_for(location, f"{location}:{base_path}")
+    repo_key = repository_key_for(f"repo_{job_key}", repo_path)
+    write_storage_store(config, {"storages": [{
+        "storage_key": storage_key,
+        "display_name": "Local" if location == "local" else location,
+        "storage_type": location,
+        "location": location,
+        "identity": f"{location}:{base_path}",
+        "profile_key": profile_key,
+        "base_path": base_path,
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": repo_key,
+        "display_name": "Appdata",
+        "repository_name": repo_name,
+        "job_name": "Appdata",
+        "backup_type": "appdata",
+        "location": location,
+        "storage_type": location,
+        "storage_key": storage_key,
+        "storage_name": "Local" if location == "local" else location,
+        "relative_path": repo_name,
+        "encryption": encryption,
+        "passphrase_ref": str(secret),
+        "used_by": [job_key],
+    }]})
     job = {
+        "schema_version": 3,
         "job_key": job_key,
         "name": "Appdata",
         "backup_type": "appdata",
         "location": location,
-        "usb_profile_key": profile_key if location == "usb" else "",
-        "smb_profile_key": profile_key if location == "smb" else "",
-        "storage_profile_key": profile_key if location == "storagebox" else "",
-        "repo": {
-            "conf_key": f"REPO_APPDATA_{location.upper()}",
-            "default": repo_path,
-        },
-        "passphrase": {
-            "conf_key": f"BORG_PASSPHRASE_FILE_APPDATA_{location.upper()}",
-            "default": f"{root}/secrets/.borg-passphrase-{job_key}",
-        },
-        "paths": {
-            "conf_key": "BACKUP_PATHS_APPDATA",
-            "default": "/mnt/user/appdata",
-        },
-        "encryption": encryption,
+        "repository_key": repo_key,
+        "source_paths": ["/mnt/user/appdata"],
     }
     path = jobs_dir / f"{job_key}.json"
     path.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
 
-def test_repository_objects_migration_links_existing_jobs(tmp_path: Path):
-    job_file = _write_job(tmp_path, "appdata_local", "/mnt/backup/borg-backup-appdata")
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-
-    result = run_startup_migrations(config)
-    store = read_repository_store(config)
-    job = json.loads(job_file.read_text(encoding="utf-8"))
-    expected_key = repository_key_for("repo_appdata_local", "/mnt/backup/borg-backup-appdata")
-
-    assert result["results"]["canonical_data_model_v1"]["status"] == "applied"
-    assert job["repository_key"] == expected_key
-    assert job["schema_version"] == 3
-    assert job["source_paths"] == ["/mnt/user/appdata"]
-    assert "paths" not in job
-    assert "repo" not in job
-    assert "passphrase" not in job
-    assert "encryption" not in job
-    assert store["repositories"][0]["repository_key"] == expected_key
-    assert store["repositories"][0]["repository_name"] == "borg-backup-appdata"
-    assert store["repositories"][0]["job_name"] == "Appdata"
-    assert store["repositories"][0]["storage_name"] == "Local"
-    assert store["repositories"][0]["storage_key"].startswith("storage_local_")
-    assert store["repositories"][0]["relative_path"] == "borg-backup-appdata"
-    assert "path_raw" not in store["repositories"][0]
-    assert store["repositories"][0]["used_by"] == ["appdata_local"]
-    assert "repo_conf_key" not in store["repositories"][0]
-    assert "storage_profile_key" not in store["repositories"][0]
-    assert "usb_profile_key" not in store["repositories"][0]
-    assert "smb_profile_key" not in store["repositories"][0]
-    storages = read_storage_store(config)["storages"]
-    assert len(storages) == 1
-    assert storages[0]["storage_key"] == store["repositories"][0]["storage_key"]
-    assert storages[0]["base_path"] == "/mnt/backup"
-
-
-def test_repository_contract_cleanup_removes_transitional_fields_once(tmp_path: Path):
-    from migrations import repository_contract_cleanup_v1
-
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    config_dir = tmp_path / "config"
-    config_dir.mkdir(parents=True)
-    (config_dir / "repositories.json").write_text(json.dumps({
-        "schema_version": 1,
-        "repositories": [{
-            "repository_key": "repo_flash_local",
-            "display_name": "Flash",
-            "storage_key": "storage_local_test",
-            "relative_path": "borg-backup-flash",
-            "path_raw": "/mnt/backup/borg-backup-flash",
-            "repo_path": "/mnt/backup/borg-backup-flash",
-            "repo_conf_key": "REPO_FLASH_LOCAL",
-            "encryption": "none",
-        }],
-    }), encoding="utf-8")
-
-    result = repository_contract_cleanup_v1.apply(config)
-    second = repository_contract_cleanup_v1.apply(config)
-    row = json.loads((config_dir / "repositories.json").read_text(encoding="utf-8"))["repositories"][0]
-
-    assert result["status"] == "applied"
-    assert result["details"]["removed_fields"] == 3
-    assert second["status"] == "not_required"
-    assert not repository_contract_cleanup_v1.LEGACY_FIELDS.intersection(row)
-    assert row["storage_key"] == "storage_local_test"
-    assert row["relative_path"] == "borg-backup-flash"
-
-
-def test_repository_objects_migration_is_idempotent(tmp_path: Path):
-    _write_job(tmp_path, "appdata_local", "/mnt/backup/borg-backup-appdata")
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-
-    first = run_startup_migrations(config)
-    second = run_startup_migrations(config)
-
-    assert first["results"]["canonical_data_model_v1"]["status"] == "applied"
-    assert second["results"]["canonical_data_model_v1"]["status"] == "skipped"
-    assert len(read_repository_store(config)["repositories"]) == 1
-    assert len(read_storage_store(config)["storages"]) == 1
-
-
 def test_storage_data_prefers_repository_objects(tmp_path: Path):
     _write_job(tmp_path, "appdata_local", "/mnt/backup/borg-backup-appdata")
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    run_startup_migrations(config)
 
     data = get_repositories_data(config)
     rows = data["groups"]["local"]
@@ -277,7 +211,6 @@ def test_restore_test_plan_loads_repository_inventory_once(tmp_path: Path, monke
         "RESTORE_TEST_STATUS_DIR": str(tmp_path / "restore-status"),
         "RUNTIME_RUNS_DIR": str(tmp_path / "runtime-runs"),
     }
-    run_startup_migrations(config)
     job = json.loads(job_file.read_text(encoding="utf-8"))
     job["restore_test_policy"] = {"mode": "scheduled", "interval_days": 30, "level": 3}
     job_file.write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
@@ -301,85 +234,6 @@ def test_restore_test_plan_loads_repository_inventory_once(tmp_path: Path, monke
 
     assert plan["jobs"][0]["policy"]["level"] == 3
     assert reads == {"repositories": 1, "storages": 1}
-
-
-def test_repository_objects_v2_enriches_existing_repository_names(tmp_path: Path):
-    job_file = _write_job(tmp_path, "appdata_local", "/mnt/backup/borg-backup-appdata")
-    job = json.loads(job_file.read_text(encoding="utf-8"))
-    job["repository_key"] = "repo_appdata_local"
-    job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    repo_file = tmp_path / "config" / "repositories.json"
-    repo_file.write_text(json.dumps({
-        "schema_version": 1,
-        "updated_at": "2026-07-09T10:00:00Z",
-        "repositories": [{
-            "repository_key": "repo_appdata_local",
-            "display_name": "Appdata - Local",
-            "backup_type": "appdata",
-            "location": "local",
-            "storage_type": "local",
-            "storage_key": "local",
-            "repo_path": "/mnt/backup/borg-backup-appdata",
-            "path_raw": "/mnt/backup/borg-backup-appdata",
-            "path_display": "/mnt/backup/borg-backup-appdata",
-            "source_job_keys": ["appdata_local"],
-            "used_by": ["appdata_local"],
-        }],
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-
-    result = run_startup_migrations(config)
-    store = read_repository_store(config)
-    repo = store["repositories"][0]
-
-    assert result["results"]["canonical_data_model_v1"]["status"] == "applied"
-    assert repo["display_name"] == "Appdata"
-    assert repo["repository_name"] == "borg-backup-appdata"
-    assert repo["job_name"] == "Appdata"
-    assert repo["storage_name"] == "Local"
-
-
-def test_storage_objects_v1_links_existing_repository_objects(tmp_path: Path):
-    job_file = _write_job(tmp_path, "appdata_local", "/mnt/backup/borg-backup-appdata")
-    job = json.loads(job_file.read_text(encoding="utf-8"))
-    job["repository_key"] = "repo_appdata_local"
-    job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    repo_file = tmp_path / "config" / "repositories.json"
-    repo_file.write_text(json.dumps({
-        "schema_version": 1,
-        "updated_at": "2026-07-09T10:00:00Z",
-        "repositories": [{
-            "repository_key": "repo_appdata_local",
-            "display_name": "Appdata",
-            "repository_name": "borg-backup-appdata",
-            "job_name": "Appdata",
-            "backup_type": "appdata",
-            "location": "local",
-            "storage_type": "local",
-            "storage_key": "local",
-            "storage_name": "Local",
-            "repo_path": "/mnt/backup/borg-backup-appdata",
-            "path_raw": "/mnt/backup/borg-backup-appdata",
-            "path_display": "/mnt/backup/borg-backup-appdata",
-            "source_job_keys": ["appdata_local"],
-            "used_by": ["appdata_local"],
-        }],
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-
-    result = run_startup_migrations(config)
-    second = run_startup_migrations(config)
-    repo = read_repository_store(config)["repositories"][0]
-    storages = read_storage_store(config)["storages"]
-
-    assert result["results"]["canonical_data_model_v1"]["status"] == "applied"
-    assert second["results"]["canonical_data_model_v1"]["status"] == "skipped"
-    assert len(storages) == 1
-    assert storages[0]["storage_key"].startswith("storage_local_")
-    assert storages[0]["display_name"] == "Local"
-    assert storages[0]["base_path"] == "/mnt/backup"
-    assert repo["storage_key"] == storages[0]["storage_key"]
-    assert repo["relative_path"] == "borg-backup-appdata"
 
 
 def test_repository_manager_import_uses_profile_storage_key(tmp_path: Path, monkeypatch):
@@ -984,171 +838,6 @@ def test_job_wizard_repository_choice_uses_readable_labels():
     assert "storageTargetSelectedHint" not in english["wizard"]
     assert "hintEl.hidden = true" in source
     assert "hint.hidden = !!storage" in source
-
-
-def test_repository_objects_v3_migrates_legacy_repository_keys(tmp_path: Path):
-    job_file = _write_job(tmp_path, "flash_local", "/mnt/backup/borg-backup-flash")
-    job = json.loads(job_file.read_text(encoding="utf-8"))
-    job["repository_key"] = "repo_flash_local"
-    job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    repo_file = tmp_path / "config" / "repositories.json"
-    repo_file.write_text(json.dumps({
-        "schema_version": 1,
-        "updated_at": "2026-07-09T10:00:00Z",
-        "repositories": [{
-            "repository_key": "repo_flash_local",
-            "display_name": "Flash",
-            "repository_name": "borg-backup-flash",
-            "job_name": "Flash",
-            "backup_type": "flash",
-            "location": "local",
-            "storage_type": "local",
-            "storage_key": "storage_local_old",
-            "storage_name": "Local",
-            "repo_path": "/mnt/backup/borg-backup-flash",
-            "path_raw": "/mnt/backup/borg-backup-flash",
-            "path_display": "/mnt/backup/borg-backup-flash",
-            "source_job_keys": ["flash_local"],
-            "used_by": ["flash_local"],
-        }],
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-
-    result = run_startup_migrations(config)
-    repo = read_repository_store(config)["repositories"][0]
-    job_after = json.loads(job_file.read_text(encoding="utf-8"))
-    expected_key = repository_key_for("repo_flash_local", "/mnt/backup/borg-backup-flash")
-
-    assert result["results"]["canonical_data_model_v1"]["status"] == "applied"
-    assert repo["repository_key"] == expected_key
-    assert job_after["repository_key"] == expected_key
-
-
-def test_repository_objects_v4_enriches_missing_encryption_from_jobs(tmp_path: Path):
-    job_file = _write_job(
-        tmp_path,
-        "flash_local",
-        "/mnt/backup/borg-backup-flash",
-        encryption="repokey-blake2",
-    )
-    job = json.loads(job_file.read_text(encoding="utf-8"))
-    job["repository_key"] = "repo_flash_local"
-    job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    repo_file = tmp_path / "config" / "repositories.json"
-    repo_file.write_text(json.dumps({
-        "schema_version": 1,
-        "updated_at": "2026-07-09T10:00:00Z",
-        "repositories": [{
-            "repository_key": "repo_flash_local",
-            "display_name": "Flash",
-            "repository_name": "borg-backup-flash",
-            "job_name": "Flash",
-            "backup_type": "flash",
-            "location": "local",
-            "storage_type": "local",
-            "storage_key": "storage_local_old",
-            "storage_name": "Local",
-            "repo_path": "/mnt/backup/borg-backup-flash",
-            "path_raw": "/mnt/backup/borg-backup-flash",
-            "path_display": "/mnt/backup/borg-backup-flash",
-            "encryption": "",
-            "source_job_keys": ["flash_local"],
-            "used_by": ["flash_local"],
-        }],
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-
-    result = run_startup_migrations(config)
-    second = run_startup_migrations(config)
-    repo = read_repository_store(config)["repositories"][0]
-
-    assert result["results"]["canonical_data_model_v1"]["status"] == "applied"
-    assert second["results"]["canonical_data_model_v1"]["status"] == "skipped"
-    assert repo["encryption"] == "repokey-blake2"
-
-
-def test_storage_objects_v2_enriches_storage_profile_fields(tmp_path: Path):
-    from migrations import storage_objects_v2
-    repo_file = tmp_path / "config" / "repositories.json"
-    repo_file.parent.mkdir(parents=True, exist_ok=True)
-    repo_key = repository_key_for("repo_flash_storagebox", "ssh://u1@example.test:23/./backup/borg-backup-flash")
-    storage_key = storage_key_for("storagebox", "storagebox-profile:storage-1")
-    repo_file.write_text(json.dumps({
-        "schema_version": 1,
-        "updated_at": "2026-07-09T10:00:00Z",
-        "repositories": [{
-            "repository_key": repo_key,
-            "display_name": "Flash",
-            "repository_name": "borg-backup-flash",
-            "job_name": "Flash",
-            "backup_type": "flash",
-            "location": "storagebox",
-            "storage_type": "ssh",
-            "storage_key": storage_key,
-            "storage_name": "storage-1",
-            "storage_profile_key": "storage-1",
-            "repo_uri": "ssh://u1@example.test:23/./backup/borg-backup-flash",
-            "path_raw": "ssh://u1@example.test:23/./backup/borg-backup-flash",
-            "path_display": "ssh://u1@example.test:23/./backup/borg-backup-flash",
-            "source_job_keys": ["flash_storagebox"],
-            "used_by": ["flash_storagebox"],
-        }],
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    settings_file = tmp_path / "config" / "settings.json"
-    settings_file.write_text(json.dumps({
-        "schema_version": 1,
-        "usb_profiles": [],
-        "smb_profiles": [],
-        "storage_profiles": [{
-            "key": "storage-1",
-            "name": "Hetzner Storagebox",
-            "host": "example.test",
-            "port": "23",
-            "user": "u1",
-            "base_path": "./backup",
-            "target_type": "storagebox",
-            "ssh_key_path": "/root/.ssh/id_rsa_storagebox",
-        }],
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (tmp_path / "config" / "storages.json").write_text(json.dumps({
-        "schema_version": 1,
-        "updated_at": "2026-07-09T10:00:00Z",
-        "storages": [{
-            "storage_key": storage_key,
-            "display_name": "Storagebox",
-            "storage_type": "ssh",
-            "location": "storagebox",
-            "identity": "storagebox-profile:storage-1",
-            "profile_key": "storage-1",
-            "base_path": "./backup",
-            "source": "storage_profile",
-        }],
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (tmp_path / "config" / "migration-state.json").write_text(json.dumps({
-        "schema_version": 2,
-        "migrations": {
-            "storage_objects_v1": {
-                "state": "applied",
-                "checked_at": "2026-07-09T10:00:00",
-                "source": "startup_registry",
-                "details": {"runner": "central_migration_registry"},
-            }
-        },
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-
-    result = storage_objects_v2.apply(config)
-    storages = read_storage_store(config)["storages"]
-    storage = next(row for row in storages if row["profile_key"] == "storage-1")
-
-    assert result["status"] == "applied"
-    assert storage["storage_key"].startswith("storage_storagebox_")
-    assert storage["display_name"] == "Hetzner Storagebox"
-    assert storage["host"] == "example.test"
-    assert storage["port"] == "23"
-    assert storage["user"] == "u1"
-    assert storage["base_path"] == "./backup"
-    assert storage["ssh_key_path"] == "/root/.ssh/id_rsa_storagebox"
 
 
 def test_repository_manager_create_runs_borg_init_and_stores_secret(tmp_path: Path, monkeypatch):

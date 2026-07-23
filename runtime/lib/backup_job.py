@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from lib.docker_manager import DockerManager, DockerStopResult
     from lib.vm_manager import VmManager, VmShutdownResult
     from lib.borg_runner import BorgStats
-    from lib.notifications import NtfyConfig, MailConfig
+    from lib.notifications import MailConfig
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,6 @@ class BackupJob:
         docker_manager: Optional["DockerManager"] = None,
         vm_manager: Optional["VmManager"] = None,
         mail_config: Optional["MailConfig"] = None,
-        ntfy_config: Optional["NtfyConfig"] = None,
         notification_config: Optional[Dict[str, str]] = None,
         phase_callback: Optional[Callable[[str], None]] = None,
     ) -> None:
@@ -213,7 +212,6 @@ class BackupJob:
         self.docker_manager = docker_manager
         self.vm_manager = vm_manager
         self.mail_config = mail_config
-        self.ntfy_config = ntfy_config
         self.notification_config = notification_config
         self.phase_callback = phase_callback
 
@@ -269,8 +267,6 @@ class BackupJob:
             if self.notification_config:
                 mail_events = str(self.notification_config.get("NOTIFY_EMAIL_EVENTS", "backup_failed") or "backup_failed")
             logger.info("  Mail:        %s (events: %s)", self.mail_config.recipient, mail_events)
-        if self.ntfy_config and self.ntfy_config.enabled:
-            logger.info("  ntfy:        %s/%s", self.ntfy_config.server_url, self.ntfy_config.topic)
         if self.vm_manager is not None:
             logger.info("  VM Timeout:  %ds", self.vm_manager.config.shutdown_timeout)
         logger.info("")
@@ -771,7 +767,7 @@ class BackupJob:
             return
         self._final_sent = True
 
-        from lib.notifications import build_backup_ntfy_message
+        from lib.notifications import build_backup_notification_message
 
         exit_code = self._borg_exit
         duration = max(0, int(time.time() - self._start_time))
@@ -786,7 +782,7 @@ class BackupJob:
             self._send_notification_event(
                 "backup_success",
                 "Borg Backup UI: Backup successful",
-                build_backup_ntfy_message(
+                build_backup_notification_message(
                     job_name=self.config.job_name,
                     status="Successful",
                     timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -804,7 +800,7 @@ class BackupJob:
             self._send_notification_event(
                 "backup_warning",
                 "Borg Backup UI: Backup completed with warnings",
-                build_backup_ntfy_message(
+                build_backup_notification_message(
                     job_name=self.config.job_name,
                     status="Warning",
                     timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -823,7 +819,7 @@ class BackupJob:
             self._send_notification_event(
                 "backup_failed",
                 "Borg Backup UI: Backup failed",
-                build_backup_ntfy_message(
+                build_backup_notification_message(
                     job_name=self.config.job_name,
                     status="Error",
                     timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -916,14 +912,14 @@ class BackupJob:
         if self._skip_status_written:
             return
         self._save_skip_status()
-        from lib.notifications import build_backup_ntfy_message
+        from lib.notifications import build_backup_notification_message
 
         duration = max(0, int(time.time() - self._start_time))
         reason = self._skip_reason or "Backup was skipped"
         self._send_notification_event(
             "backup_skipped",
             "Borg Backup UI: Backup skipped",
-            build_backup_ntfy_message(
+            build_backup_notification_message(
                 job_name=self.config.job_name,
                 status="Skipped",
                 timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -968,7 +964,6 @@ class BackupJob:
                     source="backup_job",
                 ),
                 mail_config=self.mail_config,
-                ntfy_config=self.ntfy_config,
             )
         except Exception as exc:  # noqa: BLE001 - notifications are best-effort
             logger.warning("Notification event failed: %s", exc)

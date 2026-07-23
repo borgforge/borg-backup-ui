@@ -6,6 +6,21 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #282
+- Improved the weekly HTML report layout before beta by grouping jobs by location, preferring user-facing job names and keeping archive names as secondary context.
+- Added a weekly activity view that renders scheduled jobs as a seven-day status matrix and separates manual or unsupported custom-cron jobs from schedule-based missed-run evaluation.
+- Limited the report header period and stale-run issues to the displayed seven-day report window, and kept manual jobs out of the issue summary.
+- Replaced the duplicate seven-day run and success-rate columns in job details with a seven-day repository growth column while keeping file counts visible.
+
+### Issue #264
+- Removed the native ntfy API module, direct ntfy delivery client and native ntfy dispatch plumbing before the beta baseline.
+- Renamed reusable notification message builders away from ntfy-specific names while keeping Apprise, mail, restore-test and reminder message formatting intact.
+- Removed pre-beta native ntfy cutover and NTFY event migration modules and their native-only tests from the active codebase.
+- Removed internal pre-beta data-model, repository, storage, restore-history, source-path and SMB-protocol migration modules from the beta startup baseline.
+- Removed successful historical entries for retired pre-beta migrations from System Health & Migration while still showing failed, blocked or pending entries.
+- Limited ordinary completed migration history for active/future migrations to the latest five entries while always keeping failed, blocked or pending entries visible.
+- Documented the beta as the new initial supported state for notification and migration behavior.
+
 ### Issue #255
 - Added a durable background queue for Apprise event delivery so provider network calls no longer block backup, restore-test or reminder processing.
 - Queued Apprise notifications keep per-profile retry/backoff settings, survive application restarts and write sanitized delivery status to `config/notification-deliveries.json`.

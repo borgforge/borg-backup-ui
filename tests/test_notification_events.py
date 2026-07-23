@@ -22,7 +22,7 @@ from lib.notification_events import (  # noqa: E402
     send_event,
 )
 from lib.backup_job import BackupJob, BackupJobConfig  # noqa: E402
-from lib.notifications import MailConfig, NtfyConfig  # noqa: E402
+from lib.notifications import MailConfig  # noqa: E402
 import notification_reminder_api  # noqa: E402
 
 
@@ -45,7 +45,6 @@ def test_send_event_routes_to_configured_channels(monkeypatch):
 
     monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(("unraid", kwargs)) or True)
     monkeypatch.setattr("lib.notification_events.send_mail", lambda config, subject, body: calls.append(("email", subject, body)) or True)
-    monkeypatch.setattr("lib.notification_events.send_ntfy", lambda config, event_type, title, message: calls.append(("ntfy", event_type, title)) or True)
 
     result = send_event(
         {
@@ -59,11 +58,10 @@ def test_send_event_routes_to_configured_channels(monkeypatch):
             job_name="Job",
         ),
         mail_config=MailConfig(recipient="admin@example.test"),
-        ntfy_config=NtfyConfig(enabled=True, server_url="https://ntfy.example.test", topic="borg", events={"backup_success"}),
     )
 
-    assert result == {"unraid": True, "email": False, "ntfy": True, "apprise": False}
-    assert [c[0] for c in calls] == ["unraid", "ntfy"]
+    assert result == {"unraid": True, "email": False, "apprise": False}
+    assert [c[0] for c in calls] == ["unraid"]
 
 
 def test_send_event_routes_to_enabled_apprise_profiles(monkeypatch, tmp_path):
@@ -521,11 +519,11 @@ def test_backup_success_email_appends_log_when_available(monkeypatch, tmp_path):
 def test_backup_job_uses_loaded_notification_config_for_email_events(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_send_event(config, event, *, mail_config=None, ntfy_config=None):
+    def fake_send_event(config, event, *, mail_config=None):
         captured["config"] = dict(config)
         captured["event_type"] = event.event_type
         captured["mail_recipient"] = mail_config.recipient if mail_config else ""
-        return {"unraid": False, "email": True, "ntfy": False}
+        return {"unraid": False, "email": True, "apprise": False}
 
     monkeypatch.setattr("lib.notification_events.send_event", fake_send_event)
     job = BackupJob(
@@ -549,21 +547,6 @@ def test_backup_job_uses_loaded_notification_config_for_email_events(monkeypatch
     assert captured["event_type"] == "backup_success"
     assert captured["config"]["NOTIFY_EMAIL_EVENTS"] == "backup_success,restore_test_success"
     assert captured["mail_recipient"] == "admin@example.test"
-
-
-def test_backup_warning_keeps_existing_ntfy_backup_failed_selection(monkeypatch):
-    calls = []
-    monkeypatch.setattr("lib.notification_events.send_ntfy", lambda config, event_type, title, message: calls.append(event_type) or True)
-
-    result = send_event(
-        {"NOTIFY_UNRAID_EVENTS": "", "NOTIFY_EMAIL_EVENTS": ""},
-        NotificationEvent(event_type="backup_warning", title="Warning", message="warning"),
-        ntfy_config=NtfyConfig(enabled=True, server_url="https://ntfy.example.test", topic="borg", events={"backup_failed"}),
-    )
-
-    assert result["ntfy"] is True
-    assert calls == ["backup_warning"]
-
 
 def test_reminder_state_rate_limits_by_interval(tmp_path):
     cfg = {
@@ -620,7 +603,6 @@ def test_backup_overdue_reminder_uses_supported_schedules(monkeypatch, tmp_path)
         "BACKUP_SCRIPTS_DIR": str(tmp_path),
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
-        "NTFY_ENABLED": "false",
     })
 
     assert result["checked"] == 1
@@ -641,7 +623,6 @@ def test_backup_overdue_uses_expected_run_and_configured_tolerance(monkeypatch, 
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "2",
-        "NTFY_ENABLED": "false",
     })
 
     state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
@@ -664,7 +645,6 @@ def test_backup_overdue_waits_for_tolerance_window(monkeypatch, tmp_path):
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     })
 
     assert result["checked"] == 1
@@ -690,7 +670,6 @@ def test_backup_overdue_uses_type_location_status_when_key_is_missing(monkeypatc
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     })
 
     assert result["checked"] == 1
@@ -716,7 +695,6 @@ def test_backup_overdue_clears_stale_sent_key_when_status_satisfies_expected_run
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     })
 
     state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
@@ -749,7 +727,6 @@ def test_backup_overdue_sender_matches_diagnostics_and_sends_only_ready_jobs(mon
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     })
 
     state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
@@ -779,7 +756,6 @@ def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeyp
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     })
 
     assert result["enabled"] is True
@@ -825,7 +801,6 @@ def test_notification_reminder_diagnostics_reports_apprise_channel(monkeypatch, 
         "BACKUP_SCRIPTS_DIR": str(tmp_path),
         "NOTIFY_UNRAID_EVENTS": "none",
         "NOTIFY_EMAIL_EVENTS": "",
-        "NTFY_ENABLED": "false",
     })
 
     assert result["enabled"] is True
@@ -853,7 +828,6 @@ def test_notification_reminder_diagnostics_distinguishes_missed_and_next_backup_
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_REMINDER_INTERVAL_HOURS": "24",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     })
 
     item = result["backup_overdue"]["items"][0]
@@ -888,7 +862,6 @@ def test_notification_reminder_diagnostics_reports_sent_restore_wait(monkeypatch
         "NOTIFY_UNRAID_EVENTS": "restore_test_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_REMINDER_INTERVAL_HOURS": "24",
-        "NTFY_ENABLED": "false",
     })
 
     item = result["restore_test_overdue"]["items"][0]
@@ -917,7 +890,6 @@ def test_restore_overdue_reminder_skips_rows_without_due_marker(monkeypatch, tmp
         "BACKUP_SCRIPTS_DIR": str(tmp_path),
         "NOTIFY_UNRAID_EVENTS": "restore_test_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
-        "NTFY_ENABLED": "false",
     })
 
     state = read_notification_state({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
@@ -1017,7 +989,6 @@ def test_backup_overdue_sender_does_not_send_when_diagnostics_are_current_after_
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     }
     for key in (
         "backup_overdue:appdata_local:2026-07-03 09:00:00",
@@ -1058,14 +1029,12 @@ def test_backup_overdue_sender_skips_when_latest_status_is_missing(monkeypatch, 
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     })
     diagnostics = notification_reminder_api.get_notification_reminder_diagnostics({
         "BACKUP_SCRIPTS_DIR": str(tmp_path),
         "NOTIFY_UNRAID_EVENTS": "backup_overdue",
         "NOTIFY_EMAIL_EVENTS": "",
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "6",
-        "NTFY_ENABLED": "false",
     })
 
     assert result["checked"] == 1

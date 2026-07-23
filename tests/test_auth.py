@@ -518,11 +518,11 @@ def test_storage_and_repository_context_contains_operation_identifiers():
 def test_migration_maintenance_error_context_contains_failure_details():
     cfg = {}
     set_startup_state(cfg, migration_maintenance_state({
-        "failed": ["canonical_data_model_v1"],
+        "failed": ["beta_upgrade_v1"],
         "results": {
-            "canonical_data_model_v1": {
+            "beta_upgrade_v1": {
                 "details": {
-                    "failed_phase": "canonical_storage_profiles_v1",
+                    "failed_phase": "storage_profile_validation",
                     "error_type": "ValueError",
                     "error": "SMB mount path must be a dedicated directory below /mnt",
                 }
@@ -534,8 +534,8 @@ def test_migration_maintenance_error_context_contains_failure_details():
 
     context = h._startup_migration_context()
 
-    assert context["migration_id"] == "canonical_data_model_v1"
-    assert context["phase"] == "canonical_storage_profiles_v1"
+    assert context["migration_id"] == "beta_upgrade_v1"
+    assert context["phase"] == "storage_profile_validation"
     assert context["status"] == "startup_migration_failed"
     assert context["reason"] == "SMB mount path must be a dedicated directory below /mnt"
 

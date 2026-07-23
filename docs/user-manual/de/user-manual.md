@@ -624,7 +624,7 @@ Borg-Backup-UI verwaltet Benachrichtigungskanäle in **Einstellungen > Benachric
 - E-Mail/SMTP
 - Apprise-Profile fuer ntfy, Rocket.Chat, Discord und andere unterstuetzte Provider
 
-Apprise-Profile koennen angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Die Providerliste wird aus der gebuendelten Apprise-Version geladen. Provider-URL-Formate werden aus Apprise-Metadaten erzeugt, und gespeicherte Apprise-URLs werden als Secret gespeichert und nie zurueck in die Seite gerendert. Bestehende native ntfy-Einstellungen werden beim Start in ein Apprise-Profil migriert.
+Apprise-Profile koennen angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Die Providerliste wird aus der gebuendelten Apprise-Version geladen. Provider-URL-Formate werden aus Apprise-Metadaten erzeugt, und gespeicherte Apprise-URLs werden als Secret gespeichert und nie zurueck in die Seite gerendert. Ab der Beta ist Apprise der initiale Push- und Webhook-Benachrichtigungsweg; alte interne native-ntfy-Testversionen sind keine unterstuetzte direkte Upgrade-Quelle.
 
 Echte Backup-, Restore-Test- und Reminder-Ereignisse werden fuer Apprise im Hintergrund zugestellt. Der ausloesende Job legt einen Queue-Eintrag ab und wartet nicht auf den externen Provider. Der UI-Dienst verarbeitet die Queue regelmaessig, beachtet Timeout, Versuche und Backoff des Profils und setzt nach einem Neustart mit noch offenen Eintraegen fort. Sanitizte Zustellstaende stehen im Systemzustand und im Support-Paket; die Queue mit Nachrichtentexten und die Apprise-Secret-URLs werden nicht in Support-Pakete exportiert.
 

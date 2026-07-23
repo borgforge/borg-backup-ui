@@ -22,7 +22,7 @@ import subprocess
 import sys
 
 from lib.apprise_adapter import AppriseAdapterError, send_notification
-from lib.notifications import MailConfig, NtfyConfig, notify, send_mail, send_ntfy
+from lib.notifications import MailConfig, notify, send_mail
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,6 @@ DEFAULT_UNRAID_EVENTS = {"backup_success", "backup_warning", "backup_failed", "b
 DEFAULT_REMINDER_INTERVAL_HOURS = 24
 DEFAULT_REMINDER_STATE_RETENTION_DAYS = 90
 MAX_EMAIL_LOG_CHARS = 40_000
-
-EVENT_ALIASES = {
-    # Existing ntfy installs used backup_failed for Borg warnings.
-    "backup_warning": {"backup_warning", "backup_failed"},
-}
-
 
 @dataclass
 class NotificationEvent:
@@ -85,10 +79,9 @@ def send_event(
     event: NotificationEvent,
     *,
     mail_config: Optional[MailConfig] = None,
-    ntfy_config: Optional[NtfyConfig] = None,
 ) -> dict[str, bool]:
     """Send one logical event to all configured channels, best-effort."""
-    results = {"unraid": False, "email": False, "ntfy": False, "apprise": False}
+    results = {"unraid": False, "email": False, "apprise": False}
     event_type = str(event.event_type or "").strip()
     if not event_type:
         return results
@@ -104,38 +97,22 @@ def send_event(
     if mail_config is not None and event_type in event_set(config, "NOTIFY_EMAIL_EVENTS", DEFAULT_EMAIL_EVENTS):
         results["email"] = _send_event_mail(mail_config, event)
 
-    if ntfy_config is not None:
-        results["ntfy"] = _send_event_ntfy(ntfy_config, event)
-
     if _apprise_async_enabled(config):
         apprise_result = enqueue_event_apprise(config, event)
     else:
         apprise_result = _send_event_apprise(config, event)
     results["apprise"] = apprise_result.delivered
 
-    if ntfy_config is not None:
-        logger.info(
-            "Notification event processed (event=%s source=%s unraid=%s email=%s native_ntfy=%s apprise=%s apprise_mode=%s apprise_profiles=%s)",
-            event_type,
-            event.source or "-",
-            results["unraid"],
-            results["email"],
-            results["ntfy"],
-            results["apprise"],
-            apprise_result.mode,
-            _log_list(apprise_result.delivered_profiles),
-        )
-    else:
-        logger.info(
-            "Notification event processed (event=%s source=%s unraid=%s email=%s apprise=%s apprise_mode=%s apprise_profiles=%s)",
-            event_type,
-            event.source or "-",
-            results["unraid"],
-            results["email"],
-            results["apprise"],
-            apprise_result.mode,
-            _log_list(apprise_result.delivered_profiles),
-        )
+    logger.info(
+        "Notification event processed (event=%s source=%s unraid=%s email=%s apprise=%s apprise_mode=%s apprise_profiles=%s)",
+        event_type,
+        event.source or "-",
+        results["unraid"],
+        results["email"],
+        results["apprise"],
+        apprise_result.mode,
+        _log_list(apprise_result.delivered_profiles),
+    )
     _emit_lifecycle_notification(event, results, apprise_result)
     return results
 
@@ -163,7 +140,6 @@ def _emit_lifecycle_notification(event: NotificationEvent, results: dict[str, bo
             exit_code=event.exit_code,
             unraid=bool(results.get("unraid")),
             email=bool(results.get("email")),
-            native_ntfy=bool(results.get("ntfy")),
             apprise=bool(results.get("apprise")),
             apprise_mode=apprise_result.mode,
             apprise_profiles=apprise_result.delivered_profiles,
@@ -206,17 +182,8 @@ def _read_log_excerpt(log_file: Path) -> str:
     )
 
 
-def _send_event_ntfy(config: NtfyConfig, event: NotificationEvent) -> bool:
-    allowed = set(config.events or set())
-    aliases = EVENT_ALIASES.get(event.event_type, {event.event_type})
-    if allowed and not (allowed & aliases):
-        logger.info("ntfy event skipped by configuration: %s", event.event_type)
-        return False
-    return send_ntfy(config, event.event_type, _ntfy_title(config, event.title), event.message)
-
-
-def _ntfy_title(config: NtfyConfig, title: str) -> str:
-    prefix = str(config.name or "Borg Backup UI").strip() or "Borg Backup UI"
+def _notification_title(profile_name: str, title: str) -> str:
+    prefix = str(profile_name or "Borg Backup UI").strip() or "Borg Backup UI"
     text = str(title or "").strip()
     for marker in ("Borg Backup UI:", "Borg Backup UI -"):
         if text.startswith(marker):
@@ -487,7 +454,6 @@ def apprise_event_profiles(config: dict, event_type: str) -> list[dict[str, Any]
     event = str(event_type or "").strip()
     if not event:
         return []
-    aliases = EVENT_ALIASES.get(event, {event})
     profiles = []
     for row in _read_apprise_profiles(config):
         if not isinstance(row, dict):
@@ -496,7 +462,7 @@ def apprise_event_profiles(config: dict, event_type: str) -> list[dict[str, Any]
         if not profile_id or not bool(row.get("enabled", True)):
             continue
         selected = _profile_event_set(row.get("selected_events"))
-        if selected and not (selected & aliases):
+        if selected and event not in selected:
             continue
         if not _apprise_secret_path(config, profile_id).is_file():
             continue
@@ -566,7 +532,7 @@ def _notify_apprise_profile(config: dict, profile: dict[str, Any], url: str, eve
 
 
 def _apprise_title(profile_name: str, title: str) -> str:
-    return _ntfy_title(NtfyConfig(name=profile_name), title)
+    return _notification_title(profile_name, title)
 
 
 def _apprise_timeout(value: Any) -> int:
