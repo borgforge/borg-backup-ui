@@ -2093,14 +2093,13 @@ async function onRepositoryRefreshEnabledToggle(event) {
   const input = event?.target;
   if (!input) return;
   const previous = !input.checked;
-  const enabling = input.checked && !previous;
   input.disabled = true;
   markSettingsDirty();
   const ok = await saveSettings();
   if (!ok) {
     input.checked = previous;
     markSettingsDirty();
-  } else if (enabling) {
+  } else {
     scheduleRepositoryRefreshStatusReload();
   }
   if (input.isConnected) input.disabled = false;
