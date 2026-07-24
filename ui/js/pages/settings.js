@@ -3516,7 +3516,7 @@ async function refreshSettingsConfigBackups() {
             <tr>
               <td>${escHtml(r.name)}</td>
               <td>${escHtml(r.reason || '—')}</td>
-              <td>${new Date((r.mtime || 0) * 1000).toLocaleString('de-DE')}</td>
+              <td>${new Date((r.created_ts || r.mtime || 0) * 1000).toLocaleString(settingsLocale())}</td>
               <td>${_fmtBytes(Number(r.size || 0))}</td>
               <td style="text-align:right">
                 <button class="btn btn-secondary btn-sm" data-settings-action="diff-config-backup" data-backup-name="${escHtml(r.name)}">Diff</button>

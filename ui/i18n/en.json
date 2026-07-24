@@ -1698,7 +1698,7 @@
       "none": "No configuration backups available yet.",
       "file": "File",
       "reason": "Reason",
-      "changed": "Modified",
+      "changed": "Created",
       "size": "Size",
       "restore": "Restore",
       "restoreTitle": "Restore backup",

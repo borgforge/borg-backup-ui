@@ -142,6 +142,29 @@ def _conf_backup_dir(ui_config: dict) -> Path:
     return Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backups"
 
 
+def _backup_conf_timestamp_from_name(name: str) -> datetime | None:
+    match = re.match(r"^backup\.conf\.(\d{8})-(\d{6})\.bak$", str(name or ""))
+    if not match:
+        return None
+    try:
+        return datetime.strptime("".join(match.groups()), "%Y%m%d%H%M%S")
+    except ValueError:
+        return None
+
+
+def _backup_conf_created_at_from_meta(meta: dict[str, Any], name: str, fallback_mtime: float) -> datetime:
+    raw = str(meta.get("created_at") or "").strip()
+    if raw:
+        try:
+            return datetime.fromisoformat(raw)
+        except ValueError:
+            pass
+    from_name = _backup_conf_timestamp_from_name(name)
+    if from_name is not None:
+        return from_name
+    return datetime.fromtimestamp(fallback_mtime)
+
+
 def backup_conf_snapshot(ui_config: dict, keep: int = 10, reason: str = "") -> Optional[Path]:
     """Creates a timestamped backup of backup.conf before write operations."""
     conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
@@ -149,12 +172,17 @@ def backup_conf_snapshot(ui_config: dict, keep: int = 10, reason: str = "") -> O
         return None
     backup_dir = _conf_backup_dir(ui_config)
     backup_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    created = datetime.now()
+    ts = created.strftime("%Y%m%d-%H%M%S")
     dst = backup_dir / f"backup.conf.{ts}.bak"
     shutil.copy2(conf_file, dst)
+    try:
+        os.utime(dst, (created.timestamp(), created.timestamp()))
+    except OSError:
+        pass
     meta = {
         "reason": str(reason or "").strip(),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "created_at": created.isoformat(timespec="seconds"),
         "source": str(conf_file),
     }
     meta_file = backup_dir / f"{dst.name}.meta.json"
@@ -180,23 +208,29 @@ def list_conf_backups(ui_config: dict) -> dict:
     backup_dir = _conf_backup_dir(ui_config)
     items = []
     if backup_dir.is_dir():
-        for p in sorted(backup_dir.glob("backup.conf.*.bak"), key=lambda x: x.stat().st_mtime, reverse=True):
+        for p in backup_dir.glob("backup.conf.*.bak"):
             st = p.stat()
             reason = ""
+            meta: dict[str, Any] = {}
             meta_file = backup_dir / f"{p.name}.meta.json"
             if meta_file.exists():
                 try:
                     meta = json.loads(meta_file.read_text(encoding="utf-8"))
                     reason = str(meta.get("reason") or "").strip()
                 except (json.JSONDecodeError, OSError, TypeError, ValueError):
+                    meta = {}
                     reason = ""
+            created_at = _backup_conf_created_at_from_meta(meta, p.name, st.st_mtime)
             items.append({
                 "name": p.name,
                 "path": str(p),
                 "size": int(st.st_size),
                 "mtime": int(st.st_mtime),
+                "created_at": created_at.isoformat(timespec="seconds"),
+                "created_ts": int(created_at.timestamp()),
                 "reason": reason,
             })
+        items.sort(key=lambda row: int(row.get("created_ts") or row.get("mtime") or 0), reverse=True)
     return {"backups": items, "backup_dir": str(backup_dir)}
 
 
