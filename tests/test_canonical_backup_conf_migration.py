@@ -57,6 +57,10 @@ def test_migration_rebuilds_backup_conf_from_canonical_schema(tmp_path: Path) ->
     assert result["status"] == "applied"
     assert result["details"]["added_keys"] == ["NOTIFY_EMAIL_EVENTS", "UI_SESSION_TIMEOUT_MINUTES"]
     assert result["details"]["removed_keys"] == ["REPO_FLASH_LOCAL", "STORAGEBOX_HOST"]
+    visible_backup = Path(result["details"]["visible_backup"])
+    assert visible_backup.is_file()
+    visible_meta = json.loads((visible_backup.parent / f"{visible_backup.name}.meta.json").read_text(encoding="utf-8"))
+    assert visible_meta["reason"] == "canonical_backup_conf_v1 applied"
     assert read_raw_conf(config) == {
         "GLOBAL_DATA_DIR": "/mnt/user/custom data",
         "UI_SESSION_TIMEOUT_MINUTES": "30",

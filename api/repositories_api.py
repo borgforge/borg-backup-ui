@@ -15,6 +15,7 @@ import re
 import shlex
 import subprocess
 import tempfile
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,6 +34,20 @@ ALLOWED_ENCRYPTION_MODES = {
     "authenticated-blake2",
     "authenticated",
     "none",
+}
+
+REPOSITORY_INFO_REFRESH_STATE_VERSION = 1
+REPOSITORY_INFO_REFRESH_DEFAULT_INTERVAL_HOURS = 24
+REPOSITORY_INFO_REFRESH_DEFAULT_RETRY_HOURS = 1
+
+_REFRESH_LOCK = threading.Lock()
+_REFRESH_WAKE_EVENT = threading.Event()
+_REFRESH_RUNTIME_STATE: dict[str, Any] = {
+    "worker_started": False,
+    "worker_started_at": "",
+    "worker_state": "stopped",
+    "current_run_started_at": "",
+    "last_schedule_reason": "",
 }
 
 
@@ -75,6 +90,10 @@ def _data_root(config: dict) -> Path:
 
 def repositories_file(config: dict) -> Path:
     return _data_root(config) / "config" / "repositories.json"
+
+
+def repository_info_refresh_state_file(config: dict) -> Path:
+    return _data_root(config) / "config" / "repository-info-refresh-state.json"
 
 
 def _slug(value: str, fallback: str = "repository") -> str:
@@ -1136,6 +1155,18 @@ def _record_repository_info_error(config: dict, repository_key: str, message: st
     update_repository_store(config, apply_error)
 
 
+def _record_repository_info_warning(config: dict, repository_key: str, message: str, checked_at: str) -> None:
+    def apply_warning(store: dict[str, Any]) -> dict[str, Any]:
+        return {"repositories": [{
+            **row,
+            "last_info_refresh_at": checked_at,
+            "last_info_refresh_status": "warning",
+            "last_info_refresh_error": _mask_repo_output(str(message or "Repository storage is currently unavailable"))[:500],
+            "updated_at": checked_at,
+        } if str(row.get("repository_key") or "") == repository_key else row for row in store["repositories"]]}
+    update_repository_store(config, apply_warning)
+
+
 def _record_repository_info_busy(config: dict, repository_key: str, checked_at: str) -> None:
     def apply_busy(store: dict[str, Any]) -> dict[str, Any]:
         return {"repositories": [{
@@ -1213,6 +1244,430 @@ def refresh_due_repository_info(
         "failed": failed,
         "deferred": deferred,
         "errors": errors,
+    }
+
+
+def _truthy_config(value: Any, default: bool = True) -> bool:
+    raw = str(value if value is not None else "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on", "enabled"}
+
+
+def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(str(value or "").strip())
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(parsed, maximum))
+
+
+def repository_info_refresh_settings(config: dict) -> dict[str, Any]:
+    try:
+        from config_api import read_expanded_conf, read_raw_conf
+
+        conf = read_expanded_conf(config)
+        conf.update(read_raw_conf(config))
+    except Exception:
+        conf = config
+    return {
+        "enabled": _truthy_config(conf.get("REPOSITORY_INFO_REFRESH_ENABLED"), True),
+        "interval_hours": _bounded_int(
+            conf.get("REPOSITORY_INFO_REFRESH_INTERVAL_HOURS"),
+            REPOSITORY_INFO_REFRESH_DEFAULT_INTERVAL_HOURS,
+            1,
+            24 * 30,
+        ),
+        "retry_hours": _bounded_int(
+            conf.get("REPOSITORY_INFO_REFRESH_RETRY_HOURS"),
+            REPOSITORY_INFO_REFRESH_DEFAULT_RETRY_HOURS,
+            1,
+            24 * 7,
+        ),
+    }
+
+
+def _repository_info_refresh_state_defaults() -> dict[str, Any]:
+    return {
+        "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
+        "updated_at": "",
+        "last_run_at": "",
+        "next_run_at": "",
+        "last_result": {
+            "checked": 0,
+            "refreshed": 0,
+            "failed": 0,
+            "deferred": 0,
+            "errors": [],
+        },
+    }
+
+
+def _read_repository_info_refresh_state(config: dict) -> dict[str, Any]:
+    path = repository_info_refresh_state_file(config)
+    defaults = _repository_info_refresh_state_defaults()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return defaults
+    if not isinstance(payload, dict):
+        return defaults
+    result = {**defaults, **payload}
+    if not isinstance(result.get("last_result"), dict):
+        result["last_result"] = defaults["last_result"]
+    return result
+
+
+def _write_repository_info_refresh_state(config: dict, payload: dict[str, Any]) -> None:
+    path = repository_info_refresh_state_file(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with inventory_lock(path.parent):
+        atomic_write_json(path, payload, mode=0o600)
+
+
+def _format_repository_timestamp(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _latest_repository_info_timestamp(config: dict) -> datetime | None:
+    latest: datetime | None = None
+    for row in read_repository_store(config).get("repositories", []):
+        for raw in (row.get("last_info_refresh_at"), row.get("last_seen_at")):
+            parsed = _parse_repository_timestamp(raw)
+            if parsed is not None and (latest is None or parsed > latest):
+                latest = parsed
+    return latest
+
+
+def _repository_info_missing_stats(config: dict) -> bool:
+    for row in read_repository_store(config).get("repositories", []):
+        stats = row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {}
+        status = str(row.get("last_info_refresh_status") or "").strip().lower()
+        if not stats and status not in {"error", "warning", "busy"}:
+            return True
+    return False
+
+
+def _compute_repository_info_next_run(
+    config: dict,
+    settings: dict[str, Any],
+    state: dict[str, Any],
+    now: datetime,
+    *,
+    after_run: bool = False,
+) -> datetime | None:
+    if not settings.get("enabled"):
+        return None
+    last_result = state.get("last_result") if isinstance(state.get("last_result"), dict) else {}
+    retry_due = _repository_info_result_requires_retry(config, last_result)
+    interval_hours = (
+        int(settings.get("retry_hours") or REPOSITORY_INFO_REFRESH_DEFAULT_RETRY_HOURS)
+        if retry_due
+        else int(settings.get("interval_hours") or REPOSITORY_INFO_REFRESH_DEFAULT_INTERVAL_HOURS)
+    )
+    interval = timedelta(hours=interval_hours)
+    if after_run:
+        return now + interval
+    last_run = _parse_repository_timestamp(state.get("last_run_at"))
+    if last_run is None:
+        last_run = _latest_repository_info_timestamp(config)
+    if last_run is None or _repository_info_missing_stats(config):
+        return now
+    return last_run + interval
+
+
+def _repository_storage_location(repository: dict[str, Any], storage: dict[str, Any]) -> str:
+    return str(
+        storage.get("location")
+        or storage.get("storage_type")
+        or repository.get("location")
+        or repository.get("storage_type")
+        or repository.get("storage_name")
+        or ""
+    ).strip().lower()
+
+
+def _is_removable_or_mount_storage_unavailable(
+    repository: dict[str, Any],
+    storage: dict[str, Any],
+    exc: Exception,
+) -> bool:
+    location = _repository_storage_location(repository, storage)
+    if location not in {"smb", "usb"}:
+        return False
+    message = str(exc or "").lower()
+    unavailable_markers = (
+        "not mounted",
+        "could not be mounted",
+        "couldn't be mounted",
+        "failed to mount",
+        "mount point",
+        "mountpoint",
+        "no such file or directory",
+        "does not exist",
+        "not found",
+        "is not a directory",
+        "stale file handle",
+        "transport endpoint is not connected",
+        "host is down",
+        "network is unreachable",
+    )
+    return any(marker in message for marker in unavailable_markers)
+
+
+def _repository_info_display_status(repository: dict[str, Any], storage: dict[str, Any]) -> str:
+    status = str(repository.get("last_info_refresh_status") or "").strip().lower()
+    error = str(repository.get("last_info_refresh_error") or "").strip()
+    if status == "error" and error and _is_removable_or_mount_storage_unavailable(
+        repository,
+        storage,
+        RuntimeError(error),
+    ):
+        return "warning"
+    return status
+
+
+def _repository_info_result_requires_retry(config: dict, result: dict[str, Any]) -> bool:
+    if int(result.get("deferred") or 0) > 0:
+        return True
+    failed = int(result.get("failed") or 0)
+    if failed <= 0:
+        return False
+    errors = result.get("errors") if isinstance(result.get("errors"), list) else []
+    if not errors:
+        return True
+    repositories = {
+        str(row.get("repository_key") or ""): row
+        for row in read_repository_store(config).get("repositories", [])
+    }
+    storages = _storage_by_key(config)
+    classified = 0
+    for item in errors:
+        if not isinstance(item, dict):
+            return True
+        key = str(item.get("repository_key") or "").strip()
+        repository = repositories.get(key)
+        if not repository:
+            return True
+        storage = storages.get(str(repository.get("storage_key") or ""), {})
+        error = RuntimeError(str(item.get("error") or ""))
+        if not _is_removable_or_mount_storage_unavailable(repository, storage, error):
+            return True
+        classified += 1
+    return classified < failed
+
+
+def refresh_all_repository_info(config: dict) -> dict[str, Any]:
+    """Refresh cached Borg information for every managed repository once."""
+    repositories = read_repository_store(config).get("repositories", [])
+    storages = _storage_by_key(config)
+    checked = len(repositories)
+    refreshed = 0
+    warning = 0
+    failed = 0
+    deferred = 0
+    errors: list[dict[str, str]] = []
+    for repository in repositories:
+        key = str(repository.get("repository_key") or "").strip()
+        if not key:
+            continue
+        storage = storages.get(str(repository.get("storage_key") or ""), {})
+        try:
+            refresh_repository_info(config, key)
+            refreshed += 1
+        except RepositoryBusyError:
+            deferred += 1
+            _record_repository_info_busy(config, key, _now())
+        except Exception as exc:
+            safe_message = _mask_repo_output(str(exc or "Repository information refresh failed"))[:500]
+            if _is_removable_or_mount_storage_unavailable(repository, storage, exc):
+                warning += 1
+                _record_repository_info_warning(config, key, safe_message, _now())
+            else:
+                failed += 1
+                _record_repository_info_error(config, key, safe_message, _now())
+                errors.append({"repository_key": key, "error": safe_message})
+    return {
+        "checked": checked,
+        "refreshed": refreshed,
+        "warning": warning,
+        "failed": failed,
+        "deferred": deferred,
+        "errors": errors,
+    }
+
+
+def signal_repository_info_refresh_config_changed() -> None:
+    _REFRESH_WAKE_EVENT.set()
+
+
+def run_repository_info_refresh_scheduler(
+    config: dict,
+    *,
+    log_fn: Callable[[str], None] | None = None,
+    startup_delay_seconds: int = 300,
+) -> None:
+    """Run the automatic repository info refresh without hourly polling."""
+    with _REFRESH_LOCK:
+        _REFRESH_RUNTIME_STATE.update({
+            "worker_started": True,
+            "worker_started_at": _now(),
+            "worker_state": "startup_wait",
+            "current_run_started_at": "",
+            "last_schedule_reason": "startup",
+        })
+    if _REFRESH_WAKE_EVENT.wait(max(0, int(startup_delay_seconds))):
+        _REFRESH_WAKE_EVENT.clear()
+    while True:
+        settings = repository_info_refresh_settings(config)
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        state = _read_repository_info_refresh_state(config)
+        if not settings["enabled"]:
+            disabled_payload = {
+                **state,
+                "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
+                "updated_at": _now(),
+                "next_run_at": "",
+            }
+            _write_repository_info_refresh_state(config, disabled_payload)
+            with _REFRESH_LOCK:
+                _REFRESH_RUNTIME_STATE.update({
+                    "worker_state": "disabled",
+                    "current_run_started_at": "",
+                    "last_schedule_reason": "disabled",
+                })
+            _REFRESH_WAKE_EVENT.wait(24 * 60 * 60)
+            _REFRESH_WAKE_EVENT.clear()
+            continue
+
+        next_run = _compute_repository_info_next_run(config, settings, state, now)
+        if next_run is None:
+            timeout = 24 * 60 * 60
+        else:
+            timeout = max(0.0, (next_run - now).total_seconds())
+        scheduled_payload = {
+            **state,
+            "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
+            "updated_at": _now(),
+            "next_run_at": _format_repository_timestamp(next_run),
+        }
+        _write_repository_info_refresh_state(config, scheduled_payload)
+        with _REFRESH_LOCK:
+            _REFRESH_RUNTIME_STATE.update({
+                "worker_state": "sleeping" if timeout > 0 else "due",
+                "current_run_started_at": "",
+                "last_schedule_reason": "scheduled",
+            })
+        if timeout > 0 and _REFRESH_WAKE_EVENT.wait(timeout):
+            _REFRESH_WAKE_EVENT.clear()
+            continue
+
+        _REFRESH_WAKE_EVENT.clear()
+        started_at = _now()
+        with _REFRESH_LOCK:
+            _REFRESH_RUNTIME_STATE.update({
+                "worker_state": "running",
+                "current_run_started_at": started_at,
+                "last_schedule_reason": "running",
+            })
+        try:
+            result = refresh_all_repository_info(config)
+        except Exception as exc:
+            result = {
+                "checked": 0,
+                "refreshed": 0,
+                "warning": 0,
+                "failed": 1,
+                "deferred": 0,
+                "errors": [{"repository_key": "", "error": _mask_repo_output(str(exc))[:500]}],
+            }
+        finished = datetime.now(timezone.utc).replace(microsecond=0)
+        next_after_run = _compute_repository_info_next_run(
+            config,
+            repository_info_refresh_settings(config),
+            {"last_run_at": _format_repository_timestamp(finished), "last_result": result},
+            finished,
+            after_run=True,
+        )
+        persisted = {
+            "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
+            "updated_at": _format_repository_timestamp(finished),
+            "last_run_at": _format_repository_timestamp(finished),
+            "next_run_at": _format_repository_timestamp(next_after_run),
+            "last_result": result,
+        }
+        _write_repository_info_refresh_state(config, persisted)
+        with _REFRESH_LOCK:
+            _REFRESH_RUNTIME_STATE.update({
+                "worker_state": "sleeping",
+                "current_run_started_at": "",
+                "last_schedule_reason": "completed",
+            })
+        if log_fn:
+            log_fn(
+                "Repository information refresh completed: "
+                f"checked={result.get('checked')} refreshed={result.get('refreshed')} "
+                f"warning={result.get('warning')} deferred={result.get('deferred')} "
+                f"failed={result.get('failed')} "
+                f"next_run_at={persisted.get('next_run_at') or 'disabled'}"
+            )
+
+
+def get_repository_info_refresh_status(config: dict) -> dict[str, Any]:
+    settings = repository_info_refresh_settings(config)
+    persisted = _read_repository_info_refresh_state(config)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    if settings["enabled"] and not persisted.get("next_run_at"):
+        next_run = _compute_repository_info_next_run(config, settings, persisted, now)
+        persisted["next_run_at"] = _format_repository_timestamp(next_run)
+    repositories = read_repository_store(config).get("repositories", [])
+    storages = _storage_by_key(config)
+    details = []
+    counts = {"success": 0, "warning": 0, "error": 0, "busy": 0, "pending": 0}
+    for row in repositories:
+        storage = storages.get(str(row.get("storage_key") or ""), {})
+        status = _repository_info_display_status(row, storage)
+        stats = row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {}
+        if status == "success":
+            counts["success"] += 1
+        elif status == "warning":
+            counts["warning"] += 1
+        elif status == "error":
+            counts["error"] += 1
+        elif status == "busy":
+            counts["busy"] += 1
+        else:
+            counts["pending"] += 1
+        details.append({
+            "repository_key": str(row.get("repository_key") or ""),
+            "display_name": str(row.get("display_name") or row.get("repository_name") or row.get("repository_key") or ""),
+            "storage_name": str(row.get("storage_name") or row.get("location") or ""),
+            "location": _repository_storage_location(row, storage),
+            "last_info_refresh_at": str(row.get("last_info_refresh_at") or row.get("last_seen_at") or ""),
+            "last_info_refresh_status": status or ("pending" if not stats else "unknown"),
+            "last_info_refresh_error": str(row.get("last_info_refresh_error") or ""),
+        })
+    with _REFRESH_LOCK:
+        runtime = dict(_REFRESH_RUNTIME_STATE)
+    return {
+        "enabled": bool(settings["enabled"]),
+        "interval_hours": int(settings["interval_hours"]),
+        "retry_hours": int(settings["retry_hours"]),
+        "plugin_pid": os.getpid(),
+        "worker_started": bool(runtime.get("worker_started")),
+        "worker_state": str(runtime.get("worker_state") or "stopped"),
+        "worker_started_at": str(runtime.get("worker_started_at") or ""),
+        "current_run_started_at": str(runtime.get("current_run_started_at") or ""),
+        "last_run_at": str(persisted.get("last_run_at") or ""),
+        "next_run_at": str(persisted.get("next_run_at") or ""),
+        "last_result": persisted.get("last_result") if isinstance(persisted.get("last_result"), dict) else {},
+        "repository_count": len(repositories),
+        "counts": counts,
+        "details": details,
     }
 
 

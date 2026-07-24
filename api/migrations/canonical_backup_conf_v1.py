@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from config_api import canonical_backup_conf_plan
+from config_api import backup_conf_snapshot, canonical_backup_conf_plan
 from inventory_store import atomic_write_bytes, inventory_lock
 from security_utils import mask_secrets
 
@@ -114,6 +114,13 @@ def apply(config: dict) -> dict[str, Any]:
         })
 
         try:
+            visible_backup = None
+            if source_existed and plan["changed"]:
+                visible_backup = backup_conf_snapshot(
+                    config,
+                    keep=10,
+                    reason=f"{MIGRATION_ID} applied",
+                )
             if plan["changed"]:
                 atomic_write_bytes(source, plan["content"].encode("utf-8"))
             if legacy_schema_existed:
@@ -163,6 +170,7 @@ def apply(config: dict) -> dict[str, Any]:
             "run_id": run_id,
             "affected_files": affected_files,
             "backup_directory": str(backup_dir),
+            "visible_backup": str(visible_backup) if visible_backup else "",
             "added_keys": list(plan["missing_keys"]),
             "removed_keys": list(plan["unknown_keys"]),
         })
@@ -177,8 +185,10 @@ def apply(config: dict) -> dict[str, Any]:
                 "removed_keys": list(plan["unknown_keys"]),
                 "affected_files": affected_files,
                 "backup_directory": str(backup_dir),
+                "visible_backup": str(visible_backup) if visible_backup else "",
                 "legacy_schema_removed": legacy_schema_existed,
                 "actions": [
+                    *(["Created a visible backup.conf rollback snapshot"] if visible_backup else []),
                     "Rebuilt backup.conf from the version-owned canonical schema",
                     *(["Removed the obsolete persistent backup.conf.example copy"] if legacy_schema_existed else []),
                 ],

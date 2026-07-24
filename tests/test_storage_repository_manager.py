@@ -576,6 +576,7 @@ def test_repository_import_has_storage_scoped_directory_browser():
     assert 'id="repository-manager-browser"' in html
     assert 'id="repository-manager-browser-list"' in html
     assert 'id="repository-manager-browser-btn"' in html
+    assert 'id="repository-manager-import-compatibility-notice"' in html
     assert "/api/repositories/browse?storage_key=" in script
     assert "row.managed" in script
     assert "selectDisabled = managed || !supported" in script

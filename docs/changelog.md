@@ -6,12 +6,31 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #292
+- Normalized nested Settings cards so the Restore settings tab uses the same redesigned card surface as the other settings areas in light and dark themes.
+
+### Issue #291
+- Fixed Config Backups & Rollback so backup.conf snapshots are sorted and displayed by snapshot creation time instead of the copied source file modification time.
+- Added metadata and filename fallback handling for older backup.conf snapshots, renamed the visible timestamp column to Created and clarified the German reason column as the snapshot trigger.
+- Added a visible Config Backups & Rollback snapshot when `canonical_backup_conf_v1` rewrites backup.conf, using `canonical_backup_conf_v1 applied` as the trigger.
+
+### Issue #289
+- Added Repository settings for automatic repository info refresh, including enable/disable, interval and retry controls, worker status, next-run visibility and cached per-repository details.
+- Replaced the hourly repository-info polling loop with a scheduled next-run worker so Borg info/list are not triggered merely to check whether work is due.
+- Kept manual Repository Manager info refresh unchanged while the Settings status view reads only cached metadata and does not execute Borg commands.
+- Moved the settings area to Operations > Repositories, grouped cached repository details by location and toned down the summary layout.
+- Classified temporarily unavailable USB/SMB mount targets as warnings so they do not trigger the short failed-refresh retry interval.
+- Refined the Repositories settings placement, worker status labels and grouped table layout, including display normalization for existing SMB/USB mount errors.
+- Replaced the repository refresh enablement checkbox with an immediate-save switch.
+
 ### Issue #284
 - Added consistent required-field markers to the Job Wizard, Restore Wizard, Repository Manager, profile settings, Apprise profile editor, user creation and confirmation dialogs.
 - Kept optional fields unmarked and wired conditional repository passphrase state so encryption `none` does not show a required passphrase marker.
+
 ### Issue #283
 - Removed direct SMB mount controls from the Job Wizard so job creation only selects storage targets and repositories already present in the canonical inventory.
 - Kept manual SMB mount and unmount actions in Settings > SMB Profiles, and left repository creation/import responsible for direct storage access when needed.
+- Added a visible compatibility note to repository imports, explaining that Borg Backup UI uses Borg 1.4.4 and that existing repositories must be verified after import.
 - Preserved backend SMB job mount metadata defaults for existing jobs and runtime execution while no longer exposing those controls during job creation.
 
 ### Issue #282

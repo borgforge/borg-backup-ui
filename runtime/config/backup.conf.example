@@ -22,6 +22,11 @@ GLOBAL_LOG_RETENTION_DAYS=30
 GLOBAL_BORG_CACHE_BASE="/mnt/cache/borg-cache"
 GLOBAL_BORG_CHECKPOINT_INTERVAL=1800
 GLOBAL_BORG_CHECK_INTERVAL_DAYS=30
+# Automatische Aktualisierung gecachter Repository-Statistiken.
+# Kann Array-Disks aufwecken, wenn Repositorys direkt auf /mnt/diskX liegen.
+REPOSITORY_INFO_REFRESH_ENABLED="true"
+REPOSITORY_INFO_REFRESH_INTERVAL_HOURS="24"
+REPOSITORY_INFO_REFRESH_RETRY_HOURS="1"
 # Laufzeit-Guard für lange Borg-Prozesse.
 # 0 = bewusst unbegrenzt (empfohlen für große Initial-Backups mit langsamen Uploads).
 # Bei Wert > 0 wird nach N Stunden erst SIGTERM, dann nach 30s SIGKILL gesendet.
