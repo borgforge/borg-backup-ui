@@ -28,6 +28,8 @@ def test_repository_import_compatibility_notice_is_import_only():
     assert 'class="status-message info hidden"' in index
     assert "storage.repositoryImportCompatibilityNotice" in storage_js
     assert "storage.repositoryImportCompatibilityNoticeGeneric" in storage_js
+    assert "document.getElementById('repository-manager-import-compatibility-notice')" in storage_js
+    assert "if (importCompatibilityNotice)" in storage_js
     assert "action !== 'import'" in storage_js
     assert "storageBorgVersionLabel" in storage_js
 

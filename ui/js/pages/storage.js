@@ -736,6 +736,7 @@ function repositoryManagerSyncFields() {
   document.querySelector('.repository-manager-checks')?.classList.toggle('hidden', action !== 'create');
   document.getElementById('repository-manager-browser-btn')?.classList.toggle('hidden', action !== 'import');
   document.getElementById('repository-manager-browser-hint')?.classList.toggle('hidden', action !== 'import');
+  const importCompatibilityNotice = document.getElementById('repository-manager-import-compatibility-notice');
   if (importCompatibilityNotice) {
     const version = storageBorgVersionLabel();
     importCompatibilityNotice.textContent = version
