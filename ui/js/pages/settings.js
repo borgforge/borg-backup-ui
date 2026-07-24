@@ -77,7 +77,7 @@ function getSettingsTabs() {
   { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: locationIcon('usb') },
   { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: locationIcon('smb') },
   { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: locationIcon('storagebox') },
-  { key: 'repository', label: settingsT('tabs.repository'), group: 'storage', description: settingsT('menu.repositoryDescription'), icon: settingsMenuIcon('repository') },
+  { key: 'repository', label: settingsT('tabs.repository'), group: 'operations', description: settingsT('menu.repositoryDescription'), icon: settingsMenuIcon('repository') },
   { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: settingsMenuIcon('transfer') },
   { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: settingsMenuIcon('advanced') },
   { key: 'factory-reset', label: settingsT('tabs.factoryReset'), group: 'maintenance', description: settingsT('menu.factoryResetDescription'), icon: settingsMenuIcon('factory-reset') },
@@ -2070,6 +2070,7 @@ function _repositoryRefreshStatusLabel(status) {
   const key = {
     success: 'repositoryRefreshStatusSuccess',
     ok: 'repositoryRefreshStatusSuccess',
+    warning: 'repositoryRefreshStatusWarning',
     error: 'repositoryRefreshStatusError',
     busy: 'repositoryRefreshStatusBusy',
     pending: 'repositoryRefreshStatusPending',
@@ -2078,13 +2079,70 @@ function _repositoryRefreshStatusLabel(status) {
   return key ? settingsT(`forms.${key}`) : (normalized || settingsT('forms.repositoryRefreshStatusUnknown'));
 }
 
-function _repositoryRefreshMetric(label, value, tone) {
+function _repositoryRefreshSummaryItem(label, value, tone) {
   return `
-    <div class="migration-metric ${escHtml(tone || 'neutral')}">
+    <div class="repository-refresh-summary-item ${escHtml(tone || 'neutral')}">
       <span>${escHtml(label)}</span>
       <strong>${escHtml(value)}</strong>
     </div>
   `;
+}
+
+function _repositoryRefreshLocationKey(row) {
+  return String(row?.location || row?.storage_name || '').trim().toLowerCase() || 'other';
+}
+
+function _repositoryRefreshLocationLabel(row) {
+  const key = _repositoryRefreshLocationKey(row);
+  const labels = {
+    local: 'Local',
+    usb: 'USB',
+    smb: 'SMB',
+    storagebox: 'Storagebox',
+    ssh: 'Storagebox',
+    other: settingsT('forms.repositoryRefreshLocationOther'),
+  };
+  return row?.storage_name && !labels[key] ? String(row.storage_name) : (labels[key] || String(row?.storage_name || key));
+}
+
+function _renderRepositoryRefreshDetailGroups(details) {
+  if (!details.length) {
+    return `<div class="status-message empty-state">${settingsT('forms.repositoryRefreshNoRepositories')}</div>`;
+  }
+  const groups = new Map();
+  details.forEach((row) => {
+    const key = _repositoryRefreshLocationKey(row);
+    if (!groups.has(key)) {
+      groups.set(key, { label: _repositoryRefreshLocationLabel(row), rows: [] });
+    }
+    groups.get(key).rows.push(row);
+  });
+  return Array.from(groups.values()).map((group) => {
+    const rows = group.rows.map((row) => `
+      <tr>
+        <td><strong>${escHtml(row.display_name || row.repository_key || '—')}</strong><br><small>${escHtml(row.repository_key || '')}</small></td>
+        <td>${escHtml(row.storage_name || '—')}</td>
+        <td>${escHtml(_formatHealthTimestamp(row.last_info_refresh_at) || '—')}</td>
+        <td>${escHtml(_repositoryRefreshStatusLabel(row.last_info_refresh_status))}</td>
+        <td>${escHtml(row.last_info_refresh_error || '—')}</td>
+      </tr>
+    `).join('');
+    return `
+      <div class="repository-refresh-detail-group">
+        <div class="repository-refresh-detail-heading">${escHtml(group.label)} <span>${group.rows.length}</span></div>
+        <table class="settings-table">
+          <thead><tr>
+            <th>${settingsT('forms.repositoryRefreshDetailRepository')}</th>
+            <th>${settingsT('forms.repositoryRefreshDetailStorage')}</th>
+            <th>${settingsT('forms.repositoryRefreshDetailLastInfo')}</th>
+            <th>${settingsT('forms.repositoryRefreshDetailStatus')}</th>
+            <th>${settingsT('forms.repositoryRefreshDetailMessage')}</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderSettingsRepositoryInfoRefresh(refresh) {
@@ -2099,18 +2157,10 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
   const nextRun = enabled ? (_formatHealthTimestamp(refresh?.next_run_at) || '—') : settingsT('forms.repositoryRefreshDisabled');
   const resultText = settingsT('forms.repositoryRefreshResultCounts', {
     ok: Number(lastResult.refreshed || counts.success || 0),
+    warning: Number(lastResult.warning || counts.warning || 0),
     failed: Number(lastResult.failed || counts.error || 0),
     deferred: Number(lastResult.deferred || counts.busy || 0),
   });
-  const rows = details.map((row) => `
-    <tr>
-      <td><strong>${escHtml(row.display_name || row.repository_key || '—')}</strong><br><small>${escHtml(row.repository_key || '')}</small></td>
-      <td>${escHtml(row.storage_name || '—')}</td>
-      <td>${escHtml(_formatHealthTimestamp(row.last_info_refresh_at) || '—')}</td>
-      <td>${escHtml(_repositoryRefreshStatusLabel(row.last_info_refresh_status))}</td>
-      <td>${escHtml(row.last_info_refresh_error || '—')}</td>
-    </tr>
-  `).join('');
   return settingsCard(settingsT('forms.repositoryRefreshTitle'),
     settingsMenuIcon('repository'),
     `<div class="settings-body">
@@ -2135,26 +2185,17 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
           </select>
         </div>
       </div>
-      <div class="migration-overview-grid" style="margin-top:12px">
-        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshWorker'), _repositoryRefreshStateLabel(refresh?.worker_state), enabled ? 'neutral' : 'warn')}
-        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshPluginPid'), Number(refresh?.plugin_pid || 0) || '—', 'neutral')}
-        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshLastRun'), lastRun, 'neutral')}
-        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshNextRun'), nextRun, enabled ? 'neutral' : 'warn')}
-        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshRepositories'), Number(refresh?.repository_count || details.length || 0), 'neutral')}
-        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshLastResult'), resultText, Number(lastResult.failed || 0) ? 'warn' : 'ok')}
+      <div class="repository-refresh-summary">
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshWorker'), _repositoryRefreshStateLabel(refresh?.worker_state), enabled ? 'neutral' : 'warn')}
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshPluginPid'), Number(refresh?.plugin_pid || 0) || '—', 'neutral')}
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastRun'), lastRun, 'neutral')}
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshNextRun'), nextRun, enabled ? 'neutral' : 'warn')}
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshRepositories'), Number(refresh?.repository_count || details.length || 0), 'neutral')}
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastResult'), resultText, Number(lastResult.failed || 0) ? 'warn' : 'ok')}
       </div>
       <details class="system-health-technical" style="margin-top:12px">
         <summary>${escHtml(settingsT('forms.repositoryRefreshDetails'))}</summary>
-        <table class="settings-table" style="margin-top:8px">
-          <thead><tr>
-            <th>${settingsT('forms.repositoryRefreshDetailRepository')}</th>
-            <th>${settingsT('forms.repositoryRefreshDetailStorage')}</th>
-            <th>${settingsT('forms.repositoryRefreshDetailLastInfo')}</th>
-            <th>${settingsT('forms.repositoryRefreshDetailStatus')}</th>
-            <th>${settingsT('forms.repositoryRefreshDetailError')}</th>
-          </tr></thead>
-          <tbody>${rows || `<tr><td colspan="5">${settingsT('forms.repositoryRefreshNoRepositories')}</td></tr>`}</tbody>
-        </table>
+        <div class="repository-refresh-detail-groups">${_renderRepositoryRefreshDetailGroups(details)}</div>
       </details>
     </div>`);
 }

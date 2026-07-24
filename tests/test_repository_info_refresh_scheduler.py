@@ -9,10 +9,13 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+import repositories_api as repo_api  # noqa: E402
 from repositories_api import (  # noqa: E402
     _compute_repository_info_next_run,
     get_repository_info_refresh_status,
     repository_info_refresh_settings,
+    read_repository_store,
+    refresh_all_repository_info,
     write_repository_store,
 )
 
@@ -131,3 +134,59 @@ def test_next_global_repository_info_refresh_uses_retry_after_failed_run(tmp_pat
     )
 
     assert next_run and next_run.isoformat() == "2026-07-24T13:00:00+00:00"
+
+
+def test_next_global_repository_info_refresh_does_not_retry_warnings_hourly(tmp_path: Path):
+    config = _config(tmp_path)
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_usb",
+        "display_name": "USB Repo",
+        "storage_key": "storage_usb",
+        "relative_path": "repo",
+        "location": "usb",
+        "last_info_refresh_at": "2026-07-24T07:00:00Z",
+        "last_info_refresh_status": "warning",
+        "repository_stats": {},
+    }]})
+    now = datetime(2026, 7, 24, 8, 0, tzinfo=timezone.utc)
+
+    next_run = _compute_repository_info_next_run(
+        config,
+        {"enabled": True, "interval_hours": 24, "retry_hours": 1},
+        {
+            "last_run_at": "2026-07-24T07:00:00Z",
+            "last_result": {"checked": 3, "refreshed": 2, "warning": 1, "failed": 0, "deferred": 0},
+        },
+        now,
+    )
+
+    assert next_run and next_run.isoformat() == "2026-07-25T07:00:00+00:00"
+
+
+def test_unmounted_smb_repository_refresh_is_recorded_as_warning(tmp_path: Path, monkeypatch):
+    config = _config(tmp_path)
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_smb",
+        "display_name": "SMB Repo",
+        "storage_key": "storage_smb",
+        "relative_path": "repo",
+        "storage_name": "SMB",
+        "location": "smb",
+        "last_info_refresh_at": "",
+        "last_info_refresh_status": "",
+        "repository_stats": {},
+    }]})
+
+    def fail_refresh(_config, _key):
+        raise RuntimeError("The SMB share could not be mounted. Review the server configuration.")
+
+    monkeypatch.setattr(repo_api, "refresh_repository_info", fail_refresh)
+
+    result = refresh_all_repository_info(config)
+
+    assert result["checked"] == 1
+    assert result["warning"] == 1
+    assert result["failed"] == 0
+    row = read_repository_store(config)["repositories"][0]
+    assert row["last_info_refresh_status"] == "warning"
+    assert "SMB share" in row["last_info_refresh_error"]

@@ -1155,6 +1155,18 @@ def _record_repository_info_error(config: dict, repository_key: str, message: st
     update_repository_store(config, apply_error)
 
 
+def _record_repository_info_warning(config: dict, repository_key: str, message: str, checked_at: str) -> None:
+    def apply_warning(store: dict[str, Any]) -> dict[str, Any]:
+        return {"repositories": [{
+            **row,
+            "last_info_refresh_at": checked_at,
+            "last_info_refresh_status": "warning",
+            "last_info_refresh_error": _mask_repo_output(str(message or "Repository storage is currently unavailable"))[:500],
+            "updated_at": checked_at,
+        } if str(row.get("repository_key") or "") == repository_key else row for row in store["repositories"]]}
+    update_repository_store(config, apply_warning)
+
+
 def _record_repository_info_busy(config: dict, repository_key: str, checked_at: str) -> None:
     def apply_busy(store: dict[str, Any]) -> dict[str, Any]:
         return {"repositories": [{
@@ -1333,7 +1345,9 @@ def _latest_repository_info_timestamp(config: dict) -> datetime | None:
 
 def _repository_info_missing_stats(config: dict) -> bool:
     for row in read_repository_store(config).get("repositories", []):
-        if not isinstance(row.get("repository_stats"), dict) or not row.get("repository_stats"):
+        stats = row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {}
+        status = str(row.get("last_info_refresh_status") or "").strip().lower()
+        if not stats and status not in {"error", "warning", "busy"}:
             return True
     return False
 
@@ -1366,11 +1380,52 @@ def _compute_repository_info_next_run(
     return last_run + interval
 
 
+def _repository_storage_location(repository: dict[str, Any], storage: dict[str, Any]) -> str:
+    return str(
+        storage.get("location")
+        or storage.get("storage_type")
+        or repository.get("location")
+        or repository.get("storage_type")
+        or repository.get("storage_name")
+        or ""
+    ).strip().lower()
+
+
+def _is_removable_or_mount_storage_unavailable(
+    repository: dict[str, Any],
+    storage: dict[str, Any],
+    exc: Exception,
+) -> bool:
+    location = _repository_storage_location(repository, storage)
+    if location not in {"smb", "usb"}:
+        return False
+    message = str(exc or "").lower()
+    unavailable_markers = (
+        "not mounted",
+        "could not be mounted",
+        "couldn't be mounted",
+        "failed to mount",
+        "mount point",
+        "mountpoint",
+        "no such file or directory",
+        "does not exist",
+        "not found",
+        "is not a directory",
+        "stale file handle",
+        "transport endpoint is not connected",
+        "host is down",
+        "network is unreachable",
+    )
+    return any(marker in message for marker in unavailable_markers)
+
+
 def refresh_all_repository_info(config: dict) -> dict[str, Any]:
     """Refresh cached Borg information for every managed repository once."""
     repositories = read_repository_store(config).get("repositories", [])
+    storages = _storage_by_key(config)
     checked = len(repositories)
     refreshed = 0
+    warning = 0
     failed = 0
     deferred = 0
     errors: list[dict[str, str]] = []
@@ -1378,6 +1433,7 @@ def refresh_all_repository_info(config: dict) -> dict[str, Any]:
         key = str(repository.get("repository_key") or "").strip()
         if not key:
             continue
+        storage = storages.get(str(repository.get("storage_key") or ""), {})
         try:
             refresh_repository_info(config, key)
             refreshed += 1
@@ -1385,13 +1441,18 @@ def refresh_all_repository_info(config: dict) -> dict[str, Any]:
             deferred += 1
             _record_repository_info_busy(config, key, _now())
         except Exception as exc:
-            failed += 1
             safe_message = _mask_repo_output(str(exc or "Repository information refresh failed"))[:500]
-            _record_repository_info_error(config, key, safe_message, _now())
-            errors.append({"repository_key": key, "error": safe_message})
+            if _is_removable_or_mount_storage_unavailable(repository, storage, exc):
+                warning += 1
+                _record_repository_info_warning(config, key, safe_message, _now())
+            else:
+                failed += 1
+                _record_repository_info_error(config, key, safe_message, _now())
+                errors.append({"repository_key": key, "error": safe_message})
     return {
         "checked": checked,
         "refreshed": refreshed,
+        "warning": warning,
         "failed": failed,
         "deferred": deferred,
         "errors": errors,
@@ -1477,6 +1538,7 @@ def run_repository_info_refresh_scheduler(
             result = {
                 "checked": 0,
                 "refreshed": 0,
+                "warning": 0,
                 "failed": 1,
                 "deferred": 0,
                 "errors": [{"repository_key": "", "error": _mask_repo_output(str(exc))[:500]}],
@@ -1507,7 +1569,8 @@ def run_repository_info_refresh_scheduler(
             log_fn(
                 "Repository information refresh completed: "
                 f"checked={result.get('checked')} refreshed={result.get('refreshed')} "
-                f"deferred={result.get('deferred')} failed={result.get('failed')} "
+                f"warning={result.get('warning')} deferred={result.get('deferred')} "
+                f"failed={result.get('failed')} "
                 f"next_run_at={persisted.get('next_run_at') or 'disabled'}"
             )
 
@@ -1520,13 +1583,17 @@ def get_repository_info_refresh_status(config: dict) -> dict[str, Any]:
         next_run = _compute_repository_info_next_run(config, settings, persisted, now)
         persisted["next_run_at"] = _format_repository_timestamp(next_run)
     repositories = read_repository_store(config).get("repositories", [])
+    storages = _storage_by_key(config)
     details = []
-    counts = {"success": 0, "error": 0, "busy": 0, "pending": 0}
+    counts = {"success": 0, "warning": 0, "error": 0, "busy": 0, "pending": 0}
     for row in repositories:
+        storage = storages.get(str(row.get("storage_key") or ""), {})
         status = str(row.get("last_info_refresh_status") or "").strip().lower()
         stats = row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {}
         if status == "success":
             counts["success"] += 1
+        elif status == "warning":
+            counts["warning"] += 1
         elif status == "error":
             counts["error"] += 1
         elif status == "busy":
@@ -1537,6 +1604,7 @@ def get_repository_info_refresh_status(config: dict) -> dict[str, Any]:
             "repository_key": str(row.get("repository_key") or ""),
             "display_name": str(row.get("display_name") or row.get("repository_name") or row.get("repository_key") or ""),
             "storage_name": str(row.get("storage_name") or row.get("location") or ""),
+            "location": _repository_storage_location(row, storage),
             "last_info_refresh_at": str(row.get("last_info_refresh_at") or row.get("last_seen_at") or ""),
             "last_info_refresh_status": status or ("pending" if not stats else "unknown"),
             "last_info_refresh_error": str(row.get("last_info_refresh_error") or ""),

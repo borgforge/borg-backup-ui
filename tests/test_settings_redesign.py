@@ -46,6 +46,7 @@ def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
 
     for contract in (
         "key: 'repository'",
+        "key: 'repository', label: settingsT('tabs.repository'), group: 'operations'",
         'data-settings-panel="repository"',
         "renderSettingsRepositoryInfoRefresh(data.repository_info_refresh || {})",
         'data-key="REPOSITORY_INFO_REFRESH_ENABLED"',
@@ -53,6 +54,7 @@ def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
         'data-key="REPOSITORY_INFO_REFRESH_RETRY_HOURS"',
         "repositoryRefreshWorker",
         "repositoryRefreshNextRun",
+        "_renderRepositoryRefreshDetailGroups(details)",
     ):
         assert contract in script
     for key in (
