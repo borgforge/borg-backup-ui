@@ -724,6 +724,7 @@ function repositoryManagerSyncFields() {
   document.querySelector('.repository-manager-checks')?.classList.toggle('hidden', action !== 'create');
   document.getElementById('repository-manager-browser-btn')?.classList.toggle('hidden', action !== 'import');
   document.getElementById('repository-manager-browser-hint')?.classList.toggle('hidden', action !== 'import');
+  document.getElementById('repository-manager-import-compatibility-hint')?.classList.toggle('hidden', action !== 'import');
   if (action !== 'import') repositoryManagerCloseBrowser();
   const encryptionDescription = document.getElementById('repository-manager-encryption-description');
   if (encryptionDescription) {

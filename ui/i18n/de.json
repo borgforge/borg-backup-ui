@@ -324,6 +324,7 @@
     "repositoryRelativePathHint": "Pfad innerhalb des gewählten Speicherziels, z. B. borg-backup-appdata oder team/appdata. Keine absoluten Pfade und keine .. Segmente.",
     "repositoryBrowse": "Durchsuchen",
     "repositoryBrowseHint": "Beim Import kannst du vorhandene Verzeichnisse im gewählten Speicherziel durchsuchen oder den relativen Pfad weiterhin manuell eingeben.",
+    "repositoryImportCompatibilityHint": "Borg Backup UI verwendet aktuell Borg 1.4.4. Importierte Repositorys müssen mit dieser Version kompatibel sein. Die ursprüngliche Borg-Version eines Repositorys kann nicht zuverlässig erkannt werden. Bitte prüfe nach dem Import Repository-Info, Restore-Test und einen echten Backup-Lauf.",
     "repositoryBrowseLocation": "Speicherziel",
     "repositoryBrowseUp": "Eine Ebene höher",
     "repositoryBrowseSelect": "Auswählen",

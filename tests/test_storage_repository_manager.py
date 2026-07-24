@@ -560,12 +560,18 @@ def test_repository_import_has_storage_scoped_directory_browser():
     script = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
     bindings = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(encoding="utf-8")
     html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+    de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
+    en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
 
     assert 'id="repository-manager-browser"' in html
     assert 'id="repository-manager-browser-list"' in html
     assert 'id="repository-manager-browser-btn"' in html
+    assert 'id="repository-manager-import-compatibility-hint"' in html
+    assert "repository-manager-import-compatibility-hint" in script
     assert "/api/repositories/browse?storage_key=" in script
     assert "row.managed" in script
     assert "selectDisabled = managed || !supported" in script
     assert "repositoryManagerBrowserClick" in bindings
     assert "repositoryManagerOpenBrowser" in bindings
+    assert "Borg 1.4.4" in de["storage"]["repositoryImportCompatibilityHint"]
+    assert "Borg 1.4.4" in en["storage"]["repositoryImportCompatibilityHint"]

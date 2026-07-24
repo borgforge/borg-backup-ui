@@ -23,6 +23,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #283
 - Removed direct SMB mount controls from the Job Wizard so job creation only selects storage targets and repositories already present in the canonical inventory.
 - Kept manual SMB mount and unmount actions in Settings > SMB Profiles, and left repository creation/import responsible for direct storage access when needed.
+- Added a visible compatibility note to repository imports, explaining that Borg Backup UI uses Borg 1.4.4 and that existing repositories must be verified after import.
 - Preserved backend SMB job mount metadata defaults for existing jobs and runtime execution while no longer exposing those controls during job creation.
 
 ### Issue #282
