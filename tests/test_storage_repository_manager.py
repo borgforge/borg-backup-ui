@@ -20,6 +20,18 @@ from repositories_api import RepositoryLifecycleConflict, apply_repository_lifec
 from storage_objects_api import create_storage_target, read_storage_store, test_storage_target as run_storage_target_test, write_storage_store  # noqa: E402
 
 
+def test_repository_import_compatibility_notice_is_import_only():
+    index = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+    storage_js = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
+
+    assert 'id="repository-manager-import-compatibility-notice"' in index
+    assert 'class="status-message info hidden"' in index
+    assert "storage.repositoryImportCompatibilityNotice" in storage_js
+    assert "storage.repositoryImportCompatibilityNoticeGeneric" in storage_js
+    assert "action !== 'import'" in storage_js
+    assert "storageBorgVersionLabel" in storage_js
+
+
 def test_create_local_storage_target_is_stable_and_testable(tmp_path: Path, monkeypatch):
     base = tmp_path / "backup"
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
@@ -560,18 +572,13 @@ def test_repository_import_has_storage_scoped_directory_browser():
     script = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
     bindings = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(encoding="utf-8")
     html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
-    de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
-    en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
 
     assert 'id="repository-manager-browser"' in html
     assert 'id="repository-manager-browser-list"' in html
     assert 'id="repository-manager-browser-btn"' in html
-    assert 'id="repository-manager-import-compatibility-hint"' in html
-    assert "repository-manager-import-compatibility-hint" in script
+    assert 'id="repository-manager-import-compatibility-notice"' in html
     assert "/api/repositories/browse?storage_key=" in script
     assert "row.managed" in script
     assert "selectDisabled = managed || !supported" in script
     assert "repositoryManagerBrowserClick" in bindings
     assert "repositoryManagerOpenBrowser" in bindings
-    assert "Borg 1.4.4" in de["storage"]["repositoryImportCompatibilityHint"]
-    assert "Borg 1.4.4" in en["storage"]["repositoryImportCompatibilityHint"]

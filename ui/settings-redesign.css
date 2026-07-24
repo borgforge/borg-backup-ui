@@ -747,6 +747,10 @@
   font-weight: var(--ui-font-weight-semibold);
 }
 
+.settings-profile-editor.readonly .settings-profile-field .form-required-marker {
+  display: none;
+}
+
 .settings-profile-field > input,
 .settings-profile-field > select {
   width: 100%;

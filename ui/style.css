@@ -2554,6 +2554,17 @@ body.wizard-modal-open {
   color: var(--text-secondary);
 }
 
+.form-label.form-label-required {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.form-required-marker {
+  color: var(--error);
+  font-weight: 800;
+}
+
 .form-input {
   background: var(--bg-base);
   border: 1px solid var(--border);
