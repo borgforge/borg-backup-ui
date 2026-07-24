@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #284
+- Added consistent required-field markers to the Job Wizard, Restore Wizard, Repository Manager, profile settings, Apprise profile editor, user creation and confirmation dialogs.
+- Kept optional fields unmarked and wired conditional repository passphrase state so encryption `none` does not show a required passphrase marker.
 ### Issue #283
 - Removed direct SMB mount controls from the Job Wizard so job creation only selects storage targets and repositories already present in the canonical inventory.
 - Kept manual SMB mount and unmount actions in Settings > SMB Profiles, and left repository creation/import responsible for direct storage access when needed.

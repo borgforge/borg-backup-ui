@@ -721,11 +721,13 @@ function repositoryManagerRenderStep(step) {
 function repositoryManagerSyncFields() {
   const action = document.getElementById('repository-manager-action')?.value || 'create';
   const encryption = document.getElementById('repository-manager-encryption')?.value || 'repokey-blake2';
-  const importCompatibilityNotice = document.getElementById('repository-manager-import-compatibility-notice');
+  const passphraseRequired = action === 'create' && encryption !== 'none';
   document.getElementById('repository-manager-encryption-group')?.classList.toggle('hidden', action !== 'create');
   document.getElementById('repository-manager-key-data-group')?.classList.toggle('hidden', action !== 'import');
   document.getElementById('repository-manager-passphrase-group')
     ?.classList.toggle('hidden', action === 'create' && encryption === 'none');
+  document.getElementById('repository-manager-passphrase-required-marker')?.classList.toggle('hidden', !passphraseRequired);
+  document.getElementById('repository-manager-passphrase-required-marker')?.closest('.form-label')?.classList.toggle('form-label-required', passphraseRequired);
   ['repository-manager-storage-quota', 'repository-manager-append-only', 'repository-manager-make-parent-dirs'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.disabled = action !== 'create';
@@ -1206,7 +1208,15 @@ async function openRepositoryLifecycle(repositoryKey, mode = 'remove') {
     if (title) title.textContent = storageT(requestedMode === 'delete' ? 'storage.repositoryDeletePermanent' : 'storage.repositoryRemoveFromUi');
     if (description) description.textContent = storageT(requestedMode === 'delete' ? 'storage.repositoryDeleteConfirmHint' : 'storage.repositoryRemoveConfirmHint');
     if (info) info.innerHTML = `<div class="modal-info-item ${requestedMode === 'delete' ? 'error' : 'warning'}"><span class="modal-info-text"><strong>${escHtml(preview.display_name || '')}</strong><br>${escHtml(preview.repository_path || '')}<br>${escHtml(storageT('storage.repositoryArchiveCount'))}: ${Number(preview.archive_count || 0)} · ${escHtml(storageT('storage.repositoryDeduplicatedSize'))}: ${escHtml(storageFormatBytes(preview.deduplicated_size))}</span></div>`;
-    if (nameLabel) nameLabel.textContent = storageT('storage.repositoryConfirmName', { name: preview.display_name || '' });
+    if (nameLabel) {
+      nameLabel.classList.add('form-label-required');
+      nameLabel.innerHTML = `<span class="form-required-marker" aria-hidden="true">*</span><span>${escHtml(storageT('storage.repositoryConfirmName', { name: preview.display_name || '' }))}</span>`;
+    }
+    const phraseLabel = phraseGroup?.querySelector('label');
+    if (phraseLabel) {
+      phraseLabel.classList.add('form-label-required');
+      phraseLabel.innerHTML = `<span class="form-required-marker" aria-hidden="true">*</span><span>${escHtml(storageT('storage.repositoryConfirmDeletePhrase'))}</span>`;
+    }
     phraseGroup?.classList.toggle('hidden', requestedMode !== 'delete');
     if (nameInput) nameInput.value = '';
     if (phraseInput) phraseInput.value = '';
