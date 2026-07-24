@@ -227,17 +227,19 @@ def test_job_wizard_ui_preloads_schedules_and_surfaces_save_failures() -> None:
     assert "body: JSON.stringify({ job_key: jobKey, cron, enabled: schedEnabled })" in script
 
 
-def test_job_wizard_can_temporarily_mount_smb_profiles() -> None:
+def test_job_wizard_does_not_mount_smb_profiles_during_job_creation() -> None:
     html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
     script = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
     bindings = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(encoding="utf-8")
 
-    assert 'id="wiz-smb-mount-now-btn"' in html
-    assert "temporarySmbMounts" in script
-    assert "async function wizardMountSelectedSmbProfile()" in script
-    assert "wizardState.temporarySmbMounts[profileKey] = true" in script
-    assert "async function wizardCleanupTemporarySmbMounts()" in script
-    assert "wizardMountSelectedSmbProfile" in bindings
+    assert 'id="wiz-smb-mount-options-group"' not in html
+    assert 'id="wiz-smb-mount-now-btn"' not in html
+    assert 'id="wiz-smb-mount-status"' not in html
+    assert "temporarySmbMounts" not in script
+    assert "wizardMountSelectedSmbProfile" not in script
+    assert "wizardCleanupTemporarySmbMounts" not in script
+    assert "/api/storage/smb-action" not in script
+    assert "wizardMountSelectedSmbProfile" not in bindings
 
 
 def test_only_job_wizard_steps_offer_validated_direct_navigation() -> None:
