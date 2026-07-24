@@ -103,7 +103,10 @@ def list_restore_test_plan(config: dict) -> dict:
         is_overdue = False
         if mode == "scheduled":
             interval_days = max(1, _safe_int(eff.get("interval_days"), interval_default))
-            if dt is None:
+            if test_data and last_result != "success":
+                next_due = last_test_date
+                is_overdue = True
+            elif dt is None:
                 is_overdue = True
             else:
                 due_ts = dt.timestamp() + (interval_days * 86400)
