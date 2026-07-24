@@ -9,6 +9,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #291
 - Fixed Config Backups & Rollback so backup.conf snapshots are sorted and displayed by snapshot creation time instead of the copied source file modification time.
 - Added metadata and filename fallback handling for older backup.conf snapshots, renamed the visible timestamp column to Created and clarified the German reason column as the snapshot trigger.
+- Added a visible Config Backups & Rollback snapshot when `canonical_backup_conf_v1` rewrites backup.conf, using `canonical_backup_conf_v1 applied` as the trigger.
 
 ### Issue #289
 - Added Repository settings for automatic repository info refresh, including enable/disable, interval and retry controls, worker status, next-run visibility and cached per-repository details.
