@@ -190,3 +190,63 @@ def test_unmounted_smb_repository_refresh_is_recorded_as_warning(tmp_path: Path,
     row = read_repository_store(config)["repositories"][0]
     assert row["last_info_refresh_status"] == "warning"
     assert "SMB share" in row["last_info_refresh_error"]
+
+
+def test_existing_unmounted_smb_error_is_displayed_as_warning(tmp_path: Path):
+    config = _config(tmp_path)
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_smb",
+        "display_name": "SMB Repo",
+        "storage_key": "storage_smb",
+        "relative_path": "repo",
+        "storage_name": "SMB",
+        "location": "smb",
+        "last_info_refresh_at": "2026-07-24T07:00:00Z",
+        "last_info_refresh_status": "error",
+        "last_info_refresh_error": "The SMB share could not be mounted. Review the server configuration.",
+        "repository_stats": {},
+    }]})
+
+    status = get_repository_info_refresh_status(config)
+
+    assert status["counts"]["warning"] == 1
+    assert status["counts"]["error"] == 0
+    assert status["details"][0]["last_info_refresh_status"] == "warning"
+
+
+def test_failed_unmounted_smb_refresh_result_keeps_normal_interval(tmp_path: Path):
+    config = _config(tmp_path)
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_smb",
+        "display_name": "SMB Repo",
+        "storage_key": "storage_smb",
+        "relative_path": "repo",
+        "storage_name": "SMB",
+        "location": "smb",
+        "last_info_refresh_at": "2026-07-24T07:00:00Z",
+        "last_info_refresh_status": "error",
+        "last_info_refresh_error": "The SMB share could not be mounted. Review the server configuration.",
+        "repository_stats": {},
+    }]})
+    now = datetime(2026, 7, 24, 8, 0, tzinfo=timezone.utc)
+
+    next_run = _compute_repository_info_next_run(
+        config,
+        {"enabled": True, "interval_hours": 24, "retry_hours": 1},
+        {
+            "last_run_at": "2026-07-24T07:00:00Z",
+            "last_result": {
+                "checked": 1,
+                "refreshed": 0,
+                "failed": 1,
+                "deferred": 0,
+                "errors": [{
+                    "repository_key": "repo_smb",
+                    "error": "The SMB share could not be mounted. Review the server configuration.",
+                }],
+            },
+        },
+        now,
+    )
+
+    assert next_run and next_run.isoformat() == "2026-07-25T07:00:00+00:00"

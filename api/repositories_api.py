@@ -1363,7 +1363,7 @@ def _compute_repository_info_next_run(
     if not settings.get("enabled"):
         return None
     last_result = state.get("last_result") if isinstance(state.get("last_result"), dict) else {}
-    retry_due = int(last_result.get("failed") or 0) > 0 or int(last_result.get("deferred") or 0) > 0
+    retry_due = _repository_info_result_requires_retry(config, last_result)
     interval_hours = (
         int(settings.get("retry_hours") or REPOSITORY_INFO_REFRESH_DEFAULT_RETRY_HOURS)
         if retry_due
@@ -1417,6 +1417,48 @@ def _is_removable_or_mount_storage_unavailable(
         "network is unreachable",
     )
     return any(marker in message for marker in unavailable_markers)
+
+
+def _repository_info_display_status(repository: dict[str, Any], storage: dict[str, Any]) -> str:
+    status = str(repository.get("last_info_refresh_status") or "").strip().lower()
+    error = str(repository.get("last_info_refresh_error") or "").strip()
+    if status == "error" and error and _is_removable_or_mount_storage_unavailable(
+        repository,
+        storage,
+        RuntimeError(error),
+    ):
+        return "warning"
+    return status
+
+
+def _repository_info_result_requires_retry(config: dict, result: dict[str, Any]) -> bool:
+    if int(result.get("deferred") or 0) > 0:
+        return True
+    failed = int(result.get("failed") or 0)
+    if failed <= 0:
+        return False
+    errors = result.get("errors") if isinstance(result.get("errors"), list) else []
+    if not errors:
+        return True
+    repositories = {
+        str(row.get("repository_key") or ""): row
+        for row in read_repository_store(config).get("repositories", [])
+    }
+    storages = _storage_by_key(config)
+    classified = 0
+    for item in errors:
+        if not isinstance(item, dict):
+            return True
+        key = str(item.get("repository_key") or "").strip()
+        repository = repositories.get(key)
+        if not repository:
+            return True
+        storage = storages.get(str(repository.get("storage_key") or ""), {})
+        error = RuntimeError(str(item.get("error") or ""))
+        if not _is_removable_or_mount_storage_unavailable(repository, storage, error):
+            return True
+        classified += 1
+    return classified < failed
 
 
 def refresh_all_repository_info(config: dict) -> dict[str, Any]:
@@ -1588,7 +1630,7 @@ def get_repository_info_refresh_status(config: dict) -> dict[str, Any]:
     counts = {"success": 0, "warning": 0, "error": 0, "busy": 0, "pending": 0}
     for row in repositories:
         storage = storages.get(str(row.get("storage_key") or ""), {})
-        status = str(row.get("last_info_refresh_status") or "").strip().lower()
+        status = _repository_info_display_status(row, storage)
         stats = row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {}
         if status == "success":
             counts["success"] += 1

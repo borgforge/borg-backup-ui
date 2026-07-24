@@ -65,6 +65,16 @@ def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
         assert f"{key}=" in example
 
 
+def test_repository_settings_stay_in_single_operations_menu_group() -> None:
+    script = _read("ui/js/pages/settings.js")
+
+    restore_index = script.index("key: 'restore'")
+    repository_index = script.index("key: 'repository'")
+    local_index = script.index("key: 'local'")
+
+    assert restore_index < repository_index < local_index
+
+
 def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> None:
     script = _read("ui/js/pages/settings.js")
     css = _read("ui/settings-redesign.css")

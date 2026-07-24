@@ -73,11 +73,11 @@ function getSettingsTabs() {
   { key: 'notifications', label: settingsT('tabs.notifications'), group: 'operations', description: settingsT('menu.notificationsDescription'), icon: settingsMenuIcon('notifications') },
   { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: settingsMenuIcon('backup') },
   { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: settingsMenuIcon('restore') },
+  { key: 'repository', label: settingsT('tabs.repository'), group: 'operations', description: settingsT('menu.repositoryDescription'), icon: settingsMenuIcon('repository') },
   { key: 'local', label: settingsT('tabs.localProfiles'), group: 'storage', description: settingsT('menu.localDescription'), icon: locationIcon('local') },
   { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: locationIcon('usb') },
   { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: locationIcon('smb') },
   { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: locationIcon('storagebox') },
-  { key: 'repository', label: settingsT('tabs.repository'), group: 'operations', description: settingsT('menu.repositoryDescription'), icon: settingsMenuIcon('repository') },
   { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: settingsMenuIcon('transfer') },
   { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: settingsMenuIcon('advanced') },
   { key: 'factory-reset', label: settingsT('tabs.factoryReset'), group: 'maintenance', description: settingsT('menu.factoryResetDescription'), icon: settingsMenuIcon('factory-reset') },
@@ -2130,7 +2130,14 @@ function _renderRepositoryRefreshDetailGroups(details) {
     return `
       <div class="repository-refresh-detail-group">
         <div class="repository-refresh-detail-heading">${escHtml(group.label)} <span>${group.rows.length}</span></div>
-        <table class="settings-table">
+        <table class="settings-table repository-refresh-detail-table">
+          <colgroup>
+            <col class="repository-refresh-col-repository">
+            <col class="repository-refresh-col-storage">
+            <col class="repository-refresh-col-last-info">
+            <col class="repository-refresh-col-status">
+            <col class="repository-refresh-col-message">
+          </colgroup>
           <thead><tr>
             <th>${settingsT('forms.repositoryRefreshDetailRepository')}</th>
             <th>${settingsT('forms.repositoryRefreshDetailStorage')}</th>
@@ -2155,11 +2162,12 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
   const statusClass = enabled ? 'success' : 'warning';
   const lastRun = _formatHealthTimestamp(refresh?.last_run_at) || '—';
   const nextRun = enabled ? (_formatHealthTimestamp(refresh?.next_run_at) || '—') : settingsT('forms.repositoryRefreshDisabled');
+  const useCurrentCounts = details.length > 0;
   const resultText = settingsT('forms.repositoryRefreshResultCounts', {
-    ok: Number(lastResult.refreshed || counts.success || 0),
-    warning: Number(lastResult.warning || counts.warning || 0),
-    failed: Number(lastResult.failed || counts.error || 0),
-    deferred: Number(lastResult.deferred || counts.busy || 0),
+    ok: Number(useCurrentCounts ? counts.success : (lastResult.refreshed || 0)),
+    warning: Number(useCurrentCounts ? counts.warning : (lastResult.warning || 0)),
+    failed: Number(useCurrentCounts ? counts.error : (lastResult.failed || 0)),
+    deferred: Number(useCurrentCounts ? counts.busy : (lastResult.deferred || 0)),
   });
   return settingsCard(settingsT('forms.repositoryRefreshTitle'),
     settingsMenuIcon('repository'),
@@ -2191,7 +2199,7 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastRun'), lastRun, 'neutral')}
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshNextRun'), nextRun, enabled ? 'neutral' : 'warn')}
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshRepositories'), Number(refresh?.repository_count || details.length || 0), 'neutral')}
-        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastResult'), resultText, Number(lastResult.failed || 0) ? 'warn' : 'ok')}
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastResult'), resultText, Number(useCurrentCounts ? counts.error : (lastResult.failed || 0)) ? 'warn' : 'ok')}
       </div>
       <details class="system-health-technical" style="margin-top:12px">
         <summary>${escHtml(settingsT('forms.repositoryRefreshDetails'))}</summary>

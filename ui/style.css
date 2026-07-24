@@ -2162,11 +2162,11 @@ body.wizard-modal-open {
 }
 
 .repository-refresh-detail-heading {
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-bottom: none;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  background: var(--bg-tertiary);
+  background: var(--bg-card-hover);
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
@@ -2182,12 +2182,20 @@ body.wizard-modal-open {
 
 .repository-refresh-detail-group .settings-table {
   border: 1px solid var(--border);
+  table-layout: fixed;
 }
 
 .repository-refresh-detail-group .settings-table th,
 .repository-refresh-detail-group .settings-table td {
   padding-left: 10px;
+  overflow-wrap: anywhere;
 }
+
+.repository-refresh-col-repository { width: 30%; }
+.repository-refresh-col-storage { width: 18%; }
+.repository-refresh-col-last-info { width: 18%; }
+.repository-refresh-col-status { width: 12%; }
+.repository-refresh-col-message { width: 22%; }
 
 @media (max-width: 900px) {
   .repository-refresh-summary {
