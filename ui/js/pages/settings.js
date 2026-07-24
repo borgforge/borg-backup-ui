@@ -207,6 +207,7 @@ function _normalizeAppInfo(version, author, borgVersion, contactEmail, repositor
 
 function _applyVersionInfo(version, author, borgVersion, contactEmail, repositoryUrl) {
   settingsState.appInfo = _normalizeAppInfo(version, author, borgVersion, contactEmail, repositoryUrl);
+  window.BBUI.appInfo = { ...settingsState.appInfo };
   const info = settingsState.appInfo;
   const el = document.getElementById('app-version-info');
   if (el) el.innerHTML = `
@@ -221,6 +222,7 @@ function _applyVersionInfo(version, author, borgVersion, contactEmail, repositor
   if (contactEl) contactEl.innerHTML = `<a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a>`;
   const repoEl = document.getElementById('settings-about-repository');
   if (repoEl) repoEl.innerHTML = `<a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a>`;
+  window.BBUI?.storage?.updateRepositoryImportCompatibilityNotice?.();
 }
 
 function renderSettings(data, systemHealth) {

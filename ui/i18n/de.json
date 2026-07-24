@@ -314,6 +314,8 @@
     "repositoryAction": "Aktion",
     "repositoryActionCreate": "Neues Repository erstellen",
     "repositoryActionImport": "Vorhandenes Repository importieren",
+    "repositoryImportCompatibilityNotice": "Borg Backup UI verwendet Borg {version}. Die ursprüngliche Borg-Version eines importierten Repositorys kann nicht zuverlässig erkannt werden. Bitte importiere nur Repositorys, die mit Borg 1.4.x kompatibel sind. Prüfe ältere Repositorys vorher mit borg info und möglichst borg check.",
+    "repositoryImportCompatibilityNoticeGeneric": "Borg Backup UI verwendet die aktuell aktive Borg-Version. Die ursprüngliche Borg-Version eines importierten Repositorys kann nicht zuverlässig erkannt werden. Bitte importiere nur Repositorys, die mit Borg 1.4.x kompatibel sind. Prüfe ältere Repositorys vorher mit borg info und möglichst borg check.",
     "storageTarget": "Speicherziel",
     "storageTargetColumn": "Speicherziel",
     "noStorageTargets": "Keine Speicherziele konfiguriert",
