@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #292
+- Normalized nested Settings cards so the Restore settings tab uses the same redesigned card surface as the other settings areas in light and dark themes.
+
 ### Issue #291
 - Fixed Config Backups & Rollback so backup.conf snapshots are sorted and displayed by snapshot creation time instead of the copied source file modification time.
 - Added metadata and filename fallback handling for older backup.conf snapshots, renamed the visible timestamp column to Created and clarified the German reason column as the snapshot trigger.

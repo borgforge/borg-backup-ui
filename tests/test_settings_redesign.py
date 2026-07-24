@@ -250,6 +250,8 @@ def test_settings_layout_is_sticky_and_responsive() -> None:
     assert "@media (max-width: 767px)" in css
     assert ".settings-profile-field" in css
     assert ".settings-workspace-header" in css
+    assert ".settings-tab-panel .settings-section" in css
+    assert ".settings-tab-panel > .settings-section" not in css
 
 
 def test_smb_profiles_expose_mount_workflow_controls() -> None:
