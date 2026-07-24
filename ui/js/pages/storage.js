@@ -25,6 +25,15 @@ function storageT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
 }
 
+function storageBorgVersionLabel() {
+  const version = String(
+    window.BBUI?.appInfo?.borgVersion
+      || window.BBUI?.settingsState?.appInfo?.borgVersion
+      || ''
+  ).trim();
+  return version && version.toLowerCase() !== 'unknown' ? version : '';
+}
+
 function storageCount(count, singularKey, pluralKey) {
   return storageT(count === 1 ? singularKey : pluralKey, { count });
 }
@@ -727,6 +736,13 @@ function repositoryManagerSyncFields() {
   document.querySelector('.repository-manager-checks')?.classList.toggle('hidden', action !== 'create');
   document.getElementById('repository-manager-browser-btn')?.classList.toggle('hidden', action !== 'import');
   document.getElementById('repository-manager-browser-hint')?.classList.toggle('hidden', action !== 'import');
+  if (importCompatibilityNotice) {
+    const version = storageBorgVersionLabel();
+    importCompatibilityNotice.textContent = version
+      ? storageT('storage.repositoryImportCompatibilityNotice', { version })
+      : storageT('storage.repositoryImportCompatibilityNoticeGeneric');
+    importCompatibilityNotice.classList.toggle('hidden', action !== 'import');
+  }
   if (action !== 'import') repositoryManagerCloseBrowser();
   const encryptionDescription = document.getElementById('repository-manager-encryption-description');
   if (encryptionDescription) {
@@ -737,6 +753,9 @@ function repositoryManagerSyncFields() {
   }
   repositoryManagerUpdateSummary();
 }
+
+window.BBUI.storage = window.BBUI.storage || {};
+window.BBUI.storage.updateRepositoryImportCompatibilityNotice = repositoryManagerSyncFields;
 
 function repositoryManagerFillStorages() {
   const sel = document.getElementById('repository-manager-storage');
