@@ -45,6 +45,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   appriseSelectedProfileId: '',
   appriseDraftProfile: null,
   appriseLastResult: null,
+  repositoryRefreshReloadTimer: null,
   data: null,
   systemHealth: null,
 };
@@ -2092,14 +2093,28 @@ async function onRepositoryRefreshEnabledToggle(event) {
   const input = event?.target;
   if (!input) return;
   const previous = !input.checked;
+  const enabling = input.checked && !previous;
   input.disabled = true;
   markSettingsDirty();
   const ok = await saveSettings();
   if (!ok) {
     input.checked = previous;
     markSettingsDirty();
+  } else if (enabling) {
+    scheduleRepositoryRefreshStatusReload();
   }
   if (input.isConnected) input.disabled = false;
+}
+
+function scheduleRepositoryRefreshStatusReload(delayMs = 1500) {
+  if (settingsState.repositoryRefreshReloadTimer) {
+    window.clearTimeout(settingsState.repositoryRefreshReloadTimer);
+  }
+  settingsState.repositoryRefreshReloadTimer = window.setTimeout(async () => {
+    settingsState.repositoryRefreshReloadTimer = null;
+    if (settingsState.activeTab !== 'repository') return;
+    await reloadSettingsDataAfterSave();
+  }, delayMs);
 }
 
 function _repositoryRefreshLocationKey(row) {

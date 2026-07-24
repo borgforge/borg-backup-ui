@@ -55,6 +55,8 @@ def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
         "class=\"repository-refresh-toggle-row\"",
         "class=\"toggle-switch\"",
         "onRepositoryRefreshEnabledToggle(event)",
+        "scheduleRepositoryRefreshStatusReload",
+        "settingsState.activeTab !== 'repository'",
         "repositoryRefreshWorker",
         "repositoryRefreshNextRun",
         "_renderRepositoryRefreshDetailGroups(details)",
