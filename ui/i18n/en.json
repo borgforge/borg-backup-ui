@@ -2008,7 +2008,7 @@
       "repositoryRefreshRetry": "Retry failures after",
       "repositoryRefreshHours": "{hours} hours",
       "repositoryRefreshWorker": "Worker",
-      "repositoryRefreshPluginPid": "Plugin PID",
+      "repositoryRefreshPluginPid": "Plugin process",
       "repositoryRefreshLastRun": "Last run",
       "repositoryRefreshNextRun": "Next run",
       "repositoryRefreshRepositories": "Repositories",
