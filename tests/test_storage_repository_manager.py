@@ -20,6 +20,18 @@ from repositories_api import RepositoryLifecycleConflict, apply_repository_lifec
 from storage_objects_api import create_storage_target, read_storage_store, test_storage_target as run_storage_target_test, write_storage_store  # noqa: E402
 
 
+def test_repository_import_compatibility_notice_is_import_only():
+    index = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+    storage_js = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
+
+    assert 'id="repository-manager-import-compatibility-notice"' in index
+    assert 'class="status-message info hidden"' in index
+    assert "storage.repositoryImportCompatibilityNotice" in storage_js
+    assert "storage.repositoryImportCompatibilityNoticeGeneric" in storage_js
+    assert "action !== 'import'" in storage_js
+    assert "storageBorgVersionLabel" in storage_js
+
+
 def test_create_local_storage_target_is_stable_and_testable(tmp_path: Path, monkeypatch):
     base = tmp_path / "backup"
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
