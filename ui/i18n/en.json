@@ -2002,6 +2002,8 @@
       "repositoryRefreshEnabledHint": "Automatic repository information is refreshed at the planned time. This can wake disks when repositories are stored directly on array disks.",
       "repositoryRefreshDisabledHint": "Automatic repository information is disabled. Manual info refresh remains available in the Repository Manager.",
       "repositoryRefreshEnable": "Refresh repository information automatically",
+      "repositoryRefreshToggleOn": "Enabled, changes are saved immediately.",
+      "repositoryRefreshToggleOff": "Disabled, changes are saved immediately.",
       "repositoryRefreshInterval": "Interval",
       "repositoryRefreshRetry": "Retry failures after",
       "repositoryRefreshHours": "{hours} hours",

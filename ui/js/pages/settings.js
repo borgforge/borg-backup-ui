@@ -2088,6 +2088,20 @@ function _repositoryRefreshSummaryItem(label, value, tone) {
   `;
 }
 
+async function onRepositoryRefreshEnabledToggle(event) {
+  const input = event?.target;
+  if (!input) return;
+  const previous = !input.checked;
+  input.disabled = true;
+  markSettingsDirty();
+  const ok = await saveSettings();
+  if (!ok) {
+    input.checked = previous;
+    markSettingsDirty();
+  }
+  if (input.isConnected) input.disabled = false;
+}
+
 function _repositoryRefreshLocationKey(row) {
   return String(row?.location || row?.storage_name || '').trim().toLowerCase() || 'other';
 }
@@ -2176,10 +2190,16 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
         ${settingsT(enabled ? 'forms.repositoryRefreshEnabledHint' : 'forms.repositoryRefreshDisabledHint')}
       </div>
       <div class="settings-grid two-col">
-        <label class="form-checkbox-row" style="grid-column:1/-1">
-          <input type="checkbox" data-key="REPOSITORY_INFO_REFRESH_ENABLED" ${enabled ? 'checked' : ''} onchange="markSettingsDirty()">
-          ${settingsT('forms.repositoryRefreshEnable')}
-        </label>
+        <div class="repository-refresh-toggle-row">
+          <label class="toggle-switch" title="${escHtml(settingsT('forms.repositoryRefreshEnable'))}">
+            <input type="checkbox" data-key="REPOSITORY_INFO_REFRESH_ENABLED" ${enabled ? 'checked' : ''} onchange="onRepositoryRefreshEnabledToggle(event)">
+            <span class="toggle-slider"></span>
+          </label>
+          <div>
+            <strong>${settingsT('forms.repositoryRefreshEnable')}</strong>
+            <small>${settingsT(enabled ? 'forms.repositoryRefreshToggleOn' : 'forms.repositoryRefreshToggleOff')}</small>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label">${settingsT('forms.repositoryRefreshInterval')}</label>
           <select class="form-select" data-key="REPOSITORY_INFO_REFRESH_INTERVAL_HOURS" onchange="markSettingsDirty()">
@@ -6004,3 +6024,4 @@ async function reloadSettingsDataAfterSave(profileType = '') {
 
 window.onAppriseProviderFilterChange = onAppriseProviderFilterChange;
 window.onAppriseProviderSelect = onAppriseProviderSelect;
+window.onRepositoryRefreshEnabledToggle = onRepositoryRefreshEnabledToggle;

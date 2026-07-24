@@ -52,11 +52,15 @@ def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
         'data-key="REPOSITORY_INFO_REFRESH_ENABLED"',
         'data-key="REPOSITORY_INFO_REFRESH_INTERVAL_HOURS"',
         'data-key="REPOSITORY_INFO_REFRESH_RETRY_HOURS"',
+        "class=\"repository-refresh-toggle-row\"",
+        "class=\"toggle-switch\"",
+        "onRepositoryRefreshEnabledToggle(event)",
         "repositoryRefreshWorker",
         "repositoryRefreshNextRun",
         "_renderRepositoryRefreshDetailGroups(details)",
     ):
         assert contract in script
+    assert '<label class="form-checkbox-row" style="grid-column:1/-1">\\n          <input type="checkbox" data-key="REPOSITORY_INFO_REFRESH_ENABLED"' not in script
     for key in (
         "REPOSITORY_INFO_REFRESH_ENABLED",
         "REPOSITORY_INFO_REFRESH_INTERVAL_HOURS",

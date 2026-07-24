@@ -2002,6 +2002,8 @@
       "repositoryRefreshEnabledHint": "Automatische Repository-Informationen werden nach dem geplanten Zeitpunkt aktualisiert. Dies kann Datenträger aufwecken, wenn Repositorys direkt auf Array-Disks liegen.",
       "repositoryRefreshDisabledHint": "Automatische Repository-Informationen sind deaktiviert. Manuelles Info aktualisieren im Repository-Manager bleibt verfügbar.",
       "repositoryRefreshEnable": "Automatische Repository-Informationen aktualisieren",
+      "repositoryRefreshToggleOn": "Aktiviert, Änderungen werden sofort gespeichert.",
+      "repositoryRefreshToggleOff": "Deaktiviert, Änderungen werden sofort gespeichert.",
       "repositoryRefreshInterval": "Intervall",
       "repositoryRefreshRetry": "Fehler erneut versuchen nach",
       "repositoryRefreshHours": "{hours} Stunden",

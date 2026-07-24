@@ -18,6 +18,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Moved the settings area to Operations > Repositories, grouped cached repository details by location and toned down the summary layout.
 - Classified temporarily unavailable USB/SMB mount targets as warnings so they do not trigger the short failed-refresh retry interval.
 - Refined the Repositories settings placement, worker status labels and grouped table layout, including display normalization for existing SMB/USB mount errors.
+- Replaced the repository refresh enablement checkbox with an immediate-save switch.
 
 ### Issue #283
 - Removed direct SMB mount controls from the Job Wizard so job creation only selects storage targets and repositories already present in the canonical inventory.
