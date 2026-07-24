@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #289
+- Added Repository settings for automatic repository info refresh, including enable/disable, interval and retry controls, worker status, next-run visibility and cached per-repository details.
+- Replaced the hourly repository-info polling loop with a scheduled next-run worker so Borg info/list are not triggered merely to check whether work is due.
+- Kept manual Repository Manager info refresh unchanged while the Settings status view reads only cached metadata and does not execute Borg commands.
+
 ### Issue #283
 - Removed direct SMB mount controls from the Job Wizard so job creation only selects storage targets and repositories already present in the canonical inventory.
 - Kept manual SMB mount and unmount actions in Settings > SMB Profiles, and left repository creation/import responsible for direct storage access when needed.

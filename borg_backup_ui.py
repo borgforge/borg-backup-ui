@@ -2672,6 +2672,21 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             validate_storage_profile_usage_before_save(self.config, normalized_storage)
             replace_profile_storages(self.config, "storagebox", normalized_storage)
         write_conf(self.config, updates, snapshot_reason="Manual change")
+        repository_refresh_keys = {
+            "REPOSITORY_INFO_REFRESH_ENABLED",
+            "REPOSITORY_INFO_REFRESH_INTERVAL_HOURS",
+            "REPOSITORY_INFO_REFRESH_RETRY_HOURS",
+        }
+        if repository_refresh_keys & set(updates.keys()):
+            try:
+                from repositories_api import signal_repository_info_refresh_config_changed
+
+                signal_repository_info_refresh_config_changed()
+            except Exception as exc:
+                self.log_message(
+                    f"WARNING: Repository information refresh schedule could not be signalled: "
+                    f"{_mask_secrets(str(exc))}"
+                )
         created_paths = None
         if data_dir is not None:
             created = ensure_data_dirs(str(data_dir))
@@ -3782,26 +3797,16 @@ def _start_notification_delivery_loop(config: dict) -> threading.Thread | None:
 
 def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None:
     """Refresh cached Borg repository information without blocking UI requests."""
-    startup_delay_seconds = 300
-    check_interval_seconds = 3600
-
-    def _run() -> None:
-        time.sleep(startup_delay_seconds)
-        while True:
-            try:
-                from repositories_api import refresh_due_repository_info
-                result = refresh_due_repository_info(config, max_age_hours=24, retry_after_hours=1)
-                if int(result.get("due") or 0):
-                    _log(
-                        "Repository information refresh completed: "
-                        f"due={result.get('due')} refreshed={result.get('refreshed')} "
-                        f"deferred={result.get('deferred')} failed={result.get('failed')}"
-                    )
-            except Exception as exc:
-                _log(f"WARNING: Repository information refresh failed: {_mask_secrets(str(exc))}")
-            time.sleep(check_interval_seconds)
-
     try:
+        from repositories_api import run_repository_info_refresh_scheduler
+
+        def _run() -> None:
+            run_repository_info_refresh_scheduler(
+                config,
+                log_fn=lambda message: _log(_mask_secrets(str(message))),
+                startup_delay_seconds=300,
+            )
+
         thread = threading.Thread(target=_run, name="repository-info-refresh", daemon=True)
         thread.start()
         return thread

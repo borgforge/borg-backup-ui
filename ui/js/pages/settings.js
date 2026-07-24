@@ -77,6 +77,7 @@ function getSettingsTabs() {
   { key: 'usb', label: settingsT('tabs.usbProfiles'), group: 'storage', description: settingsT('menu.usbDescription'), icon: locationIcon('usb') },
   { key: 'smb', label: settingsT('tabs.smbProfiles'), group: 'storage', description: settingsT('menu.smbDescription'), icon: locationIcon('smb') },
   { key: 'storagebox', label: settingsT('tabs.sshProfiles'), group: 'storage', description: settingsT('menu.sshDescription'), icon: locationIcon('storagebox') },
+  { key: 'repository', label: settingsT('tabs.repository'), group: 'storage', description: settingsT('menu.repositoryDescription'), icon: settingsMenuIcon('repository') },
   { key: 'transfer', label: settingsT('tabs.transfer'), group: 'maintenance', description: settingsT('menu.transferDescription'), icon: settingsMenuIcon('transfer') },
   { key: 'advanced', label: settingsT('tabs.advanced'), group: 'maintenance', description: settingsT('menu.advancedDescription'), icon: settingsMenuIcon('advanced') },
   { key: 'factory-reset', label: settingsT('tabs.factoryReset'), group: 'maintenance', description: settingsT('menu.factoryResetDescription'), icon: settingsMenuIcon('factory-reset') },
@@ -98,6 +99,7 @@ function settingsMenuIcon(key) {
     restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
     transfer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h13l-3-3M17 17H4l3 3"/><path d="M20 7l-3 3M4 17l3-3"/></svg>',
     advanced: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h7M15 18h5"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="13" cy="18" r="2"/></svg>',
+    repository: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
     'factory-reset': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>',
   };
   return icons[key] || icons.general;
@@ -273,6 +275,9 @@ function renderSettings(data, systemHealth) {
     <div class="settings-tab-panel ${settingsState.activeTab === 'storagebox' ? '' : 'hidden'}" data-settings-panel="storagebox">
       ${renderSettingsStorageProfiles(data.storage_profiles || [])}
       ${renderSettingsStorageboxSetup(data.storagebox_setup || {}, data.storage_profiles || [])}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'repository' ? '' : 'hidden'}" data-settings-panel="repository">
+      ${renderSettingsRepositoryInfoRefresh(data.repository_info_refresh || {})}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'transfer' ? '' : 'hidden'}" data-settings-panel="transfer">
       ${renderSettingsTransferTools()}
@@ -2044,6 +2049,113 @@ function renderSettingsGeneral(g) {
           onchange="markSettingsDirty()">
         ${settingsT('general.abortParity')}
       </label>
+    </div>`);
+}
+
+function _repositoryRefreshStateLabel(state) {
+  const normalized = String(state || '').trim().toLowerCase();
+  const key = {
+    stopped: 'repositoryRefreshWorkerStopped',
+    startup_wait: 'repositoryRefreshWorkerStartup',
+    sleeping: 'repositoryRefreshWorkerSleeping',
+    due: 'repositoryRefreshWorkerDue',
+    running: 'repositoryRefreshWorkerRunning',
+    disabled: 'repositoryRefreshWorkerDisabled',
+  }[normalized];
+  return key ? settingsT(`forms.${key}`) : (normalized || settingsT('forms.repositoryRefreshWorkerUnknown'));
+}
+
+function _repositoryRefreshStatusLabel(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  const key = {
+    success: 'repositoryRefreshStatusSuccess',
+    ok: 'repositoryRefreshStatusSuccess',
+    error: 'repositoryRefreshStatusError',
+    busy: 'repositoryRefreshStatusBusy',
+    pending: 'repositoryRefreshStatusPending',
+    unknown: 'repositoryRefreshStatusUnknown',
+  }[normalized];
+  return key ? settingsT(`forms.${key}`) : (normalized || settingsT('forms.repositoryRefreshStatusUnknown'));
+}
+
+function _repositoryRefreshMetric(label, value, tone) {
+  return `
+    <div class="migration-metric ${escHtml(tone || 'neutral')}">
+      <span>${escHtml(label)}</span>
+      <strong>${escHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function renderSettingsRepositoryInfoRefresh(refresh) {
+  const enabled = !!refresh?.enabled;
+  const interval = Number(refresh?.interval_hours || 24);
+  const retry = Number(refresh?.retry_hours || 1);
+  const lastResult = refresh?.last_result && typeof refresh.last_result === 'object' ? refresh.last_result : {};
+  const counts = refresh?.counts && typeof refresh.counts === 'object' ? refresh.counts : {};
+  const details = Array.isArray(refresh?.details) ? refresh.details : [];
+  const statusClass = enabled ? 'success' : 'warning';
+  const lastRun = _formatHealthTimestamp(refresh?.last_run_at) || '—';
+  const nextRun = enabled ? (_formatHealthTimestamp(refresh?.next_run_at) || '—') : settingsT('forms.repositoryRefreshDisabled');
+  const resultText = settingsT('forms.repositoryRefreshResultCounts', {
+    ok: Number(lastResult.refreshed || counts.success || 0),
+    failed: Number(lastResult.failed || counts.error || 0),
+    deferred: Number(lastResult.deferred || counts.busy || 0),
+  });
+  const rows = details.map((row) => `
+    <tr>
+      <td><strong>${escHtml(row.display_name || row.repository_key || '—')}</strong><br><small>${escHtml(row.repository_key || '')}</small></td>
+      <td>${escHtml(row.storage_name || '—')}</td>
+      <td>${escHtml(_formatHealthTimestamp(row.last_info_refresh_at) || '—')}</td>
+      <td>${escHtml(_repositoryRefreshStatusLabel(row.last_info_refresh_status))}</td>
+      <td>${escHtml(row.last_info_refresh_error || '—')}</td>
+    </tr>
+  `).join('');
+  return settingsCard(settingsT('forms.repositoryRefreshTitle'),
+    settingsMenuIcon('repository'),
+    `<div class="settings-body">
+      <div class="status-message ${statusClass}" style="margin-bottom:12px">
+        ${settingsT(enabled ? 'forms.repositoryRefreshEnabledHint' : 'forms.repositoryRefreshDisabledHint')}
+      </div>
+      <div class="settings-grid two-col">
+        <label class="form-checkbox-row" style="grid-column:1/-1">
+          <input type="checkbox" data-key="REPOSITORY_INFO_REFRESH_ENABLED" ${enabled ? 'checked' : ''} onchange="markSettingsDirty()">
+          ${settingsT('forms.repositoryRefreshEnable')}
+        </label>
+        <div class="form-group">
+          <label class="form-label">${settingsT('forms.repositoryRefreshInterval')}</label>
+          <select class="form-select" data-key="REPOSITORY_INFO_REFRESH_INTERVAL_HOURS" onchange="markSettingsDirty()">
+            ${[12, 24, 48, 168].map((value) => `<option value="${value}" ${interval === value ? 'selected' : ''}>${settingsT('forms.repositoryRefreshHours', { hours: value })}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${settingsT('forms.repositoryRefreshRetry')}</label>
+          <select class="form-select" data-key="REPOSITORY_INFO_REFRESH_RETRY_HOURS" onchange="markSettingsDirty()">
+            ${[1, 6, 12, 24].map((value) => `<option value="${value}" ${retry === value ? 'selected' : ''}>${settingsT('forms.repositoryRefreshHours', { hours: value })}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="migration-overview-grid" style="margin-top:12px">
+        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshWorker'), _repositoryRefreshStateLabel(refresh?.worker_state), enabled ? 'neutral' : 'warn')}
+        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshPluginPid'), Number(refresh?.plugin_pid || 0) || '—', 'neutral')}
+        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshLastRun'), lastRun, 'neutral')}
+        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshNextRun'), nextRun, enabled ? 'neutral' : 'warn')}
+        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshRepositories'), Number(refresh?.repository_count || details.length || 0), 'neutral')}
+        ${_repositoryRefreshMetric(settingsT('forms.repositoryRefreshLastResult'), resultText, Number(lastResult.failed || 0) ? 'warn' : 'ok')}
+      </div>
+      <details class="system-health-technical" style="margin-top:12px">
+        <summary>${escHtml(settingsT('forms.repositoryRefreshDetails'))}</summary>
+        <table class="settings-table" style="margin-top:8px">
+          <thead><tr>
+            <th>${settingsT('forms.repositoryRefreshDetailRepository')}</th>
+            <th>${settingsT('forms.repositoryRefreshDetailStorage')}</th>
+            <th>${settingsT('forms.repositoryRefreshDetailLastInfo')}</th>
+            <th>${settingsT('forms.repositoryRefreshDetailStatus')}</th>
+            <th>${settingsT('forms.repositoryRefreshDetailError')}</th>
+          </tr></thead>
+          <tbody>${rows || `<tr><td colspan="5">${settingsT('forms.repositoryRefreshNoRepositories')}</td></tr>`}</tbody>
+        </table>
+      </details>
     </div>`);
 }
 

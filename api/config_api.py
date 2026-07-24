@@ -720,6 +720,7 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "BORG_MAX_RUNTIME_HOURS":     conf.get("BORG_MAX_RUNTIME_HOURS", "0"),
             "ABORT_ON_PARITY_CHECK":      conf.get("ABORT_ON_PARITY_CHECK", "true"),
         },
+        "repository_info_refresh": {},
         "smtp": {
             "GLOBAL_MAIL_RECIPIENT":  conf.get("GLOBAL_MAIL_RECIPIENT", ""),
             "GLOBAL_MAIL_SENDER":     conf.get("GLOBAL_MAIL_SENDER", ""),
@@ -784,6 +785,8 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
     from storage_objects_api import settings_profiles_from_storages
     canonical_profiles = settings_profiles_from_storages(ui_config)
     from repositories_api import read_repository_store
+    from repositories_api import get_repository_info_refresh_status
+    data["repository_info_refresh"] = get_repository_info_refresh_status(ui_config)
     repository_rows = read_repository_store(ui_config).get("repositories", [])
     refs_by_storage: Dict[str, List[str]] = {}
     repositories_by_storage: Dict[str, List[str]] = {}

@@ -28,6 +28,7 @@ def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
         "usb",
         "smb",
         "storagebox",
+        "repository",
         "transfer",
         "advanced",
         "factory-reset",
@@ -37,6 +38,29 @@ def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
         assert f"group: '{group}'" in script
     assert "function renderSettingsMenu(tabs)" in script
     assert 'class="settings-redesign-layout"' in script
+
+
+def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
+    script = _read("ui/js/pages/settings.js")
+    example = _read("runtime/config/backup.conf.example")
+
+    for contract in (
+        "key: 'repository'",
+        'data-settings-panel="repository"',
+        "renderSettingsRepositoryInfoRefresh(data.repository_info_refresh || {})",
+        'data-key="REPOSITORY_INFO_REFRESH_ENABLED"',
+        'data-key="REPOSITORY_INFO_REFRESH_INTERVAL_HOURS"',
+        'data-key="REPOSITORY_INFO_REFRESH_RETRY_HOURS"',
+        "repositoryRefreshWorker",
+        "repositoryRefreshNextRun",
+    ):
+        assert contract in script
+    for key in (
+        "REPOSITORY_INFO_REFRESH_ENABLED",
+        "REPOSITORY_INFO_REFRESH_INTERVAL_HOURS",
+        "REPOSITORY_INFO_REFRESH_RETRY_HOURS",
+    ):
+        assert f"{key}=" in example
 
 
 def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> None:
