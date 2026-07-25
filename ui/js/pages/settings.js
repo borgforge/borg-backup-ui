@@ -1268,6 +1268,9 @@ function renderSettingsSystemHealth(data) {
     : {};
   const registryItems = Array.isArray(data?.migration_registry?.items) ? data.migration_registry.items : [];
   const registryActionItems = _migrationRegistryActionItems(registryItems);
+  const migrationBackupCleanup = data?.migration_backup_cleanup && typeof data.migration_backup_cleanup === 'object'
+    ? data.migration_backup_cleanup
+    : {};
   const jobHealth = data?.job_health && typeof data.job_health === 'object' ? data.job_health : {};
   const jobSummary = jobHealth.summary && typeof jobHealth.summary === 'object' ? jobHealth.summary : {};
   const jobItems = Array.isArray(jobHealth.items) ? jobHealth.items : [];
@@ -1370,7 +1373,7 @@ function renderSettingsSystemHealth(data) {
 
         <div class="system-health-block">
           <div class="system-health-block-title">${settingsT('health.setupConfigMaintenance')}</div>
-          ${_renderMigrationRegistryOverview(registrySummary, registryActionItems)}
+          ${_renderMigrationRegistryOverview(registrySummary, registryActionItems, migrationBackupCleanup)}
         </div>
         <div class="system-health-grid">
           ${technicalRows.map(([name, detail]) => `
@@ -1721,13 +1724,21 @@ function _migrationRegistryActionItems(items) {
   });
 }
 
-function _renderMigrationRegistryOverview(summary, actionItems) {
+function _renderMigrationRegistryOverview(summary, actionItems, migrationBackupCleanup = {}) {
   const total = Number(summary?.total || 0);
   if (!total) return `<div class="migration-action-empty">${settingsT('health.noRegistryData')}</div>`;
   const pending = Number(summary?.pending || 0);
   const failed = Number(summary?.failed || 0);
   const blocked = Number(summary?.blocked || 0);
   const hasAction = actionItems.length > 0;
+  const cleanupSummary = migrationBackupCleanup?.summary && typeof migrationBackupCleanup.summary === 'object'
+    ? migrationBackupCleanup.summary
+    : {};
+  const cleanupDelete = Number(cleanupSummary.delete || 0);
+  const cleanupTotal = Number(cleanupSummary.total || 0);
+  const cleanupSkipped = Number(cleanupSummary.skipped || 0);
+  const cleanupSize = Number(cleanupSummary.delete_size_bytes || 0);
+  const backupDir = String(migrationBackupCleanup?.backup_dir || '').trim();
   return `
     <div class="migration-overview-grid">
       ${_renderMigrationMetric(settingsT('common.entries'), total, 'neutral')}
@@ -1738,6 +1749,25 @@ function _renderMigrationRegistryOverview(summary, actionItems) {
     <div class="migration-action-panel ${hasAction ? 'attention' : 'ok'}">
       <div class="migration-action-title">${hasAction ? settingsT('health.openItems') : settingsT('health.noActionRequired')}</div>
       ${hasAction ? _renderMigrationActionList(actionItems) : `<div class="migration-action-empty">${settingsT('health.registryOk')}</div>`}
+    </div>
+    <div class="migration-action-panel ${cleanupDelete ? 'attention' : 'ok'}">
+      <div class="migration-action-title">${settingsT('health.migrationBackupCleanupTitle')}</div>
+      <div class="migration-action-empty">
+        ${cleanupDelete
+          ? escHtml(settingsT('health.migrationBackupCleanupAvailable', {
+            count: cleanupDelete,
+            total: cleanupTotal,
+            size: _fmtBytes(cleanupSize),
+          }))
+          : escHtml(settingsT('health.migrationBackupCleanupNone', { total: cleanupTotal }))}
+        ${cleanupSkipped ? `<br>${escHtml(settingsT('health.migrationBackupCleanupSkipped', { count: cleanupSkipped }))}` : ''}
+        ${backupDir ? `<br><span class="migration-registry-id">${escHtml(backupDir)}</span>` : ''}
+      </div>
+      ${cleanupDelete ? `
+        <button type="button" class="btn btn-secondary btn-sm migration-action-button" data-settings-action="migration-backups-cleanup">
+          ${settingsT('health.migrationBackupCleanupButton')}
+        </button>
+      ` : ''}
     </div>
   `;
 }
@@ -3040,6 +3070,34 @@ async function acknowledgeRuntimeRecoveryEntry(el) {
     window.BBUI?.core?.updateSidebarSystemHealth?.(true);
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('health.runtimeRecoveryAckFailed', { message: err.message }));
+  }
+}
+
+async function cleanupMigrationBackups() {
+  const cleanup = settingsState.systemHealth?.migration_backup_cleanup || {};
+  const summary = cleanup?.summary && typeof cleanup.summary === 'object' ? cleanup.summary : {};
+  const count = Number(summary.delete || 0);
+  if (!count) return;
+  const confirmed = await _openSettingsDialog({
+    title: settingsT('health.migrationBackupCleanupTitle'),
+    message: settingsT('health.migrationBackupCleanupConfirm', { count }),
+    confirmText: settingsT('health.migrationBackupCleanupButton'),
+    confirmClass: 'btn-danger',
+  });
+  if (!confirmed) return;
+  try {
+    const res = await fetch('/api/settings/migration-backups-cleanup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: false, keep_per_active_id: 5 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    showMsg('settings-message', 'success', settingsT('health.migrationBackupCleanupSuccess', { count: Number(data.deleted_count || 0) }));
+    await refreshSettings();
+    window.BBUI?.core?.updateSidebarSystemHealth?.(true);
+  } catch (err) {
+    showMsg('settings-message', 'error', settingsT('health.migrationBackupCleanupFailed', { message: err.message }));
   }
 }
 
@@ -5056,6 +5114,7 @@ async function onSettingsContentClick(event) {
   if (action === 'export-support-bundle') return exportSupportBundle();
   if (action === 'factory-reset-start') return startFactoryReset();
   if (action === 'runtime-recovery-ack') return acknowledgeRuntimeRecoveryEntry(el);
+  if (action === 'migration-backups-cleanup') return cleanupMigrationBackups();
   if (action === 'diff-config-backup') return diffSettingsConfigBackup(el.dataset.backupName || '');
   if (action === 'restore-config-backup') return restoreSettingsConfigBackup(el.dataset.backupName || '');
   if (action === 'delete-config-backup') return deleteSettingsConfigBackup(el.dataset.backupName || '');

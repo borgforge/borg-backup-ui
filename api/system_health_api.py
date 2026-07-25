@@ -394,6 +394,18 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "summary": {"total": 0, "pending": 0, "failed": 0, "planned": 0},
             "error": str(exc),
         }
+    try:
+        from migration_api import plan_migration_backup_cleanup
+        migration_backup_cleanup = plan_migration_backup_cleanup(config)
+    except Exception as exc:
+        migration_backup_cleanup = {
+            "backup_dir": str(root / "config" / "migration-backups"),
+            "summary": {"total": 0, "delete": 0, "keep": 0, "skipped": 0, "delete_size_bytes": 0},
+            "delete": [],
+            "keep": [],
+            "skipped": [],
+            "error": str(exc),
+        }
     last_effective = migration_log.get("last_effective_event") if isinstance(migration_log, dict) else {}
     if not isinstance(last_effective, dict):
         last_effective = {}
@@ -498,6 +510,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "migration_log": migration_log,
         "migration_summary": migration_summary,
         "migration_registry": migration_registry,
+        "migration_backup_cleanup": migration_backup_cleanup,
         "startup_state": startup_state,
         "job_health": job_health,
         "runtime_recovery": runtime_recovery,

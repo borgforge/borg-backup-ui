@@ -914,6 +914,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/settings/backup-delete": self._post_settings_backup_delete,
             "/api/settings/backup-delete-keep-latest": self._post_settings_backup_delete_keep_latest,
             "/api/settings/backup-diff": self._post_settings_backup_diff,
+            "/api/settings/migration-backups-cleanup": self._post_settings_migration_backups_cleanup,
             "/api/settings/jobs-import": self._post_settings_jobs_import,
             "/api/settings/jobs-import-preview": self._post_settings_jobs_import_preview,
             "/api/settings/jobs-export-secure": self._post_settings_jobs_export_secure,
@@ -2788,6 +2789,13 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise ValueError("name is required")
         context_lines = int((body or {}).get("context_lines", 3) or 3)
         return diff_conf_backup(self.config, name, context_lines=context_lines)
+
+    def _post_settings_migration_backups_cleanup(self) -> dict:
+        from migration_api import cleanup_migration_backups
+        body = self._read_json_body()
+        dry_run = bool((body or {}).get("dry_run", True))
+        keep = int((body or {}).get("keep_per_active_id", 5) or 5)
+        return cleanup_migration_backups(self.config, dry_run=dry_run, keep_per_active_id=keep)
 
     def _post_settings_jobs_import(self) -> dict:
         from settings_transfer_api import import_jobs_bundle

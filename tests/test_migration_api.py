@@ -9,7 +9,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from migration_api import analyze_backup_conf_state, get_migration_registry_status
+from migration_api import analyze_backup_conf_state, cleanup_migration_backups, get_migration_registry_status, plan_migration_backup_cleanup
 
 
 def _write_conf_tree(root: Path, backup_conf: str, example: str) -> dict:
@@ -24,6 +24,19 @@ def _write_conf_tree(root: Path, backup_conf: str, example: str) -> dict:
 
 def _items_by_id(registry: dict) -> dict:
     return {item["id"]: item for item in registry["items"]}
+
+
+def _migration_backup_dir(cfg: dict) -> Path:
+    return Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-backups"
+
+
+def _write_migration_snapshot(cfg: dict, name: str, status: str = "") -> Path:
+    target = _migration_backup_dir(cfg) / name
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "payload.txt").write_text("snapshot", encoding="utf-8")
+    if status:
+        (target / "manifest.json").write_text(json.dumps({"status": status}, indent=2), encoding="utf-8")
+    return target
 
 
 def test_analyze_backup_conf_state_reports_canonical_differences(tmp_path: Path):
@@ -47,6 +60,54 @@ def test_analyze_backup_conf_state_reports_canonical_differences(tmp_path: Path)
     assert state["missing_keys"] == ["BORG_MAX_RUNTIME_HOURS"]
     assert state["unknown_keys"] == ["REPO_FLASH_LOCAL"]
     assert state["canonical_content_changed"] is True
+
+
+def test_migration_backup_cleanup_deletes_inactive_pre_beta_snapshots(tmp_path: Path):
+    cfg = _write_conf_tree(tmp_path, 'GLOBAL_DATA_DIR="/x"\n', 'GLOBAL_DATA_DIR="/x"\n')
+    inactive = _write_migration_snapshot(cfg, "storage_objects_v1-20260701T120000Z-abcd1234")
+    active = _write_migration_snapshot(cfg, "canonical_backup_conf_v1-20260702T120000Z-abcd1234")
+
+    plan = plan_migration_backup_cleanup(cfg)
+
+    assert [row["name"] for row in plan["delete"]] == [inactive.name]
+    assert [row["name"] for row in plan["keep"]] == [active.name]
+
+    result = cleanup_migration_backups(cfg, dry_run=False)
+
+    assert result["deleted_count"] == 1
+    assert not inactive.exists()
+    assert active.exists()
+    assert "migration_backup_cleanup" in (tmp_path / "config" / "migrations.log.jsonl").read_text(encoding="utf-8")
+
+
+def test_migration_backup_cleanup_keeps_latest_five_active_snapshots(tmp_path: Path):
+    cfg = _write_conf_tree(tmp_path, 'GLOBAL_DATA_DIR="/x"\n', 'GLOBAL_DATA_DIR="/x"\n')
+    names = [
+        f"canonical_backup_conf_v1-2026070{day}T120000Z-abcd1234"
+        for day in range(1, 8)
+    ]
+    for name in names:
+        _write_migration_snapshot(cfg, name)
+
+    plan = plan_migration_backup_cleanup(cfg)
+
+    assert [row["name"] for row in plan["delete"]] == names[:2]
+    assert sorted(row["name"] for row in plan["keep"]) == names[2:]
+
+
+def test_migration_backup_cleanup_skips_unknown_and_protected_snapshots(tmp_path: Path):
+    cfg = _write_conf_tree(tmp_path, 'GLOBAL_DATA_DIR="/x"\n', 'GLOBAL_DATA_DIR="/x"\n')
+    unknown = _write_migration_snapshot(cfg, "manual-copy")
+    future = _write_migration_snapshot(cfg, "future_migration_v1-20260701T120000Z-abcd1234")
+    failed = _write_migration_snapshot(cfg, "canonical_backup_conf_v1-20260701T120000Z-abcd1234", status="failed")
+
+    plan = plan_migration_backup_cleanup(cfg)
+
+    assert plan["summary"]["delete"] == 0
+    skipped = {row["name"]: row["reason"] for row in plan["skipped"]}
+    assert skipped[unknown.name] == "unrecognized_name"
+    assert skipped[future.name] == "unknown_migration_id"
+    assert skipped[failed.name] == "protected_status:failed"
 
 
 def test_analyze_backup_conf_state_accepts_exact_canonical_file(tmp_path: Path):
