@@ -67,6 +67,18 @@ function settingsLocale() {
   return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
 }
 
+function settingsFmtBytes(value) {
+  let bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let index = 0;
+  while (bytes >= 1024 && index < units.length - 1) {
+    bytes /= 1024;
+    index += 1;
+  }
+  return `${bytes.toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
 function getSettingsTabs() {
   const tabs = [
   { key: 'general', label: settingsT('tabs.general'), group: 'system', description: settingsT('menu.generalDescription'), icon: settingsMenuIcon('general') },
@@ -1739,6 +1751,7 @@ function _renderMigrationRegistryOverview(summary, actionItems, migrationBackupC
   const cleanupSkipped = Number(cleanupSummary.skipped || 0);
   const cleanupSize = Number(cleanupSummary.delete_size_bytes || 0);
   const backupDir = String(migrationBackupCleanup?.backup_dir || '').trim();
+  const cleanupDetails = _renderMigrationBackupCleanupDetails(migrationBackupCleanup);
   return `
     <div class="migration-overview-grid">
       ${_renderMigrationMetric(settingsT('common.entries'), total, 'neutral')}
@@ -1757,18 +1770,115 @@ function _renderMigrationRegistryOverview(summary, actionItems, migrationBackupC
           ? escHtml(settingsT('health.migrationBackupCleanupAvailable', {
             count: cleanupDelete,
             total: cleanupTotal,
-            size: _fmtBytes(cleanupSize),
+            size: settingsFmtBytes(cleanupSize),
           }))
           : escHtml(settingsT('health.migrationBackupCleanupNone', { total: cleanupTotal }))}
         ${cleanupSkipped ? `<br>${escHtml(settingsT('health.migrationBackupCleanupSkipped', { count: cleanupSkipped }))}` : ''}
         ${backupDir ? `<br><span class="migration-registry-id">${escHtml(backupDir)}</span>` : ''}
       </div>
+      ${cleanupDelete || cleanupSkipped ? cleanupDetails : ''}
       ${cleanupDelete ? `
         <button type="button" class="btn btn-secondary btn-sm migration-action-button" data-settings-action="migration-backups-cleanup">
           ${settingsT('health.migrationBackupCleanupButton')}
         </button>
       ` : ''}
     </div>
+  `;
+}
+
+function _migrationBackupCleanupReasonLabel(reason) {
+  const normalized = String(reason || '').trim();
+  const retention = normalized.match(/^active_retention_keep_(\d+)$/);
+  if (retention) {
+    return settingsT('health.migrationBackupCleanupReasonRetention', { count: retention[1] });
+  }
+  if (normalized.startsWith('protected_status:')) {
+    return settingsT('health.migrationBackupCleanupReasonProtected', { status: normalized.split(':').slice(1).join(':') || 'unknown' });
+  }
+  const map = {
+    inactive_migration: 'health.migrationBackupCleanupReasonInactive',
+    unrecognized_name: 'health.migrationBackupCleanupReasonUnrecognized',
+    unknown_migration_id: 'health.migrationBackupCleanupReasonUnknown',
+    latest_active_snapshot: 'health.migrationBackupCleanupReasonKept',
+  };
+  return settingsT(map[normalized] || 'health.migrationBackupCleanupReasonOther', { reason: normalized || 'unknown' });
+}
+
+function _migrationBackupCleanupGroupRows(rows, limit = 4) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const migrationId = String(row?.migration_id || '').trim() || settingsT('health.migrationBackupCleanupUnknownMigration');
+    const reason = String(row?.reason || '').trim() || 'unknown';
+    const key = `${reason}\n${migrationId}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        reason,
+        migrationId,
+        count: 0,
+        sizeBytes: 0,
+        names: [],
+        firstTimestamp: '',
+        lastTimestamp: '',
+      });
+    }
+    const group = groups.get(key);
+    const stamp = String(row?.timestamp || '').trim();
+    group.count += 1;
+    group.sizeBytes += Number(row?.size_bytes || 0);
+    if (group.names.length < limit) group.names.push(String(row?.name || '').trim());
+    if (stamp && (!group.firstTimestamp || stamp < group.firstTimestamp)) group.firstTimestamp = stamp;
+    if (stamp && (!group.lastTimestamp || stamp > group.lastTimestamp)) group.lastTimestamp = stamp;
+  });
+  return Array.from(groups.values()).sort((a, b) => {
+    const reasonCompare = String(a.reason).localeCompare(String(b.reason));
+    if (reasonCompare) return reasonCompare;
+    return String(a.migrationId).localeCompare(String(b.migrationId));
+  });
+}
+
+function _renderMigrationBackupCleanupTable(title, rows, tone) {
+  if (!rows.length) return '';
+  const grouped = _migrationBackupCleanupGroupRows(rows);
+  return `
+    <div class="migration-backup-cleanup-table-wrap ${escHtml(tone)}">
+      <div class="migration-backup-cleanup-subtitle">${escHtml(title)}</div>
+      <table class="settings-table migration-backup-cleanup-table">
+        <thead><tr>
+          <th>${settingsT('health.migrationBackupCleanupReason')}</th>
+          <th>${settingsT('health.migrationBackupCleanupMigration')}</th>
+          <th>${settingsT('health.migrationBackupCleanupCount')}</th>
+          <th>${settingsT('health.migrationBackupCleanupSize')}</th>
+          <th>${settingsT('health.migrationBackupCleanupExamples')}</th>
+        </tr></thead>
+        <tbody>${grouped.map((group) => {
+          const range = group.firstTimestamp && group.lastTimestamp
+            ? `<small>${escHtml(group.firstTimestamp === group.lastTimestamp ? group.firstTimestamp : `${group.firstTimestamp} - ${group.lastTimestamp}`)}</small>`
+            : '';
+          return `
+            <tr>
+              <td>${escHtml(_migrationBackupCleanupReasonLabel(group.reason))}${range}</td>
+              <td><span class="migration-registry-id">${escHtml(group.migrationId)}</span></td>
+              <td>${Number(group.count || 0)}</td>
+              <td>${escHtml(settingsFmtBytes(Number(group.sizeBytes || 0)))}</td>
+              <td>${group.names.map((name) => `<span class="migration-backup-cleanup-name">${escHtml(name || '—')}</span>`).join('')}</td>
+            </tr>
+          `;
+        }).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function _renderMigrationBackupCleanupDetails(cleanup) {
+  const deleteRows = Array.isArray(cleanup?.delete) ? cleanup.delete : [];
+  const skippedRows = Array.isArray(cleanup?.skipped) ? cleanup.skipped : [];
+  if (!deleteRows.length && !skippedRows.length) return '';
+  return `
+    <details class="migration-backup-cleanup-details">
+      <summary>${escHtml(settingsT('health.migrationBackupCleanupDetails'))}</summary>
+      ${_renderMigrationBackupCleanupTable(settingsT('health.migrationBackupCleanupDeleteDetails'), deleteRows, 'delete')}
+      ${_renderMigrationBackupCleanupTable(settingsT('health.migrationBackupCleanupSkippedDetails'), skippedRows, 'skipped')}
+    </details>
   `;
 }
 
@@ -3635,7 +3745,7 @@ async function refreshSettingsConfigBackups() {
               <td>${escHtml(r.name)}</td>
               <td>${escHtml(r.reason || '—')}</td>
               <td>${new Date((r.created_ts || r.mtime || 0) * 1000).toLocaleString(settingsLocale())}</td>
-              <td>${_fmtBytes(Number(r.size || 0))}</td>
+              <td>${settingsFmtBytes(Number(r.size || 0))}</td>
               <td style="text-align:right">
                 <button class="btn btn-secondary btn-sm" data-settings-action="diff-config-backup" data-backup-name="${escHtml(r.name)}">Diff</button>
                 <button class="btn btn-secondary btn-sm" data-settings-action="restore-config-backup" data-backup-name="${escHtml(r.name)}">${settingsT('backups.restore')}</button>
