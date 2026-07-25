@@ -45,6 +45,8 @@ def _read_migration_state(path: Path) -> Dict[str, Any]:
 def _is_effective_migration(entry: Dict[str, Any]) -> bool:
     if not isinstance(entry, dict):
         return False
+    if not _is_migration_run_event(entry):
+        return False
     if str(entry.get("reason_code", "")).strip() and str(entry.get("reason_code", "")).strip() != "no_changes":
         return True
     details = entry.get("details") if isinstance(entry.get("details"), dict) else {}
@@ -52,6 +54,19 @@ def _is_effective_migration(entry: Dict[str, Any]) -> bool:
     if startup.get("applied") or startup.get("failed"):
         return True
     return False
+
+
+def _is_migration_run_event(entry: Dict[str, Any]) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    event = str(entry.get("event") or "").strip()
+    if event == "startup_migration":
+        return True
+    # Legacy migration-state/audit rows did not always include an explicit
+    # event name, but migration run rows carry a success flag. Maintenance
+    # audit events such as migration_backup_cleanup must not become the
+    # displayed "last migration".
+    return "success" in entry
 
 
 def _read_migration_log(path: Path) -> Dict[str, Any]:
@@ -71,7 +86,8 @@ def _read_migration_log(path: Path) -> Dict[str, Any]:
                     continue
                 if not isinstance(entry, dict):
                     continue
-                last_event = entry
+                if _is_migration_run_event(entry):
+                    last_event = entry
                 if _is_effective_migration(entry):
                     last_effective_event = entry
     except Exception:
