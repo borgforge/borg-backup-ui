@@ -34,12 +34,12 @@ def detect(config: dict) -> dict[str, Any]:
         "migration_id": MIGRATION_ID,
         "introduced_in": INTRODUCED_IN,
         "runner": "central_migration_registry",
-        "required": bool(plan["changed"] or legacy_schema.is_file()),
+        "required": bool(plan["changed"]),
         "missing_keys": list(plan["missing_keys"]),
         "unknown_keys": list(plan["unknown_keys"]),
         "reason": (
-            "backup.conf or its legacy persistent schema copy needs canonicalization"
-            if plan["changed"] or legacy_schema.is_file()
+            "backup.conf needs canonicalization"
+            if plan["changed"]
             else "backup.conf already matches the version-owned canonical schema"
         ),
         "legacy_schema_copy": str(legacy_schema) if legacy_schema.is_file() else "",
@@ -57,7 +57,7 @@ def apply(config: dict) -> dict[str, Any]:
         current_content = source.read_text(encoding="utf-8") if source.is_file() else ""
         plan = canonical_backup_conf_plan(config, source_content=current_content)
         legacy_schema_existed = legacy_schema.is_file()
-        if not plan["changed"] and not legacy_schema_existed:
+        if not plan["changed"]:
             return {
                 "migration_id": MIGRATION_ID,
                 "introduced_in": INTRODUCED_IN,

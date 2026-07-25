@@ -719,6 +719,51 @@ body.wizard-modal-open {
   font-size: 12px;
   line-height: 1.4;
 }
+.migration-backup-cleanup-details {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.migration-backup-cleanup-details summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  font-weight: 650;
+}
+.migration-backup-cleanup-table-wrap {
+  margin-top: 10px;
+  overflow-x: auto;
+}
+.migration-backup-cleanup-subtitle {
+  margin-bottom: 5px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+.migration-backup-cleanup-table {
+  min-width: 720px;
+  background: var(--bg-card);
+}
+.migration-backup-cleanup-table th,
+.migration-backup-cleanup-table td {
+  vertical-align: top;
+  font-size: 11px;
+}
+.migration-backup-cleanup-table small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.migration-backup-cleanup-name {
+  display: block;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-family: var(--font-mono, monospace);
+}
 .migration-registry-list {
   display: grid;
   gap: 12px;

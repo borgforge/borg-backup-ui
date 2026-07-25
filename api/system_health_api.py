@@ -45,6 +45,8 @@ def _read_migration_state(path: Path) -> Dict[str, Any]:
 def _is_effective_migration(entry: Dict[str, Any]) -> bool:
     if not isinstance(entry, dict):
         return False
+    if not _is_migration_run_event(entry):
+        return False
     if str(entry.get("reason_code", "")).strip() and str(entry.get("reason_code", "")).strip() != "no_changes":
         return True
     details = entry.get("details") if isinstance(entry.get("details"), dict) else {}
@@ -52,6 +54,19 @@ def _is_effective_migration(entry: Dict[str, Any]) -> bool:
     if startup.get("applied") or startup.get("failed"):
         return True
     return False
+
+
+def _is_migration_run_event(entry: Dict[str, Any]) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    event = str(entry.get("event") or "").strip()
+    if event == "startup_migration":
+        return True
+    # Legacy migration-state/audit rows did not always include an explicit
+    # event name, but migration run rows carry a success flag. Maintenance
+    # audit events such as migration_backup_cleanup must not become the
+    # displayed "last migration".
+    return "success" in entry
 
 
 def _read_migration_log(path: Path) -> Dict[str, Any]:
@@ -71,7 +86,8 @@ def _read_migration_log(path: Path) -> Dict[str, Any]:
                     continue
                 if not isinstance(entry, dict):
                     continue
-                last_event = entry
+                if _is_migration_run_event(entry):
+                    last_event = entry
                 if _is_effective_migration(entry):
                     last_effective_event = entry
     except Exception:
@@ -394,6 +410,18 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "summary": {"total": 0, "pending": 0, "failed": 0, "planned": 0},
             "error": str(exc),
         }
+    try:
+        from migration_api import plan_migration_backup_cleanup
+        migration_backup_cleanup = plan_migration_backup_cleanup(config)
+    except Exception as exc:
+        migration_backup_cleanup = {
+            "backup_dir": str(root / "config" / "migration-backups"),
+            "summary": {"total": 0, "delete": 0, "keep": 0, "skipped": 0, "delete_size_bytes": 0},
+            "delete": [],
+            "keep": [],
+            "skipped": [],
+            "error": str(exc),
+        }
     last_effective = migration_log.get("last_effective_event") if isinstance(migration_log, dict) else {}
     if not isinstance(last_effective, dict):
         last_effective = {}
@@ -498,6 +526,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "migration_log": migration_log,
         "migration_summary": migration_summary,
         "migration_registry": migration_registry,
+        "migration_backup_cleanup": migration_backup_cleanup,
         "startup_state": startup_state,
         "job_health": job_health,
         "runtime_recovery": runtime_recovery,

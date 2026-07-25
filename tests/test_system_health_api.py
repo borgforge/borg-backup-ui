@@ -9,7 +9,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from system_health_api import _build_migration_summary, _collect_job_health, _last_migration_successful, _probe_cifs_support, _read_migration_state, get_system_health_data
+from system_health_api import _build_migration_summary, _collect_job_health, _last_migration_successful, _probe_cifs_support, _read_migration_log, _read_migration_state, get_system_health_data
 
 
 def test_migration_summary_without_run():
@@ -187,6 +187,52 @@ def test_migration_summary_no_changes_has_no_actions():
 
     assert summary["reason"] == "Keine Änderungen nötig"
     assert summary["actions"] == []
+    assert summary["errors"] == []
+
+
+def test_migration_log_ignores_cleanup_audit_as_last_migration(tmp_path):
+    log_file = tmp_path / "migrations.log.jsonl"
+    startup_event = {
+        "schema_version": 2,
+        "timestamp": "2026-07-25T12:41:49",
+        "event": "startup_migration",
+        "success": True,
+        "message": "canonical_backup_conf_v1=applied",
+        "reason_code": "startup_migrations_applied",
+        "reason_text": "Startup migrations applied",
+        "details": {
+            "startup_migrations": {
+                "status": "ok",
+                "applied": ["canonical_backup_conf_v1"],
+                "failed": [],
+                "results": {
+                    "canonical_backup_conf_v1": {
+                        "status": "applied",
+                        "details": {"actions": ["Rebuilt backup.conf"]},
+                    },
+                },
+            },
+        },
+    }
+    cleanup_event = {
+        "schema_version": 2,
+        "timestamp": "2026-07-25T11:12:54Z",
+        "event": "migration_backup_cleanup",
+        "deleted_count": 46,
+        "failed_count": 0,
+    }
+    log_file.write_text(
+        json.dumps(startup_event) + "\n" + json.dumps(cleanup_event) + "\n",
+        encoding="utf-8",
+    )
+
+    migration_log = _read_migration_log(log_file)
+    summary = _build_migration_summary({}, migration_log)
+
+    assert migration_log["last_event"]["event"] == "startup_migration"
+    assert migration_log["last_effective_event"]["event"] == "startup_migration"
+    assert summary["status"] == "success"
+    assert summary["reason"] == "Startup migrations applied"
     assert summary["errors"] == []
 
 

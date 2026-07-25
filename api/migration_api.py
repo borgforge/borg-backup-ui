@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -123,9 +125,203 @@ REMOVED_PRE_BETA_MIGRATION_IDS = {
     "storage_paths_v1",
 }
 
+MIGRATION_BACKUP_KEEP_PER_ACTIVE_ID = 5
+_MIGRATION_BACKUP_NAME_RE = re.compile(
+    r"^(?P<migration_id>[A-Za-z0-9_]+)-(?P<stamp>\d{8}T\d{6}(?:\d{6})?Z)(?:-[A-Za-z0-9]+)?$"
+)
+
 
 def _is_actionable_migration_status(status: str) -> bool:
     return status in {"failed", "blocked", "pending", "unknown"}
+
+
+def _active_migration_ids() -> set[str]:
+    try:
+        from migrations.registry import MIGRATIONS
+    except ImportError:
+        from .migrations.registry import MIGRATIONS  # type: ignore
+    return {str(getattr(migration, "MIGRATION_ID", "") or "").strip() for migration in MIGRATIONS if str(getattr(migration, "MIGRATION_ID", "") or "").strip()}
+
+
+def _migration_backups_dir(ui_config: dict) -> Path:
+    return _config_dir(ui_config) / "migration-backups"
+
+
+def _timestamp_sort_key(stamp: str) -> str:
+    return str(stamp or "").strip()
+
+
+def _safe_snapshot_status(path: Path) -> str:
+    manifest = path / "manifest.json"
+    if not manifest.is_file():
+        return ""
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return "unknown"
+    if not isinstance(data, dict):
+        return "unknown"
+    return str(data.get("status") or data.get("state") or "").strip().lower()
+
+
+def _migration_backup_row(path: Path) -> dict[str, Any]:
+    match = _MIGRATION_BACKUP_NAME_RE.match(path.name)
+    if not match:
+        return {
+            "name": path.name,
+            "path": str(path),
+            "migration_id": "",
+            "timestamp": "",
+            "recognized": False,
+            "status": "",
+            "size_bytes": _directory_size(path),
+        }
+    migration_id = str(match.group("migration_id") or "").strip()
+    stamp = str(match.group("stamp") or "").strip()
+    return {
+        "name": path.name,
+        "path": str(path),
+        "migration_id": migration_id,
+        "timestamp": stamp,
+        "recognized": True,
+        "status": _safe_snapshot_status(path),
+        "size_bytes": _directory_size(path),
+    }
+
+
+def _directory_size(path: Path) -> int:
+    total = 0
+    try:
+        entries = list(path.rglob("*")) if path.is_dir() else []
+    except OSError:
+        return 0
+    for entry in entries:
+        try:
+            if entry.is_file():
+                total += int(entry.stat().st_size)
+        except OSError:
+            pass
+    return total
+
+
+def plan_migration_backup_cleanup(ui_config: dict, *, keep_per_active_id: int = MIGRATION_BACKUP_KEEP_PER_ACTIVE_ID) -> dict[str, Any]:
+    backup_dir = _migration_backups_dir(ui_config)
+    active_ids = _active_migration_ids()
+    state = _read_migration_state(_config_dir(ui_config))
+    state_migrations = state.get("migrations") if isinstance(state.get("migrations"), dict) else {}
+    recorded_ids = {str(key) for key in state_migrations.keys()}
+    keep_count = max(1, int(keep_per_active_id or MIGRATION_BACKUP_KEEP_PER_ACTIVE_ID))
+    rows: list[dict[str, Any]] = []
+    if backup_dir.is_dir():
+        for path in sorted(backup_dir.iterdir(), key=lambda p: p.name):
+            if path.is_dir():
+                rows.append(_migration_backup_row(path))
+
+    by_active_id: dict[str, list[dict[str, Any]]] = {}
+    delete: list[dict[str, Any]] = []
+    keep: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+
+    for row in rows:
+        migration_id = str(row.get("migration_id") or "")
+        if not row.get("recognized"):
+            skipped.append({**row, "reason": "unrecognized_name"})
+            continue
+        if migration_id in REMOVED_PRE_BETA_MIGRATION_IDS or (migration_id in recorded_ids and migration_id not in active_ids):
+            delete.append({**row, "reason": "inactive_migration"})
+            continue
+        if migration_id not in active_ids:
+            skipped.append({**row, "reason": "unknown_migration_id"})
+            continue
+        by_active_id.setdefault(migration_id, []).append(row)
+
+    protected_states = {"failed", "pending", "blocked", "unknown"}
+    for migration_id, candidates in sorted(by_active_id.items()):
+        candidates.sort(key=lambda row: _timestamp_sort_key(str(row.get("timestamp") or "")), reverse=True)
+        retained = 0
+        for row in candidates:
+            status = str(row.get("status") or "").strip().lower()
+            if status in protected_states:
+                skipped.append({**row, "reason": f"protected_status:{status}"})
+                continue
+            if retained < keep_count:
+                retained += 1
+                keep.append({**row, "reason": "latest_active_snapshot"})
+                continue
+            delete.append({**row, "reason": f"active_retention_keep_{keep_count}"})
+
+    delete.sort(key=lambda row: (str(row.get("migration_id") or ""), str(row.get("timestamp") or ""), str(row.get("name") or "")))
+    keep.sort(key=lambda row: (str(row.get("migration_id") or ""), str(row.get("timestamp") or ""), str(row.get("name") or "")), reverse=True)
+    skipped.sort(key=lambda row: str(row.get("name") or ""))
+    delete_bytes = sum(int(row.get("size_bytes") or 0) for row in delete)
+    return {
+        "backup_dir": str(backup_dir),
+        "keep_per_active_id": keep_count,
+        "active_migration_ids": sorted(active_ids),
+        "inactive_migration_ids": sorted({str(row.get("migration_id") or "") for row in delete if row.get("reason") == "inactive_migration"}),
+        "summary": {
+            "total": len(rows),
+            "delete": len(delete),
+            "keep": len(keep),
+            "skipped": len(skipped),
+            "delete_size_bytes": delete_bytes,
+        },
+        "delete": delete,
+        "keep": keep,
+        "skipped": skipped,
+    }
+
+
+def cleanup_migration_backups(ui_config: dict, *, dry_run: bool = True, keep_per_active_id: int = MIGRATION_BACKUP_KEEP_PER_ACTIVE_ID) -> dict[str, Any]:
+    plan = plan_migration_backup_cleanup(ui_config, keep_per_active_id=keep_per_active_id)
+    if dry_run:
+        return {"applied": False, **plan}
+
+    backup_dir = _migration_backups_dir(ui_config).resolve()
+    deleted: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+    for row in plan.get("delete") or []:
+        name = str(row.get("name") or "").strip()
+        if not name or "/" in name or "\\" in name or name in {".", ".."}:
+            failed.append({**row, "error": "invalid_name"})
+            continue
+        target = (backup_dir / name).resolve()
+        try:
+            target.relative_to(backup_dir)
+        except ValueError:
+            failed.append({**row, "error": "outside_backup_dir"})
+            continue
+        if not target.is_dir():
+            failed.append({**row, "error": "not_found"})
+            continue
+        try:
+            shutil.rmtree(target)
+            deleted.append(row)
+        except OSError as exc:
+            failed.append({**row, "error": str(exc)[:300]})
+
+    try:
+        from migrations.audit import append_event
+        append_event(ui_config, {
+            "event": "migration_backup_cleanup",
+            "deleted_count": len(deleted),
+            "failed_count": len(failed),
+            "keep_per_active_id": int(plan.get("keep_per_active_id") or keep_per_active_id),
+            "deleted": [str(row.get("name") or "") for row in deleted[:50]],
+            "failed": [{"name": str(row.get("name") or ""), "error": str(row.get("error") or "")} for row in failed[:50]],
+        })
+    except Exception:
+        pass
+
+    refreshed = plan_migration_backup_cleanup(ui_config, keep_per_active_id=keep_per_active_id)
+    return {
+        "applied": True,
+        **refreshed,
+        "deleted": deleted,
+        "failed": failed,
+        "deleted_count": len(deleted),
+        "failed_count": len(failed),
+    }
 
 
 def _migration_reason_from_state(migration_id: str, state: str, details: Dict[str, Any]) -> str:

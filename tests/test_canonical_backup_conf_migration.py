@@ -95,6 +95,29 @@ def test_migration_is_idempotent_after_success(tmp_path: Path) -> None:
     assert len(list((tmp_path / "config" / "migration-backups").iterdir())) == 1
 
 
+def test_legacy_schema_copy_alone_does_not_trigger_migration_backup(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    conf = tmp_path / "config" / "backup.conf"
+    conf.write_text(
+        "# Canonical global settings\n"
+        'GLOBAL_DATA_DIR="/mnt/user/custom"\n'
+        'UI_SESSION_TIMEOUT_MINUTES="30"\n'
+        'NOTIFY_EMAIL_EVENTS="backup_failed"\n',
+        encoding="utf-8",
+    )
+    legacy_schema = tmp_path / "config" / "backup.conf.example"
+    legacy_schema.write_text('STALE_KEY="stale"\n', encoding="utf-8")
+
+    detection = canonical_backup_conf_v1.detect(config)
+    result = canonical_backup_conf_v1.apply(config)
+
+    assert detection["required"] is False
+    assert detection["legacy_schema_copy"] == str(legacy_schema)
+    assert result["status"] == "not_required"
+    assert not (tmp_path / "config" / "migration-backups").exists()
+    assert legacy_schema.is_file()
+
+
 def test_migration_restores_original_file_when_verification_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
