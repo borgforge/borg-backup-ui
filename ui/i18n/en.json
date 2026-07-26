@@ -1603,7 +1603,7 @@
     },
     "general": {
       "title": "General",
-      "dataDirWarning": "Set the main directory for operational data. Start actions remain disabled without GLOBAL_DATA_DIR.",
+      "dataDirWarning": "Set the main directory for operational data. The suggested path is created only after saving; start actions remain locked until then.",
       "dataDir": "Main directory (required)",
       "derived": "{name} (derived)",
       "theme": "UI theme",

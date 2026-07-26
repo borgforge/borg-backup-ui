@@ -7,13 +7,15 @@
 # DATA DIRECTORIES (required)
 # =============================================================================
 # Pflichtfeld: Hauptverzeichnis fuer Betriebsdaten.
-# Beispiel: /mnt/user/borg-backup-ui
-GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"
+# Auf frischen Installationen bewusst leer, damit die UI den Nutzer zuerst
+# nach dem gewuenschten Speicherort fragt.
+# Vorschlag in der UI: /mnt/user/borg-backup-ui
+GLOBAL_DATA_DIR=""
 
-# Wird von der UI automatisch aus GLOBAL_DATA_DIR abgeleitet.
-GLOBAL_LOG_DIR="${GLOBAL_DATA_DIR}/logs"
-STATUS_DIR="${GLOBAL_DATA_DIR}/status"
-RESTORE_TEST_STATUS_DIR="${GLOBAL_DATA_DIR}/restore-status"
+# Wird von der UI beim Speichern automatisch aus GLOBAL_DATA_DIR abgeleitet.
+GLOBAL_LOG_DIR=""
+STATUS_DIR=""
+RESTORE_TEST_STATUS_DIR=""
 GLOBAL_LOG_RETENTION_DAYS=30
 
 # =============================================================================

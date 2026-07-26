@@ -13,7 +13,7 @@ for candidate in (ROOT, API_ROOT, RUNTIME_LIB):
     if str(candidate) not in sys.path:
         sys.path.insert(0, str(candidate))
 
-from config_api import canonical_backup_conf_plan, read_raw_conf, write_conf  # noqa: E402
+from config_api import canonical_backup_conf_plan, get_setup_status, read_raw_conf, write_conf  # noqa: E402
 from status import load_config  # noqa: E402
 
 
@@ -52,3 +52,30 @@ def test_write_conf_rejects_unknown_keys_and_line_breaks(tmp_path: Path) -> None
         write_conf(config, {"REPO_FLASH_LOCAL": "/mnt/backup/repo"})
     with pytest.raises(ValueError, match="must not contain line breaks"):
         write_conf(config, {"GLOBAL_MAIL_SENDER": "first\nsecond"})
+
+
+def test_fresh_install_template_requires_explicit_data_dir(tmp_path: Path) -> None:
+    schema_file = ROOT / "runtime" / "config" / "backup.conf.example"
+    raw = schema_file.read_text(encoding="utf-8")
+    expanded = load_config(schema_file)
+
+    assert 'GLOBAL_DATA_DIR=""' in raw
+    assert "/mnt/user/borg-backup-ui" in raw
+    assert expanded["GLOBAL_DATA_DIR"] == ""
+    assert expanded["GLOBAL_LOG_DIR"] == ""
+    assert expanded["STATUS_DIR"] == ""
+    assert expanded["RESTORE_TEST_STATUS_DIR"] == ""
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "backup.conf").write_text(raw, encoding="utf-8")
+    config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "BACKUP_CONF_SCHEMA_FILE": str(schema_file),
+    }
+
+    setup = get_setup_status(config)
+
+    assert setup["global_data_dir_set"] is False
+    assert setup["ready"] is False
+    assert setup["validation"]["errors"][0]["message_code"] == "config_data_dir_missing"

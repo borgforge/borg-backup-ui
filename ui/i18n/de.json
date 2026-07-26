@@ -1603,7 +1603,7 @@
     },
     "general": {
       "title": "Allgemein",
-      "dataDirWarning": "Bitte Hauptverzeichnis für Betriebsdaten setzen. Ohne GLOBAL_DATA_DIR sind Start-Aktionen gesperrt.",
+      "dataDirWarning": "Bitte Hauptverzeichnis für Betriebsdaten setzen. Der Vorschlag wird erst beim Speichern angelegt; bis dahin bleiben Start-Aktionen gesperrt.",
       "dataDir": "Hauptverzeichnis (Pflicht)",
       "derived": "{name} (abgeleitet)",
       "theme": "UI-Theme",
