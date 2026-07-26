@@ -22,6 +22,7 @@ PROVENANCE_NAME = "build-provenance.json"
 PROVENANCE_MEMBER = f"boot/config/plugins/{NAME}/{PROVENANCE_NAME}"
 EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/borg_backup_ui.py",
+    f"boot/config/plugins/{NAME}/LICENSE",
     f"boot/config/plugins/{NAME}/api/apprise_profiles_api.py",
     f"boot/config/plugins/{NAME}/api/config_api.py",
     f"boot/config/plugins/{NAME}/api/factory_reset_worker.py",
@@ -65,7 +66,7 @@ def git_path(repo: Path, relative: str) -> Path:
 
 
 def is_deployable_path(path: str) -> bool:
-    if path in {"borg_backup_ui.py", "borg_backup_ui.conf.example"}:
+    if path in {"borg_backup_ui.py", "borg_backup_ui.conf.example", "LICENSE"}:
         return True
     if path.startswith(("api/", "ui/", "runtime/", "docs/user-manual/")):
         return True

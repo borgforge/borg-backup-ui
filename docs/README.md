@@ -126,7 +126,7 @@ python3 -m py_compile borg_backup_ui.py api/*.py runtime/scripts/*.py
 
 ## License
 
-- Project: MIT
+- Project: MIT, see `LICENSE`
 - BorgBackup: BSD-3-Clause (third-party license)
 - Apprise notification runtime: BSD-2-Clause plus permissive Python dependency
   licenses, see `runtime/licenses/THIRD-PARTY-NOTICES.md`

@@ -156,7 +156,7 @@ and remove private infrastructure details before sharing logs publicly.
 
 ## License
 
-- Project: MIT
+- Project: MIT, see [LICENSE](LICENSE)
 - Bundled BorgBackup: BSD-3-Clause, see
   [runtime/licenses/borg/LICENSE](runtime/licenses/borg/LICENSE)
 - Bundled Apprise notification runtime: BSD-2-Clause and permissive Python

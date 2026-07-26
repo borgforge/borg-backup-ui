@@ -64,3 +64,11 @@ def test_apprise_vendor_dependencies_are_listed_in_license_notice() -> None:
     apprise_license = ROOT / "runtime" / "licenses" / "apprise" / "LICENSE"
     assert apprise_license.is_file()
     assert "BSD 2-Clause License" in apprise_license.read_text(encoding="utf-8")
+
+
+def test_project_mit_license_file_is_present() -> None:
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+
+    assert license_text.startswith("MIT License\n")
+    assert "Copyright (c) 2026 Thorsten Steinberg" in license_text
+    assert 'THE SOFTWARE IS PROVIDED "AS IS"' in license_text
