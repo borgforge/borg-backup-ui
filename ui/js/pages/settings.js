@@ -3819,7 +3819,7 @@ async function diffSettingsConfigBackup(name) {
     `).join('');
     const unifiedFallback = String(data.diff || '').trim();
     box.innerHTML = `
-      <div class="text-muted" style="font-size:12px;margin-bottom:6px">Diff: aktiv → Backup (${escHtml(name)})</div>
+      <div class="text-muted" style="font-size:12px;margin-bottom:6px">Diff: Backup → aktiv (${escHtml(name)})</div>
       <div class="settings-sbs-wrap">
         <table class="settings-sbs-table">
           <thead>

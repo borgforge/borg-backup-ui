@@ -453,6 +453,13 @@ def test_settings_save_is_scoped_to_active_panel_and_reloads_backend_state() -> 
     assert "await reloadSettingsDataAfterSave();" in script
 
 
+def test_config_backup_diff_label_uses_backup_to_active_direction() -> None:
+    script = _read("ui/js/pages/settings.js")
+
+    assert "Diff: Backup → aktiv" in script
+    assert "Diff: aktiv → Backup" not in script
+
+
 def test_profile_secret_import_allows_missing_profiles_from_bundle_settings() -> None:
     script = _read("ui/js/pages/settings.js")
 

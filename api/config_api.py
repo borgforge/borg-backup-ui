@@ -292,7 +292,7 @@ def delete_conf_backups_keep_latest(ui_config: dict) -> dict:
 
 def diff_conf_backup(ui_config: dict, name: str, context_lines: int = 3) -> dict:
     """
-    Zeigt Unified-Diff zwischen aktivem backup.conf und gewähltem Backup.
+    Zeigt Unified-Diff vom gewaehlten Backup zur aktiven backup.conf.
     """
     if not name or "/" in name or ".." in name:
         raise ValueError("Invalid backup name")
@@ -313,23 +313,25 @@ def diff_conf_backup(ui_config: dict, name: str, context_lines: int = 3) -> dict
 
     diff_lines = list(
         difflib.unified_diff(
-            current_text,
             backup_text,
-            fromfile=str(conf_file),
-            tofile=str(backup_file),
+            current_text,
+            fromfile=str(backup_file),
+            tofile=str(conf_file),
             lineterm="",
             n=ctx,
         )
     )
     changed = bool(diff_lines)
-    # Side-by-side payload for UI rendering (line-based).
-    matcher = difflib.SequenceMatcher(a=current_text, b=backup_text)
+    # Side-by-side payload for UI rendering (line-based). The matcher uses the
+    # conventional old->new direction, while the UI keeps the active file on the
+    # left because that is the primary object the user is inspecting.
+    matcher = difflib.SequenceMatcher(a=backup_text, b=current_text)
     side_by_side: List[Dict[str, Any]] = []
     left_ln = 1
     right_ln = 1
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
-            for li, rj in zip(range(i1, i2), range(j1, j2)):
+            for rj, li in zip(range(i1, i2), range(j1, j2)):
                 side_by_side.append({
                     "tag": "equal",
                     "left_no": left_ln,
@@ -340,8 +342,8 @@ def diff_conf_backup(ui_config: dict, name: str, context_lines: int = 3) -> dict
                 left_ln += 1
                 right_ln += 1
         elif tag == "replace":
-            l_chunk = current_text[i1:i2]
-            r_chunk = backup_text[j1:j2]
+            l_chunk = current_text[j1:j2]
+            r_chunk = backup_text[i1:i2]
             max_len = max(len(l_chunk), len(r_chunk))
             for idx in range(max_len):
                 l_val = l_chunk[idx] if idx < len(l_chunk) else ""
@@ -358,33 +360,33 @@ def diff_conf_backup(ui_config: dict, name: str, context_lines: int = 3) -> dict
                 if idx < len(r_chunk):
                     right_ln += 1
         elif tag == "delete":
-            for li in range(i1, i2):
+            for rj in range(i1, i2):
                 side_by_side.append({
                     "tag": "delete",
-                    "left_no": left_ln,
-                    "left": current_text[li],
-                    "right_no": None,
-                    "right": "",
-                })
-                left_ln += 1
-        elif tag == "insert":
-            for rj in range(j1, j2):
-                side_by_side.append({
-                    "tag": "insert",
                     "left_no": None,
                     "left": "",
                     "right_no": right_ln,
                     "right": backup_text[rj],
                 })
                 right_ln += 1
+        elif tag == "insert":
+            for li in range(j1, j2):
+                side_by_side.append({
+                    "tag": "insert",
+                    "left_no": left_ln,
+                    "left": current_text[li],
+                    "right_no": None,
+                    "right": "",
+                })
+                left_ln += 1
 
     return {
         "name": name,
         "changed": changed,
         "diff": "\n".join(diff_lines) if changed else "",
         "side_by_side": side_by_side,
-        "from_file": str(conf_file),
-        "to_file": str(backup_file),
+        "from_file": str(backup_file),
+        "to_file": str(conf_file),
     }
 
 

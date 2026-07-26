@@ -2342,18 +2342,18 @@ body.wizard-modal-open {
 }
 
 .settings-sbs-table tr.sbs-replace td:nth-child(2) {
-  background: color-mix(in srgb, var(--danger-color, #f85149) 14%, transparent);
-}
-
-.settings-sbs-table tr.sbs-replace td:nth-child(4) {
   background: color-mix(in srgb, var(--success-color, #3fb950) 14%, transparent);
 }
 
-.settings-sbs-table tr.sbs-delete .sbs-code:nth-child(2) {
+.settings-sbs-table tr.sbs-replace td:nth-child(4) {
+  background: color-mix(in srgb, var(--danger-color, #f85149) 14%, transparent);
+}
+
+.settings-sbs-table tr.sbs-delete .sbs-code:nth-child(4) {
   background: color-mix(in srgb, var(--danger-color, #f85149) 16%, transparent);
 }
 
-.settings-sbs-table tr.sbs-insert .sbs-code:nth-child(4) {
+.settings-sbs-table tr.sbs-insert .sbs-code:nth-child(2) {
   background: color-mix(in srgb, var(--success-color, #3fb950) 16%, transparent);
 }
 
