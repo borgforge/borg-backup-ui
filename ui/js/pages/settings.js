@@ -6008,7 +6008,9 @@ function renderSettingsAbout() {
           <span class="about-label">${settingsT('forms.thirdPartyLicenses')}</span>
           <span class="about-value">
             BorgBackup (BSD-3-Clause),
-            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a>
+            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a><br>
+            Apprise runtime (BSD-2-Clause + dependencies),
+            <a href="https://github.com/caronc/apprise/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a>
           </span>
         </div>
         <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>

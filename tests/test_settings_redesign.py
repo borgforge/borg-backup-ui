@@ -348,6 +348,8 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert "gitlab.thetwist.de" not in script
     assert "settings-about-contact" in script
     assert "settings-about-repository" in script
+    assert "Apprise runtime (BSD-2-Clause + dependencies)" in script
+    assert "https://github.com/caronc/apprise/blob/master/LICENSE" in script
     assert "settingsState.appInfo" in script
     assert "v.contact_email, v.repository_url" in bindings
 
