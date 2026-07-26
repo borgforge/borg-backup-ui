@@ -1999,6 +1999,7 @@
       "author": "Author",
       "contact": "Contact",
       "license": "License",
+      "projectLicense": "Project license",
       "repository": "Repository",
       "repositoryRefreshTitle": "Repository information",
       "repositoryRefreshEnabledHint": "Automatic repository information is refreshed at the planned time. This can wake disks when repositories are stored directly on array disks.",

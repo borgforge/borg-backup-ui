@@ -1999,6 +1999,7 @@
       "author": "Autor",
       "contact": "Kontakt",
       "license": "Lizenz",
+      "projectLicense": "Projektlizenz",
       "repository": "Repository",
       "repositoryRefreshTitle": "Repository-Informationen",
       "repositoryRefreshEnabledHint": "Automatische Repository-Informationen werden nach dem geplanten Zeitpunkt aktualisiert. Dies kann Datenträger aufwecken, wenn Repositorys direkt auf Array-Disks liegen.",

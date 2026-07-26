@@ -6003,14 +6003,12 @@ function renderSettingsAbout() {
         <div class="about-row"><span class="about-label">Borg Version</span><span class="about-value" id="settings-about-borg-version">${escHtml(info.borgVersion || '—')}</span></div>
         <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">${escHtml(info.author)}</span></div>
         <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
-        <div class="about-row"><span class="about-label">${settingsT('forms.license')}</span><span class="about-value">MIT</span></div>
+        <div class="about-row"><span class="about-label">${settingsT('forms.projectLicense')}</span><span class="about-value">Borg Backup UI - MIT</span></div>
         <div class="about-row">
           <span class="about-label">${settingsT('forms.thirdPartyLicenses')}</span>
-          <span class="about-value">
-            BorgBackup (BSD-3-Clause),
-            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a><br>
-            Apprise runtime (BSD-2-Clause + dependencies),
-            <a href="https://github.com/caronc/apprise/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a>
+          <span class="about-value about-license-list">
+            <span><strong>BorgBackup</strong> <span>BSD-3-Clause</span> <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a></span>
+            <span><strong>Apprise runtime</strong> <span>BSD-2-Clause + dependencies</span> <a href="https://github.com/caronc/apprise/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a></span>
           </span>
         </div>
         <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
