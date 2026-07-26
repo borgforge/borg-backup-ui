@@ -47,6 +47,9 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   appriseDraftProfile: null,
   appriseLastResult: null,
   repositoryRefreshReloadTimer: null,
+  aboutLicenses: {},
+  aboutLicensesLoading: false,
+  aboutLicensesError: '',
   data: null,
   systemHealth: null,
 };
@@ -332,6 +335,7 @@ function renderSettings(data, systemHealth) {
   refreshSettingsConfigBackups();
   initializeSettingsProfileManagers();
   if (settingsState.activeTab === 'notifications') maybeLoadAppriseProviders();
+  if (settingsState.activeTab === 'about') maybeLoadAboutLicenses();
   _updateUnsavedChangesUi();
 }
 
@@ -6007,29 +6011,10 @@ function renderSettingsAbout() {
   const info = settingsState.appInfo || _normalizeAppInfo('', '', '', '', '');
   const active = settingsState.aboutTab === 'third-party' ? 'third-party' : 'project';
   settingsState.aboutTab = active;
-  const mitLicenseText = [
-    'MIT License',
-    '',
-    'Copyright (c) 2026 Thorsten Steinberg',
-    '',
-    'Permission is hereby granted, free of charge, to any person obtaining a copy',
-    'of this software and associated documentation files (the "Software"), to deal',
-    'in the Software without restriction, including without limitation the rights',
-    'to use, copy, modify, merge, publish, distribute, sublicense, and/or sell',
-    'copies of the Software, and to permit persons to whom the Software is',
-    'furnished to do so, subject to the following conditions:',
-    '',
-    'The above copyright notice and this permission notice shall be included in all',
-    'copies or substantial portions of the Software.',
-    '',
-    'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR',
-    'IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,',
-    'FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE',
-    'AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER',
-    'LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,',
-    'OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE',
-    'SOFTWARE.',
-  ].join('\n');
+  const projectLicenseText = String(settingsState.aboutLicenses?.project?.content || '').trim();
+  const thirdPartyNotice = String(settingsState.aboutLicenses?.['third-party']?.content || '').trim();
+  const licenseError = String(settingsState.aboutLicensesError || '').trim();
+  const loadingText = settingsState.aboutLicensesLoading ? settingsT('forms.licenseLoading') : settingsT('forms.licenseUnavailable');
   return settingsCard(settingsT('forms.about'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
     `<div class="settings-body">
@@ -6050,7 +6035,8 @@ function renderSettingsAbout() {
           <div class="about-row"><span class="about-label">${settingsT('forms.projectLicense')}</span><span class="about-value">MIT</span></div>
           <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
         </div>
-        <pre class="about-license-text">${escHtml(mitLicenseText)}</pre>
+        ${licenseError ? `<div class="status-message error">${escHtml(licenseError)}</div>` : ''}
+        <pre class="about-license-text">${escHtml(projectLicenseText || loadingText)}</pre>
       </div>
       <div class="about-tab-panel ${active === 'third-party' ? '' : 'hidden'}" data-about-panel="third-party">
         <p class="about-license-note">${escHtml(settingsT('forms.thirdPartyIntro'))}</p>
@@ -6065,13 +6051,124 @@ function renderSettingsAbout() {
             <span>BSD-2-Clause + dependencies</span>
             <a href="https://github.com/caronc/apprise/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
           </div>
-          <div class="about-license-card">
-            <strong>${settingsT('forms.thirdPartyNoticeFile')}</strong>
-            <span>runtime/licenses/THIRD-PARTY-NOTICES.md</span>
-          </div>
         </div>
+        <details class="about-license-notices">
+          <summary>${escHtml(settingsT('forms.thirdPartyNoticeFile'))}</summary>
+          <div class="about-markdown-viewer">${thirdPartyNotice ? renderAboutMarkdown(thirdPartyNotice) : escHtml(licenseError || loadingText)}</div>
+        </details>
       </div>
     </div>`);
+}
+
+async function maybeLoadAboutLicenses(force = false) {
+  const loaded = settingsState.aboutLicenses?.project?.content && settingsState.aboutLicenses?.['third-party']?.content;
+  if (!force && (loaded || settingsState.aboutLicensesLoading)) return;
+  settingsState.aboutLicensesLoading = true;
+  settingsState.aboutLicensesError = '';
+  try {
+    const [project, thirdParty] = await Promise.all([
+      fetch('/api/licenses?id=project', { cache: 'no-store' }),
+      fetch('/api/licenses?id=third-party', { cache: 'no-store' }),
+    ]);
+    if (!project.ok) throw new Error(`project license HTTP ${project.status}`);
+    if (!thirdParty.ok) throw new Error(`third-party notices HTTP ${thirdParty.status}`);
+    settingsState.aboutLicenses = {
+      project: await project.json(),
+      'third-party': await thirdParty.json(),
+    };
+  } catch (err) {
+    settingsState.aboutLicensesError = settingsT('forms.licenseLoadFailed', { message: err.message });
+  } finally {
+    settingsState.aboutLicensesLoading = false;
+    if (settingsState.activeTab === 'about') renderSettings(settingsState.data || {}, settingsState.systemHealth);
+  }
+}
+
+function aboutMarkdownInline(text) {
+  const inlineCodePattern = new RegExp(String.fromCharCode(96) + '([^\\n]+)' + String.fromCharCode(96), 'g');
+  return escHtml(String(text || ''))
+    .replace(inlineCodePattern, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+}
+
+function aboutMarkdownCells(line) {
+  return String(line || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map(cell => cell.trim());
+}
+
+function renderAboutMarkdown(markdown) {
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let inList = false;
+  let paragraph = [];
+  const closeList = () => {
+    if (!inList) return;
+    out.push('</ul>');
+    inList = false;
+  };
+  const closeParagraph = () => {
+    if (!paragraph.length) return;
+    out.push(`<p>${aboutMarkdownInline(paragraph.join(' '))}</p>`);
+    paragraph = [];
+  };
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index] || '';
+    const line = raw.trim();
+    if (!line) {
+      closeParagraph();
+      closeList();
+      continue;
+    }
+    if (line.startsWith('|') && (lines[index + 1] || '').trim().match(/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/)) {
+      closeParagraph();
+      closeList();
+      const header = aboutMarkdownCells(line);
+      index += 2;
+      const rows = [];
+      while (index < lines.length && String(lines[index] || '').trim().startsWith('|')) {
+        rows.push(aboutMarkdownCells(lines[index]));
+        index += 1;
+      }
+      index -= 1;
+      out.push(`<table><thead><tr>${header.map(cell => `<th>${aboutMarkdownInline(cell)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${aboutMarkdownInline(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      closeParagraph();
+      closeList();
+      out.push(`<h2>${aboutMarkdownInline(line.slice(2).trim())}</h2>`);
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      closeParagraph();
+      closeList();
+      out.push(`<h3>${aboutMarkdownInline(line.slice(3).trim())}</h3>`);
+      continue;
+    }
+    if (line.startsWith('### ')) {
+      closeParagraph();
+      closeList();
+      out.push(`<h4>${aboutMarkdownInline(line.slice(4).trim())}</h4>`);
+      continue;
+    }
+    if (line.startsWith('- ')) {
+      closeParagraph();
+      if (!inList) {
+        out.push('<ul>');
+        inList = true;
+      }
+      out.push(`<li>${aboutMarkdownInline(line.slice(2).trim())}</li>`);
+      continue;
+    }
+    paragraph.push(line);
+  }
+  closeParagraph();
+  closeList();
+  return out.join('');
 }
 
 function settingsCard(title, icon, body) {

@@ -218,6 +218,30 @@ def test_static_file_serving_allows_regular_ui_asset(tmp_path: Path):
     assert h.wfile.getvalue() == b"console.log('ok');"
 
 
+def test_license_api_serves_only_whitelisted_license_files():
+    h = _make_handler()
+
+    project = h._get_license_file("id=project")
+    third_party = h._get_license_file("id=third-party")
+
+    assert project["path"] == "LICENSE"
+    assert project["format"] == "text"
+    assert project["content"].startswith("MIT License")
+    assert third_party["path"] == "runtime/licenses/THIRD-PARTY-NOTICES.md"
+    assert third_party["format"] == "markdown"
+    assert "# Third-party license notices" in third_party["content"]
+
+
+def test_license_api_rejects_unknown_license_file():
+    h = _make_handler()
+
+    with pytest.raises(ValueError) as exc:
+        h._get_license_file("id=../../borg_backup_ui.py")
+
+    assert getattr(exc.value, "api_code") == "unknown_license_file"
+    assert getattr(exc.value, "api_status") == 404
+
+
 def test_api_success_logging_suppresses_routine_fast_gets():
     h = _make_handler()
     h.config = {}

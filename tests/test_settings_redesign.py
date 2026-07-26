@@ -359,17 +359,25 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert "settings-about-contact" in script
     assert "settings-about-repository" in script
     assert "settingsState.aboutTab" in script
+    assert "aboutLicenses" in script
+    assert "maybeLoadAboutLicenses()" in script
+    assert "fetch('/api/licenses?id=project'" in script
+    assert "fetch('/api/licenses?id=third-party'" in script
+    assert "function renderAboutMarkdown(markdown)" in script
     assert 'data-settings-action="about-subtab"' in script
     assert 'data-about-subtab="project"' in script
     assert 'data-about-subtab="third-party"' in script
-    assert "MIT License" in script
-    assert "Copyright (c) 2026 Thorsten Steinberg" in script
+    assert "projectLicenseText" in script
     assert "settingsT('forms.projectLicense')" in script
     assert "settingsT('forms.projectLicenseIntro')" in script
     assert "settingsT('forms.thirdPartyIntro')" in script
-    assert "runtime/licenses/THIRD-PARTY-NOTICES.md" in script
+    assert "thirdPartyNotice" in script
     assert "about-license-text" in script
+    assert "about-license-notices" in script
+    assert "about-markdown-viewer" in script
+    assert "max-height" not in css.split(".about-license-text", 1)[1].split("}", 1)[0]
     assert ".about-license-card" in css
+    assert ".about-markdown-viewer table" in css
     assert "BorgBackup" in script
     assert "<strong>Apprise runtime</strong>" in script
     assert "BSD-2-Clause + dependencies" in script

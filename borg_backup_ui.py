@@ -154,6 +154,10 @@ BORG_BUNDLE_DIR = SCRIPT_DIR / "runtime" / "bin" / "borg"
 BORG_BUNDLE_PLAIN = BORG_BUNDLE_DIR / "borg"
 BORG_BUNDLE_VERSIONED = BORG_BUNDLE_DIR / "borg-linux-glibc231-x86_64-1.4.4"
 BORG_STAGE_BIN = Path("/usr/local/bin/borg")
+LICENSE_FILES = {
+    "project": SCRIPT_DIR / "LICENSE",
+    "third-party": SCRIPT_DIR / "runtime" / "licenses" / "THIRD-PARTY-NOTICES.md",
+}
 
 MIME_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -838,6 +842,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     "repository_url": APP_REPOSITORY_URL,
                     "startup_state": _public_startup_state(self.config),
                 },
+                "/api/licenses": lambda: self._get_license_file(parsed.query),
                 "/api/status": self._get_status,
                 "/api/system-health": self._get_system_health,
                 "/api/notification-reminders/diagnostics": self._get_notification_reminder_diagnostics,
@@ -1002,6 +1007,23 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_homepage_widget_summary(self) -> dict:
         from homepage_widget_api import build_homepage_widget_summary
         return build_homepage_widget_summary(self.config)
+
+    def _get_license_file(self, query: str = "") -> dict:
+        qs = parse_qs(query or "")
+        license_id = str((qs.get("id") or [""])[0] or "").strip()
+        path = LICENSE_FILES.get(license_id)
+        if path is None:
+            exc = ValueError("Unknown license file.")
+            exc.api_code = "unknown_license_file"
+            exc.api_status = 404
+            raise exc
+        text = path.read_text(encoding="utf-8")
+        return {
+            "id": license_id,
+            "path": str(path.relative_to(SCRIPT_DIR)),
+            "content": text,
+            "format": "markdown" if path.suffix.lower() == ".md" else "text",
+        }
 
     def _get_apprise_profiles(self, query: str = "") -> dict:
         from apprise_profiles_api import get_profile, list_profiles
