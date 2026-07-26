@@ -364,11 +364,60 @@ body.wizard-modal-open {
 .about-row { display: flex; align-items: baseline; gap: 16px; }
 .about-label { font-size: 12px; color: var(--text-muted); min-width: 90px; flex-shrink: 0; }
 .about-value { font-size: 13px; color: var(--text-primary); }
-.about-license-list { display: flex; flex-direction: column; gap: 4px; }
-.about-license-list span span { color: var(--text-muted); margin-left: 4px; }
-.about-license-list a { margin-left: 6px; }
+.about-subtab-control { margin-bottom: 12px; }
+.about-tab-panel { display: grid; gap: 14px; }
+.about-project-lead {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+.about-project-lead span,
+.about-license-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.about-license-text {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.about-license-cards {
+  display: grid;
+  gap: 10px;
+}
+.about-license-card {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+.about-license-card span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
 .about-link { color: var(--accent); text-decoration: none; }
 .about-link:hover { text-decoration: underline; }
+
+@media (max-width: 760px) {
+  .about-license-card {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* ── Main Content ── */
 .main-content {
