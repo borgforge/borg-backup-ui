@@ -318,6 +318,7 @@ function updateDashboardSelection(visible) {
 
 function dashboardRunStatus(backup) {
   if (backup.never_run) return { cls: 'unknown', label: dashboardT('dashboard.neverExecuted') };
+  if (backup.backup_overdue) return { cls: 'warning', label: dashboardT('dashboard.backupOverdue') };
   const status = String(backup.status || 'unknown').toLowerCase();
   return {
     cls: status === 'cancelled' ? 'warning' : status,
@@ -333,6 +334,14 @@ function dashboardRunStatus(backup) {
 
 function dashboardRunMessage(backup) {
   if (backup.never_run) return { cls: '', text: dashboardT('dashboard.neverExecutedHint') };
+  if (backup.backup_overdue) {
+    return {
+      cls: 'warning',
+      text: dashboardT('dashboard.backupOverdueDetails', {
+        date: dashboardAbsoluteTimestamp(backup.backup_overdue_after || backup.backup_overdue_expected_run || ''),
+      }),
+    };
+  }
   if (backup.status === 'error') {
     return { cls: 'error', text: backup.error_message || backup.message || dashboardT('dashboard.backupFailedDetails') };
   }
@@ -367,6 +376,21 @@ function dashboardRelativeRunTime(timestamp) {
   const value = Math.round(diffSeconds / divisor);
   const language = window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en' : 'de';
   return new Intl.RelativeTimeFormat(language, { numeric: 'always' }).format(value, unit);
+}
+
+function dashboardAbsoluteTimestamp(timestamp) {
+  const raw = String(timestamp || '').trim();
+  if (!raw) return '—';
+  const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return raw;
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() || 'de';
+  return parsed.toLocaleString(language === 'en' ? 'en-GB' : 'de-DE', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function dashboardRunDuration(seconds) {

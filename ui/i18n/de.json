@@ -892,6 +892,8 @@
     "unknown": "Unbekannt",
     "skipDefault": "Lauf wurde übersprungen",
     "backupFailedDetails": "Backup fehlgeschlagen. Technische Details stehen im Protokoll.",
+    "backupOverdue": "Überfällig",
+    "backupOverdueDetails": "Geplanter Backup-Lauf ist seit {date} überfällig.",
     "skipReasons": {
       "parity_active": "Backup wurde wegen einer laufenden Parity-Operation übersprungen.",
       "usb_not_mounted": "Backup wurde übersprungen, weil das USB-Ziel nicht eingehängt ist.",

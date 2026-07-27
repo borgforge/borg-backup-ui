@@ -7,7 +7,7 @@ als JSON an den Browser gesendet werden.
 """
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -145,9 +145,11 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
         if isinstance(meta.get("policy"), dict):
             b["restore_test_policy"] = meta.get("policy")
 
+    _apply_backup_overdue_metadata(config, backups)
+
     total = len(backups)
-    success = sum(1 for b in backups if b["status"] == "success")
-    warning = sum(1 for b in backups if b["status"] in {"warning", "cancelled"})
+    success = sum(1 for b in backups if b["status"] == "success" and not bool(b.get("backup_overdue")))
+    warning = sum(1 for b in backups if b["status"] in {"warning", "cancelled"} or bool(b.get("backup_overdue")))
     skipped = sum(1 for b in backups if b["status"] == "skipped")
     error = sum(1 for b in backups if b["status"] == "error")
 
@@ -167,6 +169,77 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
         "snapshots": snapshots,
         "check_interval_days": check_interval_days,
     }
+
+
+def _apply_backup_overdue_metadata(
+    config: dict,
+    backups: List[Dict[str, Any]],
+    now: Optional[datetime] = None,
+) -> None:
+    for row in backups:
+        row["backup_overdue"] = False
+        row["backup_overdue_state"] = ""
+        row["backup_overdue_expected_run"] = ""
+        row["backup_overdue_after"] = ""
+        row["backup_overdue_next_run"] = ""
+
+    try:
+        from jobs_api import list_jobs
+        from notification_reminder_api import (
+            _backup_overdue_item,
+            _backup_overdue_tolerance_hours,
+            _latest_backup_status_by_key,
+        )
+        from schedule_api import get_schedules
+    except Exception:
+        return
+
+    try:
+        schedules = get_schedules(config)
+        if not isinstance(schedules, dict) or not schedules:
+            return
+        jobs = {
+            str(job.get("key") or "").strip(): job
+            for job in list_jobs(config, {})
+            if isinstance(job, dict) and str(job.get("key") or "").strip()
+        }
+        latest = _latest_backup_status_by_key(backups)
+        tolerance_hours = _backup_overdue_tolerance_hours(config)
+        current_time = now or datetime.now()
+    except Exception:
+        return
+
+    for job_key, sched in schedules.items():
+        job_key = str(job_key or "").strip()
+        if job_key == "restore_test" or not job_key or not isinstance(sched, dict) or not bool(sched.get("enabled", True)):
+            continue
+        job = jobs.get(job_key)
+        if not job or job.get("enabled") is False:
+            continue
+        row = latest.get(job_key)
+        if row is None:
+            continue
+        try:
+            item = _backup_overdue_item(
+                job_key,
+                sched,
+                job,
+                row,
+                {},
+                current_time,
+                1,
+                tolerance_hours,
+            )
+        except Exception:
+            continue
+        state = str(item.get("state") or "")
+        if state == "unsupported":
+            continue
+        row["backup_overdue_state"] = state
+        row["backup_overdue_expected_run"] = str(item.get("expected_run") or "")
+        row["backup_overdue_after"] = str(item.get("overdue_after") or "")
+        row["backup_overdue_next_run"] = str(item.get("next_scheduled_run") or "")
+        row["backup_overdue"] = state in {"overdue_ready", "overdue_waiting"}
 
 
 def _read_snapshot_data(*paths: Path) -> Dict[str, List[Dict]]:
