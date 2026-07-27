@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -49,3 +50,25 @@ def test_manifest_installer_extracts_apprise_vendor_only_when_changed() -> None:
     assert "Apprise Runtime unveraendert, Extraktion wird uebersprungen." in workflow
     assert "extrahiere Apprise Runtime" in workflow
     assert "Apprise Vendor-Bundle SHA256 stimmt nicht." in workflow
+
+
+def test_apprise_vendor_dependencies_are_listed_in_license_notice() -> None:
+    lock = (ROOT / "plugin" / "apprise-requirements.lock").read_text(encoding="utf-8")
+    notice = (ROOT / "runtime" / "licenses" / "THIRD-PARTY-NOTICES.md").read_text(encoding="utf-8")
+
+    pinned = re.findall(r"^([A-Za-z0-9_.-]+)==([0-9][^\s]+)", lock, re.MULTILINE)
+    assert pinned
+    for name, version in pinned:
+        assert f"| {name} | {version} |" in notice
+
+    apprise_license = ROOT / "runtime" / "licenses" / "apprise" / "LICENSE"
+    assert apprise_license.is_file()
+    assert "BSD 2-Clause License" in apprise_license.read_text(encoding="utf-8")
+
+
+def test_project_mit_license_file_is_present() -> None:
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+
+    assert license_text.startswith("MIT License\n")
+    assert "Copyright (c) 2026 Thorsten Steinberg" in license_text
+    assert 'THE SOFTWARE IS PROVIDED "AS IS"' in license_text

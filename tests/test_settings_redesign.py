@@ -22,6 +22,7 @@ def test_settings_keeps_all_areas_in_grouped_side_menu() -> None:
     for key in (
         "general",
         "users",
+        "about",
         "notifications",
         "backup",
         "restore",
@@ -168,7 +169,7 @@ def test_factory_reset_is_the_last_maintenance_area() -> None:
         'data-settings-panel="advanced"', 1
     )[0]
     assert "renderSettingsFactoryReset()" not in transfer_panel
-    assert "const hideGlobalSave = profileTab || settingsState.activeTab === 'factory-reset';" in script
+    assert "const hideGlobalSave = profileTab || ['about', 'factory-reset'].includes(settingsState.activeTab);" in script
 
 
 def test_profile_pages_use_master_detail_and_explicit_edit_mode() -> None:
@@ -340,7 +341,16 @@ def test_settings_menu_translations_live_in_settings_namespace() -> None:
 def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> None:
     script = _read("ui/js/pages/settings.js")
     bindings = _read("ui/js/components/app-bindings.js")
+    css = _read("ui/style.css")
 
+    assert "key: 'about', label: settingsT('tabs.about'), group: 'system'" in script
+    assert 'data-settings-panel="about"' in script
+    assert "renderSettingsAbout()" in script
+    assert "renderSettingsHomepageWidget(data.homepage_widget || {})" in script
+    general_panel = script.split('data-settings-panel="general"', 1)[1].split(
+        'data-settings-panel="about"', 1
+    )[0]
+    assert "renderSettingsAbout()" not in general_panel
     assert "thorsten.steinberg@gmx.de" in script
     assert "mailto:${escAttr(info.contactEmail)}" in script
     assert "https://github.com/borgforge/borg-backup-ui" in script
@@ -348,6 +358,33 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert "gitlab.thetwist.de" not in script
     assert "settings-about-contact" in script
     assert "settings-about-repository" in script
+    assert "settingsState.aboutTab" in script
+    assert "aboutLicenses" in script
+    assert "maybeLoadAboutLicenses()" in script
+    assert "if (active.key === 'about') maybeLoadAboutLicenses();" in script
+    assert "profileTab || ['about', 'factory-reset'].includes(active.key)" in script
+    assert "(!hasLicenseContent && !licenseError)" in script
+    assert "fetch('/api/licenses?id=project'" in script
+    assert "fetch('/api/licenses?id=third-party'" in script
+    assert "function renderAboutMarkdown(markdown)" in script
+    assert 'data-settings-action="about-subtab"' in script
+    assert 'data-about-subtab="project"' in script
+    assert 'data-about-subtab="third-party"' in script
+    assert "projectLicenseText" in script
+    assert "settingsT('forms.projectLicense')" in script
+    assert "settingsT('forms.projectLicenseIntro')" in script
+    assert "settingsT('forms.thirdPartyIntro')" in script
+    assert "thirdPartyNotice" in script
+    assert "about-license-text" in script
+    assert "about-license-notices" in script
+    assert "about-markdown-viewer" in script
+    assert "max-height" not in css.split(".about-license-text", 1)[1].split("}", 1)[0]
+    assert ".about-license-card" in css
+    assert ".about-markdown-viewer table" in css
+    assert "BorgBackup" in script
+    assert "<strong>Apprise runtime</strong>" in script
+    assert "BSD-2-Clause + dependencies" in script
+    assert "https://github.com/caronc/apprise/blob/master/LICENSE" in script
     assert "settingsState.appInfo" in script
     assert "v.contact_email, v.repository_url" in bindings
 

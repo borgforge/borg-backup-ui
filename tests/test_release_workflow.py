@@ -79,6 +79,17 @@ def test_source_digest_tracks_apprise_lock_as_package_input(tmp_path: Path) -> N
     assert release_workflow.source_digest(repo, "HEAD") != initial
 
 
+def test_source_digest_tracks_project_license_as_package_input(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path)
+    initial = release_workflow.source_digest(repo, "HEAD")
+
+    (repo / "LICENSE").write_text("MIT License\nchanged\n", encoding="utf-8")
+    git(repo, "add", "LICENSE")
+    git(repo, "commit", "-m", "Add license")
+
+    assert release_workflow.source_digest(repo, "HEAD") != initial
+
+
 def test_attestation_rejects_dirty_and_stale_source(tmp_path: Path) -> None:
     repo = init_repo(tmp_path)
     release_workflow.write_attestation(repo, "HEAD")

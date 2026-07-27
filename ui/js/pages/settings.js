@@ -7,6 +7,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   loaded: false,
   dirty: false,
   activeTab: 'general',
+  aboutTab: 'project',
   advancedTab: 'reminders',
   profileSelection: { local: '', usb: '', smb: '', storagebox: '' },
   profileEditing: '',
@@ -46,6 +47,9 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   appriseDraftProfile: null,
   appriseLastResult: null,
   repositoryRefreshReloadTimer: null,
+  aboutLicenses: {},
+  aboutLicensesLoading: false,
+  aboutLicensesError: '',
   data: null,
   systemHealth: null,
 };
@@ -83,6 +87,7 @@ function getSettingsTabs() {
   const tabs = [
   { key: 'general', label: settingsT('tabs.general'), group: 'system', description: settingsT('menu.generalDescription'), icon: settingsMenuIcon('general') },
   { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: settingsMenuIcon('users') },
+  { key: 'about', label: settingsT('tabs.about'), group: 'system', description: settingsT('menu.aboutDescription'), icon: settingsMenuIcon('about') },
   { key: 'notifications', label: settingsT('tabs.notifications'), group: 'operations', description: settingsT('menu.notificationsDescription'), icon: settingsMenuIcon('notifications') },
   { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: settingsMenuIcon('backup') },
   { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: settingsMenuIcon('restore') },
@@ -107,6 +112,7 @@ function settingsMenuIcon(key) {
   const icons = {
     general: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3v-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1 2.8-2.8.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3h4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.2v4h-.2a1.7 1.7 0 0 0-1.4 1z"/></svg>',
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M3 21v-2a6 6 0 0 1 12 0v2"/><path d="M16 4.5a4 4 0 0 1 0 7"/><path d="M18 15a5 5 0 0 1 3 4.6V21"/></svg>',
+    about: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
     notifications: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M20 3l-3 3"/><path d="M4 3l3 3"/></svg>',
     backup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v13H4z"/><path d="M7 3h10v4H7z"/><path d="M8 12h8M8 16h5"/></svg>',
     restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
@@ -248,7 +254,7 @@ function renderSettings(data, systemHealth) {
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
   if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
-  const hideGlobalSave = profileTab || settingsState.activeTab === 'factory-reset';
+  const hideGlobalSave = profileTab || ['about', 'factory-reset'].includes(settingsState.activeTab);
   const saveBtn = document.getElementById('settings-save-btn');
   if (saveBtn) saveBtn.classList.toggle('hidden', hideGlobalSave);
   el.innerHTML = `
@@ -266,6 +272,8 @@ function renderSettings(data, systemHealth) {
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
       ${renderSettingsHomepageWidget(data.homepage_widget || {})}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'about' ? '' : 'hidden'}" data-settings-panel="about">
       ${renderSettingsAbout()}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'notifications' ? '' : 'hidden'}" data-settings-panel="notifications">
@@ -327,6 +335,7 @@ function renderSettings(data, systemHealth) {
   refreshSettingsConfigBackups();
   initializeSettingsProfileManagers();
   if (settingsState.activeTab === 'notifications') maybeLoadAppriseProviders();
+  if (settingsState.activeTab === 'about') maybeLoadAboutLicenses();
   _updateUnsavedChangesUi();
 }
 
@@ -373,10 +382,11 @@ function activateSettingsTab(tabKey) {
   if (description) description.textContent = active.description;
 
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(active.key);
-  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || active.key === 'factory-reset');
+  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || ['about', 'factory-reset'].includes(active.key));
   if (SETTINGS_PROFILE_CONFIG[previousTab]) syncSettingsProfileManager(previousTab);
   if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
   if (active.key === 'notifications') maybeLoadAppriseProviders();
+  if (active.key === 'about') maybeLoadAboutLicenses();
   _updateUnsavedChangesUi();
 }
 
@@ -5268,6 +5278,11 @@ async function onSettingsContentClick(event) {
   if (action === 'apprise-profile-test') return testAppriseProfile();
   if (action === 'apprise-profile-delete') return deleteAppriseProfile();
   if (action === 'send-weekly-report') return sendWeeklyReport();
+  if (action === 'about-subtab') {
+    settingsState.aboutTab = el.dataset.aboutSubtab === 'third-party' ? 'third-party' : 'project';
+    renderSettings(settingsState.data || {}, settingsState.systemHealth);
+    return;
+  }
   if (action === 'homepage-widget-rotate') return rotateHomepageWidgetToken();
   if (action === 'homepage-widget-revoke') return revokeHomepageWidgetToken();
   if (action === 'homepage-widget-copy-token') return copyHomepageWidgetField('homepage-widget-token');
@@ -5995,25 +6010,169 @@ async function sendWeeklyReport() {
 
 function renderSettingsAbout() {
   const info = settingsState.appInfo || _normalizeAppInfo('', '', '', '', '');
+  const active = settingsState.aboutTab === 'third-party' ? 'third-party' : 'project';
+  settingsState.aboutTab = active;
+  const projectLicenseText = String(settingsState.aboutLicenses?.project?.content || '').trim();
+  const thirdPartyNotice = String(settingsState.aboutLicenses?.['third-party']?.content || '').trim();
+  const licenseError = String(settingsState.aboutLicensesError || '').trim();
+  const hasLicenseContent = !!projectLicenseText || !!thirdPartyNotice;
+  const loadingText = (settingsState.aboutLicensesLoading || (!hasLicenseContent && !licenseError))
+    ? settingsT('forms.licenseLoading')
+    : settingsT('forms.licenseUnavailable');
   return settingsCard(settingsT('forms.about'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
     `<div class="settings-body">
-      <div class="about-grid">
-        <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">${escHtml(info.version || '—')}</span></div>
-        <div class="about-row"><span class="about-label">Borg Version</span><span class="about-value" id="settings-about-borg-version">${escHtml(info.borgVersion || '—')}</span></div>
-        <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">${escHtml(info.author)}</span></div>
-        <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
-        <div class="about-row"><span class="about-label">${settingsT('forms.license')}</span><span class="about-value">MIT</span></div>
-        <div class="about-row">
-          <span class="about-label">${settingsT('forms.thirdPartyLicenses')}</span>
-          <span class="about-value">
-            BorgBackup (BSD-3-Clause),
-            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" class="about-link">${settingsT('forms.originalLicense')}</a>
-          </span>
+      <div class="segmented-control settings-subtab-control about-subtab-control" role="tablist" aria-label="${escHtml(settingsT('forms.about'))}">
+        <button type="button" class="segmented-btn ${active === 'project' ? 'active' : ''}" data-settings-action="about-subtab" data-about-subtab="project" role="tab" aria-selected="${active === 'project' ? 'true' : 'false'}">${settingsT('forms.aboutProjectTab')}</button>
+        <button type="button" class="segmented-btn ${active === 'third-party' ? 'active' : ''}" data-settings-action="about-subtab" data-about-subtab="third-party" role="tab" aria-selected="${active === 'third-party' ? 'true' : 'false'}">${settingsT('forms.aboutThirdPartyTab')}</button>
+      </div>
+      <div class="about-tab-panel ${active === 'project' ? '' : 'hidden'}" data-about-panel="project">
+        <div class="about-project-lead">
+          <strong>Borg Backup UI</strong>
+          <span>${escHtml(settingsT('forms.projectLicenseIntro'))}</span>
         </div>
-        <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
+        <div class="about-grid">
+          <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">${escHtml(info.version || '—')}</span></div>
+          <div class="about-row"><span class="about-label">Borg Version</span><span class="about-value" id="settings-about-borg-version">${escHtml(info.borgVersion || '—')}</span></div>
+          <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">${escHtml(info.author)}</span></div>
+          <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
+          <div class="about-row"><span class="about-label">${settingsT('forms.projectLicense')}</span><span class="about-value">MIT</span></div>
+          <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
+        </div>
+        ${licenseError ? `<div class="status-message error">${escHtml(licenseError)}</div>` : ''}
+        <pre class="about-license-text">${escHtml(projectLicenseText || loadingText)}</pre>
+      </div>
+      <div class="about-tab-panel ${active === 'third-party' ? '' : 'hidden'}" data-about-panel="third-party">
+        <p class="about-license-note">${escHtml(settingsT('forms.thirdPartyIntro'))}</p>
+        <div class="about-license-cards">
+          <div class="about-license-card">
+            <strong>BorgBackup</strong>
+            <span>BSD-3-Clause</span>
+            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
+          </div>
+          <div class="about-license-card">
+            <strong>Apprise runtime</strong>
+            <span>BSD-2-Clause + dependencies</span>
+            <a href="https://github.com/caronc/apprise/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
+          </div>
+        </div>
+        <details class="about-license-notices">
+          <summary>${escHtml(settingsT('forms.thirdPartyNoticeFile'))}</summary>
+          <div class="about-markdown-viewer">${thirdPartyNotice ? renderAboutMarkdown(thirdPartyNotice) : escHtml(licenseError || loadingText)}</div>
+        </details>
       </div>
     </div>`);
+}
+
+async function maybeLoadAboutLicenses(force = false) {
+  const loaded = settingsState.aboutLicenses?.project?.content && settingsState.aboutLicenses?.['third-party']?.content;
+  if (!force && (loaded || settingsState.aboutLicensesLoading)) return;
+  settingsState.aboutLicensesLoading = true;
+  settingsState.aboutLicensesError = '';
+  try {
+    const [project, thirdParty] = await Promise.all([
+      fetch('/api/licenses?id=project', { cache: 'no-store' }),
+      fetch('/api/licenses?id=third-party', { cache: 'no-store' }),
+    ]);
+    if (!project.ok) throw new Error(`project license HTTP ${project.status}`);
+    if (!thirdParty.ok) throw new Error(`third-party notices HTTP ${thirdParty.status}`);
+    settingsState.aboutLicenses = {
+      project: await project.json(),
+      'third-party': await thirdParty.json(),
+    };
+  } catch (err) {
+    settingsState.aboutLicensesError = settingsT('forms.licenseLoadFailed', { message: err.message });
+  } finally {
+    settingsState.aboutLicensesLoading = false;
+    if (settingsState.activeTab === 'about') renderSettings(settingsState.data || {}, settingsState.systemHealth);
+  }
+}
+
+function aboutMarkdownInline(text) {
+  const inlineCodePattern = new RegExp(String.fromCharCode(96) + '([^\\n]+)' + String.fromCharCode(96), 'g');
+  return escHtml(String(text || ''))
+    .replace(inlineCodePattern, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+}
+
+function aboutMarkdownCells(line) {
+  return String(line || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map(cell => cell.trim());
+}
+
+function renderAboutMarkdown(markdown) {
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let inList = false;
+  let paragraph = [];
+  const closeList = () => {
+    if (!inList) return;
+    out.push('</ul>');
+    inList = false;
+  };
+  const closeParagraph = () => {
+    if (!paragraph.length) return;
+    out.push(`<p>${aboutMarkdownInline(paragraph.join(' '))}</p>`);
+    paragraph = [];
+  };
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index] || '';
+    const line = raw.trim();
+    if (!line) {
+      closeParagraph();
+      closeList();
+      continue;
+    }
+    if (line.startsWith('|') && (lines[index + 1] || '').trim().match(/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/)) {
+      closeParagraph();
+      closeList();
+      const header = aboutMarkdownCells(line);
+      index += 2;
+      const rows = [];
+      while (index < lines.length && String(lines[index] || '').trim().startsWith('|')) {
+        rows.push(aboutMarkdownCells(lines[index]));
+        index += 1;
+      }
+      index -= 1;
+      out.push(`<table><thead><tr>${header.map(cell => `<th>${aboutMarkdownInline(cell)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${aboutMarkdownInline(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      closeParagraph();
+      closeList();
+      out.push(`<h2>${aboutMarkdownInline(line.slice(2).trim())}</h2>`);
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      closeParagraph();
+      closeList();
+      out.push(`<h3>${aboutMarkdownInline(line.slice(3).trim())}</h3>`);
+      continue;
+    }
+    if (line.startsWith('### ')) {
+      closeParagraph();
+      closeList();
+      out.push(`<h4>${aboutMarkdownInline(line.slice(4).trim())}</h4>`);
+      continue;
+    }
+    if (line.startsWith('- ')) {
+      closeParagraph();
+      if (!inList) {
+        out.push('<ul>');
+        inList = true;
+      }
+      out.push(`<li>${aboutMarkdownInline(line.slice(2).trim())}</li>`);
+      continue;
+    }
+    paragraph.push(line);
+  }
+  closeParagraph();
+  closeList();
+  return out.join('');
 }
 
 function settingsCard(title, icon, body) {

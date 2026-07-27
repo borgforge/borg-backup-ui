@@ -364,8 +364,106 @@ body.wizard-modal-open {
 .about-row { display: flex; align-items: baseline; gap: 16px; }
 .about-label { font-size: 12px; color: var(--text-muted); min-width: 90px; flex-shrink: 0; }
 .about-value { font-size: 13px; color: var(--text-primary); }
+.about-subtab-control { margin-bottom: 12px; }
+.about-tab-panel { display: grid; gap: 14px; }
+.about-project-lead {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+.about-project-lead span,
+.about-license-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.about-license-text {
+  overflow-x: auto;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.about-license-cards {
+  display: grid;
+  gap: 10px;
+}
+.about-license-card {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+.about-license-card span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.about-license-notices {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+.about-license-notices summary {
+  cursor: pointer;
+  padding: 12px 14px;
+  font-weight: 700;
+}
+.about-markdown-viewer {
+  display: grid;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 14px 14px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.about-markdown-viewer h2,
+.about-markdown-viewer h3,
+.about-markdown-viewer h4,
+.about-markdown-viewer p {
+  margin: 0;
+}
+.about-markdown-viewer table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-card);
+}
+.about-markdown-viewer th,
+.about-markdown-viewer td {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.about-markdown-viewer th {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.about-markdown-viewer code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+}
 .about-link { color: var(--accent); text-decoration: none; }
 .about-link:hover { text-decoration: underline; }
+
+@media (max-width: 760px) {
+  .about-license-card {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* ── Main Content ── */
 .main-content {
