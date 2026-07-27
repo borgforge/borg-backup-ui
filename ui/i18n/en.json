@@ -892,6 +892,8 @@
     "unknown": "Unknown",
     "skipDefault": "Run was skipped",
     "backupFailedDetails": "Backup failed. Technical details are available in the log.",
+    "backupOverdue": "Overdue",
+    "backupOverdueDetails": "Scheduled backup has been overdue since {date}.",
     "skipReasons": {
       "parity_active": "The backup was skipped because a parity operation is running.",
       "usb_not_mounted": "The backup was skipped because the USB target is not mounted.",

@@ -98,6 +98,8 @@ def test_dashboard_jobs_locale_contract_matches() -> None:
         '"lastTestLabel"',
         '"validUntilLabel"',
         '"durationSecondsShort"',
+        '"backupOverdue"',
+        '"backupOverdueDetails"',
     ):
         assert key in english
         assert key in german
@@ -127,6 +129,15 @@ def test_dashboard_labels_relative_time_and_duration_separately() -> None:
     assert ".dashboard-run-facts" in css
     assert ".dashboard-run-facts .dashboard-fact-row > span" in css
     assert "overflow-wrap: anywhere" in css
+
+
+def test_dashboard_shows_backup_overdue_before_last_run_success() -> None:
+    script = _read("ui/js/pages/dashboard.js")
+
+    assert "backup.backup_overdue" in script
+    assert "dashboardT('dashboard.backupOverdue')" in script
+    assert "dashboardT('dashboard.backupOverdueDetails'" in script
+    assert "function dashboardAbsoluteTimestamp(timestamp)" in script
 
 
 def test_dashboard_keeps_run_restore_and_storage_facts_aligned() -> None:
