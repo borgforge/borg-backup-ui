@@ -382,10 +382,11 @@ function activateSettingsTab(tabKey) {
   if (description) description.textContent = active.description;
 
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(active.key);
-  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || active.key === 'factory-reset');
+  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || ['about', 'factory-reset'].includes(active.key));
   if (SETTINGS_PROFILE_CONFIG[previousTab]) syncSettingsProfileManager(previousTab);
   if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
   if (active.key === 'notifications') maybeLoadAppriseProviders();
+  if (active.key === 'about') maybeLoadAboutLicenses();
   _updateUnsavedChangesUi();
 }
 
@@ -6014,7 +6015,10 @@ function renderSettingsAbout() {
   const projectLicenseText = String(settingsState.aboutLicenses?.project?.content || '').trim();
   const thirdPartyNotice = String(settingsState.aboutLicenses?.['third-party']?.content || '').trim();
   const licenseError = String(settingsState.aboutLicensesError || '').trim();
-  const loadingText = settingsState.aboutLicensesLoading ? settingsT('forms.licenseLoading') : settingsT('forms.licenseUnavailable');
+  const hasLicenseContent = !!projectLicenseText || !!thirdPartyNotice;
+  const loadingText = (settingsState.aboutLicensesLoading || (!hasLicenseContent && !licenseError))
+    ? settingsT('forms.licenseLoading')
+    : settingsT('forms.licenseUnavailable');
   return settingsCard(settingsT('forms.about'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
     `<div class="settings-body">

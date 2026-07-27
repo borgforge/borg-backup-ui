@@ -361,6 +361,9 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert "settingsState.aboutTab" in script
     assert "aboutLicenses" in script
     assert "maybeLoadAboutLicenses()" in script
+    assert "if (active.key === 'about') maybeLoadAboutLicenses();" in script
+    assert "profileTab || ['about', 'factory-reset'].includes(active.key)" in script
+    assert "(!hasLicenseContent && !licenseError)" in script
     assert "fetch('/api/licenses?id=project'" in script
     assert "fetch('/api/licenses?id=third-party'" in script
     assert "function renderAboutMarkdown(markdown)" in script
