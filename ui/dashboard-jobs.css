@@ -93,6 +93,53 @@
 }
 
 /* Dashboard inventory */
+.setup-action-panel {
+  display: grid;
+  gap: var(--ui-space-3);
+  margin-bottom: var(--ui-space-4);
+  padding: var(--ui-space-4);
+  border: 1px solid var(--ui-state-info-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-state-info-bg);
+  color: var(--ui-color-text);
+}
+
+.setup-action-panel.hidden { display: none; }
+
+.setup-action-panel.warning {
+  border-color: var(--ui-state-warning-border);
+  background: var(--ui-state-warning-bg);
+}
+
+.setup-action-panel p {
+  margin: 4px 0 0;
+  color: var(--ui-color-text-muted);
+}
+
+.setup-action-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+}
+
+.setup-action-panel ul {
+  display: grid;
+  gap: var(--ui-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-action-panel li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  padding-top: var(--ui-space-2);
+  border-top: 1px solid color-mix(in srgb, var(--ui-color-border) 72%, transparent);
+}
+
 .dashboard-table-wrap {
   min-height: 12rem;
 }

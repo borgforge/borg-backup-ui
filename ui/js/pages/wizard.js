@@ -1179,6 +1179,7 @@ async function saveWizardJob() {
     jobsState.loaded = false;
     await refreshJobs();
     showMsg('jobs-message', 'success', wizardT('wizard.saved', { key: `${params.type_id}_${params.location}` }));
+    await window.BBUI?.setupWizard?.resumeAfterExternalSave?.('job');
   } catch (err) {
     errEl.textContent = wizardT('wizard.saveError', { message: err.message });
     errEl.classList.remove('hidden');

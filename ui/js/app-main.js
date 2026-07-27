@@ -57,6 +57,7 @@
     '/ui/js/components/app-bindings.js',
     '/ui/js/pages/storage.js',
     '/ui/js/pages/settings.js',
+    '/ui/js/pages/setup-wizard.js',
     '/ui/js/pages/help.js',
     '/ui/js/pages/history.js',
     '/ui/js/pages/dashboard.js',

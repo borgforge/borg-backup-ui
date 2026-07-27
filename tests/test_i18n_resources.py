@@ -107,7 +107,7 @@ def test_javascript_translation_keys_exist_in_both_resources():
     for path in (ROOT / "ui" / "js").rglob("*.js"):
         source = path.read_text(encoding="utf-8")
         referenced.update(re.findall(
-            r"['\"]((?:api|app|dashboard|history|jobs|language|nav|reports|restore|restoreTests|schedule|settings|sidebar|storage|wizard)\.[a-zA-Z0-9.]+)['\"]",
+            r"['\"]((?:api|app|dashboard|history|jobs|language|nav|reports|restore|restoreTests|schedule|settings|setupWizard|sidebar|storage|wizard)\.[a-zA-Z0-9.]+)['\"]",
             source,
         ))
         referenced.update(

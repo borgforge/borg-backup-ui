@@ -126,6 +126,7 @@
     document.getElementById('mobile-backdrop')?.addEventListener('click', () => core()?.closeMobileNav?.());
     document.getElementById('mobile-nav-toggle-btn')?.addEventListener('click', () => core()?.toggleMobileNav?.());
     document.getElementById('refresh-btn')?.addEventListener('click', refreshStatus);
+    document.getElementById('dashboard-setup-actions')?.addEventListener('click', (event) => window.BBUI?.setupWizard?.handleAction?.(event));
     document.getElementById('jobs-refresh-btn')?.addEventListener('click', refreshJobs);
     document.getElementById('jobs-new-btn')?.addEventListener('click', openWizard);
     document.getElementById('jobs-grid')?.addEventListener('click', onJobsGridClick);
@@ -228,6 +229,14 @@
     document.getElementById('repository-manager-browser-refresh-btn')?.addEventListener('click', () => repositoryManagerLoadBrowser(repositoryManagerState.browserPath || ''));
     document.getElementById('repository-manager-browser-list')?.addEventListener('click', repositoryManagerBrowserClick);
     document.getElementById('repository-manager-passphrase')?.addEventListener('input', repositoryManagerUpdateSummary);
+    document.getElementById('setup-wizard-modal')?.addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) {
+        const required = !window.BBUI?.setupWizard?.currentStatus?.global_data_dir_set;
+        if (!required) window.BBUI?.setupWizard?.close?.();
+      } else {
+        window.BBUI?.setupWizard?.handleAction?.(event);
+      }
+    });
     document.getElementById('storage-deploy-close-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-ok-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-send-btn')?.addEventListener('click', storageDeploySendInput);
@@ -352,14 +361,18 @@
       })
       .catch(() => ({}));
 
-    Promise.all([core()?.updateDataDirWarning?.(), startupStatePromise]).then(() => {
+    Promise.all([core()?.updateDataDirWarning?.({ deferMissingWarning: true }), startupStatePromise]).then(([setupStatus]) => {
       if (core()?.isSetupRequired?.()) {
         core()?.navigate?.('settings');
-        showMsg(
-          'settings-message',
-          'warning',
-          window.BBUI?.components?.i18n?.t?.('settings.setup.startupRequired') || ''
-        );
+        if (!setupStatus?.global_data_dir_set) {
+          window.BBUI?.setupWizard?.open?.(setupStatus);
+        } else {
+          showMsg(
+            'settings-message',
+            'warning',
+            window.BBUI?.components?.i18n?.t?.('settings.setup.startupRequired') || ''
+          );
+        }
         return;
       }
       core()?.updateSidebarSystemHealth?.(true);
@@ -368,6 +381,7 @@
         return;
       }
       refreshStatus();
+      window.BBUI?.setupWizard?.maybeOpen?.(false);
       scheduleAutoRefresh();
     }).catch(() => {});
     updateClock();

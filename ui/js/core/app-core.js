@@ -72,6 +72,17 @@ function isMaintenancePageAllowed(page) {
   return MAINTENANCE_ALLOWED_PAGES.has(String(page || ''));
 }
 
+async function fetchSetupStatus(force = false) {
+  const now = Date.now();
+  let data = setupStatusCache.data;
+  if (!force && data && (now - setupStatusCache.ts) <= 10_000) return data;
+  const res = await fetch('/api/setup-status', { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  data = await res.json();
+  setupStatusCache = { ts: now, data };
+  return data;
+}
+
 function maintenanceFallbackPage() {
   return state.currentRole === 'admin' ? 'settings' : 'hilfe';
 }
@@ -265,23 +276,17 @@ async function updateSidebarSystemHealth(force = false) {
   }
 }
 
-async function updateDataDirWarning() {
+async function updateDataDirWarning(options = {}) {
   const dashEl = document.getElementById('dashboard-data-dir-warning');
   const dashSetupEl = document.getElementById('dashboard-system-warning');
   const jobsEl = document.getElementById('jobs-data-dir-warning');
   const settingsEl = document.getElementById('settings-setup-warning');
-  if (!dashEl && !jobsEl && !dashSetupEl && !settingsEl) return;
+  if (!dashEl && !jobsEl && !dashSetupEl && !settingsEl) return null;
   try {
-    const now = Date.now();
-    let data = setupStatusCache.data;
-    if (!data || (now - setupStatusCache.ts) > 10_000) {
-      const res = await fetch('/api/setup-status', { credentials: 'include' });
-      if (!res.ok) return;
-      data = await res.json();
-      setupStatusCache = { ts: now, data };
-    }
+    const data = await fetchSetupStatus();
     const missing = !Boolean(data?.global_data_dir_set);
     const ready = Boolean(data?.ready);
+    const hideMissingDataDirWarnings = Boolean(options?.deferMissingWarning && missing);
     const firstError = data?.validation?.errors?.[0] || null;
     const firstErr = firstError ? apiMessage(firstError, '') : '';
     const firstErrSafe = escHtml(firstErr);
@@ -298,7 +303,7 @@ async function updateDataDirWarning() {
       : html;
     for (const el of [dashEl, jobsEl]) {
       if (!el) continue;
-      if (!ready) {
+      if (!ready && !hideMissingDataDirWarnings) {
         el.innerHTML = el === dashEl ? dashboardHtml : html;
         el.className = 'status-message warning-state';
       } else {
@@ -307,7 +312,7 @@ async function updateDataDirWarning() {
     }
     applySetupNavLock();
     if (dashSetupEl) {
-      if (!ready) {
+      if (!ready && !hideMissingDataDirWarnings) {
         dashSetupEl.className = 'status-message warning-state';
         dashSetupEl.textContent = i18n
           ? (missing
@@ -321,7 +326,7 @@ async function updateDataDirWarning() {
       }
     }
     if (settingsEl) {
-      if (!ready) {
+      if (!ready && !hideMissingDataDirWarnings) {
         settingsEl.className = 'status-message warning-state';
         settingsEl.textContent = i18n
           ? (missing
@@ -335,8 +340,10 @@ async function updateDataDirWarning() {
       }
     }
     applyDataDirActionGates();
+    return data;
   } catch {
     // ignore
+    return null;
   }
 }
 
@@ -384,6 +391,7 @@ window.BBUI.core.getSchedulesData = () => schedulesData;
 window.BBUI.core.setSchedulesData = (next) => { schedulesData = next; };
 window.BBUI.core.isGlobalDataDirReady = () => globalDataDirReady;
 window.BBUI.core.isSetupRequired = () => setupRequired;
+window.BBUI.core.fetchSetupStatus = fetchSetupStatus;
 
 window.BBUI.core.isStaleDate = isStaleDate;
 window.BBUI.core.toggleMobileNav = toggleMobileNav;

@@ -919,6 +919,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/settings/backup-delete": self._post_settings_backup_delete,
             "/api/settings/backup-delete-keep-latest": self._post_settings_backup_delete_keep_latest,
             "/api/settings/backup-diff": self._post_settings_backup_diff,
+            "/api/setup-wizard": self._post_setup_wizard,
             "/api/settings/migration-backups-cleanup": self._post_settings_migration_backups_cleanup,
             "/api/settings/jobs-import": self._post_settings_jobs_import,
             "/api/settings/jobs-import-preview": self._post_settings_jobs_import_preview,
@@ -1859,6 +1860,13 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_setup_status(self) -> dict:
         from config_api import get_setup_status
         return get_setup_status(self.config)
+
+    def _post_setup_wizard(self) -> dict:
+        from config_api import update_setup_wizard_state
+        body = self._read_json_body()
+        action = str(body.get("action") or "").strip()
+        state = update_setup_wizard_state(self.config, action)
+        return {"saved": True, "setup_wizard": state}
 
     def _get_settings_backup_history(self) -> dict:
         from config_api import list_conf_backups

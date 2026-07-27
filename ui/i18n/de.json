@@ -30,6 +30,72 @@
       "setupNotRequired": "Die Erstkonfiguration ist nicht mehr erforderlich."
     }
   },
+  "setupWizard": {
+    "title": "Borg Backup UI einrichten",
+    "stepCounter": "Schritt {step} von {total}",
+    "guidedSetup": "Geführte Einrichtung",
+    "dataDirTitle": "Hauptverzeichnis festlegen",
+    "dataDirText": "Dieses Verzeichnis speichert Laufdaten, Logs, Statusdateien, Cache und technische Arbeitsdaten. Ohne dieses Pflichtverzeichnis bleiben Backup- und Restore-Aktionen gesperrt.",
+    "dataDirLabel": "Hauptverzeichnis",
+    "dataDirRequiredNote": "Es wird nichts automatisch angelegt, bevor dieses Verzeichnis gespeichert wurde.",
+    "dataDirRequired": "Bitte ein Hauptverzeichnis eintragen.",
+    "saveFailed": "Speichern fehlgeschlagen: {message}",
+    "optionalTitle": "Ersten Backup-Pfad einrichten",
+    "optionalText": "Die nächsten Schritte nutzen die bestehenden Bereiche. Du kannst sie jetzt öffnen oder später über das Dashboard fortsetzen.",
+    "steps": {
+      "data_dir": {
+        "title": "Hauptverzeichnis",
+        "complete": "Gespeichert und geprüft.",
+        "pending": "Pflichtschritt ist noch offen."
+      },
+      "storage": {
+        "title": "Speicherziel",
+        "complete": "{count} Speicherziel(e) vorhanden.",
+        "pending": "Noch kein Speicherziel vorhanden."
+      },
+      "repository": {
+        "title": "Repository",
+        "complete": "{count} Repository(s) vorhanden.",
+        "pending": "Noch kein Repository vorhanden."
+      },
+      "job": {
+        "title": "Backup-Job",
+        "complete": "{count} Backup-Job(s) vorhanden.",
+        "pending": "Noch kein Backup-Job vorhanden."
+      },
+      "optional": {
+        "title": "Restore-Tests & Benachrichtigungen",
+        "pending": "Optional, aber empfohlen, sobald der erste Job steht."
+      }
+    },
+    "actions": {
+      "start": "Einrichtung starten",
+      "saveDataDir": "Speichern und weiter",
+      "later": "Später",
+      "finish": "Fertig",
+      "openWizard": "Einrichtung öffnen",
+      "localStorage": "Lokal",
+      "usbStorage": "USB",
+      "smbStorage": "SMB",
+      "sshStorage": "SSH",
+      "chooseStorage": "Speicherziel wählen",
+      "repository": "Repository erstellen/importieren",
+      "repositoryShort": "Repository",
+      "job": "Job erstellen",
+      "jobShort": "Job",
+      "restore": "Restore",
+      "notifications": "Benachrichtigungen"
+    },
+    "dashboard": {
+      "requiredTitle": "Erstkonfiguration erforderlich",
+      "requiredText": "Lege zuerst das zentrale Hauptverzeichnis fest. Danach werden Backup- und Restore-Aktionen freigegeben.",
+      "incompleteTitle": "Einrichtung unvollständig",
+      "incompleteText": "Die App ist bereit, aber für einen ersten Backup-Pfad fehlen noch Schritte.",
+      "storage": "Kein Speicherziel konfiguriert",
+      "repository": "Kein Repository erstellt oder importiert",
+      "job": "Kein Backup-Job angelegt"
+    }
+  },
   "nav": {
     "dashboard": "Dashboard",
     "jobs": "Jobs",

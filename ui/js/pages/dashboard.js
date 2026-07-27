@@ -95,6 +95,12 @@ async function refreshStatus() {
     coreState.lastRefresh = new Date();
     dashboardSystemHealth = systemHealth;
     renderDashboard(coreState.data, dashboardSystemHealth);
+    try {
+      const setupStatus = await window.BBUI.core.fetchSetupStatus(false);
+      window.BBUI?.setupWizard?.renderDashboardPanel?.(setupStatus);
+    } catch (_) {
+      window.BBUI?.setupWizard?.renderDashboardPanel?.({});
+    }
     updateRefreshLabel();
   } catch (err) {
     showError(dashboardT('dashboard.loadError', { message: err.message }));
