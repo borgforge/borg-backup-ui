@@ -237,8 +237,6 @@ function _applyVersionInfo(version, author, borgVersion, contactEmail, repositor
     <a class="app-contact" href="mailto:${escAttr(info.contactEmail)}">${escHtml(info.contactEmail)}</a>`;
   const aboutEl = document.getElementById('settings-about-version');
   if (aboutEl) aboutEl.textContent = info.version || '—';
-  const borgEl = document.getElementById('settings-about-borg-version');
-  if (borgEl) borgEl.textContent = info.borgVersion || '—';
   const contactEl = document.getElementById('settings-about-contact');
   if (contactEl) contactEl.innerHTML = `<a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a>`;
   const repoEl = document.getElementById('settings-about-repository');
@@ -6036,7 +6034,6 @@ function renderSettingsAbout() {
         </div>
         <div class="about-grid">
           <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">${escHtml(info.version || '—')}</span></div>
-          <div class="about-row"><span class="about-label">Borg Version</span><span class="about-value" id="settings-about-borg-version">${escHtml(info.borgVersion || '—')}</span></div>
           <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">${escHtml(info.author)}</span></div>
           <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
           <div class="about-row"><span class="about-label">${settingsT('forms.projectLicense')}</span><span class="about-value">MIT</span></div>
@@ -6050,6 +6047,7 @@ function renderSettingsAbout() {
         <div class="about-license-cards">
           <div class="about-license-card">
             <strong>BorgBackup</strong>
+            <span>${escHtml(settingsT('forms.borgBackupSupportedVersion', { version: info.borgVersion || '—' }))}</span>
             <span>BSD-3-Clause</span>
             <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
           </div>

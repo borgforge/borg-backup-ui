@@ -358,6 +358,7 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert "gitlab.thetwist.de" not in script
     assert "settings-about-contact" in script
     assert "settings-about-repository" in script
+    assert "settings-about-borg-version" not in script
     assert "settingsState.aboutTab" in script
     assert "aboutLicenses" in script
     assert "maybeLoadAboutLicenses()" in script
@@ -382,6 +383,7 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert ".about-license-card" in css
     assert ".about-markdown-viewer table" in css
     assert "BorgBackup" in script
+    assert "settingsT('forms.borgBackupSupportedVersion'" in script
     assert "<strong>Apprise runtime</strong>" in script
     assert "BSD-2-Clause + dependencies" in script
     assert "https://github.com/caronc/apprise/blob/master/LICENSE" in script
