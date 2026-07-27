@@ -692,7 +692,7 @@ def _list_local_storage_directories(
     config: dict,
     storage: dict[str, Any],
     relative_path: str,
-) -> list[str]:
+) -> list[dict[str, Any]]:
     with _local_storage_browse_path(config, storage) as raw_base:
         try:
             base = raw_base.resolve(strict=True)
@@ -702,15 +702,18 @@ def _list_local_storage_directories(
             raise ValueError("Repository browse path does not exist inside the storage target") from exc
         if not current.is_dir():
             raise ValueError("Repository browse path is not a directory")
+        if relative_path and _looks_like_borg_repository(current):
+            return []
         try:
-            return sorted(
-                (
-                    child.name
-                    for child in current.iterdir()
-                    if child.is_dir() and not child.is_symlink()
-                ),
-                key=str.lower,
-            )
+            directories = [
+                {
+                    "name": child.name,
+                    "borg_repository": _looks_like_borg_repository(child),
+                }
+                for child in current.iterdir()
+                if child.is_dir() and not child.is_symlink()
+            ]
+            return sorted(directories, key=lambda row: str(row["name"]).lower())
         except OSError as exc:
             raise ValueError(f"Repository directory cannot be listed: {exc}") from exc
 
@@ -777,13 +780,19 @@ def browse_repository_directories(config: dict, storage_key: str, relative_path:
     current = _browse_relative_path(relative_path)
     storage_type = str(storage.get("storage_type") or storage.get("location") or "").strip().lower()
     if storage_type == "ssh" or str(storage.get("location") or "").strip().lower() == "storagebox":
-        names = _list_ssh_storage_directories(storage, current)
+        entries = [
+            {"name": name, "borg_repository": False}
+            for name in _list_ssh_storage_directories(storage, current)
+        ]
     else:
-        names = _list_local_storage_directories(config, storage, current)
+        entries = _list_local_storage_directories(config, storage, current)
 
     managed = _managed_repository_paths(config, key)
     directories = []
-    for name in names:
+    for entry in entries:
+        name = str(entry.get("name") or "").strip()
+        if not name:
+            continue
         relative = f"{current}/{name}" if current else name
         existing = managed.get(relative, {})
         directories.append({
@@ -791,6 +800,7 @@ def browse_repository_directories(config: dict, storage_key: str, relative_path:
             "relative_path": relative,
             "supported": all(_browse_name_supported(part) for part in relative.split("/")),
             "managed": bool(existing),
+            "borg_repository": bool(entry.get("borg_repository")),
             "repository_key": str(existing.get("repository_key") or ""),
             "display_name": str(existing.get("display_name") or ""),
         })

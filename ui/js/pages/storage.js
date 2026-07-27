@@ -898,17 +898,24 @@ function repositoryManagerRenderBrowser(data) {
   list.innerHTML = rows.length ? rows.map((row) => {
     const relative = String(row.relative_path || '').trim();
     const managed = !!row.managed;
+    const borgRepository = !!row.borg_repository;
     const supported = row.supported !== false;
     const status = managed
       ? storageT('storage.repositoryBrowseManaged', { name: row.display_name || row.name || '' })
-      : (!supported ? storageT('storage.repositoryBrowseUnsupported') : storageT('storage.repositoryBrowseAvailable'));
+      : (borgRepository ? storageT('storage.repositoryBrowseBorgRepository') : (!supported ? storageT('storage.repositoryBrowseUnsupported') : storageT('storage.repositoryBrowseAvailable')));
     const selectDisabled = managed || !supported;
-    return `<div class="repository-manager-browser-row">
-      <button type="button" class="repository-manager-browser-open" data-repository-browser-open="${escHtml(relative)}" ${selectDisabled ? 'disabled' : ''}>
+    const openDisabled = managed || !supported || borgRepository;
+    const importableBorg = borgRepository && !managed && supported;
+    const rowClass = managed
+      ? ' repository-manager-browser-row-managed'
+      : (importableBorg ? ' repository-manager-browser-row-repository' : '');
+    const selectClass = importableBorg ? 'btn btn-primary' : 'btn btn-secondary';
+    return `<div class="repository-manager-browser-row${rowClass}">
+      <button type="button" class="repository-manager-browser-open" data-repository-browser-open="${escHtml(relative)}" ${openDisabled ? 'disabled' : ''}>
         <span class="repository-manager-browser-folder" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v9H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
         <span class="repository-manager-browser-name"><strong>${escHtml(row.name || relative)}</strong><small>${escHtml(status)}</small></span>
       </button>
-      <button type="button" class="btn btn-secondary" data-repository-browser-select="${escHtml(relative)}" ${selectDisabled ? 'disabled' : ''}>${escHtml(storageT('storage.repositoryBrowseSelect'))}</button>
+      <button type="button" class="${selectClass}" data-repository-browser-select="${escHtml(relative)}" ${selectDisabled ? 'disabled' : ''}>${escHtml(storageT('storage.repositoryBrowseSelect'))}</button>
     </div>`;
   }).join('') : `<div class="repository-manager-browser-state">${escHtml(storageT('storage.repositoryBrowseEmpty'))}</div>`;
   browser.classList.remove('hidden');
