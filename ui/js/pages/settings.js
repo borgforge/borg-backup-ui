@@ -6046,15 +6046,19 @@ function renderSettingsAbout() {
         <p class="about-license-note">${escHtml(settingsT('forms.thirdPartyIntro'))}</p>
         <div class="about-license-cards">
           <div class="about-license-card">
-            <strong>BorgBackup</strong>
-            <span>${escHtml(settingsT('forms.borgBackupSupportedVersion', { version: info.borgVersion || '—' }))}</span>
-            <span>BSD-3-Clause</span>
-            <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
+            <div class="about-license-card-head">
+              <strong>BorgBackup</strong>
+              <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
+            </div>
+            <span class="about-license-card-meta">BSD-3-Clause</span>
+            <p class="about-license-card-note">${escHtml(settingsT('forms.borgBackupSupportedVersion', { version: info.borgVersion || '—' }))}</p>
           </div>
           <div class="about-license-card">
-            <strong>Apprise runtime</strong>
-            <span>BSD-2-Clause + dependencies</span>
-            <a href="https://github.com/caronc/apprise/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
+            <div class="about-license-card-head">
+              <strong>Apprise runtime</strong>
+              <a href="https://github.com/caronc/apprise/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
+            </div>
+            <span class="about-license-card-meta">BSD-2-Clause + dependencies</span>
           </div>
         </div>
         <details class="about-license-notices">
