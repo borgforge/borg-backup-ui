@@ -898,13 +898,16 @@ function repositoryManagerRenderBrowser(data) {
   list.innerHTML = rows.length ? rows.map((row) => {
     const relative = String(row.relative_path || '').trim();
     const managed = !!row.managed;
+    const borgRepository = !!row.borg_repository;
     const supported = row.supported !== false;
     const status = managed
       ? storageT('storage.repositoryBrowseManaged', { name: row.display_name || row.name || '' })
-      : (!supported ? storageT('storage.repositoryBrowseUnsupported') : storageT('storage.repositoryBrowseAvailable'));
+      : (borgRepository ? storageT('storage.repositoryBrowseBorgRepository') : (!supported ? storageT('storage.repositoryBrowseUnsupported') : storageT('storage.repositoryBrowseAvailable')));
     const selectDisabled = managed || !supported;
-    return `<div class="repository-manager-browser-row">
-      <button type="button" class="repository-manager-browser-open" data-repository-browser-open="${escHtml(relative)}" ${selectDisabled ? 'disabled' : ''}>
+    const openDisabled = managed || !supported || borgRepository;
+    const rowClass = borgRepository ? ' repository-manager-browser-row-repository' : '';
+    return `<div class="repository-manager-browser-row${rowClass}">
+      <button type="button" class="repository-manager-browser-open" data-repository-browser-open="${escHtml(relative)}" ${openDisabled ? 'disabled' : ''}>
         <span class="repository-manager-browser-folder" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v9H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
         <span class="repository-manager-browser-name"><strong>${escHtml(row.name || relative)}</strong><small>${escHtml(status)}</small></span>
       </button>

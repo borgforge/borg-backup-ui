@@ -581,6 +581,39 @@ def test_repository_import_has_storage_scoped_directory_browser():
     assert 'id="repository-manager-import-compatibility-notice"' in html
     assert "/api/repositories/browse?storage_key=" in script
     assert "row.managed" in script
+    assert "row.borg_repository" in script
+    assert "repositoryBrowseBorgRepository" in script
     assert "selectDisabled = managed || !supported" in script
+    assert "openDisabled = managed || !supported || borgRepository" in script
     assert "repositoryManagerBrowserClick" in bindings
     assert "repositoryManagerOpenBrowser" in bindings
+
+
+def test_repository_import_browser_marks_borg_repositories_as_terminal_choices(tmp_path: Path):
+    base = tmp_path / "storage"
+    base.mkdir()
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "data")}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Backup-Lokal",
+        "storage_type": "local",
+        "location": "local",
+        "identity": f"local:{base}",
+        "base_path": str(base),
+    }]})
+    borg_repo = base / "k8s-master"
+    borg_repo.mkdir()
+    (borg_repo / "config").write_text("[repository]\nid = abcdef0123456789\n", encoding="utf-8")
+    (borg_repo / "data").mkdir()
+    (base / "ordinary-folder").mkdir()
+
+    root = repositories_api.browse_repository_directories(config, "storage_local_test", "")
+    rows = {row["name"]: row for row in root["directories"]}
+
+    assert rows["k8s-master"]["borg_repository"] is True
+    assert rows["k8s-master"]["managed"] is False
+    assert rows["k8s-master"]["supported"] is True
+    assert rows["ordinary-folder"]["borg_repository"] is False
+
+    nested = repositories_api.browse_repository_directories(config, "storage_local_test", "k8s-master")
+    assert nested["directories"] == []

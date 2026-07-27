@@ -332,6 +332,7 @@
     "repositoryBrowseLoading": "Verzeichnisse werden geladen ...",
     "repositoryBrowseEmpty": "In diesem Verzeichnis wurden keine Unterverzeichnisse gefunden.",
     "repositoryBrowseAvailable": "Verzeichnis kann für den Import ausgewählt werden",
+    "repositoryBrowseBorgRepository": "Borg-Repository erkannt, direkt auswählen",
     "repositoryBrowseManaged": "Bereits verwaltet: {name}",
     "repositoryBrowseUnsupported": "Der Verzeichnisname wird als Repository-Pfad nicht unterstützt",
     "repositoryBrowseFailed": "Das Speicherziel konnte nicht durchsucht werden.",

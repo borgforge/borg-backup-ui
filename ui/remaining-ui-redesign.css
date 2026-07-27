@@ -235,6 +235,10 @@
   border-bottom: 0;
 }
 
+.repository-manager-browser-row-repository {
+  background: var(--ui-state-info-bg);
+}
+
 .repository-manager-browser-open {
   display: flex;
   min-width: 0;
