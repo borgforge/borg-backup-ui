@@ -2074,6 +2074,7 @@
       "aboutThirdPartyTab": "Third-party",
       "projectLicenseIntro": "is this project's Unraid interface and is licensed under the MIT License.",
       "thirdPartyIntro": "Borg Backup UI bundles and uses the following third-party components. The full notices are included in the package.",
+      "borgBackupSupportedVersion": "Borg Backup UI currently supports BorgBackup {version}.",
       "thirdPartyNoticeFile": "Full license notices",
       "licenseLoading": "Loading license data...",
       "licenseUnavailable": "License data is currently unavailable.",
