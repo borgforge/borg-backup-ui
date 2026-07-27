@@ -236,7 +236,22 @@
 }
 
 .repository-manager-browser-row-repository {
-  background: var(--ui-state-info-bg);
+  border-left: 3px solid var(--ui-state-success-border);
+  background: var(--ui-state-success-bg);
+}
+
+.repository-manager-browser-row-managed {
+  background: var(--ui-state-disabled-bg);
+}
+
+.repository-manager-browser-row-repository .repository-manager-browser-folder,
+.repository-manager-browser-row-repository .repository-manager-browser-name small {
+  color: var(--ui-state-success-fg);
+}
+
+.repository-manager-browser-row-managed .repository-manager-browser-folder,
+.repository-manager-browser-row-managed .repository-manager-browser-name small {
+  color: var(--ui-state-disabled-fg);
 }
 
 .repository-manager-browser-open {

@@ -332,7 +332,7 @@
     "repositoryBrowseLoading": "Loading directories ...",
     "repositoryBrowseEmpty": "No subdirectories were found in this directory.",
     "repositoryBrowseAvailable": "Directory can be selected for import",
-    "repositoryBrowseBorgRepository": "Borg repository detected, select it directly",
+    "repositoryBrowseBorgRepository": "Importable: Borg repository detected",
     "repositoryBrowseManaged": "Already managed: {name}",
     "repositoryBrowseUnsupported": "The directory name is not supported as a repository path",
     "repositoryBrowseFailed": "The storage target could not be browsed.",

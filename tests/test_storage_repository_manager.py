@@ -585,6 +585,9 @@ def test_repository_import_has_storage_scoped_directory_browser():
     assert "repositoryBrowseBorgRepository" in script
     assert "selectDisabled = managed || !supported" in script
     assert "openDisabled = managed || !supported || borgRepository" in script
+    assert "repository-manager-browser-row-managed" in script
+    assert "repository-manager-browser-row-repository" in script
+    assert "selectClass = importableBorg ? 'btn btn-primary' : 'btn btn-secondary'" in script
     assert "repositoryManagerBrowserClick" in bindings
     assert "repositoryManagerOpenBrowser" in bindings
 
