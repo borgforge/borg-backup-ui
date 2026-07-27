@@ -768,6 +768,11 @@ function repositoryManagerFillStorages() {
   repositoryManagerUpdateSummary();
 }
 
+async function repositoryManagerEnsureStorages(force = false) {
+  if (!force && storageState.loaded && storageState.data) return;
+  await refreshStorage();
+}
+
 function repositoryManagerSelectedStorageLabel() {
   const sel = document.getElementById('repository-manager-storage');
   if (!sel) return '';
@@ -822,10 +827,20 @@ function repositoryManagerUpdateSummary() {
     <p>${escHtml(hint)}</p>`;
 }
 
-function openRepositoryManager() {
+async function openRepositoryManager(options = {}) {
   const modal = document.getElementById('repository-manager-modal');
   if (!modal) return;
   repositoryManagerSetMessage('', '');
+  const forceRefresh = !!(options && typeof options === 'object' && options.forceRefresh);
+  if (forceRefresh || !storageState.loaded || !storageState.data) {
+    const sel = document.getElementById('repository-manager-storage');
+    if (sel) sel.innerHTML = `<option value="">${escHtml(storageT('storage.loading'))}</option>`;
+    try {
+      await repositoryManagerEnsureStorages(forceRefresh);
+    } catch (error) {
+      repositoryManagerSetMessage('error', error.message || storageT('storage.error'));
+    }
+  }
   repositoryManagerFillStorages();
   const defaults = {
     'repository-manager-action': 'create',
@@ -1137,6 +1152,7 @@ async function saveRepositoryManager() {
     closeRepositoryManager();
     await refreshStorage();
     showMsg('storage-message', 'success', storageT('storage.repositorySaved'));
+    await window.BBUI?.setupWizard?.resumeAfterExternalSave?.('repository');
   } catch (err) {
     repositoryManagerSetMessage('error', err.message || storageT('storage.error'));
   } finally {

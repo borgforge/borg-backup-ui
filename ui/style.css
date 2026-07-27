@@ -4514,6 +4514,102 @@ body.wizard-modal-open {
 
 .modal-wizard { max-width: 960px; width: 95vw; }
 
+.setup-wizard-modal { max-width: 760px; }
+
+.setup-wizard-body {
+  padding: 24px;
+}
+
+.setup-wizard-intro {
+  margin-bottom: 18px;
+}
+
+.setup-wizard-intro h4 {
+  margin: 4px 0 6px;
+  font-size: 18px;
+}
+
+.setup-wizard-intro p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.setup-wizard-kicker {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.setup-wizard-required-note {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.setup-wizard-checklist {
+  display: grid;
+  gap: 10px;
+}
+
+.setup-wizard-step-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.setup-wizard-step-row.complete {
+  border-color: var(--ui-state-success-border);
+  background: var(--ui-state-success-bg);
+}
+
+.setup-wizard-step-row.pending {
+  border-color: var(--ui-state-warning-border);
+  background: var(--ui-state-warning-bg);
+}
+
+.setup-wizard-step-row.neutral {
+  border-color: var(--ui-state-neutral-border);
+  background: var(--ui-state-neutral-bg);
+}
+
+.setup-wizard-step-state {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-weight: 700;
+}
+
+.setup-wizard-step-row.complete .setup-wizard-step-state { color: var(--ui-state-success-fg); }
+.setup-wizard-step-row.pending .setup-wizard-step-state { color: var(--ui-state-warning-fg); }
+.setup-wizard-step-row.neutral .setup-wizard-step-state { color: var(--ui-state-neutral-fg); }
+
+.setup-wizard-step-copy strong,
+.setup-wizard-step-copy small {
+  display: block;
+}
+
+.setup-wizard-step-copy small {
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+
+.setup-wizard-step-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .wizard-stepper {
   display: flex;
   align-items: center;

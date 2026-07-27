@@ -30,6 +30,72 @@
       "setupNotRequired": "Initial setup is no longer required."
     }
   },
+  "setupWizard": {
+    "title": "Set up Borg Backup UI",
+    "stepCounter": "Step {step} of {total}",
+    "guidedSetup": "Guided setup",
+    "dataDirTitle": "Choose the main data directory",
+    "dataDirText": "This directory stores runtime data, logs, status files, cache, and technical working data. Backup and restore actions stay locked until this required directory is saved.",
+    "dataDirLabel": "Main data directory",
+    "dataDirRequiredNote": "Nothing is created automatically before this directory is saved.",
+    "dataDirRequired": "Enter a main data directory.",
+    "saveFailed": "Save failed: {message}",
+    "optionalTitle": "Create the first backup path",
+    "optionalText": "The next steps reuse the existing areas. Open them now or continue later from the dashboard.",
+    "steps": {
+      "data_dir": {
+        "title": "Main data directory",
+        "complete": "Saved and checked.",
+        "pending": "The required step is still open."
+      },
+      "storage": {
+        "title": "Storage target",
+        "complete": "{count} storage target(s) available.",
+        "pending": "No storage target exists yet."
+      },
+      "repository": {
+        "title": "Repository",
+        "complete": "{count} repository/repositories available.",
+        "pending": "No repository exists yet."
+      },
+      "job": {
+        "title": "Backup job",
+        "complete": "{count} backup job(s) available.",
+        "pending": "No backup job exists yet."
+      },
+      "optional": {
+        "title": "Restore tests & notifications",
+        "pending": "Optional, but recommended once the first job exists."
+      }
+    },
+    "actions": {
+      "start": "Start setup",
+      "saveDataDir": "Save and continue",
+      "later": "Later",
+      "finish": "Done",
+      "openWizard": "Open setup",
+      "localStorage": "Local",
+      "usbStorage": "USB",
+      "smbStorage": "SMB",
+      "sshStorage": "SSH",
+      "chooseStorage": "Choose storage",
+      "repository": "Create/import repository",
+      "repositoryShort": "Repository",
+      "job": "Create job",
+      "jobShort": "Job",
+      "restore": "Restore",
+      "notifications": "Notifications"
+    },
+    "dashboard": {
+      "requiredTitle": "Initial setup required",
+      "requiredText": "Choose the central main data directory first. Backup and restore actions unlock afterwards.",
+      "incompleteTitle": "Setup incomplete",
+      "incompleteText": "The app is ready, but the first backup path still needs a few steps.",
+      "storage": "No storage target configured",
+      "repository": "No repository created or imported",
+      "job": "No backup job created"
+    }
+  },
   "nav": {
     "dashboard": "Dashboard",
     "jobs": "Jobs",

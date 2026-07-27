@@ -499,6 +499,9 @@ function syncSettingsProfileManager(type, selectLast = false) {
       if (!saved) return;
       settingsState.profileEditing = '';
       await reloadSettingsDataAfterSave(type);
+      if (['local', 'usb', 'smb', 'storagebox'].includes(type)) {
+        await window.BBUI?.setupWizard?.resumeAfterExternalSave?.('storage');
+      }
     });
   }
 

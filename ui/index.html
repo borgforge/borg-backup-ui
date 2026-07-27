@@ -195,6 +195,7 @@
       </div>
       <div id="dashboard-data-dir-warning" class="status-message hidden"></div>
       <div id="dashboard-system-warning" class="status-message hidden"></div>
+      <div id="dashboard-setup-actions" class="setup-action-panel hidden"></div>
       <div id="status-message" class="status-message hidden"></div>
       <div class="dashboard-location-layout ui-context-layout">
         <aside class="dashboard-location-sidebar ui-context-sidebar" aria-label="Standorte" data-i18n-aria-label="dashboard.locations">
@@ -1257,6 +1258,27 @@
       <button class="btn btn-secondary hidden" id="repository-manager-back-btn" data-i18n="wizard.back">Zurück</button>
       <button class="btn btn-primary" id="repository-manager-next-btn" data-i18n="wizard.next">Weiter</button>
       <button class="btn btn-primary hidden" id="repository-manager-save-btn" data-i18n="storage.repositorySave">Repository speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- First Run Setup Wizard Modal -->
+<div id="setup-wizard-modal" class="modal-backdrop hidden">
+  <div class="modal modal-wizard setup-wizard-modal">
+    <div class="modal-header">
+      <h3 data-i18n="setupWizard.title">Borg Backup UI einrichten</h3>
+      <button class="modal-close" id="setup-wizard-close-btn" data-setup-wizard-action="close" data-i18n-aria-label="common.close" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="setup-wizard-body" id="setup-wizard-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary hidden" id="setup-wizard-skip-btn" data-setup-wizard-action="dismiss-optional" data-i18n="setupWizard.actions.later">Später</button>
+      <button class="btn btn-secondary hidden" id="setup-wizard-finish-btn" data-setup-wizard-action="close" data-i18n="setupWizard.actions.finish">Fertig</button>
+      <button class="btn btn-primary" id="setup-wizard-save-dir-btn" data-setup-wizard-action="save-data-dir" data-i18n="setupWizard.actions.saveDataDir">Speichern und weiter</button>
     </div>
   </div>
 </div>

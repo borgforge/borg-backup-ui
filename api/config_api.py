@@ -20,7 +20,7 @@ import uuid
 import pty
 import select
 import signal
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -920,12 +920,126 @@ def get_setup_status(ui_config: dict) -> dict:
     conf = read_expanded_conf(ui_config)
     data_dir = str(conf.get("GLOBAL_DATA_DIR", "")).strip()
     validation = validate_runtime_config(ui_config)
+    counts = get_setup_milestone_counts(ui_config)
+    milestones = [
+        {
+            "key": "data_dir",
+            "required": True,
+            "complete": bool(data_dir) and bool(validation.get("ok", False)),
+            "count": 1 if data_dir else 0,
+        },
+        {
+            "key": "storage",
+            "required": False,
+            "complete": counts["storage_count"] > 0,
+            "count": counts["storage_count"],
+        },
+        {
+            "key": "repository",
+            "required": False,
+            "complete": counts["repository_count"] > 0,
+            "count": counts["repository_count"],
+        },
+        {
+            "key": "job",
+            "required": False,
+            "complete": counts["job_count"] > 0,
+            "count": counts["job_count"],
+        },
+    ]
+    missing_optional = [
+        item["key"]
+        for item in milestones
+        if not item["required"] and not item["complete"]
+    ]
+    wizard_state = read_setup_wizard_state(ui_config)
+    ready = bool(validation.get("ok", False))
+    optional_incomplete = ready and bool(missing_optional)
     return {
         "global_data_dir_set": bool(data_dir),
         "global_data_dir": data_dir,
-        "ready": bool(validation.get("ok", False)),
+        "global_data_dir_suggestion": "/mnt/user/borg-backup-ui",
+        "ready": ready,
         "validation": validation,
+        "setup": {
+            "counts": counts,
+            "milestones": milestones,
+            "required": not bool(data_dir),
+            "optional_incomplete": optional_incomplete,
+            "missing_optional": missing_optional,
+            "optional_dismissed": bool(wizard_state.get("optional_dismissed_at")),
+            "show_optional_wizard": optional_incomplete and not bool(wizard_state.get("optional_dismissed_at")),
+            "complete": ready and not missing_optional,
+            "wizard_state": wizard_state,
+        },
     }
+
+
+def get_setup_milestone_counts(ui_config: dict) -> dict:
+    counts = {
+        "storage_count": 0,
+        "repository_count": 0,
+        "job_count": 0,
+    }
+    try:
+        from storage_objects_api import read_storage_store
+
+        rows = read_storage_store(ui_config).get("storages", [])
+        counts["storage_count"] = len([row for row in rows if str(row.get("storage_key") or "").strip()])
+    except Exception:
+        counts["storage_count"] = 0
+    try:
+        from repositories_api import read_repository_store
+
+        rows = read_repository_store(ui_config).get("repositories", [])
+        counts["repository_count"] = len([row for row in rows if str(row.get("repository_key") or "").strip()])
+    except Exception:
+        counts["repository_count"] = 0
+    try:
+        from jobs_api import list_jobs
+
+        rows = list_jobs(ui_config, {})
+        counts["job_count"] = len([row for row in rows if not row.get("is_utility")])
+    except Exception:
+        counts["job_count"] = 0
+    return counts
+
+
+def setup_wizard_state_file(ui_config: dict) -> Path:
+    raw = str(ui_config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup"
+    root = Path(raw)
+    data_root = root.parent if root.name == "scripts" else root
+    return data_root / "config" / "setup-wizard-state.json"
+
+
+def read_setup_wizard_state(ui_config: dict) -> dict:
+    path = setup_wizard_state_file(ui_config)
+    try:
+        if not path.exists():
+            return {"schema_version": 1}
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"schema_version": 1}
+        return {"schema_version": 1, **data}
+    except Exception:
+        return {"schema_version": 1}
+
+
+def update_setup_wizard_state(ui_config: dict, action: str) -> dict:
+    clean_action = str(action or "").strip().lower()
+    if clean_action not in {"dismiss_optional", "reset"}:
+        raise ValueError("Unsupported setup wizard action")
+    path = setup_wizard_state_file(ui_config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with inventory_lock(path.parent):
+        state = read_setup_wizard_state(ui_config)
+        if clean_action == "dismiss_optional":
+            state["optional_dismissed_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        elif clean_action == "reset":
+            state.pop("optional_dismissed_at", None)
+        state["schema_version"] = 1
+        atomic_write_bytes(path, (json.dumps(state, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+        return state
 
 
 def derive_data_dirs(global_data_dir: str) -> dict:
