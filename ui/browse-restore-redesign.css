@@ -118,6 +118,13 @@
 .restore-precheck-verdict strong, .restore-precheck-verdict small { display: block; }
 .restore-precheck-verdict small { margin-top: 3px; color: var(--ui-color-text-subtle); }
 .restore-legacy-summary { display: none; }
+.restore-confirm-row { align-items: flex-start; margin-top: var(--ui-space-3); padding: var(--ui-space-3); border: 1px solid var(--ui-state-warning-border); border-radius: var(--ui-radius-sm); background: var(--ui-state-warning-bg); }
+.restore-confirm-row input[type="checkbox"] { flex: 0 0 auto; width: 1.125rem; height: 1.125rem; margin-top: 1px; }
+.restore-confirm-row > span { display: grid; gap: 2px; min-width: 0; }
+.restore-confirm-row strong { font-size: var(--ui-font-size-sm); }
+.restore-confirm-row small { color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-confirm-row:has(input[type="checkbox"]:checked) { border-color: var(--ui-state-success-border); background: var(--ui-state-success-bg); }
+.restore-start-actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); margin-top: var(--ui-space-3); margin-bottom: var(--ui-space-3); }
 .restore-precheck-output { width: 100%; max-width: 100%; min-width: 0; margin-top: var(--ui-space-3); overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
 .restore-precheck-output summary { padding: var(--ui-space-3); color: var(--ui-color-text-subtle); cursor: pointer; }
 .restore-precheck-output pre { box-sizing: border-box; display: block; width: 100%; max-width: 100%; min-width: 0; overflow: auto; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
