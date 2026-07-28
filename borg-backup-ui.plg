@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.24.1513">
+<!ENTITY version   "2026.07.28.0850">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,30 @@
 
 <CHANGES>
 <![CDATA[
+###2026.07.28.0850###
+- Added a safe migration-backup cleanup under System Health & Migration: inactive pre-beta migration snapshots can be removed completely, active migrations keep the latest five snapshots, and unknown or protected snapshots are skipped.
+- Prevented the canonical backup.conf migration from creating a new migration snapshot just because an installer-created legacy backup.conf.example copy exists while backup.conf already matches the current schema.
+- Fixed System Health & Migration so cleanup audit entries are not mistaken for failed migration runs after old migration backups are deleted.
+- Fresh installations now require the main data directory to be confirmed in Settings before operational actions are unlocked, instead of silently creating the suggested `/mnt/user/borg-backup-ui` path.
+- Config Backups & Rollback now shows diff colors from backup to active configuration, so new active lines are green and removed backup-only lines are red.
+- Added third-party license notices for the bundled Apprise notification runtime and its pinned Python dependencies.
+- Added the full MIT project license to the repository and packaged plugin payload.
+- Added a dedicated Settings > About license page with project and third-party license viewers.
+- Improved the repository import browser so existing Borg repositories are detected as selectable endpoints and their internal folders are no longer offered for navigation.
+- Issue #310: Added a first-run setup wizard for the required main data directory and the first backup path.
+- Fresh installations now clearly guide users through storage target, repository, backup job, and optional restore/notification setup without silently creating objects.
+- When storage targets, repositories, or jobs are opened from the setup wizard, successful saves now return to the wizard with refreshed progress.
+- Skipped optional setup steps remain visible as dashboard action items so users can continue later.
+- Issue #313: Dashboard backup status now marks missed scheduled backup runs as overdue instead of leaving the last successful run displayed as OK.
+- Overdue detection uses the configured backup tolerance window and the latest backup status data, so normal runtime delays do not immediately trigger a warning.
+- Issue #315: Clarified the About page so BorgBackup version and license information are shown under third-party components instead of Borg Backup UI project metadata.
+- Issue #317: Improved About license layout
+- The third-party license entries on the About page now use compact cards instead of stretched table-like rows.
+- BorgBackup compatibility information is shown as a secondary note in the BorgBackup third-party entry.
+- Issue #319: Clearer restore start confirmation
+- The final restore wizard step now highlights the explicit confirmation checkbox before starting a restore.
+- The confirmation text now explains that checking the box enables the restore start button.
+
 ###2026.07.24.1513###
 - The startup script now defers Borg Backup UI startup to a background wait when the Unraid Python 3 plugin is not available yet, avoiding false missing-python errors without blocking the remaining boot sequence.
 - The weekly HTML report now includes a seven-day activity view. Scheduled jobs show a compact status matrix against their cron plan, while manual jobs are listed separately without being marked as missed.
@@ -419,7 +443,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="7ffefaef5ddf42aa1178a6dc6953d02b"
+EXPECTED_MD5="b748059d7bc98388069d5781eeeb57dc"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
