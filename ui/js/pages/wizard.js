@@ -1084,8 +1084,9 @@ async function _wizardPreview() {
       const repoState = remoteRepo.exists
         ? wizardT('wizard.repoExists')
         : (remoteRepo.checked ? wizardT('wizard.repoUnavailable') : wizardT('wizard.repoUnchecked'));
+      const repoDetail = _wizardDistinctApiMessage(remoteRepo, repoState);
       lines.push(wizardT('wizard.previewRepositoryStatus', {
-        value: `${repoState} (${apiMessage(remoteRepo, repoState)})`,
+        value: repoDetail ? `${repoState} (${repoDetail})` : repoState,
       }));
     }
     lines.push(wizardT('wizard.previewEncryption', { value: summary.encryption || '-' }));
@@ -1109,8 +1110,9 @@ async function _wizardPreview() {
       const repoState = remoteRepo.exists
         ? wizardT('wizard.remoteRepoExists')
         : (remoteRepo.checked ? wizardT('wizard.remoteRepoUnavailable') : wizardT('wizard.remoteRepoUnchecked'));
+      const repoDetail = _wizardDistinctApiMessage(remoteRepo, repoState);
       repoStatusEl.className = `status-message ${remoteRepo.exists ? 'success-state' : 'warning-state'}`;
-      repoStatusEl.textContent = `${repoState} ${apiMessage(remoteRepo, repoState)}`;
+      repoStatusEl.textContent = repoDetail ? `${repoState} ${repoDetail}` : repoState;
     } else if (repoStatusEl) {
       repoStatusEl.className = 'status-message hidden';
       repoStatusEl.textContent = '';
@@ -1123,6 +1125,18 @@ async function _wizardPreview() {
   } finally {
     loading.classList.add('hidden');
   }
+}
+
+function _wizardDistinctApiMessage(payload, fallback) {
+  const message = String(apiMessage(payload, fallback) || '').trim();
+  const base = String(fallback || '').trim();
+  const normalize = (value) => value
+    .replace(/\s+/g, ' ')
+    .replace(/[.!?]+$/g, '')
+    .trim()
+    .toLowerCase();
+  if (!message || normalize(message) === normalize(base)) return '';
+  return message;
 }
 
 function _wizardRuntimePreviewText(kind, summary) {

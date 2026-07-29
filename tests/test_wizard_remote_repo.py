@@ -75,6 +75,16 @@ def test_wizard_preview_resolves_only_the_selected_repository_object(tmp_path: P
     )
 
 
+def test_wizard_preview_ui_deduplicates_repository_status_fallbacks():
+    script = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
+
+    assert "function _wizardDistinctApiMessage(payload, fallback)" in script
+    assert "value: repoDetail ? `${repoState} (${repoDetail})` : repoState" in script
+    assert "repoStatusEl.textContent = repoDetail ? `${repoState} ${repoDetail}` : repoState" in script
+    assert "apiMessage(remoteRepo, repoState)})" not in script
+    assert "repoStatusEl.textContent = `${repoState} ${apiMessage(remoteRepo, repoState)}`" not in script
+
+
 def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
     params = _storagebox_params()
