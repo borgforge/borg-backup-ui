@@ -12,3 +12,11 @@ def test_wizard_prefers_backend_validation_details_for_errors() -> None:
     assert "return apiErrorMessage(payload, status);" in script
     assert script.count("wizardApiErrorMessage(data, res.status)") >= 4
     assert "throw new Error(wizardApiErrorMessage(data, res.status));" in script
+
+
+def test_wizard_allows_libvirt_vm_source_paths() -> None:
+    script = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
+
+    assert "v === '/etc/libvirt'" in script
+    assert "v.startsWith('/etc/libvirt/')" in script
+    assert "prefix.startsWith('/boot') || prefix.startsWith('/etc/libvirt')" in script

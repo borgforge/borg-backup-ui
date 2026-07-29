@@ -842,8 +842,8 @@ function wizardRenderSourceSuggest() {
 }
 
 function wizardIsAllowedSourcePath(path) {
-  const v = String(path || '').trim();
-  return v.startsWith('/mnt') || v.startsWith('/boot');
+  const v = String(path || '').trim().replace(/\/+$/, '');
+  return v.startsWith('/mnt') || v.startsWith('/boot') || v === '/etc/libvirt' || v.startsWith('/etc/libvirt/');
 }
 
 function wizardSourcePathInputChanged() {
@@ -851,8 +851,8 @@ function wizardSourcePathInputChanged() {
   if (!input) return;
   const prefix = String(input.value || '').trim();
   wizardCancelSourceSuggestRequest();
-  if (prefix.startsWith('/boot')) {
-    // /boot is allowed as free text source path, but autocomplete remains /mnt-based.
+  if (prefix.startsWith('/boot') || prefix.startsWith('/etc/libvirt')) {
+    // /boot and /etc/libvirt are allowed as free text source paths, but autocomplete remains /mnt-based.
     wizardHideSourceSuggest();
     return;
   }
