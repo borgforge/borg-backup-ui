@@ -82,6 +82,24 @@ def test_storage_reuses_location_icons_without_summary_ledger() -> None:
     assert "storage-summary" not in script
 
 
+def test_storage_maintenance_uses_minimal_status_icons() -> None:
+    script = _read("ui/js/pages/storage.js")
+    css = _read("ui/remaining-ui-redesign.css")
+
+    assert "function storageMaintenanceIcon(status)" in script
+    assert 'idle: \'<circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/>\'' in script
+    assert 'success: \'<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>\'' in script
+    assert 'warning: \'<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/>' in script
+    assert 'error: \'<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>\'' in script
+    assert 'running: \'<path class="storage-maintenance-spinner" d="M21 12a9 9 0 1 1-6.2-8.6"/>\'' in script
+    assert "${storageMaintenanceIcon(status)}" in script
+    assert "status === 'success' ? '\\u2713'" not in script
+    assert ".storage-maintenance-icon svg" in css
+    assert "animation: storage-maintenance-spin 1s linear infinite" in css
+    assert ".status-success .storage-maintenance-icon { color: var(--ui-state-success-fg); }" in css
+    assert ".status-success .storage-maintenance-icon { background:" not in css
+
+
 def test_help_has_generated_table_of_contents() -> None:
     html = _read("ui/index.html")
     script = _read("ui/js/pages/help.js")
