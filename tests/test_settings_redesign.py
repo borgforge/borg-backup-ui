@@ -336,6 +336,9 @@ def test_advanced_settings_separates_reminders_and_passphrases_into_subtabs() ->
     assert ".reminder-detail-line" in css
     assert ".reminder-detail-label" in css
     assert ".reminder-detail-stack" in css
+    assert '<td class="reminder-date-cell reminder-detail-stack">' not in script
+    assert '<div class="reminder-detail-stack">' in script
+    assert ".reminder-diagnostics-table tbody tr:hover td" in css
     assert ".reminder-stack-line" in css
     assert "settings-passphrase-card" in script
     assert "settings-passphrase-table" in script

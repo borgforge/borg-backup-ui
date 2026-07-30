@@ -1540,8 +1540,10 @@ function _renderReminderTableRow(item) {
         ${scheduleRows.map(([label, value]) => _renderReminderDetailLine(label, value)).join('')}
       </td>
       <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(latestFormatted)}</span></td>
-      <td class="reminder-date-cell reminder-detail-stack">
-        ${reminderRows.map(([label, value]) => _renderReminderStackLine(label, value)).join('')}
+      <td class="reminder-date-cell">
+        <div class="reminder-detail-stack">
+          ${reminderRows.map(([label, value]) => _renderReminderStackLine(label, value)).join('')}
+        </div>
       </td>
     </tr>
   `;
