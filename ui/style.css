@@ -123,10 +123,16 @@ body.wizard-modal-open {
   overflow: hidden;
 }
 
+body.wizard-modal-open .main-content {
+  overflow: hidden;
+}
+
 /* ── Layout ── */
 .app-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ── Sidebar ── */
@@ -478,8 +484,11 @@ body.wizard-modal-open {
 /* ── Main Content ── */
 .main-content {
   flex: 1;
+  height: 100vh;
   min-width: 0;
   overflow-x: clip;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .startup-maintenance-banner {
@@ -539,9 +548,14 @@ body.wizard-modal-open {
 /* ── Page Header ── */
 .page-header {
   display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 30;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 24px;
+  padding-block: 0 12px;
+  background: var(--bg-base);
 }
 
 .page-header h1 {
@@ -3094,6 +3108,20 @@ body.wizard-modal-open {
   /* Main Content ohne Sidebar-Offset */
   .app-layout {
     flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .main-content {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .page-header {
+    position: static;
+    padding-block: 0;
   }
 
   .page {

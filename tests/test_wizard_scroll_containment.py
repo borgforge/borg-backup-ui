@@ -19,6 +19,7 @@ def test_job_wizard_nested_scroll_areas_do_not_scroll_the_background() -> None:
         css, ".wizard-runtime-selection"
     )
     assert "overflow: hidden" in _selector_block(css, "body.wizard-modal-open")
+    assert "overflow: hidden" in _selector_block(css, "body.wizard-modal-open .main-content")
     assert "document.body.classList.add('wizard-modal-open')" in wizard_js
     assert "document.body.classList.remove('wizard-modal-open')" in wizard_js
 
