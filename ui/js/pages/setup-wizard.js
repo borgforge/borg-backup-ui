@@ -31,11 +31,20 @@
     return (status?.setup?.milestones || []).find((row) => row.key === key) || {};
   }
 
+  function setupStatusIcon(status) {
+    const icons = {
+      neutral: '<circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/>',
+      success: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>',
+      warning: '<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/><path d="M12 8.8v4.8"/><path d="M12 17h.01"/>',
+    };
+    return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[status] || icons.neutral}</svg>`;
+  }
+
   function stepRow(status, key, actionHtml = '') {
     const item = milestone(status, key);
     const complete = !!item.complete;
     return `<div class="setup-wizard-step-row ${complete ? 'complete' : 'pending'}">
-      <span class="setup-wizard-step-state" aria-hidden="true">${complete ? '&#10003;' : '!'}</span>
+      <span class="setup-wizard-step-state" aria-hidden="true">${setupStatusIcon(complete ? 'success' : 'warning')}</span>
       <div class="setup-wizard-step-copy">
         <strong>${escHtml(setupT(`steps.${key}.title`))}</strong>
         <small>${escHtml(setupT(`steps.${key}.${complete ? 'complete' : 'pending'}`, { count: Number(item.count || 0) }))}</small>
@@ -77,7 +86,7 @@
         ${stepRow(status, 'repository', `<button class="btn btn-primary btn-sm" data-setup-wizard-action="open-repository-manager">${escHtml(setupT('actions.repository'))}</button>`)}
         ${stepRow(status, 'job', `<button class="btn btn-primary btn-sm" data-setup-wizard-action="open-job-wizard">${escHtml(setupT('actions.job'))}</button>`)}
         <div class="setup-wizard-step-row neutral">
-          <span class="setup-wizard-step-state" aria-hidden="true">&middot;</span>
+          <span class="setup-wizard-step-state" aria-hidden="true">${setupStatusIcon('neutral')}</span>
           <div class="setup-wizard-step-copy">
             <strong>${escHtml(setupT('steps.optional.title'))}</strong>
             <small>${escHtml(setupT('steps.optional.pending'))}</small>

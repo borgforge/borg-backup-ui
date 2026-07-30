@@ -4603,14 +4603,21 @@ body.wizard-modal-open {
   place-items: center;
   width: 24px;
   height: 24px;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  font-weight: 700;
 }
 
 .setup-wizard-step-row.complete .setup-wizard-step-state { color: var(--ui-state-success-fg); }
 .setup-wizard-step-row.pending .setup-wizard-step-state { color: var(--ui-state-warning-fg); }
 .setup-wizard-step-row.neutral .setup-wizard-step-state { color: var(--ui-state-neutral-fg); }
+
+.setup-wizard-step-state svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 .setup-wizard-step-copy strong,
 .setup-wizard-step-copy small {
