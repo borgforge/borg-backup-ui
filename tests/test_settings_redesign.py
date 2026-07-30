@@ -82,6 +82,29 @@ def test_repository_settings_stay_in_single_operations_menu_group() -> None:
     assert restore_index < repository_index < local_index
 
 
+def test_system_health_uses_minimal_status_icons() -> None:
+    script = _read("ui/js/pages/settings.js")
+    redesign_css = _read("ui/settings-redesign.css")
+    base_css = _read("ui/style.css")
+
+    assert "function settingsStatusIcon(status)" in script
+    assert 'neutral: \'<circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/>\'' in script
+    assert 'success: \'<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>\'' in script
+    assert 'warning: \'<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/>' in script
+    assert 'error: \'<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>\'' in script
+    assert 'class="system-health-overview ${overallOk ? \'ok\' : \'bad\'} status-${overviewStatus}"' in script
+    assert '<span class="system-health-overview-mark">${settingsStatusIcon(overviewStatus)}</span>' in script
+    assert '<span class="system-health-state">${settingsStatusIcon(ok ? \'success\' : \'error\')}</span>' in script
+    assert '<span class="system-health-state">${settingsStatusIcon(\'neutral\')}</span>' in script
+    assert "overallOk ? '\\u2713' : '!'" not in script
+    assert "const icon = (ok) => ok ? '\\u2713' : '\\u2717'" not in script
+    assert ".system-health-overview.status-warning .system-health-overview-mark" in redesign_css
+    assert ".system-health-overview.status-error .system-health-overview-mark" in redesign_css
+    assert ".system-health-overview-mark svg" in redesign_css
+    assert "background: var(--ui-state-success-fg);" not in redesign_css
+    assert ".system-health-state svg" in base_css
+
+
 def test_notifications_are_a_dedicated_settings_area_with_apprise_profiles() -> None:
     script = _read("ui/js/pages/settings.js")
     css = _read("ui/settings-redesign.css")

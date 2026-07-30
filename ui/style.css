@@ -702,6 +702,15 @@ body.wizard-modal-open {
 .system-health-row.ok .system-health-state { color: var(--success); }
 .system-health-row.bad .system-health-state { color: var(--error); }
 .system-health-row.neutral .system-health-state { color: var(--text-muted); }
+.system-health-state svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .system-health-name { color: var(--text-secondary); }
 .system-health-detail {
   color: var(--text-primary);
