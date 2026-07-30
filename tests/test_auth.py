@@ -48,6 +48,17 @@ def _render_auth_page(method_name: str) -> str:
     return handler.wfile.getvalue().decode("utf-8")
 
 
+def _render_index_page() -> tuple[str, dict[str, str]]:
+    handler = _make_handler()
+    handler.wfile = BytesIO()
+    headers = {}
+    handler.send_response = lambda _status: None
+    handler.send_header = lambda name, value: headers.__setitem__(name, value)
+    handler.end_headers = lambda: None
+    handler._serve_index_page()
+    return handler.wfile.getvalue().decode("utf-8"), headers
+
+
 def test_verify_password_hash_accepts_valid_password():
     encoded = hash_password("secret-123")
     assert verify_password_hash("secret-123", encoded) is True
@@ -74,6 +85,16 @@ def test_login_page_uses_shared_language_preference_and_localized_error_codes():
     assert "api.errors.${code}" in html
     assert "d.message" not in html
     assert "Login fehlgeschlagen" not in html
+
+
+def test_main_index_versions_static_css_and_js_assets():
+    html, headers = _render_index_page()
+
+    assert headers["Cache-Control"] == "no-store"
+    assert '/ui/style.css?v=' in html
+    assert '/ui/design-system.css?v=' in html
+    assert '/ui/js/app-main.js?v=' in html
+    assert '/ui/assets/favicon.png?v=' not in html
 
 
 def test_setup_page_uses_shared_language_preference_and_localized_error_codes():
