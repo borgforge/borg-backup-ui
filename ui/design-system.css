@@ -195,7 +195,10 @@
 .ui-context-sidebar {
   position: sticky;
   top: var(--ui-space-4);
-  overflow: hidden;
+  max-height: calc(100vh - var(--ui-space-8));
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .ui-context-sidebar__header,
@@ -702,7 +705,11 @@
 /* Tablet: context navigation moves above the workspace and remains operable. */
 @media (max-width: 1023px) {
   .ui-context-layout { grid-template-columns: minmax(0, 1fr); }
-  .ui-context-sidebar { position: static; }
+  .ui-context-sidebar {
+    position: static;
+    max-height: none;
+    overflow: hidden;
+  }
   .ui-context-sidebar__header { padding-block: var(--ui-space-2); }
   .ui-context-nav {
     display: flex;

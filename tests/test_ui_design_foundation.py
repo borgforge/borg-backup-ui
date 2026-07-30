@@ -113,6 +113,9 @@ def test_foundation_exposes_incremental_component_contract() -> None:
     }
     for component in required_components:
         assert component in css
+    assert "max-height: calc(100vh - var(--ui-space-8));" in css
+    assert "overscroll-behavior: contain;" in css
+    assert "scrollbar-width: thin;" in css
 
 
 def test_foundation_bridges_existing_status_components() -> None:

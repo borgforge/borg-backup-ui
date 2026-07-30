@@ -67,7 +67,10 @@ def test_history_reports_layout_is_responsive_and_compact() -> None:
     assert "@media (max-width: 767px)" in css
     assert "overflow-x: auto" in css
     assert ".history-detail-panel" in css
+    assert ".report-sidebar { display: flex; flex-direction: column; max-height: calc(100vh - var(--ui-space-8)); overflow: hidden; }" in css
     assert ".report-job-list" in css
+    assert ".report-job-list { display: grid; flex: 1 1 auto; min-height: 0; overflow-y: auto;" in css
+    assert ".report-sidebar { display: block; max-height: none; }" in css
     assert ".report-job-icon" in css
     assert ".report-metric-ledger" in css
     assert ".report-sparkline" in css

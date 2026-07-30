@@ -270,6 +270,9 @@ def test_settings_layout_is_sticky_and_responsive() -> None:
     css = _read("ui/settings-redesign.css")
     assert ".settings-page-header" in css
     assert "position: sticky" in css
+    assert ".settings-side-menu" in css
+    assert "max-height: calc(100vh - 6.5rem);" in css
+    assert "overscroll-behavior: contain;" in css
     assert "@media (max-width: 1050px)" in css
     assert "@media (max-width: 767px)" in css
     assert ".settings-profile-field" in css
