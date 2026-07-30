@@ -25,6 +25,15 @@ function restoreTestsT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`restoreTests.${key}`, params) || `restoreTests.${key}`;
 }
 
+function restoreTestsStatusIcon(status) {
+  const icons = {
+    success: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>',
+    warning: '<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/><path d="M12 8.8v4.8"/><path d="M12 17h.01"/>',
+    error: '<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[status] || icons.warning}</svg>`;
+}
+
 function restoreTestsLocale() {
   return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
 }
@@ -819,7 +828,7 @@ function renderRTReportRow(t, idx) {
               <div class="rt-report-subtitle">${escHtml(archive || restoreTestsT('noArchive'))}</div>
             </div>
             <div class="rt-report-result ${successful ? 'success' : 'error'}">
-              <span class="rt-report-result-mark">${successful ? '&#10003;' : '!'}</span>
+              <span class="rt-report-result-mark">${restoreTestsStatusIcon(successful ? 'success' : 'error')}</span>
               <span><strong>${escHtml(restoreTestsT(successful ? 'restorabilityVerified' : 'verificationFailed'))}</strong>${validUntil ? `<small>${escHtml(restoreTestsT('proofValidUntil', { date: validUntil }))}</small>` : ''}</span>
             </div>
           </div>

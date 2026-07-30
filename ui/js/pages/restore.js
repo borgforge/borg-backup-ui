@@ -40,6 +40,15 @@ function restoreT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`restore.${key}`, params) || `restore.${key}`;
 }
 
+function restoreStatusIcon(status) {
+  const icons = {
+    success: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>',
+    warning: '<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/><path d="M12 8.8v4.8"/><path d="M12 17h.01"/>',
+    error: '<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[status] || icons.warning}</svg>`;
+}
+
 function restoreSetStep(step) {
   const next = Math.max(1, Math.min(5, Number(step) || 1));
   restoreState.step = next;
@@ -1152,7 +1161,7 @@ function renderRestorePrecheck(data) {
   const ok = !!data.ok;
   verdict.classList.remove('hidden');
   verdict.classList.toggle('error', !ok);
-  verdict.innerHTML = `<span class="restore-precheck-verdict-mark">${ok ? '✓' : '!'}</span><span><strong>${escHtml(restoreT(ok ? 'precheckVerdictOk' : 'precheckVerdictFailed'))}</strong><small>${escHtml(restoreT(ok ? 'precheckVerdictOkDetail' : 'precheckVerdictFailedDetail'))}</small></span>`;
+  verdict.innerHTML = `<span class="restore-precheck-verdict-mark">${restoreStatusIcon(ok ? 'success' : 'error')}</span><span><strong>${escHtml(restoreT(ok ? 'precheckVerdictOk' : 'precheckVerdictFailed'))}</strong><small>${escHtml(restoreT(ok ? 'precheckVerdictOkDetail' : 'precheckVerdictFailedDetail'))}</small></span>`;
   facts.innerHTML = [
     [restoreT('mountpointLabel'), data.target_mountpoint || '—'],
     [restoreT('freeSpaceLabel'), _restoreFmtSize(data.target_free_bytes || 0)],

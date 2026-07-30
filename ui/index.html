@@ -156,7 +156,13 @@
     </div>
 
     <section id="startup-maintenance-banner" class="startup-maintenance-banner hidden" role="alert" aria-live="assertive">
-      <div class="startup-maintenance-icon" aria-hidden="true">!</div>
+      <div class="startup-maintenance-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <circle cx="12" cy="12" r="8.5"></circle>
+          <path d="m9 9 6 6"></path>
+          <path d="m15 9-6 6"></path>
+        </svg>
+      </div>
       <div class="startup-maintenance-copy">
         <strong data-i18n="maintenanceMode.title">Eingeschränkter Wartungsmodus</strong>
         <span data-i18n="maintenanceMode.message">Eine erforderliche Startmigration ist fehlgeschlagen. Backups und Änderungen sind blockiert.</span>

@@ -33,11 +33,18 @@ def test_browse_restore_keeps_five_step_workflow_and_api_contracts() -> None:
 
 def test_browse_restore_uses_configured_icons_and_structured_precheck() -> None:
     script = _read("ui/js/pages/restore.js")
+    css = _read("ui/browse-restore-redesign.css")
     assert "resolveJobIcon(job)" in script
     assert "resolveJobIconColor(job)" in script
     assert "renderRestorePrecheck" in script
     assert "restore-precheck-verdict" in script
     assert "restore-system-check-facts" in script
+    assert "function restoreStatusIcon(status)" in script
+    assert "restoreStatusIcon(ok ? 'success' : 'error')" in script
+    assert "ok ? '\\u2713' : '!'" not in script
+    assert ".restore-precheck-verdict-mark svg" in css
+    assert ".restore-precheck-verdict.error .restore-precheck-verdict-mark { color: var(--ui-state-error-fg); }" in css
+    assert ".restore-precheck-verdict-mark { display: grid; place-items: center; width: 2.125rem; height: 2.125rem; color: var(--ui-state-success-fg); }" in css
 
 
 def test_browse_restore_layout_is_responsive_and_contained() -> None:

@@ -502,10 +502,16 @@ body.wizard-modal-open {
   width: 30px;
   height: 30px;
   flex: 0 0 30px;
-  border-radius: 50%;
-  background: var(--danger, #dc3545);
-  color: #fff;
-  font-weight: 700;
+  color: var(--ui-state-error-fg);
+}
+.startup-maintenance-icon svg {
+  width: 1.55rem;
+  height: 1.55rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .startup-maintenance-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
 .startup-maintenance-copy > span { color: var(--text-secondary); font-size: 13px; }
