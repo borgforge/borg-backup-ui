@@ -76,11 +76,11 @@
 }
 .history-pagination { padding-bottom: var(--ui-space-1); }
 
-.report-sidebar { display: flex; flex-direction: column; max-height: calc(100vh - var(--ui-space-8)); overflow: hidden; }
+.report-sidebar { overflow: hidden; }
 .report-search { display: grid; gap: var(--ui-space-1); padding: var(--ui-space-3); border-bottom: 1px solid var(--ui-color-border); }
 .report-search span { color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); font-weight: var(--ui-font-weight-semibold); text-transform: uppercase; }
 .report-search input { width: 100%; min-width: 0; }
-.report-job-list { display: grid; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--ui-space-1); }
+.report-job-list { display: grid; max-height: calc(100vh - 18rem); overflow-y: auto; padding: var(--ui-space-1); }
 .report-job-group h3 { margin: var(--ui-space-2); color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); text-transform: uppercase; }
 .report-job {
   display: grid;
@@ -179,7 +179,6 @@
 @media (max-width: 1023px) {
   .history-detail-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .history-sidebar .ui-context-nav__item { min-width: 12.5rem; }
-  .report-sidebar { display: block; max-height: none; }
   .report-job-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; }
   .report-job-group { display: flex; min-width: max-content; }
   .report-job-group h3 { align-self: center; }

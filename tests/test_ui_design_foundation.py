@@ -113,9 +113,6 @@ def test_foundation_exposes_incremental_component_contract() -> None:
     }
     for component in required_components:
         assert component in css
-    assert "max-height: calc(100vh - var(--ui-space-8));" in css
-    assert "overscroll-behavior: contain;" in css
-    assert "scrollbar-width: thin;" in css
 
 
 def test_foundation_bridges_existing_status_components() -> None:
@@ -144,17 +141,6 @@ def test_foundation_covers_tablet_mobile_and_accessibility_states() -> None:
     assert ":focus-visible" in css
     assert '[aria-disabled="true"]' in css
     assert "overflow-x: auto" in css
-
-
-def test_app_shell_scrolls_main_content_without_moving_sidebar_or_header() -> None:
-    css = STYLE.read_text(encoding="utf-8")
-    assert ".app-layout {\n  display: flex;\n  height: 100vh;\n  min-height: 0;\n  overflow: hidden;\n}" in css
-    assert ".main-content {\n  flex: 1;\n  height: 100vh;\n  min-width: 0;\n  overflow-x: clip;\n  overflow-y: auto;" in css
-    assert ".page-header {\n  display: flex;\n  position: sticky;\n  top: 0;" in css
-    mobile = css.split("@media (max-width: 480px)", 1)[1]
-    assert ".app-layout {\n    flex-direction: column;\n    height: auto;\n    min-height: 100vh;\n    overflow: visible;\n  }" in mobile
-    assert ".main-content {\n    height: auto;\n    min-height: 100vh;\n    overflow: visible;\n  }" in mobile
-    assert ".page-header {\n    position: static;\n    padding-block: 0;\n  }" in mobile
 
 
 def test_light_theme_uses_explicit_readable_status_surfaces() -> None:

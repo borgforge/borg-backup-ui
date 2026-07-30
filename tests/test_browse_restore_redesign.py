@@ -51,9 +51,6 @@ def test_browse_restore_layout_is_responsive_and_contained() -> None:
     css = _read("ui/browse-restore-redesign.css")
     assert "@media (max-width: 1100px)" in css
     assert "@media (max-width: 767px)" in css
-    assert ".restore-job-sidebar { display: flex; flex-direction: column; max-height: calc(100vh - var(--ui-space-8)); overflow: hidden; }" in css
-    assert ".restore-sidebar-job-list { display: block; flex: 1 1 auto; min-height: 0; overflow: auto;" in css
-    assert ".restore-job-sidebar { display: block; position: static; max-height: none; }" in css
     assert ".restore-browser-layout" in css
     assert ".restore-review-grid" in css
     assert "overflow-x: auto" in css

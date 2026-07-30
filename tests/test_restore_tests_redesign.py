@@ -45,10 +45,7 @@ def test_restore_tests_layout_is_responsive_and_prioritizes_summaries() -> None:
     assert ".rt-redesign-layout { grid-template-columns: minmax(0, 1fr); }" in css
     assert "@media (max-width: 767px)" in css
     assert ".rt-plan-summary" in css
-    assert ".rt-job-sidebar { display: flex; flex-direction: column; max-height: calc(100vh - var(--ui-space-8)); overflow: hidden; }" in css
     assert ".rt-sidebar-job-list" in css
-    assert ".rt-sidebar-job-list { display: block; flex: 1 1 auto; min-height: 0; overflow: auto;" in css
-    assert ".rt-job-sidebar { display: block; position: static; max-height: none; }" in css
     assert "overflow-x: auto" in css
     assert "#restore-tests-summary" in css
 

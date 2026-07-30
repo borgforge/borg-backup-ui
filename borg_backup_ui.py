@@ -817,7 +817,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 return
-            self._serve_index_page()
+            self._serve_file(UI_DIR / "index.html", allowed_root=UI_DIR)
         elif path.startswith("/ui/"):
             # Static UI assets must stay directly reachable, otherwise browsers receive
             # HTML redirects for JS/CSS and fail with MIME/syntax errors on /login.
@@ -3182,33 +3182,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
-        cache_control = "no-store" if filepath.suffix.lower() in {".css", ".js"} else "no-cache"
-        self.send_header("Cache-Control", cache_control)
-        self.end_headers()
-        self.wfile.write(content)
-
-    def _serve_index_page(self):
-        try:
-            html = (UI_DIR / "index.html").read_text(encoding="utf-8")
-        except OSError:
-            self.send_error(500, "Read error")
-            return
-        asset_version = re.sub(r"[^A-Za-z0-9._-]", "", APP_VERSION) or "dev"
-
-        def version_asset(match: re.Match[str]) -> str:
-            attr, path = match.group(1), match.group(2)
-            return f'{attr}="{path}?v={asset_version}"'
-
-        html = re.sub(
-            r'(href|src)="(/ui/[^"?]+\.(?:css|js))"',
-            version_asset,
-            html,
-        )
-        content = html.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(content)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(content)
 

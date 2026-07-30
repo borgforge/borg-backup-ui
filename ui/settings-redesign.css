@@ -22,10 +22,7 @@
 .settings-side-menu {
   position: sticky;
   top: 5.5rem;
-  max-height: calc(100vh - 6.5rem);
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+  overflow: hidden;
   border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
   background: var(--ui-color-surface);
@@ -1006,8 +1003,6 @@
 
   .settings-side-menu {
     position: static;
-    max-height: none;
-    overflow: hidden;
   }
 
   .settings-side-menu nav {
