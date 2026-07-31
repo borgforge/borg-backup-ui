@@ -104,6 +104,11 @@ def test_dashboard_summary_uses_subtle_status_surfaces() -> None:
     assert "background: var(--ui-state-warning-bg)" in css
     assert "background: var(--ui-state-error-bg)" in css
     assert "border-radius: var(--ui-radius-sm)" in css
+    assert "min-height: 5.125rem" in css
+    assert "--dashboard-summary-fg: var(--ui-state-success-fg)" in css
+    assert "--dashboard-summary-fg: var(--ui-state-warning-fg)" in css
+    assert "--dashboard-summary-fg: var(--ui-state-error-fg)" in css
+    assert "color: var(--dashboard-summary-fg)" in css
 
 
 def test_dashboard_jobs_locale_contract_matches() -> None:
