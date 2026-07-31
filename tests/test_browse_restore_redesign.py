@@ -95,6 +95,7 @@ def test_browse_restore_has_dedicated_restore_history() -> None:
     assert 'id="restore-history-content"' in html
     assert 'id="restore-history-delete-confirm-modal"' in html
     assert 'id="restore-history-delete-confirm-delete-btn"' in html
+    assert '<div class="modal-info-item"><span data-i18n="restore.restoreIdLabel">Restore-ID:</span><strong id="restore-history-delete-confirm-id"></strong></div>' in html
     assert ".restore-view-tabs" in css
     assert ".restore-history-card" in css
     assert ".restore-history-detail-grid" in css
@@ -113,6 +114,10 @@ def test_browse_restore_has_dedicated_restore_history() -> None:
     assert "deleteHistoryRunModalTitle" in german
     assert "deleteHistoryRunModalMessage" in german
     assert "deleteHistoryRunModalWarning" in german
+    assert '"restoreIdLabel": "Restore-ID:"' in german
+    assert "Verlaufsdaten von Borg Backup UI" in german
     assert "deleteHistoryRunModalTitle" in english
     assert "deleteHistoryRunModalMessage" in english
     assert "deleteHistoryRunModalWarning" in english
+    assert '"restoreIdLabel": "Restore ID:"' in english
+    assert "Borg Backup UI history data" in english
