@@ -201,6 +201,8 @@ def test_language_selector_keeps_names_and_accessible_flag_symbols() -> None:
     assert "🇬🇧 English" in german
     assert "🇩🇪 German" in english
     assert "🇬🇧 English" in english
+    assert ".sidebar-language select" in _read("ui/style.css")
+    assert "height: 30px" in _read("ui/style.css")
 
 
 def test_sidebar_footer_keeps_version_only_and_direct_theme_toggle() -> None:
@@ -233,6 +235,11 @@ def test_sidebar_footer_keeps_version_only_and_direct_theme_toggle() -> None:
     assert "fetch(" not in theme_binding
     assert ".sidebar-theme-toggle" in css
     assert ".sidebar-theme-btn.active" in css
+    assert ".sidebar-language" in css
+    assert "grid-template-columns: minmax(0, 1fr)" in css
+    assert "width: 100%" in css
+    assert "height: 30px" in css
+    assert "height: 100%" in css
     assert '"themeLight": "Helles Theme"' in german
     assert '"themeDark": "Dunkles Theme"' in german
     assert '"themeLight": "Light theme"' in english

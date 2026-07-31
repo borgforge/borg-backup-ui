@@ -257,16 +257,16 @@ body.wizard-modal-open {
 }
 .sidebar-language {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
   margin-bottom: 8px;
   color: var(--text-secondary);
 }
 .sidebar-language select {
   width: 100%;
   min-width: 0;
-  padding: 5px 24px 5px 8px;
+  height: 30px;
+  padding: 0 24px 0 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-card);
@@ -275,16 +275,17 @@ body.wizard-modal-open {
 }
 .sidebar-theme {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
   margin-bottom: 8px;
   color: var(--text-secondary);
 }
 .sidebar-theme-toggle {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
   min-width: 0;
+  height: 30px;
   padding: 2px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -294,7 +295,7 @@ body.wizard-modal-open {
   display: grid;
   place-items: center;
   min-width: 0;
-  height: 24px;
+  height: 100%;
   border: 0;
   border-radius: calc(var(--radius-sm) - 2px);
   background: transparent;
