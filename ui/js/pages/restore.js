@@ -19,6 +19,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   targetSuggestCache: new Map(),
   confirmResolver: null,
   downloadConfirmResolver: null,
+  historyDeleteConfirmResolver: null,
   activeRestoreId: '',
   restorePollTimer: null,
   autoPrecheckKey: '',
@@ -472,7 +473,7 @@ async function restoreDeleteHistoryEntry(restoreId) {
   if (!id) return;
   const run = (restoreState.history || []).find((item) => String(item.restore_id || '') === id) || {};
   const label = run.job_key || id;
-  const ok = window.confirm(restoreT('deleteHistoryRunConfirm', { name: label, id }));
+  const ok = await openRestoreHistoryDeleteConfirmModal(label, id);
   if (!ok) return;
   try {
     const res = await fetch('/api/restore/history', {
@@ -487,6 +488,32 @@ async function restoreDeleteHistoryEntry(restoreId) {
     await restoreLoadHistory();
   } catch (err) {
     showMsg('restore-assist-msg', 'error', restoreT('deleteHistoryRunFailed', { message: err.message }));
+  }
+}
+
+function openRestoreHistoryDeleteConfirmModal(label, id) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('restore-history-delete-confirm-modal');
+    const message = document.getElementById('restore-history-delete-confirm-message');
+    const idEl = document.getElementById('restore-history-delete-confirm-id');
+    if (!modal || !message || !idEl) {
+      resolve(window.confirm(restoreT('deleteHistoryRunConfirm', { name: label, id })));
+      return;
+    }
+    restoreState.historyDeleteConfirmResolver = resolve;
+    message.textContent = restoreT('deleteHistoryRunModalMessage', { name: label });
+    idEl.textContent = id;
+    modal.classList.remove('hidden');
+  });
+}
+
+function closeRestoreHistoryDeleteConfirmModal(confirmed = false) {
+  const modal = document.getElementById('restore-history-delete-confirm-modal');
+  if (modal) modal.classList.add('hidden');
+  if (restoreState.historyDeleteConfirmResolver) {
+    const done = restoreState.historyDeleteConfirmResolver;
+    restoreState.historyDeleteConfirmResolver = null;
+    done(!!confirmed);
   }
 }
 

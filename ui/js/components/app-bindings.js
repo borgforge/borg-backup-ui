@@ -187,6 +187,12 @@
     document.getElementById('restore-download-confirm-modal')?.addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeRestoreDownloadConfirmModal(false);
     });
+    document.getElementById('restore-history-delete-confirm-close-btn')?.addEventListener('click', () => closeRestoreHistoryDeleteConfirmModal(false));
+    document.getElementById('restore-history-delete-confirm-cancel-btn')?.addEventListener('click', () => closeRestoreHistoryDeleteConfirmModal(false));
+    document.getElementById('restore-history-delete-confirm-delete-btn')?.addEventListener('click', () => closeRestoreHistoryDeleteConfirmModal(true));
+    document.getElementById('restore-history-delete-confirm-modal')?.addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeRestoreHistoryDeleteConfirmModal(false);
+    });
     document.getElementById('restore-tests-refresh-btn')?.addEventListener('click', refreshRestoreTests);
     document.getElementById('rt-run-btn')?.addEventListener('click', runRestoreTestNow);
     document.getElementById('rt-subtab-plan-btn')?.addEventListener('click', () => switchRestoreTestsSubtab('plan'));
