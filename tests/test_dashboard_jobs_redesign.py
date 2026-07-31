@@ -83,6 +83,29 @@ def test_dashboard_jobs_layout_is_tablet_and_mobile_responsive() -> None:
     assert "var(--ui-state-neutral-bg)" in css
 
 
+def test_dashboard_summary_uses_subtle_status_surfaces() -> None:
+    css = _read("ui/dashboard-jobs.css")
+    script = _read("ui/js/pages/dashboard.js")
+
+    assert "statTile('total'" in script
+    assert "statTile('success'" in script
+    assert "statTile('skipped'" in script
+    assert "statTile('warning'" in script
+    assert "statTile('error'" in script
+    assert "statTile('unknown'" in script
+    assert ".dashboard-summary-grid .stat-tile.total" in css
+    assert ".dashboard-summary-grid .stat-tile.success" in css
+    assert ".dashboard-summary-grid .stat-tile.skipped" in css
+    assert ".dashboard-summary-grid .stat-tile.warning" in css
+    assert ".dashboard-summary-grid .stat-tile.error" in css
+    assert "background: var(--ui-state-success-bg)" in css
+    assert "background: var(--ui-state-neutral-bg)" in css
+    assert "background: var(--ui-state-info-bg)" in css
+    assert "background: var(--ui-state-warning-bg)" in css
+    assert "background: var(--ui-state-error-bg)" in css
+    assert "border-radius: var(--ui-radius-sm)" in css
+
+
 def test_dashboard_jobs_locale_contract_matches() -> None:
     english = _read("ui/i18n/en.json")
     german = _read("ui/i18n/de.json")

@@ -25,20 +25,44 @@
 .dashboard-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--ui-space-1);
+  gap: var(--ui-space-2);
   margin: 0;
 }
 
 .dashboard-summary-grid .stat-tile {
   min-width: 0;
-  padding: var(--ui-space-2);
-  border: 0;
-  border-right: 1px solid var(--ui-color-border);
-  border-radius: 0;
-  background: transparent;
+  padding: var(--ui-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-surface-subtle);
 }
 
-.dashboard-summary-grid .stat-tile:last-child { border-right: 0; }
+.dashboard-summary-grid .stat-tile.success {
+  border-color: var(--ui-state-success-border);
+  background: var(--ui-state-success-bg);
+}
+
+.dashboard-summary-grid .stat-tile.total,
+.dashboard-summary-grid .stat-tile.skipped {
+  border-color: var(--ui-state-neutral-border);
+  background: var(--ui-state-neutral-bg);
+}
+
+.dashboard-summary-grid .stat-tile.unknown {
+  border-color: var(--ui-state-info-border);
+  background: var(--ui-state-info-bg);
+}
+
+.dashboard-summary-grid .stat-tile.warning {
+  border-color: var(--ui-state-warning-border);
+  background: var(--ui-state-warning-bg);
+}
+
+.dashboard-summary-grid .stat-tile.error {
+  border-color: var(--ui-state-error-border);
+  background: var(--ui-state-error-bg);
+}
+
 .dashboard-summary-grid .stat-icon { display: none; }
 .dashboard-summary-grid .stat-value { font-size: var(--ui-font-size-xl); }
 .dashboard-summary-grid .stat-label { overflow-wrap: anywhere; }
@@ -557,8 +581,6 @@
 
 @media (max-width: 767px) {
   .dashboard-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dashboard-summary-grid .stat-tile { border-right: 0; border-bottom: 1px solid var(--ui-color-border); }
-  .dashboard-summary-grid .stat-tile:last-child { border-bottom: 0; }
   .jobs-redesign-row { grid-template-columns: minmax(0, 1fr); }
   .jobs-redesign-cell { border-right: 0; border-bottom: 1px solid var(--ui-color-border); }
   .jobs-redesign-cell:nth-child(-n+2) { border-bottom: 1px solid var(--ui-color-border); }
