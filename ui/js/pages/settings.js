@@ -6042,14 +6042,24 @@ function renderSettingsAbout() {
       <div class="about-tab-panel ${active === 'project' ? '' : 'hidden'}" data-about-panel="project">
         <div class="about-project-lead">
           <strong>Borg Backup UI</strong>
-          <span>${escHtml(settingsT('forms.projectLicenseIntro'))}</span>
+          <span>${escHtml(settingsT('forms.projectSummary'))}</span>
+          <span class="about-project-version">${settingsT('forms.version')}: <strong id="settings-about-version">${escHtml(info.version || '—')}</strong></span>
         </div>
-        <div class="about-grid">
-          <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">${escHtml(info.version || '—')}</span></div>
-          <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">${escHtml(info.author)}</span></div>
-          <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
-          <div class="about-row"><span class="about-label">${settingsT('forms.projectLicense')}</span><span class="about-value">MIT</span></div>
-          <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
+        <div class="about-info-sections">
+          <section class="about-info-section">
+            <h4>${settingsT('forms.projectInfo')}</h4>
+            <div class="about-grid">
+              <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
+              <div class="about-row"><span class="about-label">${settingsT('forms.projectLicense')}</span><span class="about-value">MIT</span></div>
+            </div>
+          </section>
+          <section class="about-info-section">
+            <h4>${settingsT('forms.projectMaintenance')}</h4>
+            <div class="about-grid">
+              <div class="about-row"><span class="about-label">${settingsT('forms.maintainer')}</span><span class="about-value">${escHtml(info.author)}</span></div>
+              <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
+            </div>
+          </section>
         </div>
         ${licenseError ? `<div class="status-message error">${escHtml(licenseError)}</div>` : ''}
         <pre class="about-license-text">${escHtml(projectLicenseText || loadingText)}</pre>

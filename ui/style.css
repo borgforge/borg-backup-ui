@@ -417,6 +417,27 @@ body.wizard-modal-open {
   color: var(--text-secondary);
   font-size: 13px;
 }
+.about-project-version {
+  margin-top: 6px;
+}
+.about-project-version strong {
+  color: var(--text-primary);
+}
+.about-info-sections {
+  display: grid;
+  gap: 16px;
+  max-width: 36rem;
+}
+.about-info-section {
+  display: grid;
+  gap: 10px;
+}
+.about-info-section h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
 .about-license-text {
   overflow-x: auto;
   margin: 0;

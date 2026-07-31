@@ -398,14 +398,24 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert 'data-about-subtab="project"' in script
     assert 'data-about-subtab="third-party"' in script
     assert "projectLicenseText" in script
+    assert "settingsT('forms.projectSummary')" in script
+    assert "settingsT('forms.version')" in script
+    assert "settingsT('forms.projectInfo')" in script
+    assert "settingsT('forms.projectMaintenance')" in script
+    assert "settingsT('forms.maintainer')" in script
     assert "settingsT('forms.projectLicense')" in script
-    assert "settingsT('forms.projectLicenseIntro')" in script
     assert "settingsT('forms.thirdPartyIntro')" in script
     assert "thirdPartyNotice" in script
+    assert "about-project-version" in script
+    assert "about-info-sections" in script
+    assert script.index("settingsT('forms.projectInfo')") < script.index("settingsT('forms.projectMaintenance')")
+    assert script.index("settings-about-repository") < script.index("settingsT('forms.maintainer')")
     assert "about-license-text" in script
     assert "about-license-notices" in script
     assert "about-markdown-viewer" in script
     assert "max-height" not in css.split(".about-license-text", 1)[1].split("}", 1)[0]
+    assert ".about-info-sections" in css
+    assert ".about-info-section h4" in css
     assert ".about-license-card" in css
     assert ".about-markdown-viewer table" in css
     assert "BorgBackup" in script
