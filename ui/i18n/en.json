@@ -117,6 +117,9 @@
     "healthOk": "all OK",
     "healthOkTitle": "System health OK",
     "healthUnavailable": "System health could not be loaded.",
+    "theme": "Theme",
+    "themeLight": "Light theme",
+    "themeDark": "Dark theme",
     "logout": "Log out"
   },
   "maintenanceMode": {

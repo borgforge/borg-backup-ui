@@ -130,6 +130,29 @@
           <option value="en" data-i18n="language.english">🇬🇧 English</option>
         </select>
       </label>
+      <div class="sidebar-theme" role="group" data-i18n-aria-label="sidebar.theme" aria-label="Theme">
+        <span data-i18n="sidebar.theme">Theme</span>
+        <div class="sidebar-theme-toggle">
+          <button type="button" class="sidebar-theme-btn" data-theme-choice="light" data-i18n-title="sidebar.themeLight" data-i18n-aria-label="sidebar.themeLight" title="Helles Theme" aria-label="Helles Theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="m4.93 4.93 1.41 1.41"></path>
+              <path d="m17.66 17.66 1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="m6.34 17.66-1.41 1.41"></path>
+              <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+          </button>
+          <button type="button" class="sidebar-theme-btn" data-theme-choice="dark" data-i18n-title="sidebar.themeDark" data-i18n-aria-label="sidebar.themeDark" title="Dunkles Theme" aria-label="Dunkles Theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
       <button class="btn btn-secondary btn-sm" id="auth-logout-btn" style="width:100%;justify-content:center;margin-bottom:8px">
         <span data-i18n="sidebar.logout">Abmelden</span>
       </button>

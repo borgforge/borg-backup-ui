@@ -117,6 +117,9 @@
     "healthOk": "alles OK",
     "healthOkTitle": "Systemzustand OK",
     "healthUnavailable": "Systemzustand konnte nicht geladen werden.",
+    "theme": "Theme",
+    "themeLight": "Helles Theme",
+    "themeDark": "Dunkles Theme",
     "logout": "Abmelden"
   },
   "maintenanceMode": {

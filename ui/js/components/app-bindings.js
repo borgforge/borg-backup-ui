@@ -212,6 +212,12 @@
       const sel = event.target.closest('#ui-theme-select');
       if (sel) theme()?.applyThemePreference?.(sel.value, true);
     });
+    document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const choice = String(button.dataset.themeChoice || '');
+        if (choice === 'light' || choice === 'dark') theme()?.applyThemePreference?.(choice, true);
+      });
+    });
     document.getElementById('log-viewer-close-btn')?.addEventListener('click', () => logViewer()?.close?.());
     document.getElementById('repository-manager-close-btn')?.addEventListener('click', closeRepositoryManager);
     document.getElementById('repository-manager-cancel-btn')?.addEventListener('click', closeRepositoryManager);

@@ -273,6 +273,51 @@ body.wizard-modal-open {
   color: var(--text-primary);
   font: inherit;
 }
+.sidebar-theme {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+.sidebar-theme-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+.sidebar-theme-btn {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 24px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.sidebar-theme-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+.sidebar-theme-btn.active {
+  color: var(--accent-hover);
+  background: var(--state-info-dim);
+}
+.sidebar-theme-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .sidebar-health-indicator {
   width: 100%;
   display: flex;
@@ -352,14 +397,6 @@ body.wizard-modal-open {
   color: var(--text-muted);
   opacity: 0.7;
 }
-.app-contact {
-  font-size: 10px;
-  color: var(--text-muted);
-  opacity: 0.85;
-  text-decoration: none;
-  word-break: break-word;
-}
-.app-contact:hover { color: var(--accent); text-decoration: underline; }
 .about-grid { display: flex; flex-direction: column; gap: 10px; }
 .about-row { display: flex; align-items: baseline; gap: 16px; }
 .about-label { font-size: 12px; color: var(--text-muted); min-width: 90px; flex-shrink: 0; }

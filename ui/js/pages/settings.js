@@ -232,9 +232,7 @@ function _applyVersionInfo(version, author, borgVersion, contactEmail, repositor
   const info = settingsState.appInfo;
   const el = document.getElementById('app-version-info');
   if (el) el.innerHTML = `
-    <span class="app-version">${info.version ? `v${escHtml(info.version)}` : 'v—'}</span>
-    <span class="app-author">${escHtml(info.author)}</span>
-    <a class="app-contact" href="mailto:${escAttr(info.contactEmail)}">${escHtml(info.contactEmail)}</a>`;
+    <span class="app-version">${info.version ? `v${escHtml(info.version)}` : 'v—'}</span>`;
   const aboutEl = document.getElementById('settings-about-version');
   if (aboutEl) aboutEl.textContent = info.version || '—';
   const contactEl = document.getElementById('settings-about-contact');
