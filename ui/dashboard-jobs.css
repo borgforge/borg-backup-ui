@@ -22,6 +22,13 @@
   background: var(--ui-color-surface);
 }
 
+.dashboard-summary-title {
+  margin-bottom: var(--ui-space-3);
+  color: var(--ui-color-text);
+  font-size: var(--ui-font-size-md);
+  font-weight: var(--ui-font-weight-bold);
+}
+
 .dashboard-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -38,6 +45,8 @@
   border: 1px solid transparent;
   border-radius: var(--ui-radius-sm);
   background: var(--ui-color-surface-subtle);
+  justify-content: center;
+  text-align: center;
 }
 
 .dashboard-summary-grid .stat-tile.success {

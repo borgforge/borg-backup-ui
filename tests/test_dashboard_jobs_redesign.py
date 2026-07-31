@@ -86,6 +86,8 @@ def test_dashboard_jobs_layout_is_tablet_and_mobile_responsive() -> None:
 def test_dashboard_summary_uses_subtle_status_surfaces() -> None:
     css = _read("ui/dashboard-jobs.css")
     script = _read("ui/js/pages/dashboard.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
 
     assert "statTile('total'" in script
     assert "statTile('success'" in script
@@ -109,6 +111,21 @@ def test_dashboard_summary_uses_subtle_status_surfaces() -> None:
     assert "--dashboard-summary-fg: var(--ui-state-warning-fg)" in css
     assert "--dashboard-summary-fg: var(--ui-state-error-fg)" in css
     assert "color: var(--dashboard-summary-fg)" in css
+    assert "justify-content: center" in css
+    assert "text-align: center" in css
+    assert ".dashboard-summary-title" in css
+    assert "font-size: var(--ui-font-size-md)" in css
+    assert "font-weight: var(--ui-font-weight-bold)" in css
+    assert '"restoreVerified": "Verifiziert"' in german
+    assert '"restoreOverdue": "Überfällig"' in german
+    assert '"restoreFailed": "Fehlgeschlagen"' in german
+    assert '"restoreOpen": "Offen"' in german
+    assert '"restoreNotScheduled": "Nicht geplant"' in german
+    assert '"restoreVerified": "Verified"' in english
+    assert '"restoreOverdue": "Overdue"' in english
+    assert '"restoreFailed": "Failed"' in english
+    assert '"restoreOpen": "Pending"' in english
+    assert '"restoreNotScheduled": "Not scheduled"' in english
 
 
 def test_dashboard_jobs_locale_contract_matches() -> None:
