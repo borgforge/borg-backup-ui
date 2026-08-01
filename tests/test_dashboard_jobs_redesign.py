@@ -84,6 +84,24 @@ def test_jobs_log_shows_resource_lock_exit_as_skipped() -> None:
     assert '"logSkipped": "Skipped (exit {code})"' in english
 
 
+def test_wizard_and_jobs_support_docker_exclusion_mode() -> None:
+    html = _read("ui/index.html")
+    wizard = _read("ui/js/pages/wizard.js")
+    jobs = _read("ui/js/pages/jobs.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    assert '<option value="except_selected" data-i18n="wizard.runtimeExceptSelectedDocker">' in html
+    assert "mode === 'except_selected'" in wizard
+    assert "runtimeExclusionCount" in wizard
+    assert "runtimeExceptSelectedDocker" in wizard
+    assert "dockerExceptSelectedWarning" in jobs
+    assert '"runtimeExceptSelectedDocker": "Alle außer ausgewählte Container"' in german
+    assert '"dockerExceptSelectedWarning": "Alle Docker-Container außer diesen werden' in german
+    assert '"runtimeExceptSelectedDocker": "All except selected containers"' in english
+    assert '"dockerExceptSelectedWarning": "All Docker containers except these will' in english
+
+
 def test_dashboard_jobs_layout_is_tablet_and_mobile_responsive() -> None:
     css = _read("ui/dashboard-jobs.css")
     foundation = _read("ui/design-system.css")

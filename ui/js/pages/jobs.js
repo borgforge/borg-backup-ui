@@ -61,7 +61,8 @@ function jobRuntimeControl(job, kind) {
   const raw = job?.[`${kind}_control`] && typeof job[`${kind}_control`] === 'object'
     ? job[`${kind}_control`]
     : {};
-  const mode = ['all', 'selected', 'none'].includes(raw.mode)
+  const modes = kind === 'docker' ? ['all', 'selected', 'except_selected', 'none'] : ['all', 'selected', 'none'];
+  const mode = modes.includes(raw.mode)
     ? raw.mode
     : (legacyEnabled ? 'all' : 'none');
   const selected = Array.isArray(raw.selected)
@@ -78,6 +79,12 @@ function jobRuntimeWarningText(job, kind) {
       ? control.selected.map(name => escHtml(name)).join(', ')
       : escHtml(jobsT('jobs.runtimeSelectionStored'));
     return jobsT(kind === 'docker' ? 'jobs.dockerSelectedWarning' : 'jobs.vmSelectedWarning', { names });
+  }
+  if (kind === 'docker' && control.mode === 'except_selected') {
+    const names = control.selected.length
+      ? control.selected.map(name => escHtml(name)).join(', ')
+      : escHtml(jobsT('jobs.runtimeSelectionStored'));
+    return jobsT('jobs.dockerExceptSelectedWarning', { names });
   }
   return jobsT(kind === 'docker' ? 'jobs.dockerWarning' : 'jobs.vmWarning');
 }

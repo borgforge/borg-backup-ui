@@ -714,8 +714,13 @@ def main() -> int:
                 return result_code
             if docker_mgr is not None:
                 set_phase("stopping_docker")
-                selected = docker_control["selected"] if docker_control["mode"] == "selected" else None
-                job.stop_docker(selected)
+                selected = docker_control["selected"]
+                if docker_control["mode"] == "selected":
+                    job.stop_docker(selected)
+                elif docker_control["mode"] == "except_selected":
+                    job.stop_docker(exclude_names=selected)
+                else:
+                    job.stop_docker()
                 if control.is_cancel_requested():
                     logging.info("Cancellation requested; Docker stop completed and recovery starts now")
                     job.set_cancelled()

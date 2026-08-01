@@ -285,6 +285,68 @@ class DockerManager:
         result.success = True
         return result
 
+    def stop_except_selected(self, names: List[str], log_file: str = "") -> DockerStopResult:
+        """Stops all running containers except the selected names."""
+        excluded = set(_normalize_names(names))
+        if not excluded:
+            logger.info("No Docker container exclusions selected; stopping all running containers")
+            return self.stop_all(log_file)
+
+        result = DockerStopResult()
+
+        if not docker_available():
+            logger.info("Docker is disabled or unavailable; skipping container stop")
+            return result
+
+        result.available = True
+        running = _get_running_name_id_map()
+        missing = [name for name in sorted(excluded) if name not in running]
+        if missing:
+            logger.info("Excluded Docker containers are not running or missing: %s", ", ".join(missing))
+
+        container_ids = [cid for name, cid in running.items() if name not in excluded]
+        if not container_ids:
+            logger.info("No Docker containers need to be stopped after applying exclusions")
+            result.success = True
+            return result
+
+        result.container_ids = container_ids
+        result.container_names = [_get_container_name(cid) for cid in container_ids]
+        result.count_before = len(container_ids)
+        logger.info(
+            "Stopping %d Docker container(s), excluding %d selected container(s) (timeout: %ds)",
+            result.count_before,
+            len(excluded),
+            self.config.stop_timeout,
+        )
+        self._log_running_containers(container_ids)
+
+        try:
+            subprocess.run(
+                ["docker", "stop", "-t", str(self.config.stop_timeout)] + container_ids,
+                capture_output=True,
+                timeout=self.config.stop_timeout * len(container_ids) + 30,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("docker stop timed out")
+        except OSError as exc:
+            logger.warning("docker stop failed: %s", exc)
+
+        time.sleep(self.config.stop_wait)
+
+        still_running = [cid for cid in container_ids if _is_running(cid)]
+        if still_running:
+            msg = (
+                "Not all non-excluded containers could be stopped "
+                f"({len(still_running)} still running). See log: {log_file}"
+            )
+            logger.error("ERROR: %s", msg)
+            raise RuntimeError(msg)
+
+        logger.info("Non-excluded Docker containers stopped successfully")
+        result.success = True
+        return result
+
     def start_all(self, stop_result: DockerStopResult) -> DockerStartResult:
         """
         Startet alle zuvor gestoppten Docker Container nach Priorität.

@@ -111,7 +111,7 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 
 1. **Grunddaten:** Name, technischer Typ, Icon und optionale Docker-/VM-Steuerung.
 2. **Quellen & Ziel:** Quellpfade, Ausschlüsse, Speichertyp, Speicherziel, Repository und Kompression.
-3. **Docker:** alle laufenden oder nur ausgewählte Container stoppen und danach neu starten.
+3. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten.
 4. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
 5. **Retention:** tägliche, wöchentliche, monatliche und jährliche Aufbewahrung.
 6. **Beschreibung:** verständliche Beschreibung mit optionalem Markdown.
@@ -139,6 +139,8 @@ Cron verwendet fünf Felder: Minute, Stunde, Tag, Monat und Wochentag. `0 3 * * 
 Die Anwendung berechnet den erwarteten Lauf aus dem Zeitplan. Nach Ablauf der konfigurierten Toleranz kann sie ueber Unraid, E-Mail oder Apprise-Profile informieren. Das Reminder-Intervall verhindert sofortige Wiederholungen.
 
 ## 8. Docker und VMs
+
+Bei Docker kann die Auswahl positiv oder negativ verwendet werden. **Nur ausgewählte Container** stoppt exakt die markierten Container. **Alle außer ausgewählte Container** stoppt alle laufenden Container, lässt aber die markierten Container aktiv.
 
 Die Anwendung zeichnet vor dem Backup auf, welche Container oder VMs tatsächlich liefen. Nur diese Ziele werden danach wieder gestartet. Bei einem Abbruch oder Serverneustart weist **Runtime-Recovery** im Systemstatus auf offene Neustarts hin.
 
