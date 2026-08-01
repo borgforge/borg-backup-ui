@@ -382,7 +382,7 @@ def _repository_borg_env(config: dict, info: dict) -> dict:
 
 
 def _repository_resource(info: dict) -> str:
-    repo = str(info.get("repo") or "").strip()
+    repo = str(info["repo"] if "repo" in info else "").strip()
     if not repo:
         raise ValueError("Repository path is missing")
     return f"repo:{repo}"
