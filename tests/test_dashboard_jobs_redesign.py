@@ -71,6 +71,19 @@ def test_jobs_keeps_location_actions_and_live_log_contract() -> None:
     assert 'data-jobs-action="adopt-legacy"' not in script
 
 
+def test_jobs_log_shows_resource_lock_exit_as_skipped() -> None:
+    script = _read("ui/js/pages/jobs.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    assert "function isResourceLockSkipExit(exitCode)" in script
+    assert "Job is being skipped: resource locked by" in script
+    assert "setLogStatus(state, code)" in script
+    assert "badge.className = 'badge skipped'" in script
+    assert '"logSkipped": "Übersprungen (Exit {code})"' in german
+    assert '"logSkipped": "Skipped (exit {code})"' in english
+
+
 def test_dashboard_jobs_layout_is_tablet_and_mobile_responsive() -> None:
     css = _read("ui/dashboard-jobs.css")
     foundation = _read("ui/design-system.css")

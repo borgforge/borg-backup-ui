@@ -603,6 +603,7 @@
     "logError": "[Fehler] {message}",
     "logDone": "Fertig (Exit {code})",
     "logFailed": "Fehler (Exit {code})",
+    "logSkipped": "Übersprungen (Exit {code})",
     "logCancelled": "Abgebrochen (Exit {code})"
   },
   "schedule": {

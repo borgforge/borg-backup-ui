@@ -653,7 +653,7 @@ def main() -> int:
             failure_code="resource_lock_unavailable",
         )
         logging.warning("Job is being skipped: %s", reason)
-        control.update_phase("failed", cancel_allowed=False, finished=True, exit_code=2)
+        control.update_phase("skipped", cancel_allowed=False, finished=True, exit_code=2)
         return 2
     emit_lifecycle(
         "JOB",
