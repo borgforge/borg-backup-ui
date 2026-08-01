@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.07.28.0850">
+<!ENTITY version   "2026.08.01.1908">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,26 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.01.1908###
+- Issue #322: Allow libvirt VM source paths
+- The Job Wizard now accepts `/etc/libvirt` as an explicit source path for Unraid VM backup jobs.
+- `/mnt/user/system/libvirt` remains supported through the existing `/mnt` source path handling.
+- Fixes duplicate Storagebox repository status text in the Job Wizard preview.
+- Uses a cleaner minimal status icon set for repository maintenance cards.
+- Aligns System Health & Migration status icons with the minimal status icon set.
+- Aligns setup wizard checklist status icons with the minimal status icon set.
+- Aligns remaining restore and startup maintenance status markers with the minimal status icon set.
+- Issue #329: Fixed the Apprise reminder diagnostics table hover background for taller overdue backup rows.
+- Issue #331: Added subtle colored dashboard summary surfaces for faster status scanning.
+- Issue #332: Cleaned up the sidebar footer and added a direct light/dark theme toggle without saving backup.conf.
+- Issue #333: Replaced the browser restore history delete prompt with an application modal.
+- Issue #334: Reorganized the About page around project information and grouped maintainer contact details separately.
+- Browse & Restore now respects repository resource locks: browse, download checks, and prechecks report a busy repository clearly, while restore extraction and direct downloads hold the repository lock so matching backup jobs do not start concurrently.
+- Restore-held repository locks no longer make the related backup job appear as if a backup run itself was active on the Jobs page.
+- Backup starts that are skipped because a restore holds the repository lock are shown as skipped in the live log instead of as failed jobs.
+- The Job Wizard now supports a Docker exclusion mode that stops all running containers except the selected containers, making large Appdata backup setups easier to configure.
+- Fixed the backup runner so the Docker exclusion mode is preserved at execution time instead of falling back to stopping all containers.
+
 ###2026.07.28.0850###
 - Added a safe migration-backup cleanup under System Health & Migration: inactive pre-beta migration snapshots can be removed completely, active migrations keep the latest five snapshots, and unknown or protected snapshots are skipped.
 - Prevented the canonical backup.conf migration from creating a new migration snapshot just because an installer-created legacy backup.conf.example copy exists while backup.conf already matches the current schema.
@@ -443,7 +463,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="b748059d7bc98388069d5781eeeb57dc"
+EXPECTED_MD5="8a8aaba7fe93784997d2ebf849d76fcc"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
