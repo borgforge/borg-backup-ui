@@ -440,6 +440,7 @@ def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, rest
         grace_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_GRACE_SECONDS", 60),
         heartbeat_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_HEARTBEAT_SECONDS", 20),
         run_id=str(restore_id or "").strip(),
+        operation="restore",
     )
     ok, reason = lock_set.acquire([resource])
     if ok:

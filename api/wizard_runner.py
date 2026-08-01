@@ -158,6 +158,7 @@ class ResourceLockSet:
         heartbeat_seconds: int = 20,
         log_file: str = "",
         run_id: str = "",
+        operation: str = "backup",
     ) -> None:
         self.lock_dir = lock_dir
         self.job_key = job_key
@@ -166,6 +167,7 @@ class ResourceLockSet:
         self.heartbeat_seconds = heartbeat_seconds
         self.log_file = str(log_file or "").strip()
         self.run_id = str(run_id or "").strip()
+        self.operation = str(operation or "backup").strip().lower() or "backup"
         self._owned: list[Path] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -182,6 +184,7 @@ class ResourceLockSet:
             "job_key": self.job_key,
             "pid": os.getpid(),
             "host": self._host,
+            "operation": self.operation,
             "started_at": now,
             "updated_at": now,
             "ttl_seconds": self.ttl_seconds,
@@ -255,7 +258,11 @@ class ResourceLockSet:
                     self._owned.append(path)
                     continue
 
+            operation = str(lock_data.get("operation") or "backup").strip().lower()
+            run_id = str(lock_data.get("run_id") or "").strip()
             holder = lock_data.get("job_key", "unknown")
+            if operation and operation != "backup" and run_id:
+                holder = f"{operation} {run_id}"
             self.release()
             return False, f"resource locked by {holder} ({resource})"
 

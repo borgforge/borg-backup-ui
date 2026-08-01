@@ -42,6 +42,27 @@ def test_active_resource_lock_restores_running_job_and_log(tmp_path: Path):
     assert is_resource_active(config, "repo:/mnt/disks/usb/appdata") is True
 
 
+def test_restore_resource_lock_does_not_mark_backup_job_running(tmp_path: Path):
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    (lock_dir / "repo.lock.json").write_text(json.dumps({
+        "resource": "repo:/mnt/user/vms",
+        "job_key": "vms_local",
+        "operation": "restore",
+        "run_id": "20260801-090213-8f96711d",
+        "pid": os.getpid(),
+        "started_at": "2026-08-01T09:02:13+00:00",
+        "updated_at": "2026-08-01T09:02:14+00:00",
+    }), encoding="utf-8")
+    config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
+        "BORG_RESOURCE_LOCK_DIR": str(lock_dir),
+    }
+
+    assert durable_running_states(config) == {}
+    assert is_resource_active(config, "repo:/mnt/user/vms") is True
+
+
 def test_dead_resource_lock_is_not_reported_as_running(tmp_path: Path):
     lock_dir = tmp_path / "locks"
     lock_dir.mkdir()

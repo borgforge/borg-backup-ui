@@ -1,5 +1,6 @@
 from pathlib import Path
 import io
+import json
 import sys
 
 import pytest
@@ -82,7 +83,9 @@ def test_restore_extract_holds_repository_resource_lock(tmp_path: Path, monkeypa
         def __init__(self, _cmd, stdout=None, stderr=None, text=False, env=None, cwd=None, bufsize=0):
             locks = list((tmp_path / "locks").glob("*.lock.json"))
             assert len(locks) == 1
-            assert "restore-run-1" in locks[0].read_text(encoding="utf-8")
+            payload = json.loads(locks[0].read_text(encoding="utf-8"))
+            assert payload["run_id"] == "restore-run-1"
+            assert payload["operation"] == "restore"
             self.stdout = io.StringIO("foo\n")
             self.returncode = 0
             Path(cwd, "foo").write_text("restored", encoding="utf-8")

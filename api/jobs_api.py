@@ -172,6 +172,7 @@ def active_resource_locks(config: dict) -> List[dict]:
             "job_key": job_key,
             "pid": pid,
             "resource": str(raw.get("resource") or "").strip(),
+            "operation": str(raw.get("operation") or "backup").strip().lower() or "backup",
             "started_at": str(raw.get("started_at") or "").strip(),
             "updated_at": str(raw.get("updated_at") or "").strip(),
             "log_file": str(raw.get("log_file") or "").strip(),
@@ -226,6 +227,8 @@ def durable_running_states(config: dict) -> Dict[str, dict]:
     """Aggregate live runner locks into one durable state per job."""
     grouped: Dict[str, dict] = {}
     for lock in active_resource_locks(config):
+        if str(lock.get("operation") or "backup").strip().lower() != "backup":
+            continue
         job_key = str(lock.get("job_key") or "")
         current = grouped.setdefault(job_key, {
             "running": True,
