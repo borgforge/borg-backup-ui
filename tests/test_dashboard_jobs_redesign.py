@@ -102,6 +102,15 @@ def test_wizard_and_jobs_support_docker_exclusion_mode() -> None:
     assert '"dockerExceptSelectedWarning": "All Docker containers except these will' in english
 
 
+def test_wizard_prunes_stale_docker_runtime_selections() -> None:
+    script = _read("ui/js/pages/wizard.js")
+
+    assert "function _wizardPruneMissingDockerSelections()" in script
+    assert "_wizardPruneMissingDockerSelections();" in script
+    assert "if (!rows.length) return;" in script
+    assert ".filter(name => available.has(name))" in script
+
+
 def test_dashboard_jobs_layout_is_tablet_and_mobile_responsive() -> None:
     css = _read("ui/dashboard-jobs.css")
     foundation = _read("ui/design-system.css")

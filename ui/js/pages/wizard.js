@@ -104,6 +104,7 @@ function _wizardSetRuntimeControl(kind, control = {}) {
 function wizardRenderRuntimeControls() {
   const dockerEnabled = !!document.getElementById('wiz-use-docker')?.checked;
   const vmEnabled = !!document.getElementById('wiz-use-vm')?.checked;
+  _wizardPruneMissingDockerSelections();
   document.getElementById('wstep-dot-3')?.classList.toggle('wizard-step-skipped', !dockerEnabled);
   document.getElementById('wstep-dot-4')?.classList.toggle('wizard-step-skipped', !vmEnabled);
   _wizardRenderRuntimeSelection('docker');
@@ -111,6 +112,14 @@ function wizardRenderRuntimeControls() {
   _wizardUpdateRuntimeCount('docker');
   _wizardUpdateRuntimeCount('vm');
   wizardUpdateRuntimeRiskWarnings();
+}
+
+function _wizardPruneMissingDockerSelections() {
+  const rows = Array.isArray(wizardState.dockerContainers) ? wizardState.dockerContainers : [];
+  if (!rows.length) return;
+  const available = new Set(rows.map(row => String(row?.name || '').trim()).filter(Boolean));
+  wizardState.selectedDockerContainers = _wizardUniqueList(wizardState.selectedDockerContainers)
+    .filter(name => available.has(name));
 }
 
 function _wizardRenderRuntimeSelection(kind) {
