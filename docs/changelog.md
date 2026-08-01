@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #336
+- Refreshed the release-candidate provenance after the Docker exclusion mode test package was rebuilt from the current stable baseline.
+
 ### Issue #292
 - Normalized nested Settings cards so the Restore settings tab uses the same redesigned card surface as the other settings areas in light and dark themes.
 
