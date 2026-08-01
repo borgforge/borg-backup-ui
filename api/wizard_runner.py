@@ -527,11 +527,14 @@ def _build_resources(env: dict, meta: dict) -> list[str]:
 def _runtime_control(meta: dict, kind: str) -> dict:
     raw = meta.get(f"{kind}_control") if isinstance(meta.get(f"{kind}_control"), dict) else {}
     features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
+    allowed_modes = {"all", "selected", "none"}
+    if kind == "docker":
+        allowed_modes.add("except_selected")
     mode = str(raw.get("mode") or "").strip().lower()
-    if mode not in {"all", "selected", "none"}:
+    if mode not in allowed_modes:
         mode = "all" if bool(features.get(kind, False)) else "none"
     selected = []
-    if mode == "selected":
+    if mode in {"selected", "except_selected"}:
         raw_selected = raw.get("selected") if isinstance(raw.get("selected"), list) else []
         seen = set()
         for item in raw_selected:
