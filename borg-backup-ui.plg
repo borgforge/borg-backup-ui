@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.01.1908">
+<!ENTITY version   "2026.08.01.2317">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,9 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.01.2317###
+- The Job Wizard now removes deleted Docker containers from saved runtime selections when the current Docker inventory is available, so stale names no longer stay invisibly selected.
+
 ###2026.08.01.1908###
 - Issue #322: Allow libvirt VM source paths
 - The Job Wizard now accepts `/etc/libvirt` as an explicit source path for Unraid VM backup jobs.
@@ -463,7 +466,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="8a8aaba7fe93784997d2ebf849d76fcc"
+EXPECTED_MD5="c4d5249a0abaecc5fb299ad6420c62bd"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
