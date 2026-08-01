@@ -31,6 +31,21 @@ def test_wizard_runner_prefers_plugin_runtime_before_data_root(tmp_path: Path):
         sys.path[:] = original
 
 
+def test_wizard_runner_preserves_docker_exclusion_runtime_control():
+    control = wizard_runner._runtime_control({
+        "features": {"docker": True},
+        "docker_control": {
+            "mode": "except_selected",
+            "selected": ["beszel", "beszel-agent", "beszel"],
+        },
+    }, "docker")
+
+    assert control == {
+        "mode": "except_selected",
+        "selected": ["beszel", "beszel-agent"],
+    }
+
+
 def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
     tmp_path: Path,
     monkeypatch,

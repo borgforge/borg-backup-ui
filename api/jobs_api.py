@@ -23,6 +23,7 @@ from typing import Dict, Generator, List, Optional
 DEFAULT_DATA_ROOT = Path("/boot/config/borg-backup")
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _RUNTIME_MODES = {"all", "selected", "none"}
+_DOCKER_RUNTIME_MODES = _RUNTIME_MODES | {"except_selected"}
 _JOB_DISCOVERY_CACHE_TTL_SECONDS = 5.0
 _job_discovery_cache: dict[str, dict] = {}
 _job_discovery_cache_lock = threading.Lock()
@@ -98,17 +99,21 @@ def _split_runtime_selected(raw) -> List[str]:
     return selected
 
 
+def _runtime_modes(kind: str) -> set[str]:
+    return _DOCKER_RUNTIME_MODES if kind == "docker" else _RUNTIME_MODES
+
+
 def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
     raw = meta.get(f"{kind}_control") if isinstance(meta.get(f"{kind}_control"), dict) else {}
     features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
     legacy_enabled = bool(features.get(kind, False))
     mode = str(raw.get("mode") or "").strip().lower()
-    if mode not in _RUNTIME_MODES:
+    if mode not in _runtime_modes(kind):
         mode = "all" if legacy_enabled else "none"
     ack_key = "ack_appdata_risk" if kind == "docker" else "ack_domains_risk"
     return {
         "mode": mode,
-        "selected": _split_runtime_selected(raw.get("selected", [])) if mode == "selected" else [],
+        "selected": _split_runtime_selected(raw.get("selected", [])) if mode in {"selected", "except_selected"} else [],
         ack_key: bool(raw.get(ack_key, False)),
     }
 
@@ -172,6 +177,7 @@ def active_resource_locks(config: dict) -> List[dict]:
             "job_key": job_key,
             "pid": pid,
             "resource": str(raw.get("resource") or "").strip(),
+            "operation": str(raw.get("operation") or "backup").strip().lower() or "backup",
             "started_at": str(raw.get("started_at") or "").strip(),
             "updated_at": str(raw.get("updated_at") or "").strip(),
             "log_file": str(raw.get("log_file") or "").strip(),
@@ -226,6 +232,8 @@ def durable_running_states(config: dict) -> Dict[str, dict]:
     """Aggregate live runner locks into one durable state per job."""
     grouped: Dict[str, dict] = {}
     for lock in active_resource_locks(config):
+        if str(lock.get("operation") or "backup").strip().lower() != "backup":
+            continue
         job_key = str(lock.get("job_key") or "")
         current = grouped.setdefault(job_key, {
             "running": True,

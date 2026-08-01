@@ -937,16 +937,32 @@
   width: 2rem;
   height: 2rem;
   place-items: center;
-  border-radius: 50%;
-  background: var(--ui-color-surface-hover);
   color: var(--ui-color-text-muted);
-  font-weight: 800;
 }
 
-.status-success .storage-maintenance-icon { background: var(--ui-state-success-bg); color: var(--ui-state-success-fg); }
-.status-warning .storage-maintenance-icon { background: var(--ui-state-warning-bg); color: var(--ui-state-warning-fg); }
-.status-error .storage-maintenance-icon { background: var(--ui-state-error-bg); color: var(--ui-state-error-fg); }
-.status-running .storage-maintenance-icon { background: var(--ui-state-info-bg); color: var(--ui-state-info-fg); }
+.storage-maintenance-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.status-success .storage-maintenance-icon { color: var(--ui-state-success-fg); }
+.status-warning .storage-maintenance-icon { color: var(--ui-state-warning-fg); }
+.status-error .storage-maintenance-icon { color: var(--ui-state-error-fg); }
+.status-running .storage-maintenance-icon { color: var(--ui-state-info-fg); }
+
+.storage-maintenance-spinner {
+  transform-origin: center;
+  animation: storage-maintenance-spin 1s linear infinite;
+}
+
+@keyframes storage-maintenance-spin {
+  to { transform: rotate(360deg); }
+}
 
 .storage-maintenance-copy {
   min-width: 0;

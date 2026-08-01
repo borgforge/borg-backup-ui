@@ -246,6 +246,7 @@ def test_maintenance_keeps_diagnostics_and_support_bundle_available():
 
 def test_ui_contains_global_localized_maintenance_notice():
     html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+    css = (ROOT / "ui" / "style.css").read_text(encoding="utf-8")
     js = (ROOT / "ui" / "js" / "core" / "app-core.js").read_text(encoding="utf-8")
     bindings = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(
         encoding="utf-8"
@@ -255,6 +256,11 @@ def test_ui_contains_global_localized_maintenance_notice():
     en = (ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8")
 
     assert 'id="startup-maintenance-banner"' in html
+    assert '<div class="startup-maintenance-icon" aria-hidden="true">!' not in html
+    assert '<circle cx="12" cy="12" r="8.5"></circle>' in html
+    assert '<path d="m9 9 6 6"></path>' in html
+    assert ".startup-maintenance-icon svg" in css
+    assert "background: var(--danger, #dc3545);" not in css
     assert "renderStartupMaintenanceBanner" in js
     assert "maintenance-disabled" in js
     assert "applyStartupMaintenanceNavigation" in js

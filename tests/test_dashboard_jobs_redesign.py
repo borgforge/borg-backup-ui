@@ -71,6 +71,37 @@ def test_jobs_keeps_location_actions_and_live_log_contract() -> None:
     assert 'data-jobs-action="adopt-legacy"' not in script
 
 
+def test_jobs_log_shows_resource_lock_exit_as_skipped() -> None:
+    script = _read("ui/js/pages/jobs.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    assert "function isResourceLockSkipExit(exitCode)" in script
+    assert "Job is being skipped: resource locked by" in script
+    assert "setLogStatus(state, code)" in script
+    assert "badge.className = 'badge skipped'" in script
+    assert '"logSkipped": "Übersprungen (Exit {code})"' in german
+    assert '"logSkipped": "Skipped (exit {code})"' in english
+
+
+def test_wizard_and_jobs_support_docker_exclusion_mode() -> None:
+    html = _read("ui/index.html")
+    wizard = _read("ui/js/pages/wizard.js")
+    jobs = _read("ui/js/pages/jobs.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    assert '<option value="except_selected" data-i18n="wizard.runtimeExceptSelectedDocker">' in html
+    assert "mode === 'except_selected'" in wizard
+    assert "runtimeExclusionCount" in wizard
+    assert "runtimeExceptSelectedDocker" in wizard
+    assert "dockerExceptSelectedWarning" in jobs
+    assert '"runtimeExceptSelectedDocker": "Alle außer ausgewählte Container"' in german
+    assert '"dockerExceptSelectedWarning": "Alle Docker-Container außer diesen werden' in german
+    assert '"runtimeExceptSelectedDocker": "All except selected containers"' in english
+    assert '"dockerExceptSelectedWarning": "All Docker containers except these will' in english
+
+
 def test_dashboard_jobs_layout_is_tablet_and_mobile_responsive() -> None:
     css = _read("ui/dashboard-jobs.css")
     foundation = _read("ui/design-system.css")
@@ -81,6 +112,51 @@ def test_dashboard_jobs_layout_is_tablet_and_mobile_responsive() -> None:
     assert ".jobs-redesign-row" in css
     assert "var(--ui-state-running-bg)" in css
     assert "var(--ui-state-neutral-bg)" in css
+
+
+def test_dashboard_summary_uses_subtle_status_surfaces() -> None:
+    css = _read("ui/dashboard-jobs.css")
+    script = _read("ui/js/pages/dashboard.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    assert "statTile('total'" in script
+    assert "statTile('success'" in script
+    assert "statTile('skipped'" in script
+    assert "statTile('warning'" in script
+    assert "statTile('error'" in script
+    assert "statTile('unknown'" in script
+    assert ".dashboard-summary-grid .stat-tile.total" in css
+    assert ".dashboard-summary-grid .stat-tile.success" in css
+    assert ".dashboard-summary-grid .stat-tile.skipped" in css
+    assert ".dashboard-summary-grid .stat-tile.warning" in css
+    assert ".dashboard-summary-grid .stat-tile.error" in css
+    assert "background: var(--ui-state-success-bg)" in css
+    assert "background: var(--ui-state-neutral-bg)" in css
+    assert "background: var(--ui-state-info-bg)" in css
+    assert "background: var(--ui-state-warning-bg)" in css
+    assert "background: var(--ui-state-error-bg)" in css
+    assert "border-radius: var(--ui-radius-sm)" in css
+    assert "min-height: 5.125rem" in css
+    assert "--dashboard-summary-fg: var(--ui-state-success-fg)" in css
+    assert "--dashboard-summary-fg: var(--ui-state-warning-fg)" in css
+    assert "--dashboard-summary-fg: var(--ui-state-error-fg)" in css
+    assert "color: var(--dashboard-summary-fg)" in css
+    assert "justify-content: center" in css
+    assert "text-align: center" in css
+    assert ".dashboard-summary-title" in css
+    assert "font-size: var(--ui-font-size-md)" in css
+    assert "font-weight: var(--ui-font-weight-bold)" in css
+    assert '"restoreVerified": "Verifiziert"' in german
+    assert '"restoreOverdue": "Überfällig"' in german
+    assert '"restoreFailed": "Fehlgeschlagen"' in german
+    assert '"restoreOpen": "Offen"' in german
+    assert '"restoreNotScheduled": "Nicht geplant"' in german
+    assert '"restoreVerified": "Verified"' in english
+    assert '"restoreOverdue": "Overdue"' in english
+    assert '"restoreFailed": "Failed"' in english
+    assert '"restoreOpen": "Pending"' in english
+    assert '"restoreNotScheduled": "Not scheduled"' in english
 
 
 def test_dashboard_jobs_locale_contract_matches() -> None:

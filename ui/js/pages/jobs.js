@@ -61,7 +61,8 @@ function jobRuntimeControl(job, kind) {
   const raw = job?.[`${kind}_control`] && typeof job[`${kind}_control`] === 'object'
     ? job[`${kind}_control`]
     : {};
-  const mode = ['all', 'selected', 'none'].includes(raw.mode)
+  const modes = kind === 'docker' ? ['all', 'selected', 'except_selected', 'none'] : ['all', 'selected', 'none'];
+  const mode = modes.includes(raw.mode)
     ? raw.mode
     : (legacyEnabled ? 'all' : 'none');
   const selected = Array.isArray(raw.selected)
@@ -78,6 +79,12 @@ function jobRuntimeWarningText(job, kind) {
       ? control.selected.map(name => escHtml(name)).join(', ')
       : escHtml(jobsT('jobs.runtimeSelectionStored'));
     return jobsT(kind === 'docker' ? 'jobs.dockerSelectedWarning' : 'jobs.vmSelectedWarning', { names });
+  }
+  if (kind === 'docker' && control.mode === 'except_selected') {
+    const names = control.selected.length
+      ? control.selected.map(name => escHtml(name)).join(', ')
+      : escHtml(jobsT('jobs.runtimeSelectionStored'));
+    return jobsT('jobs.dockerExceptSelectedWarning', { names });
   }
   return jobsT(kind === 'docker' ? 'jobs.dockerWarning' : 'jobs.vmWarning');
 }
@@ -905,7 +912,10 @@ function openLogPanel(jobKey) {
   es.addEventListener('done', (e) => {
     const code = e.data;
     const numericCode = parseInt(code, 10);
-    setLogStatus(numericCode === 0 ? 'success' : (numericCode === 130 ? 'cancelled' : 'error'), code);
+    const state = numericCode === 0
+      ? 'success'
+      : (numericCode === 130 ? 'cancelled' : (isResourceLockSkipExit(code) ? 'skipped' : 'error'));
+    setLogStatus(state, code);
     es.close();
     jobsState.activeEventSource = null;
     setTimeout(refreshJobs, 1500);
@@ -923,6 +933,13 @@ function openLogPanel(jobKey) {
       // Verbindung wurde geschlossen – normal nach 'done'
     }
   };
+}
+
+function isResourceLockSkipExit(exitCode) {
+  if (parseInt(exitCode, 10) !== 2) return false;
+  const el = document.getElementById('log-output');
+  const text = el ? String(el.textContent || '') : '';
+  return /Job is being skipped: resource locked by/i.test(text);
 }
 
 function appendLogLine(line) {
@@ -974,6 +991,9 @@ function setLogStatus(state, exitCode) {
   } else if (state === 'cancelled') {
     badge.className = 'badge warning';
     badge.textContent = jobsT('jobs.logCancelled', { code: exit });
+  } else if (state === 'skipped') {
+    badge.className = 'badge skipped';
+    badge.textContent = jobsT('jobs.logSkipped', { code: exit });
   } else {
     badge.className = 'badge error';
     badge.textContent = '';

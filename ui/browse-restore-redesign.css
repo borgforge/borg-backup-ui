@@ -113,8 +113,9 @@
 .restore-review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ui-space-3); }
 .restore-precheck-verdict { display: flex; align-items: center; gap: var(--ui-space-3); margin-bottom: var(--ui-space-3); padding: var(--ui-space-3); border: 1px solid var(--ui-state-success-border); border-radius: var(--ui-radius-md); background: var(--ui-state-success-bg); }
 .restore-precheck-verdict.error { border-color: var(--ui-state-error-border); background: var(--ui-state-error-bg); }
-.restore-precheck-verdict-mark { display: grid; place-items: center; width: 2.125rem; height: 2.125rem; border-radius: 50%; background: var(--ui-state-success-fg); color: var(--ui-color-surface); font-weight: var(--ui-font-weight-bold); }
-.restore-precheck-verdict.error .restore-precheck-verdict-mark { background: var(--ui-state-error-fg); }
+.restore-precheck-verdict-mark { display: grid; place-items: center; width: 2.125rem; height: 2.125rem; color: var(--ui-state-success-fg); }
+.restore-precheck-verdict.error .restore-precheck-verdict-mark { color: var(--ui-state-error-fg); }
+.restore-precheck-verdict-mark svg { width: 1.55rem; height: 1.55rem; fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
 .restore-precheck-verdict strong, .restore-precheck-verdict small { display: block; }
 .restore-precheck-verdict small { margin-top: 3px; color: var(--ui-color-text-subtle); }
 .restore-legacy-summary { display: none; }

@@ -20,6 +20,11 @@ def _type_upper(type_id: str) -> str:
 
 
 _RUNTIME_MODES = {"all", "selected", "none"}
+_DOCKER_RUNTIME_MODES = _RUNTIME_MODES | {"except_selected"}
+
+
+def _runtime_modes(kind: str) -> set[str]:
+    return _DOCKER_RUNTIME_MODES if kind == "docker" else _RUNTIME_MODES
 
 
 def list_source_directories(prefix: str = "", limit: int = 40, base_path: Path | None = None) -> list[dict]:
@@ -131,7 +136,7 @@ def _runtime_control_from_params(params: dict, kind: str, existing: Optional[dic
         source = existing.get(f"{kind}_control") or {}
 
     mode = str(source.get("mode") or "").strip().lower()
-    if mode not in _RUNTIME_MODES:
+    if mode not in _runtime_modes(kind):
         mode = "all" if bool(params.get(legacy_key, False)) else "none"
 
     selected = _split_selected(
@@ -141,7 +146,7 @@ def _runtime_control_from_params(params: dict, kind: str, existing: Optional[dic
     ack = bool(params.get(ack_key, source.get(ack_key, False)))
     return {
         "mode": mode,
-        "selected": selected if mode == "selected" else [],
+        "selected": selected if mode in {"selected", "except_selected"} else [],
         ack_key: ack,
     }
 
@@ -151,12 +156,12 @@ def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
     features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
     legacy_enabled = bool(features.get(kind, False))
     mode = str(raw.get("mode") or "").strip().lower()
-    if mode not in _RUNTIME_MODES:
+    if mode not in _runtime_modes(kind):
         mode = "all" if legacy_enabled else "none"
     ack_key = "ack_appdata_risk" if kind == "docker" else "ack_domains_risk"
     return {
         "mode": mode,
-        "selected": _split_selected(raw.get("selected", [])) if mode == "selected" else [],
+        "selected": _split_selected(raw.get("selected", [])) if mode in {"selected", "except_selected"} else [],
         ack_key: bool(raw.get(ack_key, False)),
     }
 
@@ -225,7 +230,7 @@ def validate_params(
 
     docker_control = _runtime_control_from_params(params, "docker")
     vm_control = _runtime_control_from_params(params, "vm")
-    if docker_control["mode"] == "selected" and not docker_control["selected"]:
+    if docker_control["mode"] in {"selected", "except_selected"} and not docker_control["selected"]:
         raise ValueError("At least one Docker container must be selected")
     if vm_control["mode"] == "selected" and not vm_control["selected"]:
         raise ValueError("At least one VM must be selected")
@@ -429,6 +434,11 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     if use_docker:
         if docker_control["mode"] == "selected":
             add_step("dockerStop", f"Stop selected Docker containers ({len(docker_control['selected'])})")
+        elif docker_control["mode"] == "except_selected":
+            add_step(
+                "dockerStop",
+                f"Stop all Docker containers except selected containers ({len(docker_control['selected'])} kept running)",
+            )
         else:
             add_step("dockerStop", "Stop all Docker containers")
     if use_vm:

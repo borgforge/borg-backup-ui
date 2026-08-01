@@ -148,11 +148,13 @@ def test_runner_defers_cancellation_until_runtime_stop_finishes():
     source = (API_ROOT / "wizard_runner.py").read_text(encoding="utf-8")
 
     docker_stop = source.index("job.stop_docker(selected)")
+    docker_except_stop = source.index("job.stop_docker(exclude_names=selected)")
     docker_cancel = source.index("Cancellation requested; Docker stop completed")
     vm_stop = source.index("job.shutdown_vms(selected)")
     vm_cancel = source.index("Cancellation requested; VM shutdown completed")
 
     assert docker_stop < docker_cancel < vm_stop < vm_cancel
+    assert docker_except_stop < docker_cancel
     assert 'phase in {"recovering_docker", "recovering_vms", "unmounting"}' in source
     assert 'terminal_phase = "cancelled" if result_code == 130' in source
 

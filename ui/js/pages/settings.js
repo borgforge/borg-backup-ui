@@ -232,9 +232,7 @@ function _applyVersionInfo(version, author, borgVersion, contactEmail, repositor
   const info = settingsState.appInfo;
   const el = document.getElementById('app-version-info');
   if (el) el.innerHTML = `
-    <span class="app-version">${info.version ? `v${escHtml(info.version)}` : 'v—'}</span>
-    <span class="app-author">${escHtml(info.author)}</span>
-    <a class="app-contact" href="mailto:${escAttr(info.contactEmail)}">${escHtml(info.contactEmail)}</a>`;
+    <span class="app-version">${info.version ? `v${escHtml(info.version)}` : 'v—'}</span>`;
   const aboutEl = document.getElementById('settings-about-version');
   if (aboutEl) aboutEl.textContent = info.version || '—';
   const contactEl = document.getElementById('settings-about-contact');
@@ -1303,6 +1301,9 @@ function renderSettingsSystemHealth(data) {
   const failedChecks = checks.filter(([, ok]) => !ok).length;
   const registryAttention = Number(registrySummary?.pending || 0) + Number(registrySummary?.failed || 0) + Number(registrySummary?.blocked || 0);
   const overallOk = !maintenanceActive && failedChecks === 0 && migrationSummary.status !== 'failed' && registryAttention === 0 && jobFailed === 0 && runtimeAttention === 0;
+  const overviewStatus = overallOk
+    ? 'success'
+    : (maintenanceActive || failedChecks > 0 || migrationSummary.status === 'failed' || jobFailed > 0 ? 'error' : 'warning');
   const jobTotal = Number(jobSummary.total || jobItems.length || 0);
   const jobsDetail = jobFailed
     ? settingsT('health.jobChecksFailed', { count: jobFailed })
@@ -1313,7 +1314,7 @@ function renderSettingsSystemHealth(data) {
   const startupFailureHtml = maintenanceActive ? `
       <section class="startup-migration-critical" role="alert">
         <div class="startup-migration-critical-header">
-          <span class="startup-migration-critical-mark">!</span>
+          <span class="startup-migration-critical-mark">${settingsStatusIcon('error')}</span>
           <div>
             <strong>${settingsT('health.startupFailureTitle')}</strong>
             <span>${settingsT('health.startupFailureSubtitle')}</span>
@@ -1347,8 +1348,8 @@ function renderSettingsSystemHealth(data) {
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
     `<div class="settings-body">
       ${startupFailureHtml}
-      <div class="system-health-overview ${overallOk ? 'ok' : 'bad'}">
-        <span class="system-health-overview-mark">${overallOk ? '✓' : '!'}</span>
+      <div class="system-health-overview ${overallOk ? 'ok' : 'bad'} status-${overviewStatus}">
+        <span class="system-health-overview-mark">${settingsStatusIcon(overviewStatus)}</span>
         <div>
           <div class="system-health-overview-title">${overallOk ? settingsT('health.okTitle') : (maintenanceActive ? settingsT('health.startupBlocked') : settingsT('health.attentionTitle'))}</div>
           <div class="system-health-overview-subtitle">${overallOk ? settingsT('health.okSubtitle') : (maintenanceActive ? settingsT('health.startupFailureSubtitle') : _systemHealthAttentionText(failedChecks, registryAttention, jobFailed, runtimeAttention))}</div>
@@ -1402,7 +1403,7 @@ function renderSettingsSystemHealth(data) {
           ${technicalRows.map(([name, detail]) => `
             <div class="system-health-row neutral">
               <span class="system-health-name">${escHtml(name)}</span>
-              <span class="system-health-state">•</span>
+              <span class="system-health-state">${settingsStatusIcon('neutral')}</span>
               <span class="system-health-detail">${escHtml(String(detail || '—'))}</span>
             </div>
           `).join('')}
@@ -1537,8 +1538,10 @@ function _renderReminderTableRow(item) {
         ${scheduleRows.map(([label, value]) => _renderReminderDetailLine(label, value)).join('')}
       </td>
       <td class="reminder-date-cell"><span class="reminder-date-main">${escHtml(latestFormatted)}</span></td>
-      <td class="reminder-date-cell reminder-detail-stack">
-        ${reminderRows.map(([label, value]) => _renderReminderStackLine(label, value)).join('')}
+      <td class="reminder-date-cell">
+        <div class="reminder-detail-stack">
+          ${reminderRows.map(([label, value]) => _renderReminderStackLine(label, value)).join('')}
+        </div>
       </td>
     </tr>
   `;
@@ -1593,13 +1596,22 @@ function _formatReminderTimestamp(value) {
   return raw;
 }
 
+function settingsStatusIcon(status) {
+  const icons = {
+    neutral: '<circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/>',
+    success: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>',
+    warning: '<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/><path d="M12 8.8v4.8"/><path d="M12 17h.01"/>',
+    error: '<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[status] || icons.neutral}</svg>`;
+}
+
 function _renderSystemHealthRows(rows) {
-  const icon = (ok) => ok ? '✓' : '✗';
   const cls = (ok) => ok ? 'ok' : 'bad';
   return rows.map(([name, ok, detail]) => `
     <div class="system-health-row ${cls(!!ok)}">
       <span class="system-health-name">${escHtml(name)}</span>
-      <span class="system-health-state">${icon(!!ok)}</span>
+      <span class="system-health-state">${settingsStatusIcon(ok ? 'success' : 'error')}</span>
       <span class="system-health-detail">${escHtml(String(detail || '—'))}</span>
     </div>
   `).join('');
@@ -6030,14 +6042,24 @@ function renderSettingsAbout() {
       <div class="about-tab-panel ${active === 'project' ? '' : 'hidden'}" data-about-panel="project">
         <div class="about-project-lead">
           <strong>Borg Backup UI</strong>
-          <span>${escHtml(settingsT('forms.projectLicenseIntro'))}</span>
+          <span>${escHtml(settingsT('forms.projectSummary'))}</span>
+          <span class="about-project-version">${settingsT('forms.version')}: <strong id="settings-about-version">${escHtml(info.version || '—')}</strong></span>
         </div>
-        <div class="about-grid">
-          <div class="about-row"><span class="about-label">Version</span><span class="about-value" id="settings-about-version">${escHtml(info.version || '—')}</span></div>
-          <div class="about-row"><span class="about-label">${settingsT('forms.author')}</span><span class="about-value">${escHtml(info.author)}</span></div>
-          <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
-          <div class="about-row"><span class="about-label">${settingsT('forms.projectLicense')}</span><span class="about-value">MIT</span></div>
-          <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
+        <div class="about-info-sections">
+          <section class="about-info-section">
+            <h4>${settingsT('forms.projectInfo')}</h4>
+            <div class="about-grid">
+              <div class="about-row"><span class="about-label">${settingsT('forms.repository')}</span><span class="about-value" id="settings-about-repository"><a href="${escAttr(info.repositoryUrl)}" target="_blank" rel="noopener noreferrer" class="about-link">${APP_REPOSITORY_LABEL}</a></span></div>
+              <div class="about-row"><span class="about-label">${settingsT('forms.projectLicense')}</span><span class="about-value">MIT</span></div>
+            </div>
+          </section>
+          <section class="about-info-section">
+            <h4>${settingsT('forms.projectMaintenance')}</h4>
+            <div class="about-grid">
+              <div class="about-row"><span class="about-label">${settingsT('forms.maintainer')}</span><span class="about-value">${escHtml(info.author)}</span></div>
+              <div class="about-row"><span class="about-label">${settingsT('forms.contact')}</span><span class="about-value" id="settings-about-contact"><a href="mailto:${escAttr(info.contactEmail)}" class="about-link">${escHtml(info.contactEmail)}</a></span></div>
+            </div>
+          </section>
         </div>
         ${licenseError ? `<div class="status-message error">${escHtml(licenseError)}</div>` : ''}
         <pre class="about-license-text">${escHtml(projectLicenseText || loadingText)}</pre>

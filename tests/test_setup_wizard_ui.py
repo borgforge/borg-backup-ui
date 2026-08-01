@@ -58,3 +58,19 @@ def test_setup_wizard_returns_after_external_save_flows() -> None:
     assert "setupWizard?.resumeAfterExternalSave?.('repository')" in storage
     assert "setupWizard?.resumeAfterExternalSave?.('job')" in wizard
     assert "async function repositoryManagerEnsureStorages(force = false)" in storage
+
+
+def test_setup_wizard_uses_minimal_status_icons() -> None:
+    script = _read("ui/js/pages/setup-wizard.js")
+    css = _read("ui/style.css")
+
+    assert "function setupStatusIcon(status)" in script
+    assert 'neutral: \'<circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/>\'' in script
+    assert 'success: \'<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>\'' in script
+    assert 'warning: \'<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/>' in script
+    assert "setupStatusIcon(complete ? 'success' : 'warning')" in script
+    assert "setupStatusIcon('neutral')" in script
+    assert "&#10003;" not in script
+    assert "&middot;" not in script
+    assert ".setup-wizard-step-state svg" in css
+    assert ".setup-wizard-step-state {\n  display: inline-grid;\n  place-items: center;\n  width: 24px;\n  height: 24px;\n}" in css

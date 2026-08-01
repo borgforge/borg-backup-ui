@@ -2104,10 +2104,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self.send_error(400, "job, archive, and path are required")
             return
 
+        lock_set = None
         try:
-            from restore_api import get_repo_info, _borg_env
+            from restore_api import RestoreRepositoryBusy, acquire_restore_repository_lock, get_repo_info, _repository_borg_env
             info = get_repo_info(self.config, job_key)
-            env = _borg_env(self.config, info["passphrase_file"])
+            lock_set = acquire_restore_repository_lock(
+                self.config,
+                info,
+                job_key,
+                f"restore-download-{datetime.now().strftime('%Y%m%dT%H%M%S')}",
+            )
+            env = _repository_borg_env(self.config, info)
+        except RestoreRepositoryBusy as exc:
+            self.send_error(409, str(exc))
+            return
         except Exception as exc:
             self.send_error(500, str(exc))
             return
@@ -2119,14 +2129,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         try:
             check = self._compute_restore_download_check(repo_archive, source_path, env)
         except RuntimeError as exc:
+            if lock_set is not None:
+                lock_set.release()
             self.send_error(400, str(exc)[:500])
             return
         entry_type = check["entry_type"]
         action = check["action"]
         if action == "block":
+            if lock_set is not None:
+                lock_set.release()
             self.send_error(413, check["message"])
             return
         if action == "confirm" and not confirm_large:
+            if lock_set is not None:
+                lock_set.release()
             self.send_error(409, check["message"])
             return
 
@@ -2141,7 +2157,13 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             dl_name = filename
             content_type = "application/octet-stream"
 
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        except OSError as exc:
+            if lock_set is not None:
+                lock_set.release()
+            self.send_error(500, f"Start failed: {exc}")
+            return
         stderr_thread, stderr_snapshot = _start_bounded_stderr_collector(proc.stderr)
         finished = threading.Event()
         timed_out = threading.Event()
@@ -2206,6 +2228,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             except OSError:
                 pass
             stderr_thread.join(timeout=1)
+            if lock_set is not None:
+                lock_set.release()
 
     def _compute_restore_download_check(self, repo_archive: str, source_path: str, env: dict) -> dict:
         import subprocess
@@ -2277,7 +2301,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_restore_download_check(self, query: str) -> dict:
         from urllib.parse import parse_qs, unquote
-        from restore_api import get_repo_info, _borg_env
+        from restore_api import ensure_restore_repository_available, get_repo_info, _repository_borg_env
         qs = parse_qs(query or "")
         job_key = (qs.get("job") or [""])[0]
         archive = (qs.get("archive") or [""])[0]
@@ -2285,7 +2309,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         if not all([job_key, archive, path]):
             raise ValueError("job, archive, and path are required")
         info = get_repo_info(self.config, job_key)
-        env = _borg_env(self.config, info["passphrase_file"])
+        ensure_restore_repository_available(self.config, info)
+        env = _repository_borg_env(self.config, info)
         repo_archive = f"{info['repo']}::{archive}"
         source_path = path.lstrip("/")
         check = self._compute_restore_download_check(repo_archive, source_path, env)

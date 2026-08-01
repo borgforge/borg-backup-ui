@@ -75,6 +75,16 @@ def test_wizard_preview_resolves_only_the_selected_repository_object(tmp_path: P
     )
 
 
+def test_wizard_preview_ui_deduplicates_repository_status_fallbacks():
+    script = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
+
+    assert "function _wizardDistinctApiMessage(payload, fallback)" in script
+    assert "value: repoDetail ? `${repoState} (${repoDetail})` : repoState" in script
+    assert "repoStatusEl.textContent = repoDetail ? `${repoState} ${repoDetail}` : repoState" in script
+    assert "apiMessage(remoteRepo, repoState)})" not in script
+    assert "repoStatusEl.textContent = `${repoState} ${apiMessage(remoteRepo, repoState)}`" not in script
+
+
 def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
     params = _storagebox_params()
@@ -96,6 +106,26 @@ def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypa
     assert "Quelle(n)" not in fallback
     assert "Wartung" not in fallback
     assert "Benachrichtigung" not in fallback
+
+
+def test_wizard_preview_supports_docker_exclusion_mode(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _RunResult(0))
+    params = _storagebox_params()
+    params.update({
+        "source_paths": ["/mnt/user/appdata"],
+        "docker_control": {
+            "mode": "except_selected",
+            "selected": ["AdGuard-Home"],
+            "ack_appdata_risk": True,
+        },
+    })
+
+    flow = generate_flow_preview(params, {}, Path("/tmp/scripts"))
+
+    assert flow["summary"]["docker"] is True
+    assert flow["summary"]["docker_mode"] == "except_selected"
+    assert flow["summary"]["docker_selected"] == ["AdGuard-Home"]
+    assert "Stop all Docker containers except selected containers (1 kept running)" in flow["steps"]
 
 
 def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):

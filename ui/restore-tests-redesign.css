@@ -62,8 +62,9 @@
 .rt-report-hero { align-items: center; padding: var(--ui-space-4) !important; background: var(--ui-color-surface-subtle); }
 .rt-report-result { display: flex; align-items: center; gap: var(--ui-space-2); padding: var(--ui-space-2) var(--ui-space-3); border: 1px solid var(--ui-state-success-border); border-radius: var(--ui-radius-sm); background: var(--ui-state-success-bg); }
 .rt-report-result.error { border-color: var(--ui-state-error-border); background: var(--ui-state-error-bg); }
-.rt-report-result-mark { display: grid; place-items: center; width: 1.875rem; height: 1.875rem; border-radius: 50%; background: var(--ui-state-success-fg); color: var(--ui-color-surface); font-size: var(--ui-font-size-lg); font-weight: var(--ui-font-weight-bold); }
-.rt-report-result.error .rt-report-result-mark { background: var(--ui-state-error-fg); }
+.rt-report-result-mark { display: grid; place-items: center; width: 1.875rem; height: 1.875rem; color: var(--ui-state-success-fg); }
+.rt-report-result.error .rt-report-result-mark { color: var(--ui-state-error-fg); }
+.rt-report-result-mark svg { width: 1.45rem; height: 1.45rem; fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
 .rt-report-result strong, .rt-report-result small { display: block; }
 .rt-report-result strong { color: var(--ui-state-success-fg); }
 .rt-report-result.error strong { color: var(--ui-state-error-fg); }

@@ -83,11 +83,12 @@ function _wizardRuntimeMode(kind) {
 function _wizardSetRuntimeControl(kind, control = {}) {
   const enabledEl = document.getElementById(kind === 'docker' ? 'wiz-use-docker' : 'wiz-use-vm');
   const modeEl = document.getElementById(kind === 'docker' ? 'wiz-docker-mode' : 'wiz-vm-mode');
-  const mode = ['all', 'selected', 'none'].includes(String(control?.mode || '').toLowerCase())
+  const allowedModes = kind === 'docker' ? ['all', 'selected', 'except_selected', 'none'] : ['all', 'selected', 'none'];
+  const mode = allowedModes.includes(String(control?.mode || '').toLowerCase())
     ? String(control.mode).toLowerCase()
     : 'none';
   if (enabledEl) enabledEl.checked = mode !== 'none';
-  if (modeEl) modeEl.value = mode === 'selected' ? 'selected' : 'all';
+  if (modeEl) modeEl.value = mode !== 'none' ? mode : 'all';
   if (kind === 'docker') {
     wizardState.selectedDockerContainers = _wizardUniqueList(control?.selected || []);
     const ack = document.getElementById('wiz-ack-appdata-risk');
@@ -116,8 +117,9 @@ function _wizardRenderRuntimeSelection(kind) {
   const mode = _wizardRuntimeMode(kind);
   const target = document.getElementById(kind === 'docker' ? 'wiz-docker-selection' : 'wiz-vm-selection');
   if (!target) return;
-  target.classList.toggle('hidden', mode !== 'selected');
-  if (mode !== 'selected') return;
+  const selectable = mode === 'selected' || mode === 'except_selected';
+  target.classList.toggle('hidden', !selectable);
+  if (!selectable) return;
   const rows = kind === 'docker' ? wizardState.dockerContainers : wizardState.vms;
   const selected = new Set(kind === 'docker' ? wizardState.selectedDockerContainers : wizardState.selectedVms);
   const emptyText = wizardT(kind === 'docker' ? 'wizard.noDockerContainers' : 'wizard.noVms');
@@ -162,6 +164,8 @@ function _wizardUpdateRuntimeCount(kind) {
   const total = Array.isArray(rows) ? rows.length : 0;
   if (mode === 'selected') {
     target.textContent = wizardT('wizard.runtimeSelectionCount', { selected: selected.length, total });
+  } else if (mode === 'except_selected') {
+    target.textContent = wizardT('wizard.runtimeExclusionCount', { selected: selected.length, total });
   } else if (mode === 'all') {
     target.textContent = wizardT('wizard.runtimeAllCount', { total });
   } else {
@@ -630,7 +634,7 @@ function _wizardCollectParams() {
     use_vm:       vmMode !== 'none',
     docker_control: {
       mode: dockerMode,
-      selected: dockerMode === 'selected' ? _wizardUniqueList(wizardState.selectedDockerContainers) : [],
+      selected: ['selected', 'except_selected'].includes(dockerMode) ? _wizardUniqueList(wizardState.selectedDockerContainers) : [],
       ack_appdata_risk: !!document.getElementById('wiz-ack-appdata-risk')?.checked,
     },
     vm_control: {
@@ -842,8 +846,8 @@ function wizardRenderSourceSuggest() {
 }
 
 function wizardIsAllowedSourcePath(path) {
-  const v = String(path || '').trim();
-  return v.startsWith('/mnt') || v.startsWith('/boot');
+  const v = String(path || '').trim().replace(/\/+$/, '');
+  return v.startsWith('/mnt') || v.startsWith('/boot') || v === '/etc/libvirt' || v.startsWith('/etc/libvirt/');
 }
 
 function wizardSourcePathInputChanged() {
@@ -851,8 +855,8 @@ function wizardSourcePathInputChanged() {
   if (!input) return;
   const prefix = String(input.value || '').trim();
   wizardCancelSourceSuggestRequest();
-  if (prefix.startsWith('/boot')) {
-    // /boot is allowed as free text source path, but autocomplete remains /mnt-based.
+  if (prefix.startsWith('/boot') || prefix.startsWith('/etc/libvirt')) {
+    // /boot and /etc/libvirt are allowed as free text source paths, but autocomplete remains /mnt-based.
     wizardHideSourceSuggest();
     return;
   }
@@ -969,7 +973,7 @@ function _wizardValidate(step) {
     if (!p.repository_key) { _wizardShowError(2, wizardT('wizard.validationRepositorySelect')); return false; }
   }
   if (step === 3) {
-    if (p.docker_control.mode === 'selected' && !p.docker_control.selected.length) {
+    if (['selected', 'except_selected'].includes(p.docker_control.mode) && !p.docker_control.selected.length) {
       _wizardShowError(3, wizardT('wizard.validationDockerSelection'));
       return false;
     }
@@ -1084,8 +1088,9 @@ async function _wizardPreview() {
       const repoState = remoteRepo.exists
         ? wizardT('wizard.repoExists')
         : (remoteRepo.checked ? wizardT('wizard.repoUnavailable') : wizardT('wizard.repoUnchecked'));
+      const repoDetail = _wizardDistinctApiMessage(remoteRepo, repoState);
       lines.push(wizardT('wizard.previewRepositoryStatus', {
-        value: `${repoState} (${apiMessage(remoteRepo, repoState)})`,
+        value: repoDetail ? `${repoState} (${repoDetail})` : repoState,
       }));
     }
     lines.push(wizardT('wizard.previewEncryption', { value: summary.encryption || '-' }));
@@ -1109,8 +1114,9 @@ async function _wizardPreview() {
       const repoState = remoteRepo.exists
         ? wizardT('wizard.remoteRepoExists')
         : (remoteRepo.checked ? wizardT('wizard.remoteRepoUnavailable') : wizardT('wizard.remoteRepoUnchecked'));
+      const repoDetail = _wizardDistinctApiMessage(remoteRepo, repoState);
       repoStatusEl.className = `status-message ${remoteRepo.exists ? 'success-state' : 'warning-state'}`;
-      repoStatusEl.textContent = `${repoState} ${apiMessage(remoteRepo, repoState)}`;
+      repoStatusEl.textContent = repoDetail ? `${repoState} ${repoDetail}` : repoState;
     } else if (repoStatusEl) {
       repoStatusEl.className = 'status-message hidden';
       repoStatusEl.textContent = '';
@@ -1125,6 +1131,18 @@ async function _wizardPreview() {
   }
 }
 
+function _wizardDistinctApiMessage(payload, fallback) {
+  const message = String(apiMessage(payload, fallback) || '').trim();
+  const base = String(fallback || '').trim();
+  const normalize = (value) => value
+    .replace(/\s+/g, ' ')
+    .replace(/[.!?]+$/g, '')
+    .trim()
+    .toLowerCase();
+  if (!message || normalize(message) === normalize(base)) return '';
+  return message;
+}
+
 function _wizardRuntimePreviewText(kind, summary) {
   const mode = String(summary?.[`${kind}_mode`] || 'none');
   if (mode === 'all') {
@@ -1134,6 +1152,10 @@ function _wizardRuntimePreviewText(kind, summary) {
     const selected = Array.isArray(summary?.[`${kind}_selected`]) ? summary[`${kind}_selected`] : [];
     const label = wizardT(kind === 'docker' ? 'wizard.runtimeSelectedDocker' : 'wizard.runtimeSelectedVms');
     return `${label}: ${selected.length ? selected.join(', ') : '-'}`;
+  }
+  if (kind === 'docker' && mode === 'except_selected') {
+    const selected = Array.isArray(summary?.docker_selected) ? summary.docker_selected : [];
+    return `${wizardT('wizard.runtimeExceptSelectedDocker')}: ${selected.length ? selected.join(', ') : '-'}`;
   }
   return wizardT('wizard.runtimeNone');
 }

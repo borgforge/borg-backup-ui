@@ -201,3 +201,46 @@ def test_language_selector_keeps_names_and_accessible_flag_symbols() -> None:
     assert "🇬🇧 English" in german
     assert "🇩🇪 German" in english
     assert "🇬🇧 English" in english
+    assert ".sidebar-language select" in _read("ui/style.css")
+    assert "height: 30px" in _read("ui/style.css")
+
+
+def test_sidebar_footer_keeps_version_only_and_direct_theme_toggle() -> None:
+    html = _read("ui/index.html")
+    script = _read("ui/js/pages/settings.js")
+    bindings = _read("ui/js/components/app-bindings.js")
+    theme = _read("ui/js/components/theme.js")
+    css = _read("ui/style.css")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    version_block = script.split("const el = document.getElementById('app-version-info');", 1)[1].split(
+        "const aboutEl = document.getElementById('settings-about-version');", 1
+    )[0]
+    theme_binding = bindings.split("document.querySelectorAll('[data-theme-choice]')", 1)[1].split(
+        "document.getElementById('log-viewer-close-btn')", 1
+    )[0]
+
+    assert "app-version" in version_block
+    assert "app-author" not in version_block
+    assert "app-contact" not in version_block
+    assert "mailto:" not in version_block
+    assert 'data-theme-choice="light"' in html
+    assert 'data-theme-choice="dark"' in html
+    assert "sidebar-theme-btn" in html
+    assert "updateThemeControls(clean)" in theme
+    assert "aria-pressed" in theme
+    assert "applyThemePreference?.(choice, true)" in theme_binding
+    assert "saveSettings" not in theme_binding
+    assert "fetch(" not in theme_binding
+    assert ".sidebar-theme-toggle" in css
+    assert ".sidebar-theme-btn.active" in css
+    assert ".sidebar-language" in css
+    assert "grid-template-columns: minmax(0, 1fr)" in css
+    assert "width: 100%" in css
+    assert "height: 30px" in css
+    assert "height: 100%" in css
+    assert '"themeLight": "Helles Theme"' in german
+    assert '"themeDark": "Dunkles Theme"' in german
+    assert '"themeLight": "Light theme"' in english
+    assert '"themeDark": "Dark theme"' in english

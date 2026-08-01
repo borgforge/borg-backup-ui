@@ -187,6 +187,12 @@
     document.getElementById('restore-download-confirm-modal')?.addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeRestoreDownloadConfirmModal(false);
     });
+    document.getElementById('restore-history-delete-confirm-close-btn')?.addEventListener('click', () => closeRestoreHistoryDeleteConfirmModal(false));
+    document.getElementById('restore-history-delete-confirm-cancel-btn')?.addEventListener('click', () => closeRestoreHistoryDeleteConfirmModal(false));
+    document.getElementById('restore-history-delete-confirm-delete-btn')?.addEventListener('click', () => closeRestoreHistoryDeleteConfirmModal(true));
+    document.getElementById('restore-history-delete-confirm-modal')?.addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeRestoreHistoryDeleteConfirmModal(false);
+    });
     document.getElementById('restore-tests-refresh-btn')?.addEventListener('click', refreshRestoreTests);
     document.getElementById('rt-run-btn')?.addEventListener('click', runRestoreTestNow);
     document.getElementById('rt-subtab-plan-btn')?.addEventListener('click', () => switchRestoreTestsSubtab('plan'));
@@ -211,6 +217,12 @@
     document.getElementById('settings-content')?.addEventListener('change', (event) => {
       const sel = event.target.closest('#ui-theme-select');
       if (sel) theme()?.applyThemePreference?.(sel.value, true);
+    });
+    document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const choice = String(button.dataset.themeChoice || '');
+        if (choice === 'light' || choice === 'dark') theme()?.applyThemePreference?.(choice, true);
+      });
     });
     document.getElementById('log-viewer-close-btn')?.addEventListener('click', () => logViewer()?.close?.());
     document.getElementById('repository-manager-close-btn')?.addEventListener('click', closeRepositoryManager);

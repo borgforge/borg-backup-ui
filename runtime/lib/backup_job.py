@@ -405,10 +405,19 @@ class BackupJob:
         if self.phase_callback is not None:
             self.phase_callback(phase)
 
-    def stop_docker(self, selected_names: Optional[List[str]] = None) -> None:
+    def stop_docker(
+        self,
+        selected_names: Optional[List[str]] = None,
+        exclude_names: Optional[List[str]] = None,
+    ) -> None:
         """Stoppt Docker-Container für das Backup."""
         if self.docker_manager is not None:
-            if selected_names is None:
+            if exclude_names is not None:
+                self._docker_stop_result = self.docker_manager.stop_except_selected(
+                    exclude_names,
+                    str(self.config.log_file),
+                )
+            elif selected_names is None:
                 self._docker_stop_result = self.docker_manager.stop_all(
                     str(self.config.log_file)
                 )

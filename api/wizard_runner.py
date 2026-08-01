@@ -158,6 +158,7 @@ class ResourceLockSet:
         heartbeat_seconds: int = 20,
         log_file: str = "",
         run_id: str = "",
+        operation: str = "backup",
     ) -> None:
         self.lock_dir = lock_dir
         self.job_key = job_key
@@ -166,6 +167,7 @@ class ResourceLockSet:
         self.heartbeat_seconds = heartbeat_seconds
         self.log_file = str(log_file or "").strip()
         self.run_id = str(run_id or "").strip()
+        self.operation = str(operation or "backup").strip().lower() or "backup"
         self._owned: list[Path] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -182,6 +184,7 @@ class ResourceLockSet:
             "job_key": self.job_key,
             "pid": os.getpid(),
             "host": self._host,
+            "operation": self.operation,
             "started_at": now,
             "updated_at": now,
             "ttl_seconds": self.ttl_seconds,
@@ -255,7 +258,11 @@ class ResourceLockSet:
                     self._owned.append(path)
                     continue
 
+            operation = str(lock_data.get("operation") or "backup").strip().lower()
+            run_id = str(lock_data.get("run_id") or "").strip()
             holder = lock_data.get("job_key", "unknown")
+            if operation and operation != "backup" and run_id:
+                holder = f"{operation} {run_id}"
             self.release()
             return False, f"resource locked by {holder} ({resource})"
 
@@ -520,11 +527,14 @@ def _build_resources(env: dict, meta: dict) -> list[str]:
 def _runtime_control(meta: dict, kind: str) -> dict:
     raw = meta.get(f"{kind}_control") if isinstance(meta.get(f"{kind}_control"), dict) else {}
     features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
+    allowed_modes = {"all", "selected", "none"}
+    if kind == "docker":
+        allowed_modes.add("except_selected")
     mode = str(raw.get("mode") or "").strip().lower()
-    if mode not in {"all", "selected", "none"}:
+    if mode not in allowed_modes:
         mode = "all" if bool(features.get(kind, False)) else "none"
     selected = []
-    if mode == "selected":
+    if mode in {"selected", "except_selected"}:
         raw_selected = raw.get("selected") if isinstance(raw.get("selected"), list) else []
         seen = set()
         for item in raw_selected:
@@ -646,7 +656,7 @@ def main() -> int:
             failure_code="resource_lock_unavailable",
         )
         logging.warning("Job is being skipped: %s", reason)
-        control.update_phase("failed", cancel_allowed=False, finished=True, exit_code=2)
+        control.update_phase("skipped", cancel_allowed=False, finished=True, exit_code=2)
         return 2
     emit_lifecycle(
         "JOB",
@@ -707,8 +717,13 @@ def main() -> int:
                 return result_code
             if docker_mgr is not None:
                 set_phase("stopping_docker")
-                selected = docker_control["selected"] if docker_control["mode"] == "selected" else None
-                job.stop_docker(selected)
+                selected = docker_control["selected"]
+                if docker_control["mode"] == "selected":
+                    job.stop_docker(selected)
+                elif docker_control["mode"] == "except_selected":
+                    job.stop_docker(exclude_names=selected)
+                else:
+                    job.stop_docker()
                 if control.is_cancel_requested():
                     logging.info("Cancellation requested; Docker stop completed and recovery starts now")
                     job.set_cancelled()

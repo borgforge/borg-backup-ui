@@ -28,6 +28,17 @@ _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _ARCHIVE_RX = re.compile(r"^[a-zA-Z0-9_.:-]+$")
 
 
+class RestoreRepositoryBusy(ValueError):
+    def __init__(self, message: str, *, holder: str = "", resource: str = "") -> None:
+        super().__init__(message)
+        self.api_status = 409
+        self.api_code = "repository_busy"
+        self.api_message_params = {
+            "holder": holder,
+            "resource": resource,
+        }
+
+
 def _validate_job_key(job_key: str) -> str:
     key = str(job_key or "").strip()
     if not _JOB_KEY_RX.fullmatch(key):
@@ -370,6 +381,76 @@ def _repository_borg_env(config: dict, info: dict) -> dict:
     return env
 
 
+def _repository_resource(info: dict) -> str:
+    repo = str(info["repo"] if "repo" in info else "").strip()
+    if not repo:
+        raise ValueError("Repository path is missing")
+    return f"repo:{repo}"
+
+
+def _resource_lock_int(config: dict, key: str, default: int) -> int:
+    raw = str(config.get(key) or "").strip()
+    if not raw:
+        try:
+            from config_api import read_expanded_conf
+            raw = str(read_expanded_conf(config).get(key) or "").strip()
+        except Exception:
+            raw = ""
+    try:
+        return max(1, int(raw)) if raw else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _active_repository_lock(config: dict, info: dict) -> dict | None:
+    from jobs_api import active_resource_locks
+
+    resource = _repository_resource(info)
+    for row in active_resource_locks(config):
+        if str(row.get("resource") or "") == resource:
+            return row
+    return None
+
+
+def _raise_repository_busy(resource: str, holder: str) -> None:
+    holder_text = holder or "another operation"
+    raise RestoreRepositoryBusy(
+        f"Repository is currently used by {holder_text}. Please wait until the running operation has finished.",
+        holder=holder,
+        resource=resource,
+    )
+
+
+def ensure_restore_repository_available(config: dict, info: dict) -> None:
+    resource = _repository_resource(info)
+    lock = _active_repository_lock(config, info)
+    if lock:
+        _raise_repository_busy(resource, str(lock.get("job_key") or "").strip())
+
+
+def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, restore_id: str):
+    from jobs_api import resolve_resource_lock_dir
+    from wizard_runner import ResourceLockSet
+
+    resource = _repository_resource(info)
+    lock_set = ResourceLockSet(
+        lock_dir=resolve_resource_lock_dir(config),
+        job_key=_validate_job_key(job_key),
+        ttl_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_TTL_SECONDS", 7200),
+        grace_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_GRACE_SECONDS", 60),
+        heartbeat_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_HEARTBEAT_SECONDS", 20),
+        run_id=str(restore_id or "").strip(),
+        operation="restore",
+    )
+    ok, reason = lock_set.acquire([resource])
+    if ok:
+        return lock_set
+    lock = _active_repository_lock(config, info)
+    holder = str(lock.get("job_key") or "").strip() if lock else ""
+    lock_set.release()
+    _raise_repository_busy(resource, holder or reason)
+
+
 def _get_max_runtime_hours(config: dict) -> int:
     """
     Liefert den konfigurierten Hard-Limit-Wert in Stunden.
@@ -394,6 +475,7 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
     guard = ensure_smb_mount_for_job(config, job_key)
     try:
         info = _get_job_repo_info(config, job_key)
+        ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
 
         r = subprocess.run(
@@ -494,6 +576,7 @@ def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict
     guard = ensure_smb_mount_for_job(config, job_key)
     try:
         info = _get_job_repo_info(config, job_key)
+        ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
 
         index = _build_index(info["repo"], archive, env)
@@ -515,45 +598,49 @@ def get_repo_info(config: dict, job_key: str) -> dict:
 def get_repo_stats(config: dict, job_key: str) -> dict:
     job_key = _validate_job_key(job_key)
     from smb_mount import ensure_smb_mount_for_job
-    ensure_smb_mount_for_job(config, job_key)
-    info = _get_job_repo_info(config, job_key)
-    env = _repository_borg_env(config, info)
+    guard = ensure_smb_mount_for_job(config, job_key)
+    try:
+        info = _get_job_repo_info(config, job_key)
+        ensure_restore_repository_available(config, info)
+        env = _repository_borg_env(config, info)
 
-    r_info = subprocess.run(
-        ["borg", "info", "--json", info["repo"]],
-        capture_output=True, text=True, env=env, timeout=60,
-    )
-    if r_info.returncode != 0:
-        raise RuntimeError(f"borg info failed: {r_info.stderr.strip()}")
+        r_info = subprocess.run(
+            ["borg", "info", "--json", info["repo"]],
+            capture_output=True, text=True, env=env, timeout=60,
+        )
+        if r_info.returncode != 0:
+            raise RuntimeError(f"borg info failed: {r_info.stderr.strip()}")
 
-    r_list = subprocess.run(
-        ["borg", "list", "--json", info["repo"]],
-        capture_output=True, text=True, env=env, timeout=30,
-    )
-    if r_list.returncode != 0:
-        raise RuntimeError(f"borg list failed: {r_list.stderr.strip()}")
+        r_list = subprocess.run(
+            ["borg", "list", "--json", info["repo"]],
+            capture_output=True, text=True, env=env, timeout=30,
+        )
+        if r_list.returncode != 0:
+            raise RuntimeError(f"borg list failed: {r_list.stderr.strip()}")
 
-    info_data = json.loads(r_info.stdout)
-    list_data = json.loads(r_list.stdout)
-    stats = info_data.get("cache", {}).get("stats", {})
-    archives = list_data.get("archives", [])
+        info_data = json.loads(r_info.stdout)
+        list_data = json.loads(r_list.stdout)
+        stats = info_data.get("cache", {}).get("stats", {})
+        archives = list_data.get("archives", [])
 
-    months: dict = {}
-    for a in archives:
-        start = a.get("start", "")
-        if len(start) >= 7:
-            month = start[:7]
-            months[month] = months.get(month, 0) + 1
+        months: dict = {}
+        for a in archives:
+            start = a.get("start", "")
+            if len(start) >= 7:
+                month = start[:7]
+                months[month] = months.get(month, 0) + 1
 
-    sorted_months = sorted(months.items())
-    return {
-        "total_size": stats.get("total_size", 0),
-        "total_csize": stats.get("total_csize", 0),
-        "unique_csize": stats.get("unique_csize", 0),
-        "archive_count": len(archives),
-        "repo": info["repo"],
-        "monthly": [{"month": m, "count": c} for m, c in sorted_months],
-    }
+        sorted_months = sorted(months.items())
+        return {
+            "total_size": stats.get("total_size", 0),
+            "total_csize": stats.get("total_csize", 0),
+            "unique_csize": stats.get("unique_csize", 0),
+            "archive_count": len(archives),
+            "repo": info["repo"],
+            "monthly": [{"month": m, "count": c} for m, c in sorted_months],
+        }
+    finally:
+        guard.cleanup()
 
 
 def list_target_dirs(prefix: str = "", limit: int = 40) -> list[dict]:
@@ -751,43 +838,47 @@ def restore_precheck(
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
     from smb_mount import ensure_smb_mount_for_job
-    ensure_smb_mount_for_job(config, job_key)
-    info = _get_job_repo_info(config, job_key)
-    env = _repository_borg_env(config, info)
-    target = _validate_target_dir(target_dir, config)
-    if conflict_mode not in {"skip", "overwrite", "rename"}:
-        raise ValueError("Invalid conflict mode")
+    guard = ensure_smb_mount_for_job(config, job_key)
+    try:
+        info = _get_job_repo_info(config, job_key)
+        ensure_restore_repository_available(config, info)
+        env = _repository_borg_env(config, info)
+        target = _validate_target_dir(target_dir, config)
+        if conflict_mode not in {"skip", "overwrite", "rename"}:
+            raise ValueError("Invalid conflict mode")
 
-    mountpoint = str(target.anchor or "/")
-    free = shutil.disk_usage(target).free
-    meta = _precheck_metadata(info["repo"], archive, source_path, env)
-    source_type = str(meta.get("source_type", "")).strip()
-    source_basename = str(meta.get("basename", "")).strip()
-    same_name_target = bool(source_type == "d" and source_basename and target.name == source_basename)
-    dest = target if same_name_target else (target / source_basename)
-    exists = dest.exists()
+        mountpoint = str(target.anchor or "/")
+        free = shutil.disk_usage(target).free
+        meta = _precheck_metadata(info["repo"], archive, source_path, env)
+        source_type = str(meta.get("source_type", "")).strip()
+        source_basename = str(meta.get("basename", "")).strip()
+        same_name_target = bool(source_type == "d" and source_basename and target.name == source_basename)
+        dest = target if same_name_target else (target / source_basename)
+        exists = dest.exists()
 
-    return {
-        "ok": bool(meta["ok"]),
-        "job_key": job_key,
-        "archive": archive,
-        "repo": info["repo"],
-        "source_path": source_path,
-        "target_dir": str(target),
-        "conflict_mode": conflict_mode,
-        "dry_run": False,
-        "dry_run_exit_code": meta["exit_code"],
-        "dry_run_stdout": (
-            "Precheck is metadata-only (no extraction).\n"
-            + (meta["stdout"] or "")
-        )[-8000:],
-        "dry_run_stderr": (meta["stderr"] or "")[-8000:],
-        "destination_path": str(dest),
-        "destination_exists": exists,
-        "target_writable": True,
-        "target_mountpoint": mountpoint,
-        "target_free_bytes": int(free),
-    }
+        return {
+            "ok": bool(meta["ok"]),
+            "job_key": job_key,
+            "archive": archive,
+            "repo": info["repo"],
+            "source_path": source_path,
+            "target_dir": str(target),
+            "conflict_mode": conflict_mode,
+            "dry_run": False,
+            "dry_run_exit_code": meta["exit_code"],
+            "dry_run_stdout": (
+                "Precheck is metadata-only (no extraction).\n"
+                + (meta["stdout"] or "")
+            )[-8000:],
+            "dry_run_stderr": (meta["stderr"] or "")[-8000:],
+            "destination_path": str(dest),
+            "destination_exists": exists,
+            "target_writable": True,
+            "target_mountpoint": mountpoint,
+            "target_free_bytes": int(free),
+        }
+    finally:
+        guard.cleanup()
 
 
 def start_restore(
@@ -799,219 +890,233 @@ def start_restore(
     conflict_mode: str,
     preserve_owner: bool = False,
     progress_cb=None,
+    restore_id: str = "",
 ) -> dict:
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
     from smb_mount import ensure_smb_mount_for_job
-    ensure_smb_mount_for_job(config, job_key)
-    info = _get_job_repo_info(config, job_key)
-    env = _repository_borg_env(config, info)
-    target = _validate_target_dir(target_dir, config)
-    if conflict_mode not in {"skip", "overwrite", "rename"}:
-        raise ValueError("Invalid conflict mode")
 
-    source_clean = str(source_path or "").strip().strip("/")
-    parts = [x for x in source_clean.split("/") if x]
-    if not parts:
-        raise ValueError("source_path is missing")
-    basename = parts[-1]
-    source_meta = _precheck_metadata(info["repo"], archive, source_clean, env)
-    source_type = str(source_meta.get("source_type", "")).strip()
-    same_name_target = bool(source_type == "d" and basename and target.name == basename)
-    restore_dir_contents_directly = same_name_target
-    target_stat = target.stat()
-    target_uid = int(target_stat.st_uid)
-    target_gid = int(target_stat.st_gid)
+    guard = ensure_smb_mount_for_job(config, job_key)
+    lock_set = None
+    try:
+        info = _get_job_repo_info(config, job_key)
+        lock_set = acquire_restore_repository_lock(
+            config,
+            info,
+            job_key,
+            str(restore_id or "").strip() or f"restore-sync-{uuid.uuid4().hex[:8]}",
+        )
+        env = _repository_borg_env(config, info)
+        target = _validate_target_dir(target_dir, config)
+        if conflict_mode not in {"skip", "overwrite", "rename"}:
+            raise ValueError("Invalid conflict mode")
 
-    def _apply_target_owner(path: Path) -> None:
-        """Set owner/group recursively to target directory ownership."""
-        _ensure_restore_path_inside(path, target)
-        try:
-            os.lchown(path, target_uid, target_gid)
-        except OSError:
-            pass
-        if path.is_dir() and not path.is_symlink():
-            for root, dirs, files in os.walk(path):
-                root_p = Path(root)
-                _ensure_restore_path_inside(root_p, target)
-                try:
-                    os.lchown(root_p, target_uid, target_gid)
-                except OSError:
-                    pass
-                for name in dirs:
-                    p = root_p / name
-                    _ensure_restore_path_inside(p, target)
-                    try:
-                        os.lchown(p, target_uid, target_gid)
-                    except OSError:
-                        pass
-                for name in files:
-                    p = root_p / name
-                    _ensure_restore_path_inside(p, target)
-                    try:
-                        os.lchown(p, target_uid, target_gid)
-                    except OSError:
-                        pass
+        source_clean = str(source_path or "").strip().strip("/")
+        parts = [x for x in source_clean.split("/") if x]
+        if not parts:
+            raise ValueError("source_path is missing")
+        basename = parts[-1]
+        source_meta = _precheck_metadata(info["repo"], archive, source_clean, env)
+        source_type = str(source_meta.get("source_type", "")).strip()
+        same_name_target = bool(source_type == "d" and basename and target.name == basename)
+        restore_dir_contents_directly = same_name_target
+        target_stat = target.stat()
+        target_uid = int(target_stat.st_uid)
+        target_gid = int(target_stat.st_gid)
 
-    def _merge_replace(src: Path, dst: Path) -> None:
-        """
-        Merge src into dst and replace only conflicting paths.
-        Unrelated existing files in dst stay untouched.
-        """
-        _ensure_restore_path_inside(src, target, allow_missing=False)
-        _ensure_restore_path_inside(dst, target)
-        if src.is_dir():
-            if dst.exists() and not dst.is_dir():
-                _ensure_restore_path_inside(dst, target, allow_missing=False)
-                dst.unlink()
-            dst.mkdir(parents=True, exist_ok=True)
-            _ensure_restore_path_inside(dst, target, allow_missing=False)
-            for child in src.iterdir():
-                _merge_replace(child, dst / child.name)
+        def _apply_target_owner(path: Path) -> None:
+            """Set owner/group recursively to target directory ownership."""
+            _ensure_restore_path_inside(path, target)
             try:
-                _ensure_restore_path_inside(src, target, allow_missing=False)
-                src.rmdir()
+                os.lchown(path, target_uid, target_gid)
             except OSError:
                 pass
-            return
+            if path.is_dir() and not path.is_symlink():
+                for root, dirs, files in os.walk(path):
+                    root_p = Path(root)
+                    _ensure_restore_path_inside(root_p, target)
+                    try:
+                        os.lchown(root_p, target_uid, target_gid)
+                    except OSError:
+                        pass
+                    for name in dirs:
+                        p = root_p / name
+                        _ensure_restore_path_inside(p, target)
+                        try:
+                            os.lchown(p, target_uid, target_gid)
+                        except OSError:
+                            pass
+                    for name in files:
+                        p = root_p / name
+                        _ensure_restore_path_inside(p, target)
+                        try:
+                            os.lchown(p, target_uid, target_gid)
+                        except OSError:
+                            pass
 
-        # file/symlink/other
-        if dst.exists() or dst.is_symlink():
+        def _merge_replace(src: Path, dst: Path) -> None:
+            """
+            Merge src into dst and replace only conflicting paths.
+            Unrelated existing files in dst stay untouched.
+            """
+            _ensure_restore_path_inside(src, target, allow_missing=False)
+            _ensure_restore_path_inside(dst, target)
+            if src.is_dir():
+                if dst.exists() and not dst.is_dir():
+                    _ensure_restore_path_inside(dst, target, allow_missing=False)
+                    dst.unlink()
+                dst.mkdir(parents=True, exist_ok=True)
+                _ensure_restore_path_inside(dst, target, allow_missing=False)
+                for child in src.iterdir():
+                    _merge_replace(child, dst / child.name)
+                try:
+                    _ensure_restore_path_inside(src, target, allow_missing=False)
+                    src.rmdir()
+                except OSError:
+                    pass
+                return
+
+            # file/symlink/other
+            if dst.exists() or dst.is_symlink():
+                _ensure_restore_path_inside(dst, target, allow_missing=False)
+                if dst.is_dir() and not dst.is_symlink():
+                    shutil.rmtree(dst)
+                else:
+                    dst.unlink()
+            _ensure_restore_path_inside(dst.parent, target, allow_missing=False)
+            shutil.move(str(src), str(dst))
             _ensure_restore_path_inside(dst, target, allow_missing=False)
-            if dst.is_dir() and not dst.is_symlink():
-                shutil.rmtree(dst)
-            else:
-                dst.unlink()
-        _ensure_restore_path_inside(dst.parent, target, allow_missing=False)
-        shutil.move(str(src), str(dst))
-        _ensure_restore_path_inside(dst, target, allow_missing=False)
 
-    # Restore directly on target filesystem (no /tmp usage), so large files do not consume RAM/tmpfs.
-    dest = target if restore_dir_contents_directly else (target / basename)
-    final_dest = dest
-    extract_cwd = target
-    cleanup_extract_dir = None
-    _ensure_restore_path_inside(dest, target)
-    _ensure_restore_path_inside(final_dest, target)
-    if dest.exists() and not (restore_dir_contents_directly and conflict_mode != "rename"):
-        if conflict_mode == "skip":
-            return {"started": False, "skipped": True, "reason": "Target file exists", "skip_reason_code": "target_exists", "destination_path": str(dest)}
-        if conflict_mode == "overwrite":
-            extract_cwd = _make_restore_stage_dir(target)
-            cleanup_extract_dir = extract_cwd
-        elif conflict_mode == "rename":
-            final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-            _ensure_restore_path_inside(final_dest, target)
-            extract_cwd = _make_restore_stage_dir(target)
-            cleanup_extract_dir = extract_cwd
-    elif conflict_mode == "rename":
-        # Keep consistent behavior for rename mode even when destination does not yet exist.
-        final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        # Restore directly on target filesystem (no /tmp usage), so large files do not consume RAM/tmpfs.
+        dest = target if restore_dir_contents_directly else (target / basename)
+        final_dest = dest
+        extract_cwd = target
+        cleanup_extract_dir = None
+        _ensure_restore_path_inside(dest, target)
         _ensure_restore_path_inside(final_dest, target)
-        extract_cwd = _make_restore_stage_dir(target)
-        cleanup_extract_dir = extract_cwd
-
-    if restore_dir_contents_directly:
-        if conflict_mode == "skip":
-            try:
-                if any(target.iterdir()):
-                    return {"started": False, "skipped": True, "reason": "Target directory already contains data", "skip_reason_code": "target_not_empty", "destination_path": str(target)}
-            except OSError:
-                return {"started": False, "skipped": True, "reason": "Target directory is not readable", "skip_reason_code": "target_unreadable", "destination_path": str(target)}
-        if conflict_mode == "overwrite":
-            extract_cwd = _make_restore_stage_dir(target)
-            cleanup_extract_dir = extract_cwd
+        if dest.exists() and not (restore_dir_contents_directly and conflict_mode != "rename"):
+            if conflict_mode == "skip":
+                return {"started": False, "skipped": True, "reason": "Target file exists", "skip_reason_code": "target_exists", "destination_path": str(dest)}
+            if conflict_mode == "overwrite":
+                extract_cwd = _make_restore_stage_dir(target)
+                cleanup_extract_dir = extract_cwd
+            elif conflict_mode == "rename":
+                final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                _ensure_restore_path_inside(final_dest, target)
+                extract_cwd = _make_restore_stage_dir(target)
+                cleanup_extract_dir = extract_cwd
         elif conflict_mode == "rename":
+            # Keep consistent behavior for rename mode even when destination does not yet exist.
             final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
             _ensure_restore_path_inside(final_dest, target)
-            final_dest.mkdir(parents=False, exist_ok=False)
-            extract_cwd = final_dest
+            extract_cwd = _make_restore_stage_dir(target)
+            cleanup_extract_dir = extract_cwd
 
-    strip_components = max(len(parts), 0) if restore_dir_contents_directly else max(len(parts) - 1, 0)
-    repo_archive = f"{info['repo']}::{archive}"
-    cmd = ["borg", "extract", repo_archive, source_clean, "--strip-components", str(strip_components), "--list"]
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        env=env,
-        cwd=extract_cwd,
-        bufsize=1,
-    )
-    max_runtime_hours = _get_max_runtime_hours(config)
-    wd_stop = threading.Event()
-    wd_thread = None
-    try:
-        from lib.borg_runner import _start_process_watchdog
-        wd_thread = _start_process_watchdog(
-            proc,
-            operation="borg extract",
-            max_runtime_hours=max_runtime_hours,
-            stop_event=wd_stop,
+        if restore_dir_contents_directly:
+            if conflict_mode == "skip":
+                try:
+                    if any(target.iterdir()):
+                        return {"started": False, "skipped": True, "reason": "Target directory already contains data", "skip_reason_code": "target_not_empty", "destination_path": str(target)}
+                except OSError:
+                    return {"started": False, "skipped": True, "reason": "Target directory is not readable", "skip_reason_code": "target_unreadable", "destination_path": str(target)}
+            if conflict_mode == "overwrite":
+                extract_cwd = _make_restore_stage_dir(target)
+                cleanup_extract_dir = extract_cwd
+            elif conflict_mode == "rename":
+                final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                _ensure_restore_path_inside(final_dest, target)
+                final_dest.mkdir(parents=False, exist_ok=False)
+                extract_cwd = final_dest
+
+        strip_components = max(len(parts), 0) if restore_dir_contents_directly else max(len(parts) - 1, 0)
+        repo_archive = f"{info['repo']}::{archive}"
+        cmd = ["borg", "extract", repo_archive, source_clean, "--strip-components", str(strip_components), "--list"]
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
+            cwd=extract_cwd,
+            bufsize=1,
         )
-    except Exception:
+        max_runtime_hours = _get_max_runtime_hours(config)
+        wd_stop = threading.Event()
         wd_thread = None
-    out_lines: list[str] = []
-    if proc.stdout is not None:
         try:
-            for line in proc.stdout:
-                line = line.rstrip("\n")
-                if line:
-                    out_lines.append(line)
-                    if len(out_lines) > 400:
-                        del out_lines[:-400]
-                    if progress_cb:
-                        progress_cb(line)
-        finally:
+            from lib.borg_runner import _start_process_watchdog
+            wd_thread = _start_process_watchdog(
+                proc,
+                operation="borg extract",
+                max_runtime_hours=max_runtime_hours,
+                stop_event=wd_stop,
+            )
+        except Exception:
+            wd_thread = None
+        out_lines: list[str] = []
+        if proc.stdout is not None:
+            try:
+                for line in proc.stdout:
+                    line = line.rstrip("\n")
+                    if line:
+                        out_lines.append(line)
+                        if len(out_lines) > 400:
+                            del out_lines[:-400]
+                        if progress_cb:
+                            progress_cb(line)
+            finally:
+                ret = proc.wait()
+                wd_stop.set()
+                if wd_thread is not None:
+                    wd_thread.join(timeout=1.0)
+        else:
             ret = proc.wait()
             wd_stop.set()
             if wd_thread is not None:
                 wd_thread.join(timeout=1.0)
-    else:
-        ret = proc.wait()
-        wd_stop.set()
-        if wd_thread is not None:
-            wd_thread.join(timeout=1.0)
-    if ret != 0:
-        tail = "\n".join(out_lines[-20:]).strip()
-        if cleanup_extract_dir and cleanup_extract_dir.exists():
-            _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
-            shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
-        raise RuntimeError(tail or f"borg extract failed (exit {ret})")
+        if ret != 0:
+            tail = "\n".join(out_lines[-20:]).strip()
+            if cleanup_extract_dir and cleanup_extract_dir.exists():
+                _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
+                shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
+            raise RuntimeError(tail or f"borg extract failed (exit {ret})")
 
-    src_temp = extract_cwd if restore_dir_contents_directly else (extract_cwd / basename)
-    if not src_temp.exists():
-        if cleanup_extract_dir and cleanup_extract_dir.exists():
-            _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
-            shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
-        raise RuntimeError("Extract succeeded, but the source file was not found in the target")
+        src_temp = extract_cwd if restore_dir_contents_directly else (extract_cwd / basename)
+        if not src_temp.exists():
+            if cleanup_extract_dir and cleanup_extract_dir.exists():
+                _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
+                shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
+            raise RuntimeError("Extract succeeded, but the source file was not found in the target")
 
-    _ensure_restore_path_inside(src_temp, target, allow_missing=False)
-    _ensure_restore_path_inside(final_dest, target)
-    if restore_dir_contents_directly and conflict_mode == "overwrite":
-        for child in src_temp.iterdir():
-            _merge_replace(child, final_dest / child.name)
-    elif conflict_mode == "overwrite" and final_dest.exists() and src_temp != final_dest:
-        _merge_replace(src_temp, final_dest)
-    elif src_temp != final_dest:
         _ensure_restore_path_inside(src_temp, target, allow_missing=False)
-        _ensure_restore_path_inside(final_dest.parent, target, allow_missing=False)
-        shutil.move(str(src_temp), str(final_dest))
-        _ensure_restore_path_inside(final_dest, target, allow_missing=False)
-    if cleanup_extract_dir and cleanup_extract_dir.exists() and cleanup_extract_dir != final_dest:
-        _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
-        shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
-    if not preserve_owner:
-        _apply_target_owner(final_dest)
-    return {
-        "started": True,
-        "destination_path": str(final_dest),
-        "conflict_mode": conflict_mode,
-        "owner_mode": "preserve_backup" if preserve_owner else "target_directory",
-        "stdout": "\n".join(out_lines)[-4000:],
-        "stderr": "",
-    }
+        _ensure_restore_path_inside(final_dest, target)
+        if restore_dir_contents_directly and conflict_mode == "overwrite":
+            for child in src_temp.iterdir():
+                _merge_replace(child, final_dest / child.name)
+        elif conflict_mode == "overwrite" and final_dest.exists() and src_temp != final_dest:
+            _merge_replace(src_temp, final_dest)
+        elif src_temp != final_dest:
+            _ensure_restore_path_inside(src_temp, target, allow_missing=False)
+            _ensure_restore_path_inside(final_dest.parent, target, allow_missing=False)
+            shutil.move(str(src_temp), str(final_dest))
+            _ensure_restore_path_inside(final_dest, target, allow_missing=False)
+        if cleanup_extract_dir and cleanup_extract_dir.exists() and cleanup_extract_dir != final_dest:
+            _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
+            shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
+        if not preserve_owner:
+            _apply_target_owner(final_dest)
+        return {
+            "started": True,
+            "destination_path": str(final_dest),
+            "conflict_mode": conflict_mode,
+            "owner_mode": "preserve_backup" if preserve_owner else "target_directory",
+            "stdout": "\n".join(out_lines)[-4000:],
+            "stderr": "",
+        }
+    finally:
+        if lock_set is not None:
+            lock_set.release()
+        guard.cleanup()
 
 
 def _trim_runs(config: dict) -> None:
@@ -1143,6 +1248,7 @@ def start_restore_async(
                 conflict_mode,
                 preserve_owner,
                 progress_cb=_append,
+                restore_id=restore_id,
             )
             if result.get("skipped"):
                 _append(f"Skipped: {result.get('reason', 'unknown')}")

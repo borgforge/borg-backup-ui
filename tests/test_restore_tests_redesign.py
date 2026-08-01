@@ -59,4 +59,10 @@ def test_verification_report_matches_approved_detail_hierarchy() -> None:
     ):
         assert contract in script or contract in css
     assert "const successful = t.test_result === 'success'" in script
+    assert "function restoreTestsStatusIcon(status)" in script
+    assert "restoreTestsStatusIcon(successful ? 'success' : 'error')" in script
+    assert "successful ? '&#10003;' : '!'" not in script
+    assert ".rt-report-result-mark svg" in css
+    assert ".rt-report-result.error .rt-report-result-mark { color: var(--ui-state-error-fg); }" in css
+    assert ".rt-report-result-mark { display: grid; place-items: center; width: 1.875rem; height: 1.875rem; color: var(--ui-state-success-fg); }" in css
     assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in css

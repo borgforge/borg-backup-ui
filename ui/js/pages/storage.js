@@ -384,6 +384,17 @@ function storageMaintenanceSummary(key, result) {
   return storageT('storage.repositoryCheckSuccessful');
 }
 
+function storageMaintenanceIcon(status) {
+  const icons = {
+    idle: '<circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/>',
+    success: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>',
+    warning: '<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/><path d="M12 8.8v4.8"/><path d="M12 17h.01"/>',
+    error: '<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>',
+    running: '<path class="storage-maintenance-spinner" d="M21 12a9 9 0 1 1-6.2-8.6"/>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[status] || icons.idle}</svg>`;
+}
+
 function renderStorageMaintenanceCard(repo, key, { withAction = false, job = null } = {}) {
   const running = storageMaintenanceRunning(repo, key);
   const result = storageMaintenanceResult(repo, key);
@@ -403,7 +414,7 @@ function renderStorageMaintenanceCard(repo, key, { withAction = false, job = nul
       ? `<details class="storage-maintenance-result-details"><summary>${escHtml(storageT('storage.repositoryPruneDetails', { count: deletedArchives.length }))}</summary><ul>${deletedArchives.map((archive) => `<li>${escHtml(archive)}</li>`).join('')}</ul></details>`
       : '');
   return `<article class="storage-maintenance-card status-${escHtml(status)}">
-    <span class="storage-maintenance-icon">${running ? '…' : (status === 'success' ? '✓' : (status === 'error' ? '!' : (status === 'warning' ? '!' : '·')))}</span>
+    <span class="storage-maintenance-icon">${storageMaintenanceIcon(status)}</span>
     <div class="storage-maintenance-copy">
       <small>${escHtml(storageMaintenanceTitle(key))}</small>
       <strong>${escHtml(running ? storageT('storage.repositoryActionRunning') : storageMaintenanceSummary(key, result))}</strong>

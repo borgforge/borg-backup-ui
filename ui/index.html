@@ -130,6 +130,29 @@
           <option value="en" data-i18n="language.english">🇬🇧 English</option>
         </select>
       </label>
+      <div class="sidebar-theme" role="group" data-i18n-aria-label="sidebar.theme" aria-label="Theme">
+        <span data-i18n="sidebar.theme">Theme</span>
+        <div class="sidebar-theme-toggle">
+          <button type="button" class="sidebar-theme-btn" data-theme-choice="light" data-i18n-title="sidebar.themeLight" data-i18n-aria-label="sidebar.themeLight" title="Helles Theme" aria-label="Helles Theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="m4.93 4.93 1.41 1.41"></path>
+              <path d="m17.66 17.66 1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="m6.34 17.66-1.41 1.41"></path>
+              <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+          </button>
+          <button type="button" class="sidebar-theme-btn" data-theme-choice="dark" data-i18n-title="sidebar.themeDark" data-i18n-aria-label="sidebar.themeDark" title="Dunkles Theme" aria-label="Dunkles Theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
       <button class="btn btn-secondary btn-sm" id="auth-logout-btn" style="width:100%;justify-content:center;margin-bottom:8px">
         <span data-i18n="sidebar.logout">Abmelden</span>
       </button>
@@ -156,7 +179,13 @@
     </div>
 
     <section id="startup-maintenance-banner" class="startup-maintenance-banner hidden" role="alert" aria-live="assertive">
-      <div class="startup-maintenance-icon" aria-hidden="true">!</div>
+      <div class="startup-maintenance-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <circle cx="12" cy="12" r="8.5"></circle>
+          <path d="m9 9 6 6"></path>
+          <path d="m15 9-6 6"></path>
+        </svg>
+      </div>
       <div class="startup-maintenance-copy">
         <strong data-i18n="maintenanceMode.title">Eingeschränkter Wartungsmodus</strong>
         <span data-i18n="maintenanceMode.message">Eine erforderliche Startmigration ist fehlgeschlagen. Backups und Änderungen sind blockiert.</span>
@@ -976,6 +1005,32 @@
   </div>
 </div>
 
+<!-- Restore History Delete Confirm Modal -->
+<div id="restore-history-delete-confirm-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="restore-history-delete-confirm-title" data-i18n="restore.deleteHistoryRunModalTitle">Restore-History löschen</h3>
+      <button class="modal-close" id="restore-history-delete-confirm-close-btn" data-i18n-aria-label="restore.close" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="restore-history-delete-confirm-message" style="margin-top:0"></p>
+      <div class="modal-info-list">
+        <div class="modal-info-item"><span data-i18n="restore.restoreIdLabel">Restore-ID:</span><strong id="restore-history-delete-confirm-id"></strong></div>
+      </div>
+      <div class="status-message warning" data-i18n="restore.deleteHistoryRunModalWarning">Es werden nur Verlaufsdaten von Borg Backup UI und das gespeicherte Restore-Log gelöscht. Wiederhergestellte Dateien bleiben unverändert.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="restore-history-delete-confirm-cancel-btn" data-i18n="restore.cancel">Abbrechen</button>
+      <button class="btn btn-danger" id="restore-history-delete-confirm-delete-btn" data-i18n="restore.deleteHistoryRun">Löschen</button>
+    </div>
+  </div>
+</div>
+
 <!-- Confirm Modal -->
 <div id="confirm-modal" class="modal-backdrop hidden">
   <div class="modal">
@@ -1523,6 +1578,7 @@
                   <select class="form-select" id="wiz-docker-mode">
                     <option value="all" data-i18n="wizard.runtimeAllDocker">Alle laufenden Container</option>
                     <option value="selected" data-i18n="wizard.runtimeSelectedDocker">Nur ausgewählte Container</option>
+                    <option value="except_selected" data-i18n="wizard.runtimeExceptSelectedDocker">Alle außer ausgewählte Container</option>
                   </select>
                 </div>
               </div>

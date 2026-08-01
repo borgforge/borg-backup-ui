@@ -33,11 +33,18 @@ def test_browse_restore_keeps_five_step_workflow_and_api_contracts() -> None:
 
 def test_browse_restore_uses_configured_icons_and_structured_precheck() -> None:
     script = _read("ui/js/pages/restore.js")
+    css = _read("ui/browse-restore-redesign.css")
     assert "resolveJobIcon(job)" in script
     assert "resolveJobIconColor(job)" in script
     assert "renderRestorePrecheck" in script
     assert "restore-precheck-verdict" in script
     assert "restore-system-check-facts" in script
+    assert "function restoreStatusIcon(status)" in script
+    assert "restoreStatusIcon(ok ? 'success' : 'error')" in script
+    assert "ok ? '\\u2713' : '!'" not in script
+    assert ".restore-precheck-verdict-mark svg" in css
+    assert ".restore-precheck-verdict.error .restore-precheck-verdict-mark { color: var(--ui-state-error-fg); }" in css
+    assert ".restore-precheck-verdict-mark { display: grid; place-items: center; width: 2.125rem; height: 2.125rem; color: var(--ui-state-success-fg); }" in css
 
 
 def test_browse_restore_layout_is_responsive_and_contained() -> None:
@@ -79,14 +86,38 @@ def test_browse_restore_has_dedicated_restore_history() -> None:
     html = _read("ui/index.html")
     css = _read("ui/browse-restore-redesign.css")
     script = _read("ui/js/pages/restore.js")
+    bindings = _read("ui/js/components/app-bindings.js")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
     assert 'id="restore-view-wizard-btn"' in html
     assert 'id="restore-view-history-btn"' in html
     assert 'id="restore-history-panel" class="restore-history-panel hidden"' in html
     assert 'id="restore-history-content"' in html
+    assert 'id="restore-history-delete-confirm-modal"' in html
+    assert 'id="restore-history-delete-confirm-delete-btn"' in html
+    assert '<div class="modal-info-item"><span data-i18n="restore.restoreIdLabel">Restore-ID:</span><strong id="restore-history-delete-confirm-id"></strong></div>' in html
     assert ".restore-view-tabs" in css
     assert ".restore-history-card" in css
     assert ".restore-history-detail-grid" in css
     assert "function restoreSwitchView(view)" in script
     assert "function restoreLoadHistory()" in script
+    assert "function openRestoreHistoryDeleteConfirmModal(label, id)" in script
+    assert "function closeRestoreHistoryDeleteConfirmModal(confirmed = false)" in script
     assert "function restoreLoadHistoryDetail(restoreId)" in script
     assert "function onRestoreHistoryClick(event)" in script
+    delete_fn = script.split("async function restoreDeleteHistoryEntry(restoreId)", 1)[1].split(
+        "function openRestoreHistoryDeleteConfirmModal", 1
+    )[0]
+    assert "await openRestoreHistoryDeleteConfirmModal(label, id)" in delete_fn
+    assert "window.confirm" not in delete_fn
+    assert "closeRestoreHistoryDeleteConfirmModal(true)" in bindings
+    assert "deleteHistoryRunModalTitle" in german
+    assert "deleteHistoryRunModalMessage" in german
+    assert "deleteHistoryRunModalWarning" in german
+    assert '"restoreIdLabel": "Restore-ID:"' in german
+    assert "Verlaufsdaten von Borg Backup UI" in german
+    assert "deleteHistoryRunModalTitle" in english
+    assert "deleteHistoryRunModalMessage" in english
+    assert "deleteHistoryRunModalWarning" in english
+    assert '"restoreIdLabel": "Restore ID:"' in english
+    assert "Borg Backup UI history data" in english

@@ -111,7 +111,7 @@ A job connects sources to exactly one existing repository. Encryption belongs to
 
 1. **Basics:** Name, technical type, icon, and optional Docker/VM control.
 2. **Sources & Target:** Source paths, exclusions, storage type, storage target, repository, and compression.
-3. **Docker:** Stop all running or selected containers and restart them afterwards.
+3. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards.
 4. **VMs:** Shut down all running or selected VMs and restart them afterwards.
 5. **Retention:** Daily, weekly, monthly, and yearly retention.
 6. **Description:** Clear description with optional Markdown.
@@ -139,6 +139,8 @@ Cron uses five fields: minute, hour, day, month, and weekday. `0 3 * * *` starts
 The application calculates the expected run from the schedule. After the configured tolerance expires, it can notify through Unraid, email, or Apprise profiles. The reminder interval prevents immediate repetitions.
 
 ## 8. Docker and VMs
+
+Docker selection can be used as either an include or exclude list. **Selected containers only** stops exactly the checked containers. **All except selected containers** stops all running containers but keeps the checked containers running.
 
 Before a backup, the application records which containers or VMs were actually running. Only those targets are restarted afterwards. After an interruption or server restart, **Runtime Recovery** in system health reports pending restarts.
 

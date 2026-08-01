@@ -19,6 +19,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   targetSuggestCache: new Map(),
   confirmResolver: null,
   downloadConfirmResolver: null,
+  historyDeleteConfirmResolver: null,
   activeRestoreId: '',
   restorePollTimer: null,
   autoPrecheckKey: '',
@@ -38,6 +39,15 @@ const restoreState = window.BBUI.restoreState;
 
 function restoreT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`restore.${key}`, params) || `restore.${key}`;
+}
+
+function restoreStatusIcon(status) {
+  const icons = {
+    success: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>',
+    warning: '<path d="M10.3 4.4a2 2 0 0 1 3.4 0l7.4 12.8a2 2 0 0 1-1.7 3H4.6a2 2 0 0 1-1.7-3z"/><path d="M12 8.8v4.8"/><path d="M12 17h.01"/>',
+    error: '<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[status] || icons.warning}</svg>`;
 }
 
 function restoreSetStep(step) {
@@ -463,7 +473,7 @@ async function restoreDeleteHistoryEntry(restoreId) {
   if (!id) return;
   const run = (restoreState.history || []).find((item) => String(item.restore_id || '') === id) || {};
   const label = run.job_key || id;
-  const ok = window.confirm(restoreT('deleteHistoryRunConfirm', { name: label, id }));
+  const ok = await openRestoreHistoryDeleteConfirmModal(label, id);
   if (!ok) return;
   try {
     const res = await fetch('/api/restore/history', {
@@ -478,6 +488,32 @@ async function restoreDeleteHistoryEntry(restoreId) {
     await restoreLoadHistory();
   } catch (err) {
     showMsg('restore-assist-msg', 'error', restoreT('deleteHistoryRunFailed', { message: err.message }));
+  }
+}
+
+function openRestoreHistoryDeleteConfirmModal(label, id) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('restore-history-delete-confirm-modal');
+    const message = document.getElementById('restore-history-delete-confirm-message');
+    const idEl = document.getElementById('restore-history-delete-confirm-id');
+    if (!modal || !message || !idEl) {
+      resolve(window.confirm(restoreT('deleteHistoryRunConfirm', { name: label, id })));
+      return;
+    }
+    restoreState.historyDeleteConfirmResolver = resolve;
+    message.textContent = restoreT('deleteHistoryRunModalMessage', { name: label });
+    idEl.textContent = id;
+    modal.classList.remove('hidden');
+  });
+}
+
+function closeRestoreHistoryDeleteConfirmModal(confirmed = false) {
+  const modal = document.getElementById('restore-history-delete-confirm-modal');
+  if (modal) modal.classList.add('hidden');
+  if (restoreState.historyDeleteConfirmResolver) {
+    const done = restoreState.historyDeleteConfirmResolver;
+    restoreState.historyDeleteConfirmResolver = null;
+    done(!!confirmed);
   }
 }
 
@@ -1152,7 +1188,7 @@ function renderRestorePrecheck(data) {
   const ok = !!data.ok;
   verdict.classList.remove('hidden');
   verdict.classList.toggle('error', !ok);
-  verdict.innerHTML = `<span class="restore-precheck-verdict-mark">${ok ? '✓' : '!'}</span><span><strong>${escHtml(restoreT(ok ? 'precheckVerdictOk' : 'precheckVerdictFailed'))}</strong><small>${escHtml(restoreT(ok ? 'precheckVerdictOkDetail' : 'precheckVerdictFailedDetail'))}</small></span>`;
+  verdict.innerHTML = `<span class="restore-precheck-verdict-mark">${restoreStatusIcon(ok ? 'success' : 'error')}</span><span><strong>${escHtml(restoreT(ok ? 'precheckVerdictOk' : 'precheckVerdictFailed'))}</strong><small>${escHtml(restoreT(ok ? 'precheckVerdictOkDetail' : 'precheckVerdictFailedDetail'))}</small></span>`;
   facts.innerHTML = [
     [restoreT('mountpointLabel'), data.target_mountpoint || '—'],
     [restoreT('freeSpaceLabel'), _restoreFmtSize(data.target_free_bytes || 0)],
