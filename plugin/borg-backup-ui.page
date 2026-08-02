@@ -44,6 +44,12 @@ function bbui_write_conf($file, $port, $bind) {
   file_put_contents($file, implode("\n", $lines) . "\n");
 }
 
+function bbui_ui_url($port) {
+  $host = $_SERVER['SERVER_ADDR'] ?? ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+  $host = preg_replace('/:\d+$/', '', (string)$host);
+  return "http://$host:$port/";
+}
+
 function bbui_python_runtime_status() {
   $path = trim((string)shell_exec("command -v python3 2>/dev/null"));
   $status = [
@@ -96,10 +102,12 @@ foreach ($plugin_manifests as $plg) {
 
 // Actions use a GET parameter because Unraid intercepts form POSTs and opens a new window.
 // Do not sleep here; JavaScript shows the loading state and reloads after a delay.
-$action = $_GET['action'] ?? ($_POST['action'] ?? '');
+$action = $_POST['action'] ?? ($_GET['action'] ?? '');
 $python_status = bbui_python_runtime_status();
 $python_ok = $python_status['ok'];
 $warn_msg = '';
+$async = (($_POST['bbui_async'] ?? '') === '1' || ($_GET['bbui_async'] ?? '') === '1');
+$json_response = null;
 
 if (($action === 'start' || $action === 'restart') && !$python_ok) {
   $warn_msg = $python_status['reason'] . " Install or update the 'Python 3 for Unraid' plugin first.";
@@ -119,14 +127,26 @@ if (($action === 'start' || $action === 'restart') && !$python_ok) {
   }
   bbui_write_conf($CONF_FILE, $port, $bind);
   shell_exec("$RC restart >/dev/null 2>&1 &");
+  $json_response = [
+    'ok' => true,
+    'action' => $action,
+    'port' => $port,
+    'bind' => $bind,
+    'url' => bbui_ui_url($port),
+  ];
+}
+
+if ($async && $json_response !== null) {
+  header('Content-Type: application/json');
+  echo json_encode($json_response);
+  exit;
 }
 
 $running = bbui_is_running($PIDFILE);
 $conf    = bbui_read_conf($CONF_FILE);
 $port    = $conf['PORT'];
 $bind    = $conf['BIND'];
-$ip      = $_SERVER['SERVER_ADDR'];
-$ui_url  = "http://$ip:$port";
+$ui_url  = bbui_ui_url($port);
 ?>
 <style>
 .bbui-section {
@@ -298,7 +318,7 @@ $ui_url  = "http://$ip:$port";
     &#128295; Configuration
   </div>
   <div class="bbui-body">
-    <form method="POST">
+    <form method="POST" id="bbui-config-form" onsubmit="return bbui_apply_config('apply')">
       <input type="hidden" name="action" value="apply">
       <table class="bbui-table">
         <tr>
@@ -319,10 +339,38 @@ $ui_url  = "http://$ip:$port";
         </tr>
       </table>
       <br>
-      <div class="bbui-btn-row">
-        <button type="submit"                         class="bbui-btn primary">&#10003; Apply</button>
-        <button type="submit" name="action" value="default" class="bbui-btn">&#8635; Default</button>
+      <div class="bbui-btn-row" id="bbui-config-btns">
+        <button type="button" onclick="bbui_apply_config('apply')"   class="bbui-btn primary">&#10003; Apply</button>
+        <button type="button" onclick="bbui_apply_config('default')" class="bbui-btn">&#8635; Default</button>
       </div>
     </form>
+    <script>
+    function bbui_apply_config(action) {
+      var form = document.getElementById('bbui-config-form');
+      var buttons = document.getElementById('bbui-config-btns');
+      var portInput = form.querySelector('input[name="PORT"]');
+      var data = new FormData(form);
+      data.set('action', action);
+      data.set('bbui_async', '1');
+      if (action === 'default') {
+        data.set('PORT', '8765');
+        data.set('BIND', '0.0.0.0');
+      }
+      var requestedPort = action === 'default' ? '8765' : (portInput.value || '8765');
+      buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Applying configuration...</span>';
+      fetch(window.location.href, {method: 'POST', body: data, credentials: 'same-origin'})
+        .then(function(response) { return response.json(); })
+        .then(function(payload) {
+          var target = payload && payload.url ? payload.url : ('http://' + window.location.hostname + ':' + requestedPort + '/');
+          buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Restarting service...</span>';
+          setTimeout(function(){ window.location.href = target; }, 2500);
+        })
+        .catch(function() {
+          buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Restarting service...</span>';
+          setTimeout(function(){ window.location.href = 'http://' + window.location.hostname + ':' + requestedPort + '/'; }, 2500);
+        });
+      return false;
+    }
+    </script>
   </div>
 </div>

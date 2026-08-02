@@ -42,6 +42,18 @@ def test_control_page_service_actions_remain_available():
         assert f"'{action}'" in source or f'\"{action}\"' in source
 
 
+def test_control_page_config_apply_uses_async_restart_redirect():
+    source = CONTROL_PAGE.read_text(encoding="utf-8")
+
+    assert "bbui_async" in source
+    assert "Content-Type: application/json" in source
+    assert "bbui_apply_config('apply')" in source
+    assert "bbui_apply_config('default')" in source
+    assert "fetch(window.location.href, {method: 'POST'" in source
+    assert "window.location.href = target" in source
+    assert "bbui_ui_url($port)" in source
+
+
 def test_control_page_reads_test_and_stable_manifest_versions():
     source = CONTROL_PAGE.read_text(encoding="utf-8")
 
