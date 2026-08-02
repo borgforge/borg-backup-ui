@@ -44,6 +44,12 @@ function bbui_write_conf($file, $port, $bind) {
   file_put_contents($file, implode("\n", $lines) . "\n");
 }
 
+function bbui_ui_url($port) {
+  $host = $_SERVER['SERVER_ADDR'] ?? ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+  $host = preg_replace('/:\d+$/', '', (string)$host);
+  return "http://$host:$port/";
+}
+
 function bbui_python_runtime_status() {
   $path = trim((string)shell_exec("command -v python3 2>/dev/null"));
   $status = [
@@ -96,10 +102,12 @@ foreach ($plugin_manifests as $plg) {
 
 // Actions use a GET parameter because Unraid intercepts form POSTs and opens a new window.
 // Do not sleep here; JavaScript shows the loading state and reloads after a delay.
-$action = $_GET['action'] ?? ($_POST['action'] ?? '');
+$action = $_POST['action'] ?? ($_GET['action'] ?? '');
 $python_status = bbui_python_runtime_status();
 $python_ok = $python_status['ok'];
 $warn_msg = '';
+$async = (($_POST['bbui_async'] ?? '') === '1' || ($_GET['bbui_async'] ?? '') === '1');
+$json_response = null;
 
 if (($action === 'start' || $action === 'restart') && !$python_ok) {
   $warn_msg = $python_status['reason'] . " Install or update the 'Python 3 for Unraid' plugin first.";
@@ -113,20 +121,33 @@ if (($action === 'start' || $action === 'restart') && !$python_ok) {
   if ($action === 'default') {
     $port = '8765'; $bind = '0.0.0.0';
   } else {
-    $port = intval($_POST['PORT'] ?? 8765);
-    $bind = in_array($_POST['BIND'] ?? '', ['0.0.0.0', '127.0.0.1']) ? $_POST['BIND'] : '0.0.0.0';
+    $port = intval($_POST['PORT'] ?? ($_GET['PORT'] ?? 8765));
+    $requested_bind = $_POST['BIND'] ?? ($_GET['BIND'] ?? '');
+    $bind = in_array($requested_bind, ['0.0.0.0', '127.0.0.1']) ? $requested_bind : '0.0.0.0';
     if ($port < 1 || $port > 65535) $port = 8765;
   }
   bbui_write_conf($CONF_FILE, $port, $bind);
   shell_exec("$RC restart >/dev/null 2>&1 &");
+  $json_response = [
+    'ok' => true,
+    'action' => $action,
+    'port' => $port,
+    'bind' => $bind,
+    'url' => bbui_ui_url($port),
+  ];
+}
+
+if ($async && $json_response !== null) {
+  header('Content-Type: application/json');
+  echo json_encode($json_response);
+  exit;
 }
 
 $running = bbui_is_running($PIDFILE);
 $conf    = bbui_read_conf($CONF_FILE);
 $port    = $conf['PORT'];
 $bind    = $conf['BIND'];
-$ip      = $_SERVER['SERVER_ADDR'];
-$ui_url  = "http://$ip:$port";
+$ui_url  = bbui_ui_url($port);
 ?>
 <style>
 .bbui-section {
@@ -298,7 +319,7 @@ $ui_url  = "http://$ip:$port";
     &#128295; Configuration
   </div>
   <div class="bbui-body">
-    <form method="POST">
+    <form method="POST" id="bbui-config-form" onsubmit="return bbui_apply_config('apply')">
       <input type="hidden" name="action" value="apply">
       <table class="bbui-table">
         <tr>
@@ -319,10 +340,58 @@ $ui_url  = "http://$ip:$port";
         </tr>
       </table>
       <br>
-      <div class="bbui-btn-row">
-        <button type="submit"                         class="bbui-btn primary">&#10003; Apply</button>
-        <button type="submit" name="action" value="default" class="bbui-btn">&#8635; Default</button>
+      <div class="bbui-btn-row" id="bbui-config-btns">
+        <button type="button" onclick="bbui_apply_config('apply')"   class="bbui-btn primary">&#10003; Apply</button>
+        <button type="button" onclick="bbui_apply_config('default')" class="bbui-btn">&#8635; Default</button>
       </div>
     </form>
+    <script>
+    function bbui_apply_config(action) {
+      var form = document.getElementById('bbui-config-form');
+      var buttons = document.getElementById('bbui-config-btns');
+      var portInput = form.querySelector('input[name="PORT"]');
+      var bindInput = form.querySelector('select[name="BIND"]');
+      var defaultButtons = buttons.innerHTML;
+      var requestedPort = action === 'default' ? '8765' : (portInput.value || '8765');
+      var parsedPort = parseInt(requestedPort, 10);
+      if (!parsedPort || parsedPort < 1 || parsedPort > 65535) {
+        requestedPort = '8765';
+      } else {
+        requestedPort = String(parsedPort);
+      }
+      var requestedBind = action === 'default' ? '0.0.0.0' : (bindInput.value || '0.0.0.0');
+      var target = 'http://' + window.location.hostname + ':' + requestedPort + '/';
+      var targetWindow = window.open('about:blank', '_blank');
+      if (targetWindow) {
+        targetWindow.document.write('<!doctype html><title>Borg Backup UI</title><p style="font-family:sans-serif">Borg Backup UI is restarting...</p>');
+        targetWindow.document.close();
+      }
+      var params = new URLSearchParams();
+      params.set('action', action);
+      params.set('PORT', requestedPort);
+      params.set('BIND', requestedBind);
+      params.set('bbui_async', '1');
+      params.set('_', String(Date.now()));
+      if (action === 'default') {
+        portInput.value = '8765';
+        bindInput.value = '0.0.0.0';
+      }
+      buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Applying configuration...</span>';
+      fetch('?' + params.toString(), {credentials: 'same-origin', cache: 'no-store'}).catch(function(){});
+      setTimeout(function() {
+        buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Restarting service...</span>';
+      }, 800);
+      setTimeout(function() {
+        if (targetWindow && !targetWindow.closed) {
+          targetWindow.location.href = target;
+        } else {
+          buttons.innerHTML = defaultButtons + '<span style="color:#888;font-size:13px"> Use the Open Borg Backup UI button above if no new window opened.</span>';
+          return;
+        }
+        buttons.innerHTML = defaultButtons;
+      }, 3500);
+      return false;
+    }
+    </script>
   </div>
 </div>
