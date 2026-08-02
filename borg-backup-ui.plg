@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.01.2317">
+<!ENTITY version   "2026.08.02.1320">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,9 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.02.1320###
+- Fixed the Unraid control page so applying a changed port or bind address restarts Borg Backup UI and redirects to the correct UI URL with the configured port instead of leaving the browser on a blank Settings page.
+
 ###2026.08.01.2317###
 - The Job Wizard now removes deleted Docker containers from saved runtime selections when the current Docker inventory is available, so stale names no longer stay invisibly selected.
 
@@ -466,7 +469,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="c4d5249a0abaecc5fb299ad6420c62bd"
+EXPECTED_MD5="f55143014c4540be01305fe79a5452c1"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
