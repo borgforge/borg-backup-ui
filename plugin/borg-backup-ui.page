@@ -121,8 +121,9 @@ if (($action === 'start' || $action === 'restart') && !$python_ok) {
   if ($action === 'default') {
     $port = '8765'; $bind = '0.0.0.0';
   } else {
-    $port = intval($_POST['PORT'] ?? 8765);
-    $bind = in_array($_POST['BIND'] ?? '', ['0.0.0.0', '127.0.0.1']) ? $_POST['BIND'] : '0.0.0.0';
+    $port = intval($_POST['PORT'] ?? ($_GET['PORT'] ?? 8765));
+    $requested_bind = $_POST['BIND'] ?? ($_GET['BIND'] ?? '');
+    $bind = in_array($requested_bind, ['0.0.0.0', '127.0.0.1']) ? $requested_bind : '0.0.0.0';
     if ($port < 1 || $port > 65535) $port = 8765;
   }
   bbui_write_conf($CONF_FILE, $port, $bind);
@@ -349,26 +350,34 @@ $ui_url  = bbui_ui_url($port);
       var form = document.getElementById('bbui-config-form');
       var buttons = document.getElementById('bbui-config-btns');
       var portInput = form.querySelector('input[name="PORT"]');
-      var data = new FormData(form);
-      data.set('action', action);
-      data.set('bbui_async', '1');
-      if (action === 'default') {
-        data.set('PORT', '8765');
-        data.set('BIND', '0.0.0.0');
-      }
+      var bindInput = form.querySelector('select[name="BIND"]');
       var requestedPort = action === 'default' ? '8765' : (portInput.value || '8765');
+      var parsedPort = parseInt(requestedPort, 10);
+      if (!parsedPort || parsedPort < 1 || parsedPort > 65535) {
+        requestedPort = '8765';
+      } else {
+        requestedPort = String(parsedPort);
+      }
+      var requestedBind = action === 'default' ? '0.0.0.0' : (bindInput.value || '0.0.0.0');
+      var target = 'http://' + window.location.hostname + ':' + requestedPort + '/';
+      var params = new URLSearchParams();
+      params.set('action', action);
+      params.set('PORT', requestedPort);
+      params.set('BIND', requestedBind);
+      params.set('bbui_async', '1');
+      params.set('_', String(Date.now()));
+      if (action === 'default') {
+        portInput.value = '8765';
+        bindInput.value = '0.0.0.0';
+      }
       buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Applying configuration...</span>';
-      fetch(window.location.href, {method: 'POST', body: data, credentials: 'same-origin'})
-        .then(function(response) { return response.json(); })
-        .then(function(payload) {
-          var target = payload && payload.url ? payload.url : ('http://' + window.location.hostname + ':' + requestedPort + '/');
-          buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Restarting service...</span>';
-          setTimeout(function(){ window.location.href = target; }, 2500);
-        })
-        .catch(function() {
-          buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Restarting service...</span>';
-          setTimeout(function(){ window.location.href = 'http://' + window.location.hostname + ':' + requestedPort + '/'; }, 2500);
-        });
+      fetch('?' + params.toString(), {credentials: 'same-origin', cache: 'no-store'}).catch(function(){});
+      setTimeout(function() {
+        buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Restarting service...</span>';
+      }, 800);
+      setTimeout(function() {
+        window.location.href = target;
+      }, 3500);
       return false;
     }
     </script>
