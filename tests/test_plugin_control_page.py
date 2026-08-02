@@ -51,7 +51,10 @@ def test_control_page_config_apply_uses_async_restart_redirect():
     assert "bbui_apply_config('default')" in source
     assert "new URLSearchParams()" in source
     assert "fetch('?' + params.toString()" in source
-    assert "window.location.href = target" in source
+    assert "window.open('about:blank', '_blank')" in source
+    assert "targetWindow.location.href = target" in source
+    assert "Open Borg Backup UI" in source
+    assert "window.location.href = target" not in source
     assert "bbui_ui_url($port)" in source
     assert "($_GET['PORT'] ?? 8765)" in source
 

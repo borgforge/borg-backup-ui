@@ -360,6 +360,11 @@ $ui_url  = bbui_ui_url($port);
       }
       var requestedBind = action === 'default' ? '0.0.0.0' : (bindInput.value || '0.0.0.0');
       var target = 'http://' + window.location.hostname + ':' + requestedPort + '/';
+      var targetWindow = window.open('about:blank', '_blank');
+      if (targetWindow) {
+        targetWindow.document.write('<!doctype html><title>Borg Backup UI</title><p style="font-family:sans-serif">Borg Backup UI is restarting...</p>');
+        targetWindow.document.close();
+      }
       var params = new URLSearchParams();
       params.set('action', action);
       params.set('PORT', requestedPort);
@@ -376,7 +381,12 @@ $ui_url  = bbui_ui_url($port);
         buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Restarting service...</span>';
       }, 800);
       setTimeout(function() {
-        window.location.href = target;
+        if (targetWindow && !targetWindow.closed) {
+          targetWindow.location.href = target;
+          buttons.innerHTML = '<a href="' + target + '" target="_blank" class="bbui-btn primary">&#10149; Open Borg Backup UI</a>';
+        } else {
+          buttons.innerHTML = '<a href="' + target + '" target="_blank" class="bbui-btn primary">&#10149; Open Borg Backup UI</a><span style="color:#888;font-size:13px"> Open the UI in a new browser window.</span>';
+        }
       }, 3500);
       return false;
     }
