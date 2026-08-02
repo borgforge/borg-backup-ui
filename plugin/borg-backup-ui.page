@@ -351,6 +351,7 @@ $ui_url  = bbui_ui_url($port);
       var buttons = document.getElementById('bbui-config-btns');
       var portInput = form.querySelector('input[name="PORT"]');
       var bindInput = form.querySelector('select[name="BIND"]');
+      var defaultButtons = buttons.innerHTML;
       var requestedPort = action === 'default' ? '8765' : (portInput.value || '8765');
       var parsedPort = parseInt(requestedPort, 10);
       if (!parsedPort || parsedPort < 1 || parsedPort > 65535) {
@@ -383,10 +384,11 @@ $ui_url  = bbui_ui_url($port);
       setTimeout(function() {
         if (targetWindow && !targetWindow.closed) {
           targetWindow.location.href = target;
-          buttons.innerHTML = '<a href="' + target + '" target="_blank" class="bbui-btn primary">&#10149; Open Borg Backup UI</a>';
         } else {
-          buttons.innerHTML = '<a href="' + target + '" target="_blank" class="bbui-btn primary">&#10149; Open Borg Backup UI</a><span style="color:#888;font-size:13px"> Open the UI in a new browser window.</span>';
+          buttons.innerHTML = defaultButtons + '<span style="color:#888;font-size:13px"> Use the Open Borg Backup UI button above if no new window opened.</span>';
+          return;
         }
+        buttons.innerHTML = defaultButtons;
       }, 3500);
       return false;
     }

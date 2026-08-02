@@ -53,6 +53,9 @@ def test_control_page_config_apply_uses_async_restart_redirect():
     assert "fetch('?' + params.toString()" in source
     assert "window.open('about:blank', '_blank')" in source
     assert "targetWindow.location.href = target" in source
+    assert "var defaultButtons = buttons.innerHTML" in source
+    assert "buttons.innerHTML = defaultButtons" in source
+    assert "Open the UI in a new browser window" not in source
     assert "Open Borg Backup UI" in source
     assert "window.location.href = target" not in source
     assert "bbui_ui_url($port)" in source
