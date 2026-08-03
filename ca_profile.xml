@@ -1,0 +1,11 @@
+<CommunityApplications>
+  <Profile>
+    Borg Backup UI provides an Unraid plugin for BorgBackup with a guided web
+    interface for backup jobs, repositories, restore tests, archive browsing,
+    reports, notifications, and system health checks. Support and issue tracking
+    are handled through GitHub Issues.
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/plugin/plugin-icon.png</Icon>
+  <WebPage>https://github.com/borgforge/borg-backup-ui</WebPage>
+  <Forum>https://github.com/borgforge/borg-backup-ui/issues</Forum>
+</CommunityApplications>

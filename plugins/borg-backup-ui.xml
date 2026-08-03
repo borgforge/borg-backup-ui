@@ -1,0 +1,17 @@
+<Plugin>
+  <Name>Borg Backup UI</Name>
+  <Overview>Guided BorgBackup web interface for Unraid backups, repositories, restore tests, reports, archive browsing, and notifications.</Overview>
+  <PluginURL>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/borg-backup-ui.plg</PluginURL>
+  <PluginAuthor>Thorsten Steinberg</PluginAuthor>
+  <Support>https://github.com/borgforge/borg-backup-ui/issues</Support>
+  <Project>https://github.com/borgforge/borg-backup-ui</Project>
+  <ReadMe>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/README.md</ReadMe>
+  <Category>Tools:System</Category>
+  <Beta>true</Beta>
+  <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/plugin/plugin-icon.png</Icon>
+  <License>MIT</License>
+  <ExtraSearchTerms>borg borgbackup backup restore repository repositories unraid snapshots</ExtraSearchTerms>
+  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme-dashboard.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/user-manual/assets/en/jobs.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/user-manual/assets/en/restore-wizard.png</Screenshot>
+</Plugin>
