@@ -8,7 +8,7 @@
   <ReadMe>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/README.md</ReadMe>
   <Category>Tools:System</Category>
   <Beta>true</Beta>
-  <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/plugin/plugin-icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/ui/assets/app-icon.png</Icon>
   <License>MIT</License>
   <ExtraSearchTerms>borg borgbackup backup restore repository repositories unraid snapshots</ExtraSearchTerms>
   <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme-dashboard.png</Screenshot>
