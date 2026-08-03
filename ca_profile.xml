@@ -10,7 +10,7 @@ documentation, screenshots, and Community Apps submission metadata.
 Support and issue tracking are handled through GitHub Issues:
 https://github.com/borgforge/borg-backup-ui/issues
   ]]></Profile>
-  <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/plugin/plugin-icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/ui/assets/app-icon.png</Icon>
   <WebPage>https://github.com/borgforge/borg-backup-ui</WebPage>
   <Forum>https://github.com/borgforge/borg-backup-ui/issues</Forum>
   <Photo>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme-dashboard.png</Photo>
