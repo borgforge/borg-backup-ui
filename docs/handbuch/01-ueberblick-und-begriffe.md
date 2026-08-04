@@ -10,6 +10,10 @@ Borg Backup UI ist eine Weboberfläche für Borg-Backups auf Unraid. Sie verwalt
 
 Die Anwendung ersetzt nicht das Verständnis für die eigenen Daten. Sie hilft aber dabei, wiederholbare Backups und Restore-Prüfungen über eine einheitliche Oberfläche zu bedienen.
 
+Das Dashboard ist der zentrale Einstiegspunkt. Es zeigt pro Job den aktuellen
+Laufstatus, Restore-Nachweis, Speicherdaten, Repository-Prüfungen und den
+nächsten geplanten Lauf, sofern ein Zeitplan aktiv ist.
+
 ## Wichtige Begriffe
 
 - **Job**: Eine Backup-Aufgabe mit Quellen, Repository-Zuordnung, Kompression,

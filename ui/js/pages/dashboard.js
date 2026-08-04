@@ -41,6 +41,16 @@ async function fetchSystemHealth() {
   }
 }
 
+async function fetchDashboardSchedules() {
+  try {
+    const res = await fetch('/api/schedules');
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 async function refreshStatus() {
   const btn = document.getElementById('refresh-btn');
   if (btn) btn.classList.add('loading');
@@ -48,13 +58,17 @@ async function refreshStatus() {
   hideMessage();
 
   try {
-    const [statusData, jobsData, systemHealth] = await Promise.all([
+    const [statusData, jobsData, schedulesData, systemHealth] = await Promise.all([
       fetchStatus(),
       fetchJobsList(),
+      fetchDashboardSchedules(),
       fetchSystemHealth(),
     ]);
     await window.BBUI.core.updateDataDirWarning();
     window.BBUI.core.setAppCheckIntervalDays(statusData.check_interval_days || 30);
+    if (schedulesData) {
+      window.BBUI.core.setSchedulesData(schedulesData);
+    }
 
     const jobMap = {};
     for (const job of (jobsData.jobs || [])) {
@@ -393,6 +407,22 @@ function dashboardAbsoluteTimestamp(timestamp) {
   });
 }
 
+function dashboardFormatNextRunDate(date) {
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() || 'de';
+  const locale = language === 'en' ? 'en-GB' : 'de-DE';
+  const datePart = new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+  return `${datePart} ${timePart}`;
+}
+
 function dashboardRunDuration(seconds) {
   let remaining = Math.max(0, Math.round(Number(seconds || 0)));
   const hours = Math.floor(remaining / 3600);
@@ -404,6 +434,18 @@ function dashboardRunDuration(seconds) {
   if (minutes) parts.push(`${minutes} ${dashboardT('dashboard.durationMinutesShort')}`);
   if (secs || parts.length === 0) parts.push(`${secs} ${dashboardT('dashboard.durationSecondsShort')}`);
   return parts.join(' ');
+}
+
+function dashboardNextRun(jobKey, enabled) {
+  if (enabled === false) return '';
+  const schedules = window.BBUI.core.getSchedulesData?.() || {};
+  const sched = schedules[jobKey];
+  if (!sched) return dashboardT('dashboard.notScheduled');
+  if (!sched.enabled) return dashboardT('dashboard.scheduleDisabled');
+  const next = typeof calcNextRun === 'function' ? calcNextRun(sched.cron) : null;
+  return next
+    ? dashboardFormatNextRunDate(next)
+    : (sched.cron || dashboardT('dashboard.unknown'));
 }
 
 function renderDashboardRestoreVerificationBadge(backup) {
@@ -444,10 +486,20 @@ function renderDashboardInventoryRow(backup) {
   const identityDetail = backup.archive_name || backup.key || dashboardT('dashboard.neverExecuted');
   const runTime = dashboardRelativeRunTime(backup.timestamp);
   const runDuration = dashboardRunDuration(backup.duration_seconds);
-  const runFacts = backup.never_run ? '' : `<span class="dashboard-run-facts">
-      <span class="dashboard-fact-row"><b>${escHtml(dashboardT('dashboard.lastRunTime'))}:</b><span>${escHtml(runTime)}</span></span>
-      <span class="dashboard-fact-row"><b>${escHtml(dashboardT('dashboard.runDuration'))}:</b><span>${escHtml(runDuration)}</span></span>
-    </span>`;
+  const nextRun = dashboardNextRun(backup.key, backup.enabled);
+  const runFactRows = [
+    ...(!backup.never_run ? [
+      [dashboardT('dashboard.lastRunTime'), runTime, ''],
+      [dashboardT('dashboard.runDuration'), runDuration, ''],
+    ] : []),
+    ...(nextRun ? [[dashboardT('dashboard.nextRunTime'), nextRun, 'next-run']] : []),
+  ];
+  const runFacts = runFactRows.length ? `<span class="dashboard-run-facts">
+      ${runFactRows.map(([label, value, cls]) => {
+        const rowClass = cls ? ` ${cls}` : '';
+        return `<span class="dashboard-fact-row${rowClass}"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`;
+      }).join('')}
+    </span>` : '';
   const hasSizes = Number(backup.original_size || 0) > 0;
   const sizeFacts = hasSizes ? [
     [dashboardT('dashboard.deduplicated'), backup.deduplicated_size_formatted || '—', true],

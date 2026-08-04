@@ -163,6 +163,10 @@ def test_package_installer_rewrite_adds_checksum_and_skip_logic() -> None:
     assert 'EXPECTED_MD5="abcdef0123456789abcdef0123456789"' in rendered
     assert "vorhandenes Paket passt zur MD5" in rendered
     assert "Version ${VERSION} ist bereits installiert" in rendered
+    assert "package_payload_present()" in rendered
+    assert "extract_package_payload()" in rendered
+    assert "Paket ist registriert, aber Plugin-Dateien fehlen; Payload wird erneut entpackt." in rendered
+    assert "Paketmanager hat die Payload nicht vollstaendig entpackt; Payload wird direkt entpackt." in rendered
     assert "upgradepkg --install-new" in rendered
     assert "<MD5>" not in rendered
 

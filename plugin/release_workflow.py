@@ -317,6 +317,12 @@ core_payload_present() {{
   return 0
 }}
 
+package_payload_present() {{
+  core_payload_present || return 1
+  [ -f "${{VENDOR_META}}" ] || return 1
+  return 0
+}}
+
 vendor_ready() {{
   [ -f "${{VENDOR_META}}" ] || return 1
   [ -f "${{VENDOR_MARKER}}" ] || return 1
@@ -414,9 +420,20 @@ ensure_package_file() {{
   download_package
 }}
 
+extract_package_payload() {{
+  _reason="$1"
+  ensure_package_file
+  echo "Borg Backup UI: ${{_reason}}"
+  tar -xf "${{PACKAGE_FILE}}" -C /
+}}
+
 mkdir -p "${{PLUGIN_DIR}}"
 
 if package_registered; then
+  if ! package_payload_present; then
+    extract_package_payload "Paket ist registriert, aber Plugin-Dateien fehlen; Payload wird erneut entpackt."
+  fi
+
   if core_payload_present; then
     marker_md5="$(cat "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true)"
     if [ "${{marker_md5}}" = "${{EXPECTED_MD5}}" ]; then
@@ -444,6 +461,9 @@ fi
 ensure_package_file
 echo "Borg Backup UI: installiere Paket ${{VERSION}}. Auf USB-Flash kann dieser Schritt etwas dauern..."
 upgradepkg --install-new "${{PACKAGE_FILE}}"
+if ! package_payload_present; then
+  extract_package_payload "Paketmanager hat die Payload nicht vollstaendig entpackt; Payload wird direkt entpackt."
+fi
 ensure_apprise_vendor
 echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
 rm -f /tmp/borg-backup-ui-package-install.sh

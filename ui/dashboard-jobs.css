@@ -320,6 +320,11 @@
   white-space: normal;
 }
 
+.dashboard-run-facts .dashboard-fact-row.next-run > span {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
 .dashboard-run-facts b,
 .dashboard-restore-facts b,
 .dashboard-storage-facts b {

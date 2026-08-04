@@ -11,14 +11,21 @@ Dieses Kapitel beschreibt, wie Jobs angelegt, geprüft und gespeichert werden.
 3. Jobname und Typ eintragen.
 4. Speicherziel wählen: lokal, USB, SMB oder SSH/Storagebox.
 5. Ein dazugehöriges vorhandenes Repository wählen.
-6. Quellpfade eintragen.
+6. Zu sichernde Ordner oder Dateien auswählen.
 7. Kompression und Retention setzen.
 8. Optional Zeitplan aktivieren.
 9. Vorschau prüfen und speichern.
 
-## Quellpfade
+## Zu sichernde Ordner und Dateien
 
-Quellpfade sind die Daten, die gesichert werden. Sie sollten existieren und für den Backup-Prozess lesbar sein.
+Der Wizard nennt die Auswahl bewusst **Zu sichernde Ordner**. Technisch sind das
+die Quellpfade des Backup-Jobs: also die Ordner oder Dateien, die in das
+Borg-Archiv geschrieben werden.
+
+Mindestens ein Ordner oder eine Datei ist erforderlich. Ohne diese Angabe weiß
+der Job nicht, welche Daten gesichert werden sollen.
+
+Die ausgewählten Pfade sollten existieren und für den Backup-Prozess lesbar sein.
 
 Typische Beispiele:
 

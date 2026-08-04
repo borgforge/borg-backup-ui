@@ -32,7 +32,7 @@ Borg-Backup-UI ist eine Weboberfläche für BorgBackup auf Unraid. Die Anwendung
 
 ### 1.1 Grundbegriffe
 
-- **Job:** Eine Backup-Definition mit Quellpfaden, Ziel, Borg-Optionen, Retention, Passphrase und optionalem Zeitplan.
+- **Job:** Eine Backup-Definition mit zu sichernden Ordnern oder Dateien, Ziel, Borg-Optionen, Retention, Passphrase und optionalem Zeitplan.
 - **Repository:** Das BorgBackup-Ziel, in dem Archive gespeichert werden.
 - **Archiv:** Ein einzelner BorgBackup-Snapshot innerhalb eines Repositorys.
 - **Standort:** Eine Zielgruppe wie `Lokal`, `USB`, `SMB` oder `Storagebox`.
@@ -69,6 +69,7 @@ Das Dashboard beantwortet die wichtigsten Betriebsfragen:
 
 - Welche Jobs existieren?
 - Welche Backups waren erfolgreich, übersprungen, mit Warnung oder fehlerhaft?
+- Wann läuft ein geplanter Job das nächste Mal?
 - Welche Restore-Tests sind verifiziert, überfällig, fehlgeschlagen oder nicht geplant?
 - Welche Speicher- und Repository-Daten sind zuletzt bekannt?
 - Welche Jobs benötigen Aufmerksamkeit?
@@ -81,14 +82,14 @@ Die Seite besteht aus:
 - **Restore-Nachweis:** Anzahl verifizierter, überfälliger, fehlgeschlagener, offener und nicht geplanter Restore-Tests.
 - **Standort-Sidebar:** Filtert die Tabelle nach `Alle Standorte`, `Lokal`, `USB`, `SMB` und `Storagebox`.
 - **Auswahlkarte:** Zeigt den aktuell gewählten Standort und die Anzahl der Backups.
-- **Job-Tabelle:** Zeigt Job, Standort, Laufstatus, Restore-Status, Speicherdaten und Wachstum/Check.
+- **Job-Tabelle:** Zeigt Job, Standort, Laufstatus inklusive nächstem geplanten Lauf, Restore-Status, Speicherdaten und Wachstum/Check.
 - **Aktualisieren:** Lädt Dashboard-Daten neu.
 
 ### 2.3 Wichtige Spalten
 
 - **Backup:** Name, Schlüssel und Icon des Jobs.
 - **Standort:** Speicherziel des Jobs.
-- **Laufstatus:** Letzter Lauf, Dauer und Ergebnis.
+- **Laufstatus:** Letzter Lauf, Dauer, Ergebnis und nächster geplanter Lauf.
 - **Restore:** Letzter Restore-Test und Gültigkeit, sofern geplant.
 - **Speicherdaten:** Deduplizierte Größe, Quelle, komprimierte Größe und Repository-Größe.
 - **Wachstum / Check:** Größenänderung und letzter Repository-Check.
@@ -121,7 +122,7 @@ Jobs definieren, welche Daten wohin gesichert werden. Ein Job enthält:
 
 - Anzeigename und Typ-ID
 - Standort und Repository
-- Quellpfade
+- Zu sichernde Ordner oder Dateien
 - Docker- und VM-Steuerung
 - Borg-Optionen wie Kompression, Retention und Passphrase
 - Zeitplan
@@ -177,18 +178,18 @@ Wichtige Felder:
 
 #### Schritt 2: Quellen & Ziel
 
-Die kompakte Ansicht zeigt links **Quellen und Ausschlüsse** und rechts das **Backup-Ziel**. Hier werden Quellpfade, optionale Ausschlusspfade, Speichertyp, konkretes Speicherziel, ein vorhandenes Repository und die Job-Kompression gewählt. Die Repository-Liste zeigt ausschließlich Repositorys, die zum ausgewählten Speicherziel gehören. Repository-Pfade werden im Job nicht mehr frei eingegeben.
+Die kompakte Ansicht zeigt links **Zu sichernde Ordner** und **Ausschlüsse** und rechts das **Backup-Ziel**. Links legen Sie fest, welche Ordner oder Dateien in das Backup aufgenommen werden und welche Unterordner oder Dateien ausgelassen werden sollen. Rechts werden Speichertyp, konkretes Speicherziel, ein vorhandenes Repository und die Job-Kompression gewählt. Die Repository-Liste zeigt ausschließlich Repositorys, die zum ausgewählten Speicherziel gehören. Repository-Pfade werden im Job nicht mehr frei eingegeben.
 
-Typische Quellpfade:
+Typische Ordner, die gesichert werden:
 
 - `/boot/`
 - `/mnt/user/appdata/`
 - `/mnt/user/domains/`
 - `/mnt/user/photos/`
 
-> **Hinweis:** Quellpfade müssen auf dem Unraid-System existieren und für den Backup-Prozess lesbar sein.
+> **Hinweis:** Die ausgewählten Ordner oder Dateien müssen auf dem Unraid-System existieren und für den Backup-Prozess lesbar sein. Technisch werden sie als Quellpfade des Jobs gespeichert.
 
-Ausschlusspfade sind konkrete Dateien oder Verzeichnisse unterhalb eines ausgewählten Quellpfads. Sie werden nicht in das Borg-Archiv aufgenommen. Bei vielen Einträgen scrollen nur die Pfadlisten innerhalb ihres Bereichs.
+Ausschlüsse sind konkrete Dateien oder Verzeichnisse unterhalb eines ausgewählten Backup-Ordners. Sie werden nicht in das Borg-Archiv aufgenommen. Bei vielen Einträgen scrollen nur die Pfadlisten innerhalb ihres Bereichs.
 
 #### Docker- und VM-Schritte
 
@@ -227,7 +228,7 @@ Dieser Ausdruck startet täglich um 03:00 Uhr.
 
 #### Flow-Vorschau
 
-Der letzte Schritt zeigt eine technische Vorschau des geplanten Ablaufs. Hier werden Repository, Quellpfade, Docker-/VM-Auswahl und geplante Aktionen zusammengefasst.
+Der letzte Schritt zeigt eine technische Vorschau des geplanten Ablaufs. Hier werden Repository, zu sichernde Ordner oder Dateien, Docker-/VM-Auswahl und geplante Aktionen zusammengefasst.
 
 ### 3.5 Zeitplanung und Cron
 
@@ -242,7 +243,7 @@ Best Practices:
 
 ### 3.6 Typische Meldungen
 
-- **Vorschau Fehler / ungültige Angaben:** Ein Feld im Wizard ist nicht plausibel. Prüfen Sie Quellpfade, Typ-ID, Speicherziel und Repository-Auswahl.
+- **Vorschau Fehler / ungültige Angaben:** Ein Feld im Wizard ist nicht plausibel. Prüfen Sie die zu sichernden Ordner oder Dateien, Typ-ID, Speicherziel und Repository-Auswahl.
 - **Kein Speicherziel oder Repository vorhanden:** Richten Sie das Speicherziel zuerst unter **Einstellungen** ein. Erstellen oder importieren Sie danach das Repository unter **Repositories**.
 - **Schedule disabled / Zeitplan deaktiviert:** Der Job läuft nur manuell.
 
@@ -906,7 +907,7 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 1. Öffnen Sie **Jobs**.
 2. Klicken Sie auf **Neuer Job**.
 3. Tragen Sie Name, Typ-ID, Icon und Standort ein.
-4. Wählen Sie Quellpfade.
+4. Wählen Sie die Ordner oder Dateien, die gesichert werden sollen.
 5. Wählen Sie zuerst das Speicherziel und danach ein vorhandenes Repository.
 6. Konfigurieren Sie Docker- oder VM-Steuerung, wenn nötig.
 7. Setzen Sie Kompression und Retention. Verschlüsselung und Passphrase gehören zum Repository.
