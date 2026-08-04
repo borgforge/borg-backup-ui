@@ -109,18 +109,27 @@ def test_wizard_source_autocomplete_cancels_stale_requests() -> None:
 
 def test_wizard_source_paths_are_explained_for_normal_users() -> None:
     html = _read("ui/index.html")
+    css = _read("ui/style.css")
     german = _read("ui/i18n/de.json")
     english = _read("ui/i18n/en.json")
     help_de = _read("ui/docs/help.md")
     help_en = _read("ui/docs/help.en.md")
 
-    assert 'data-i18n="wizard.sourcePathsHelp"' in html
-    assert '"sourcePaths": "Zu sichernde Ordner"' in german
-    assert '"sourcePathsHelp": "Wähle hier die Ordner oder Dateien aus, die dieser Backup-Job sichern soll.' in german
+    assert 'data-i18n="wizard.sourcePathsHelp"' not in html
+    assert 'data-i18n="wizard.exclusionsSection"' in html
+    assert 'data-i18n="wizard.exclusionsSectionHint"' in html
+    assert ".wizard-step2-panel-subheader" in css
+    assert '"sourcesSection": "Zu sichernde Ordner"' in german
+    assert '"sourcesSectionHint": "Festlegen, welche Verzeichnisse gesichert werden sollen."' in german
+    assert '"sourcePaths": "Auswahl"' in german
+    assert '"exclusionsSection": "Ausschlüsse"' in german
+    assert '"exclusionsSectionHint": "Festlegen, welche Unterverzeichnisse oder Dateien nicht gesichert werden sollen."' in german
+    assert '"excludePaths": "Nicht sichern"' in german
     assert '"noSourcePaths": "Noch keine zu sichernden Ordner hinzugefügt."' in german
     assert '"validationSource": "Bitte mindestens einen Ordner oder eine Datei auswählen, die gesichert werden soll."' in german
-    assert '"sourcePaths": "Folders to back up"' in english
-    assert '"sourcePathsHelp": "Choose the folders or files this backup job should back up.' in english
+    assert '"sourcesSection": "Folders to back up"' in english
+    assert '"sourcePaths": "Selection"' in english
+    assert '"exclusionsSection": "Exclusions"' in english
     assert "Quellen sind die Ordner oder Dateien" in help_de
     assert "Sources are the folders or files" in help_en
 

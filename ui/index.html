@@ -1489,23 +1489,26 @@
         <div class="wizard-step2-layout">
           <section class="wizard-step2-panel" aria-labelledby="wizard-step2-sources-title">
             <header class="wizard-step2-panel-header">
-              <strong id="wizard-step2-sources-title" data-i18n="wizard.sourcesSection">Quellen und Ausschlüsse</strong>
-              <span data-i18n="wizard.sourcesSectionHint">Daten auswählen und optionale Unterpfade auslassen.</span>
+              <strong id="wizard-step2-sources-title" data-i18n="wizard.sourcesSection">Zu sichernde Ordner</strong>
+              <span data-i18n="wizard.sourcesSectionHint">Festlegen, welche Verzeichnisse gesichert werden sollen.</span>
             </header>
             <div class="form-group">
-              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.sourcePaths">Zu sichernde Ordner</span> <span class="form-hint" data-i18n="wizard.sourcePathsHint">(ab /mnt: ↑/↓ auswählen, → Verzeichnis öffnen, Enter übernehmen)</span></label>
+              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.sourcePaths">Auswahl</span> <span class="form-hint" data-i18n="wizard.sourcePathsHint">(ab /mnt: ↑/↓ auswählen, → Verzeichnis öffnen, Enter übernehmen)</span></label>
               <div class="wizard-path-control">
                 <input class="form-input mono" type="text" id="wiz-source-path-input" placeholder="/mnt/user/...">
                 <div id="wiz-source-path-suggest" class="wizard-path-suggest hidden"></div>
               </div>
-              <div class="form-hint" data-i18n="wizard.sourcePathsHelp">Wähle hier die Ordner oder Dateien aus, die dieser Backup-Job sichern soll. Beispiele: /mnt/user/appdata/ oder /mnt/user/domains/.</div>
               <div id="wiz-source-path-list" class="wizard-path-list wizard-step2-path-list"></div>
               <textarea class="form-input path-list-input hidden" id="wiz-source-paths" rows="4"
                 placeholder="/mnt/user/data/&#10;/mnt/user/documents/"></textarea>
             </div>
             <div class="wizard-step2-divider"></div>
+            <header class="wizard-step2-panel-header wizard-step2-panel-subheader">
+              <strong data-i18n="wizard.exclusionsSection">Ausschlüsse</strong>
+              <span data-i18n="wizard.exclusionsSectionHint">Festlegen, welche Unterverzeichnisse oder Dateien nicht gesichert werden sollen.</span>
+            </header>
             <div class="form-group">
-              <label class="form-label"><span data-i18n="wizard.excludePaths">Ausschlusspfade</span> <span class="form-hint" data-i18n="wizard.excludePathsHint">(optional, muss unter einem zu sichernden Ordner liegen)</span></label>
+              <label class="form-label"><span data-i18n="wizard.excludePaths">Nicht sichern</span> <span class="form-hint" data-i18n="wizard.excludePathsHint">(optional, unter einem zu sichernden Ordner)</span></label>
               <div class="wizard-path-control">
                 <input class="form-input mono" type="text" id="wiz-exclude-path-input" placeholder="/mnt/user/appdata/cache/">
                 <div id="wiz-exclude-path-suggest" class="wizard-path-suggest hidden"></div>

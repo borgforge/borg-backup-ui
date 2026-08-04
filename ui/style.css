@@ -4853,6 +4853,11 @@ body.wizard-modal-open {
   line-height: 1.35;
 }
 
+.wizard-step2-panel-subheader {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
 .wizard-step2-panel .form-group {
   margin: 0;
   gap: 5px;
