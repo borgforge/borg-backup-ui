@@ -50,7 +50,7 @@ Das Dashboard beantwortet, ob Backups und Restore-Nachweise aktuell gesund sind.
 
 ### Wichtige Spalten
 
-- **Laufstatus:** Ergebnis, Zeitpunkt und Dauer des letzten Backup-Laufs.
+- **Laufstatus:** Ergebnis, Zeitpunkt und Dauer des letzten Backup-Laufs sowie der nächste geplante Lauf.
 - **Restore:** letzter Restore-Test und seine Gültigkeit.
 - **Speicherdaten:** Quellgröße, komprimierte und deduplizierte Daten sowie Repository-Größe.
 - **Wachstum / Check:** Größenänderung und letzter bekannter Repository-Check.
