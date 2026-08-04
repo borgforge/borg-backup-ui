@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.02.1320">
+<!ENTITY version   "2026.08.04.1237">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,12 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.04.1237###
+- Clarified the Job Wizard source selection wording: the sources step now separates folders to back up from exclusions, uses shorter labels in the form, clearer validation, and matching help documentation.
+- Show the next scheduled backup run on the Dashboard job overview, including clear states for jobs without a schedule or with a disabled schedule.
+- Recover incomplete manual plugin deletions during reinstall: if Unraid still reports the package as installed but plugin payload or Apprise vendor metadata is missing, the installer now re-extracts the verified package before continuing.
+- Added an Unraid control page recovery action for forgotten Borg Backup UI admin credentials. The control page now creates a short-lived one-time recovery link for an existing admin account and shows it as a clear action button; the recovery page displays the selected admin, the new password is entered in Borg Backup UI, all UI sessions are signed out, and jobs, repositories, secrets, settings, and logs remain untouched.
+
 ###2026.08.02.1320###
 - Fixed the Unraid control page so applying a changed port or bind address restarts Borg Backup UI and redirects to the correct UI URL with the configured port instead of leaving the browser on a blank Settings page.
 
@@ -469,7 +475,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="f55143014c4540be01305fe79a5452c1"
+EXPECTED_MD5="fa64db8138d2a422d8ad5d840a17a523"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
@@ -511,6 +517,12 @@ package_registered() {
 core_payload_present() {
   [ -f "${PLUGIN_DIR}/borg_backup_ui.py" ] || return 1
   [ -f "/etc/rc.d/rc.borg_backup_ui" ] || return 1
+  return 0
+}
+
+package_payload_present() {
+  core_payload_present || return 1
+  [ -f "${VENDOR_META}" ] || return 1
   return 0
 }
 
@@ -611,9 +623,20 @@ ensure_package_file() {
   download_package
 }
 
+extract_package_payload() {
+  _reason="$1"
+  ensure_package_file
+  echo "Borg Backup UI: ${_reason}"
+  tar -xf "${PACKAGE_FILE}" -C /
+}
+
 mkdir -p "${PLUGIN_DIR}"
 
 if package_registered; then
+  if ! package_payload_present; then
+    extract_package_payload "Paket ist registriert, aber Plugin-Dateien fehlen; Payload wird erneut entpackt."
+  fi
+
   if core_payload_present; then
     marker_md5="$(cat "${INSTALLED_MD5_FILE}" 2>/dev/null || true)"
     if [ "${marker_md5}" = "${EXPECTED_MD5}" ]; then
@@ -641,6 +664,9 @@ fi
 ensure_package_file
 echo "Borg Backup UI: installiere Paket ${VERSION}. Auf USB-Flash kann dieser Schritt etwas dauern..."
 upgradepkg --install-new "${PACKAGE_FILE}"
+if ! package_payload_present; then
+  extract_package_payload "Paketmanager hat die Payload nicht vollstaendig entpackt; Payload wird direkt entpackt."
+fi
 ensure_apprise_vendor
 echo "${EXPECTED_MD5}" > "${INSTALLED_MD5_FILE}" 2>/dev/null || true
 rm -f /tmp/borg-backup-ui-package-install.sh
