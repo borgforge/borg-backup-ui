@@ -18,7 +18,7 @@ def test_control_page_is_consistently_english():
         "local only",
         "Python 3.10 or newer",
         "Admin Access Recovery",
-        "Reset Admin Access",
+        "Open Admin Recovery",
     ]
     forbidden = [
         "Web-Oberfläche",
@@ -40,7 +40,7 @@ def test_control_page_is_consistently_english():
 def test_control_page_service_actions_remain_available():
     source = CONTROL_PAGE.read_text(encoding="utf-8")
 
-    for action in ("start", "stop", "restart", "apply", "default", "admin_recovery"):
+    for action in ("start", "stop", "restart", "apply", "default", "admin_recovery_start"):
         assert f"'{action}'" in source or f'\"{action}\"' in source
 
 
@@ -76,26 +76,27 @@ def test_control_page_reads_test_and_stable_manifest_versions():
     assert "foreach ($plugin_manifests as $plg)" in source
 
 
-def test_control_page_admin_recovery_uses_post_body_and_python_helper():
+def test_control_page_admin_recovery_uses_token_link_and_python_helper():
     source = CONTROL_PAGE.read_text(encoding="utf-8")
 
     assert "api/admin_recovery.py" in source
-    assert "--control-page" in source
+    assert "--create-token" in source
     assert "--list-admins" in source
-    assert 'method="POST"' in source
+    assert 'method="GET"' in source
     assert "$action = (string)bbui_request_value('action', '')" in source
     assert "$action = $_POST['action']" not in source
-    assert "onsubmit=\"return bbui_validate_admin_recovery()\"" in source
-    assert "bbui_request_value('password'" in source
+    assert "onsubmit=\"return bbui_start_admin_recovery()\"" in source
+    assert "bbui_request_value('password'" not in source
     assert "file_get_contents('php://input')" in source
-    assert "bbui_run_admin_recovery" in source
-    assert "Admin access recovered for" in source
+    assert "bbui_create_admin_recovery_link" in source
+    assert "Recovery page created for" in source
+    assert "/admin-recovery?token=" in source
     assert "fetch('/plugins/borg-backup-ui/admin-recovery.php'" not in source
     assert "Admin recovery returned an empty response." not in source
     assert "bbui_load_admin_accounts" in source
     assert "<select class=\"bbui-select\" name=\"username\"" in source
-    assert "password_confirm" in source
-    assert "Password must contain at least 12 characters." in source
-    assert "All Borg Backup UI sessions were signed out" in source
-    assert "Reset the password of an existing Borg Backup UI administrator account" in source
+    assert "password_confirm" not in source
+    assert "Password must contain at least 12 characters." not in source
+    assert "All Borg Backup UI sessions were signed out" not in source
+    assert "Open a one-time recovery page for an existing Borg Backup UI administrator account" in source
     assert "Reset or create an enabled" not in source
