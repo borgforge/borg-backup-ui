@@ -110,7 +110,7 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 ### Job-Wizard
 
 1. **Grunddaten:** Name, technischer Typ, Icon und optionale Docker-/VM-Steuerung.
-2. **Quellen & Ziel:** Quellpfade, Ausschlüsse, Speichertyp, Speicherziel, Repository und Kompression.
+2. **Quellen & Ziel:** Zu sichernde Ordner oder Dateien, Ausschlüsse, Speichertyp, Speicherziel, Repository und Kompression.
 3. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten.
 4. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
 5. **Retention:** tägliche, wöchentliche, monatliche und jährliche Aufbewahrung.
@@ -120,7 +120,11 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 
 ### Quellen und Ausschlüsse
 
-Quellen müssen existieren. Fehlende Pflichtquellen stoppen den Lauf, damit kein scheinbar erfolgreiches, aber unvollständiges Archiv entsteht. Ausschlüsse müssen unterhalb einer Quelle liegen.
+Quellen sind die Ordner oder Dateien, die ein Backup-Job sichern soll. Typische Beispiele sind `/mnt/user/appdata/`, `/mnt/user/domains/` oder eine eigene Share unter `/mnt/user/...`.
+
+Mindestens eine Quelle ist erforderlich, weil der Job sonst nicht weiß, welche Daten gesichert werden sollen. Quellen müssen existieren und für den Backup-Prozess lesbar sein. Fehlende Pflichtquellen stoppen den Lauf, damit kein scheinbar erfolgreiches, aber unvollständiges Archiv entsteht.
+
+Ausschlüsse sind optionale Unterordner oder Dateien innerhalb einer Quelle, die nicht ins Backup sollen. Ausschlüsse müssen deshalb unterhalb einer ausgewählten Quelle liegen.
 
 > [!TIP] Starten Sie jeden neuen oder grundlegend geänderten Job einmal manuell, bevor Sie seinen Zeitplan aktivieren.
 
@@ -238,7 +242,7 @@ Prüfen Sie WAN-Verbindung, Servererreichbarkeit und SSH-Keepalive. Ein abgebroc
 
 ### Backup enthält keine Daten
 
-Prüfen Sie Schreibweise, Groß-/Kleinschreibung, Inhalt und Lesbarkeit der Quellpfade. Ein vorhandenes, aber leeres Verzeichnis ist technisch gültig und erzeugt ein leeres Archiv.
+Prüfen Sie Schreibweise, Groß-/Kleinschreibung, Inhalt und Lesbarkeit der ausgewählten Ordner oder Dateien. Ein vorhandenes, aber leeres Verzeichnis ist technisch gültig und erzeugt ein leeres Archiv.
 
 ### Welche Backup-Strategie ist sinnvoll?
 
