@@ -23,6 +23,7 @@ from api.auth_store import (
     write_sessions_store,
     write_users_store,
 )
+from api.admin_recovery import load_control_page_config, recover_admin_access
 from borg_backup_ui import BackupUIHandler
 from api.restore_api import _validate_target_dir
 from startup_state import migration_maintenance_state, set_startup_state
@@ -99,6 +100,82 @@ def test_auth_store_writes_users_and_sessions_atomically(tmp_path: Path):
     assert read_sessions_store(cfg)["sessions"][0]["sid"] == "s1"
     assert (tmp_path / "config" / "users.json").stat().st_mode & 0o777 == 0o600
     assert (tmp_path / "config" / "sessions.json").stat().st_mode & 0o777 == 0o600
+
+
+def test_admin_recovery_resets_existing_admin_and_invalidates_sessions(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [{
+            "id": "u_existing",
+            "username": "admin",
+            "password_hash": hash_password("old-password-value"),
+            "role": "admin",
+            "enabled": True,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "last_login_at": "2026-01-02T00:00:00Z",
+        }],
+        "security": {"session_timeout_minutes": 30, "password_policy": {"min_length": 12}},
+    })
+    write_sessions_store(cfg, {"schema_version": 1, "sessions": [{"sid": "s1", "username": "admin"}]})
+
+    result = recover_admin_access(cfg, "Admin", "new-password-value")
+
+    store = read_users_store(cfg)
+    user = store["users"][0]
+    assert result["ok"] is True
+    assert result["action"] == "reset"
+    assert result["username"] == "admin"
+    assert verify_password_hash("new-password-value", user["password_hash"]) is True
+    assert user["role"] == "admin"
+    assert user["enabled"] is True
+    assert read_sessions_store(cfg)["sessions"] == []
+    backup_file = Path(result["backup_file"])
+    assert backup_file.is_file()
+    assert backup_file.stat().st_mode & 0o777 == 0o600
+    assert "new-password-value" not in (tmp_path / "config" / "users.json").read_text(encoding="utf-8")
+
+
+def test_admin_recovery_creates_admin_when_no_user_exists(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    result = recover_admin_access(cfg, "owner.user", "created-password-value")
+
+    store = read_users_store(cfg)
+    assert result["action"] == "created"
+    assert result["backup_file"] == ""
+    assert store["users"][0]["username"] == "owner.user"
+    assert store["users"][0]["role"] == "admin"
+    assert store["users"][0]["enabled"] is True
+    assert verify_password_hash("created-password-value", store["users"][0]["password_hash"]) is True
+
+
+@pytest.mark.parametrize(
+    ("username", "password", "message"),
+    [
+        ("root user", "valid-password-value", "Username is invalid"),
+        ("admin", "short", "Password must contain at least 12 characters"),
+    ],
+)
+def test_admin_recovery_validates_inputs(tmp_path: Path, username: str, password: str, message: str):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    with pytest.raises(ValueError, match=message):
+        recover_admin_access(cfg, username, password)
+
+
+def test_control_page_config_loader_reads_data_root(tmp_path: Path):
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "borg_backup_ui.conf").write_text(
+        'PORT=8765\nBACKUP_SCRIPTS_DIR="/mnt/user/borg-data"\n',
+        encoding="utf-8",
+    )
+
+    cfg = load_control_page_config(plugin_dir)
+
+    assert cfg["BACKUP_SCRIPTS_DIR"] == "/mnt/user/borg-data"
 
 
 @pytest.mark.parametrize(

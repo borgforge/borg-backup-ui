@@ -5,6 +5,20 @@ Borg Backup UI fails closed when an existing
 API access, login and administrator bootstrap remain unavailable until the file
 is recovered locally.
 
+## Forgotten administrator password
+
+Use the Unraid plugin control page first. It is the intended recovery path for
+valid user stores where only the administrator password is unknown:
+
+1. Open **Unraid WebUI > Settings > Borg Backup UI**.
+2. In **Admin Access Recovery**, enter the admin username and a new password.
+3. Confirm the password and select **Reset Admin Access**.
+4. Sign in to Borg Backup UI with the recovered admin account.
+
+The recovery action resets or creates an enabled admin account, backs up the
+current `config/users.json` when it exists, and invalidates all Borg Backup UI
+sessions. Jobs, repositories, secrets, settings and logs are not changed.
+
 ## Preferred recovery
 
 1. Stop Borg Backup UI from the Unraid plugin control panel.

@@ -17,6 +17,8 @@ def test_control_page_is_consistently_english():
         "all interfaces",
         "local only",
         "Python 3.10 or newer",
+        "Admin Access Recovery",
+        "Reset Admin Access",
     ]
     forbidden = [
         "Web-Oberfläche",
@@ -38,7 +40,7 @@ def test_control_page_is_consistently_english():
 def test_control_page_service_actions_remain_available():
     source = CONTROL_PAGE.read_text(encoding="utf-8")
 
-    for action in ("start", "stop", "restart", "apply", "default"):
+    for action in ("start", "stop", "restart", "apply", "default", "admin_recovery"):
         assert f"'{action}'" in source or f'\"{action}\"' in source
 
 
@@ -71,3 +73,17 @@ def test_control_page_reads_test_and_stable_manifest_versions():
     assert stable_manifest in source
     assert source.index(test_manifest) < source.index(stable_manifest)
     assert "foreach ($plugin_manifests as $plg)" in source
+
+
+def test_control_page_admin_recovery_uses_post_body_and_python_helper():
+    source = CONTROL_PAGE.read_text(encoding="utf-8")
+
+    assert "api/admin_recovery.py" in source
+    assert "--control-page" in source
+    assert "method: 'POST'" in source
+    assert "new FormData(form)" in source
+    assert "params.set('bbui_async', '1')" in source
+    assert "password_confirm" in source
+    assert "Password must contain at least 12 characters." in source
+    assert "All Borg Backup UI sessions were signed out" in source
+    assert "action=admin_recovery" not in source

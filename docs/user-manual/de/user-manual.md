@@ -671,6 +671,14 @@ Rollen:
 
 > **Tipp:** Deaktivieren Sie Benutzer zunächst, statt sie sofort dauerhaft zu löschen. So bleibt der Offboarding-Schritt kontrollierbarer.
 
+Wenn ein Administrator das Passwort vergessen hat, erfolgt die Wiederherstellung
+nicht über die Login-Seite. Öffnen Sie stattdessen in Unraid
+**Einstellungen > Borg Backup UI** und nutzen Sie **Admin Access Recovery** auf
+der Plugin-Control-Page. Dort kann ein Unraid-Administrator ein Admin-Konto
+zurücksetzen oder neu anlegen. Dabei werden alle Borg-Backup-UI-Sessions
+abgemeldet; Jobs, Repositorys, Secrets, Einstellungen und Logs bleiben
+unverändert.
+
 ### 9.3 Backup
 
 ![Einstellungen - Backup](../assets/de/settings-backup.png)
