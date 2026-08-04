@@ -50,7 +50,7 @@ The dashboard shows whether backups and restore evidence are currently healthy. 
 
 ### Important Columns
 
-- **Run status:** Result, time, and duration of the latest backup run.
+- **Run status:** Result, time, duration of the latest backup run, and the next scheduled run.
 - **Restore:** Latest restore test and its validity.
 - **Storage data:** Source size, compressed and deduplicated data, and repository size.
 - **Growth / Check:** Size change and the latest known repository check.

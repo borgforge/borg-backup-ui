@@ -69,6 +69,7 @@ Das Dashboard beantwortet die wichtigsten Betriebsfragen:
 
 - Welche Jobs existieren?
 - Welche Backups waren erfolgreich, übersprungen, mit Warnung oder fehlerhaft?
+- Wann läuft ein geplanter Job das nächste Mal?
 - Welche Restore-Tests sind verifiziert, überfällig, fehlgeschlagen oder nicht geplant?
 - Welche Speicher- und Repository-Daten sind zuletzt bekannt?
 - Welche Jobs benötigen Aufmerksamkeit?
@@ -81,14 +82,14 @@ Die Seite besteht aus:
 - **Restore-Nachweis:** Anzahl verifizierter, überfälliger, fehlgeschlagener, offener und nicht geplanter Restore-Tests.
 - **Standort-Sidebar:** Filtert die Tabelle nach `Alle Standorte`, `Lokal`, `USB`, `SMB` und `Storagebox`.
 - **Auswahlkarte:** Zeigt den aktuell gewählten Standort und die Anzahl der Backups.
-- **Job-Tabelle:** Zeigt Job, Standort, Laufstatus, Restore-Status, Speicherdaten und Wachstum/Check.
+- **Job-Tabelle:** Zeigt Job, Standort, Laufstatus inklusive nächstem geplanten Lauf, Restore-Status, Speicherdaten und Wachstum/Check.
 - **Aktualisieren:** Lädt Dashboard-Daten neu.
 
 ### 2.3 Wichtige Spalten
 
 - **Backup:** Name, Schlüssel und Icon des Jobs.
 - **Standort:** Speicherziel des Jobs.
-- **Laufstatus:** Letzter Lauf, Dauer und Ergebnis.
+- **Laufstatus:** Letzter Lauf, Dauer, Ergebnis und nächster geplanter Lauf.
 - **Restore:** Letzter Restore-Test und Gültigkeit, sofern geplant.
 - **Speicherdaten:** Deduplizierte Größe, Quelle, komprimierte Größe und Repository-Größe.
 - **Wachstum / Check:** Größenänderung und letzter Repository-Check.

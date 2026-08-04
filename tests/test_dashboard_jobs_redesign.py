@@ -204,16 +204,41 @@ def test_dashboard_uses_configured_job_icons() -> None:
 def test_dashboard_labels_relative_time_and_duration_separately() -> None:
     script = _read("ui/js/pages/dashboard.js")
     css = _read("ui/dashboard-jobs.css")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+    help_de = _read("ui/docs/help.md")
+    help_en = _read("ui/docs/help.en.md")
+    manual_de = _read("docs/user-manual/de/user-manual.md")
+    manual_en = _read("docs/user-manual/en/user-manual.md")
 
     assert "function dashboardRelativeRunTime(timestamp)" in script
     assert "new Intl.RelativeTimeFormat" in script
     assert "function dashboardRunDuration(seconds)" in script
+    assert "function fetchDashboardSchedules()" in script
+    assert "window.BBUI.core.setSchedulesData(schedulesData);" in script
+    assert "function dashboardFormatNextRunDate(date)" in script
+    assert "function dashboardNextRun(jobKey, enabled)" in script
+    assert "typeof calcNextRun === 'function' ? calcNextRun(sched.cron)" in script
+    assert "typeof fmtDateShort === 'function'" in script
     assert "dashboard.lastRunTime" in script
     assert "dashboard.runDuration" in script
+    assert "dashboard.nextRunTime" in script
+    assert "dashboard.notScheduled" in script
+    assert "dashboard.scheduleDisabled" in script
     assert "backup.time_ago" not in script
     assert ".dashboard-run-facts" in css
     assert ".dashboard-run-facts .dashboard-fact-row > span" in css
     assert "overflow-wrap: anywhere" in css
+    assert '"nextRunTime": "Nächster Lauf"' in german
+    assert '"notScheduled": "Nicht geplant"' in german
+    assert '"scheduleDisabled": "Zeitplan deaktiviert"' in german
+    assert '"nextRunTime": "Next run"' in english
+    assert '"notScheduled": "Not scheduled"' in english
+    assert '"scheduleDisabled": "Schedule disabled"' in english
+    assert "nächste geplante Lauf" in help_de
+    assert "next scheduled run" in help_en
+    assert "Wann läuft ein geplanter Job das nächste Mal?" in manual_de
+    assert "When will a scheduled job run next?" in manual_en
 
 
 def test_dashboard_shows_backup_overdue_before_last_run_success() -> None:

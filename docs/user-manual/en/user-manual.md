@@ -69,6 +69,7 @@ The Dashboard answers the most important operational questions:
 
 - Which jobs exist?
 - Which backups were successful, skipped, completed with warnings, or failed?
+- When will a scheduled job run next?
 - Which restore tests are verified, overdue, failed, open, or not scheduled?
 - Which storage and repository data was last recorded?
 - Which jobs need attention?
@@ -81,14 +82,14 @@ The page consists of:
 - **Restore evidence:** Number of verified, overdue, failed, open, and not scheduled restore tests.
 - **Location sidebar:** Filters the table by `All locations`, `Local`, `USB`, `SMB`, and `Storagebox`.
 - **Selection card:** Shows the currently selected location and number of backups.
-- **Job table:** Shows job, location, run status, restore status, storage data, and growth/check information.
+- **Job table:** Shows job, location, run status including the next scheduled run, restore status, storage data, and growth/check information.
 - **Refresh:** Reloads dashboard data.
 
 ### 2.3 Important Columns
 
 - **Backup:** Job name, key, and icon.
 - **Location:** Job storage target.
-- **Run status:** Last run, duration, and result.
+- **Run status:** Last run, duration, result, and next scheduled run.
 - **Restore:** Last restore test and validity, if scheduled.
 - **Storage data:** Deduplicated size, source, compressed size, and repository size.
 - **Growth / Check:** Size change and last repository check.
