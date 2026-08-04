@@ -177,7 +177,7 @@ foreach ($plugin_manifests as $plg) {
 
 // Actions use a GET parameter because Unraid intercepts form POSTs and opens a new window.
 // Do not sleep here; JavaScript shows the loading state and reloads after a delay.
-$action = $_POST['action'] ?? ($_GET['action'] ?? '');
+$action = (string)bbui_request_value('action', '');
 $python_status = bbui_python_runtime_status();
 $python_ok = $python_status['ok'];
 $warn_msg = '';

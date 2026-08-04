@@ -83,6 +83,8 @@ def test_control_page_admin_recovery_uses_post_body_and_python_helper():
     assert "--control-page" in source
     assert "--list-admins" in source
     assert 'method="POST"' in source
+    assert "$action = (string)bbui_request_value('action', '')" in source
+    assert "$action = $_POST['action']" not in source
     assert "onsubmit=\"return bbui_validate_admin_recovery()\"" in source
     assert "bbui_request_value('password'" in source
     assert "file_get_contents('php://input')" in source
