@@ -91,6 +91,8 @@ def test_control_page_admin_recovery_uses_token_link_and_python_helper():
     assert "bbui_create_admin_recovery_link" in source
     assert "Recovery page created for" in source
     assert "/admin-recovery?token=" in source
+    assert "bbui-recovery-link" in source
+    assert "class=\"bbui-btn primary\"" in source
     assert "fetch('/plugins/borg-backup-ui/admin-recovery.php'" not in source
     assert "fetch('?' + params.toString()" in source
     assert "bbui-admin-recovery-form" in source

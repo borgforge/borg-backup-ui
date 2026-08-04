@@ -356,6 +356,9 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
 }
 .bbui-result.ok { color: #8bd78b; }
 .bbui-result.error { color: #f08a8a; }
+.bbui-result .bbui-recovery-link {
+  margin-top: 10px;
+}
 </style>
 
 <!-- Service Control -->
@@ -545,8 +548,12 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
       <div class="bbui-result <?= is_array($admin_recovery_result) ? (!empty($admin_recovery_result['ok']) ? 'ok' : 'error') : '' ?>" id="bbui-admin-recovery-result">
         <?php if (is_array($admin_recovery_result)): ?>
           <?php if (!empty($admin_recovery_result['ok'])): ?>
-            Recovery page created for "<?= htmlspecialchars((string)($admin_recovery_result['username'] ?? '')) ?>".
-            <a href="<?= htmlspecialchars((string)($admin_recovery_result['url'] ?? '#')) ?>" target="_blank" style="color:#8bd78b">Open recovery page</a>
+            <div>Recovery page created for "<?= htmlspecialchars((string)($admin_recovery_result['username'] ?? '')) ?>".</div>
+            <div class="bbui-btn-row bbui-recovery-link">
+              <a href="<?= htmlspecialchars((string)($admin_recovery_result['url'] ?? '#')) ?>" target="_blank" class="bbui-btn primary">
+                &#10149; Open recovery page
+              </a>
+            </div>
           <?php else: ?>
             <?= htmlspecialchars((string)($admin_recovery_result['error'] ?? 'Admin recovery failed.')) ?>
           <?php endif; ?>

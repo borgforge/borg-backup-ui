@@ -20,6 +20,7 @@ import threading
 import time
 import uuid
 from datetime import datetime
+from html import escape as _html_escape
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -47,7 +48,10 @@ from api.auth_store import (
     write_sessions_store as _write_sessions_store,
     write_users_store as _write_users_store,
 )
-from api.admin_recovery import recover_admin_access_with_token as _recover_admin_access_with_token
+from api.admin_recovery import (
+    describe_admin_recovery_token as _describe_admin_recovery_token,
+    recover_admin_access_with_token as _recover_admin_access_with_token,
+)
 from api.security_utils import mask_secrets as _mask_secrets
 from api.startup_state import (
     get_startup_state as _get_startup_state,
@@ -3443,6 +3447,19 @@ btn.addEventListener('click',doSetup);
         qs = parse_qs(query or "")
         token = str((qs.get("token") or [""])[0] or "").strip()
         token_json = json.dumps(token)
+        try:
+            recovery_token_info = _describe_admin_recovery_token(self.config, token)
+        except Exception:
+            recovery_token_info = {"valid": False, "username": "", "expires_at": ""}
+        recovery_username = str(recovery_token_info.get("username") or "").strip()
+        recovery_account_html = ""
+        if recovery_username:
+            recovery_account_html = (
+                '<div class="recovery-account">'
+                '<span data-i18n="auth.recoveryAccount"></span> '
+                f'<strong>{_html_escape(recovery_username)}</strong>'
+                '</div>'
+            )
         html = """<!DOCTYPE html>
 <html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Borg Backup Admin Recovery</title>
@@ -3472,8 +3489,11 @@ btn.addEventListener('click',doSetup);
   .login-logo{width:30px;height:30px;object-fit:contain;display:block}
   .login-title{font-size:16px;font-weight:600;color:var(--text-primary)}
   .login-sub{padding:12px 18px 0 18px;color:var(--text-secondary);font-size:13px;line-height:1.45}
-  .login-body{padding:12px 18px 18px 18px}
+  .login-body{padding:12px 18px 18px 18px;display:grid;gap:12px}
   .login-msg{margin-top:10px}
+  .recovery-account{font-size:13px;color:var(--text-secondary);padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card)}
+  .recovery-account strong{color:var(--text-primary)}
+  .login-body .form-group{margin:0}
   .login-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .login-actions .btn{flex:1;justify-content:center;min-width:160px}
 </style>
@@ -3482,6 +3502,7 @@ btn.addEventListener('click',doSetup);
 <div class="login-head"><img class="login-logo" src="/ui/assets/app-icon.png" alt="" aria-hidden="true"><div class="login-title" data-i18n="auth.recoveryTitle"></div></div>
 <div class="login-sub" data-i18n="auth.recoverySubtitle"></div>
 <div class="login-body">
+__RECOVERY_ACCOUNT__
 <div class="form-group"><label class="form-label" data-i18n="auth.password"></label><input id="recovery-password" class="form-input" type="password" autocomplete="new-password" autofocus><div class="ui-field__hint" data-i18n="auth.passwordHint"></div></div>
 <div class="form-group"><label class="form-label" data-i18n="auth.passwordConfirm"></label><input id="recovery-password-confirm" class="form-input" type="password" autocomplete="new-password"></div>
 <div id="recovery-msg" class="status-message hidden login-msg"></div>
@@ -3524,6 +3545,7 @@ btn.addEventListener('click',doRecovery);
 ['recovery-password','recovery-password-confirm'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')doRecovery();}));
 </script></body></html>"""
         html = html.replace("__TOKEN__", token_json)
+        html = html.replace("__RECOVERY_ACCOUNT__", recovery_account_html)
         content = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

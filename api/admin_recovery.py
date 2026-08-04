@@ -187,6 +187,30 @@ def create_admin_recovery_token(
     }
 
 
+def describe_admin_recovery_token(config: dict[str, Any], token: str) -> dict[str, Any]:
+    """Return non-secret display information for a valid recovery token."""
+    clean_token = str(token or "").strip()
+    if len(clean_token) < 24:
+        return {"valid": False, "username": "", "expires_at": ""}
+    store = _read_recovery_tokens(config)
+    now = int(time.time())
+    token_hash = _hash_token(clean_token)
+    for item in store.get("tokens", []):
+        if not isinstance(item, dict):
+            continue
+        expires_at = int(item.get("expires_at", 0) or 0)
+        if expires_at <= now:
+            continue
+        if not secrets.compare_digest(str(item.get("token_hash", "")), token_hash):
+            continue
+        return {
+            "valid": True,
+            "username": normalize_username(item.get("username", "")),
+            "expires_at": datetime.fromtimestamp(expires_at, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    return {"valid": False, "username": "", "expires_at": ""}
+
+
 def recover_admin_access_with_token(config: dict[str, Any], token: str, password: str) -> dict[str, Any]:
     """Consume a one-time token and reset the linked admin password."""
     clean_token = str(token or "").strip()

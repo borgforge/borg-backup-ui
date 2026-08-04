@@ -15,6 +15,7 @@
     "setupSubtitle": "Bitte den ersten Admin-Benutzer anlegen.",
     "recoveryTitle": "Admin-Zugang wiederherstellen",
     "recoverySubtitle": "Lege ein neues Passwort für den ausgewählten Administrator fest. Der Link ist nur kurz gültig und kann einmal verwendet werden.",
+    "recoveryAccount": "Administrator:",
     "username": "Benutzername",
     "password": "Passwort",
     "passwordHint": "Mindestens 12 Zeichen.",

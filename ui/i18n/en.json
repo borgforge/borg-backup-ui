@@ -15,6 +15,7 @@
     "setupSubtitle": "Create the first administrator account.",
     "recoveryTitle": "Recover administrator access",
     "recoverySubtitle": "Set a new password for the selected administrator. The link is short-lived and can be used once.",
+    "recoveryAccount": "Administrator:",
     "username": "Username",
     "password": "Password",
     "passwordHint": "At least 12 characters.",

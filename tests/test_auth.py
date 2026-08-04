@@ -25,6 +25,7 @@ from api.auth_store import (
 )
 from api.admin_recovery import (
     create_admin_recovery_token,
+    describe_admin_recovery_token,
     list_admin_users,
     load_control_page_config,
     recover_admin_access,
@@ -207,6 +208,9 @@ def test_admin_recovery_token_resets_password_once_without_storing_plain_token(t
     token_store = recovery_tokens_file(cfg).read_text(encoding="utf-8")
     assert token not in token_store
     assert token_result["username"] == "admin"
+    token_info = describe_admin_recovery_token(cfg, token)
+    assert token_info["valid"] is True
+    assert token_info["username"] == "admin"
 
     result = recover_admin_access_with_token(cfg, token, "new-password-value")
 
@@ -250,20 +254,30 @@ def test_control_page_config_loader_reads_data_root(tmp_path: Path):
     assert cfg["BACKUP_SCRIPTS_DIR"] == "/mnt/user/borg-data"
 
 
-def test_admin_recovery_page_posts_token_to_public_api():
+def test_admin_recovery_page_posts_token_to_public_api_and_shows_admin(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [{"username": "admin", "password_hash": hash_password("old-password-value"), "role": "admin", "enabled": True}],
+        "security": {"session_timeout_minutes": 30},
+    })
+    token = create_admin_recovery_token(cfg, "admin")["token"]
     handler = _make_handler()
+    handler.config = cfg
     handler.wfile = BytesIO()
     handler._bootstrap_required = lambda: False
     handler.send_response = lambda _status: None
     handler.send_header = lambda _name, _value: None
     handler.end_headers = lambda: None
 
-    handler._serve_admin_recovery_page("token=abc123")
+    handler._serve_admin_recovery_page(f"token={token}")
     html = handler.wfile.getvalue().decode("utf-8")
 
     assert "auth.recoveryTitle" in html
+    assert "auth.recoveryAccount" in html
     assert "/api/auth/admin-recovery" in html
-    assert '"abc123"' in html
+    assert "admin" in html
+    assert json.dumps(token) in html
     assert "current_password" not in html
 
 
