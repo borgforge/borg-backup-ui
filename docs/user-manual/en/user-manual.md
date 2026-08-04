@@ -671,6 +671,13 @@ Roles:
 
 > **Tip:** Disable users first instead of immediately deleting them permanently. This makes offboarding easier to control.
 
+If an administrator forgot the password, recovery is not handled on the login
+page. Open **Unraid WebUI > Settings > Borg Backup UI** and use
+**Admin Access Recovery** on the plugin control page instead. An Unraid
+administrator can select an existing admin account there and reset its
+password. All Borg Backup UI sessions are signed out; jobs, repositories,
+secrets, settings, and logs remain unchanged.
+
 ### 9.3 Backup
 
 ![Settings - Backup](../assets/en/settings-backup.png)

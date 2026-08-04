@@ -17,6 +17,8 @@ def test_control_page_is_consistently_english():
         "all interfaces",
         "local only",
         "Python 3.10 or newer",
+        "Admin Access Recovery",
+        "Open Admin Recovery",
     ]
     forbidden = [
         "Web-Oberfläche",
@@ -38,7 +40,7 @@ def test_control_page_is_consistently_english():
 def test_control_page_service_actions_remain_available():
     source = CONTROL_PAGE.read_text(encoding="utf-8")
 
-    for action in ("start", "stop", "restart", "apply", "default"):
+    for action in ("start", "stop", "restart", "apply", "default", "admin_recovery_start"):
         assert f"'{action}'" in source or f'\"{action}\"' in source
 
 
@@ -51,6 +53,7 @@ def test_control_page_config_apply_uses_async_restart_redirect():
     assert "bbui_apply_config('default')" in source
     assert "new URLSearchParams()" in source
     assert "fetch('?' + params.toString()" in source
+    assert "Unsupported control page action." in source
     assert "window.open('about:blank', '_blank')" in source
     assert "targetWindow.location.href = target" in source
     assert "var defaultButtons = buttons.innerHTML" in source
@@ -71,3 +74,35 @@ def test_control_page_reads_test_and_stable_manifest_versions():
     assert stable_manifest in source
     assert source.index(test_manifest) < source.index(stable_manifest)
     assert "foreach ($plugin_manifests as $plg)" in source
+
+
+def test_control_page_admin_recovery_uses_token_link_and_python_helper():
+    source = CONTROL_PAGE.read_text(encoding="utf-8")
+
+    assert "api/admin_recovery.py" in source
+    assert "--create-token" in source
+    assert "--list-admins" in source
+    assert 'method="GET"' in source
+    assert "$action = (string)bbui_request_value('action', '')" in source
+    assert "$action = $_POST['action']" not in source
+    assert "onsubmit=\"return bbui_validate_admin_recovery_selection()\"" in source
+    assert "bbui_request_value('password'" not in source
+    assert "file_get_contents('php://input')" in source
+    assert "bbui_create_admin_recovery_link" in source
+    assert "Recovery page created for" in source
+    assert "/admin-recovery?token=" in source
+    assert "bbui-recovery-link" in source
+    assert "class=\"bbui-btn primary\"" in source
+    assert "fetch('/plugins/borg-backup-ui/admin-recovery.php'" not in source
+    assert "fetch('?' + params.toString()" in source
+    assert "bbui-admin-recovery-form" in source
+    admin_recovery_block = source.split("<!-- Admin Recovery -->", 1)[1]
+    assert ".then(function(r){ return r.json(); })" not in admin_recovery_block
+    assert "Admin recovery returned an empty response." not in source
+    assert "bbui_load_admin_accounts" in source
+    assert "<select class=\"bbui-select\" name=\"username\"" in source
+    assert "password_confirm" not in source
+    assert "Password must contain at least 12 characters." not in source
+    assert "All Borg Backup UI sessions were signed out" not in source
+    assert "Open a one-time recovery page for an existing Borg Backup UI administrator account" in source
+    assert "Reset or create an enabled" not in source

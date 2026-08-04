@@ -20,6 +20,7 @@ import threading
 import time
 import uuid
 from datetime import datetime
+from html import escape as _html_escape
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -46,6 +47,10 @@ from api.auth_store import (
     users_file as _users_file,
     write_sessions_store as _write_sessions_store,
     write_users_store as _write_users_store,
+)
+from api.admin_recovery import (
+    describe_admin_recovery_token as _describe_admin_recovery_token,
+    recover_admin_access_with_token as _recover_admin_access_with_token,
 )
 from api.security_utils import mask_secrets as _mask_secrets
 from api.startup_state import (
@@ -636,7 +641,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         m = str(method or "").upper()
 
         # Public/auth bootstrap endpoints
-        if p in {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin", "/api/version"}:
+        if p in {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin", "/api/auth/admin-recovery", "/api/version"}:
             return None
 
         # Read-only endpoints
@@ -712,7 +717,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             )
             return False
 
-        auth_free_paths = {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin", "/api/version"}
+        auth_free_paths = {"/api/auth/login", "/api/auth/status", "/api/auth/setup-admin", "/api/auth/admin-recovery", "/api/version"}
         if self.command in {"POST", "PUT", "DELETE"}:
             if not self._has_valid_api_token_header() and not self._is_same_origin_request():
                 self._send_api_error(
@@ -752,6 +757,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/auth/logout",
             "/api/auth/status",
             "/api/auth/setup-admin",
+            "/api/auth/admin-recovery",
             "/api/version",
             "/api/system-health",
             "/api/setup-status",
@@ -794,6 +800,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
         if path == "/setup-admin":
             self._serve_setup_admin_page()
+            return
+        if path == "/admin-recovery":
+            self._serve_admin_recovery_page(parsed.query)
             return
         if path == "/login":
             if self._bootstrap_required():
@@ -952,6 +961,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/auth/login": self._post_auth_login,
             "/api/auth/logout": self._post_auth_logout,
             "/api/auth/setup-admin": self._post_auth_setup_admin,
+            "/api/auth/admin-recovery": self._post_auth_admin_recovery,
             "/api/auth/users": self._post_auth_user_create,
             "/api/auth/users/password-reset": self._post_auth_user_password_reset,
             "/api/auth/change-password": self._post_auth_change_password,
@@ -1349,6 +1359,26 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             _write_users_store(self.config, store)
         self._security_audit("auth_setup_admin", "ok", target=username)
         return {"ok": True, "created": True, "username": username}
+
+    def _post_auth_admin_recovery(self) -> dict:
+        body = self._read_json_body()
+        token = str(body.get("token", "")).strip()
+        password = str(body.get("password", ""))
+        password_confirm = str(body.get("password_confirm", ""))
+        if len(password) < 12:
+            raise ValueError("Password must contain at least 12 characters")
+        if password != password_confirm:
+            raise ValueError("The password confirmation does not match")
+
+        result = _recover_admin_access_with_token(self.config, token, password)
+        username = str(result.get("username", "")).strip()
+        cls = type(self)
+        with cls._UI_SESSIONS_LOCK:
+            cls._UI_SESSIONS = {}
+        self._extra_response_headers.append(("Set-Cookie", "bbui_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"))
+        self._extra_response_headers.append(("Set-Cookie", "bbui_api_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"))
+        self._security_audit("auth_admin_recovery", "ok", target=username)
+        return {"ok": True, "username": username, "sessions_invalidated": True}
 
     def _post_auth_user_create(self) -> dict:
         body = self._read_json_body()
@@ -3400,6 +3430,122 @@ finally{btn.classList.remove('loading');}}
 btn.addEventListener('click',doSetup);
 ['setup-username','setup-password','setup-password-confirm'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')doSetup();}));
 </script></body></html>"""
+        content = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(content)
+
+    def _serve_admin_recovery_page(self, query: str = ""):
+        if self._bootstrap_required():
+            self.send_response(302)
+            self.send_header("Location", "/setup-admin")
+            self.end_headers()
+            return
+        qs = parse_qs(query or "")
+        token = str((qs.get("token") or [""])[0] or "").strip()
+        token_json = json.dumps(token)
+        try:
+            recovery_token_info = _describe_admin_recovery_token(self.config, token)
+        except Exception:
+            recovery_token_info = {"valid": False, "username": "", "expires_at": ""}
+        recovery_username = str(recovery_token_info.get("username") or "").strip()
+        recovery_account_html = ""
+        if recovery_username:
+            recovery_account_html = (
+                '<div class="recovery-account">'
+                '<span data-i18n="auth.recoveryAccount"></span> '
+                f'<strong>{_html_escape(recovery_username)}</strong>'
+                '</div>'
+            )
+        html = """<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Borg Backup Admin Recovery</title>
+<script>
+(() => {
+  try {
+    const key = 'bbui_theme_preference';
+    const pref = localStorage.getItem(key);
+    const clean = (pref === 'light' || pref === 'dark' || pref === 'system') ? pref : 'system';
+    const resolved = clean === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : clean;
+    document.documentElement.setAttribute('data-theme', resolved);
+  } catch (error) {
+    const resolved = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', resolved);
+  }
+})();
+</script>
+<link rel="stylesheet" href="/ui/style.css">
+<link rel="stylesheet" href="/ui/design-system.css">
+<script src="/ui/js/components/i18n.js"></script>
+<style>
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{width:min(520px,100%);background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-soft)}
+  .login-head{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--border)}
+  .login-logo{width:30px;height:30px;object-fit:contain;display:block}
+  .login-title{font-size:16px;font-weight:600;color:var(--text-primary)}
+  .login-sub{padding:12px 18px 0 18px;color:var(--text-secondary);font-size:13px;line-height:1.45}
+  .login-body{padding:12px 18px 18px 18px;display:grid;gap:12px}
+  .login-msg{margin-top:10px}
+  .recovery-account{font-size:13px;color:var(--text-secondary);padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card)}
+  .recovery-account strong{color:var(--text-primary)}
+  .login-body .form-group{margin:0}
+  .login-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .login-actions .btn{flex:1;justify-content:center;min-width:160px}
+</style>
+</head><body>
+<main class="login-wrap"><section class="login-card">
+<div class="login-head"><img class="login-logo" src="/ui/assets/app-icon.png" alt="" aria-hidden="true"><div class="login-title" data-i18n="auth.recoveryTitle"></div></div>
+<div class="login-sub" data-i18n="auth.recoverySubtitle"></div>
+<div class="login-body">
+__RECOVERY_ACCOUNT__
+<div class="form-group"><label class="form-label" data-i18n="auth.password"></label><input id="recovery-password" class="form-input" type="password" autocomplete="new-password" autofocus><div class="ui-field__hint" data-i18n="auth.passwordHint"></div></div>
+<div class="form-group"><label class="form-label" data-i18n="auth.passwordConfirm"></label><input id="recovery-password-confirm" class="form-input" type="password" autocomplete="new-password"></div>
+<div id="recovery-msg" class="status-message hidden login-msg"></div>
+<div class="login-actions">
+  <button id="recovery-btn" class="btn btn-primary" data-i18n="auth.recoveryAction"></button>
+  <a id="login-link" class="btn btn-secondary hidden" href="/login" data-i18n="auth.recoveryLogin"></a>
+</div>
+</div></section></main>
+<script>
+const recoveryToken=__TOKEN__;
+const btn=document.getElementById('recovery-btn');const msg=document.getElementById('recovery-msg');const loginLink=document.getElementById('login-link');
+const i18nReady=window.BBUI.components.i18n.init().then(()=>{document.title=window.BBUI.components.i18n.t('auth.recoveryTitle');});
+function authT(key){return window.BBUI.components.i18n.t(key);}
+function recoveryValidationMessage(data){
+ const raw=String(data?.message||data?.details||'').trim();
+ const known={
+  'Password must contain at least 12 characters':'auth.errors.passwordTooShort',
+  'The password confirmation does not match':'auth.errors.passwordMismatch',
+  'Admin recovery link is invalid or expired':'auth.errors.recoveryInvalid',
+  'Admin user was not found':'auth.errors.recoveryInvalid'
+ };
+ const key=known[raw]||'';return key?authT(key):'';
+}
+function authApiError(data,fallback){const code=String(data?.code||'').trim();if(code==='bad_request')return recoveryValidationMessage(data)||authT(fallback);const key=code?`api.errors.${code}`:'';const translated=key?authT(key):'';return translated&&translated!==key?translated:authT(fallback);}
+function showMsg(type,t){msg.textContent=t;msg.className='status-message '+type+' login-msg';}
+async function doRecovery(){btn.classList.add('loading');msg.className='status-message hidden login-msg';
+try{
+ await i18nReady;
+ if(!recoveryToken)throw new Error(authT('auth.errors.recoveryInvalid'));
+ const password=document.getElementById('recovery-password').value||'';
+ const password_confirm=document.getElementById('recovery-password-confirm').value||'';
+ if(password.length<12)throw new Error(authT('auth.errors.passwordTooShort'));
+ if(password!==password_confirm)throw new Error(authT('auth.errors.passwordMismatch'));
+ const r=await fetch('/api/auth/admin-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:recoveryToken,password,password_confirm})});
+ const d=await r.json();if(!r.ok||!d.ok)throw new Error(authApiError(d,'auth.recoveryFailed'));
+ showMsg('success',authT('auth.recoverySuccess'));btn.disabled=true;loginLink.classList.remove('hidden');
+}catch(e){showMsg('error',e.message||authT('auth.recoveryFailed'));}
+finally{btn.classList.remove('loading');}}
+btn.addEventListener('click',doRecovery);
+['recovery-password','recovery-password-confirm'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')doRecovery();}));
+</script></body></html>"""
+        html = html.replace("__TOKEN__", token_json)
+        html = html.replace("__RECOVERY_ACCOUNT__", recovery_account_html)
         content = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

@@ -23,6 +23,15 @@ from api.auth_store import (
     write_sessions_store,
     write_users_store,
 )
+from api.admin_recovery import (
+    create_admin_recovery_token,
+    describe_admin_recovery_token,
+    list_admin_users,
+    load_control_page_config,
+    recover_admin_access,
+    recover_admin_access_with_token,
+    recovery_tokens_file,
+)
 from borg_backup_ui import BackupUIHandler
 from api.restore_api import _validate_target_dir
 from startup_state import migration_maintenance_state, set_startup_state
@@ -99,6 +108,203 @@ def test_auth_store_writes_users_and_sessions_atomically(tmp_path: Path):
     assert read_sessions_store(cfg)["sessions"][0]["sid"] == "s1"
     assert (tmp_path / "config" / "users.json").stat().st_mode & 0o777 == 0o600
     assert (tmp_path / "config" / "sessions.json").stat().st_mode & 0o777 == 0o600
+
+
+def test_admin_recovery_resets_existing_admin_and_invalidates_sessions(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [{
+            "id": "u_existing",
+            "username": "admin",
+            "password_hash": hash_password("old-password-value"),
+            "role": "admin",
+            "enabled": True,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "last_login_at": "2026-01-02T00:00:00Z",
+        }],
+        "security": {"session_timeout_minutes": 30, "password_policy": {"min_length": 12}},
+    })
+    write_sessions_store(cfg, {"schema_version": 1, "sessions": [{"sid": "s1", "username": "admin"}]})
+
+    result = recover_admin_access(cfg, "Admin", "new-password-value")
+
+    store = read_users_store(cfg)
+    user = store["users"][0]
+    assert result["ok"] is True
+    assert result["action"] == "reset"
+    assert result["username"] == "admin"
+    assert verify_password_hash("new-password-value", user["password_hash"]) is True
+    assert user["role"] == "admin"
+    assert user["enabled"] is True
+    assert read_sessions_store(cfg)["sessions"] == []
+    backup_file = Path(result["backup_file"])
+    assert backup_file.is_file()
+    assert backup_file.stat().st_mode & 0o777 == 0o600
+    assert "new-password-value" not in (tmp_path / "config" / "users.json").read_text(encoding="utf-8")
+
+
+def test_admin_recovery_rejects_missing_admin_user(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    with pytest.raises(ValueError, match="Admin user was not found"):
+        recover_admin_access(cfg, "owner.user", "created-password-value")
+
+
+def test_admin_recovery_lists_existing_admin_users(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [
+            {"username": "viewer", "role": "viewer", "enabled": True},
+            {"username": "Root.Admin", "role": "admin", "enabled": False},
+            {"username": "admin", "role": "admin", "enabled": True},
+        ],
+        "security": {"session_timeout_minutes": 30},
+    })
+
+    assert list_admin_users(cfg) == [
+        {"username": "admin", "enabled": True},
+        {"username": "root.admin", "enabled": False},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("username", "password", "message"),
+    [
+        ("root user", "valid-password-value", "Username is invalid"),
+        ("admin", "short", "Password must contain at least 12 characters"),
+    ],
+)
+def test_admin_recovery_validates_inputs(tmp_path: Path, username: str, password: str, message: str):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    with pytest.raises(ValueError, match=message):
+        recover_admin_access(cfg, username, password)
+
+
+def test_admin_recovery_token_resets_password_once_without_storing_plain_token(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [{
+            "id": "u_existing",
+            "username": "admin",
+            "password_hash": hash_password("old-password-value"),
+            "role": "admin",
+            "enabled": True,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "last_login_at": "",
+        }],
+        "security": {"session_timeout_minutes": 30, "password_policy": {"min_length": 12}},
+    })
+    write_sessions_store(cfg, {"schema_version": 1, "sessions": [{"sid": "s1", "username": "admin"}]})
+
+    token_result = create_admin_recovery_token(cfg, "admin")
+    token = token_result["token"]
+
+    token_store = recovery_tokens_file(cfg).read_text(encoding="utf-8")
+    assert token not in token_store
+    assert token_result["username"] == "admin"
+    token_info = describe_admin_recovery_token(cfg, token)
+    assert token_info["valid"] is True
+    assert token_info["username"] == "admin"
+
+    result = recover_admin_access_with_token(cfg, token, "new-password-value")
+
+    assert result["ok"] is True
+    assert result["username"] == "admin"
+    assert result["token_consumed"] is True
+    assert verify_password_hash("new-password-value", read_users_store(cfg)["users"][0]["password_hash"]) is True
+    assert read_sessions_store(cfg)["sessions"] == []
+
+    with pytest.raises(ValueError, match="Admin recovery link is invalid or expired"):
+        recover_admin_access_with_token(cfg, token, "another-password-value")
+
+
+def test_admin_recovery_token_rejects_expired_link(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [{"username": "admin", "password_hash": hash_password("old-password-value"), "role": "admin", "enabled": True}],
+        "security": {"session_timeout_minutes": 30},
+    })
+    token = create_admin_recovery_token(cfg, "admin")["token"]
+    store_path = recovery_tokens_file(cfg)
+    store = json.loads(store_path.read_text(encoding="utf-8"))
+    store["tokens"][0]["expires_at"] = 1
+    store_path.write_text(json.dumps(store), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Admin recovery link is invalid or expired"):
+        recover_admin_access_with_token(cfg, token, "new-password-value")
+
+
+def test_control_page_config_loader_reads_data_root(tmp_path: Path):
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "borg_backup_ui.conf").write_text(
+        'PORT=8765\nBACKUP_SCRIPTS_DIR="/mnt/user/borg-data"\n',
+        encoding="utf-8",
+    )
+
+    cfg = load_control_page_config(plugin_dir)
+
+    assert cfg["BACKUP_SCRIPTS_DIR"] == "/mnt/user/borg-data"
+
+
+def test_admin_recovery_page_posts_token_to_public_api_and_shows_admin(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [{"username": "admin", "password_hash": hash_password("old-password-value"), "role": "admin", "enabled": True}],
+        "security": {"session_timeout_minutes": 30},
+    })
+    token = create_admin_recovery_token(cfg, "admin")["token"]
+    handler = _make_handler()
+    handler.config = cfg
+    handler.wfile = BytesIO()
+    handler._bootstrap_required = lambda: False
+    handler.send_response = lambda _status: None
+    handler.send_header = lambda _name, _value: None
+    handler.end_headers = lambda: None
+
+    handler._serve_admin_recovery_page(f"token={token}")
+    html = handler.wfile.getvalue().decode("utf-8")
+
+    assert "auth.recoveryTitle" in html
+    assert "auth.recoveryAccount" in html
+    assert "/api/auth/admin-recovery" in html
+    assert "admin" in html
+    assert json.dumps(token) in html
+    assert "current_password" not in html
+
+
+def test_admin_recovery_api_consumes_token_and_clears_live_sessions(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [{"username": "admin", "password_hash": hash_password("old-password-value"), "role": "admin", "enabled": True}],
+        "security": {"session_timeout_minutes": 30},
+    })
+    token = create_admin_recovery_token(cfg, "admin")["token"]
+    handler = _make_handler()
+    handler.config = cfg
+    handler._read_json_body = lambda: {
+        "token": token,
+        "password": "new-password-value",
+        "password_confirm": "new-password-value",
+    }
+    handler._security_audit = lambda *args, **kwargs: None
+    handler._extra_response_headers = []
+    type(handler)._UI_SESSIONS = {"sid1": {"username": "admin"}}
+
+    result = handler._post_auth_admin_recovery()
+
+    assert result == {"ok": True, "username": "admin", "sessions_invalidated": True}
+    assert type(handler)._UI_SESSIONS == {}
+    assert verify_password_hash("new-password-value", read_users_store(cfg)["users"][0]["password_hash"]) is True
 
 
 @pytest.mark.parametrize(
