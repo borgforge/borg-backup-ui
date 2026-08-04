@@ -110,7 +110,7 @@ A job connects sources to exactly one existing repository. Encryption belongs to
 ### Job Wizard
 
 1. **Basics:** Name, technical type, icon, and optional Docker/VM control.
-2. **Sources & Target:** Source paths, exclusions, storage type, storage target, repository, and compression.
+2. **Sources & Target:** Folders or files to back up, exclusions, storage type, storage target, repository, and compression.
 3. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards.
 4. **VMs:** Shut down all running or selected VMs and restart them afterwards.
 5. **Retention:** Daily, weekly, monthly, and yearly retention.
@@ -120,7 +120,11 @@ A job connects sources to exactly one existing repository. Encryption belongs to
 
 ### Sources and Exclusions
 
-Sources must exist. Missing required sources stop the run so that an apparently successful but incomplete archive is not created. Exclusions must be located below a source.
+Sources are the folders or files that a backup job should back up. Typical examples are `/mnt/user/appdata/`, `/mnt/user/domains/`, or a custom share below `/mnt/user/...`.
+
+At least one source is required because the job otherwise does not know which data should be backed up. Sources must exist and be readable by the backup process. Missing required sources stop the run so that an apparently successful but incomplete archive is not created.
+
+Exclusions are optional child folders or files inside a source that should not be included in the backup. Exclusions must therefore be located below a selected source.
 
 > [!TIP] Run every new or substantially changed job manually once before enabling its schedule.
 

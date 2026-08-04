@@ -107,6 +107,24 @@ def test_wizard_source_autocomplete_cancels_stale_requests() -> None:
     assert "→ open directory" in english
 
 
+def test_wizard_source_paths_are_explained_for_normal_users() -> None:
+    html = _read("ui/index.html")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+    help_de = _read("ui/docs/help.md")
+    help_en = _read("ui/docs/help.en.md")
+
+    assert 'data-i18n="wizard.sourcePathsHelp"' in html
+    assert '"sourcePaths": "Zu sichernde Ordner"' in german
+    assert '"sourcePathsHelp": "Wähle hier die Ordner oder Dateien aus, die dieser Backup-Job sichern soll.' in german
+    assert '"noSourcePaths": "Noch keine zu sichernden Ordner hinzugefügt."' in german
+    assert '"validationSource": "Bitte mindestens einen Ordner oder eine Datei auswählen, die gesichert werden soll."' in german
+    assert '"sourcePaths": "Folders to back up"' in english
+    assert '"sourcePathsHelp": "Choose the folders or files this backup job should back up.' in english
+    assert "Quellen sind die Ordner oder Dateien" in help_de
+    assert "Sources are the folders or files" in help_en
+
+
 def test_wizard_sources_and_target_use_compact_two_column_layout() -> None:
     html = _read("ui/index.html")
     script = _read("ui/js/pages/wizard.js")
