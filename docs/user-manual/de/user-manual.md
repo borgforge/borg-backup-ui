@@ -674,10 +674,10 @@ Rollen:
 Wenn ein Administrator das Passwort vergessen hat, erfolgt die Wiederherstellung
 nicht über die Login-Seite. Öffnen Sie stattdessen in Unraid
 **Einstellungen > Borg Backup UI** und nutzen Sie **Admin Access Recovery** auf
-der Plugin-Control-Page. Dort kann ein Unraid-Administrator ein Admin-Konto
-zurücksetzen oder neu anlegen. Dabei werden alle Borg-Backup-UI-Sessions
-abgemeldet; Jobs, Repositorys, Secrets, Einstellungen und Logs bleiben
-unverändert.
+der Plugin-Control-Page. Dort kann ein Unraid-Administrator ein vorhandenes
+Admin-Konto auswählen und dessen Passwort zurücksetzen. Dabei werden alle
+Borg-Backup-UI-Sessions abgemeldet; Jobs, Repositorys, Secrets, Einstellungen
+und Logs bleiben unverändert.
 
 ### 9.3 Backup
 

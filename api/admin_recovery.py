@@ -19,7 +19,6 @@ from typing import Any
 try:
     from auth_store import (
         default_sessions_store,
-        default_users_store,
         hash_password,
         normalize_username,
         read_users_store,
@@ -31,7 +30,6 @@ try:
 except ImportError:  # pragma: no cover - package import path
     from .auth_store import (
         default_sessions_store,
-        default_users_store,
         hash_password,
         normalize_username,
         read_users_store,
@@ -89,11 +87,31 @@ def _backup_users_file(config: dict[str, Any], now: str) -> Path | None:
     return dst
 
 
+def list_admin_users(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return existing administrator accounts for the control page selector."""
+    store = read_users_store(config)
+    admins: list[dict[str, Any]] = []
+    for user in store.get("users", []):
+        if not isinstance(user, dict):
+            continue
+        if str(user.get("role", "")).strip().lower() != "admin":
+            continue
+        username = normalize_username(user.get("username", ""))
+        if not username:
+            continue
+        admins.append({
+            "username": username,
+            "enabled": bool(user.get("enabled", True)),
+        })
+    admins.sort(key=lambda item: item["username"])
+    return admins
+
+
 def recover_admin_access(config: dict[str, Any], username: str, password: str) -> dict[str, Any]:
-    """Reset or create an enabled admin account and invalidate all sessions."""
+    """Reset an existing admin account and invalidate all sessions."""
     normalized = normalize_username(username)
     if not normalized:
-        normalized = "admin"
+        raise ValueError("Admin username is required")
     if not USERNAME_RE.fullmatch(normalized):
         raise ValueError("Username is invalid (3-64 characters: a-z, 0-9, ., _, -)")
     if len(str(password or "")) < 12:
@@ -104,22 +122,17 @@ def recover_admin_access(config: dict[str, Any], username: str, password: str) -
     store = read_users_store(config)
     users = [u for u in store.get("users", []) if isinstance(u, dict)]
 
-    action = "created"
     target = None
     for user in users:
-        if normalize_username(user.get("username", "")) == normalized:
+        if (
+            normalize_username(user.get("username", "")) == normalized
+            and str(user.get("role", "")).strip().lower() == "admin"
+        ):
             target = user
-            action = "reset"
             break
 
     if target is None:
-        target = {
-            "id": f"u_{os.urandom(8).hex()}",
-            "username": normalized,
-            "created_at": now,
-            "last_login_at": "",
-        }
-        users.append(target)
+        raise ValueError("Admin user was not found")
 
     target["username"] = normalized
     target["password_hash"] = hash_password(password)
@@ -127,7 +140,6 @@ def recover_admin_access(config: dict[str, Any], username: str, password: str) -
     target["enabled"] = True
     target["updated_at"] = now
     store.setdefault("schema_version", 1)
-    store.setdefault("security", default_users_store()["security"])
     store["users"] = users
 
     write_users_store(config, store)
@@ -135,7 +147,7 @@ def recover_admin_access(config: dict[str, Any], username: str, password: str) -
 
     return {
         "ok": True,
-        "action": action,
+        "action": "reset",
         "username": normalized,
         "users_file": str(users_file(config)),
         "sessions_file": str(sessions_file(config)),
@@ -143,14 +155,27 @@ def recover_admin_access(config: dict[str, Any], username: str, password: str) -
     }
 
 
-def _run_control_page() -> int:
+def _load_control_config_from_env() -> dict[str, str]:
+    plugin_dir = Path(str(os.environ.get("BBUI_PLUGIN_DIR") or DEFAULT_PLUGIN_DIR))
+    return load_control_page_config(plugin_dir)
+
+
+def _run_list_admins() -> int:
+    try:
+        result = {"ok": True, "admins": list_admin_users(_load_control_config_from_env())}
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+        return 1
+
+
+def _run_control_page_reset() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
-        plugin_dir = Path(str(os.environ.get("BBUI_PLUGIN_DIR") or DEFAULT_PLUGIN_DIR))
-        config = load_control_page_config(plugin_dir)
         result = recover_admin_access(
-            config,
-            str(payload.get("username") or "admin"),
+            _load_control_config_from_env(),
+            str(payload.get("username") or ""),
             str(payload.get("password") or ""),
         )
         print(json.dumps(result, sort_keys=True))
@@ -163,10 +188,13 @@ def _run_control_page() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Recover Borg Backup UI admin access")
     parser.add_argument("--control-page", action="store_true", help="read recovery data as JSON from stdin")
+    parser.add_argument("--list-admins", action="store_true", help="list existing admin accounts as JSON")
     args = parser.parse_args(argv)
+    if args.list_admins:
+        return _run_list_admins()
     if args.control_page:
-        return _run_control_page()
-    parser.error("--control-page is required")
+        return _run_control_page_reset()
+    parser.error("--control-page or --list-admins is required")
     return 2
 
 

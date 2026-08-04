@@ -80,10 +80,15 @@ def test_control_page_admin_recovery_uses_post_body_and_python_helper():
 
     assert "api/admin_recovery.py" in source
     assert "--control-page" in source
+    assert "--list-admins" in source
     assert "method: 'POST'" in source
     assert "new FormData(form)" in source
     assert "params.set('bbui_async', '1')" in source
+    assert "bbui_load_admin_accounts" in source
+    assert "<select class=\"bbui-select\" name=\"username\"" in source
     assert "password_confirm" in source
     assert "Password must contain at least 12 characters." in source
     assert "All Borg Backup UI sessions were signed out" in source
+    assert "Reset the password of an existing Borg Backup UI administrator account" in source
+    assert "Reset or create an enabled" not in source
     assert "action=admin_recovery" not in source

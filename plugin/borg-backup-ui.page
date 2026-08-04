@@ -85,7 +85,7 @@ function bbui_python_runtime_status() {
   return $status;
 }
 
-function bbui_run_admin_recovery($plugin_dir, $python_path, $username, $password) {
+function bbui_run_admin_helper($plugin_dir, $python_path, $args, $payload = null) {
   $script = "$plugin_dir/api/admin_recovery.py";
   if (!is_file($script)) {
     return ['ok' => false, 'error' => 'Admin recovery helper is missing. Reinstall or update the plugin package.'];
@@ -94,7 +94,10 @@ function bbui_run_admin_recovery($plugin_dir, $python_path, $username, $password
     return ['ok' => false, 'error' => 'Python 3 is not available. Install or update Python 3 for Unraid first.'];
   }
 
-  $cmd = escapeshellarg($python_path) . ' ' . escapeshellarg($script) . ' --control-page';
+  $cmd = escapeshellarg($python_path) . ' ' . escapeshellarg($script);
+  foreach ($args as $arg) {
+    $cmd .= ' ' . escapeshellarg($arg);
+  }
   $descriptors = [
     0 => ['pipe', 'r'],
     1 => ['pipe', 'w'],
@@ -107,7 +110,9 @@ function bbui_run_admin_recovery($plugin_dir, $python_path, $username, $password
     return ['ok' => false, 'error' => 'Admin recovery could not be started.'];
   }
 
-  fwrite($pipes[0], json_encode(['username' => $username, 'password' => $password]));
+  if ($payload !== null) {
+    fwrite($pipes[0], json_encode($payload));
+  }
   fclose($pipes[0]);
   $stdout = stream_get_contents($pipes[1]);
   fclose($pipes[1]);
@@ -122,6 +127,23 @@ function bbui_run_admin_recovery($plugin_dir, $python_path, $username, $password
     return ['ok' => false, 'error' => (string)($result['error'] ?? 'Admin recovery failed.')];
   }
   return $result;
+}
+
+function bbui_run_admin_recovery($plugin_dir, $python_path, $username, $password) {
+  return bbui_run_admin_helper(
+    $plugin_dir,
+    $python_path,
+    ['--control-page'],
+    ['username' => $username, 'password' => $password]
+  );
+}
+
+function bbui_load_admin_accounts($plugin_dir, $python_path) {
+  $result = bbui_run_admin_helper($plugin_dir, $python_path, ['--list-admins']);
+  if (empty($result['ok']) || !isset($result['admins']) || !is_array($result['admins'])) {
+    return [];
+  }
+  return $result['admins'];
 }
 
 // Version from .plg file
@@ -198,6 +220,7 @@ $conf    = bbui_read_conf($CONF_FILE);
 $port    = $conf['PORT'];
 $bind    = $conf['BIND'];
 $ui_url  = bbui_ui_url($port);
+$admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_status['path']) : [];
 ?>
 <style>
 .bbui-section {
@@ -467,17 +490,29 @@ $ui_url  = bbui_ui_url($port);
   </div>
   <div class="bbui-body">
     <p class="bbui-help">
-      Reset or create an enabled Borg Backup UI administrator account from the Unraid control page.
+      Reset the password of an existing Borg Backup UI administrator account from the Unraid control page.
       Jobs, repositories, secrets, settings, and logs are not changed.
     </p>
     <form method="POST" id="bbui-admin-recovery-form" onsubmit="return bbui_admin_recovery()">
       <input type="hidden" name="action" value="admin_recovery">
       <table class="bbui-table">
         <tr>
-          <td>Admin username</td>
+          <td>Administrator</td>
           <td>
-            <input class="bbui-input" type="text" name="username" value="admin" autocomplete="username"
-              pattern="[a-z0-9._-]{3,64}">
+            <?php if (count($admin_accounts) > 0): ?>
+              <select class="bbui-select" name="username" autocomplete="username">
+                <?php foreach ($admin_accounts as $admin): ?>
+                  <?php
+                    $admin_name = (string)($admin['username'] ?? '');
+                    $admin_enabled = !empty($admin['enabled']);
+                    $admin_label = $admin_name . ($admin_enabled ? '' : ' (disabled)');
+                  ?>
+                  <option value="<?= htmlspecialchars($admin_name) ?>"><?= htmlspecialchars($admin_label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            <?php else: ?>
+              <span style="color:#888;font-size:13px">No administrator account found.</span>
+            <?php endif; ?>
           </td>
         </tr>
         <tr>
@@ -495,7 +530,7 @@ $ui_url  = bbui_ui_url($port);
       </table>
       <br>
       <div class="bbui-btn-row" id="bbui-admin-recovery-btns">
-        <button type="submit" class="bbui-btn danger" <?= $python_ok ? '' : 'disabled title="Python 3 is missing or too old"' ?>>Reset Admin Access</button>
+        <button type="submit" class="bbui-btn danger" <?= ($python_ok && count($admin_accounts) > 0) ? '' : 'disabled title="No existing admin account is available"' ?>>Reset Admin Access</button>
       </div>
       <div class="bbui-result" id="bbui-admin-recovery-result"></div>
     </form>

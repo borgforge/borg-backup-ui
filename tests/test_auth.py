@@ -23,7 +23,7 @@ from api.auth_store import (
     write_sessions_store,
     write_users_store,
 )
-from api.admin_recovery import load_control_page_config, recover_admin_access
+from api.admin_recovery import list_admin_users, load_control_page_config, recover_admin_access
 from borg_backup_ui import BackupUIHandler
 from api.restore_api import _validate_target_dir
 from startup_state import migration_maintenance_state, set_startup_state
@@ -137,18 +137,29 @@ def test_admin_recovery_resets_existing_admin_and_invalidates_sessions(tmp_path:
     assert "new-password-value" not in (tmp_path / "config" / "users.json").read_text(encoding="utf-8")
 
 
-def test_admin_recovery_creates_admin_when_no_user_exists(tmp_path: Path):
+def test_admin_recovery_rejects_missing_admin_user(tmp_path: Path):
     cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
 
-    result = recover_admin_access(cfg, "owner.user", "created-password-value")
+    with pytest.raises(ValueError, match="Admin user was not found"):
+        recover_admin_access(cfg, "owner.user", "created-password-value")
 
-    store = read_users_store(cfg)
-    assert result["action"] == "created"
-    assert result["backup_file"] == ""
-    assert store["users"][0]["username"] == "owner.user"
-    assert store["users"][0]["role"] == "admin"
-    assert store["users"][0]["enabled"] is True
-    assert verify_password_hash("created-password-value", store["users"][0]["password_hash"]) is True
+
+def test_admin_recovery_lists_existing_admin_users(tmp_path: Path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_users_store(cfg, {
+        "schema_version": 1,
+        "users": [
+            {"username": "viewer", "role": "viewer", "enabled": True},
+            {"username": "Root.Admin", "role": "admin", "enabled": False},
+            {"username": "admin", "role": "admin", "enabled": True},
+        ],
+        "security": {"session_timeout_minutes": 30},
+    })
+
+    assert list_admin_users(cfg) == [
+        {"username": "admin", "enabled": True},
+        {"username": "root.admin", "enabled": False},
+    ]
 
 
 @pytest.mark.parametrize(
