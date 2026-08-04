@@ -16,7 +16,7 @@ def test_foundation_is_loaded_after_legacy_styles() -> None:
     assert html.index('/ui/style.css') < html.index('/ui/design-system.css')
 
     server = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
-    assert server.count('<link rel="stylesheet" href="/ui/design-system.css">') == 2
+    assert server.count('<link rel="stylesheet" href="/ui/design-system.css">') == 3
 
 
 def test_main_app_applies_stored_theme_before_stylesheets() -> None:
@@ -34,8 +34,8 @@ def test_new_users_follow_system_theme_without_overwriting_existing_preferences(
     system_fallback = "? pref : 'system'"
     assert system_fallback in html
     assert system_fallback in component
-    assert server.count(system_fallback) == 2
-    assert server.count("window.matchMedia?.('(prefers-color-scheme: dark)').matches") == 2
+    assert server.count(system_fallback) == 3
+    assert server.count("window.matchMedia?.('(prefers-color-scheme: dark)').matches") == 3
     assert "localStorage.setItem(UI_THEME_KEY, clean)" in component
     assert "return 'system';" in component
     assert "setAttribute('data-theme', 'dark')" not in html
