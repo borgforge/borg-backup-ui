@@ -408,17 +408,19 @@ function dashboardAbsoluteTimestamp(timestamp) {
 }
 
 function dashboardFormatNextRunDate(date) {
-  if (typeof fmtDateShort === 'function') return fmtDateShort(date);
   const language = window.BBUI?.components?.i18n?.getLanguage?.() || 'de';
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'de-DE', {
-    weekday: 'short',
+  const locale = language === 'en' ? 'en-GB' : 'de-DE';
+  const datePart = new Intl.DateTimeFormat(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat(locale, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   }).format(date);
+  return `${datePart} ${timePart}`;
 }
 
 function dashboardRunDuration(seconds) {
@@ -487,13 +489,16 @@ function renderDashboardInventoryRow(backup) {
   const nextRun = dashboardNextRun(backup.key, backup.enabled);
   const runFactRows = [
     ...(!backup.never_run ? [
-      [dashboardT('dashboard.lastRunTime'), runTime],
-      [dashboardT('dashboard.runDuration'), runDuration],
+      [dashboardT('dashboard.lastRunTime'), runTime, ''],
+      [dashboardT('dashboard.runDuration'), runDuration, ''],
     ] : []),
-    ...(nextRun ? [[dashboardT('dashboard.nextRunTime'), nextRun]] : []),
+    ...(nextRun ? [[dashboardT('dashboard.nextRunTime'), nextRun, 'next-run']] : []),
   ];
   const runFacts = runFactRows.length ? `<span class="dashboard-run-facts">
-      ${runFactRows.map(([label, value]) => `<span class="dashboard-fact-row"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`).join('')}
+      ${runFactRows.map(([label, value, cls]) => {
+        const rowClass = cls ? ` ${cls}` : '';
+        return `<span class="dashboard-fact-row${rowClass}"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`;
+      }).join('')}
     </span>` : '';
   const hasSizes = Number(backup.original_size || 0) > 0;
   const sizeFacts = hasSizes ? [

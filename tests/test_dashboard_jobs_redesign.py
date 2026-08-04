@@ -219,7 +219,10 @@ def test_dashboard_labels_relative_time_and_duration_separately() -> None:
     assert "function dashboardFormatNextRunDate(date)" in script
     assert "function dashboardNextRun(jobKey, enabled)" in script
     assert "typeof calcNextRun === 'function' ? calcNextRun(sched.cron)" in script
-    assert "typeof fmtDateShort === 'function'" in script
+    assert "return `${datePart} ${timePart}`;" in script
+    assert "const rowClass = cls ? ` ${cls}` : '';" in script
+    assert "dashboard-fact-row${rowClass}" in script
+    assert "'next-run'" in script
     assert "dashboard.lastRunTime" in script
     assert "dashboard.runDuration" in script
     assert "dashboard.nextRunTime" in script
@@ -229,6 +232,8 @@ def test_dashboard_labels_relative_time_and_duration_separately() -> None:
     assert ".dashboard-run-facts" in css
     assert ".dashboard-run-facts .dashboard-fact-row > span" in css
     assert "overflow-wrap: anywhere" in css
+    assert ".dashboard-run-facts .dashboard-fact-row.next-run > span" in css
+    assert "white-space: nowrap" in css
     assert '"nextRunTime": "Nächster Lauf"' in german
     assert '"notScheduled": "Nicht geplant"' in german
     assert '"scheduleDisabled": "Zeitplan deaktiviert"' in german
