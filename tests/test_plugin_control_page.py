@@ -85,13 +85,17 @@ def test_control_page_admin_recovery_uses_token_link_and_python_helper():
     assert 'method="GET"' in source
     assert "$action = (string)bbui_request_value('action', '')" in source
     assert "$action = $_POST['action']" not in source
-    assert "onsubmit=\"return bbui_start_admin_recovery()\"" in source
+    assert "onsubmit=\"return bbui_validate_admin_recovery_selection()\"" in source
     assert "bbui_request_value('password'" not in source
     assert "file_get_contents('php://input')" in source
     assert "bbui_create_admin_recovery_link" in source
     assert "Recovery page created for" in source
     assert "/admin-recovery?token=" in source
     assert "fetch('/plugins/borg-backup-ui/admin-recovery.php'" not in source
+    assert "fetch('?' + params.toString()" in source
+    assert "bbui-admin-recovery-form" in source
+    admin_recovery_block = source.split("<!-- Admin Recovery -->", 1)[1]
+    assert ".then(function(r){ return r.json(); })" not in admin_recovery_block
     assert "Admin recovery returned an empty response." not in source
     assert "bbui_load_admin_accounts" in source
     assert "<select class=\"bbui-select\" name=\"username\"" in source

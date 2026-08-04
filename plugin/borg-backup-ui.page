@@ -515,7 +515,7 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
       Open a one-time recovery page for an existing Borg Backup UI administrator account.
       The new password is entered in Borg Backup UI. Jobs, repositories, secrets, settings, and logs are not changed.
     </p>
-    <form method="GET" id="bbui-admin-recovery-form" onsubmit="return bbui_start_admin_recovery()">
+    <form method="GET" id="bbui-admin-recovery-form" onsubmit="return bbui_validate_admin_recovery_selection()">
       <input type="hidden" name="action" value="admin_recovery_start">
       <table class="bbui-table">
         <tr>
@@ -554,7 +554,7 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
       </div>
     </form>
     <script>
-    function bbui_start_admin_recovery() {
+    function bbui_validate_admin_recovery_selection() {
       var form = document.getElementById('bbui-admin-recovery-form');
       var result = document.getElementById('bbui-admin-recovery-result');
       var select = form.querySelector('select[name="username"]');
@@ -564,49 +564,10 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
         return false;
       }
       var buttons = document.getElementById('bbui-admin-recovery-btns');
-      var defaultButtons = buttons.innerHTML;
-      var targetWindow = window.open('about:blank', '_blank');
-      if (targetWindow) {
-        targetWindow.document.write('<!doctype html><title>Borg Backup UI</title><p style="font-family:sans-serif">Creating admin recovery link...</p>');
-        targetWindow.document.close();
-      }
       result.className = 'bbui-result';
       result.textContent = '';
       buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Creating recovery link...</span>';
-      var params = new URLSearchParams();
-      params.set('action', 'admin_recovery_start');
-      params.set('username', select.value);
-      params.set('bbui_async', '1');
-      params.set('_', String(Date.now()));
-      fetch('?' + params.toString(), {credentials: 'same-origin', cache: 'no-store'})
-        .then(function(r){ return r.json(); })
-        .then(function(data) {
-          if (!data || !data.ok || !data.url) {
-            throw new Error((data && data.error) || 'Admin recovery failed.');
-          }
-          if (targetWindow && !targetWindow.closed) {
-            targetWindow.location.href = data.url;
-          }
-          result.className = 'bbui-result ok';
-          result.textContent = 'Recovery page created for "' + data.username + '". ';
-          var link = document.createElement('a');
-          link.href = data.url;
-          link.target = '_blank';
-          link.style.color = '#8bd78b';
-          link.textContent = 'Open recovery page';
-          result.appendChild(link);
-        })
-        .catch(function(error) {
-          if (targetWindow && !targetWindow.closed) {
-            targetWindow.close();
-          }
-          result.className = 'bbui-result error';
-          result.textContent = error && error.message ? error.message : 'Admin recovery failed.';
-        })
-        .finally(function() {
-          buttons.innerHTML = defaultButtons;
-        });
-      return false;
+      return true;
     }
     </script>
   </div>
