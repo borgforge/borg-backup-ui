@@ -44,6 +44,20 @@ function bbui_write_conf($file, $port, $bind) {
   file_put_contents($file, implode("\n", $lines) . "\n");
 }
 
+function bbui_request_value($key, $default = '') {
+  static $raw_post = null;
+  if (isset($_POST[$key])) return $_POST[$key];
+  if (isset($_GET[$key])) return $_GET[$key];
+  if ($raw_post === null) {
+    $raw_post = [];
+    $raw = file_get_contents('php://input');
+    if (is_string($raw) && $raw !== '') {
+      parse_str($raw, $raw_post);
+    }
+  }
+  return $raw_post[$key] ?? $default;
+}
+
 function bbui_ui_url($port) {
   $host = $_SERVER['SERVER_ADDR'] ?? ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
   $host = preg_replace('/:\d+$/', '', (string)$host);
@@ -197,9 +211,9 @@ if (($action === 'start' || $action === 'restart') && !$python_ok) {
     'url' => bbui_ui_url($port),
   ];
 } elseif ($action === 'admin_recovery') {
-  $username = trim((string)($_POST['username'] ?? 'admin'));
-  $password = (string)($_POST['password'] ?? '');
-  $password_confirm = (string)($_POST['password_confirm'] ?? '');
+  $username = trim((string)bbui_request_value('username', ''));
+  $password = (string)bbui_request_value('password', '');
+  $password_confirm = (string)bbui_request_value('password_confirm', '');
   if ($password !== $password_confirm) {
     $json_response = ['ok' => false, 'error' => 'The password confirmation does not match.'];
   } elseif (!$python_ok) {
@@ -209,9 +223,9 @@ if (($action === 'start' || $action === 'restart') && !$python_ok) {
   }
 }
 
-if ($async && $json_response !== null) {
+if ($async) {
   header('Content-Type: application/json');
-  echo json_encode($json_response);
+  echo json_encode($json_response ?? ['ok' => false, 'error' => 'Unsupported control page action.']);
   exit;
 }
 
@@ -553,18 +567,25 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
         return false;
       }
       var params = new URLSearchParams(new FormData(form));
-      params.set('bbui_async', '1');
+      var requestParams = new URLSearchParams();
+      requestParams.set('action', 'admin_recovery');
+      requestParams.set('bbui_async', '1');
       buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Recovering admin access...</span>';
       result.className = 'bbui-result';
       result.textContent = '';
-      fetch('', {
+      fetch('?' + requestParams.toString(), {
         method: 'POST',
         credentials: 'same-origin',
         cache: 'no-store',
         headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
         body: params.toString()
       }).then(function(response) {
-        return response.json();
+        return response.text();
+      }).then(function(text) {
+        if (!text) {
+          throw new Error('Admin recovery returned an empty response.');
+        }
+        return JSON.parse(text);
       }).then(function(data) {
         if (!data.ok) {
           throw new Error(data.error || 'Admin recovery failed.');

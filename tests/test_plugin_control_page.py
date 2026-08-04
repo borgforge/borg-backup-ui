@@ -53,6 +53,7 @@ def test_control_page_config_apply_uses_async_restart_redirect():
     assert "bbui_apply_config('default')" in source
     assert "new URLSearchParams()" in source
     assert "fetch('?' + params.toString()" in source
+    assert "Unsupported control page action." in source
     assert "window.open('about:blank', '_blank')" in source
     assert "targetWindow.location.href = target" in source
     assert "var defaultButtons = buttons.innerHTML" in source
@@ -83,7 +84,12 @@ def test_control_page_admin_recovery_uses_post_body_and_python_helper():
     assert "--list-admins" in source
     assert "method: 'POST'" in source
     assert "new FormData(form)" in source
-    assert "params.set('bbui_async', '1')" in source
+    assert "bbui_request_value('password'" in source
+    assert "file_get_contents('php://input')" in source
+    assert "requestParams.set('action', 'admin_recovery')" in source
+    assert "requestParams.set('bbui_async', '1')" in source
+    assert "fetch('?' + requestParams.toString()" in source
+    assert "Admin recovery returned an empty response." in source
     assert "bbui_load_admin_accounts" in source
     assert "<select class=\"bbui-select\" name=\"username\"" in source
     assert "password_confirm" in source
@@ -91,4 +97,3 @@ def test_control_page_admin_recovery_uses_post_body_and_python_helper():
     assert "All Borg Backup UI sessions were signed out" in source
     assert "Reset the password of an existing Borg Backup UI administrator account" in source
     assert "Reset or create an enabled" not in source
-    assert "action=admin_recovery" not in source
