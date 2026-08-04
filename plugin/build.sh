@@ -204,7 +204,6 @@ EMHTTP_DST="${BUILD_DIR}/usr/local/emhttp/plugins/${NAME}"
 mkdir -p "${EMHTTP_DST}"
 find "${SCRIPT_DIR}" -maxdepth 1 -type f -name 'plugin-icon*.png' -exec cp {} "${EMHTTP_DST}/" \;
 [ -f "${SCRIPT_DIR}/${NAME}.page" ]    && cp "${SCRIPT_DIR}/${NAME}.page"    "${EMHTTP_DST}/"
-[ -f "${SCRIPT_DIR}/admin-recovery.php" ] && cp "${SCRIPT_DIR}/admin-recovery.php" "${EMHTTP_DST}/"
 
 # ── Slackware-Paketmetadaten ──────────────────────────────────────────────
 INSTALL_DIR="${BUILD_DIR}/install"

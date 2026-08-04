@@ -44,6 +44,20 @@ function bbui_write_conf($file, $port, $bind) {
   file_put_contents($file, implode("\n", $lines) . "\n");
 }
 
+function bbui_request_value($key, $default = '') {
+  static $raw_post = null;
+  if (isset($_POST[$key])) return $_POST[$key];
+  if (isset($_GET[$key])) return $_GET[$key];
+  if ($raw_post === null) {
+    $raw_post = [];
+    $raw = file_get_contents('php://input');
+    if (is_string($raw) && $raw !== '') {
+      parse_str($raw, $raw_post);
+    }
+  }
+  return $raw_post[$key] ?? $default;
+}
+
 function bbui_ui_url($port) {
   $host = $_SERVER['SERVER_ADDR'] ?? ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
   $host = preg_replace('/:\d+$/', '', (string)$host);
@@ -129,6 +143,15 @@ function bbui_run_admin_helper($plugin_dir, $python_path, $args, $payload = null
   return $result;
 }
 
+function bbui_run_admin_recovery($plugin_dir, $python_path, $username, $password) {
+  return bbui_run_admin_helper(
+    $plugin_dir,
+    $python_path,
+    ['--control-page'],
+    ['username' => $username, 'password' => $password]
+  );
+}
+
 function bbui_load_admin_accounts($plugin_dir, $python_path) {
   $result = bbui_run_admin_helper($plugin_dir, $python_path, ['--list-admins']);
   if (empty($result['ok']) || !isset($result['admins']) || !is_array($result['admins'])) {
@@ -160,6 +183,7 @@ $python_ok = $python_status['ok'];
 $warn_msg = '';
 $async = (($_POST['bbui_async'] ?? '') === '1' || ($_GET['bbui_async'] ?? '') === '1');
 $json_response = null;
+$admin_recovery_result = null;
 
 if (($action === 'start' || $action === 'restart') && !$python_ok) {
   $warn_msg = $python_status['reason'] . " Install or update the 'Python 3 for Unraid' plugin first.";
@@ -187,6 +211,17 @@ if (($action === 'start' || $action === 'restart') && !$python_ok) {
     'bind' => $bind,
     'url' => bbui_ui_url($port),
   ];
+} elseif ($action === 'admin_recovery') {
+  $username = trim((string)bbui_request_value('username', ''));
+  $password = (string)bbui_request_value('password', '');
+  $password_confirm = (string)bbui_request_value('password_confirm', '');
+  if ($password !== $password_confirm) {
+    $admin_recovery_result = ['ok' => false, 'error' => 'The password confirmation does not match.'];
+  } elseif (!$python_ok) {
+    $admin_recovery_result = ['ok' => false, 'error' => $python_status['reason'] . " Install or update the 'Python 3 for Unraid' plugin first."];
+  } else {
+    $admin_recovery_result = bbui_run_admin_recovery($PLUGIN_DIR, $python_status['path'], $username, $password);
+  }
 }
 
 if ($async) {
@@ -473,7 +508,7 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
       Reset the password of an existing Borg Backup UI administrator account from the Unraid control page.
       Jobs, repositories, secrets, settings, and logs are not changed.
     </p>
-    <form method="POST" id="bbui-admin-recovery-form" onsubmit="return bbui_admin_recovery()">
+    <form method="POST" id="bbui-admin-recovery-form" onsubmit="return bbui_validate_admin_recovery()">
       <input type="hidden" name="action" value="admin_recovery">
       <table class="bbui-table">
         <tr>
@@ -512,14 +547,22 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
       <div class="bbui-btn-row" id="bbui-admin-recovery-btns">
         <button type="submit" class="bbui-btn danger" <?= ($python_ok && count($admin_accounts) > 0) ? '' : 'disabled title="No existing admin account is available"' ?>>Reset Admin Access</button>
       </div>
-      <div class="bbui-result" id="bbui-admin-recovery-result"></div>
+      <div class="bbui-result <?= is_array($admin_recovery_result) ? (!empty($admin_recovery_result['ok']) ? 'ok' : 'error') : '' ?>" id="bbui-admin-recovery-result">
+        <?php if (is_array($admin_recovery_result)): ?>
+          <?php if (!empty($admin_recovery_result['ok'])): ?>
+            Admin access recovered for "<?= htmlspecialchars((string)($admin_recovery_result['username'] ?? '')) ?>".
+            All Borg Backup UI sessions were signed out.
+            Backup: <?= htmlspecialchars((string)($admin_recovery_result['backup_file'] ?? 'not needed')) ?>
+          <?php else: ?>
+            <?= htmlspecialchars((string)($admin_recovery_result['error'] ?? 'Admin recovery failed.')) ?>
+          <?php endif; ?>
+        <?php endif; ?>
+      </div>
     </form>
     <script>
-    function bbui_admin_recovery() {
+    function bbui_validate_admin_recovery() {
       var form = document.getElementById('bbui-admin-recovery-form');
-      var buttons = document.getElementById('bbui-admin-recovery-btns');
       var result = document.getElementById('bbui-admin-recovery-result');
-      var defaultButtons = buttons.innerHTML;
       var password = form.querySelector('input[name="password"]').value || '';
       var confirm = form.querySelector('input[name="password_confirm"]').value || '';
       if (password.length < 12) {
@@ -532,38 +575,11 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
         result.textContent = 'The password confirmation does not match.';
         return false;
       }
-      var params = new URLSearchParams(new FormData(form));
+      var buttons = document.getElementById('bbui-admin-recovery-btns');
       buttons.innerHTML = '<span style="color:#888;font-size:13px">&#8987; Recovering admin access...</span>';
       result.className = 'bbui-result';
       result.textContent = '';
-      fetch('/plugins/borg-backup-ui/admin-recovery.php', {
-        method: 'POST',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
-        body: params.toString()
-      }).then(function(response) {
-        return response.text();
-      }).then(function(text) {
-        if (!text) {
-          throw new Error('Admin recovery returned an empty response.');
-        }
-        return JSON.parse(text);
-      }).then(function(data) {
-        if (!data.ok) {
-          throw new Error(data.error || 'Admin recovery failed.');
-        }
-        form.querySelector('input[name="password"]').value = '';
-        form.querySelector('input[name="password_confirm"]').value = '';
-        result.className = 'bbui-result ok';
-        result.textContent = 'Admin access recovered for "' + data.username + '". All Borg Backup UI sessions were signed out. Backup: ' + (data.backup_file || 'not needed');
-      }).catch(function(error) {
-        result.className = 'bbui-result error';
-        result.textContent = error.message || 'Admin recovery failed.';
-      }).finally(function() {
-        buttons.innerHTML = defaultButtons;
-      });
-      return false;
+      return true;
     }
     </script>
   </div>
