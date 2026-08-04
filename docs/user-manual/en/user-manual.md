@@ -32,7 +32,7 @@ Borg-Backup-UI is a web interface for BorgBackup on Unraid. The application mana
 
 ### 1.1 Key Terms
 
-- **Job:** A backup definition with source paths, target, Borg options, retention, passphrase, and optional schedule.
+- **Job:** A backup definition with folders or files to back up, target, Borg options, retention, passphrase, and optional schedule.
 - **Repository:** The BorgBackup target where archives are stored.
 - **Archive:** A single BorgBackup snapshot inside a repository.
 - **Location:** A target group such as `Local`, `USB`, `SMB`, or `Storagebox`.
@@ -121,7 +121,7 @@ Jobs define which data is backed up and where it is stored. A job contains:
 
 - Display name and type ID
 - Location and repository
-- Source paths
+- Folders or files to back up
 - Docker and VM control
 - Borg options such as compression, retention, and passphrase
 - Schedule
@@ -177,18 +177,18 @@ Important fields:
 
 #### Step 2: Sources & Target
 
-The compact view shows **Sources and exclusions** on the left and the **Backup target** on the right. This step selects source paths, optional exclusion paths, storage type, the exact storage target, an existing repository, and job compression. The repository list only shows repositories belonging to the selected storage target. Repository paths are no longer entered freely in a job.
+The compact view shows **Folders to back up** and **Exclusions** on the left and the **Backup target** on the right. The left side defines which folders or files are included in the backup and which child folders or files are skipped. The right side selects storage type, the exact storage target, an existing repository, and job compression. The repository list only shows repositories belonging to the selected storage target. Repository paths are no longer entered freely in a job.
 
-Typical source paths:
+Typical folders to back up:
 
 - `/boot/`
 - `/mnt/user/appdata/`
 - `/mnt/user/domains/`
 - `/mnt/user/photos/`
 
-> **Note:** Source paths must exist on the Unraid system and must be readable by the backup process.
+> **Note:** The selected folders or files must exist on the Unraid system and must be readable by the backup process. Technically, they are stored as the job's source paths.
 
-Exclusion paths are concrete files or directories below a selected source path. They are omitted from the Borg archive. With many entries, only the path lists scroll inside their section.
+Exclusions are concrete files or directories below a selected backup folder. They are omitted from the Borg archive. With many entries, only the path lists scroll inside their section.
 
 #### Docker and VM Steps
 
@@ -227,7 +227,7 @@ This expression starts the job daily at 03:00.
 
 #### Flow Preview
 
-The final step shows a technical preview of the planned flow. It summarizes repository, source paths, Docker/VM selection, and planned actions.
+The final step shows a technical preview of the planned flow. It summarizes repository, folders or files to back up, Docker/VM selection, and planned actions.
 
 ### 3.5 Scheduling and Cron
 
@@ -242,7 +242,7 @@ Best practices:
 
 ### 3.6 Typical Messages
 
-- **Preview error / invalid data:** A wizard field is not plausible. Check source paths, type ID, storage target, and repository selection.
+- **Preview error / invalid data:** A wizard field is not plausible. Check the folders or files to back up, type ID, storage target, and repository selection.
 - **No storage target or repository available:** Configure the storage target under **Settings** first. Then create or import the repository under **Repositories**.
 - **Schedule disabled:** The job only runs manually.
 
@@ -905,7 +905,7 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 1. Open **Jobs**.
 2. Click **New job**.
 3. Enter name, type ID, icon, and location.
-4. Select source paths.
+4. Select the folders or files to back up.
 5. Select the storage target first and then an existing repository.
 6. Configure Docker or VM control if needed.
 7. Set compression and retention. Encryption and passphrase belong to the repository.

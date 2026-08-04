@@ -242,7 +242,7 @@ Check the WAN connection, server availability, and SSH keepalive. A failed check
 
 ### Backup Contains No Data
 
-Check spelling, letter case, content, and readability of source paths. An existing but empty directory is technically valid and creates an empty archive.
+Check spelling, letter case, content, and readability of the selected folders or files. An existing but empty directory is technically valid and creates an empty archive.
 
 ### What Backup Strategy Should I Use?
 

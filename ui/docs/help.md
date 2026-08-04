@@ -242,7 +242,7 @@ Prüfen Sie WAN-Verbindung, Servererreichbarkeit und SSH-Keepalive. Ein abgebroc
 
 ### Backup enthält keine Daten
 
-Prüfen Sie Schreibweise, Groß-/Kleinschreibung, Inhalt und Lesbarkeit der Quellpfade. Ein vorhandenes, aber leeres Verzeichnis ist technisch gültig und erzeugt ein leeres Archiv.
+Prüfen Sie Schreibweise, Groß-/Kleinschreibung, Inhalt und Lesbarkeit der ausgewählten Ordner oder Dateien. Ein vorhandenes, aber leeres Verzeichnis ist technisch gültig und erzeugt ein leeres Archiv.
 
 ### Welche Backup-Strategie ist sinnvoll?
 

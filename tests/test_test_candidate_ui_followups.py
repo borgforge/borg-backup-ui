@@ -114,6 +114,8 @@ def test_wizard_source_paths_are_explained_for_normal_users() -> None:
     english = _read("ui/i18n/en.json")
     help_de = _read("ui/docs/help.md")
     help_en = _read("ui/docs/help.en.md")
+    manual_de = _read("docs/user-manual/de/user-manual.md")
+    manual_en = _read("docs/user-manual/en/user-manual.md")
 
     assert 'data-i18n="wizard.sourcePathsHelp"' not in html
     assert 'data-i18n="wizard.exclusionsSection"' in html
@@ -131,7 +133,13 @@ def test_wizard_source_paths_are_explained_for_normal_users() -> None:
     assert '"sourcePaths": "Selection"' in english
     assert '"exclusionsSection": "Exclusions"' in english
     assert "Quellen sind die Ordner oder Dateien" in help_de
+    assert "Lesbarkeit der ausgewählten Ordner oder Dateien" in help_de
     assert "Sources are the folders or files" in help_en
+    assert "readability of the selected folders or files" in help_en
+    assert "**Zu sichernde Ordner** und **Ausschlüsse**" in manual_de
+    assert "Technisch werden sie als Quellpfade des Jobs gespeichert." in manual_de
+    assert "**Folders to back up** and **Exclusions**" in manual_en
+    assert "Technically, they are stored as the job's source paths." in manual_en
 
 
 def test_wizard_sources_and_target_use_compact_two_column_layout() -> None:
