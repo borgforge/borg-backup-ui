@@ -72,6 +72,7 @@ def is_deployable_path(path: str) -> bool:
         return True
     if path in {
         "plugin/apprise-requirements.lock",
+        "plugin/admin-recovery.php",
         "plugin/build.sh",
         "plugin/borg-backup-ui.page",
         "plugin/rc.borg_backup_ui",

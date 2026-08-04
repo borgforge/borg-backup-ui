@@ -33,6 +33,7 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     workflow = (ROOT / "plugin" / "release_workflow.py").read_text(encoding="utf-8")
 
     assert 'release_workflow.py" package-provenance' in script
+    assert '"plugin/admin-recovery.php"' in workflow
     assert 'f"boot/config/plugins/{NAME}/borg_backup_ui.py"' in workflow
     assert 'f"boot/config/plugins/{NAME}/LICENSE"' in workflow
     assert 'f"boot/config/plugins/{NAME}/api/apprise_profiles_api.py"' in workflow
@@ -51,6 +52,7 @@ def test_build_removes_stale_generated_packages() -> None:
 
     assert 'find "${BUILD_OUTPUT_DIR}"' in script
     assert '-name "${NAME}-*.txz" -delete' in script
+    assert 'admin-recovery.php' in script
 
 
 def test_test_channel_publisher_replaces_snapshot_with_exact_lease(tmp_path: Path) -> None:

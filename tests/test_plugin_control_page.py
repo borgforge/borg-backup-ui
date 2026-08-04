@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTROL_PAGE = ROOT / "plugin" / "borg-backup-ui.page"
+ADMIN_RECOVERY_ENDPOINT = ROOT / "plugin" / "admin-recovery.php"
 
 
 def test_control_page_is_consistently_english():
@@ -40,7 +41,7 @@ def test_control_page_is_consistently_english():
 def test_control_page_service_actions_remain_available():
     source = CONTROL_PAGE.read_text(encoding="utf-8")
 
-    for action in ("start", "stop", "restart", "apply", "default", "admin_recovery"):
+    for action in ("start", "stop", "restart", "apply", "default"):
         assert f"'{action}'" in source or f'\"{action}\"' in source
 
 
@@ -78,17 +79,18 @@ def test_control_page_reads_test_and_stable_manifest_versions():
 
 def test_control_page_admin_recovery_uses_post_body_and_python_helper():
     source = CONTROL_PAGE.read_text(encoding="utf-8")
+    endpoint = ADMIN_RECOVERY_ENDPOINT.read_text(encoding="utf-8")
 
     assert "api/admin_recovery.py" in source
-    assert "--control-page" in source
     assert "--list-admins" in source
     assert "method: 'POST'" in source
     assert "new FormData(form)" in source
-    assert "bbui_request_value('password'" in source
-    assert "file_get_contents('php://input')" in source
-    assert "requestParams.set('action', 'admin_recovery')" in source
-    assert "requestParams.set('bbui_async', '1')" in source
-    assert "fetch('?' + requestParams.toString()" in source
+    assert "fetch('/plugins/borg-backup-ui/admin-recovery.php'" in source
+    assert "bbui_request_value('password'" in endpoint
+    assert "file_get_contents('php://input')" in endpoint
+    assert "--control-page" in endpoint
+    assert "Content-Type: application/json" in endpoint
+    assert "Admin recovery requires POST." in endpoint
     assert "Admin recovery returned an empty response." in source
     assert "bbui_load_admin_accounts" in source
     assert "<select class=\"bbui-select\" name=\"username\"" in source
