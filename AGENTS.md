@@ -263,7 +263,7 @@ Beschreibungen ASCII-sicher formulieren:
 Vor Abschluss jeder Codeaenderung:
 
 ```text
-docs/release-workflow.md
+docs/maintainer/release-workflow.md
 ```
 
 lesen und befolgen.

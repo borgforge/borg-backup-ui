@@ -14,7 +14,7 @@ diagnostics.
 > Public installation instructions will be added after Community Apps approval.
 > This project is not affiliated with BorgBackup or other Borg UI projects.
 
-![Borg Backup UI dashboard](docs/assets/readme-dashboard.png)
+![Borg Backup UI dashboard](docs/assets/readme/dashboard.png)
 
 ## Overview
 
@@ -121,35 +121,35 @@ verified on your system.
 Backup status, restore verification, repository health, and recent activity in
 one overview.
 
-![Dashboard](docs/assets/readme-dashboard.png)
+![Dashboard](docs/assets/readme/dashboard.png)
 
 ### Jobs
 
 Grouped backup jobs with operational status, next run information, restore
 verification state, and manual start controls.
 
-![Jobs](docs/user-manual/assets/en/jobs.png)
+![Jobs](docs/assets/readme/jobs.png)
 
 ### Job Wizard
 
 A step-by-step workflow for sources, repositories, Docker/VM handling,
 retention, description, schedule, and flow preview.
 
-![Job wizard](docs/user-manual/assets/en/job-wizard-step-1.png)
+![Job wizard](docs/assets/readme/job-wizard.png)
 
 ### Browse and Restore
 
 Browse archives, select content, precheck the restore target, and restore into
 administrator-approved paths.
 
-![Restore wizard](docs/user-manual/assets/en/restore-wizard.png)
+![Restore wizard](docs/assets/readme/restore-wizard.png)
 
 ### Restore Tests
 
 Plan and review automated restore checks so backups are not only written, but
 also verified.
 
-![Restore test plan](docs/user-manual/assets/en/restore-tests-plan.png)
+![Restore test plan](docs/assets/readme/restore-tests-plan.png)
 
 ## Data and Secrets
 
@@ -166,11 +166,12 @@ treats restore tests and restore history as first-class operating data.
 | Document | Purpose |
 | --- | --- |
 | [Technical overview](docs/README.md) | Runtime architecture, paths, build notes, and development basics. |
-| [Release workflow](docs/release-workflow.md) | Build, test-channel, and stable release process. |
-| [Manual maintenance tests](docs/manual-maintenance-tests.md) | Manual validation checklist for Unraid test systems. |
+| [Release workflow](docs/maintainer/release-workflow.md) | Build, test-channel, and stable release process. |
+| [Manual maintenance tests](docs/maintainer/manual-maintenance-tests.md) | Manual validation checklist for Unraid test systems. |
 | [Changelog](docs/changelog.md) | Technical and release history. |
 | [Homepage widget](docs/integrations/homepage-widget.md) | Read-only dashboard integration and token setup. |
-| [German user manual](docs/handbuch/README.md) | Current German handbuch draft. |
+| [German user manual](docs/user-manual/de/user-manual.md) | German user manual. |
+| [English user manual](docs/user-manual/en/user-manual.md) | English user manual. |
 
 ## Development
 
@@ -197,7 +198,7 @@ Publish that attested commit to the test channel:
 directly. Stable releases promote the exact tested package through a separate
 release PR.
 
-See [docs/release-workflow.md](docs/release-workflow.md) before preparing
+See [docs/maintainer/release-workflow.md](docs/maintainer/release-workflow.md) before preparing
 plugin builds, test-channel deployments, or stable release promotions.
 
 ## Support
