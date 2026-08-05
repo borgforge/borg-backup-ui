@@ -107,7 +107,7 @@ Publish the attested commit to the test channel:
 The direct `plugin/build.sh` entry point is intentionally restricted to an
 exported staging tree. After explicit test approval, stable promotion copies
 the exact tested package into a separate release PR without rebuilding it.
-See [release-workflow.md](release-workflow.md).
+See [maintainer/release-workflow.md](maintainer/release-workflow.md).
 
 ## Development
 
@@ -120,9 +120,9 @@ python3 -m py_compile borg_backup_ui.py api/*.py runtime/scripts/*.py
 ## Manual Release Validation
 
 - [Bilingual user manual](./user-manual/README.md)
-- [Manual maintenance tests on Unraid](./manual-maintenance-tests.md)
-- [Release workflow](./release-workflow.md)
-- [Bilingual documentation plan](./bilingual-documentation-plan.md)
+- [Manual maintenance tests on Unraid](./maintainer/manual-maintenance-tests.md)
+- [Pre-beta regression tests](./maintainer/pre-beta-regression-tests.md)
+- [Release workflow](./maintainer/release-workflow.md)
 
 ## License
 

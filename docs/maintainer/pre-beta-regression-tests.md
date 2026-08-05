@@ -32,5 +32,5 @@ pytest -q
   possible. They protect the decision logic and error handling, not the Unraid
   platform itself.
 - Real Unraid behavior remains covered by manual maintenance tests in
-  `docs/manual-maintenance-tests.md`.
-- Test reports for specific builds are stored in `docs/test-reports/`.
+  `docs/maintainer/manual-maintenance-tests.md`.
+- Build-specific test reports are not kept in this repository.

@@ -11,7 +11,7 @@
   <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/ui/assets/app-icon.png</Icon>
   <License>MIT</License>
   <ExtraSearchTerms>borg borgbackup backup restore repository repositories unraid snapshots</ExtraSearchTerms>
-  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme-dashboard.png</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/user-manual/assets/en/jobs.png</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/user-manual/assets/en/restore-wizard.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/dashboard.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/jobs.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/restore-wizard.png</Screenshot>
 </Plugin>

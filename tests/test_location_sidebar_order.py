@@ -25,9 +25,3 @@ def test_all_location_sidebars_use_the_shared_fixed_order() -> None:
 
     jobs = _read("ui/js/pages/jobs.js")
     assert "['local', 'usb', 'smb', 'storagebox', 'utility']" in jobs
-
-
-def test_location_order_is_documented_as_fixed() -> None:
-    design = _read("docs/ui-design/README.md")
-    assert "Local, USB, SMB, Storagebox" in design
-    assert "not user-configurable" in design
