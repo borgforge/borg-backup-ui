@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #365
+- Updated the bundled BorgBackup 1.x stable binary from 1.4.4 to 1.4.5.
+
 ### Issue #292
 - Normalized nested Settings cards so the Restore settings tab uses the same redesigned card surface as the other settings areas in light and dark themes.
 
@@ -30,7 +33,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #283
 - Removed direct SMB mount controls from the Job Wizard so job creation only selects storage targets and repositories already present in the canonical inventory.
 - Kept manual SMB mount and unmount actions in Settings > SMB Profiles, and left repository creation/import responsible for direct storage access when needed.
-- Added a visible compatibility note to repository imports, explaining that Borg Backup UI uses Borg 1.4.4 and that existing repositories must be verified after import.
+- Added a visible compatibility note to repository imports, explaining that Borg Backup UI uses the bundled Borg 1.4.x runtime and that existing repositories must be verified after import.
 - Preserved backend SMB job mount metadata defaults for existing jobs and runtime execution while no longer exposing those controls during job creation.
 
 ### Issue #282

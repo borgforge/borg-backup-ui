@@ -26,7 +26,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
 BORG_BUNDLE_DIR = ROOT_DIR / "runtime" / "bin" / "borg"
 BORG_BUNDLE_PLAIN = BORG_BUNDLE_DIR / "borg"
-BORG_BUNDLE_VERSIONED = BORG_BUNDLE_DIR / "borg-linux-glibc231-x86_64-1.4.4"
+BORG_BUNDLE_VERSIONED = BORG_BUNDLE_DIR / "borg-linux-glibc231-x86_64-1.4.5"
 BORG_TMP_BIN = Path("/tmp/borg")
 
 

@@ -157,7 +157,7 @@ SCRIPT_DIR = Path(__file__).parent.resolve()
 UI_DIR = SCRIPT_DIR / "ui"
 BORG_BUNDLE_DIR = SCRIPT_DIR / "runtime" / "bin" / "borg"
 BORG_BUNDLE_PLAIN = BORG_BUNDLE_DIR / "borg"
-BORG_BUNDLE_VERSIONED = BORG_BUNDLE_DIR / "borg-linux-glibc231-x86_64-1.4.4"
+BORG_BUNDLE_VERSIONED = BORG_BUNDLE_DIR / "borg-linux-glibc231-x86_64-1.4.5"
 BORG_STAGE_BIN = Path("/usr/local/bin/borg")
 LICENSE_FILES = {
     "project": SCRIPT_DIR / "LICENSE",
