@@ -96,6 +96,8 @@ Andere Pfade sind erlaubt, muessen aber im Testprotokoll festgehalten werden.
   erkannten Python-Pfad und eine unterstuetzte Python-Version.
 - [ ] **A1.5 (P)** `/var/log/borg_backup_ui.log` enthaelt keine Secrets und keine
   unerwarteten Tracebacks. Von Borg Backup UI erzeugte Meldungen sind Englisch.
+- [ ] **A1.6 (P)** `/boot/config/go` enthaelt keinen neu hinzugefuegten Borg
+  Backup UI Autostart-Block und keine Zeile mit `rc.borg_backup_ui`.
 
 ### A2 - Erstkonfiguration und Anmeldung
 
@@ -194,7 +196,9 @@ Andere Pfade sind erlaubt, muessen aber im Testprotokoll festgehalten werden.
   Login, Einstellungen, Job, History und Restore-Test-Bericht weiterhin da.
 - [ ] **A9.2 (P)** Unraid-Testsystem einmal neu starten. Das Plugin startet
   automatisch und die in A9.1 genannten Daten bleiben erhalten.
-- [ ] **A9.3 (P)** Nach dem Neustart erneut Systemzustand und Repository-Zugriff
+- [ ] **A9.3 (P)** `/boot/config/go` bleibt nach dem Neustart frei von Borg
+  Backup UI Autostart-Zeilen.
+- [ ] **A9.4 (P)** Nach dem Neustart erneut Systemzustand und Repository-Zugriff
   pruefen.
 
 ## B. Update einer bestehenden Installation
@@ -225,6 +229,8 @@ von Deutsch abweichende gespeicherte UI-Sprache vorhanden sein.
   Tracebacks und keine Secrets.
 - [ ] **B2.4 (U)** Bestehende Anmeldung oder erneute Anmeldung funktioniert nach
   dem Update wie erwartet.
+- [ ] **B2.5 (U)** Ein vorhandener alter Borg Backup UI Autostart-Block wurde aus
+  `/boot/config/go` entfernt.
 
 ### B3 - Bestand und Migration pruefen
 
@@ -270,4 +276,3 @@ fortgesetzt werden, wenn alle fuer den Durchlauf erforderlichen Schritte
 `PASS` sind. Ein `FAIL` oder `BLOCKED` benoetigt ein Issue, einen neuen
 Release-Kandidaten und die Wiederholung aller durch die Korrektur betroffenen
 Schritte.
-

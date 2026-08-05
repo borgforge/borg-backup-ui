@@ -75,7 +75,10 @@ def is_deployable_path(path: str) -> bool:
         "plugin/apprise-requirements.lock",
         "plugin/build.sh",
         "plugin/borg-backup-ui.page",
+        "plugin/deploy-test.sh",
+        "plugin/promote-release.sh",
         "plugin/rc.borg_backup_ui",
+        "plugin/release_workflow.py",
         "plugin/plugin-icon.png",
         "plugin/plugin-icon-dark.png",
         "plugin/plugin-icon-light.png",
@@ -509,6 +512,32 @@ def rewrite_package_installer(manifest: str, md5: str) -> str:
     raise RuntimeError("Plugin manifest package install block was not found")
 
 
+GO_AUTOSTART_RE = re.compile(
+    r"# Register autostart in /boot/config/go \(once\)\n"
+    r"if ! grep -q \"rc\.borg_backup_ui\" \"\$\{GO_FILE\}\" 2>/dev/null; then\n"
+    r"(?:.*?\n)"
+    r"fi\n",
+    re.DOTALL,
+)
+
+
+def rewrite_go_autostart_handling(manifest: str) -> str:
+    """Remove go-file autostart registration and keep update cleanup."""
+    cleanup = """# Clean up legacy Borg Backup UI autostart lines from /boot/config/go.
+# The plugin install/boot flow starts the service without persistent go entries.
+if [ -f "${GO_FILE}" ]; then
+  sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
+  sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
+fi
+"""
+    rendered, count = GO_AUTOSTART_RE.subn(cleanup, manifest, count=1)
+    if count:
+        return rendered
+    if "Autostart registered in ${GO_FILE}" in manifest:
+        raise RuntimeError("go autostart block was found but could not be rewritten")
+    return manifest
+
+
 def prepare_build_tree(
     root: Path,
     version: str,
@@ -529,6 +558,7 @@ def prepare_build_tree(
         count=1,
     )
     manifest = replace_changelog_block(manifest, version, notes)
+    manifest = rewrite_go_autostart_handling(manifest)
     manifest_path.write_text(manifest, encoding="utf-8")
 
     app = app_path.read_text(encoding="utf-8")

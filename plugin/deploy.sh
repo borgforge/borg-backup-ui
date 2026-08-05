@@ -47,12 +47,10 @@ ssh "root@${UNRAID_IP}" "
     echo 'Neue borg_backup_ui.conf aus Vorlage erstellt.'
   fi
 
-  # Autostart eintragen (einmalig)
-  if ! grep -q 'rc.borg_backup_ui' /boot/config/go 2>/dev/null; then
-    echo '' >> /boot/config/go
-    echo '# Borg Backup UI' >> /boot/config/go
-    echo '/etc/rc.d/rc.borg_backup_ui start' >> /boot/config/go
-  fi
+  # Legacy cleanup: Borg Backup UI no longer persists an autostart entry in
+  # /boot/config/go. The plugin install/boot flow starts the service.
+  sed -i '/# Borg Backup UI/d' /boot/config/go 2>/dev/null || true
+  sed -i '/rc.borg_backup_ui/d' /boot/config/go 2>/dev/null || true
 
   # Neu starten
   /etc/rc.d/rc.borg_backup_ui start

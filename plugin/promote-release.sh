@@ -125,6 +125,11 @@ package_install_re = re.compile(
     re.escape(package_install_begin) + r".*?" + re.escape(package_install_end),
     re.DOTALL,
 )
+post_install_re = re.compile(
+    r'<FILE Name="/tmp/borg-backup-ui-install\.sh" Run="/bin/bash">\s*'
+    r"<INLINE>.*?</INLINE>\s*</FILE>",
+    re.DOTALL,
+)
 legacy_package_file_re = re.compile(
     r'<FILE Name="&bootdir;/&name;-&version;\.txz" Run="upgradepkg --install-new">\s*'
     r"<URL>&pkgurl;</URL>\s*"
@@ -157,6 +162,14 @@ if tested_package_install:
         raise SystemExit("Stable manifest has no package install block to replace")
 else:
     stable = re.sub(r"<MD5>[^<]*</MD5>", f"<MD5>{md5}</MD5>", stable, count=1)
+
+tested_post_install = post_install_re.search(test)
+if not tested_post_install:
+    raise SystemExit("Test manifest has no post-install block")
+if not post_install_re.search(stable):
+    raise SystemExit("Stable manifest has no post-install block to replace")
+stable = post_install_re.sub(lambda _match: tested_post_install.group(0), stable, count=1)
+
 stable = re.sub(
     rf"###{re.escape(version)}###\n(?:.*?)(?=\n###|\n\]\]>|\Z)",
     "",
