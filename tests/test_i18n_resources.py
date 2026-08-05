@@ -129,11 +129,15 @@ def test_i18n_initializes_before_application_modules():
     assert "initI18n" in bootstrap
 
 
-def test_i18n_keeps_german_as_explicit_fallback():
+def test_i18n_detects_browser_language_and_defaults_to_english():
     component = (ROOT / "ui" / "js" / "components" / "i18n.js").read_text(encoding="utf-8")
 
-    assert "const fallbackLanguage = 'de';" in component
-    assert "navigator.language" not in component
+    assert "const defaultLanguage = 'en';" in component
+    assert "const fallbackLanguage = 'en';" in component
+    assert "function detectBrowserLanguage()" in component
+    assert "navigatorRef.languages" in component
+    assert "navigatorRef.language" in component
+    assert "readStoredLanguage() || detectBrowserLanguage()" in component
 
 
 def test_in_app_help_has_bilingual_parity_and_no_public_urls():

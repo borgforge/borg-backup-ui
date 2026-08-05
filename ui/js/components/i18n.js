@@ -5,24 +5,39 @@
   window.BBUI.components = window.BBUI.components || {};
 
   const supportedLanguages = ['de', 'en'];
-  const fallbackLanguage = 'de';
+  const defaultLanguage = 'en';
+  const fallbackLanguage = 'en';
   const storageKey = 'borg-backup-ui.language';
   const resources = {};
-  let activeLanguage = fallbackLanguage;
+  let activeLanguage = defaultLanguage;
   let initPromise = null;
   let observer = null;
 
   function normalizeLanguage(language) {
     const normalized = String(language || '').trim().toLowerCase().split('-')[0];
-    return supportedLanguages.includes(normalized) ? normalized : fallbackLanguage;
+    return supportedLanguages.includes(normalized) ? normalized : '';
   }
 
   function readStoredLanguage() {
     try {
       return normalizeLanguage(window.localStorage.getItem(storageKey));
     } catch (_) {
-      return fallbackLanguage;
+      return '';
     }
+  }
+
+  function detectBrowserLanguage() {
+    const navigatorRef = window.navigator || {};
+    const candidates = [
+      ...(Array.isArray(navigatorRef.languages) ? navigatorRef.languages : []),
+      navigatorRef.language,
+      navigatorRef.userLanguage,
+    ];
+    for (const candidate of candidates) {
+      const language = normalizeLanguage(candidate);
+      if (language) return language;
+    }
+    return defaultLanguage;
   }
 
   function lookup(language, key) {
@@ -77,7 +92,7 @@
   }
 
   function setLanguage(language, options = {}) {
-    activeLanguage = normalizeLanguage(language);
+    activeLanguage = normalizeLanguage(language) || defaultLanguage;
     if (options.persist !== false) {
       try {
         window.localStorage.setItem(storageKey, activeLanguage);
@@ -119,7 +134,7 @@
   function init() {
     if (initPromise) return initPromise;
     initPromise = Promise.allSettled(supportedLanguages.map(loadResource)).then(() => {
-      activeLanguage = readStoredLanguage();
+      activeLanguage = readStoredLanguage() || detectBrowserLanguage();
       translate(document);
       bindLanguageSelector();
       observeDynamicContent();
