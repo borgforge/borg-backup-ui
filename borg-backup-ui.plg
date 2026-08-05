@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.04.1237">
+<!ENTITY version   "2026.08.06.0120">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -19,6 +19,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.06.0120###
+- Updated the bundled BorgBackup 1.x stable runtime from 1.4.4 to 1.4.5, including Borg's latest 1.x fixes.
+- Borg Backup UI no longer adds its own autostart block to `/boot/config/go`; updates clean up the old block while the plugin still starts through the normal plugin flow.
+- Borg Backup UI now detects German or English from the browser on first use and defaults to English for all other languages; an existing browser language selection is kept. Plugin install and service startup messages are now English as well.
+
 ###2026.08.04.1237###
 - Clarified the Job Wizard source selection wording: the sources step now separates folders to back up from exclusions, uses shorter labels in the form, clearer validation, and matching help documentation.
 - Show the next scheduled backup run on the Dashboard job overview, including clear states for jobs without a schedule or with a disabled schedule.
@@ -28,429 +33,6 @@
 ###2026.08.02.1320###
 - Fixed the Unraid control page so applying a changed port or bind address restarts Borg Backup UI and redirects to the correct UI URL with the configured port instead of leaving the browser on a blank Settings page.
 
-###2026.08.01.2317###
-- The Job Wizard now removes deleted Docker containers from saved runtime selections when the current Docker inventory is available, so stale names no longer stay invisibly selected.
-
-###2026.08.01.1908###
-- Issue #322: Allow libvirt VM source paths
-- The Job Wizard now accepts `/etc/libvirt` as an explicit source path for Unraid VM backup jobs.
-- `/mnt/user/system/libvirt` remains supported through the existing `/mnt` source path handling.
-- Fixes duplicate Storagebox repository status text in the Job Wizard preview.
-- Uses a cleaner minimal status icon set for repository maintenance cards.
-- Aligns System Health & Migration status icons with the minimal status icon set.
-- Aligns setup wizard checklist status icons with the minimal status icon set.
-- Aligns remaining restore and startup maintenance status markers with the minimal status icon set.
-- Issue #329: Fixed the Apprise reminder diagnostics table hover background for taller overdue backup rows.
-- Issue #331: Added subtle colored dashboard summary surfaces for faster status scanning.
-- Issue #332: Cleaned up the sidebar footer and added a direct light/dark theme toggle without saving backup.conf.
-- Issue #333: Replaced the browser restore history delete prompt with an application modal.
-- Issue #334: Reorganized the About page around project information and grouped maintainer contact details separately.
-- Browse & Restore now respects repository resource locks: browse, download checks, and prechecks report a busy repository clearly, while restore extraction and direct downloads hold the repository lock so matching backup jobs do not start concurrently.
-- Restore-held repository locks no longer make the related backup job appear as if a backup run itself was active on the Jobs page.
-- Backup starts that are skipped because a restore holds the repository lock are shown as skipped in the live log instead of as failed jobs.
-- The Job Wizard now supports a Docker exclusion mode that stops all running containers except the selected containers, making large Appdata backup setups easier to configure.
-- Fixed the backup runner so the Docker exclusion mode is preserved at execution time instead of falling back to stopping all containers.
-
-###2026.07.28.0850###
-- Added a safe migration-backup cleanup under System Health & Migration: inactive pre-beta migration snapshots can be removed completely, active migrations keep the latest five snapshots, and unknown or protected snapshots are skipped.
-- Prevented the canonical backup.conf migration from creating a new migration snapshot just because an installer-created legacy backup.conf.example copy exists while backup.conf already matches the current schema.
-- Fixed System Health & Migration so cleanup audit entries are not mistaken for failed migration runs after old migration backups are deleted.
-- Fresh installations now require the main data directory to be confirmed in Settings before operational actions are unlocked, instead of silently creating the suggested `/mnt/user/borg-backup-ui` path.
-- Config Backups & Rollback now shows diff colors from backup to active configuration, so new active lines are green and removed backup-only lines are red.
-- Added third-party license notices for the bundled Apprise notification runtime and its pinned Python dependencies.
-- Added the full MIT project license to the repository and packaged plugin payload.
-- Added a dedicated Settings > About license page with project and third-party license viewers.
-- Improved the repository import browser so existing Borg repositories are detected as selectable endpoints and their internal folders are no longer offered for navigation.
-- Issue #310: Added a first-run setup wizard for the required main data directory and the first backup path.
-- Fresh installations now clearly guide users through storage target, repository, backup job, and optional restore/notification setup without silently creating objects.
-- When storage targets, repositories, or jobs are opened from the setup wizard, successful saves now return to the wizard with refreshed progress.
-- Skipped optional setup steps remain visible as dashboard action items so users can continue later.
-- Issue #313: Dashboard backup status now marks missed scheduled backup runs as overdue instead of leaving the last successful run displayed as OK.
-- Overdue detection uses the configured backup tolerance window and the latest backup status data, so normal runtime delays do not immediately trigger a warning.
-- Issue #315: Clarified the About page so BorgBackup version and license information are shown under third-party components instead of Borg Backup UI project metadata.
-- Issue #317: Improved About license layout
-- The third-party license entries on the About page now use compact cards instead of stretched table-like rows.
-- BorgBackup compatibility information is shown as a secondary note in the BorgBackup third-party entry.
-- Issue #319: Clearer restore start confirmation
-- The final restore wizard step now highlights the explicit confirmation checkbox before starting a restore.
-- The confirmation text now explains that checking the box enables the restore start button.
-
-###2026.07.24.1513###
-- The startup script now defers Borg Backup UI startup to a background wait when the Unraid Python 3 plugin is not available yet, avoiding false missing-python errors without blocking the remaining boot sequence.
-- The weekly HTML report now includes a seven-day activity view. Scheduled jobs show a compact status matrix against their cron plan, while manual jobs are listed separately without being marked as missed.
-- The Job Wizard no longer offers direct SMB mount actions. SMB targets must be prepared through SMB profiles and Repository Manager before a job selects an existing repository.
-- Repository imports now show a Borg compatibility note because the original Borg version of an existing repository cannot be detected reliably.
-- Required fields in the Job, Restore and Repository wizards and key settings forms are now marked consistently so users can see mandatory input before submitting.
-- Issue #287: Repository import compatibility notice
-- The repository import dialog now explains that Borg Backup UI uses the active Borg 1.4.x runtime and cannot reliably detect the original Borg version of an imported repository.
-- The notice asks users to verify older repositories with `borg info` and preferably `borg check` before importing them.
-- Issue #289: Repository info refresh controls
-- Added a Settings > Repository area for controlling automatic repository information refreshes.
-- Automatic repository info refresh can now be disabled to avoid waking spun-down Unraid array disks only for cached repository statistics.
-- The refresh worker now schedules the next global run instead of waking every hour to check whether repository statistics are due.
-- Settings show the worker state, plugin PID, last run, next run, latest result counts and optional per-repository details without running Borg commands.
-- Repository refresh settings are shown under Operations > Repositories with grouped repository details by location.
-- USB and SMB repositories whose storage is currently not mounted are treated as warnings and keep the normal refresh interval instead of triggering short error retries.
-- Repository details now use consistent grouped table widths, clearer worker status labels and a single Operations menu group.
-- The repository refresh enablement control is now a switch and saves immediately when toggled.
-- Issue #291: Reliable backup.conf rollback timestamps
-- Config backup history now shows the snapshot creation time instead of the copied source file modification time.
-- Existing backup.conf rollback snapshots without readable metadata fall back to the timestamp embedded in the backup filename.
-- The rollback table labels the timestamp column as Created and clarifies the German reason column as the snapshot trigger instead of the currently displayed diff reason.
-- Canonical backup.conf migrations now also create a visible Config Backups & Rollback entry with the `canonical_backup_conf_v1 applied` trigger.
-- Restore settings now use the same card surface as the other settings areas instead of falling back to the older darker panel background.
-- Fixed a Settings frontend error that could appear when the repository import compatibility notice was refreshed before the Repository Manager DOM element was available.
-- Scheduled restore tests with a latest failed, unavailable or unreadable result now remain due immediately, so "Run due tests now" no longer skips them just because the failed manual test was recent.
-
-###2026.07.22.1637###
-- Support logs are quieter by default: routine successful polling requests are suppressed, slow or write requests stay visible, and transient Python startup delays during Unraid boot no longer leave false missing-Python errors.
-- Support logs now include richer sanitized context for important actions, including job runs, restore tests, storage and repository operations, Apprise profile actions and migration maintenance blockers.
-- Backup and restore-test runs now write compact lifecycle summaries to the support log, covering request, process start, final status and notification delivery without duplicating detailed Borg output.
-- SMB profiles now get a managed mount path under `/mnt/borg-backup-ui/smb/`, can be mounted or unmounted manually from settings, and can be mounted directly in the job wizard so existing repositories are selectable before saving the job.
-
-###2026.07.21.1712###
-- Finalizes canonical configuration ownership for global settings, storage targets and repositories, including an audited startup migration for existing installations.
-- Restores archive browsing, information refreshes, tests and maintenance for repositories explicitly configured without encryption while retaining Borg's safety check for unknown repositories.
-- Separates the immutable migration execution time from later startup checks and presents recorded migration actions in a readable audit view.
-- Apprise event delivery now uses a durable background queue so slow or unavailable providers do not block backup, restore-test or reminder processing.
-- Queued Apprise notifications keep per-profile retry and backoff settings, survive application restarts and record sanitized delivery status for troubleshooting and support bundles.
-- Added a dedicated Notifications settings area with Apprise profile management, compact saved-profile summaries, searchable provider selection, dynamic provider URL templates from Apprise metadata, URL validation and test delivery.
-- Apprise profile editing now generates provider-specific URL fields from the selected URL format, saves non-secret fields for later edits and keeps password/token values write-only so they can be replaced without being rendered back into the browser.
-- Provider URL format selection now exposes all Apprise templates so later ntfy formats with password or token fields can be selected during profile creation.
-- Saved Apprise profiles now use a quieter compact summary and avoid duplicate provider labels such as `ntfy (ntfy)`.
-- Apprise profiles now receive their selected backup, restore-test and overdue reminder events, using the profile display name as the notification title prefix.
-- Existing native ntfy settings are migrated into an Apprise profile during startup, and the separate native ntfy settings UI has been removed.
-- Migrated Apprise ntfy profiles now reopen the matching URL-format editor correctly, including token-based templates.
-- The Notifications settings area no longer shows the one-time ntfy migration note after the cutover.
-- Backup and reminder logs now report delivered Apprise profile names instead of showing the inactive native ntfy channel in the standard event summary.
-- The canonical `backup.conf` migration now rechecks completed installations after schema updates, so obsolete native ntfy keys and new Apprise keys are cleaned up automatically on startup.
-- Validating an existing Apprise profile now uses the stored write-only URL when no replacement URL was entered, matching the test-notification behavior.
-- Improved plugin upgrades so an unchanged package is reused or skipped after version and checksum checks, with clearer install output before downloads and long package operations.
-- Apprise is now shipped as a verified vendor bundle and only extracted again when the bundled Apprise version or SHA256 changes.
-- Fixed the canonical storage migration so legacy SMB profiles with invalid old mount paths are normalized to the managed `/mnt/borg-backup-ui/smb/<profile-key>` mount path instead of blocking startup migration.
-
-###2026.07.18.0057###
-- Restore tests now support unencrypted Borg repositories without requiring a passphrase file.
-
-###2026.07.16.1604###
-- Rebuilt the bilingual in-app help and complete German and English user manuals with searchable chapter navigation and offline access inside the application.
-- Running backup jobs can now be cancelled cooperatively from the Jobs page while Docker and VM recovery remains protected and visible.
-- Running restore tests now reopen their live log automatically after the page is loaded or refreshed.
-- Updated the German and English user-manual screenshots to the current light-theme interface, restored numbered guide callouts and removed environment-specific SSH profile values.
-
-###2026.07.15.1415###
-- Added a read-only Homepage dashboard widget for backup, restore-test, overdue and active-run status with a dedicated restricted token.
-- Homepage widget settings can create, rotate or revoke the token and provide a ready-to-copy Custom API configuration.
-- Backup cleanup now attempts Docker and VM recovery, status persistence and lock release independently, even if an earlier cleanup step fails.
-- Jobs, repository passphrases and profile-secret exports now use a versioned authenticated format with manipulation detection.
-- Wrong passwords, modified, damaged and unsupported export files now produce actionable errors before import data is written.
-- Failed preview attempts clear previously loaded preview data before another import can be applied.
-- Existing encrypted exports remain importable as an explicitly marked legacy format; all new exports use the authenticated format.
-
-###2026.07.14.1342###
-- Security and access control:
-  - Static UI paths, log streams, restore downloads and repository streams now enforce path containment, authentication and role checks.
-  - Corrupt user data fails closed instead of reopening administrator setup.
-- Backup and recovery safety:
-  - Jobs stop before Docker, VM or Borg operations when a required source path is missing and report every affected path.
-  - VM recovery verifies that the VMs stopped by the job were restarted and keeps failures visible.
-  - Repository maintenance waits up to 30 seconds for transient Borg locks and provides privacy-safe troubleshooting guidance.
-- User interface:
-  - New users follow the browser or operating-system theme by default, and dark-theme secondary text has improved contrast.
-- Issue #223:
-  - SMB profiles now negotiate modern SMB 2/3 automatically by default.
-  - SMB profile checks provide actionable diagnostics for protocol, authentication, permissions, share and network failures.
-
-###2026.07.13.2248###
-- Issue #205:
-  - Repository creation and import now validate targets before writing and report actionable conflicts.
-  - Editing a job preserves its schedule and reports persistence errors without closing the wizard.
-- Issue #208:
-  - SSH keepalives are applied consistently to backups, repository maintenance, restores and restore tests.
-  - Interrupted SSH connections now report a clear network error without implying repository corruption.
-- Issue #186:
-  - Existing repositories can be selected through a storage-scoped directory browser for Local, USB, SMB and SSH targets.
-- Issue #206:
-  - Backup source paths now preserve spaces through structured JSON arrays.
-  - Existing jobs are migrated once with audit, rollback backup and clear diagnostics for ambiguous legacy values.
-
-###2026.07.13.1144###
-- Upgrade notice:
-  - Back up /boot/config/borg-backup before installing this release.
-  - Existing storage targets, repositories and jobs are migrated once to the canonical data model. Review the migration result under Settings > System Health & Migration after restart.
-- Repository and storage management:
-  - Jobs now select centrally managed repositories on storage targets configured under Settings.
-  - Repositories can be created, imported, inspected, maintained, removed from the inventory or permanently deleted through guarded workflows.
-  - Persistent Borg keyfiles, repository passphrases and lifecycle audit records are handled centrally.
-- Backup workflow:
-  - The Job Wizard supports source exclusions, improved path selection and clearer storage/repository assignment.
-  - Dashboard rows are grouped by storage location and long Docker/VM selections remain contained inside the Wizard.
-- Safety and maintenance:
-  - Canonical migrations are audited, idempotent and protected by rollback backups and consistency checks.
-  - A guarded factory reset, improved runtime recovery diagnostics and localized blocker messages were added.
-  - The Unraid plugin icon opens the Borg Backup UI control panel under Settings.
-
-###2026.07.05.1531###
-- Issue #171:
-  - Reports now show the translated restore-test failure reason, such as network or SSH connection errors, when restore verification fails.
-
-###2026.07.04.2328###
-- Issue #166:
-  - Restore Tests now show a clear message and live log when another restore test is already running.
-  - Support bundles now include restore-test status files and mask additional privacy-sensitive fields.
-
-###2026.07.04.2139###
-- Issue #163:
-  - Event e-mails now use STARTTLS on port 587, matching SMTP test mail and weekly reports.
-
-###2026.07.04.2054###
-- Issue #158:
-  - Dashboard run-status details now wrap cleanly instead of overlapping the Restore column for longer duration text.
-- Issue #160:
-  - Backup and restore-test event e-mails now fall back to the weekly-report recipient when the global e-mail recipient is empty.
-  - SMTP test e-mails now require saving changed SMTP or e-mail settings first, so a successful test reflects the persisted runtime configuration.
-
-###2026.07.04.1425###
-- Issue #155:
-  - Backup event e-mails now include the backup log output below the event summary when a log file is available.
-
-###2026.07.04.0712###
-- Issue #150:
-  - Sidebar and About now show maintainer contact information and the current GitHub repository link.
-
-###2026.07.03.0021###
-- Issue #137:
-  - Backup overdue reminders now use the same schedule/status calculation as the diagnostics table and no longer send stale notifications for already satisfied runs.
-
-###2026.07.02.1242###
-- Issue #123:
-  - Runtime recovery warnings can now be marked as resolved after Docker containers or VMs have been checked manually.
-
-###2026.07.02.1211###
-- Issue #123:
-  - Runtime recovery now keeps only open Docker/VM restart problems and removes successfully completed recovery entries.
-
-###2026.07.02.1200###
-- Issue #123:
-  - Runtime recovery now treats Docker/VM stops from currently running backup jobs as normal activity instead of system-health warnings.
-
-###2026.07.02.1145###
-- Issue #123:
-  - Backup execution now prefers the packaged plugin runtime over older persistent data-root libraries, so Docker/VM recovery state is written reliably during running jobs.
-
-###2026.07.02.1117###
-- Issue #123:
-  - Backup runs now persist Docker/VM stop state before continuing, so a restart or crash leaves an auditable recovery warning.
-  - System health now shows pending Docker/VM runtime recovery entries when services may need manual verification.
-  - Schedule save/delete operations now report crontab application failures instead of silently swallowing them.
-
-###2026.07.02.1026###
-- Issue #125:
-  - Restore overwrite handling now revalidates target paths before destructive file operations and blocks unsafe symlink targets.
-  - Restore downloads now drain Borg error output while streaming and stop stalled download processes with a watchdog timeout.
-
-###2026.07.02.0951###
-- Issue #133:
-  - Per-repository passphrase settings now use the same lighter table surface as notification reminder diagnostics.
-
-###2026.07.02.0939###
-- Issue #133:
-  - Backup overdue diagnostics now advance to the next scheduled run once the latest expected run has completed successfully.
-
-###2026.07.02.0821###
-- Issue #133:
-  - Notification reminder diagnostics now use a lighter table surface and avoid unnecessary line breaks in job, status and timestamp columns.
-
-###2026.07.02.0808###
-- Issue #133:
-  - Advanced settings now separate notification reminder diagnostics and per-repository passphrases into subtabs.
-  - Notification reminder diagnostics now use two-digit day and month formatting for more stable table alignment.
-
-###2026.07.02.0747###
-- Issue #133:
-  - Notification reminder diagnostics moved to Settings > Advanced and now use a clearer table layout.
-
-###2026.07.02.0739###
-- Issue #130:
-  - Backup overdue reminder state is now cleared when a later successful backup status satisfies the missed scheduled run.
-
-###2026.07.02.0725###
-- Issue #133:
-  - System health now shows read-only notification reminder diagnostics for backup and restore-test overdue checks.
-
-###2026.07.02.0642###
-- Issue #132:
-  - The main app now applies the stored UI theme before loading stylesheets, preventing a brief dark-theme flash when light mode is selected.
-
-###2026.07.02.0041###
-- Issue #130:
-  - Notification reminder state is now cleaned up automatically so stale entries and old restore-test `never` markers do not grow forever.
-
-###2026.07.02.0025###
-- Issue #130:
-  - Fixed false overdue notifications for restore tests and backup schedules when current status files already show future or completed runs.
-
-###2026.07.01.1626###
-- Issue #128:
-  - Job wizard preview and save errors now show the concrete validation detail, such as the affected source path, instead of only a generic bad-request message.
-
-###2026.07.01.1526###
-- Issue #122:
-  - Hardened schedule saving and cron generation against invalid job keys.
-  - Browser UI sessions no longer receive the global API token as a cookie.
-  - Repository test output and API/client logs mask more secret formats before display.
-
-###2026.07.01.1341###
-- Issue #112:
-  - ntfy backup notifications now use the configured display name as title prefix and a cleaner success message format with target and archive details.
-- Issue #118:
-  - The sidebar branding now clarifies that Borg Backup UI is for Unraid.
-
-###2026.06.30.1729###
-- Issue #102:
-  - Restore target root inputs no longer normalize paths while typing, so paths such as /mnt/data can be entered normally.
-
-###2026.06.30.1654###
-- Issue #102:
-  - Browse & Restore target roots can be configured under Settings > Restore while unsafe broad system paths remain blocked.
-
-###2026.06.30.0143###
-- Issue #101:
-  - Reminder interval and backup overdue tolerance now appear in a central reminder settings card because they apply to all notification channels.
-
-###2026.06.30.0012###
-- Issue #101:
-  - Backup overdue reminders now use the latest expected schedule run plus a configurable tolerance in hours.
-
-###2026.06.29.2324###
-- Issue #92:
-  - Backup overdue reminders now support weekday cron ranges and lists such as 0 9 * * 1-5.
-
-###2026.06.29.2248###
-- Issue #92:
-  - Applied startup migrations are now written to migrations.log.jsonl so the latest migration summary shows the correct run time and actions.
-
-###2026.06.29.2235###
-- Issue #92:
-  - System health now shows recorded startup migrations such as notification event migration with status, changed keys and execution time.
-
-###2026.06.29.2151###
-- Issue #92:
-  - Notification delivery now uses a central event dispatcher for Unraid notifications, email and ntfy.
-  - Settings now allow channel-specific event selection and a reminder interval for overdue restore-test notifications.
-  - Scheduled restore-test overdue reminders are rate-limited and survive UI restarts.
-
-###2026.06.29.1933###
-- Issue #98:
-  - Dashboard job icons now use the configured job metadata, matching the Jobs page.
-
-###2026.06.29.1813###
-- Issue #93:
-  - Restore History delete buttons now use a less prominent outline style.
-
-###2026.06.29.1738###
-- Issue #93:
-  - Restore History now keeps completed restore runs as individual records and allows deleting history entries from the UI.
-
-###2026.06.29.1704###
-- Issue #93:
-  - Restore History migration state now records central registry no-op results correctly after earlier migration attempts.
-
-###2026.06.29.1626###
-- Issue #93:
-  - Restore History migration now runs through the central migration registry instead of restore_api.
-  - Obsolete restore-history-internal migration tracking files are cleaned up; central migration-state.json remains authoritative.
-
-###2026.06.29.1544###
-- Issue #93:
-  - Restore History migration now skips legacy restore-run entries that were already imported by restore ID.
-
-###2026.06.29.1502###
-- Issue #93:
-  - Startup checks no longer overwrite the last effective migration timestamp when no migration work is required.
-
-###2026.06.29.1442###
-- Issue #93:
-  - Restore History view now uses clearer tabs, colored status badges, restore IDs and collapsible details.
-  - Legacy restore history entries with empty conflict mode now show the effective default conflict strategy.
-
-###2026.06.29.1402###
-- Issue #93:
-  - Restore History is now opened as a separate Browse & Restore view instead of being shown above the wizard.
-  - Restore History migration is reported through the central startup migration state shown under Settings.
-
-###2026.06.29.1336###
-- Issue #93:
-  - Browse & Restore now includes a dedicated Restore History with structured details for completed restore runs.
-  - Existing completed entries from restore-runs.json are migrated once into the new restore-history storage with an audit log.
-
-###2026.06.29.1048###
-- Issue #90:
-  - Resuming an active restore now opens a dedicated live-log mode instead of rerunning the wizard precheck.
-
-###2026.06.29.1010###
-- Issue #90:
-  - Restore page now only shows active restore runs in the wizard; completed restore history is tracked separately.
-
-###2026.06.29.0908###
-- Issue #90:
-  - Restore page keeps running restores visible but shows completed restore runs only as a compact limited history.
-
-###2026.06.29.0853###
-- Issue #90:
-  - Active UI sessions are refreshed during restore activity so long-running restores do not sign out active users.
-  - Restore page now shows recent restore runs and can resume a running restore live log after reload or re-login.
-
-###2026.06.28.1750###
-- Fixed the edit wizard so existing job metadata repository and source paths are shown instead of legacy backup.conf defaults.
-
-###2026.06.28.1718###
-- Issue #87:
-  - Added ntfy events for scheduled restore test success, failure and overdue detection.
-
-###2026.06.28.1624###
-- Issue #87:
-  - Added ntfy push notifications with test delivery and selectable backup success, failure and skipped events.
-  - ntfy passwords and access tokens are stored as secret files and are not written to backup.conf.
-
-###2026.06.28.0956###
-- Issue #82:
-  - Job start confirmation now shows whether all or only selected Docker containers and VMs will be stopped.
-
-###2026.06.27.1921###
-- Issue #82:
-  - Wizard now separates Docker and VM runtime selection into dedicated optional steps.
-
-###2026.06.27.1847###
-- Issue #82:
-  - Wizard runtime selection is wider, shows readable status badges and lists selected runtime targets in the preview.
-  - Selective Docker logs now show only the selected containers.
-
-###2026.06.27.1831###
-- Issue #82:
-  - Appdata and VM domain risk confirmations are only required when the full standard directory is selected.
-
-###2026.06.27.1821###
-- Issue #82:
-  - Wizard runtime selection now uses a dedicated step with clearer Docker and VM choices.
-  - Docker container discovery for the wizard is more compatible with Unraid systems.
-
-###2026.06.27.1751###
-- Issue #82:
-  - Wizard can stop all or selected Docker containers and VMs before a backup.
-  - Appdata and VM domain source paths now show explicit risk acknowledgements when not all related runtime services are stopped.
-
-###2026.06.26.1347###
-- Release (#35):
-  - Einheitliches Redesign fuer Dashboard, Jobs, History, Berichte, Restore Tests, Browse & Restore, Storage, Einstellungen und Hilfe.
-  - Profilbasierte Speicherziele, SMTP/Wochenbericht, Import/Export und Plugin-Installationspruefungen enthalten die getesteten Korrekturen.
-
-###2026.06.15.1213###
-- Aktueller Stand (#60):
-  - Wochenbericht zeigt die Erfolgsquote der letzten 7 Tage statt der historischen Gesamtquote.
-  - Wochenbericht enthaelt den aktuellen Mailkopf, sortierte Job-Uebersicht und fokussierte Log-Hinweise.
-  - Restore-Test-Berichte und Plugin-UI entsprechen dem aktuellen stabilen Unraid-Plugin-Stand.
-  - Vollstaendige technische Historie wurde nach docs/changelog.md ausgelagert.
 ]]>
 </CHANGES>
 
@@ -475,7 +57,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="fa64db8138d2a422d8ad5d840a17a523"
+EXPECTED_MD5="16f18dcc54ef9d52ba672142116bcd58"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
@@ -543,12 +125,12 @@ vendor_ready() {
 
 ensure_apprise_vendor() {
   if vendor_ready; then
-    echo "Borg Backup UI: Apprise Runtime unveraendert, Extraktion wird uebersprungen."
+    echo "Borg Backup UI: Apprise runtime is unchanged, skipping extraction."
     return 0
   fi
 
   if [ ! -f "${VENDOR_META}" ]; then
-    echo "ERROR: Apprise Vendor-Metadaten fehlen: ${VENDOR_META}"
+    echo "ERROR: Apprise vendor metadata is missing: ${VENDOR_META}"
     return 1
   fi
 
@@ -556,30 +138,30 @@ ensure_apprise_vendor() {
   expected_sha="$(json_value "${VENDOR_META}" sha256)"
   expected_version="$(json_value "${VENDOR_META}" version)"
   if [ -z "${bundle_name}" ] || [ -z "${expected_sha}" ] || [ -z "${expected_version}" ]; then
-    echo "ERROR: Apprise Vendor-Metadaten sind unvollstaendig."
+    echo "ERROR: Apprise vendor metadata is incomplete."
     return 1
   fi
 
   bundle_path="${VENDOR_BUNDLE_DIR}/${bundle_name}"
   if [ ! -f "${bundle_path}" ]; then
-    echo "ERROR: Apprise Vendor-Bundle fehlt: ${bundle_path}"
+    echo "ERROR: Apprise vendor bundle is missing: ${bundle_path}"
     return 1
   fi
 
   actual_sha="$(file_sha256 "${bundle_path}")"
   if [ "${actual_sha}" != "${expected_sha}" ]; then
-    echo "ERROR: Apprise Vendor-Bundle SHA256 stimmt nicht."
-    echo "  erwartet: ${expected_sha}"
-    echo "  erhalten : ${actual_sha}"
+    echo "ERROR: Apprise vendor bundle SHA256 does not match."
+    echo "  expected: ${expected_sha}"
+    echo "  actual  : ${actual_sha}"
     return 1
   fi
 
-  echo "Borg Backup UI: extrahiere Apprise Runtime ${expected_version} einmalig..."
+  echo "Borg Backup UI: extracting Apprise runtime ${expected_version}..."
   rm -rf "${VENDOR_TMP}" 2>/dev/null || true
   mkdir -p "${VENDOR_TMP}"
   tar -xf "${bundle_path}" -C "${VENDOR_TMP}"
   if [ ! -f "${VENDOR_TMP}/apprise/__init__.py" ]; then
-    echo "ERROR: Apprise Vendor-Bundle enthaelt keine lauffaehige Runtime."
+    echo "ERROR: Apprise vendor bundle does not contain a runnable runtime."
     rm -rf "${VENDOR_TMP}" 2>/dev/null || true
     return 1
   fi
@@ -589,22 +171,22 @@ ensure_apprise_vendor() {
 }
 
 download_package() {
-  echo "Borg Backup UI: lade Paket ${VERSION} herunter..."
+  echo "Borg Backup UI: downloading package ${VERSION}..."
   rm -f "${PACKAGE_TMP}"
   if command -v curl >/dev/null 2>/dev/null; then
     curl -fL --retry 3 --connect-timeout 20 -o "${PACKAGE_TMP}" "${PACKAGE_URL}"
   elif command -v wget >/dev/null 2>/dev/null; then
     wget -O "${PACKAGE_TMP}" "${PACKAGE_URL}"
   else
-    echo "ERROR: Weder curl noch wget ist verfuegbar, Paket kann nicht geladen werden."
+    echo "ERROR: Neither curl nor wget is available, cannot download package."
     return 1
   fi
 
   actual_md5="$(file_md5 "${PACKAGE_TMP}")"
   if [ "${actual_md5}" != "${EXPECTED_MD5}" ]; then
-    echo "ERROR: Paket-MD5 stimmt nicht."
-    echo "  erwartet: ${EXPECTED_MD5}"
-    echo "  erhalten : ${actual_md5}"
+    echo "ERROR: Package MD5 does not match."
+    echo "  expected: ${EXPECTED_MD5}"
+    echo "  actual  : ${actual_md5}"
     rm -f "${PACKAGE_TMP}"
     return 1
   fi
@@ -615,10 +197,10 @@ ensure_package_file() {
   if [ -f "${PACKAGE_FILE}" ]; then
     actual_md5="$(file_md5 "${PACKAGE_FILE}")"
     if [ "${actual_md5}" = "${EXPECTED_MD5}" ]; then
-      echo "Borg Backup UI: vorhandenes Paket passt zur MD5, Download wird uebersprungen."
+      echo "Borg Backup UI: existing package matches MD5, skipping download."
       return 0
     fi
-    echo "Borg Backup UI: lokales Paket hat andere MD5, lade neu."
+    echo "Borg Backup UI: local package has a different MD5, downloading again."
   fi
   download_package
 }
@@ -634,26 +216,26 @@ mkdir -p "${PLUGIN_DIR}"
 
 if package_registered; then
   if ! package_payload_present; then
-    extract_package_payload "Paket ist registriert, aber Plugin-Dateien fehlen; Payload wird erneut entpackt."
+    extract_package_payload "package is registered but plugin files are missing; extracting payload again."
   fi
 
   if core_payload_present; then
     marker_md5="$(cat "${INSTALLED_MD5_FILE}" 2>/dev/null || true)"
     if [ "${marker_md5}" = "${EXPECTED_MD5}" ]; then
       ensure_apprise_vendor
-      echo "Borg Backup UI: Version ${VERSION} ist bereits installiert, Paketinstallation wird uebersprungen."
+      echo "Borg Backup UI: version ${VERSION} is already installed, skipping package installation."
       exit 0
     fi
     if [ -f "${PACKAGE_FILE}" ]; then
       actual_md5="$(file_md5 "${PACKAGE_FILE}")"
       if [ "${actual_md5}" = "${EXPECTED_MD5}" ]; then
         ensure_apprise_vendor
-        echo "Borg Backup UI: Version ${VERSION} ist bereits installiert, MD5-Marker wird aktualisiert."
+        echo "Borg Backup UI: version ${VERSION} is already installed, updating MD5 marker."
         echo "${EXPECTED_MD5}" > "${INSTALLED_MD5_FILE}" 2>/dev/null || true
         exit 0
       fi
     else
-      echo "Borg Backup UI: Version ${VERSION} ist bereits installiert, kein Download/Entpacken noetig."
+      echo "Borg Backup UI: version ${VERSION} is already installed, no download or extraction needed."
       ensure_apprise_vendor
       echo "${EXPECTED_MD5}" > "${INSTALLED_MD5_FILE}" 2>/dev/null || true
       exit 0
@@ -662,10 +244,10 @@ if package_registered; then
 fi
 
 ensure_package_file
-echo "Borg Backup UI: installiere Paket ${VERSION}. Auf USB-Flash kann dieser Schritt etwas dauern..."
+echo "Borg Backup UI: installing package ${VERSION}. This can take a while on USB flash."
 upgradepkg --install-new "${PACKAGE_FILE}"
 if ! package_payload_present; then
-  extract_package_payload "Paketmanager hat die Payload nicht vollstaendig entpackt; Payload wird direkt entpackt."
+  extract_package_payload "package manager did not extract the full payload; extracting payload directly."
 fi
 ensure_apprise_vendor
 echo "${EXPECTED_MD5}" > "${INSTALLED_MD5_FILE}" 2>/dev/null || true
@@ -710,12 +292,11 @@ if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.conf" ]; then
   echo "Created borg_backup_ui.conf from template."
 fi
 
-# Register autostart in /boot/config/go (once)
-if ! grep -q "rc.borg_backup_ui" "${GO_FILE}" 2>/dev/null; then
-  echo ""                                    >> "${GO_FILE}"
-  echo "# Borg Backup UI"                   >> "${GO_FILE}"
-  echo "/etc/rc.d/rc.borg_backup_ui start"  >> "${GO_FILE}"
-  echo "Autostart registered in ${GO_FILE}."
+# Clean up legacy Borg Backup UI autostart lines from /boot/config/go.
+# The plugin install/boot flow starts the service without persistent go entries.
+if [ -f "${GO_FILE}" ]; then
+  sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
+  sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
 fi
 
 # Copy restore-test script to scripts/ (if phase-1 migration was done)
