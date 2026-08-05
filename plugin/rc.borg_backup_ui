@@ -1,6 +1,6 @@
 #!/bin/bash
 # rc.borg_backup_ui – Start/Stop-Skript für Unraid
-# Wird aufgerufen von /boot/config/go beim Systemstart.
+# Wird vom Unraid-Plugin-Ablauf und der Control Page gestartet.
 
 PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
 PIDFILE="/var/run/borg_backup_ui.pid"

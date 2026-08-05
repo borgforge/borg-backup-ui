@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #368
+- Stopped adding a persistent Borg Backup UI autostart block to `/boot/config/go`; updates now remove the old block while keeping service startup in the plugin flow.
+
 ### Issue #365
 - Updated the bundled BorgBackup 1.x stable binary from 1.4.4 to 1.4.5.
 

@@ -223,6 +223,38 @@ def test_manifest_md5_accepts_rendered_package_installer(tmp_path: Path) -> None
     assert release_workflow.manifest_md5(manifest) == "abcdef0123456789abcdef0123456789"
 
 
+def test_go_autostart_rewrite_removes_registration_and_keeps_cleanup() -> None:
+    manifest = """<PLUGIN>
+<FILE Name="/tmp/borg-backup-ui-install.sh" Run="/bin/bash">
+<INLINE>
+#!/bin/bash
+PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
+GO_FILE="/boot/config/go"
+
+# Register autostart in /boot/config/go (once)
+if ! grep -q "rc.borg_backup_ui" "${GO_FILE}" 2>/dev/null; then
+  echo ""                                    >> "${GO_FILE}"
+  echo "# Borg Backup UI"                   >> "${GO_FILE}"
+  echo "/etc/rc.d/rc.borg_backup_ui start"  >> "${GO_FILE}"
+  echo "Autostart registered in ${GO_FILE}."
+fi
+
+/etc/rc.d/rc.borg_backup_ui start
+</INLINE>
+</FILE>
+</PLUGIN>
+"""
+
+    rendered = release_workflow.rewrite_go_autostart_handling(manifest)
+
+    assert "Autostart registered in ${GO_FILE}" not in rendered
+    assert 'echo "/etc/rc.d/rc.borg_backup_ui start"' not in rendered
+    assert "Clean up legacy Borg Backup UI autostart lines" in rendered
+    assert "sed -i '/# Borg Backup UI/d'" in rendered
+    assert "sed -i '/rc.borg_backup_ui/d'" in rendered
+    assert "/etc/rc.d/rc.borg_backup_ui start" in rendered
+
+
 def test_release_workflow_cli_reads_inline_installer_md5(tmp_path: Path) -> None:
     manifest = tmp_path / "borg-backup-ui-test.plg"
     manifest.write_text(
@@ -286,6 +318,8 @@ def test_stable_promotion_reuses_exact_package_from_clean_current_main() -> None
     assert "tested_package_install" in script
     assert "package_install_re.sub(lambda _match: package_install_replacement" in script
     assert "legacy_package_file_re.sub(lambda _match: package_install_replacement" in script
+    assert "tested_post_install" in script
+    assert "post_install_re.sub(lambda _match: tested_post_install.group(0)" in script
     assert "max_changelog_releases = 3" in script
     assert "stable = limit_changelog(stable)" in script
     assert "plugin/build.sh" not in script
