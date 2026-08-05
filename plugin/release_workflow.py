@@ -371,12 +371,12 @@ vendor_ready() {{
 
 ensure_apprise_vendor() {{
   if vendor_ready; then
-    echo "Borg Backup UI: Apprise Runtime unveraendert, Extraktion wird uebersprungen."
+    echo "Borg Backup UI: Apprise runtime is unchanged, skipping extraction."
     return 0
   fi
 
   if [ ! -f "${{VENDOR_META}}" ]; then
-    echo "ERROR: Apprise Vendor-Metadaten fehlen: ${{VENDOR_META}}"
+    echo "ERROR: Apprise vendor metadata is missing: ${{VENDOR_META}}"
     return 1
   fi
 
@@ -384,30 +384,30 @@ ensure_apprise_vendor() {{
   expected_sha="$(json_value "${{VENDOR_META}}" sha256)"
   expected_version="$(json_value "${{VENDOR_META}}" version)"
   if [ -z "${{bundle_name}}" ] || [ -z "${{expected_sha}}" ] || [ -z "${{expected_version}}" ]; then
-    echo "ERROR: Apprise Vendor-Metadaten sind unvollstaendig."
+    echo "ERROR: Apprise vendor metadata is incomplete."
     return 1
   fi
 
   bundle_path="${{VENDOR_BUNDLE_DIR}}/${{bundle_name}}"
   if [ ! -f "${{bundle_path}}" ]; then
-    echo "ERROR: Apprise Vendor-Bundle fehlt: ${{bundle_path}}"
+    echo "ERROR: Apprise vendor bundle is missing: ${{bundle_path}}"
     return 1
   fi
 
   actual_sha="$(file_sha256 "${{bundle_path}}")"
   if [ "${{actual_sha}}" != "${{expected_sha}}" ]; then
-    echo "ERROR: Apprise Vendor-Bundle SHA256 stimmt nicht."
-    echo "  erwartet: ${{expected_sha}}"
-    echo "  erhalten : ${{actual_sha}}"
+    echo "ERROR: Apprise vendor bundle SHA256 does not match."
+    echo "  expected: ${{expected_sha}}"
+    echo "  actual  : ${{actual_sha}}"
     return 1
   fi
 
-  echo "Borg Backup UI: extrahiere Apprise Runtime ${{expected_version}} einmalig..."
+  echo "Borg Backup UI: extracting Apprise runtime ${{expected_version}}..."
   rm -rf "${{VENDOR_TMP}}" 2>/dev/null || true
   mkdir -p "${{VENDOR_TMP}}"
   tar -xf "${{bundle_path}}" -C "${{VENDOR_TMP}}"
   if [ ! -f "${{VENDOR_TMP}}/apprise/__init__.py" ]; then
-    echo "ERROR: Apprise Vendor-Bundle enthaelt keine lauffaehige Runtime."
+    echo "ERROR: Apprise vendor bundle does not contain a runnable runtime."
     rm -rf "${{VENDOR_TMP}}" 2>/dev/null || true
     return 1
   fi
@@ -417,22 +417,22 @@ ensure_apprise_vendor() {{
 }}
 
 download_package() {{
-  echo "Borg Backup UI: lade Paket ${{VERSION}} herunter..."
+  echo "Borg Backup UI: downloading package ${{VERSION}}..."
   rm -f "${{PACKAGE_TMP}}"
   if command -v curl >/dev/null 2>/dev/null; then
     curl -fL --retry 3 --connect-timeout 20 -o "${{PACKAGE_TMP}}" "${{PACKAGE_URL}}"
   elif command -v wget >/dev/null 2>/dev/null; then
     wget -O "${{PACKAGE_TMP}}" "${{PACKAGE_URL}}"
   else
-    echo "ERROR: Weder curl noch wget ist verfuegbar, Paket kann nicht geladen werden."
+    echo "ERROR: Neither curl nor wget is available, cannot download package."
     return 1
   fi
 
   actual_md5="$(file_md5 "${{PACKAGE_TMP}}")"
   if [ "${{actual_md5}}" != "${{EXPECTED_MD5}}" ]; then
-    echo "ERROR: Paket-MD5 stimmt nicht."
-    echo "  erwartet: ${{EXPECTED_MD5}}"
-    echo "  erhalten : ${{actual_md5}}"
+    echo "ERROR: Package MD5 does not match."
+    echo "  expected: ${{EXPECTED_MD5}}"
+    echo "  actual  : ${{actual_md5}}"
     rm -f "${{PACKAGE_TMP}}"
     return 1
   fi
@@ -443,10 +443,10 @@ ensure_package_file() {{
   if [ -f "${{PACKAGE_FILE}}" ]; then
     actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
     if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
-      echo "Borg Backup UI: vorhandenes Paket passt zur MD5, Download wird uebersprungen."
+      echo "Borg Backup UI: existing package matches MD5, skipping download."
       return 0
     fi
-    echo "Borg Backup UI: lokales Paket hat andere MD5, lade neu."
+    echo "Borg Backup UI: local package has a different MD5, downloading again."
   fi
   download_package
 }}
@@ -462,26 +462,26 @@ mkdir -p "${{PLUGIN_DIR}}"
 
 if package_registered; then
   if ! package_payload_present; then
-    extract_package_payload "Paket ist registriert, aber Plugin-Dateien fehlen; Payload wird erneut entpackt."
+    extract_package_payload "package is registered but plugin files are missing; extracting payload again."
   fi
 
   if core_payload_present; then
     marker_md5="$(cat "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true)"
     if [ "${{marker_md5}}" = "${{EXPECTED_MD5}}" ]; then
       ensure_apprise_vendor
-      echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, Paketinstallation wird uebersprungen."
+      echo "Borg Backup UI: version ${{VERSION}} is already installed, skipping package installation."
       exit 0
     fi
     if [ -f "${{PACKAGE_FILE}}" ]; then
       actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
       if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
         ensure_apprise_vendor
-        echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, MD5-Marker wird aktualisiert."
+        echo "Borg Backup UI: version ${{VERSION}} is already installed, updating MD5 marker."
         echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
         exit 0
       fi
     else
-      echo "Borg Backup UI: Version ${{VERSION}} ist bereits installiert, kein Download/Entpacken noetig."
+      echo "Borg Backup UI: version ${{VERSION}} is already installed, no download or extraction needed."
       ensure_apprise_vendor
       echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
       exit 0
@@ -490,10 +490,10 @@ if package_registered; then
 fi
 
 ensure_package_file
-echo "Borg Backup UI: installiere Paket ${{VERSION}}. Auf USB-Flash kann dieser Schritt etwas dauern..."
+echo "Borg Backup UI: installing package ${{VERSION}}. This can take a while on USB flash."
 upgradepkg --install-new "${{PACKAGE_FILE}}"
 if ! package_payload_present; then
-  extract_package_payload "Paketmanager hat die Payload nicht vollstaendig entpackt; Payload wird direkt entpackt."
+  extract_package_payload "package manager did not extract the full payload; extracting payload directly."
 fi
 ensure_apprise_vendor
 echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true

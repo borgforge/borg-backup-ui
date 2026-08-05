@@ -8,6 +8,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #370
 - Added first-use browser language detection for German and English, with English as the default for unsupported or unknown browser languages.
+- Changed user-visible plugin install and service startup messages to English for international Unraid users.
 
 ### Issue #368
 - Stopped adding a persistent Borg Backup UI autostart block to `/boot/config/go`; updates now remove the old block while keeping service startup in the plugin flow.
