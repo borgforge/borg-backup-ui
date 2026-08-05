@@ -20,6 +20,7 @@ from pathlib import Path
 NAME = "borg-backup-ui"
 PROVENANCE_NAME = "build-provenance.json"
 PROVENANCE_MEMBER = f"boot/config/plugins/{NAME}/{PROVENANCE_NAME}"
+MAX_MANIFEST_CHANGELOG_RELEASES = 3
 EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/borg_backup_ui.py",
     f"boot/config/plugins/{NAME}/LICENSE",
@@ -253,7 +254,34 @@ def replace_changelog_block(manifest: str, version: str, notes: str) -> str:
     block = f"###{version}###\n{notes}\n\n"
     if "<![CDATA[\n" not in manifest:
         raise RuntimeError("Plugin manifest has no changelog CDATA section")
-    return manifest.replace("<![CDATA[\n", "<![CDATA[\n" + block, 1)
+    manifest = manifest.replace("<![CDATA[\n", "<![CDATA[\n" + block, 1)
+    return limit_manifest_changelog(manifest)
+
+
+def limit_manifest_changelog(
+    manifest: str, max_releases: int = MAX_MANIFEST_CHANGELOG_RELEASES
+) -> str:
+    if max_releases < 1:
+        raise RuntimeError("Manifest changelog limit must keep at least one release")
+    start_marker = "<![CDATA[\n"
+    end_marker = "\n]]>"
+    start = manifest.find(start_marker)
+    end = manifest.find(end_marker, start + len(start_marker))
+    if start < 0 or end < 0:
+        raise RuntimeError("Plugin manifest has no changelog CDATA section")
+    body_start = start + len(start_marker)
+    body = manifest[body_start:end]
+    blocks = list(
+        re.finditer(
+            r"###[^#\n]+###\n.*?(?=\n###[^#\n]+###|\Z)",
+            body.strip(),
+            re.DOTALL,
+        )
+    )
+    if len(blocks) <= max_releases:
+        return manifest
+    kept = "\n\n".join(match.group(0).strip() for match in blocks[:max_releases])
+    return manifest[:body_start] + kept + "\n" + manifest[end:]
 
 
 def package_install_block(md5: str) -> str:

@@ -127,6 +127,8 @@ Promotion:
 - consumes only the pending release-note fragments named and hashed by the
   package provenance;
 - updates `APP_VERSION` and the stable manifest;
+- keeps only the newest three release-note sections in the stable plugin
+  manifest changelog;
 - keeps at most five stable packages under `releases/`;
 - creates or updates a separate `codex/release-<version>` PR.
 
