@@ -115,7 +115,7 @@ def test_existing_file_and_directory_sources_keep_valid_job_behavior(
     monkeypatch.setattr("runtime.lib.backup_job.shutil.which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(
         "runtime.lib.backup_job.subprocess.run",
-        lambda *args, **kwargs: type("Result", (), {"stdout": "borg 1.4.4\n"})(),
+        lambda *args, **kwargs: type("Result", (), {"stdout": "borg 1.4.5\n"})(),
     )
 
     job = BackupJob(config)
