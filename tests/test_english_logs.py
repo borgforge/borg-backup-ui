@@ -1,4 +1,5 @@
 import ast
+import importlib.util
 import re
 from pathlib import Path
 
@@ -58,3 +59,23 @@ def test_scriptless_job_runner_forces_english_subprocess_locale():
 
     assert 'os.environ["LC_ALL"] = "C"' in source
     assert 'os.environ["LANG"] = "C"' in source
+
+
+def test_public_plugin_install_and_service_messages_are_english():
+    spec = importlib.util.spec_from_file_location(
+        "release_workflow",
+        ROOT / "plugin" / "release_workflow.py",
+    )
+    assert spec and spec.loader
+    release_workflow = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(release_workflow)
+
+    installer = release_workflow.package_install_block("abcdef0123456789abcdef0123456789")
+    service_script = (ROOT / "plugin" / "rc.borg_backup_ui").read_text(encoding="utf-8")
+
+    public_text = installer + "\n" + service_script
+    assert not GERMAN_LOG_TEXT.search(public_text)
+    assert "downloading package" in installer
+    assert "installing package" in installer
+    assert "Python runtime is not available yet" in service_script
+    assert "Borg Backup UI started" in service_script

@@ -47,9 +47,9 @@ def test_manifest_installer_extracts_apprise_vendor_only_when_changed() -> None:
 
     assert "ensure_apprise_vendor" in workflow
     assert ".apprise-vendor.json" in workflow
-    assert "Apprise Runtime unveraendert, Extraktion wird uebersprungen." in workflow
-    assert "extrahiere Apprise Runtime" in workflow
-    assert "Apprise Vendor-Bundle SHA256 stimmt nicht." in workflow
+    assert "Apprise runtime is unchanged, skipping extraction." in workflow
+    assert "extracting Apprise runtime" in workflow
+    assert "Apprise vendor bundle SHA256 does not match." in workflow
 
 
 def test_apprise_vendor_dependencies_are_listed_in_license_notice() -> None:

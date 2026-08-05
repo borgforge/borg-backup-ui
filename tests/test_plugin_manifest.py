@@ -146,9 +146,9 @@ def test_rc_script_waits_for_python_runtime_before_reporting_missing_python() ->
     assert "defer_start_until_python_ready" in script
     assert 'BBUI_DEFERRED_START=1 "$0" start >> "$LOGFILE" 2>&1 &' in script
     assert 'if [ "${BBUI_DEFERRED_START:-0}" != "1" ] && ! command -v python3 >/dev/null 2>&1; then' in script
-    assert "warte bis zu ${PYTHON_WAIT_SECONDS}s auf Unraid-Plugin-Initialisierung" in script
-    assert "python3 nach ${PYTHON_WAIT_SECONDS}s nicht gefunden" in script
-    assert "Borg Backup UI Warteprozess gestoppt" in script
-    assert "Borg Backup UI wartet auf Python Runtime" in script
-    assert "Python Runtime bereit nach" in script
+    assert "waiting up to ${PYTHON_WAIT_SECONDS}s for Unraid plugin initialization" in script
+    assert "python3 was not found after ${PYTHON_WAIT_SECONDS}s" in script
+    assert "Borg Backup UI wait process stopped" in script
+    assert "Borg Backup UI is waiting for the Python runtime" in script
+    assert "Python runtime became available after" in script
     assert 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"' in script

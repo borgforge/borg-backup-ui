@@ -1,6 +1,6 @@
 #!/bin/bash
-# rc.borg_backup_ui – Start/Stop-Skript für Unraid
-# Wird vom Unraid-Plugin-Ablauf und der Control Page gestartet.
+# rc.borg_backup_ui - Start/stop script for Unraid.
+# Started by the Unraid plugin flow and the control page.
 
 PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
 PIDFILE="/var/run/borg_backup_ui.pid"
@@ -24,7 +24,7 @@ python_runtime_status() {
   PY_BIN="$(command -v python3 || true)"
   while [ -z "$PY_BIN" ] && [ "$waited" -lt "$PYTHON_WAIT_SECONDS" ]; do
     if [ "$logged_wait" -eq 0 ]; then
-      echo "Python Runtime noch nicht verfuegbar, warte bis zu ${PYTHON_WAIT_SECONDS}s auf Unraid-Plugin-Initialisierung..." >> "$LOGFILE"
+      echo "Python runtime is not available yet, waiting up to ${PYTHON_WAIT_SECONDS}s for Unraid plugin initialization..." >> "$LOGFILE"
       logged_wait=1
     fi
     sleep "$PYTHON_WAIT_STEP_SECONDS"
@@ -32,20 +32,20 @@ python_runtime_status() {
     PY_BIN="$(command -v python3 || true)"
   done
   if [ -z "$PY_BIN" ]; then
-    echo "FEHLER: python3 nach ${PYTHON_WAIT_SECONDS}s nicht gefunden. Bitte Plugin 'Python 3 for Unraid' installieren oder Boot-Reihenfolge pruefen." >> "$LOGFILE"
+    echo "ERROR: python3 was not found after ${PYTHON_WAIT_SECONDS}s. Install the 'Python 3 for Unraid' plugin or check the boot order." >> "$LOGFILE"
     return 1
   fi
   if [ "$waited" -gt 0 ]; then
-    echo "Python Runtime bereit nach ${waited}s: ${PY_BIN}" >> "$LOGFILE"
+    echo "Python runtime became available after ${waited}s: ${PY_BIN}" >> "$LOGFILE"
   fi
   if [ ! -x "$PY_BIN" ]; then
-    echo "FEHLER: python3 ist nicht ausfuehrbar: $PY_BIN" >> "$LOGFILE"
+    echo "ERROR: python3 is not executable: $PY_BIN" >> "$LOGFILE"
     return 1
   fi
   PY_VERSION="$("$PY_BIN" -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null)"
   PY_RC=$?
   if [ "$PY_RC" -ne 0 ]; then
-    echo "FEHLER: Python ${PY_VERSION:-unbekannt} ist zu alt. Erforderlich ist Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR} oder neuer. Bitte Plugin 'Python 3 for Unraid' aktualisieren." >> "$LOGFILE"
+    echo "ERROR: Python ${PY_VERSION:-unknown} is too old. Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR} or newer is required. Please update the 'Python 3 for Unraid' plugin." >> "$LOGFILE"
     return 1
   fi
   echo "$PY_BIN"
@@ -54,28 +54,28 @@ python_runtime_status() {
 
 defer_start_until_python_ready() {
   if [ -f "$WAIT_PIDFILE" ] && kill -0 "$(cat "$WAIT_PIDFILE")" 2>/dev/null; then
-    echo "Borg Backup UI wartet bereits im Hintergrund auf Python Runtime (PID: $(cat "$WAIT_PIDFILE"))"
+    echo "Borg Backup UI is already waiting for the Python runtime in the background (PID: $(cat "$WAIT_PIDFILE"))"
     return 0
   fi
-  echo "Python Runtime noch nicht verfuegbar, starte Borg Backup UI Warteprozess im Hintergrund (bis zu ${PYTHON_WAIT_SECONDS}s)." >> "$LOGFILE"
+  echo "Python runtime is not available yet, starting Borg Backup UI background wait process (up to ${PYTHON_WAIT_SECONDS}s)." >> "$LOGFILE"
   BBUI_DEFERRED_START=1 "$0" start >> "$LOGFILE" 2>&1 &
   echo $! > "$WAIT_PIDFILE"
-  echo "Borg Backup UI Warteprozess gestartet (PID: $!)"
+  echo "Borg Backup UI wait process started (PID: $!)"
   return 0
 }
 
 start() {
   if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-    echo "Borg Backup UI bereits gestartet (PID: $(cat "$PIDFILE"))"
+    echo "Borg Backup UI is already running (PID: $(cat "$PIDFILE"))"
     return 0
   fi
   if [ "${BBUI_DEFERRED_START:-0}" != "1" ] && [ -f "$WAIT_PIDFILE" ] && kill -0 "$(cat "$WAIT_PIDFILE")" 2>/dev/null; then
-    echo "Borg Backup UI wartet bereits im Hintergrund auf Python Runtime (PID: $(cat "$WAIT_PIDFILE"))"
+    echo "Borg Backup UI is already waiting for the Python runtime in the background (PID: $(cat "$WAIT_PIDFILE"))"
     return 0
   fi
 
   if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
-    echo "FEHLER: ${PLUGIN_DIR}/borg_backup_ui.py nicht gefunden" >&2
+    echo "ERROR: ${PLUGIN_DIR}/borg_backup_ui.py not found" >&2
     return 1
   fi
 
@@ -128,9 +128,9 @@ start() {
     fi
     echo "Borg Binary: ${BORG_BIN}"
   else
-    echo "WARNUNG: Gebuendelte Borg-Binary nicht gefunden, nutze System-PATH."
+    echo "WARNING: bundled Borg binary not found, using system PATH."
   fi
-  echo "Starte Borg Backup UI..."
+  echo "Starting Borg Backup UI..."
   PY_BIN="$(python_runtime_status)"
   if [ -z "$PY_BIN" ]; then
     [ "${BBUI_DEFERRED_START:-0}" = "1" ] && rm -f "$WAIT_PIDFILE"
@@ -140,7 +140,7 @@ start() {
   "$PY_BIN" "${PLUGIN_DIR}/borg_backup_ui.py" >> "$LOGFILE" 2>&1 &
   echo $! > "$PIDFILE"
   [ "${BBUI_DEFERRED_START:-0}" = "1" ] && rm -f "$WAIT_PIDFILE"
-  echo "Borg Backup UI gestartet (PID: $!)"
+  echo "Borg Backup UI started (PID: $!)"
 }
 
 stop() {
@@ -148,7 +148,7 @@ stop() {
     WAIT_PID=$(cat "$WAIT_PIDFILE")
     if kill -0 "$WAIT_PID" 2>/dev/null; then
       kill "$WAIT_PID" 2>/dev/null || true
-      echo "Borg Backup UI Warteprozess gestoppt"
+      echo "Borg Backup UI wait process stopped"
     fi
     rm -f "$WAIT_PIDFILE"
   fi
@@ -158,23 +158,23 @@ stop() {
       kill "$PID"
       sleep 1
       kill -0 "$PID" 2>/dev/null && kill -9 "$PID" 2>/dev/null
-      echo "Borg Backup UI gestoppt"
+      echo "Borg Backup UI stopped"
     else
-      echo "Borg Backup UI läuft nicht"
+      echo "Borg Backup UI is not running"
     fi
     rm -f "$PIDFILE"
   else
-    echo "Borg Backup UI läuft nicht"
+    echo "Borg Backup UI is not running"
   fi
 }
 
 status() {
   if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-    echo "Borg Backup UI läuft (PID: $(cat "$PIDFILE"))"
+    echo "Borg Backup UI is running (PID: $(cat "$PIDFILE"))"
   elif [ -f "$WAIT_PIDFILE" ] && kill -0 "$(cat "$WAIT_PIDFILE")" 2>/dev/null; then
-    echo "Borg Backup UI wartet auf Python Runtime (PID: $(cat "$WAIT_PIDFILE"))"
+    echo "Borg Backup UI is waiting for the Python runtime (PID: $(cat "$WAIT_PIDFILE"))"
   else
-    echo "Borg Backup UI läuft nicht"
+    echo "Borg Backup UI is not running"
   fi
 }
 
@@ -184,7 +184,7 @@ case "$1" in
   restart) stop; sleep 1; start ;;
   status)  status ;;
   *)
-    echo "Verwendung: $0 {start|stop|restart|status}"
+    echo "Usage: $0 {start|stop|restart|status}"
     exit 1
     ;;
 esac

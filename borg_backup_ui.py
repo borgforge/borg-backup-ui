@@ -3258,7 +3258,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
       </div>"""
         login_payload = "const un=(document.getElementById('login-username')?.value||'').trim();const payload={username:un,password:pw};"
         html = """<!DOCTYPE html>
-<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Borg Backup Login</title>
 <script>
 (() => {
@@ -3351,7 +3351,7 @@ if(document.getElementById('login-username')){document.getElementById('login-use
             self.end_headers()
             return
         html = """<!DOCTYPE html>
-<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Borg Backup Setup</title>
 <script>
 (() => {
@@ -3461,7 +3461,7 @@ btn.addEventListener('click',doSetup);
                 '</div>'
             )
         html = """<!DOCTYPE html>
-<html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Borg Backup Admin Recovery</title>
 <script>
 (() => {
