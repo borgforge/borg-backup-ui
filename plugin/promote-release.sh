@@ -120,6 +120,7 @@ stable_path = worktree / "borg-backup-ui.plg"
 app_path = worktree / "borg_backup_ui.py"
 package_install_begin = "<!-- BEGIN borg-backup-ui package installer -->"
 package_install_end = "<!-- END borg-backup-ui package installer -->"
+max_changelog_releases = 3
 package_install_re = re.compile(
     re.escape(package_install_begin) + r".*?" + re.escape(package_install_end),
     re.DOTALL,
@@ -165,6 +166,29 @@ stable = re.sub(
 if "<![CDATA[\n" not in stable:
     raise SystemExit("Stable manifest has no changelog CDATA section")
 stable = stable.replace("<![CDATA[\n", "<![CDATA[\n" + tested_block, 1)
+
+def limit_changelog(manifest: str) -> str:
+    start_marker = "<![CDATA[\n"
+    end_marker = "\n]]>"
+    start = manifest.find(start_marker)
+    end = manifest.find(end_marker, start + len(start_marker))
+    if start < 0 or end < 0:
+        raise SystemExit("Stable manifest has no changelog CDATA section")
+    body_start = start + len(start_marker)
+    body = manifest[body_start:end]
+    blocks = list(
+        re.finditer(
+            r"###[^#\n]+###\n.*?(?=\n###[^#\n]+###|\Z)",
+            body.strip(),
+            re.DOTALL,
+        )
+    )
+    if len(blocks) <= max_changelog_releases:
+        return manifest
+    kept = "\n\n".join(match.group(0).strip() for match in blocks[:max_changelog_releases])
+    return manifest[:body_start] + kept + "\n" + manifest[end:]
+
+stable = limit_changelog(stable)
 
 launch = re.search(r'<PLUGIN\b[^>]*\blaunch="([^"]+)"', test, re.DOTALL)
 if not launch:

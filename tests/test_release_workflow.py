@@ -145,6 +145,39 @@ def test_release_note_fragments_are_ordered_and_hashed(tmp_path: Path) -> None:
     assert len(digest) == 64
 
 
+def test_replace_changelog_block_keeps_latest_three_versions() -> None:
+    manifest = """<PLUGIN>
+<CHANGES>
+<![CDATA[
+###2026.01.04.0000###
+- Old current
+
+###2026.01.03.0000###
+- Old third
+
+###2026.01.02.0000###
+- Old second
+
+###2026.01.01.0000###
+- Old first
+]]>
+</CHANGES>
+</PLUGIN>
+"""
+
+    rendered = release_workflow.replace_changelog_block(
+        manifest,
+        "2026.01.05.0000",
+        "- New release",
+    )
+
+    assert "###2026.01.05.0000###" in rendered
+    assert "###2026.01.04.0000###" in rendered
+    assert "###2026.01.03.0000###" in rendered
+    assert "###2026.01.02.0000###" not in rendered
+    assert "###2026.01.01.0000###" not in rendered
+
+
 def test_package_installer_rewrite_adds_checksum_and_skip_logic() -> None:
     manifest = """<PLUGIN>
 <FILE Name="&bootdir;/&name;-&version;.txz" Run="upgradepkg --install-new">
@@ -253,6 +286,8 @@ def test_stable_promotion_reuses_exact_package_from_clean_current_main() -> None
     assert "tested_package_install" in script
     assert "package_install_re.sub(lambda _match: package_install_replacement" in script
     assert "legacy_package_file_re.sub(lambda _match: package_install_replacement" in script
+    assert "max_changelog_releases = 3" in script
+    assert "stable = limit_changelog(stable)" in script
     assert "plugin/build.sh" not in script
 
 

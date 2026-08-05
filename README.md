@@ -1,51 +1,43 @@
-# Borg Backup UI for Unraid
+# Borg Backup UI
 
-Borg Backup UI is an Unraid-focused plugin and web interface for BorgBackup. It
-provides a guided interface for creating backup jobs, managing storage targets,
-running restore tests, browsing archives, and monitoring backup health from one
-place.
+Unraid plugin for BorgBackup with guided backup jobs, repository management,
+restore verification, archive browsing, reports, notifications, and system
+health checks.
 
-> Project status: active development before public Community Apps publication.
-> Public installation URLs are intentionally not listed here yet.
+Borg Backup UI is built for Unraid users who want the reliability of BorgBackup
+without maintaining custom shell scripts for everyday operation. BorgBackup
+remains the backup engine; this project adds the Unraid-focused control layer
+around jobs, storage targets, schedules, restore workflows, checks, and support
+diagnostics.
+
+> Status: pre-publication candidate for Unraid Community Apps.
+> Public installation instructions will be added after Community Apps approval.
 > This project is not affiliated with BorgBackup or other Borg UI projects.
 
 ![Borg Backup UI dashboard](docs/assets/readme-dashboard.png)
 
-## Highlights
+## Overview
 
-- Guided backup job wizard for common Unraid backup workflows.
+- Guided job wizard for common Unraid backup workflows.
 - Storage profiles for local paths, USB devices, SMB shares, SSH targets, and
   Hetzner Storage Box style repositories.
-- Selective Docker container and VM shutdown handling during backup runs.
-- Backup dashboard with run status, restore verification, storage data, and
-  repository checks.
-- Backup history, reports, repository information, and Borg check integration.
-- Browse & Restore assistant with configurable safe restore target roots.
+- Docker container and VM runtime handling during backup runs.
+- Dashboard overview for backup runs, restore proof, storage data, and checks.
+- Browse and Restore assistant with configurable safe restore target roots.
 - Automated restore tests with structured reports and restore history.
-- Notifications through Unraid notifications, email, and ntfy.
+- Notifications through Apprise profiles, Unraid notifications, and email.
 - Import/export, support bundle, system health, and auditable migrations.
-
-## What It Does
-
-Borg Backup UI is built specifically for Unraid users who want BorgBackup
-without maintaining all operational glue by hand. It keeps the Borg repository
-model intact while adding an Unraid-focused plugin UI around jobs, storage
-profiles, schedules, checks, reports, restore workflows, and notifications.
-
-The plugin stores configuration under the Unraid flash configuration area and
-keeps runtime data under the configured data directory. Secrets are handled via
-dedicated secret files and must not be written into normal logs or public
-artifacts.
 
 ## Feature Overview
 
 ### Backup Jobs
 
-- Create and edit jobs through a multi-step wizard.
+- Create and edit jobs through a guided multi-step wizard.
 - Choose backup type, source paths, repository target, retention, passphrase,
   schedule, and runtime behavior.
-- Stop all or selected Docker containers and VMs before a backup, then restart
-  them after the run.
+- Stop all Docker containers, selected containers, or all except selected
+  containers before a backup, then restart them after the run.
+- Stop selected VMs when a VM backup requires consistent runtime state.
 - Review a flow preview before saving the job.
 
 ### Storage and Repositories
@@ -61,6 +53,8 @@ artifacts.
 
 - Browse Borg archives and restore selected files or directories.
 - Restrict restore targets to administrator-approved safe roots.
+- Prevent unsafe backup and restore write operations from using the same
+  repository at the same time.
 - Track active restore runs and completed restore history.
 - Configure and run automated restore tests for backup verification.
 - Use restore test reports to verify repository accessibility, archive
@@ -75,15 +69,19 @@ artifacts.
 - Notification events for successful, warning, failed, skipped, and overdue
   backup runs.
 - Restore test notifications for success, failure, and overdue tests.
-- Notification channels include Unraid notifications, email, and ntfy.
+- Notification channels are configured through Apprise profiles and can include
+  providers such as ntfy, email-capable services, and other Apprise-supported
+  targets.
 
-### Operations
+### Operations and Safety
 
 - System health and migration status inside Settings.
 - Structured migration state and JSONL audit logs.
 - Support bundle creation for troubleshooting.
 - Import/export flows for jobs, profiles, and secrets.
 - Plugin packaging for Unraid with bundled BorgBackup runtime.
+- Admin access recovery from the Unraid control page through a short-lived,
+  one-time recovery link.
 
 ## Requirements
 
@@ -95,19 +93,73 @@ artifacts.
 BorgBackup is bundled with the plugin package. No pip-based runtime dependency
 installation is required for normal operation.
 
-## Getting Started
+## First Run
 
 1. Install the required Python runtime on Unraid.
 2. Install Borg Backup UI through the approved project or release channel.
 3. Open the Borg Backup UI plugin page from Unraid.
-4. Configure the global data directory and basic settings.
-5. Create at least one storage profile or local repository target.
-6. Create a backup job with the wizard.
-7. Run the first backup manually and review Dashboard, History, and Reports.
-8. Configure restore tests and notifications for ongoing verification.
+4. Start Borg Backup UI from the Unraid control page.
+5. Create the first administrator account.
+6. Confirm the main data directory in the setup wizard.
+7. Create or select a storage target and repository.
+8. Create the first backup job with the guided wizard.
+9. Run the first backup manually and review Dashboard, History, and Reports.
+10. Restore a small sample into a separate test folder and verify the result.
+11. Configure restore tests and notifications for ongoing verification.
 
 Public installation instructions will be added after the Community Apps
 publication requirements are complete.
+
+For first tests, start with a small test folder or non-critical share. Do not
+begin with irreplaceable data until backup and restore behavior has been
+verified on your system.
+
+## Screenshots
+
+### Dashboard
+
+Backup status, restore verification, repository health, and recent activity in
+one overview.
+
+![Dashboard](docs/assets/readme-dashboard.png)
+
+### Jobs
+
+Grouped backup jobs with operational status, next run information, restore
+verification state, and manual start controls.
+
+![Jobs](docs/user-manual/assets/en/jobs.png)
+
+### Job Wizard
+
+A step-by-step workflow for sources, repositories, Docker/VM handling,
+retention, description, schedule, and flow preview.
+
+![Job wizard](docs/user-manual/assets/en/job-wizard-step-1.png)
+
+### Browse and Restore
+
+Browse archives, select content, precheck the restore target, and restore into
+administrator-approved paths.
+
+![Restore wizard](docs/user-manual/assets/en/restore-wizard.png)
+
+### Restore Tests
+
+Plan and review automated restore checks so backups are not only written, but
+also verified.
+
+![Restore test plan](docs/user-manual/assets/en/restore-tests-plan.png)
+
+## Data and Secrets
+
+The plugin stores configuration below the Unraid flash configuration area and
+keeps runtime data below the configured data directory. Repository passphrases
+and profile secrets are stored in dedicated secret files and are excluded from
+normal logs, public artifacts, and support bundle output.
+
+Backups are only useful when restores are proven. Borg Backup UI therefore
+treats restore tests and restore history as first-class operating data.
 
 ## Documentation
 
