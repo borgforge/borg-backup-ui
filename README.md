@@ -161,46 +161,6 @@ normal logs, public artifacts, and support bundle output.
 Backups are only useful when restores are proven. Borg Backup UI therefore
 treats restore tests and restore history as first-class operating data.
 
-## Documentation
-
-| Document | Purpose |
-| --- | --- |
-| [Technical overview](docs/README.md) | Runtime architecture, paths, build notes, and development basics. |
-| [Release workflow](docs/maintainer/release-workflow.md) | Build, test-channel, and stable release process. |
-| [Manual maintenance tests](docs/maintainer/manual-maintenance-tests.md) | Manual validation checklist for Unraid test systems. |
-| [Changelog](docs/changelog.md) | Technical and release history. |
-| [Homepage widget](docs/integrations/homepage-widget.md) | Read-only dashboard integration and token setup. |
-| [German user manual](docs/user-manual/de/user-manual.md) | German user manual. |
-| [English user manual](docs/user-manual/en/user-manual.md) | English user manual. |
-
-## Development
-
-Syntax check example:
-
-```bash
-python3 -m py_compile borg_backup_ui.py api/*.py runtime/scripts/*.py
-```
-
-Run focused tests while developing. After the final commit has been pushed,
-run the full source preflight exactly once:
-
-```bash
-./plugin/mr-preflight.sh
-```
-
-Publish that attested commit to the test channel:
-
-```bash
-./plugin/deploy-test.sh <version>
-```
-
-`plugin/build.sh` is an internal staging-tree builder and must not be called
-directly. Stable releases promote the exact tested package through a separate
-release PR.
-
-See [docs/maintainer/release-workflow.md](docs/maintainer/release-workflow.md) before preparing
-plugin builds, test-channel deployments, or stable release promotions.
-
 ## Support
 
 Use GitHub Issues for bugs, feature requests, and design discussions. When
