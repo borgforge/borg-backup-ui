@@ -277,9 +277,12 @@ def test_secure_jobs_import_uses_guided_per_job_selection():
 
     for catalog in (de, en):
         transfer_labels = catalog["settings"]["transfer"]
+        assert transfer_labels["importWizardTitle"]
         assert transfer_labels["importStepSelectTitle"]
         assert transfer_labels["importStepActionTitle"]
         assert transfer_labels["importStepConfirmTitle"]
         assert transfer_labels["selectedJobsCount"]
+        assert transfer_labels["importAdvancedOptions"]
         assert transfer_labels["importScopeAllHelp"]
+        assert transfer_labels["importResultOverwrite"]
         assert transfer_labels["passphraseIncluded"]

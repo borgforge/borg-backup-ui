@@ -2514,6 +2514,19 @@ body.wizard-modal-open {
   background: var(--state-info-dim);
 }
 
+.settings-transfer-scope-card-primary {
+  grid-column: 1 / -1;
+  min-height: 68px;
+}
+
+.settings-transfer-advanced-title {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
 .settings-transfer-scope-card.is-disabled {
   opacity: .62;
   cursor: default;

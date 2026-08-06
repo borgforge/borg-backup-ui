@@ -3452,10 +3452,11 @@ function renderSettingsTransferActionStep(preview, selectedRows, fileName, hasBo
     ${renderSettingsTransferStepHeader(2, settingsT('transfer.importStepActionTitle'), settingsT('transfer.importStepActionText'))}
     ${renderSettingsTransferFileSummary(preview, fileName)}
     <div class="settings-transfer-scope-grid">
-      <label class="settings-transfer-scope-card">
+      <label class="settings-transfer-scope-card settings-transfer-scope-card-primary">
         <input type="radio" name="jobs-secure-scope" value="all" checked>
         <span><strong>${settingsT('transfer.importScopeAll')}</strong><small>${settingsT('transfer.importScopeAllHelp')}</small></span>
       </label>
+      <div class="settings-transfer-advanced-title">${settingsT('transfer.importAdvancedOptions')}</div>
       <label class="settings-transfer-scope-card">
         <input type="radio" name="jobs-secure-scope" value="jobs_only">
         <span><strong>${settingsT('transfer.importScopeJobsOnly')}</strong><small>${settingsT('transfer.importScopeJobsOnlyHelp')}</small></span>
@@ -3521,9 +3522,44 @@ function renderSettingsTransferConfirmStep(preview, selectedRows, fileName, deci
   `;
 }
 
+function settingsTransferImportResultMessage(data) {
+  const report = Array.isArray(data?.report) ? data.report : [];
+  const byStatus = report.reduce((acc, row) => {
+    const status = String(row?.status || 'unknown');
+    if (status === 'skipped_unselected') return acc;
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+  const parts = [];
+  [
+    ['new', 'importResultNew'],
+    ['overwrite', 'importResultOverwrite'],
+    ['renamed', 'importResultRenamed'],
+    ['skipped_exists', 'importResultSkipped'],
+    ['invalid', 'importResultInvalid'],
+  ].forEach(([status, key]) => {
+    const count = Number(byStatus[status] || 0);
+    if (count) parts.push(settingsT(`transfer.${key}`, { count }));
+  });
+  const passphrases = Number(data?.restored_passphrases || 0);
+  if (passphrases) parts.push(settingsT('transfer.passphrasesRestored', { count: passphrases }));
+  const keyfiles = Number(data?.restored_keyfiles || 0);
+  if (keyfiles) parts.push(settingsT('transfer.keyfilesRestored', { count: keyfiles }));
+  const borgKeys = Number(data?.restored_borg_key_exports || 0);
+  if (borgKeys) parts.push(settingsT('transfer.borgKeyExportsRestored', { count: borgKeys }));
+  const skippedBorgKeys = Number(data?.skipped_borg_key_exports || 0);
+  if (skippedBorgKeys) parts.push(settingsT('transfer.borgKeyExportsSkipped', { count: skippedBorgKeys }));
+  const details = parts.length ? settingsT('transfer.importResultDetails', { details: parts.join(', ') }) : '';
+  return settingsT('transfer.importSummary', {
+    jobs: Number(data?.imported_count || 0),
+    schedules: Number(data?.scheduled_count || 0),
+    details,
+  });
+}
+
 async function settingsTransferRunSecureJobsWizard(preview, importableRows, fileName) {
   const selectedJobs = await _openSettingsDialog({
-    title: settingsT('transfer.importStepSelectTitle'),
+    title: settingsT('transfer.importWizardTitle'),
     dialogClass: 'modal-transfer-wizard',
     html: renderSettingsTransferJobSelectionStep(preview, importableRows, fileName),
     confirmText: settingsT('transfer.continue'),
@@ -3547,7 +3583,7 @@ async function settingsTransferRunSecureJobsWizard(preview, importableRows, file
   const selectedRows = selectedJobs.map((key) => settingsTransferJobByKey(preview, key)).filter(Boolean);
   const hasBorgKeys = Number(preview?.borg_key_export_count || 0) > 0;
   const action = await _openSettingsDialog({
-    title: settingsT('transfer.importStepActionTitle'),
+    title: settingsT('transfer.importWizardTitle'),
     dialogClass: 'modal-transfer-wizard',
     html: renderSettingsTransferActionStep(preview, selectedRows, fileName, hasBorgKeys),
     confirmText: settingsT('transfer.continue'),
@@ -3568,7 +3604,7 @@ async function settingsTransferRunSecureJobsWizard(preview, importableRows, file
   });
   if (!action || typeof action !== 'object') return null;
   const confirmed = await _openSettingsDialog({
-    title: settingsT('transfer.importStepConfirmTitle'),
+    title: settingsT('transfer.importWizardTitle'),
     dialogClass: 'modal-transfer-wizard',
     html: renderSettingsTransferConfirmStep(preview, selectedRows, fileName, action),
     confirmText: settingsT('transfer.startImport'),
@@ -3665,28 +3701,14 @@ async function importJobsApplySelected(options = {}) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
-    const report = Array.isArray(data?.report) ? data.report : [];
-    const byStatus = report.reduce((acc, r) => {
-      const s = String(r?.status || 'unknown');
-      acc[s] = (acc[s] || 0) + 1;
-      return acc;
-    }, {});
-    const detail = Object.keys(byStatus).length
-      ? ` · ${Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(', ')}`
-      : '';
-    const srep = data?.settings_report || null;
-    const stext = srep ? ` · Settings(${srep.mode}): ${srep.applied || 0} ${settingsT('transfer.settingsApplied')}, ${settingsT('transfer.conflicts')} ${srep.conflicts || 0}${data?.settings_backup ? `, Backup: ${data.settings_backup}` : ''}` : '';
-    const ppText = Number(data?.restored_passphrases || 0) ? ` · ${settingsT('transfer.passphrasesRestored', { count: Number(data.restored_passphrases) })}` : '';
-    const keyText = Number(data?.restored_keyfiles || 0) ? ` · ${settingsT('transfer.keyfilesRestored', { count: Number(data.restored_keyfiles) })}` : '';
-    const borgKeyText = Number(data?.restored_borg_key_exports || 0) ? ` · ${settingsT('transfer.borgKeyExportsRestored', { count: Number(data.restored_borg_key_exports) })}` : '';
-    const skippedBorgKeyText = Number(data?.skipped_borg_key_exports || 0) ? ` · ${settingsT('transfer.borgKeyExportsSkipped', { count: Number(data.skipped_borg_key_exports) })}` : '';
-    showMsg('settings-transfer-msg', 'success', settingsT('transfer.importSummary', { jobs: data.imported_count || 0, schedules: data.scheduled_count || 0, details: `${detail}${stext}${ppText}${keyText}${borgKeyText}${skippedBorgKeyText}` }));
+    const importMessage = settingsTransferImportResultMessage(data);
     settingsState.transferJobsPreview = null;
     settingsState.transferJobsBundleText = '';
     settingsState.transferJobsSecurePayloadB64 = '';
     settingsState.transferJobsSecurePassword = '';
     settingsState.transferJobsSecureMode = false;
     await refreshSettings();
+    showMsg('settings-transfer-msg', 'success', importMessage);
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.importFailed', { message: err.message }));
   }
