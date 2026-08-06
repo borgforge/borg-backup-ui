@@ -32,6 +32,7 @@ EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/runtime/config/backup.conf.example",
     f"boot/config/plugins/{NAME}/runtime/vendor-bundles/apprise-vendor.json",
     "etc/rc.d/rc.borg_backup_ui",
+    f"usr/local/emhttp/plugins/{NAME}/README.md",
     PROVENANCE_MEMBER,
 )
 
@@ -75,6 +76,7 @@ def is_deployable_path(path: str) -> bool:
     if path in {
         "plugin/apprise-requirements.lock",
         "plugin/build.sh",
+        "plugin/README.md",
         "plugin/borg-backup-ui.page",
         "plugin/deploy-test.sh",
         "plugin/promote-release.sh",
