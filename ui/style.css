@@ -2529,7 +2529,8 @@ body.wizard-modal-open {
 }
 
 .settings-transfer-overview-actions .btn {
-  min-width: 172px;
+  flex: 0 0 190px;
+  width: 190px;
   justify-content: center;
 }
 
