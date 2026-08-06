@@ -2621,7 +2621,7 @@ function renderSettingsTransferTools() {
           <span>${settingsT('transfer.overviewJobsBadge')}</span>
           <strong>${settingsT('transfer.overviewJobsTitle')}</strong>
           <small>${settingsT('transfer.overviewJobsText')}</small>
-          <div>
+          <div class="settings-transfer-overview-actions">
             <button class="btn btn-primary btn-sm" data-settings-action="import-jobs-secure-select-file">${settingsT('transfer.jobsImport')}</button>
             <button class="btn btn-secondary btn-sm" data-settings-action="export-jobs-secure">${settingsT('transfer.jobsExport')}</button>
           </div>
@@ -2629,9 +2629,8 @@ function renderSettingsTransferTools() {
         <section class="settings-transfer-overview-card settings-transfer-overview-card-keys">
           <span>${settingsT('transfer.overviewKeysBadge')}</span>
           <strong>${settingsT('transfer.overviewKeysTitle')}</strong>
-          <small>${settingsT('transfer.overviewKeysText')}</small>
-          <div>
-            <button class="btn btn-primary btn-sm" data-settings-action="import-repository-keys">${settingsT('transfer.repositoryKeysImport')}</button>
+          <small>${settingsT('transfer.overviewKeysText')} <em>${settingsT('transfer.overviewKeysImportHint')}</em></small>
+          <div class="settings-transfer-overview-actions">
             <button class="btn btn-secondary btn-sm" data-settings-action="export-repository-keys">${settingsT('transfer.repositoryKeysExport')}</button>
           </div>
         </section>
@@ -2639,7 +2638,7 @@ function renderSettingsTransferTools() {
           <span>${settingsT('transfer.overviewProfilesBadge')}</span>
           <strong>${settingsT('transfer.overviewProfilesTitle')}</strong>
           <small>${settingsT('transfer.overviewProfilesText')}</small>
-          <div>
+          <div class="settings-transfer-overview-actions">
             <button class="btn btn-primary btn-sm" data-settings-action="import-profile-secrets-select-file">${settingsT('transfer.profilesImport')}</button>
             <button class="btn btn-secondary btn-sm" data-settings-action="export-profile-secrets">${settingsT('transfer.profilesExport')}</button>
           </div>
@@ -3132,13 +3131,6 @@ async function exportRepositoryKeysBackup() {
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.repositoryKeysFailed', { message: err.message }));
   }
-}
-
-function openRepositoryKeyImportGuide() {
-  window.BBUI.storageState = window.BBUI.storageState || {};
-  window.BBUI.storageState.selectedTab = 'management';
-  window.BBUI.storageState.pendingRepositoryKeyImportGuide = true;
-  window.BBUI?.core?.navigate?.('storage');
 }
 
 async function exportSupportBundle() {
@@ -5929,7 +5921,6 @@ async function onSettingsContentClick(event) {
   if (action === 'export-jobs') return exportJobsBundle();
   if (action === 'export-jobs-secure') return exportJobsBundleSecure();
   if (action === 'export-repository-keys') return exportRepositoryKeysBackup();
-  if (action === 'import-repository-keys') return openRepositoryKeyImportGuide();
   if (action === 'import-jobs-select-file') return importJobsPreviewSelectFile();
   if (action === 'import-jobs-secure-select-file') return importJobsSecurePreviewSelectFile();
   if (action === 'import-jobs-apply') return importJobsApplySelected();

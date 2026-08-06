@@ -2460,6 +2460,7 @@ body.wizard-modal-open {
 
 .settings-transfer-overview-card {
   display: grid;
+  grid-template-rows: auto auto 1fr auto;
   gap: 8px;
   min-height: 138px;
   padding: 14px;
@@ -2512,11 +2513,24 @@ body.wizard-modal-open {
   line-height: 1.45;
 }
 
-.settings-transfer-overview-card div {
+.settings-transfer-overview-card small em {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.settings-transfer-overview-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-self: end;
+}
+
+.settings-transfer-overview-actions .btn {
+  min-width: 172px;
+  justify-content: center;
 }
 
 .settings-transfer-context-strip {

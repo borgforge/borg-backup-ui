@@ -1904,6 +1904,7 @@
       "overviewKeysBadge": "Notfallfunktion",
       "overviewKeysTitle": "Repository-Keys",
       "overviewKeysText": "Separate Key-Sicherung importieren. Nur bei defektem oder verlorenem Key nötig.",
+      "overviewKeysImportHint": "Import nur über das jeweilige Repository unter Repositories.",
       "overviewProfilesBadge": "System-Einstellungen",
       "overviewProfilesTitle": "Profiles + Secrets",
       "overviewProfilesText": "SMB/SSH-Profile und Zugangsdaten wiederherstellen.",

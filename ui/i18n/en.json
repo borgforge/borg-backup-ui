@@ -1904,6 +1904,7 @@
       "overviewKeysBadge": "Emergency function",
       "overviewKeysTitle": "Repository keys",
       "overviewKeysText": "Import a separate key backup. Needed only for a broken or lost key.",
+      "overviewKeysImportHint": "Import is available only from the matching repository under Repositories.",
       "overviewProfilesBadge": "System settings",
       "overviewProfilesTitle": "Profiles + secrets",
       "overviewProfilesText": "Restore SMB/SSH profiles and access credentials.",
