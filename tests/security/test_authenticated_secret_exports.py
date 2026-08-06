@@ -271,22 +271,27 @@ def test_secure_jobs_import_uses_guided_per_job_selection():
     assert "renderSettingsTransferJobSelectionStep" in source
     assert "renderSettingsTransferActionStep" in source
     assert "renderSettingsTransferConfirmStep" in source
+    assert "exportRepositoryKeysBackup" in source
     assert "settingsTransferPlannedActionLines" in source
     assert "data-jobs-secure-row-select" in source
     assert "data-jobs-secure-row-mode" in source
+    assert "borg_keys_only" not in source
     assert "jobImportCreateNew" in source
 
     for catalog in (de, en):
         transfer_labels = catalog["settings"]["transfer"]
         assert transfer_labels["importWizardTitle"]
+        assert transfer_labels["importStepKindTitle"]
         assert transfer_labels["importStepSelectTitle"]
         assert transfer_labels["importStepActionTitle"]
         assert transfer_labels["importStepConfirmTitle"]
         assert transfer_labels["selectedJobsCount"]
+        assert transfer_labels["importKindSelective"]
+        assert transfer_labels["importKindComplete"]
         assert transfer_labels["importAdvancedOptions"]
         assert transfer_labels["importScopeAllHelp"]
+        assert transfer_labels["repositoryKeysExport"]
         assert transfer_labels["importResultOverwrite"]
         assert transfer_labels["planJobOverwrite"]
         assert transfer_labels["planPassphraseReplace"]
-        assert transfer_labels["planBorgKeyImport"]
         assert transfer_labels["passphraseIncluded"]

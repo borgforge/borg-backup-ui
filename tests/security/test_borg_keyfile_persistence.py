@@ -176,7 +176,7 @@ def test_encrypted_job_transfer_restores_keyfile_to_target_store(tmp_path: Path)
     assert restored[0].read_bytes() == _key_content()
 
 
-def test_encrypted_job_transfer_exports_borg_keys_for_required_repository_modes(tmp_path: Path, monkeypatch):
+def test_encrypted_job_transfer_excludes_repository_key_exports(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     config = {"BACKUP_SCRIPTS_DIR": str(source)}
     jobs = source / "config" / "jobs"
@@ -241,25 +241,15 @@ def test_encrypted_job_transfer_exports_borg_keys_for_required_repository_modes(
     )
     payload = json.loads(plaintext.decode("utf-8"))
 
-    assert calls == ["repo_appdata"]
-    assert exported["borg_key_export_count"] == 1
+    assert calls == []
+    assert exported["borg_key_export_count"] == 0
     assert exported["borg_key_export_failed_count"] == 0
-    assert payload["borg_key_exports"]["repo_appdata"]["exists"] is True
-    assert "repo_flash" not in payload["borg_key_exports"]
+    assert "borg_key_exports" not in payload
 
 
-def test_encrypted_job_transfer_imports_borg_key_exports(tmp_path: Path, monkeypatch):
+def test_repository_key_backup_exports_and_imports_matching_repository_key(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     source_config = {"BACKUP_SCRIPTS_DIR": str(source)}
-    jobs = source / "config" / "jobs"
-    jobs.mkdir(parents=True)
-    (jobs / "appdata_local.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "appdata_local",
-        "name": "Appdata",
-        "repository_key": "repo_appdata",
-        "source_paths": ["/mnt/user/appdata"],
-    }), encoding="utf-8")
     write_storage_store(source_config, {"storages": [{
         "storage_key": "storage_local",
         "display_name": "Local",
@@ -282,7 +272,35 @@ def test_encrypted_job_transfer_imports_borg_key_exports(tmp_path: Path, monkeyp
         "repository_id": "b" * 64,
         "key_data": key_data,
     })
-    exported = export_jobs_bundle_encrypted(source_config, "transfer-password-190")
+    exported = transfer.export_repository_keys_backup(source_config, "transfer-password-190")
+    plaintext, _fmt = transfer._decrypt_encrypted_export(
+        base64.b64decode(exported["payload_b64"], validate=True),
+        "transfer-password-190",
+    )
+    payload = json.loads(plaintext.decode("utf-8"))
+
+    assert exported["repository_key_count"] == 1
+    assert payload["format"] == "bbui-repository-keys-v1"
+    assert payload["key_exports"]["repo_appdata"]["repository_id"] == "b" * 64
+
+    target_config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "target")}
+    write_storage_store(target_config, {"storages": [{
+        "storage_key": "storage_local",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": "local:/mnt/backup",
+        "base_path": "/mnt/backup",
+    }]})
+    write_repository_store(target_config, {"repositories": [{
+        "repository_key": "repo_appdata",
+        "display_name": "Appdata",
+        "storage_key": "storage_local",
+        "relative_path": "borg-backup-appdata",
+        "path_raw": "/mnt/backup/borg-backup-appdata",
+        "encryption": "repokey-blake2",
+        "borg_repository_id": "b" * 64,
+    }]})
     calls = []
 
     def fake_import_repository_key(config_arg, repository_key, imported_key_data, **kwargs):
@@ -291,56 +309,25 @@ def test_encrypted_job_transfer_imports_borg_key_exports(tmp_path: Path, monkeyp
 
     monkeypatch.setattr(repositories_api, "import_repository_key", fake_import_repository_key)
 
-    result = import_jobs_bundle_encrypted(
-        {"BACKUP_SCRIPTS_DIR": str(tmp_path / "target")},
+    preview = transfer.preview_repository_keys_backup_for_repository(
+        target_config,
+        "repo_appdata",
         "transfer-password-190",
         exported["payload_b64"],
-        dry_run=False,
-        settings_mode="ignore",
+    )
+
+    assert preview["matching_key"]["exists"] is True
+    assert preview["repository_id"] == "b" * 64
+
+    result = transfer.import_repository_keys_backup_for_repository(
+        target_config,
+        "repo_appdata",
+        "transfer-password-190",
+        exported["payload_b64"],
     )
 
     assert calls == [("repo_appdata", key_data)]
-    assert result["restored_borg_key_exports"] == 1
-    assert result["skipped_borg_key_exports"] == 0
-
-    calls.clear()
-    result = import_jobs_bundle_encrypted(
-        {"BACKUP_SCRIPTS_DIR": str(tmp_path / "target_borg_keys_only")},
-        "transfer-password-190",
-        exported["payload_b64"],
-        dry_run=False,
-        settings_mode="ignore",
-        selected_jobs=["appdata_local"],
-        import_jobs=False,
-        import_passphrases=False,
-        import_borg_keys=True,
-    )
-
-    assert calls == [("repo_appdata", key_data)]
-    assert result["imported_count"] == 0
-    assert result["scheduled_count"] == 0
-    assert result["restored_passphrases"] == 0
-    assert result["restored_keyfiles"] == 0
-    assert result["restored_borg_key_exports"] == 1
-
-    calls.clear()
-    result = import_jobs_bundle_encrypted(
-        {"BACKUP_SCRIPTS_DIR": str(tmp_path / "target_jobs_only")},
-        "transfer-password-190",
-        exported["payload_b64"],
-        dry_run=False,
-        settings_mode="ignore",
-        selected_jobs=["appdata_local"],
-        import_jobs=True,
-        import_passphrases=False,
-        import_borg_keys=False,
-    )
-
-    assert calls == []
-    assert result["imported_count"] == 1
-    assert result["restored_passphrases"] == 0
-    assert result["restored_keyfiles"] == 0
-    assert result["restored_borg_key_exports"] == 0
+    assert result["repository_id"] == "b" * 64
 
 
 @pytest.mark.skipif(shutil.which("borg") is None, reason="borg is not installed")

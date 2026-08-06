@@ -547,9 +547,9 @@ function renderStorageRepositoryManagement(repo) {
       <div><h4>${storageT('storage.repositoryKeyRecovery')}</h4><p>${storageT('storage.repositoryKeyRecoveryHint')}</p></div>
       ${keyStatus}
       <div class="storage-lifecycle-actions">
-        <button class="btn btn-secondary" data-storage-action="repository-key-import-select" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyImportUpload')}</button>
-        <button class="btn btn-primary" data-storage-action="repository-key-export" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyExportDownload')}</button>
-        <input type="file" class="hidden" data-storage-key-import-file data-repository-key="${escHtml(key)}" accept=".txt,.key">
+        <button class="btn btn-primary" data-storage-action="repository-key-import-select" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyImportUpload')}</button>
+        <button class="btn btn-secondary" data-storage-action="repository-key-export" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyExportDownload')}</button>
+        <input type="file" class="hidden" data-storage-key-import-file data-repository-key="${escHtml(key)}" accept=".keys.enc,application/octet-stream">
       </div>
     </section>
     <section class="storage-lifecycle-card">
@@ -761,6 +761,18 @@ async function storageReadTextFile(file) {
   return file.text();
 }
 
+async function storageReadFileAsBase64(file) {
+  if (!file) throw new Error(storageT('storage.repositoryKeyImportFileMissing'));
+  const buffer = await file.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 async function exportRepositoryKey(repositoryKey, button) {
   const key = String(repositoryKey || '').trim();
   if (!key) return;
@@ -789,11 +801,43 @@ async function importRepositoryKey(repositoryKey, file, input) {
   if (!key) return;
   showMsg('storage-message', 'info', storageT('storage.repositoryKeyImportReading'));
   try {
-    const keyData = await storageReadTextFile(file);
-    const response = await fetch('/api/repositories/key-import', {
+    const payload_b64 = await storageReadFileAsBase64(file);
+    const password = await _openSettingsDialog({
+      title: storageT('storage.repositoryKeyBackupPasswordTitle'),
+      html: `<div class="modal-info-item warning">${storageT('storage.repositoryKeyBackupPasswordMessage')}</div>`,
+      input: { label: storageT('storage.repositoryKeyBackupPassword'), type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: storageT('storage.repositoryKeyBackupCheck'),
+    });
+    if (!password) return;
+    const previewResponse = await fetch('/api/repositories/key-backup-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repository_key: key, key_data: keyData }),
+      body: JSON.stringify({ repository_key: key, password, payload_b64 }),
+    });
+    const preview = await previewResponse.json();
+    if (!previewResponse.ok) throw new Error(apiErrorMessage(preview, previewResponse.status));
+    const confirmed = await _openSettingsDialog({
+      title: storageT('storage.repositoryKeyBackupReviewTitle'),
+      html: `
+        <div class="modal-info-list">
+          <div class="modal-info-item">
+            <span class="modal-info-text">
+              <strong>${escHtml(preview.repository_name || key)}</strong><br>
+              ${escHtml(preview.repository_path || '')}<br>
+              ${escHtml(storageT('storage.repositoryKeyRecoveryRepositoryId'))}: ${escHtml(preview.repository_id || '')}
+            </span>
+          </div>
+          <div class="modal-info-item success">
+            <span class="modal-info-text">${escHtml(storageT('storage.repositoryKeyBackupReviewMessage'))}</span>
+          </div>
+        </div>`,
+      confirmText: storageT('storage.repositoryKeyBackupImportConfirm'),
+    });
+    if (!confirmed) return;
+    const response = await fetch('/api/repositories/key-backup-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repository_key: key, password, payload_b64 }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(apiErrorMessage(data, response.status));

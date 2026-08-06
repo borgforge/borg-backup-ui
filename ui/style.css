@@ -2405,6 +2405,25 @@ body.wizard-modal-open {
   margin-top: 12px;
 }
 
+.settings-transfer-mode-note {
+  display: grid;
+  gap: 3px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--state-info-border);
+  border-radius: 6px;
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-mode-note strong {
+  color: var(--text);
+}
+
+.settings-transfer-mode-note span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .settings-transfer-job-list,
 .settings-transfer-action-list,
 .settings-transfer-confirm-list,

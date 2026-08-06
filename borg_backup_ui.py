@@ -922,6 +922,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/repositories/lifecycle": self._post_repository_lifecycle,
             "/api/repositories/key-export": self._post_repository_key_export,
             "/api/repositories/key-import": self._post_repository_key_import,
+            "/api/repositories/key-backup-preview": self._post_repository_key_backup_preview,
+            "/api/repositories/key-backup-import": self._post_repository_key_backup_import,
             "/api/storage/smb-action": self._post_storage_smb_action,
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
@@ -938,6 +940,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/settings/jobs-export-secure": self._post_settings_jobs_export_secure,
             "/api/settings/jobs-import-secure-preview": self._post_settings_jobs_import_secure_preview,
             "/api/settings/jobs-import-secure": self._post_settings_jobs_import_secure,
+            "/api/settings/repository-keys-export": self._post_settings_repository_keys_export,
             "/api/settings/secrets-backup-export": self._post_settings_secrets_backup_export,
             "/api/settings/secrets-backup-preview": self._post_settings_secrets_backup_preview,
             "/api/settings/secrets-backup-import": self._post_settings_secrets_backup_import,
@@ -1860,6 +1863,38 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 str(body.get("repository_key") or ""),
                 str(body.get("key_data") or ""),
                 audit_context=self._repository_audit_context(str(getattr(self, "_current_request_id", "") or "")),
+            )
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _post_repository_key_backup_preview(self) -> dict:
+        from settings_transfer_api import preview_repository_keys_backup_for_repository
+
+        body = self._read_json_body()
+        payload_b64 = str(body.get("payload_b64") or "")
+        if not payload_b64:
+            raise ValueError("payload_b64 is required")
+        return preview_repository_keys_backup_for_repository(
+            self.config,
+            str(body.get("repository_key") or ""),
+            str(body.get("password") or ""),
+            payload_b64,
+        )
+
+    def _post_repository_key_backup_import(self) -> dict:
+        from repositories_api import RepositoryBusyError
+        from settings_transfer_api import import_repository_keys_backup_for_repository
+
+        body = self._read_json_body()
+        payload_b64 = str(body.get("payload_b64") or "")
+        if not payload_b64:
+            raise ValueError("payload_b64 is required")
+        try:
+            return import_repository_keys_backup_for_repository(
+                self.config,
+                str(body.get("repository_key") or ""),
+                str(body.get("password") or ""),
+                payload_b64,
             )
         except RepositoryBusyError as exc:
             raise ApiConflictError(str(exc), code="repository_busy") from exc
@@ -2958,6 +2993,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         password = str(body.get("password") or "")
         return export_jobs_bundle_encrypted(self.config, password)
 
+    def _post_settings_repository_keys_export(self) -> dict:
+        from settings_transfer_api import export_repository_keys_backup
+        body = self._read_json_body()
+        password = str(body.get("password") or "")
+        return export_repository_keys_backup(self.config, password)
+
     def _post_settings_jobs_import_secure_preview(self) -> dict:
         from settings_transfer_api import preview_jobs_bundle_encrypted
         body = self._read_json_body()
@@ -2982,7 +3023,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         per_profile_mode = body.get("per_profile_mode") if isinstance(body.get("per_profile_mode"), dict) else None
         import_jobs = bool(body.get("import_jobs", True))
         import_passphrases = bool(body.get("import_passphrases", True))
-        import_borg_keys = bool(body.get("import_borg_keys", True))
+        import_borg_keys = bool(body.get("import_borg_keys", False))
         return import_jobs_bundle_encrypted(
             self.config,
             password,
