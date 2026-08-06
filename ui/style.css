@@ -1930,7 +1930,8 @@ body.wizard-modal-open {
   padding: 18px 20px;
 }
 
-.modal-body p {
+.modal-body p,
+.modal-description {
   color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.6;
@@ -2349,6 +2350,39 @@ body.wizard-modal-open {
 }
 .settings-table tr:last-child td { border-bottom: none; }
 
+.modal-transfer-wizard {
+  width: 760px;
+  max-width: 94vw;
+}
+
+.modal-transfer-wizard .modal-body {
+  max-height: 72vh;
+  overflow: auto;
+}
+
+.settings-transfer-step-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.settings-transfer-step-header span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-transfer-step-header strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.settings-transfer-step-header small {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .settings-transfer-wizard-summary {
   display: grid;
   gap: 4px;
@@ -2364,11 +2398,23 @@ body.wizard-modal-open {
   font-size: 12px;
 }
 
-.settings-transfer-job-picker {
+.settings-transfer-selection-counter {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 12px;
+}
+
+.settings-transfer-job-list,
+.settings-transfer-action-list,
+.settings-transfer-confirm-list {
   display: grid;
   gap: 6px;
   margin-top: 12px;
-  max-height: min(46vh, 420px);
+}
+
+.settings-transfer-job-list {
+  max-height: min(48vh, 460px);
   overflow: auto;
   padding-right: 2px;
 }
@@ -2379,59 +2425,173 @@ body.wizard-modal-open {
   font-weight: 700;
 }
 
-.settings-transfer-job-picker-head,
-.settings-transfer-job-row {
+.settings-transfer-job-card {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) auto auto minmax(130px, .8fr);
-  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
   align-items: center;
-}
-
-.settings-transfer-job-picker-head {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 0 10px;
-  text-transform: uppercase;
-}
-
-.settings-transfer-job-row {
-  padding: 8px 10px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-secondary);
+  cursor: pointer;
 }
 
-.settings-transfer-job-row.is-disabled {
-  opacity: .62;
+.settings-transfer-job-card:hover {
+  border-color: var(--accent);
+  background: var(--state-info-dim);
 }
 
-.settings-transfer-job-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+.settings-transfer-job-card input {
+  width: 16px;
+  height: 16px;
 }
 
-.settings-transfer-job-main span {
+.settings-transfer-job-card-main {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.settings-transfer-job-main strong {
+.settings-transfer-job-card-main strong {
+  color: var(--text);
+  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.settings-transfer-job-main small,
-.settings-transfer-job-state {
+.settings-transfer-job-card-main small,
+.settings-transfer-scope-card small,
+.settings-transfer-action-row small,
+.settings-transfer-confirm-row small {
   color: var(--text-muted);
   font-size: 12px;
 }
 
-.settings-transfer-job-state {
+.settings-transfer-job-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.settings-transfer-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.settings-transfer-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-transfer-scope-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.settings-transfer-scope-card:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-scope-card.is-disabled {
+  opacity: .62;
+  cursor: default;
+}
+
+.settings-transfer-scope-card span {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-transfer-scope-card strong {
+  color: var(--text);
+}
+
+.settings-transfer-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(180px, .5fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-action-row > div:first-child,
+.settings-transfer-confirm-row span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-transfer-action-row strong,
+.settings-transfer-confirm-row strong {
+  color: var(--text);
+}
+
+.settings-transfer-confirm-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-transfer-confirm-grid > div {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-confirm-grid span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-confirm-grid strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.settings-transfer-confirm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-confirm-row em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -2461,17 +2621,20 @@ body.wizard-modal-open {
 }
 
 @media (max-width: 700px) {
-  .settings-transfer-job-picker-head {
-    display: none;
-  }
-
-  .settings-transfer-job-row {
+  .settings-transfer-job-card,
+  .settings-transfer-scope-grid,
+  .settings-transfer-action-row,
+  .settings-transfer-confirm-grid,
+  .settings-transfer-confirm-row {
     grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
   }
 
   .settings-transfer-job-action .form-select {
     min-width: 0;
+  }
+
+  .settings-transfer-job-badges {
+    justify-content: flex-start;
   }
 }
 
