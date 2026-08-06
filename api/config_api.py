@@ -585,6 +585,7 @@ def get_repositories_data(ui_config: dict) -> dict:
     Gibt die kanonischen Repository-Objekte gruppiert nach Location zurück.
     """
     groups: Dict[str, List[Dict]] = {"local": [], "usb": [], "smb": [], "storagebox": []}
+    repository_info_refresh: Dict[str, object] = {}
     try:
         from repositories_api import build_repository_groups
         from storage_objects_api import read_storage_store
@@ -592,6 +593,11 @@ def get_repositories_data(ui_config: dict) -> dict:
         storages = read_storage_store(ui_config).get("storages", [])
     except Exception:
         storages = []
+    try:
+        from repositories_api import get_repository_info_refresh_status
+        repository_info_refresh = get_repository_info_refresh_status(ui_config)
+    except Exception:
+        repository_info_refresh = {}
 
     # Sortierung innerhalb Gruppen
     type_order = {}
@@ -604,6 +610,7 @@ def get_repositories_data(ui_config: dict) -> dict:
     return {
         "groups": groups,
         "storages": storages,
+        "repository_info_refresh": repository_info_refresh,
         "smb_profiles": get_smb_profiles_with_status(ui_config),
         "conf_file": str(get_conf_file(ui_config)),
         "conf_writable": conf_exists(ui_config),

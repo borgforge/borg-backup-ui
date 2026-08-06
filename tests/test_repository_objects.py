@@ -96,6 +96,7 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
     assert rows[0]["path_raw"] == "/mnt/backup/borg-backup-appdata"
     assert rows[0]["path_display"] == "/mnt/backup/borg-backup-appdata"
     assert data["storages"][0]["storage_key"] == rows[0]["storage_key"]
+    assert data["repository_info_refresh"]["enabled"] is False
 
 
 def test_storage_data_derives_remote_repository_path_from_storage(tmp_path: Path):

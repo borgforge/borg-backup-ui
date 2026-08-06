@@ -722,6 +722,23 @@
   font-size: var(--ui-font-size-xs);
 }
 
+.storage-repository-workspace-status .storage-repository-info-disabled {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ui-color-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-size-xs);
+  padding: 0;
+  text-align: right;
+}
+
+.storage-repository-workspace-status .storage-repository-info-disabled:hover,
+.storage-repository-workspace-status .storage-repository-info-disabled:focus-visible {
+  text-decoration: underline;
+}
+
 .storage-repository-master-detail {
   min-height: 34rem;
 }
