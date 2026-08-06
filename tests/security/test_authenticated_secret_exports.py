@@ -260,3 +260,20 @@ def test_failed_preview_invalidates_previously_loaded_sensitive_state():
     assert "settingsState.transferProfileSecretsPayloadB64 = '';" in source
     assert "settingsState.transferProfileSecretsPassword = '';" in source
     assert "previewEl.replaceChildren();" in source
+
+
+def test_secure_jobs_import_uses_guided_per_job_selection():
+    source = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
+    de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
+    en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
+
+    assert "function renderSettingsTransferJobPicker" in source
+    assert "data-jobs-secure-row-select" in source
+    assert "data-jobs-secure-row-mode" in source
+    assert "jobImportCreateNew" in source
+
+    for catalog in (de, en):
+        transfer_labels = catalog["settings"]["transfer"]
+        assert transfer_labels["jobSelectionTitle"]
+        assert transfer_labels["jobColumnAction"]
+        assert transfer_labels["passphraseIncluded"]

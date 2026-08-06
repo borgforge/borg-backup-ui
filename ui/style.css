@@ -2364,6 +2364,88 @@ body.wizard-modal-open {
   font-size: 12px;
 }
 
+.settings-transfer-job-picker {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  max-height: min(46vh, 420px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.settings-transfer-job-picker-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-transfer-job-picker-head,
+.settings-transfer-job-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) auto auto minmax(130px, .8fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-transfer-job-picker-head {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 10px;
+  text-transform: uppercase;
+}
+
+.settings-transfer-job-row {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-job-row.is-disabled {
+  opacity: .62;
+}
+
+.settings-transfer-job-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-transfer-job-main span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-transfer-job-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-transfer-job-main small,
+.settings-transfer-job-state {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-job-state {
+  white-space: nowrap;
+}
+
+.settings-transfer-job-action .form-select {
+  width: 100%;
+  min-width: 130px;
+}
+
+.settings-transfer-job-action-static {
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .settings-transfer-job-preview-details {
   border-top: 1px solid var(--border);
   margin-top: 8px;
@@ -2376,6 +2458,21 @@ body.wizard-modal-open {
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 8px;
+}
+
+@media (max-width: 700px) {
+  .settings-transfer-job-picker-head {
+    display: none;
+  }
+
+  .settings-transfer-job-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .settings-transfer-job-action .form-select {
+    min-width: 0;
+  }
 }
 
 .repository-refresh-summary {
