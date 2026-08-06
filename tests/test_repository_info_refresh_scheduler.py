@@ -47,6 +47,17 @@ def test_repository_info_refresh_settings_are_read_from_backup_conf(tmp_path: Pa
     assert settings == {"enabled": False, "interval_hours": 168, "retry_hours": 6}
 
 
+def test_repository_info_refresh_is_disabled_by_default(tmp_path: Path):
+    config = _config(tmp_path)
+    _write_conf(tmp_path, "\n".join([
+        'GLOBAL_DATA_DIR="/mnt/user/borg-backup-ui"',
+    ]))
+
+    settings = repository_info_refresh_settings(config)
+
+    assert settings["enabled"] is False
+
+
 def test_repository_info_refresh_status_does_not_run_borg(tmp_path: Path, monkeypatch):
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": [{

@@ -25,8 +25,8 @@ GLOBAL_BORG_CACHE_BASE="/mnt/cache/borg-cache"
 GLOBAL_BORG_CHECKPOINT_INTERVAL=1800
 GLOBAL_BORG_CHECK_INTERVAL_DAYS=30
 # Automatische Aktualisierung gecachter Repository-Statistiken.
-# Kann Array-Disks aufwecken, wenn Repositorys direkt auf /mnt/diskX liegen.
-REPOSITORY_INFO_REFRESH_ENABLED="true"
+# Kann Datentraeger aufwecken, wenn Repositorys direkt auf Unraid-Datentraegern liegen.
+REPOSITORY_INFO_REFRESH_ENABLED="false"
 REPOSITORY_INFO_REFRESH_INTERVAL_HOURS="24"
 REPOSITORY_INFO_REFRESH_RETRY_HOURS="1"
 # Laufzeit-Guard für lange Borg-Prozesse.

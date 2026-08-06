@@ -60,6 +60,7 @@ def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
         "settingsState.activeTab !== 'repository'",
         "repositoryRefreshWorker",
         "repositoryRefreshNextRun",
+        "enabled ? 'success' : 'info'",
         "_renderRepositoryRefreshDetailGroups(details)",
     ):
         assert contract in script

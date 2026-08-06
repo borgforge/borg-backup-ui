@@ -1281,7 +1281,7 @@ def repository_info_refresh_settings(config: dict) -> dict[str, Any]:
     except Exception:
         conf = config
     return {
-        "enabled": _truthy_config(conf.get("REPOSITORY_INFO_REFRESH_ENABLED"), True),
+        "enabled": _truthy_config(conf.get("REPOSITORY_INFO_REFRESH_ENABLED"), False),
         "interval_hours": _bounded_int(
             conf.get("REPOSITORY_INFO_REFRESH_INTERVAL_HOURS"),
             REPOSITORY_INFO_REFRESH_DEFAULT_INTERVAL_HOURS,

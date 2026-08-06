@@ -2366,7 +2366,7 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
   const lastResult = refresh?.last_result && typeof refresh.last_result === 'object' ? refresh.last_result : {};
   const counts = refresh?.counts && typeof refresh.counts === 'object' ? refresh.counts : {};
   const details = Array.isArray(refresh?.details) ? refresh.details : [];
-  const statusClass = enabled ? 'success' : 'warning';
+  const statusClass = enabled ? 'success' : 'info';
   const lastRun = _formatHealthTimestamp(refresh?.last_run_at) || '—';
   const nextRun = enabled ? (_formatHealthTimestamp(refresh?.next_run_at) || '—') : settingsT('forms.repositoryRefreshDisabled');
   const useCurrentCounts = details.length > 0;
