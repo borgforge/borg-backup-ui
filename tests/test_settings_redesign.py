@@ -82,6 +82,9 @@ def test_repository_page_shows_disabled_auto_refresh_hint() -> None:
     assert "repository_info_refresh?.enabled !== false" in script
     assert "repositoryInfoAutoRefreshDisabled" in script
     assert "storage-repository-info-disabled" in script
+    assert "openRepositoryRefreshSettings" in script
+    assert "activateSettingsTab('repository')" in script
+    assert "data-storage-action=\"open-repository-refresh-settings\"" in script
     assert ".storage-repository-workspace-status .storage-repository-info-disabled" in css
     assert de["storage"]["repositoryInfoAutoRefreshDisabled"] == "Info-Automatik deaktiviert"
     assert en["storage"]["repositoryInfoAutoRefreshDisabled"] == "Info auto-refresh disabled"

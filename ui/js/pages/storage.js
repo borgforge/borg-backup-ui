@@ -319,13 +319,32 @@ function renderStorageWorkspaceHeader(repo, job) {
   } else if (infoUpdatedAt) {
     infoState = storageT('storage.repositoryInfoLastUpdated', { date: storageFormatDateTime(infoUpdatedAt) });
   }
-  const infoStateClass = infoRefreshEnabled ? '' : ' class="storage-repository-info-disabled"';
+  const infoStateMarkup = infoRefreshEnabled
+    ? `<small>${escHtml(infoState)}</small>`
+    : `<button type="button" class="storage-repository-info-disabled" data-storage-action="open-repository-refresh-settings">${escHtml(infoState)}</button>`;
   header.innerHTML = `
     <div class="storage-repository-workspace-identity">
       ${storageRepositoryIcon(repo, job, true)}
       <span><small>${storageT('storage.repository')}</small><h2>${escHtml(storageRepositoryTitle(repo, job))}</h2><span><b>${escHtml(storageT('storage.repositoryPathLabel'))}:</b> ${escHtml(repo.path_display || repo.path_raw || '')}</span></span>
     </div>
-    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span><small${infoStateClass}>${escHtml(infoState)}</small></div>`;
+    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span>${infoStateMarkup}</div>`;
+  header.querySelector('[data-storage-action="open-repository-refresh-settings"]')?.addEventListener('click', openRepositoryRefreshSettings);
+}
+
+function openRepositoryRefreshSettings() {
+  if (window.BBUI?.settingsState) window.BBUI.settingsState.activeTab = 'repository';
+  window.BBUI?.core?.navigate?.('settings');
+  let attempts = 0;
+  const activate = () => {
+    attempts += 1;
+    if (typeof activateSettingsTab === 'function' && document.querySelector('#settings-content [data-settings-tab="repository"]')) {
+      activateSettingsTab('repository');
+      document.querySelector('#settings-content [data-settings-panel="repository"]')?.scrollIntoView({ block: 'start' });
+      return;
+    }
+    if (attempts < 12) window.setTimeout(activate, 100);
+  };
+  window.setTimeout(activate, 80);
 }
 
 function storageFormatDateTime(value) {
