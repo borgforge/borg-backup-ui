@@ -198,7 +198,8 @@ def test_package_installer_rewrite_adds_checksum_and_skip_logic() -> None:
     assert "version ${VERSION} is already installed" in rendered
     assert "app_payload_version_matches()" in rendered
     assert 'grep -F -q "APP_VERSION = \\"${VERSION}\\""' in rendered
-    assert "installed payload version differs from ${VERSION}; extracting package." in rendered
+    assert "installed payload version differs from ${VERSION}; extracting payload again." in rendered
+    assert "package is registered but Apprise vendor metadata is missing; extracting payload again." in rendered
     assert "package_payload_present()" in rendered
     assert "extract_package_payload()" in rendered
     assert "package is registered but plugin files are missing; extracting payload again." in rendered
