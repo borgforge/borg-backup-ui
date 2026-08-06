@@ -12,7 +12,7 @@ if str(API_ROOT) not in sys.path:
 
 from repositories_api import read_repository_store, write_repository_store  # noqa: E402
 from repository_context import resolve_job_repository_context  # noqa: E402
-from settings_transfer_api import export_jobs_bundle, import_jobs_bundle  # noqa: E402
+from settings_transfer_api import export_jobs_bundle, import_jobs_bundle, preview_jobs_bundle  # noqa: E402
 from storage_objects_api import read_storage_store, write_storage_store  # noqa: E402
 
 
@@ -65,6 +65,20 @@ def test_job_export_contains_canonical_repository_inventory(tmp_path: Path):
     assert bundle["storages"][0]["storage_key"] == "storage_local"
     assert bundle["passphrase_meta"]["repo_appdata"]["path"] == str(secret)
     assert "secret\n" not in result["bundle_text"]
+
+
+def test_job_preview_exposes_repository_and_passphrase_metadata_without_secrets(tmp_path: Path):
+    config, secret = _canonical_source(tmp_path / "source")
+    bundle = export_jobs_bundle(config)["bundle"]
+
+    preview = preview_jobs_bundle(config, bundle)
+    row = preview["jobs"][0]
+
+    assert row["repository_key"] == "repo_appdata"
+    assert row["repository"]["display_name"] == "Appdata"
+    assert row["repository"]["path"] == "/mnt/backup/borg-backup-appdata"
+    assert row["passphrase"]["bundle"]["path"] == str(secret)
+    assert "content_b64" not in row["passphrase"]["bundle"]
 
 
 def test_job_import_restores_repository_and_storage_before_job(tmp_path: Path):

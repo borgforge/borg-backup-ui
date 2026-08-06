@@ -140,6 +140,7 @@
     document.getElementById('storage-location-list')?.addEventListener('click', onStorageLocationClick);
     document.getElementById('storage-location-list')?.addEventListener('input', onStorageSearchInput);
     document.getElementById('storage-content')?.addEventListener('click', onStorageContentClick);
+    document.getElementById('storage-content')?.addEventListener('change', onStorageContentChange);
     document.getElementById('storage-maintenance-confirm-close-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(false));
     document.getElementById('storage-maintenance-confirm-cancel-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(false));
     document.getElementById('storage-maintenance-confirm-start-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(true));

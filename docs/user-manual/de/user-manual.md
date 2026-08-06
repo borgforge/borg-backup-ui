@@ -270,7 +270,7 @@ Die Seite trennt Speicherziele, Borg-Repositorys und Backup-Jobs. Ein Speicherzi
 - **Übersicht:** Zeigt Borg-Kennzahlen, Wartungsstatus sowie verständliche Angaben zu Repository, Speicherziel, Job, Verschlüsselung und Pfad.
 - **Archive:** Lädt die aktuelle Archivliste mit Archivname, technischer ID, Startzeit und Dauer direkt aus Borg.
 - **Wartung:** Bietet Check, Datenprüfung, Prune und Compact als klar getrennte Aktionen mit dauerhaft sichtbarem Ergebnis.
-- **Verwaltung:** Zeigt aktuelle Job-Verknüpfungen und trennt das nicht-destruktive Entfernen aus der UI von der endgültigen Repository-Löschung.
+- **Verwaltung:** Zeigt aktuelle Job-Verknüpfungen, Borg-Key-Export/Import und trennt das nicht-destruktive Entfernen aus der UI von der endgültigen Repository-Löschung.
 - **Repository hinzufügen:** Öffnet einen Assistenten zum Auswählen eines vorhandenen Speicherziels und zum Erstellen oder Importieren eines Repositorys.
 
 Die Borg-Kennzahlen werden im Hintergrund alle 24 Stunden aktualisiert und in `repositories.json` zwischengespeichert. Fehlt die Information oder ist sie älter, wird sie beim nächsten stündlichen Prüflauf geladen. Fehlgeschlagene Aktualisierungen werden nach einer Stunde erneut versucht. Der Seitenaufruf selbst wartet dadurch nicht auf alle lokalen und entfernten Repositorys.
@@ -293,6 +293,15 @@ Der Repository-Kopf verwendet den beim Erstellen oder Importieren vergebenen **A
 > **Warnung:** Bei `keyfile` und `keyfile-blake2` benötigen Sie für eine Wiederherstellung sowohl die Passphrase als auch die lokale Schlüsseldatei. Verwenden Sie für einen Systemumzug den verschlüsselten Jobs-/Secrets-Export und bewahren Sie zusätzlich einen unabhängigen `borg key export` auf.
 
 ### 4.4 Typische Aktionen
+
+Borg-Key eines Repositorys sichern oder wiederherstellen:
+
+1. Öffnen Sie **Repositories** und wählen Sie das verschlüsselte Repository.
+2. Öffnen Sie den Reiter **Verwaltung**.
+3. **Key exportieren** lädt einen Borg-Key-Export herunter. Bewahren Sie diese Datei getrennt von Repository und Passphrase auf.
+4. **Key importieren** nimmt einen Borg-Key-Export entgegen. Borg Backup UI prüft vor dem Import die Repository-ID, damit kein Schlüssel für ein anderes Repository importiert wird.
+
+> **Hinweis:** Ein Borg-Key-Export ersetzt die Passphrase nicht. Für verschlüsselte Repositorys werden weiterhin Borg-Key und Passphrase benötigt.
 
 Repository prüfen und warten:
 

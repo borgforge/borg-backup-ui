@@ -181,6 +181,7 @@ def test_every_secret_bearing_export_entry_point_uses_authenticated_format(tmp_p
     })
     monkeypatch.setattr(transfer, "_collect_job_passphrase_files", lambda bundle: {})
     monkeypatch.setattr(transfer, "_collect_job_key_files", lambda config, bundle, include_content: {})
+    monkeypatch.setattr(transfer, "_collect_repository_key_exports", lambda config, bundle: {})
     monkeypatch.setattr(transfer, "_canonical_profile_payload", lambda config: {
         "smb_profiles": [],
         "storage_profiles": [],
@@ -233,7 +234,7 @@ def test_failed_preview_invalidates_previously_loaded_sensitive_state():
     cases = [
         (
             "async function importJobsSecurePreviewSelectFile()",
-            "async function importJobsApplySelected()",
+            "async function importJobsApplySelected",
             "clearJobsImportPreview();",
             "fetch('/api/settings/jobs-import-secure-preview'",
         ),
@@ -245,7 +246,7 @@ def test_failed_preview_invalidates_previously_loaded_sensitive_state():
         ),
         (
             "async function importProfileSecretsPreviewSelectFile()",
-            "async function importProfileSecretsApplySelected()",
+            "async function importProfileSecretsApplySelected",
             "clearProfileSecretsImportPreview();",
             "fetch('/api/settings/profile-secrets-preview'",
         ),
@@ -259,3 +260,38 @@ def test_failed_preview_invalidates_previously_loaded_sensitive_state():
     assert "settingsState.transferProfileSecretsPayloadB64 = '';" in source
     assert "settingsState.transferProfileSecretsPassword = '';" in source
     assert "previewEl.replaceChildren();" in source
+
+
+def test_secure_jobs_import_uses_guided_per_job_selection():
+    source = (ROOT / "ui" / "js" / "pages" / "settings.js").read_text(encoding="utf-8")
+    de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
+    en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
+
+    assert "async function settingsTransferRunSecureJobsWizard" in source
+    assert "renderSettingsTransferJobSelectionStep" in source
+    assert "renderSettingsTransferActionStep" in source
+    assert "renderSettingsTransferConfirmStep" in source
+    assert "exportRepositoryKeysBackup" in source
+    assert "settingsTransferPlannedActionLines" in source
+    assert "data-jobs-secure-row-select" in source
+    assert "data-jobs-secure-row-mode" in source
+    assert "borg_keys_only" not in source
+    assert "jobImportCreateNew" in source
+
+    for catalog in (de, en):
+        transfer_labels = catalog["settings"]["transfer"]
+        assert transfer_labels["importWizardTitle"]
+        assert transfer_labels["importStepKindTitle"]
+        assert transfer_labels["importStepSelectTitle"]
+        assert transfer_labels["importStepActionTitle"]
+        assert transfer_labels["importStepConfirmTitle"]
+        assert transfer_labels["selectedJobsCount"]
+        assert transfer_labels["importKindSelective"]
+        assert transfer_labels["importKindComplete"]
+        assert transfer_labels["importAdvancedOptions"]
+        assert transfer_labels["importScopeAllHelp"]
+        assert transfer_labels["repositoryKeysExport"]
+        assert transfer_labels["importResultOverwrite"]
+        assert transfer_labels["planJobOverwrite"]
+        assert transfer_labels["planPassphraseReplace"]
+        assert transfer_labels["passphraseIncluded"]

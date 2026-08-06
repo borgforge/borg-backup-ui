@@ -270,7 +270,7 @@ The page separates storage targets, Borg repositories, and backup jobs. A storag
 - **Overview:** Shows Borg statistics, maintenance state, and human-readable repository, storage target, job, encryption, and path details.
 - **Archives:** Loads the current Borg archive inventory with archive name, technical ID, start time, and duration.
 - **Maintenance:** Provides Check, Verify Data, Prune, and Compact as separate actions with persistent results.
-- **Management:** Shows current job links and separates non-destructive removal from the UI from permanent repository deletion.
+- **Management:** Shows current job links, Borg key export/import, and separates non-destructive removal from the UI from permanent repository deletion.
 - **Add repository:** Opens a wizard for selecting an existing storage target and creating or importing a repository.
 
 Borg statistics are refreshed in the background every 24 hours and cached in `repositories.json`. Missing or stale information is loaded during the next hourly scan. Failed refreshes are retried after one hour. Opening the page therefore does not wait for every local and remote repository.
@@ -293,6 +293,15 @@ The repository header uses the **display name** assigned during creation or impo
 > **Warning:** With `keyfile` and `keyfile-blake2`, recovery requires both the passphrase and the local key file. Use the encrypted jobs/secrets export for system migration and keep an additional independent `borg key export` backup.
 
 ### 4.4 Typical Actions
+
+Back up or restore a repository Borg key:
+
+1. Open **Repositories** and select the encrypted repository.
+2. Open the **Management** tab.
+3. **Export key** downloads a Borg key export. Keep this file separate from the repository and passphrase.
+4. **Import key** accepts a Borg key export. Borg Backup UI checks the repository ID before import so a key for another repository cannot be imported.
+
+> **Note:** A Borg key export does not replace the passphrase. Encrypted repositories still require both the Borg key and passphrase.
 
 Check and maintain a repository:
 

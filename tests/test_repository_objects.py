@@ -16,7 +16,7 @@ import config_api  # noqa: E402
 import repositories_api  # noqa: E402
 import smb_profiles_api  # noqa: E402
 from config_api import get_repositories_data  # noqa: E402
-from repositories_api import browse_repository_directories, create_or_import_repository, get_repository_archives, read_repository_store, refresh_due_repository_info, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
+from repositories_api import browse_repository_directories, create_or_import_repository, export_repository_key, get_repository_archives, import_repository_key, read_repository_store, refresh_due_repository_info, refresh_repository_info, repository_key_for, write_repository_store  # noqa: E402
 from restore_tests_api import list_restore_test_plan  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
@@ -551,6 +551,119 @@ def test_repository_info_keeps_smb_mounted_when_profile_requests_keep(tmp_path: 
 
     assert result["ok"] is True
     assert calls == [("smb-1", "mount")]
+
+
+def _write_key_recovery_repository(tmp_path: Path, repository_id: str) -> tuple[dict, Path, Path]:
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    base = tmp_path / "backup"
+    repository_path = base / "appdata"
+    repository_path.mkdir(parents=True)
+    secret = tmp_path / "secrets" / ".borg-passphrase-repo_appdata"
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    secret.write_text("secret\n", encoding="utf-8")
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "identity": f"local:{base}",
+        "base_path": str(base),
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_appdata",
+        "display_name": "Appdata",
+        "storage_key": "storage_local_test",
+        "storage_name": "Local",
+        "location": "local",
+        "relative_path": "appdata",
+        "passphrase_ref": str(secret),
+        "encryption": "repokey-blake2",
+        "borg_repository_id": repository_id,
+    }]})
+    return config, repository_path, secret
+
+
+def test_repository_key_export_returns_download_and_tracks_state(tmp_path: Path, monkeypatch):
+    repository_id = "a" * 64
+    config, repository_path, _secret = _write_key_recovery_repository(tmp_path, repository_id)
+    key_data = f"BORG_KEY {repository_id}\nexample-key-data\n"
+    calls = []
+
+    def fake_run(cmd, **_kwargs):
+        calls.append(cmd)
+        assert cmd[:3] == ["borg", "key", "export"]
+        assert cmd[3] == str(repository_path)
+        Path(cmd[4]).write_text(key_data, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(repositories_api.subprocess, "run", fake_run)
+    monkeypatch.setattr("jobs_api.is_resource_active", lambda *_args: False)
+
+    result = export_repository_key(config, "repo_appdata")
+    repository = read_repository_store(config)["repositories"][0]
+
+    assert result["ok"] is True
+    assert result["repository_id"] == repository_id
+    assert result["key_data"] == key_data
+    assert result["filename"].startswith("borg-key-appdata-aaaaaaaaaaaa-")
+    assert repository["borg_key_exported_at"]
+    assert repository["borg_key_repository_id"] == repository_id
+    assert calls[0][:4] == ["borg", "key", "export", str(repository_path)]
+    assert not list((tmp_path / "config").glob(".key-recovery-export-*"))
+
+
+def test_repository_key_import_rejects_mismatched_repository_id_before_borg(tmp_path: Path, monkeypatch):
+    config, _repository_path, _secret = _write_key_recovery_repository(tmp_path, "a" * 64)
+
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("borg must not be called for a mismatched key")
+
+    monkeypatch.setattr(repositories_api.subprocess, "run", fail_run)
+
+    with pytest.raises(ValueError, match="different repository ID"):
+        import_repository_key(config, "repo_appdata", f"BORG_KEY {'b' * 64}\nexample-key-data\n")
+
+
+def test_repository_key_import_runs_borg_and_verifies_repository_id(tmp_path: Path, monkeypatch):
+    repository_id = "c" * 64
+    config, repository_path, _secret = _write_key_recovery_repository(tmp_path, repository_id)
+    key_data = f"BORG_KEY {repository_id}\nexample-key-data\n"
+    calls = []
+
+    def fake_run(cmd, **_kwargs):
+        calls.append(cmd[:4])
+        if cmd[:3] == ["borg", "key", "import"]:
+            assert cmd[3] == str(repository_path)
+            assert Path(cmd[4]).read_text(encoding="utf-8").startswith(f"BORG_KEY {repository_id}")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[:3] == ["borg", "info", "--json"]:
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                json.dumps({
+                    "repository": {"id": repository_id, "last_modified": "2026-08-06T10:00:00.000000"},
+                    "encryption": {"mode": "repokey-blake2"},
+                }),
+                "",
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(repositories_api.subprocess, "run", fake_run)
+    monkeypatch.setattr("jobs_api.is_resource_active", lambda *_args: False)
+
+    result = import_repository_key(config, "repo_appdata", key_data)
+    repository = read_repository_store(config)["repositories"][0]
+
+    assert result["ok"] is True
+    assert result["repository_id"] == repository_id
+    assert repository["borg_key_imported_at"]
+    assert repository["borg_key_repository_id"] == repository_id
+    assert repository["borg_repository_id"] == repository_id
+    assert calls == [
+        ["borg", "key", "import", str(repository_path)],
+        ["borg", "info", "--json", str(repository_path)],
+    ]
+    assert not list((tmp_path / "config").glob(".key-recovery-import-*"))
 
 
 def test_repository_archives_keep_smb_mounted_when_profile_requests_keep(tmp_path: Path, monkeypatch):

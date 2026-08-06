@@ -1930,7 +1930,8 @@ body.wizard-modal-open {
   padding: 18px 20px;
 }
 
-.modal-body p {
+.modal-body p,
+.modal-description {
   color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.6;
@@ -2348,6 +2349,808 @@ body.wizard-modal-open {
   vertical-align: middle;
 }
 .settings-table tr:last-child td { border-bottom: none; }
+
+.modal-transfer-wizard {
+  width: 820px;
+  max-width: 94vw;
+}
+
+.modal-transfer-wizard .modal-body {
+  max-height: 72vh;
+  overflow: auto;
+}
+
+.settings-transfer-step-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.settings-transfer-step-top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-transfer-step-top > span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-transfer-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-transfer-stepper span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-transfer-stepper span.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.settings-transfer-stepper i {
+  width: 34px;
+  height: 2px;
+  background: var(--border);
+}
+
+.settings-transfer-step-header strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.settings-transfer-step-header small {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.settings-transfer-wizard-summary {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+
+.settings-transfer-wizard-summary span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-selection-counter {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 12px;
+}
+
+.settings-transfer-support-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.settings-transfer-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.settings-transfer-overview-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 8px;
+  min-height: 138px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-overview-card-jobs {
+  border-color: var(--state-info-border);
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-overview-card-keys {
+  border-color: var(--state-warning-border);
+  background: var(--warning-dim);
+}
+
+.settings-transfer-overview-card-profiles {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-secondary));
+}
+
+.settings-transfer-overview-card > span {
+  justify-self: start;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-transfer-overview-card-jobs > span,
+.settings-transfer-overview-card-profiles > span {
+  color: var(--accent);
+}
+
+.settings-transfer-overview-card-keys > span {
+  color: var(--warning);
+}
+
+.settings-transfer-overview-card strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.settings-transfer-overview-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-transfer-overview-card small em {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.settings-transfer-overview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-self: end;
+}
+
+.settings-transfer-overview-actions .btn {
+  flex: 0 0 190px;
+  width: 190px;
+  justify-content: center;
+}
+
+.settings-transfer-context-strip {
+  display: grid;
+  gap: 3px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+}
+
+.settings-transfer-context-strip strong {
+  color: var(--text);
+}
+
+.settings-transfer-context-strip span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-info-box {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--state-info-border);
+  border-radius: 6px;
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-info-box-warning {
+  border-color: var(--state-warning-border);
+  background: var(--warning-dim);
+}
+
+.settings-transfer-info-box-profiles {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-secondary));
+}
+
+.settings-transfer-info-box strong {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.settings-transfer-info-box-warning strong {
+  color: var(--warning);
+}
+
+.settings-transfer-info-box span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-transfer-job-list,
+.settings-transfer-action-list,
+.settings-transfer-confirm-list,
+.settings-transfer-plan-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.settings-transfer-job-list {
+  max-height: min(48vh, 460px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.settings-transfer-job-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.settings-transfer-job-picker-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-transfer-job-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.settings-transfer-job-card:hover {
+  border-color: var(--accent);
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-job-card input {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-transfer-job-card-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-transfer-job-card-main strong {
+  color: var(--text);
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-transfer-job-card-main small,
+.settings-transfer-scope-card small,
+.settings-transfer-action-row small,
+.settings-transfer-confirm-row small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-job-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.settings-transfer-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.settings-transfer-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settings-transfer-kind-stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settings-transfer-kind-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 138px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.settings-transfer-kind-stack .settings-transfer-kind-card {
+  min-height: 78px;
+}
+
+.settings-transfer-kind-card-profiles:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-secondary));
+}
+
+.settings-transfer-kind-card:hover {
+  border-color: var(--accent);
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-kind-card:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--state-info-dim);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.settings-transfer-kind-card input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.settings-transfer-kind-card-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-transfer-kind-card-top {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.settings-transfer-kind-card-top strong {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.settings-transfer-kind-card-top em {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.settings-transfer-kind-card-body small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-transfer-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-transfer-scope-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.settings-transfer-scope-card:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-scope-card-primary {
+  grid-column: 1 / -1;
+  min-height: 68px;
+}
+
+.settings-transfer-advanced-title {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.settings-transfer-scope-card.is-disabled {
+  opacity: .62;
+  cursor: default;
+}
+
+.settings-transfer-scope-card span {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-transfer-scope-card strong {
+  color: var(--text);
+}
+
+.settings-transfer-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(180px, .5fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-action-row > div:first-child,
+.settings-transfer-confirm-row span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-transfer-action-row strong,
+.settings-transfer-confirm-row strong {
+  color: var(--text);
+}
+
+.settings-transfer-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+}
+
+.settings-transfer-segmented label {
+  cursor: pointer;
+}
+
+.settings-transfer-segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-transfer-segmented span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-transfer-segmented input:checked + span {
+  background: var(--state-info-dim);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.settings-transfer-review-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-review-summary header {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-transfer-review-summary header strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.settings-transfer-review-summary header span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-transfer-review-summary-grid > div {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.settings-transfer-review-summary-grid span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-review-summary-grid strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.settings-transfer-review-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-transfer-review-stats-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-transfer-review-stats-key {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(150px, .75fr);
+}
+
+.settings-transfer-stat-card {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 82px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-stat-card span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-transfer-stat-card strong {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.settings-transfer-stat-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.settings-transfer-stat-card-key-id small {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.settings-transfer-stat-card.state-info {
+  border-color: var(--state-info-border);
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-stat-card.state-success {
+  border-color: var(--state-success-border);
+  background: var(--success-dim);
+}
+
+.settings-transfer-stat-card.state-warning {
+  border-color: var(--state-warning-border);
+  background: var(--warning-dim);
+}
+
+.settings-transfer-stat-card.state-error {
+  border-color: var(--state-error-border);
+  background: var(--error-dim);
+}
+
+.settings-transfer-stat-card.state-neutral {
+  background: var(--bg-tertiary);
+}
+
+.settings-transfer-stat-card.state-profiles {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-secondary));
+}
+
+.settings-transfer-confirm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-confirm-row em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.settings-transfer-plan-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-plan-row header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-transfer-plan-row header span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-transfer-plan-row header strong {
+  color: var(--text);
+}
+
+.settings-transfer-plan-row header small {
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.settings-transfer-plan-row header em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.settings-transfer-plan-row ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+
+.settings-transfer-plan-row li {
+  line-height: 1.45;
+}
+
+.settings-transfer-confirm-check {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.settings-transfer-confirm-check input {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-transfer-job-action .form-select {
+  width: 100%;
+  min-width: 130px;
+}
+
+.settings-transfer-job-action-static {
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-transfer-job-preview-details {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.settings-transfer-job-preview-details summary {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 700px) {
+  .settings-transfer-job-card,
+  .settings-transfer-kind-grid,
+  .settings-transfer-overview-grid,
+  .settings-transfer-job-toolbar,
+  .settings-transfer-scope-grid,
+  .settings-transfer-action-row,
+  .settings-transfer-review-summary-grid,
+  .settings-transfer-review-stats,
+  .settings-transfer-confirm-row,
+  .settings-transfer-plan-row header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-transfer-job-action .form-select {
+    min-width: 0;
+  }
+
+  .settings-transfer-job-badges {
+    justify-content: flex-start;
+  }
+}
 
 .repository-refresh-summary {
   display: grid;

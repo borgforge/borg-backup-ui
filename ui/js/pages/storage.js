@@ -13,6 +13,7 @@ window.BBUI.storageState = window.BBUI.storageState || {
   lifecycleCache: {},
   maintenanceState: { running: false },
   search: '',
+  pendingRepositoryKeyImportGuide: false,
 };
 const storageState = window.BBUI.storageState;
 storageState.archiveCache = storageState.archiveCache || {};
@@ -20,6 +21,7 @@ storageState.lifecycleCache = storageState.lifecycleCache || {};
 storageState.maintenanceState = storageState.maintenanceState || { running: false };
 storageState.maintenanceConfirmation = null;
 storageState.lifecycleConfirmation = null;
+storageState.pendingRepositoryKeyImportGuide = !!storageState.pendingRepositoryKeyImportGuide;
 
 function storageT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
@@ -186,6 +188,10 @@ async function refreshStorage() {
     if (storageState.selectedTab === 'management' && storageState.selectedRepositoryKey) {
       await loadRepositoryLifecycle(storageState.selectedRepositoryKey, true);
     }
+    if (storageState.pendingRepositoryKeyImportGuide) {
+      storageState.pendingRepositoryKeyImportGuide = false;
+      showMsg('storage-message', 'info', storageT('storage.repositoryKeyImportGuide'));
+    }
   } catch (err) {
     showMsg('storage-message', 'error', storageT('storage.errorPrefix', { message: err.message }));
   }
@@ -322,13 +328,18 @@ function renderStorageWorkspaceHeader(repo, job) {
   const infoStateMarkup = infoRefreshEnabled
     ? `<small>${escHtml(infoState)}</small>`
     : `<button type="button" class="storage-repository-info-disabled" data-storage-action="open-repository-refresh-settings">${escHtml(infoState)}</button>`;
+  const keyBackupMissing = storageRepositoryNeedsExternalKeyBackup(repo);
+  const keyBackupMarkup = keyBackupMissing
+    ? `<button type="button" class="storage-repository-key-backup-link" data-storage-action="open-repository-management">${escHtml(storageT('storage.repositoryKeyBackupMissing'))}</button>`
+    : '';
   header.innerHTML = `
     <div class="storage-repository-workspace-identity">
       ${storageRepositoryIcon(repo, job, true)}
       <span><small>${storageT('storage.repository')}</small><h2>${escHtml(storageRepositoryTitle(repo, job))}</h2><span><b>${escHtml(storageT('storage.repositoryPathLabel'))}:</b> ${escHtml(repo.path_display || repo.path_raw || '')}</span></span>
     </div>
-    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span>${infoStateMarkup}</div>`;
+    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span>${keyBackupMarkup}${infoStateMarkup}</div>`;
   header.querySelector('[data-storage-action="open-repository-refresh-settings"]')?.addEventListener('click', openRepositoryRefreshSettings);
+  header.querySelector('[data-storage-action="open-repository-management"]')?.addEventListener('click', openRepositoryManagementTab);
 }
 
 function openRepositoryRefreshSettings() {
@@ -345,6 +356,12 @@ function openRepositoryRefreshSettings() {
     if (attempts < 12) window.setTimeout(activate, 100);
   };
   window.setTimeout(activate, 80);
+}
+
+function openRepositoryManagementTab() {
+  storageState.selectedTab = 'management';
+  renderStorage(storageState.data);
+  loadRepositoryLifecycle(storageState.selectedRepositoryKey);
 }
 
 function storageFormatDateTime(value) {
@@ -514,16 +531,32 @@ function renderStorageRepositoryManagement(repo) {
   const jobs = Array.isArray(state.job_keys) ? state.job_keys : [];
   const blockers = Array.isArray(state.blockers) ? state.blockers : [];
   const blocked = !state.allowed;
+  const keyActionBlocked = blockers.some((item) => String(item || '') !== 'jobs_linked');
   const jobList = jobs.length
     ? `<div class="storage-lifecycle-jobs"><strong>${storageT('storage.repositoryLinkedJobs')}</strong><div>${jobs.map((jobKey) => `<span>${escHtml(storageLifecycleJobLabel(jobKey))}</span>`).join('')}</div></div>`
     : `<div class="status-message success">${storageT('storage.repositoryNoLinkedJobs')}</div>`;
   const blockerText = blockers.length
     ? `<p class="storage-lifecycle-blocker">${escHtml(storageT('storage.repositoryLifecycleBlocked'))}</p>`
     : '';
+  const keyRecoverySupported = storageRepositoryKeyRecoverySupported(repo);
+  const keyExportedAt = String(repo?.borg_key_exported_at || '').trim();
+  const keyImportedAt = String(repo?.borg_key_imported_at || '').trim();
+  const keyRepositoryId = String(repo?.borg_key_repository_id || repo?.borg_repository_id || state.repository_id || '').trim();
+  const keyStatus = keyRecoverySupported
+    ? `<dl><div><dt>${storageT('storage.repositoryKeyRecoveryRepositoryId')}</dt><dd>${escHtml(keyRepositoryId || '—')}</dd></div><div><dt>${storageT('storage.repositoryKeyRecoveryLastExport')}</dt><dd>${escHtml(keyExportedAt ? storageFormatDateTime(keyExportedAt) : storageT('storage.repositoryKeyRecoveryNeverExported'))}</dd></div><div><dt>${storageT('storage.repositoryKeyRecoveryLastImport')}</dt><dd>${escHtml(keyImportedAt ? storageFormatDateTime(keyImportedAt) : storageT('storage.repositoryKeyRecoveryNeverImported'))}</dd></div></dl>`
+    : `<p class="storage-lifecycle-blocker">${escHtml(storageT('storage.repositoryKeyRecoveryUnsupported'))}</p>`;
   return `<div class="storage-repository-management">
     <div class="storage-section-heading"><div><h3>${storageT('storage.repositoryManagement')}</h3><p>${storageT('storage.repositoryManagementHint')}</p></div><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-lifecycle" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
     ${jobList}
     ${blockerText}
+    <section class="storage-lifecycle-card">
+      <div><h4>${storageT('storage.repositoryKeyRecovery')}</h4><p>${storageT('storage.repositoryKeyRecoveryHint')}</p></div>
+      ${keyStatus}
+      <div class="storage-lifecycle-actions">
+        <button class="btn btn-primary" data-storage-action="repository-key-import-select" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyImportUpload')}</button>
+        <input type="file" class="hidden" data-storage-key-import-file data-repository-key="${escHtml(key)}" accept=".keys.enc,application/octet-stream">
+      </div>
+    </section>
     <section class="storage-lifecycle-card">
       <div><h4>${storageT('storage.repositoryRemoveFromUi')}</h4><p>${storageT('storage.repositoryRemoveFromUiHint')}</p></div>
       <button class="btn btn-secondary" data-storage-action="repository-lifecycle" data-lifecycle-mode="remove" data-repository-key="${escHtml(key)}"${blocked ? ' disabled' : ''}>${storageT('storage.repositoryRemoveFromUi')}</button>
@@ -636,6 +669,17 @@ function storageRepositoryEncryption(repo, job) {
   return String(repo?.encryption || job?.encryption || '').trim() || storageT('storage.unknown');
 }
 
+function storageRepositoryKeyRecoverySupported(repo) {
+  const mode = String(repo?.encryption || '').trim().toLowerCase();
+  return !!mode && mode !== 'none' && mode !== 'unknown';
+}
+
+function storageRepositoryNeedsExternalKeyBackup(repo) {
+  const mode = String(repo?.encryption || '').trim().toLowerCase();
+  if (!(mode.startsWith('repokey') || mode.startsWith('authenticated'))) return false;
+  return !String(repo?.borg_key_exported_at || '').trim();
+}
+
 function storageJobForRepository(repo) {
   const jobs = Array.isArray(storageState.jobs) ? storageState.jobs : [];
   const confKey = String(repo?.conf_key || '');
@@ -685,6 +729,133 @@ function onStorageContentClick(event) {
       el.dataset.repositoryKey || storageState.selectedRepositoryKey,
       el.dataset.lifecycleMode || 'remove',
     );
+  }
+  if (action === 'repository-key-import-select') {
+    const key = el.dataset.repositoryKey || storageState.selectedRepositoryKey;
+    const input = Array.from(document.querySelectorAll('[data-storage-key-import-file]'))
+      .find((node) => String(node.dataset.repositoryKey || '') === String(key || ''));
+    if (input) input.click();
+  }
+}
+
+function onStorageContentChange(event) {
+  const input = event.target.closest('[data-storage-key-import-file]');
+  if (!input) return;
+  const key = input.dataset.repositoryKey || storageState.selectedRepositoryKey;
+  const file = input.files && input.files[0] ? input.files[0] : null;
+  importRepositoryKey(key, file, input);
+}
+
+async function storageReadFileAsBase64(file) {
+  if (!file) throw new Error(storageT('storage.repositoryKeyImportFileMissing'));
+  const buffer = await file.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function storageRepositoryKeyWizardHeader(step, title, text) {
+  const stepper = typeof renderSettingsTransferStepper === 'function'
+    ? renderSettingsTransferStepper(step, 3)
+    : '';
+  return `<div class="settings-transfer-step-header">
+    <div class="settings-transfer-step-top">
+      <span>${escHtml(storageT('storage.repositoryKeyImportStep', { step, total: 3 }))}</span>
+      ${stepper}
+    </div>
+    <strong>${escHtml(title)}</strong>
+    <small>${escHtml(text)}</small>
+  </div>`;
+}
+
+function storageRepositoryKeyFileSummary(file, preview = null) {
+  return `<div class="settings-transfer-wizard-summary">
+    <strong>${escHtml(file?.name || storageT('storage.repositoryKeyBackupFile'))}</strong>
+    <span>${escHtml(preview?.repository_id ? storageT('storage.repositoryKeyBackupFound', { count: 1 }) : storageT('storage.repositoryKeyBackupEncrypted'))}</span>
+  </div>`;
+}
+
+async function importRepositoryKey(repositoryKey, file, input) {
+  const key = String(repositoryKey || '').trim();
+  if (!key) return;
+  showMsg('storage-message', 'info', storageT('storage.repositoryKeyImportReading'));
+  try {
+    const payload_b64 = await storageReadFileAsBase64(file);
+    const password = await _openSettingsDialog({
+      title: storageT('storage.repositoryKeyBackupPasswordTitle'),
+      dialogClass: 'modal-transfer-wizard',
+      html: `
+        ${storageRepositoryKeyWizardHeader(1, storageT('storage.repositoryKeyBackupSelectTitle'), storageT('storage.repositoryKeyBackupSelectText'))}
+        ${storageRepositoryKeyFileSummary(file)}
+        <div class="settings-transfer-info-box settings-transfer-info-box-warning">
+          <strong>${escHtml(storageT('storage.repositoryKeyBackupEmergencyTitle'))}</strong>
+          <span>${escHtml(storageT('storage.repositoryKeyBackupPasswordMessage'))}</span>
+        </div>
+      `,
+      input: { label: storageT('storage.repositoryKeyBackupPassword'), type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
+      confirmText: storageT('storage.repositoryKeyBackupCheck'),
+    });
+    if (!password) return;
+    const previewResponse = await fetch('/api/repositories/key-backup-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repository_key: key, password, payload_b64 }),
+    });
+    const preview = await previewResponse.json();
+    if (!previewResponse.ok) throw new Error(apiErrorMessage(preview, previewResponse.status));
+    const confirmed = await _openSettingsDialog({
+      title: storageT('storage.repositoryKeyBackupReviewTitle'),
+      dialogClass: 'modal-transfer-wizard',
+      html: `
+        ${storageRepositoryKeyWizardHeader(3, storageT('storage.repositoryKeyBackupConfirmTitle'), storageT('storage.repositoryKeyBackupConfirmText'))}
+        ${storageRepositoryKeyFileSummary(file, preview)}
+        <div class="settings-transfer-review-stats settings-transfer-review-stats-key">
+          <div class="settings-transfer-stat-card state-info"><span>${escHtml(storageT('storage.repository'))}</span><strong>${escHtml(preview.repository_name || key)}</strong><small>${escHtml(preview.repository_path || '')}</small></div>
+          <div class="settings-transfer-stat-card settings-transfer-stat-card-key-id state-success"><span>${escHtml(storageT('storage.repositoryKeyIdCheck'))}</span><strong>OK</strong><small>${escHtml(preview.repository_id || '')}</small></div>
+          <div class="settings-transfer-stat-card state-warning"><span>${escHtml(storageT('storage.repositoryKeyAction'))}</span><strong>${escHtml(storageT('storage.repositoryKeyActionReplace'))}</strong><small>${escHtml(storageT('storage.repositoryKeyActionReplaceHint'))}</small></div>
+        </div>
+        <div class="settings-transfer-info-box settings-transfer-info-box-warning">
+          <strong>${escHtml(storageT('storage.repositoryKeyBackupEmergencyTitle'))}</strong>
+          <span>${escHtml(storageT('storage.repositoryKeyBackupReviewMessage'))}</span>
+        </div>
+        <div class="settings-transfer-plan-list">
+          <div class="settings-transfer-plan-row">
+            <header><span><strong>${escHtml(storageT('storage.repositoryKeyPlannedChange'))}</strong><small>${escHtml(storageT('storage.repositoryKeyPlannedChangeText', { id: preview.repository_id || '', name: preview.repository_name || key }))}</small></span><em>${escHtml(storageT('storage.repositoryKeyBackupImportConfirm'))}</em></header>
+          </div>
+        </div>
+        <label class="settings-transfer-confirm-check">
+          <input type="checkbox" data-storage-key-import-confirm>
+          <span>${escHtml(storageT('storage.repositoryKeyImportAck'))}</span>
+        </label>`,
+      confirmText: storageT('storage.repositoryKeyBackupImportConfirm'),
+      onOpen: ({ modal, okBtn, addCleanup }) => {
+        const cb = modal.querySelector('[data-storage-key-import-confirm]');
+        const update = () => { okBtn.disabled = !cb?.checked; };
+        if (cb) {
+          cb.addEventListener('change', update);
+          addCleanup(() => cb.removeEventListener('change', update));
+        }
+        update();
+      },
+    });
+    if (!confirmed) return;
+    const response = await fetch('/api/repositories/key-backup-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repository_key: key, password, payload_b64 }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    await refreshStorage();
+    showMsg('storage-message', 'success', storageT('storage.repositoryKeyImported'));
+  } catch (error) {
+    showMsg('storage-message', 'error', error.message || storageT('storage.error'));
+  } finally {
+    if (input) input.value = '';
   }
 }
 

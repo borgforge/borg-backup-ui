@@ -454,6 +454,9 @@ def normalize_repositories(rows: Any, *, preserve_legacy: bool = False) -> list[
             "last_info_refresh_error": str(row.get("last_info_refresh_error") or "").strip(),
             "borg_repository_id": str(row.get("borg_repository_id") or "").strip(),
             "borg_last_modified": str(row.get("borg_last_modified") or "").strip(),
+            "borg_key_exported_at": str(row.get("borg_key_exported_at") or "").strip(),
+            "borg_key_imported_at": str(row.get("borg_key_imported_at") or "").strip(),
+            "borg_key_repository_id": str(row.get("borg_key_repository_id") or "").strip(),
             "repository_stats": row.get("repository_stats") if isinstance(row.get("repository_stats"), dict) else {},
             "maintenance_results": row.get("maintenance_results") if isinstance(row.get("maintenance_results"), dict) else {},
             "offsite_candidate": bool(row.get("offsite_candidate", location == "storagebox")),
@@ -1016,6 +1019,281 @@ def _import_exported_repository_key(
     finally:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
+
+
+def _repository_by_key(config: dict, repository_key: str) -> dict[str, Any]:
+    key = str(repository_key or "").strip()
+    if not key:
+        raise ValueError("repository_key is required")
+    repository = next(
+        (row for row in read_repository_store(config).get("repositories", []) if str(row.get("repository_key") or "") == key),
+        None,
+    )
+    if not repository:
+        raise ValueError("Repository not found")
+    return repository
+
+
+def _key_recovery_supported(encryption: str) -> bool:
+    mode = str(encryption or "").strip().lower()
+    return mode in ALLOWED_ENCRYPTION_MODES and mode != "none"
+
+
+def _repository_key_error(message: str, code: str, status: int = 400) -> ValueError:
+    exc = ValueError(message)
+    exc.api_code = code  # type: ignore[attr-defined]
+    exc.api_status = status  # type: ignore[attr-defined]
+    return exc
+
+
+def _parse_borg_key_export_repository_id(key_data: str) -> str:
+    encoded = str(key_data or "").strip().encode("utf-8")
+    if not encoded or len(encoded) > 1024 * 1024:
+        raise _repository_key_error("Borg key export is empty or too large", "repository_key_invalid")
+    first = encoded.splitlines()[0].decode("utf-8", "replace").strip()
+    if not first.startswith("BORG_KEY "):
+        raise _repository_key_error("Borg key export has an invalid format", "repository_key_invalid")
+    repository_id = first[len("BORG_KEY "):].strip().lower()
+    if not repository_id or any(ch not in "0123456789abcdef" for ch in repository_id):
+        raise _repository_key_error("Borg key export has an invalid repository ID", "repository_key_invalid")
+    return repository_id
+
+
+def _write_temp_borg_key_export(config: dict, key_data: str) -> Path:
+    encoded = str(key_data or "").strip().encode("utf-8")
+    import_dir = _data_root(config) / "config"
+    import_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile(mode="wb", dir=import_dir, prefix=".key-recovery-import-", delete=False) as handle:
+        handle.write(encoded + b"\n")
+        temp_path = Path(handle.name)
+    os.chmod(temp_path, 0o600)
+    return temp_path
+
+
+def _export_borg_repository_key(
+    config: dict,
+    storage: dict[str, Any],
+    repo_path: str,
+    passphrase_file: Path | None,
+    encryption: str,
+) -> str:
+    export_dir = _data_root(config) / "config"
+    export_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", dir=export_dir, prefix=".key-recovery-export-", delete=False) as handle:
+            temp_path = Path(handle.name)
+        os.chmod(temp_path, 0o600)
+        proc = subprocess.run(
+            ["borg", "key", "export", repo_path, str(temp_path)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=_repo_env(storage, passphrase_file, config, encryption=encryption),
+            check=False,
+        )
+        output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        if proc.returncode != 0:
+            _raise_borg_command_error(output, "Borg key export failed")
+        key_data = temp_path.read_text(encoding="utf-8")
+        _parse_borg_key_export_repository_id(key_data)
+        return key_data.strip() + "\n"
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def _import_borg_repository_key(
+    config: dict,
+    storage: dict[str, Any],
+    repo_path: str,
+    passphrase_file: Path | None,
+    key_data: str,
+    encryption: str,
+) -> None:
+    temp_path: Path | None = None
+    try:
+        temp_path = _write_temp_borg_key_export(config, key_data)
+        proc = subprocess.run(
+            ["borg", "key", "import", repo_path, str(temp_path)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=_repo_env(storage, passphrase_file, config, encryption=encryption),
+            check=False,
+        )
+        output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        if proc.returncode != 0:
+            _raise_borg_command_error(output, "Borg key import failed")
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def _safe_key_export_filename(repository: dict[str, Any], repository_id: str) -> str:
+    name = _slug(str(repository.get("display_name") or repository.get("repository_name") or "repository"), "repository")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    suffix = str(repository_id or "").strip().lower()[:12] or "unknown"
+    return f"borg-key-{name}-{suffix}-{stamp}.txt"
+
+
+def _update_repository_key_recovery_fields(
+    config: dict,
+    repository_key: str,
+    fields: dict[str, Any],
+) -> dict[str, Any]:
+    key = str(repository_key or "").strip()
+    store = read_repository_store(config)
+    rows: list[dict[str, Any]] = []
+    updated: dict[str, Any] | None = None
+    for row in store.get("repositories", []):
+        if str(row.get("repository_key") or "") == key:
+            updated = {**row, **fields, "updated_at": _now()}
+            rows.append(updated)
+        else:
+            rows.append(row)
+    if updated is None:
+        raise ValueError("Repository not found")
+    write_repository_store(config, {"repositories": rows})
+    return updated
+
+
+def export_repository_key(
+    config: dict,
+    repository_key: str,
+    *,
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    repository = _repository_by_key(config, repository_key)
+    encryption = str(repository.get("encryption") or "").strip().lower()
+    if not _key_recovery_supported(encryption):
+        raise _repository_key_error("This repository encryption mode does not use a Borg key export.", "repository_key_unsupported")
+    with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
+        from jobs_api import is_resource_active
+
+        if is_resource_active(config, f"repo:{repo_path}"):
+            raise RepositoryBusyError("Repository is currently in use by another Borg operation.")
+        try:
+            key_data = _export_borg_repository_key(config, storage, repo_path, passphrase_file, encryption)
+            exported_id = _parse_borg_key_export_repository_id(key_data)
+            expected_id = str(repository.get("borg_repository_id") or "").strip().lower()
+            if expected_id and exported_id != expected_id:
+                raise _repository_key_error(
+                    "The exported Borg key belongs to a different repository ID.",
+                    "repository_key_mismatch",
+                    409,
+                )
+            exported_at = _now()
+            updated = _update_repository_key_recovery_fields(config, str(repository.get("repository_key") or ""), {
+                "borg_key_exported_at": exported_at,
+                "borg_key_repository_id": exported_id,
+                "borg_repository_id": expected_id or exported_id,
+            })
+            _write_repository_lifecycle_audit(
+                config,
+                updated,
+                action="key_export",
+                status="success",
+                details={"repository_id": exported_id},
+                audit_context=audit_context,
+            )
+            return {
+                "ok": True,
+                "repository_key": str(repository.get("repository_key") or ""),
+                "repository_id": exported_id,
+                "filename": _safe_key_export_filename(repository, exported_id),
+                "key_data": key_data,
+                "exported_at": exported_at,
+            }
+        except Exception as exc:
+            _write_repository_lifecycle_audit(
+                config,
+                repository,
+                action="key_export",
+                status="failed",
+                details={"error": type(exc).__name__},
+                audit_context=audit_context,
+            )
+            raise
+
+
+def import_repository_key(
+    config: dict,
+    repository_key: str,
+    key_data: str,
+    *,
+    audit_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    repository = _repository_by_key(config, repository_key)
+    encryption = str(repository.get("encryption") or "").strip().lower()
+    if not _key_recovery_supported(encryption):
+        raise _repository_key_error("This repository encryption mode does not use a Borg key export.", "repository_key_unsupported")
+    imported_id = _parse_borg_key_export_repository_id(key_data)
+    expected_id = str(repository.get("borg_repository_id") or repository.get("borg_key_repository_id") or "").strip().lower()
+    if not expected_id:
+        raise _repository_key_error(
+            "Repository ID is unknown. Refresh repository information before importing a Borg key.",
+            "repository_id_missing",
+            409,
+        )
+    if imported_id != expected_id:
+        raise _repository_key_error(
+            "The selected Borg key belongs to a different repository ID.",
+            "repository_key_mismatch",
+            409,
+        )
+    with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
+        from jobs_api import is_resource_active
+
+        if is_resource_active(config, f"repo:{repo_path}"):
+            raise RepositoryBusyError("Repository is currently in use by another Borg operation.")
+        try:
+            _import_borg_repository_key(config, storage, repo_path, passphrase_file, key_data, encryption)
+            info_fields = _borg_info_fields(_borg_info(config, storage, repo_path, passphrase_file, encryption))
+            live_id = str(info_fields.get("borg_repository_id") or "").strip().lower()
+            if live_id and live_id != expected_id:
+                raise _repository_key_error(
+                    "Borg reported a different repository ID after key import.",
+                    "repository_key_mismatch",
+                    409,
+                )
+            imported_at = _now()
+            fields: dict[str, Any] = {
+                "borg_key_imported_at": imported_at,
+                "borg_key_repository_id": expected_id,
+                "borg_repository_id": live_id or expected_id,
+                "borg_last_modified": str(info_fields.get("borg_last_modified") or repository.get("borg_last_modified") or ""),
+            }
+            if str(encryption).startswith("keyfile"):
+                from borg_key_store import borg_keys_dir, find_key_file
+
+                key_file = find_key_file(borg_keys_dir(config), expected_id)
+                fields["keyfile_ref"] = str(key_file) if key_file is not None else str(repository.get("keyfile_ref") or "")
+            updated = _update_repository_key_recovery_fields(config, str(repository.get("repository_key") or ""), fields)
+            _write_repository_lifecycle_audit(
+                config,
+                updated,
+                action="key_import",
+                status="success",
+                details={"repository_id": expected_id},
+                audit_context=audit_context,
+            )
+            return {
+                "ok": True,
+                "repository_key": str(repository.get("repository_key") or ""),
+                "repository_id": expected_id,
+                "imported_at": imported_at,
+            }
+        except Exception as exc:
+            _write_repository_lifecycle_audit(
+                config,
+                repository,
+                action="key_import",
+                status="failed",
+                details={"error": type(exc).__name__},
+                audit_context=audit_context,
+            )
+            raise
 
 
 def _borg_list(

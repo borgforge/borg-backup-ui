@@ -195,6 +195,42 @@ def _collect_job_key_files(config: dict, bundle: dict, *, include_content: bool)
     return out
 
 
+def _repository_needs_borg_key_export(repository: dict) -> bool:
+    mode = str(repository.get("encryption") or "").strip().lower()
+    return mode.startswith("repokey") or mode.startswith("authenticated")
+
+
+def _collect_repository_key_exports(config: dict, bundle: dict) -> dict[str, dict]:
+    from repositories_api import export_repository_key
+
+    out: dict[str, dict] = {}
+    repositories = bundle.get("repositories") if isinstance(bundle.get("repositories"), list) else []
+    for repository in repositories:
+        if not isinstance(repository, dict) or not _repository_needs_borg_key_export(repository):
+            continue
+        repository_key = str(repository.get("repository_key") or "").strip()
+        if not repository_key:
+            continue
+        try:
+            exported = export_repository_key(config, repository_key)
+            key_data = str(exported.get("key_data") or "")
+            encoded = key_data.encode("utf-8")
+            out[repository_key] = {
+                "exists": True,
+                "repository_id": str(exported.get("repository_id") or "").strip().lower(),
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+                "size": len(encoded),
+                "content_b64": base64.b64encode(encoded).decode("ascii"),
+            }
+        except Exception as exc:
+            out[repository_key] = {
+                "exists": False,
+                "repository_id": str(repository.get("borg_repository_id") or "").strip().lower(),
+                "error": type(exc).__name__,
+            }
+    return out
+
+
 def _normalize_job_key(base: str) -> str:
     out = "".join(ch.lower() if ch.isalnum() else "_" for ch in str(base or "").strip())
     while "__" in out:
@@ -245,6 +281,18 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
     jobs = bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []
     schedules = bundle.get("schedules") if isinstance(bundle.get("schedules"), dict) else {}
     pp_meta = bundle.get("passphrase_meta") if isinstance(bundle.get("passphrase_meta"), dict) else {}
+    repositories = bundle.get("repositories") if isinstance(bundle.get("repositories"), list) else []
+    storages = bundle.get("storages") if isinstance(bundle.get("storages"), list) else []
+    repo_by_key = {
+        str(row.get("repository_key") or "").strip(): row
+        for row in repositories
+        if isinstance(row, dict)
+    }
+    storage_by_key = {
+        str(row.get("storage_key") or "").strip(): row
+        for row in storages
+        if isinstance(row, dict)
+    }
     jobs_dir = _jobs_dir(config)
     existing = {p.stem for p in jobs_dir.glob("*.json")}
     rows: list[dict] = []
@@ -261,6 +309,17 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
         schedule = schedules.get(src_key, {})
         feats = raw.get("features") if isinstance(raw.get("features"), dict) else {}
         repository_key = str(raw.get("repository_key") or "").strip()
+        repository = repo_by_key.get(repository_key) or {}
+        repo_path = str(repository.get("path_display") or repository.get("path_raw") or repository.get("repo_path") or "").strip()
+        if not repo_path:
+            relative_path = str(repository.get("relative_path") or "").strip()
+            storage_key = str(repository.get("storage_key") or "").strip()
+            storage = storage_by_key.get(storage_key) or {}
+            base_path = str(storage.get("base_path") or storage.get("path") or "").strip()
+            if base_path and relative_path:
+                repo_path = f"{base_path.rstrip('/')}/{relative_path.lstrip('/')}"
+            else:
+                repo_path = relative_path
         pp = pp_meta.get(repository_key) if isinstance(pp_meta.get(repository_key), dict) else {}
         pp_status = "unknown"
         pp_local = None
@@ -283,6 +342,14 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
             "name": str(raw.get("name") or src_key),
             "backup_type": str(raw.get("backup_type") or ""),
             "location": str(raw.get("location") or ""),
+            "repository_key": repository_key,
+            "repository": {
+                "repository_key": repository_key,
+                "display_name": str(repository.get("display_name") or repository.get("repository_name") or repository_key),
+                "repository_name": str(repository.get("repository_name") or ""),
+                "path": repo_path,
+                "repository_id": str(repository.get("borg_repository_id") or repository.get("borg_key_repository_id") or "").strip().lower(),
+            },
             "features": {"docker": bool(feats.get("docker")), "vm": bool(feats.get("vm"))},
             "schedule": schedule if isinstance(schedule, dict) else {},
             "conflict": conflict,
@@ -1146,11 +1213,13 @@ def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: lis
     }
     encrypted = _encrypt_authenticated_export(json.dumps(payload, ensure_ascii=False).encode("utf-8"), pw)
     return {
-        "filename": f"bbui-jobs-secure-{datetime.now().strftime('%Y%m%d-%H%M%S')}.jobs.enc",
+        "filename": f"bbui-jobs-passphrases-{datetime.now().strftime('%Y%m%d-%H%M%S')}.jobs.enc",
         "payload_b64": base64.b64encode(encrypted).decode("ascii"),
         "job_count": int(plain.get("job_count") or 0),
         "passphrase_count": len(passphrase_files),
         "keyfile_count": sum(1 for row in key_files.values() if row.get("exists")),
+        "borg_key_export_count": 0,
+        "borg_key_export_failed_count": 0,
     }
 
 
@@ -1167,8 +1236,146 @@ def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str)
     out["secure_format"] = payload.get("format")
     out["passphrase_count"] = len(payload.get("passphrase_files") or {})
     out["keyfile_count"] = len(payload.get("key_files") or {})
+    borg_key_exports = payload.get("borg_key_exports") if isinstance(payload.get("borg_key_exports"), dict) else {}
+    out["borg_key_export_count"] = sum(1 for row in borg_key_exports.values() if isinstance(row, dict) and row.get("exists"))
+    out["borg_key_export_failed_count"] = sum(1 for row in borg_key_exports.values() if isinstance(row, dict) and not row.get("exists"))
     out.update(_encryption_preview_metadata(encryption_format))
     return out
+
+
+def export_repository_keys_backup(config: dict, password: str) -> dict:
+    from repositories_api import read_repository_store
+
+    pw = str(password or "")
+    if len(pw) < 8:
+        raise ValueError("Password must contain at least 8 characters")
+    repositories = read_repository_store(config).get("repositories", [])
+    bundle = {"repositories": repositories if isinstance(repositories, list) else []}
+    key_exports = _collect_repository_key_exports(config, bundle)
+    manifest = []
+    for repository in bundle["repositories"]:
+        if not isinstance(repository, dict) or not _repository_needs_borg_key_export(repository):
+            continue
+        repository_key = str(repository.get("repository_key") or "").strip()
+        row = key_exports.get(repository_key) if repository_key else None
+        manifest.append({
+            "repository_key": repository_key,
+            "display_name": str(repository.get("display_name") or repository.get("repository_name") or repository_key),
+            "path": str(repository.get("path_display") or repository.get("path_raw") or repository.get("repo_path") or repository.get("relative_path") or ""),
+            "repository_id": str((row or {}).get("repository_id") or repository.get("borg_repository_id") or repository.get("borg_key_repository_id") or "").strip().lower(),
+            "exists": bool((row or {}).get("exists")),
+            "sha256": str((row or {}).get("sha256") or ""),
+            "size": int((row or {}).get("size") or 0),
+            "error": str((row or {}).get("error") or ""),
+        })
+    payload = {
+        "format": "bbui-repository-keys-v1",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "manifest": manifest,
+        "key_exports": key_exports,
+    }
+    encrypted = _encrypt_authenticated_export(json.dumps(payload, ensure_ascii=False).encode("utf-8"), pw)
+    ok_count = sum(1 for row in key_exports.values() if isinstance(row, dict) and row.get("exists"))
+    failed_count = sum(1 for row in key_exports.values() if isinstance(row, dict) and not row.get("exists"))
+    return {
+        "filename": f"bbui-repository-keys-{datetime.now().strftime('%Y%m%d-%H%M%S')}.keys.enc",
+        "payload_b64": base64.b64encode(encrypted).decode("ascii"),
+        "repository_key_count": ok_count,
+        "failed_count": failed_count,
+    }
+
+
+def _decrypt_repository_keys_backup(password: str, payload_b64: str) -> tuple[dict, dict]:
+    enc = _decode_encrypted_export_payload(payload_b64)
+    plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
+    payload = _decode_encrypted_json_payload(plaintext)
+    if payload.get("format") != "bbui-repository-keys-v1":
+        raise ValueError("Invalid repository key backup format")
+    return payload, _encryption_preview_metadata(encryption_format)
+
+
+def _repository_key_backup_match(config: dict, repository_key: str, payload: dict) -> tuple[dict, dict | None]:
+    from repositories_api import read_repository_store
+
+    key = str(repository_key or "").strip()
+    repository = next(
+        (
+            row for row in read_repository_store(config).get("repositories", [])
+            if str(row.get("repository_key") or "").strip() == key
+        ),
+        None,
+    )
+    if not repository:
+        raise ValueError("Repository not found")
+    expected_id = str(repository.get("borg_repository_id") or repository.get("borg_key_repository_id") or "").strip().lower()
+    if not expected_id:
+        raise ValueError("Repository ID is unknown. Refresh repository information before importing a Borg key.")
+    key_exports = payload.get("key_exports") if isinstance(payload.get("key_exports"), dict) else {}
+    matching = None
+    for row in key_exports.values():
+        if not isinstance(row, dict) or not row.get("exists"):
+            continue
+        if str(row.get("repository_id") or "").strip().lower() == expected_id:
+            matching = row
+            break
+    return repository, matching
+
+
+def preview_repository_keys_backup_for_repository(
+    config: dict,
+    repository_key: str,
+    password: str,
+    payload_b64: str,
+) -> dict:
+    payload, meta = _decrypt_repository_keys_backup(password, payload_b64)
+    repository, matching = _repository_key_backup_match(config, repository_key, payload)
+    repository_id = str(repository.get("borg_repository_id") or repository.get("borg_key_repository_id") or "").strip().lower()
+    return {
+        "format": payload.get("format"),
+        "repository_key": str(repository.get("repository_key") or ""),
+        "repository_name": str(repository.get("display_name") or repository.get("repository_name") or repository_key),
+        "repository_path": str(repository.get("path_display") or repository.get("path_raw") or repository.get("repo_path") or repository.get("relative_path") or ""),
+        "repository_id": repository_id,
+        "matching_key": {
+            "exists": bool(matching),
+            "repository_id": str((matching or {}).get("repository_id") or "").strip().lower(),
+            "sha256": str((matching or {}).get("sha256") or ""),
+            "size": int((matching or {}).get("size") or 0),
+        },
+        "key_count": sum(1 for row in (payload.get("key_exports") or {}).values() if isinstance(row, dict) and row.get("exists")),
+        **meta,
+    }
+
+
+def import_repository_keys_backup_for_repository(
+    config: dict,
+    repository_key: str,
+    password: str,
+    payload_b64: str,
+) -> dict:
+    from repositories_api import import_repository_key
+
+    payload, meta = _decrypt_repository_keys_backup(password, payload_b64)
+    repository, matching = _repository_key_backup_match(config, repository_key, payload)
+    if not matching:
+        raise ValueError("No matching Borg key for this repository ID was found in the key backup.")
+    try:
+        content = base64.b64decode(str(matching.get("content_b64") or "").encode("ascii"), validate=False)
+    except Exception as exc:
+        raise ValueError("Matching Borg key entry is invalid") from exc
+    if not content or len(content) > 1024 * 1024:
+        raise ValueError("Matching Borg key entry is empty or too large")
+    result = import_repository_key(
+        config,
+        str(repository.get("repository_key") or repository_key),
+        content.decode("utf-8", "replace"),
+    )
+    return {
+        **result,
+        **meta,
+        "repository_id": str(repository.get("borg_repository_id") or repository.get("borg_key_repository_id") or "").strip().lower(),
+        "matched_repository_id": str(matching.get("repository_id") or "").strip().lower(),
+    }
 
 
 def import_jobs_bundle_encrypted(
@@ -1183,6 +1390,7 @@ def import_jobs_bundle_encrypted(
     per_profile_mode: dict | None = None,
     import_jobs: bool = True,
     import_passphrases: bool = True,
+    import_borg_keys: bool = False,
 ) -> dict:
     enc = _decode_encrypted_export_payload(payload_b64)
     plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
@@ -1194,6 +1402,18 @@ def import_jobs_bundle_encrypted(
         raise ValueError("Invalid bundle")
     passphrase_files = payload.get("passphrase_files") if isinstance(payload.get("passphrase_files"), dict) else {}
     key_files = payload.get("key_files") if isinstance(payload.get("key_files"), dict) else {}
+    borg_key_exports = payload.get("borg_key_exports") if isinstance(payload.get("borg_key_exports"), dict) else {}
+    selected_repository_keys: set[str] = set()
+    selected_set = set(str(x).strip() for x in (selected_jobs or []) if str(x).strip())
+    if selected_set:
+        for job in bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []:
+            if not isinstance(job, dict):
+                continue
+            if str(job.get("job_key") or "").strip() not in selected_set:
+                continue
+            repository_key = str(job.get("repository_key") or "").strip()
+            if repository_key:
+                selected_repository_keys.add(repository_key)
 
     # Secure jobs import intentionally ignores settings payload.
     bundle = dict(bundle)
@@ -1229,6 +1449,8 @@ def import_jobs_bundle_encrypted(
             for row in read_repository_store(config).get("repositories", [])
         }
         for repository_key, raw_file in passphrase_files.items():
+            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
+                continue
             pf = raw_file if isinstance(raw_file, dict) else None
             if not pf:
                 continue
@@ -1260,6 +1482,8 @@ def import_jobs_bundle_encrypted(
         }
         changed = False
         for repository_key, raw_file in key_files.items():
+            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
+                continue
             key_row = raw_file if isinstance(raw_file, dict) else {}
             repository = repositories.get(str(repository_key or "").strip())
             if not repository or not key_row.get("exists"):
@@ -1293,6 +1517,34 @@ def import_jobs_bundle_encrypted(
         if changed:
             write_repository_store(config, {"repositories": list(repositories.values())})
     result["restored_keyfiles"] = restored_keys
+    restored_borg_key_exports = 0
+    skipped_borg_key_exports = 0
+    if not dry_run and import_borg_keys and borg_key_exports:
+        from repositories_api import import_repository_key
+
+        for repository_key, raw_file in borg_key_exports.items():
+            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
+                continue
+            key_row = raw_file if isinstance(raw_file, dict) else {}
+            if not key_row.get("exists"):
+                skipped_borg_key_exports += 1
+                continue
+            try:
+                content = base64.b64decode(str(key_row.get("content_b64") or "").encode("ascii"), validate=False)
+            except Exception:
+                skipped_borg_key_exports += 1
+                continue
+            if not content or len(content) > 1024 * 1024:
+                skipped_borg_key_exports += 1
+                continue
+            try:
+                import_repository_key(config, str(repository_key or ""), content.decode("utf-8", "replace"))
+            except Exception:
+                skipped_borg_key_exports += 1
+                continue
+            restored_borg_key_exports += 1
+    result["restored_borg_key_exports"] = restored_borg_key_exports
+    result["skipped_borg_key_exports"] = skipped_borg_key_exports
     result.update(_encryption_preview_metadata(encryption_format))
     return result
 

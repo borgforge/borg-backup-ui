@@ -689,6 +689,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             or p.startswith("/api/wizard")
             or p.startswith("/api/client-log")
             or p in {"/api/jobs/enabled", "/api/jobs", "/api/schedules", "/api/storages", "/api/repositories", "/api/restore-tests", "/api/restore-tests/policy"}
+            or p in {"/api/repositories/key-export", "/api/repositories/key-import"}
         ):
             return "admin"
 
@@ -919,6 +920,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/repositories/validate": self._post_repository_validate,
             "/api/repositories/info": self._post_repository_info,
             "/api/repositories/lifecycle": self._post_repository_lifecycle,
+            "/api/repositories/key-export": self._post_repository_key_export,
+            "/api/repositories/key-import": self._post_repository_key_import,
+            "/api/repositories/key-backup-preview": self._post_repository_key_backup_preview,
+            "/api/repositories/key-backup-import": self._post_repository_key_backup_import,
             "/api/storage/smb-action": self._post_storage_smb_action,
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
@@ -935,6 +940,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/settings/jobs-export-secure": self._post_settings_jobs_export_secure,
             "/api/settings/jobs-import-secure-preview": self._post_settings_jobs_import_secure_preview,
             "/api/settings/jobs-import-secure": self._post_settings_jobs_import_secure,
+            "/api/settings/repository-keys-export": self._post_settings_repository_keys_export,
             "/api/settings/secrets-backup-export": self._post_settings_secrets_backup_export,
             "/api/settings/secrets-backup-preview": self._post_settings_secrets_backup_preview,
             "/api/settings/secrets-backup-import": self._post_settings_secrets_backup_import,
@@ -1813,10 +1819,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         except RepositoryBusyError as exc:
             raise ApiConflictError(str(exc), code="repository_busy") from exc
 
-    def _delete_repository(self) -> dict:
-        from repositories_api import RepositoryBusyError, RepositoryLifecycleConflict, apply_repository_lifecycle
-
-        body = self._read_json_body()
+    def _repository_audit_context(self, request_id: str = "") -> dict[str, str]:
         session = self._get_current_session_meta() or {}
         actor = _normalize_username(session.get("username", ""))
         actor_role = str(session.get("role", "") or "").strip().lower()
@@ -1830,16 +1833,81 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 actor = "system"
                 actor_role = self._get_current_role() or "system"
                 auth_method = "internal"
+        return {
+            "actor": actor,
+            "actor_role": actor_role,
+            "auth_method": auth_method,
+            "request_id": request_id,
+        }
+
+    def _post_repository_key_export(self) -> dict:
+        from repositories_api import RepositoryBusyError, export_repository_key
+
+        body = self._read_json_body()
+        try:
+            return export_repository_key(
+                self.config,
+                str(body.get("repository_key") or ""),
+                audit_context=self._repository_audit_context(str(getattr(self, "_current_request_id", "") or "")),
+            )
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _post_repository_key_import(self) -> dict:
+        from repositories_api import RepositoryBusyError, import_repository_key
+
+        body = self._read_json_body()
+        try:
+            return import_repository_key(
+                self.config,
+                str(body.get("repository_key") or ""),
+                str(body.get("key_data") or ""),
+                audit_context=self._repository_audit_context(str(getattr(self, "_current_request_id", "") or "")),
+            )
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _post_repository_key_backup_preview(self) -> dict:
+        from settings_transfer_api import preview_repository_keys_backup_for_repository
+
+        body = self._read_json_body()
+        payload_b64 = str(body.get("payload_b64") or "")
+        if not payload_b64:
+            raise ValueError("payload_b64 is required")
+        return preview_repository_keys_backup_for_repository(
+            self.config,
+            str(body.get("repository_key") or ""),
+            str(body.get("password") or ""),
+            payload_b64,
+        )
+
+    def _post_repository_key_backup_import(self) -> dict:
+        from repositories_api import RepositoryBusyError
+        from settings_transfer_api import import_repository_keys_backup_for_repository
+
+        body = self._read_json_body()
+        payload_b64 = str(body.get("payload_b64") or "")
+        if not payload_b64:
+            raise ValueError("payload_b64 is required")
+        try:
+            return import_repository_keys_backup_for_repository(
+                self.config,
+                str(body.get("repository_key") or ""),
+                str(body.get("password") or ""),
+                payload_b64,
+            )
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _delete_repository(self) -> dict:
+        from repositories_api import RepositoryBusyError, RepositoryLifecycleConflict, apply_repository_lifecycle
+
+        body = self._read_json_body()
         try:
             return apply_repository_lifecycle(
                 self.config,
                 body,
-                audit_context={
-                    "actor": actor,
-                    "actor_role": actor_role,
-                    "auth_method": auth_method,
-                    "request_id": str(getattr(self, "_current_request_id", "") or ""),
-                },
+                audit_context=self._repository_audit_context(str(getattr(self, "_current_request_id", "") or "")),
             )
         except RepositoryLifecycleConflict as exc:
             raise ApiConflictError(str(exc), code=exc.code) from exc
@@ -2925,6 +2993,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         password = str(body.get("password") or "")
         return export_jobs_bundle_encrypted(self.config, password)
 
+    def _post_settings_repository_keys_export(self) -> dict:
+        from settings_transfer_api import export_repository_keys_backup
+        body = self._read_json_body()
+        password = str(body.get("password") or "")
+        return export_repository_keys_backup(self.config, password)
+
     def _post_settings_jobs_import_secure_preview(self) -> dict:
         from settings_transfer_api import preview_jobs_bundle_encrypted
         body = self._read_json_body()
@@ -2949,6 +3023,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         per_profile_mode = body.get("per_profile_mode") if isinstance(body.get("per_profile_mode"), dict) else None
         import_jobs = bool(body.get("import_jobs", True))
         import_passphrases = bool(body.get("import_passphrases", True))
+        import_borg_keys = bool(body.get("import_borg_keys", False))
         return import_jobs_bundle_encrypted(
             self.config,
             password,
@@ -2961,6 +3036,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             per_profile_mode=per_profile_mode,
             import_jobs=import_jobs,
             import_passphrases=import_passphrases,
+            import_borg_keys=import_borg_keys,
         )
 
     def _post_settings_secrets_backup_export(self) -> dict:
@@ -3575,7 +3651,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token"}
+                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)
@@ -3826,6 +3902,10 @@ btn.addEventListener('click',doRecovery);
             return "validate"
         if path == "/api/repositories/info":
             return "refresh-info"
+        if path == "/api/repositories/key-export":
+            return "key-export"
+        if path == "/api/repositories/key-import":
+            return "key-import"
         if path == "/api/repositories/lifecycle" or path == "/api/repositories":
             if method == "DELETE":
                 return str(body.get("mode") or "delete")
