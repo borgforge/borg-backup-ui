@@ -2369,6 +2369,7 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
   const statusClass = enabled ? 'success' : 'info';
   const lastRun = _formatHealthTimestamp(refresh?.last_run_at) || '—';
   const nextRun = enabled ? (_formatHealthTimestamp(refresh?.next_run_at) || '—') : settingsT('forms.repositoryRefreshDisabled');
+  const workerState = enabled ? _repositoryRefreshStateLabel(refresh?.worker_state) : settingsT('forms.repositoryRefreshWorkerDisabled');
   const useCurrentCounts = details.length > 0;
   const resultText = settingsT('forms.repositoryRefreshResultCounts', {
     ok: Number(useCurrentCounts ? counts.success : (lastResult.refreshed || 0)),
@@ -2376,6 +2377,12 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
     failed: Number(useCurrentCounts ? counts.error : (lastResult.failed || 0)),
     deferred: Number(useCurrentCounts ? counts.busy : (lastResult.deferred || 0)),
   });
+  const runtimeItems = enabled
+    ? [
+        _repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshPluginPid'), Number(refresh?.plugin_pid || 0) || '—', 'neutral'),
+        _repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshNextRun'), nextRun, 'neutral'),
+      ].join('')
+    : '';
   return settingsCard(settingsT('forms.repositoryRefreshTitle'),
     settingsMenuIcon('repository'),
     `<div class="settings-body">
@@ -2407,10 +2414,9 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
         </div>
       </div>
       <div class="repository-refresh-summary">
-        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshWorker'), _repositoryRefreshStateLabel(refresh?.worker_state), enabled ? 'neutral' : 'warn')}
-        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshPluginPid'), Number(refresh?.plugin_pid || 0) || '—', 'neutral')}
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshWorker'), workerState, enabled ? 'neutral' : 'warn')}
+        ${runtimeItems}
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastRun'), lastRun, 'neutral')}
-        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshNextRun'), nextRun, enabled ? 'neutral' : 'warn')}
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshRepositories'), Number(refresh?.repository_count || details.length || 0), 'neutral')}
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastResult'), resultText, Number(useCurrentCounts ? counts.error : (lastResult.failed || 0)) ? 'warn' : 'ok')}
       </div>
