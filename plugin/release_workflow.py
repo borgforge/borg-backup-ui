@@ -49,6 +49,11 @@ LEGACY_PACKAGE_FILE_RE = re.compile(
     r"</FILE>",
     re.DOTALL,
 )
+REMOVE_HANDLER_RE = re.compile(
+    r'<FILE Name="/tmp/borg-backup-ui-remove\.sh" Run="/bin/bash" Method="remove">\s*'
+    r"<INLINE>.*?</INLINE>\s*</FILE>",
+    re.DOTALL,
+)
 
 
 def run_git(repo: Path, *args: str, text: bool = True) -> str | bytes:
@@ -541,6 +546,57 @@ fi
     return manifest
 
 
+def remove_handler_block() -> str:
+    return """<FILE Name="/tmp/borg-backup-ui-remove.sh" Run="/bin/bash" Method="remove">
+<INLINE>
+#!/bin/bash
+set -e
+
+NAME="borg-backup-ui"
+PLUGIN_DIR="/boot/config/plugins/${NAME}"
+EMHTTP_DIR="/usr/local/emhttp/plugins/${NAME}"
+GO_FILE="/boot/config/go"
+RC_SCRIPT="/etc/rc.d/rc.borg_backup_ui"
+PIDFILE="/var/run/borg_backup_ui.pid"
+WAIT_PIDFILE="/var/run/borg_backup_ui_start_wait.pid"
+LOGFILE="/var/log/borg_backup_ui.log"
+CLIENT_LOGFILE="/var/log/borg_backup_ui_client.log"
+
+# Stop the service and any delayed start process before deleting payload files.
+if [ -x "${RC_SCRIPT}" ]; then
+  "${RC_SCRIPT}" stop 2>/dev/null || true
+fi
+
+# Remove legacy autostart lines from /boot/config/go.
+if [ -f "${GO_FILE}" ]; then
+  sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
+  sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
+fi
+
+# Remove runtime files installed outside the persistent plugin directory.
+rm -f "${RC_SCRIPT}" 2>/dev/null || true
+rm -rf "${EMHTTP_DIR}" 2>/dev/null || true
+rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}" 2>/dev/null || true
+
+# Remove plugin-owned payload from the USB flash. User data outside this
+# directory, Borg repositories, jobs, histories, and configured data paths are
+# intentionally left untouched.
+if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ] && [ -d "${PLUGIN_DIR}" ]; then
+  rm -rf "${PLUGIN_DIR}"
+fi
+
+rm -f /tmp/borg-backup-ui-remove.sh
+</INLINE>
+</FILE>"""
+
+
+def rewrite_remove_handler(manifest: str) -> str:
+    block = remove_handler_block()
+    if not REMOVE_HANDLER_RE.search(manifest):
+        raise RuntimeError("Plugin manifest remove handler was not found")
+    return REMOVE_HANDLER_RE.sub(lambda _match: block, manifest, count=1)
+
+
 def prepare_build_tree(
     root: Path,
     version: str,
@@ -562,6 +618,7 @@ def prepare_build_tree(
     )
     manifest = replace_changelog_block(manifest, version, notes)
     manifest = rewrite_go_autostart_handling(manifest)
+    manifest = rewrite_remove_handler(manifest)
     manifest_path.write_text(manifest, encoding="utf-8")
 
     app = app_path.read_text(encoding="utf-8")

@@ -1,10 +1,21 @@
 import os
+import importlib.util
 from pathlib import Path
 import subprocess
 import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_release_workflow_module():
+    module_path = ROOT / "plugin" / "release_workflow.py"
+    spec = importlib.util.spec_from_file_location("release_workflow", module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_plugin_manifest_extracts_payload_when_upgradepkg_left_it_missing() -> None:
@@ -143,6 +154,33 @@ def test_release_promotion_copies_tested_display_title_and_settings_launch_targe
     assert "display_title" in script
     assert "Test manifest has no tested launch target" in script
     assert "launch_target" in script
+
+
+def test_release_workflow_generates_safe_uninstall_payload_cleanup() -> None:
+    workflow = load_release_workflow_module()
+    manifest = (ROOT / "borg-backup-ui.plg").read_text(encoding="utf-8")
+    rewritten = workflow.rewrite_remove_handler(manifest)
+
+    assert 'Method="remove"' in rewritten
+    assert 'PLUGIN_DIR="/boot/config/plugins/${NAME}"' in rewritten
+    assert 'EMHTTP_DIR="/usr/local/emhttp/plugins/${NAME}"' in rewritten
+    assert 'RC_SCRIPT="/etc/rc.d/rc.borg_backup_ui"' in rewritten
+    assert 'rm -rf "${PLUGIN_DIR}"' in rewritten
+    assert 'rm -rf "${EMHTTP_DIR}"' in rewritten
+    assert 'rm -f "${RC_SCRIPT}"' in rewritten
+    assert 'rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}"' in rewritten
+    assert 'if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ]' in rewritten
+    assert "User data outside this" in rewritten
+    assert "Borg repositories, jobs, histories, and configured data paths are" in rewritten
+
+
+def test_release_promotion_copies_tested_remove_handler() -> None:
+    script = (ROOT / "plugin" / "promote-release.sh").read_text(encoding="utf-8")
+
+    assert "remove_handler_re" in script
+    assert "Test manifest has no remove handler block" in script
+    assert "Stable manifest has no remove handler block to replace" in script
+    assert "tested_remove_handler.group(0)" in script
 
 
 def test_rc_script_waits_for_python_runtime_before_reporting_missing_python() -> None:

@@ -130,6 +130,11 @@ post_install_re = re.compile(
     r"<INLINE>.*?</INLINE>\s*</FILE>",
     re.DOTALL,
 )
+remove_handler_re = re.compile(
+    r'<FILE Name="/tmp/borg-backup-ui-remove\.sh" Run="/bin/bash" Method="remove">\s*'
+    r"<INLINE>.*?</INLINE>\s*</FILE>",
+    re.DOTALL,
+)
 legacy_package_file_re = re.compile(
     r'<FILE Name="&bootdir;/&name;-&version;\.txz" Run="upgradepkg --install-new">\s*'
     r"<URL>&pkgurl;</URL>\s*"
@@ -169,6 +174,13 @@ if not tested_post_install:
 if not post_install_re.search(stable):
     raise SystemExit("Stable manifest has no post-install block to replace")
 stable = post_install_re.sub(lambda _match: tested_post_install.group(0), stable, count=1)
+
+tested_remove_handler = remove_handler_re.search(test)
+if not tested_remove_handler:
+    raise SystemExit("Test manifest has no remove handler block")
+if not remove_handler_re.search(stable):
+    raise SystemExit("Stable manifest has no remove handler block to replace")
+stable = remove_handler_re.sub(lambda _match: tested_remove_handler.group(0), stable, count=1)
 
 stable = re.sub(
     rf"###{re.escape(version)}###\n(?:.*?)(?=\n###|\n\]\]>|\Z)",
