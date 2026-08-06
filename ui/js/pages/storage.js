@@ -554,7 +554,6 @@ function renderStorageRepositoryManagement(repo) {
       ${keyStatus}
       <div class="storage-lifecycle-actions">
         <button class="btn btn-primary" data-storage-action="repository-key-import-select" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyImportUpload')}</button>
-        <button class="btn btn-secondary" data-storage-action="repository-key-export" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyExportDownload')}</button>
         <input type="file" class="hidden" data-storage-key-import-file data-repository-key="${escHtml(key)}" accept=".keys.enc,application/octet-stream">
       </div>
     </section>
@@ -731,9 +730,6 @@ function onStorageContentClick(event) {
       el.dataset.lifecycleMode || 'remove',
     );
   }
-  if (action === 'repository-key-export') {
-    return exportRepositoryKey(el.dataset.repositoryKey || storageState.selectedRepositoryKey, el);
-  }
   if (action === 'repository-key-import-select') {
     const key = el.dataset.repositoryKey || storageState.selectedRepositoryKey;
     const input = Array.from(document.querySelectorAll('[data-storage-key-import-file]'))
@@ -748,23 +744,6 @@ function onStorageContentChange(event) {
   const key = input.dataset.repositoryKey || storageState.selectedRepositoryKey;
   const file = input.files && input.files[0] ? input.files[0] : null;
   importRepositoryKey(key, file, input);
-}
-
-function storageDownloadTextFile(filename, content) {
-  const blob = new Blob([String(content || '')], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename || 'borg-key-export.txt';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function storageReadTextFile(file) {
-  if (!file) throw new Error(storageT('storage.repositoryKeyImportFileMissing'));
-  return file.text();
 }
 
 async function storageReadFileAsBase64(file) {
@@ -798,29 +777,6 @@ function storageRepositoryKeyFileSummary(file, preview = null) {
     <strong>${escHtml(file?.name || storageT('storage.repositoryKeyBackupFile'))}</strong>
     <span>${escHtml(preview?.repository_id ? storageT('storage.repositoryKeyBackupFound', { count: 1 }) : storageT('storage.repositoryKeyBackupEncrypted'))}</span>
   </div>`;
-}
-
-async function exportRepositoryKey(repositoryKey, button) {
-  const key = String(repositoryKey || '').trim();
-  if (!key) return;
-  if (button) button.disabled = true;
-  showMsg('storage-message', 'info', storageT('storage.repositoryKeyExportRunning'));
-  try {
-    const response = await fetch('/api/repositories/key-export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repository_key: key }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
-    storageDownloadTextFile(data.filename, data.key_data);
-    await refreshStorage();
-    showMsg('storage-message', 'success', storageT('storage.repositoryKeyExported'));
-  } catch (error) {
-    showMsg('storage-message', 'error', error.message || storageT('storage.error'));
-  } finally {
-    if (button) button.disabled = false;
-  }
 }
 
 async function importRepositoryKey(repositoryKey, file, input) {
