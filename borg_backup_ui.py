@@ -2982,6 +2982,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         per_profile_mode = body.get("per_profile_mode") if isinstance(body.get("per_profile_mode"), dict) else None
         import_jobs = bool(body.get("import_jobs", True))
         import_passphrases = bool(body.get("import_passphrases", True))
+        import_borg_keys = bool(body.get("import_borg_keys", True))
         return import_jobs_bundle_encrypted(
             self.config,
             password,
@@ -2994,6 +2995,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             per_profile_mode=per_profile_mode,
             import_jobs=import_jobs,
             import_passphrases=import_passphrases,
+            import_borg_keys=import_borg_keys,
         )
 
     def _post_settings_secrets_backup_export(self) -> dict:

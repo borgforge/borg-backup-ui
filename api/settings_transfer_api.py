@@ -1227,6 +1227,7 @@ def import_jobs_bundle_encrypted(
     per_profile_mode: dict | None = None,
     import_jobs: bool = True,
     import_passphrases: bool = True,
+    import_borg_keys: bool = True,
 ) -> dict:
     enc = _decode_encrypted_export_payload(payload_b64)
     plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
@@ -1239,6 +1240,17 @@ def import_jobs_bundle_encrypted(
     passphrase_files = payload.get("passphrase_files") if isinstance(payload.get("passphrase_files"), dict) else {}
     key_files = payload.get("key_files") if isinstance(payload.get("key_files"), dict) else {}
     borg_key_exports = payload.get("borg_key_exports") if isinstance(payload.get("borg_key_exports"), dict) else {}
+    selected_repository_keys: set[str] = set()
+    selected_set = set(str(x).strip() for x in (selected_jobs or []) if str(x).strip())
+    if selected_set:
+        for job in bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []:
+            if not isinstance(job, dict):
+                continue
+            if str(job.get("job_key") or "").strip() not in selected_set:
+                continue
+            repository_key = str(job.get("repository_key") or "").strip()
+            if repository_key:
+                selected_repository_keys.add(repository_key)
 
     # Secure jobs import intentionally ignores settings payload.
     bundle = dict(bundle)
@@ -1274,6 +1286,8 @@ def import_jobs_bundle_encrypted(
             for row in read_repository_store(config).get("repositories", [])
         }
         for repository_key, raw_file in passphrase_files.items():
+            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
+                continue
             pf = raw_file if isinstance(raw_file, dict) else None
             if not pf:
                 continue
@@ -1305,6 +1319,8 @@ def import_jobs_bundle_encrypted(
         }
         changed = False
         for repository_key, raw_file in key_files.items():
+            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
+                continue
             key_row = raw_file if isinstance(raw_file, dict) else {}
             repository = repositories.get(str(repository_key or "").strip())
             if not repository or not key_row.get("exists"):
@@ -1340,10 +1356,12 @@ def import_jobs_bundle_encrypted(
     result["restored_keyfiles"] = restored_keys
     restored_borg_key_exports = 0
     skipped_borg_key_exports = 0
-    if not dry_run and import_passphrases and borg_key_exports:
+    if not dry_run and import_borg_keys and borg_key_exports:
         from repositories_api import import_repository_key
 
         for repository_key, raw_file in borg_key_exports.items():
+            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
+                continue
             key_row = raw_file if isinstance(raw_file, dict) else {}
             if not key_row.get("exists"):
                 skipped_borg_key_exports += 1

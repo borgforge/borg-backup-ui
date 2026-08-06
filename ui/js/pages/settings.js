@@ -2687,6 +2687,7 @@ function renderJobsImportPreview(d) {
   const rows = Array.isArray(d?.jobs) ? d.jobs : [];
   const sp = d?.settings_preview || null;
   if (!rows.length && !(sp && sp.present)) return '';
+  const securePreview = String(d?.secure_format || '') === 'bbui-job-bundle-secure-v2';
   const stats = rows.reduce((acc, r) => {
     const c = String(r?.conflict || 'new');
     acc.total += 1;
@@ -2724,13 +2725,7 @@ function renderJobsImportPreview(d) {
       </tbody>
     </table>
   ` : '';
-  return `
-    ${renderLegacyEncryptionWarning(d)}
-    ${settingsBlock}
-    <div class="text-muted" style="font-size:12px;margin-bottom:8px">${settingsT('transfer.jobsPreviewTitle', { count: rows.length })}${Number(d?.passphrase_count || 0) ? ` · ${settingsT('transfer.passphrasesInPackage', { count: Number(d.passphrase_count) })}` : ''}${Number(d?.keyfile_count || 0) ? ` · ${settingsT('transfer.keyfilesInPackage', { count: Number(d.keyfile_count) })}` : ''}${Number(d?.borg_key_export_count || 0) ? ` · ${settingsT('transfer.borgKeyExportsInPackage', { count: Number(d.borg_key_export_count) })}` : ''}${Number(d?.borg_key_export_failed_count || 0) ? ` · ${settingsT('transfer.borgKeyExportsFailedInPackage', { count: Number(d.borg_key_export_failed_count) })}` : ''}</div>
-    <div class="status-message info" style="margin:0 0 8px 0">
-      ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.new', { count: stats.new })} · ${settingsT('transfer.existing', { count: stats.exists })} · ${settingsT('transfer.invalid', { count: stats.invalid })}${stats.other ? ` · ${settingsT('transfer.other', { count: stats.other })}` : ''}
-    </div>
+  const jobTable = `
     <table class="settings-table">
       <thead><tr><th>${settingsT('transfer.import')}</th><th>${settingsT('transfer.name')}</th><th>${settingsT('transfer.type')}</th><th>${settingsT('transfer.location')}</th><th>${settingsT('transfer.schedule')}</th><th>${settingsT('transfer.features')}</th><th>${settingsT('transfer.job')}</th><th>${settingsT('transfer.passphrase')}</th><th>${settingsT('transfer.mode')}</th></tr></thead>
       <tbody>
@@ -2762,6 +2757,14 @@ function renderJobsImportPreview(d) {
       }).join('')}
       </tbody>
     </table>`;
+  return `
+    ${renderLegacyEncryptionWarning(d)}
+    ${settingsBlock}
+    <div class="text-muted" style="font-size:12px;margin-bottom:8px">${settingsT('transfer.jobsPreviewTitle', { count: rows.length })}${Number(d?.passphrase_count || 0) ? ` · ${settingsT('transfer.passphrasesInPackage', { count: Number(d.passphrase_count) })}` : ''}${Number(d?.keyfile_count || 0) ? ` · ${settingsT('transfer.keyfilesInPackage', { count: Number(d.keyfile_count) })}` : ''}${Number(d?.borg_key_export_count || 0) ? ` · ${settingsT('transfer.borgKeyExportsInPackage', { count: Number(d.borg_key_export_count) })}` : ''}${Number(d?.borg_key_export_failed_count || 0) ? ` · ${settingsT('transfer.borgKeyExportsFailedInPackage', { count: Number(d.borg_key_export_failed_count) })}` : ''}</div>
+    <div class="status-message info" style="margin:0 0 8px 0">
+      ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.new', { count: stats.new })} · ${settingsT('transfer.existing', { count: stats.exists })} · ${settingsT('transfer.invalid', { count: stats.invalid })}${stats.other ? ` · ${settingsT('transfer.other', { count: stats.other })}` : ''}
+    </div>
+    ${securePreview ? `<details class="settings-transfer-job-preview-details"><summary>${settingsT('transfer.jobSelectionDetails')}</summary>${jobTable}</details>` : jobTable}`;
 }
 
 function renderSecretsImportPreview(d) {
@@ -3359,7 +3362,6 @@ async function importJobsApplySelected() {
         if (modeSel?.value) perMode[r.job_key] = modeSel.value;
       }
     });
-    if (!selected.length) throw new Error(settingsT('transfer.noJobsSelected'));
     const settingsModeEl = document.getElementById('settings-import-mode');
     const settingsMode = String(settingsModeEl?.value || settingsState.transferSettingsMode || 'merge').trim().toLowerCase();
     document.querySelectorAll('[data-settings-profile-mode]').forEach((el) => {
@@ -3371,22 +3373,21 @@ async function importJobsApplySelected() {
       const row = (preview.jobs || []).find((r) => r.job_key === key);
       return String(row?.conflict || '') === 'exists';
     }).length;
-    const ok = await _openSettingsDialog({
-      title: settingsT('transfer.importJobsTitle'),
-      message: settingsT('transfer.confirmJobsImport', { count: selected.length, existing: existsCnt ? settingsT('transfer.existingSelection', { count: existsCnt }) : '' }),
-      confirmText: settingsT('transfer.startImport'),
-    });
-    if (!ok) return;
     let importJobs = true;
     let importPassphrases = true;
+    let importBorgKeys = false;
+    let scopeLabel = settingsT('transfer.jobsOnly');
     if (settingsState.transferJobsSecureMode) {
+      const hasBorgKeys = Number(preview?.borg_key_export_count || 0) > 0;
+      const defaultScope = hasBorgKeys && existsCnt === selected.length ? 'borg_keys_only' : 'all';
       const scope = await _openSettingsDialog({
         title: settingsT('transfer.importContent'),
         html: `
           <div style="display:flex;flex-direction:column;gap:8px">
-            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="both" checked> ${settingsT('transfer.jobsAndPassphrases')}</label>
-            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="jobs_only"> ${settingsT('transfer.jobsOnly')}</label>
-            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="passphrases_only"> ${settingsT('transfer.passphrasesOnly')}</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="all" ${defaultScope === 'all' ? 'checked' : ''}> ${settingsT('transfer.importScopeAll')}</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="jobs_only" ${defaultScope === 'jobs_only' ? 'checked' : ''}> ${settingsT('transfer.importScopeJobsOnly')}</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="passphrases_only" ${defaultScope === 'passphrases_only' ? 'checked' : ''}> ${settingsT('transfer.importScopePassphrasesOnly')}</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="borg_keys_only" ${defaultScope === 'borg_keys_only' ? 'checked' : ''}> ${settingsT('transfer.importScopeBorgKeysOnly')}</label>
           </div>
         `,
         confirmText: settingsT('transfer.continue'),
@@ -3396,9 +3397,25 @@ async function importJobsApplySelected() {
         },
       });
       if (!scope) return;
-      importJobs = scope !== 'passphrases_only';
-      importPassphrases = scope !== 'jobs_only';
+      importJobs = scope === 'all' || scope === 'jobs_only';
+      importPassphrases = scope === 'all' || scope === 'passphrases_only';
+      importBorgKeys = scope === 'all' || scope === 'borg_keys_only';
+      scopeLabel = ({
+        all: settingsT('transfer.importScopeAll'),
+        jobs_only: settingsT('transfer.importScopeJobsOnly'),
+        passphrases_only: settingsT('transfer.importScopePassphrasesOnly'),
+        borg_keys_only: settingsT('transfer.importScopeBorgKeysOnly'),
+      })[scope] || settingsT('transfer.importScopeAll');
     }
+    if (!selected.length) throw new Error(settingsT('transfer.noJobsSelected'));
+    const ok = await _openSettingsDialog({
+      title: settingsT('transfer.importJobsTitle'),
+      message: settingsState.transferJobsSecureMode
+        ? settingsT('transfer.confirmSecureImport', { count: selected.length, scope: scopeLabel, existing: existsCnt ? settingsT('transfer.existingSelection', { count: existsCnt }) : '' })
+        : settingsT('transfer.confirmJobsImport', { count: selected.length, existing: existsCnt ? settingsT('transfer.existingSelection', { count: existsCnt }) : '' }),
+      confirmText: settingsT('transfer.startImport'),
+    });
+    if (!ok) return;
     const endpoint = settingsState.transferJobsSecureMode ? '/api/settings/jobs-import-secure' : '/api/settings/jobs-import';
     const body = settingsState.transferJobsSecureMode ? {
       password: settingsState.transferJobsSecurePassword,
@@ -3411,6 +3428,7 @@ async function importJobsApplySelected() {
       per_profile_mode: perProfileMode,
       import_jobs: importJobs,
       import_passphrases: importPassphrases,
+      import_borg_keys: importBorgKeys,
     } : {
       bundle_text: settingsState.transferJobsBundleText,
       mode: 'skip',

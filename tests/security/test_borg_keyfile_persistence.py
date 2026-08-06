@@ -303,6 +303,45 @@ def test_encrypted_job_transfer_imports_borg_key_exports(tmp_path: Path, monkeyp
     assert result["restored_borg_key_exports"] == 1
     assert result["skipped_borg_key_exports"] == 0
 
+    calls.clear()
+    result = import_jobs_bundle_encrypted(
+        {"BACKUP_SCRIPTS_DIR": str(tmp_path / "target_borg_keys_only")},
+        "transfer-password-190",
+        exported["payload_b64"],
+        dry_run=False,
+        settings_mode="ignore",
+        selected_jobs=["appdata_local"],
+        import_jobs=False,
+        import_passphrases=False,
+        import_borg_keys=True,
+    )
+
+    assert calls == [("repo_appdata", key_data)]
+    assert result["imported_count"] == 0
+    assert result["scheduled_count"] == 0
+    assert result["restored_passphrases"] == 0
+    assert result["restored_keyfiles"] == 0
+    assert result["restored_borg_key_exports"] == 1
+
+    calls.clear()
+    result = import_jobs_bundle_encrypted(
+        {"BACKUP_SCRIPTS_DIR": str(tmp_path / "target_jobs_only")},
+        "transfer-password-190",
+        exported["payload_b64"],
+        dry_run=False,
+        settings_mode="ignore",
+        selected_jobs=["appdata_local"],
+        import_jobs=True,
+        import_passphrases=False,
+        import_borg_keys=False,
+    )
+
+    assert calls == []
+    assert result["imported_count"] == 1
+    assert result["restored_passphrases"] == 0
+    assert result["restored_keyfiles"] == 0
+    assert result["restored_borg_key_exports"] == 0
+
 
 @pytest.mark.skipif(shutil.which("borg") is None, reason="borg is not installed")
 def test_keyfile_repository_survives_fresh_process_environment(tmp_path: Path, monkeypatch):
