@@ -356,8 +356,14 @@ core_payload_present() {{
   return 0
 }}
 
+app_payload_version_matches() {{
+  [ -f "${{PLUGIN_DIR}}/borg_backup_ui.py" ] || return 1
+  grep -F -q "APP_VERSION = \\"${{VERSION}}\\"" "${{PLUGIN_DIR}}/borg_backup_ui.py" 2>/dev/null
+}}
+
 package_payload_present() {{
   core_payload_present || return 1
+  app_payload_version_matches || return 1
   [ -f "${{VENDOR_META}}" ] || return 1
   return 0
 }}
@@ -474,25 +480,29 @@ if package_registered; then
   fi
 
   if core_payload_present; then
-    marker_md5="$(cat "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true)"
-    if [ "${{marker_md5}}" = "${{EXPECTED_MD5}}" ]; then
-      ensure_apprise_vendor
-      echo "Borg Backup UI: version ${{VERSION}} is already installed, skipping package installation."
-      exit 0
-    fi
-    if [ -f "${{PACKAGE_FILE}}" ]; then
-      actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
-      if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
+    if app_payload_version_matches; then
+      marker_md5="$(cat "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true)"
+      if [ "${{marker_md5}}" = "${{EXPECTED_MD5}}" ]; then
         ensure_apprise_vendor
-        echo "Borg Backup UI: version ${{VERSION}} is already installed, updating MD5 marker."
+        echo "Borg Backup UI: version ${{VERSION}} is already installed, skipping package installation."
+        exit 0
+      fi
+      if [ -f "${{PACKAGE_FILE}}" ]; then
+        actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
+        if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
+          ensure_apprise_vendor
+          echo "Borg Backup UI: version ${{VERSION}} is already installed, updating MD5 marker."
+          echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
+          exit 0
+        fi
+      else
+        echo "Borg Backup UI: version ${{VERSION}} is already installed, no download or extraction needed."
+        ensure_apprise_vendor
         echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
         exit 0
       fi
     else
-      echo "Borg Backup UI: version ${{VERSION}} is already installed, no download or extraction needed."
-      ensure_apprise_vendor
-      echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
-      exit 0
+      echo "Borg Backup UI: installed payload version differs from ${{VERSION}}; extracting package."
     fi
   fi
 fi
