@@ -1900,7 +1900,7 @@
       "overviewJobsText": "Backup-Jobs und zugehörige Passphrase-Dateien wiederherstellen.",
       "overviewKeysBadge": "Notfallfunktion",
       "overviewKeysTitle": "Borg-Keys",
-      "overviewKeysText": "Separate Borg-Key-Sicherung erstellen. Nur bei defektem oder verlorenem Borg-Key nötig.",
+      "overviewKeysText": "Borg-Key-Sicherung vorsorglich erstellen, damit Borg-Keys bei Verlust oder Defekt wiederhergestellt werden können.",
       "overviewKeysImportHint": "Wiederherstellung nur über das jeweilige Repository unter Repositories.",
       "overviewProfilesBadge": "System-Einstellungen",
       "overviewProfilesTitle": "Profiles + Secrets",

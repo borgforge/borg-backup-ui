@@ -1900,7 +1900,7 @@
       "overviewJobsText": "Restore backup jobs and their passphrase files.",
       "overviewKeysBadge": "Emergency function",
       "overviewKeysTitle": "Borg keys",
-      "overviewKeysText": "Create a separate Borg key backup. Needed only for a broken or lost Borg key.",
+      "overviewKeysText": "Create a Borg key backup as a precaution so Borg keys can be restored if they are ever lost or damaged.",
       "overviewKeysImportHint": "Restore is available only from the matching repository under Repositories.",
       "overviewProfilesBadge": "System settings",
       "overviewProfilesTitle": "Profiles + secrets",
