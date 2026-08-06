@@ -2613,20 +2613,37 @@ function renderSettingsTransferTools() {
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
         ${settingsT('transfer.description')}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
+      <div class="settings-transfer-support-row">
         <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-support-bundle">${settingsT('transfer.supportBundle')}</button>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-jobs-secure">${settingsT('transfer.jobsExport')}</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-secure-select-file">${settingsT('transfer.jobsImport')}</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-repository-keys">${settingsT('transfer.repositoryKeysExport')}</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-repository-keys">${settingsT('transfer.repositoryKeysImport')}</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-profile-secrets">${settingsT('transfer.profilesExport')}</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-select-file">${settingsT('transfer.profilesImport')}</button>
+      <div class="settings-transfer-overview-grid">
+        <section class="settings-transfer-overview-card settings-transfer-overview-card-jobs">
+          <span>${settingsT('transfer.overviewJobsBadge')}</span>
+          <strong>${settingsT('transfer.overviewJobsTitle')}</strong>
+          <small>${settingsT('transfer.overviewJobsText')}</small>
+          <div>
+            <button class="btn btn-primary btn-sm" data-settings-action="import-jobs-secure-select-file">${settingsT('transfer.jobsImport')}</button>
+            <button class="btn btn-secondary btn-sm" data-settings-action="export-jobs-secure">${settingsT('transfer.jobsExport')}</button>
+          </div>
+        </section>
+        <section class="settings-transfer-overview-card settings-transfer-overview-card-keys">
+          <span>${settingsT('transfer.overviewKeysBadge')}</span>
+          <strong>${settingsT('transfer.overviewKeysTitle')}</strong>
+          <small>${settingsT('transfer.overviewKeysText')}</small>
+          <div>
+            <button class="btn btn-primary btn-sm" data-settings-action="import-repository-keys">${settingsT('transfer.repositoryKeysImport')}</button>
+            <button class="btn btn-secondary btn-sm" data-settings-action="export-repository-keys">${settingsT('transfer.repositoryKeysExport')}</button>
+          </div>
+        </section>
+        <section class="settings-transfer-overview-card settings-transfer-overview-card-profiles">
+          <span>${settingsT('transfer.overviewProfilesBadge')}</span>
+          <strong>${settingsT('transfer.overviewProfilesTitle')}</strong>
+          <small>${settingsT('transfer.overviewProfilesText')}</small>
+          <div>
+            <button class="btn btn-primary btn-sm" data-settings-action="import-profile-secrets-select-file">${settingsT('transfer.profilesImport')}</button>
+            <button class="btn btn-secondary btn-sm" data-settings-action="export-profile-secrets">${settingsT('transfer.profilesExport')}</button>
+          </div>
+        </section>
       </div>
       <div id="settings-transfer-msg" class="status-message hidden"></div>
     </div>`);
@@ -3504,9 +3521,23 @@ function settingsTransferPlannedActionLines(row, scope, rowModes) {
   return lines;
 }
 
+function renderSettingsTransferStepper(step, total = 3) {
+  const count = Math.max(1, Number(total || 3));
+  const active = Math.min(Math.max(1, Number(step || 1)), count);
+  return `<div class="settings-transfer-stepper" aria-hidden="true">
+    ${Array.from({ length: count }, (_, idx) => {
+      const nr = idx + 1;
+      return `<span class="${nr <= active ? 'is-active' : ''}">${nr}</span>`;
+    }).join('<i></i>')}
+  </div>`;
+}
+
 function renderSettingsTransferStepHeader(step, title, text, total = 3) {
   return `<div class="settings-transfer-step-header">
-    <span>${settingsT('transfer.importStep', { step, total })}</span>
+    <div class="settings-transfer-step-top">
+      <span>${settingsT('transfer.importStep', { step, total })}</span>
+      ${renderSettingsTransferStepper(step, total)}
+    </div>
     <strong>${escHtml(title)}</strong>
     <small>${escHtml(text)}</small>
   </div>`;
@@ -3526,7 +3557,7 @@ function renderSettingsTransferKindStep(preview, fileName) {
   return `
     ${renderSettingsTransferStepHeader(1, settingsT('transfer.importStepKindTitle'), settingsT('transfer.importStepKindText'))}
     ${renderSettingsTransferFileSummary(preview, fileName)}
-    <div class="settings-transfer-kind-grid">
+    <div class="settings-transfer-kind-stack">
       <label class="settings-transfer-kind-card">
         <input type="radio" name="jobs-secure-kind" value="selective" checked>
         <span class="settings-transfer-kind-card-body">
@@ -3547,6 +3578,72 @@ function renderSettingsTransferKindStep(preview, fileName) {
           <small>${settingsT('transfer.importKindCompleteHelp')}</small>
         </span>
       </label>
+    </div>
+    <div class="settings-transfer-info-box">
+      <strong>${settingsT('transfer.importJobPassphraseHintTitle')}</strong>
+      <span>${settingsT('transfer.importJobPassphraseHintText')}</span>
+    </div>
+  `;
+}
+
+function renderSettingsTransferSelectAndActionStep(preview, rows, fileName, kind = 'selective') {
+  const complete = String(kind || '') === 'complete';
+  const selectedRows = complete ? rows : [];
+  const existingCount = (complete ? selectedRows : rows).filter((row) => String(row?.conflict || '') === 'exists').length;
+  return `
+    ${renderSettingsTransferStepHeader(2, settingsT('transfer.importStepSelectTitle'), settingsT(complete ? 'transfer.importStepCompleteActionText' : 'transfer.importStepSelectText'), 3)}
+    ${renderSettingsTransferFileSummary(preview, fileName)}
+    ${complete ? `
+      <div class="settings-transfer-info-box">
+        <strong>${settingsT('transfer.importKindComplete')}</strong>
+        <span>${settingsT('transfer.importKindCompleteReview')}</span>
+      </div>
+    ` : `
+      <div class="settings-transfer-job-toolbar">
+        <input class="form-input" type="search" placeholder="${escHtml(settingsT('transfer.jobSearchPlaceholder'))}" data-jobs-secure-search>
+        <span id="jobs-secure-selection-count" class="settings-transfer-chip">${settingsT('transfer.selectedJobsCount', { count: 0 })}</span>
+      </div>
+      <div class="settings-transfer-job-list">
+        ${rows.map((row) => {
+          const jobKey = String(row?.job_key || '').trim();
+          return `<label class="settings-transfer-job-card" data-jobs-secure-row-card data-filter-text="${escHtml(`${row?.name || ''} ${settingsTransferJobSubline(row)} ${settingsTransferJobStatusLabel(row)}`.toLowerCase())}">
+            <input type="checkbox" data-jobs-secure-row-select="${escHtml(jobKey)}">
+            <span class="settings-transfer-job-card-main">
+              <strong>${escHtml(row?.name || jobKey)}</strong>
+              <small>${escHtml(settingsTransferJobSubline(row))}</small>
+            </span>
+            <span class="settings-transfer-job-badges">
+              <span class="settings-transfer-chip">${escHtml(settingsTransferJobStatusLabel(row))}</span>
+              <span class="settings-transfer-chip">${escHtml(settingsTransferPassphraseStatusLabel(row))}</span>
+            </span>
+          </label>`;
+        }).join('')}
+      </div>
+    `}
+    <div class="settings-transfer-scope-grid">
+      <label class="settings-transfer-scope-card settings-transfer-scope-card-primary">
+        <input type="radio" name="jobs-secure-scope" value="all" checked>
+        <span><strong>${settingsT('transfer.importScopeAll')}</strong><small>${settingsT('transfer.importScopeAllHelp')}</small></span>
+      </label>
+      <div class="settings-transfer-advanced-title">${settingsT('transfer.importAdvancedOptions')}</div>
+      <label class="settings-transfer-scope-card">
+        <input type="radio" name="jobs-secure-scope" value="jobs_only">
+        <span><strong>${settingsT('transfer.importScopeJobsOnly')}</strong><small>${settingsT('transfer.importScopeJobsOnlyHelp')}</small></span>
+      </label>
+      <label class="settings-transfer-scope-card">
+        <input type="radio" name="jobs-secure-scope" value="passphrases_only">
+        <span><strong>${settingsT('transfer.importScopePassphrasesOnly')}</strong><small>${settingsT('transfer.importScopePassphrasesOnlyHelp')}</small></span>
+      </label>
+    </div>
+    <div class="settings-transfer-action-list">
+      <div class="settings-transfer-job-picker-title">${settingsT('transfer.jobImportMode')}</div>
+      ${existingCount ? `
+        <div class="settings-transfer-segmented" data-jobs-secure-global-mode-wrap>
+          <label><input type="radio" name="jobs-secure-global-mode" value="skip" checked><span>${settingsT('transfer.jobImportSkipExisting')}</span></label>
+          <label><input type="radio" name="jobs-secure-global-mode" value="overwrite"><span>${settingsT('transfer.jobImportOverwriteExisting')}</span></label>
+          <label><input type="radio" name="jobs-secure-global-mode" value="rename"><span>${settingsT('transfer.jobImportRenameExisting')}</span></label>
+        </div>
+      ` : `<div class="status-message success">${settingsT('transfer.completeImportNoConflicts')}</div>`}
     </div>
   `;
 }
@@ -3648,21 +3745,23 @@ function renderSettingsTransferConfirmStep(preview, selectedRows, fileName, deci
   const rowModes = decision?.rowModes || {};
   const existingCount = selectedRows.filter((row) => String(row?.conflict || '') === 'exists').length;
   const newCount = selectedRows.length - existingCount;
-  const total = String(decision?.kind || '') === 'selective' ? 4 : 3;
+  const overwriteCount = selectedRows.filter((row) => String(row?.conflict || '') === 'exists' && String(rowModes[String(row?.job_key || '').trim()] || 'skip') === 'overwrite').length;
+  const renameCount = selectedRows.filter((row) => String(row?.conflict || '') === 'exists' && String(rowModes[String(row?.job_key || '').trim()] || 'skip') === 'rename').length;
+  const passphraseCount = settingsTransferScopeIncludesPassphrases(scope)
+    ? selectedRows.filter((row) => String(row?.passphrase?.bundle?.path || '').trim()).length
+    : 0;
   return `
-    ${renderSettingsTransferStepHeader(total, settingsT('transfer.importStepConfirmTitle'), settingsT('transfer.importStepConfirmText'), total)}
+    ${renderSettingsTransferStepHeader(3, settingsT('transfer.importStepConfirmTitle'), settingsT('transfer.importStepConfirmText'), 3)}
     ${renderSettingsTransferFileSummary(preview, fileName)}
-    <section class="settings-transfer-review-summary">
-      <header>
-        <strong>${settingsT('transfer.importReviewTitle')}</strong>
-        <span>${settingsT('transfer.importReviewText')}</span>
-      </header>
-      <div class="settings-transfer-review-summary-grid">
-        <div><span>${settingsT('transfer.importKind')}</span><strong>${escHtml(settingsTransferImportKindLabel(decision?.kind))}</strong></div>
-        <div><span>${settingsT('transfer.importContent')}</span><strong>${escHtml(settingsTransferImportScopeLabel(scope))}</strong></div>
-        <div><span>${settingsT('transfer.selectedJobs')}</span><strong>${settingsT('transfer.importReviewJobsDetail', { selected: selectedRows.length, existing: existingCount, new: newCount })}</strong></div>
-      </div>
-    </section>
+    <div class="settings-transfer-review-stats">
+      <div class="settings-transfer-stat-card state-info"><span>${settingsT('transfer.selectedJobs')}</span><strong>${selectedRows.length}</strong><small>${settingsT('transfer.importReviewJobsDetail', { selected: selectedRows.length, existing: existingCount, new: newCount })}</small></div>
+      <div class="settings-transfer-stat-card state-warning"><span>${settingsT('transfer.passphrase')}</span><strong>${passphraseCount}</strong><small>${settingsT('transfer.importReviewPassphrases')}</small></div>
+      <div class="settings-transfer-stat-card state-neutral"><span>${settingsT('transfer.borgKeyTarget')}</span><strong>0</strong><small>${settingsT('transfer.importReviewNoBorgKeys')}</small></div>
+    </div>
+    <div class="settings-transfer-info-box">
+      <strong>${settingsT('transfer.importReviewNoBorgKeysTitle')}</strong>
+      <span>${settingsT('transfer.importReviewNoBorgKeysText')}</span>
+    </div>
     <div class="settings-transfer-plan-list">
       ${selectedRows.map((row) => {
         const jobKey = String(row?.job_key || '').trim();
@@ -3677,6 +3776,12 @@ function renderSettingsTransferConfirmStep(preview, selectedRows, fileName, deci
         </div>`;
       }).join('')}
     </div>
+    ${(overwriteCount || renameCount) ? `
+      <label class="settings-transfer-confirm-check">
+        <input type="checkbox" data-settings-transfer-confirm-overwrite>
+        <span>${settingsT('transfer.importOverwriteAck')}</span>
+      </label>
+    ` : ''}
   `;
 }
 
@@ -3725,54 +3830,45 @@ async function settingsTransferRunSecureJobsWizard(preview, importableRows, file
   });
   if (!importKind) return null;
 
-  let selectedJobs = [];
-  if (importKind === 'complete') {
-    selectedJobs = importableRows.map((row) => String(row.job_key || '').trim()).filter(Boolean);
-  } else {
-    selectedJobs = await _openSettingsDialog({
-      title: settingsT('transfer.importWizardTitle'),
-      dialogClass: 'modal-transfer-wizard',
-      html: renderSettingsTransferJobSelectionStep(preview, importableRows, fileName, 2, 4),
-      confirmText: settingsT('transfer.continue'),
-      onOpen: ({ modal, okBtn, addCleanup }) => {
-        const updateSelection = () => {
-          const count = modal.querySelectorAll('[data-jobs-secure-row-select]:checked').length;
-          const counter = modal.querySelector('#jobs-secure-selection-count');
-          if (counter) counter.textContent = settingsT('transfer.selectedJobsCount', { count });
-          okBtn.disabled = count < 1;
-        };
-        modal.addEventListener('change', updateSelection);
-        addCleanup(() => modal.removeEventListener('change', updateSelection));
-        updateSelection();
-      },
-      resolveValue: ({ modal }) => Array.from(modal?.querySelectorAll('[data-jobs-secure-row-select]:checked') || [])
-        .map((el) => String(el.getAttribute('data-jobs-secure-row-select') || '').trim())
-        .filter(Boolean),
-    });
-    if (!selectedJobs) return null;
-  }
-  if (!selectedJobs.length) throw new Error(settingsT('transfer.noJobsSelected'));
-  const selectedRows = selectedJobs.map((key) => settingsTransferJobByKey(preview, key)).filter(Boolean);
   const action = await _openSettingsDialog({
     title: settingsT('transfer.importWizardTitle'),
     dialogClass: 'modal-transfer-wizard',
-    html: renderSettingsTransferActionStep(
-      preview,
-      selectedRows,
-      fileName,
-      importKind,
-      importKind === 'selective' ? 3 : 2,
-      importKind === 'selective' ? 4 : 3,
-    ),
+    html: renderSettingsTransferSelectAndActionStep(preview, importableRows, fileName, importKind),
     confirmText: settingsT('transfer.continue'),
-    resolveValue: ({ modal }) => {
-      const rowModes = {};
-      Array.from(modal?.querySelectorAll('[data-jobs-secure-row-mode]') || []).forEach((el) => {
-        const key = String(el.getAttribute('data-jobs-secure-row-mode') || '').trim();
-        const value = String(el.value || 'skip').trim();
-        if (key) rowModes[key] = value;
+    onOpen: ({ modal, okBtn, addCleanup }) => {
+      const searchEl = modal.querySelector('[data-jobs-secure-search]');
+      const updateRows = () => {
+        const q = String(searchEl?.value || '').trim().toLowerCase();
+        modal.querySelectorAll('[data-jobs-secure-row-card]').forEach((row) => {
+          row.classList.toggle('hidden', !!q && !String(row.getAttribute('data-filter-text') || '').includes(q));
+        });
+      };
+      const updateSelection = () => {
+        const count = importKind === 'complete'
+          ? importableRows.length
+          : modal.querySelectorAll('[data-jobs-secure-row-select]:checked').length;
+        const counter = modal.querySelector('#jobs-secure-selection-count');
+        if (counter) counter.textContent = settingsT('transfer.selectedJobsCount', { count });
+        okBtn.disabled = count < 1;
+      };
+      modal.addEventListener('change', updateSelection);
+      if (searchEl) searchEl.addEventListener('input', updateRows);
+      addCleanup(() => {
+        modal.removeEventListener('change', updateSelection);
+        if (searchEl) searchEl.removeEventListener('input', updateRows);
       });
-      const globalMode = String(modal?.querySelector('[data-jobs-secure-global-mode]')?.value || '').trim();
+      updateRows();
+      updateSelection();
+    },
+    resolveValue: ({ modal }) => {
+      const selectedJobs = importKind === 'complete'
+        ? importableRows.map((row) => String(row.job_key || '').trim()).filter(Boolean)
+        : Array.from(modal?.querySelectorAll('[data-jobs-secure-row-select]:checked') || [])
+          .map((el) => String(el.getAttribute('data-jobs-secure-row-select') || '').trim())
+          .filter(Boolean);
+      const selectedRows = selectedJobs.map((key) => settingsTransferJobByKey(preview, key)).filter(Boolean);
+      const rowModes = {};
+      const globalMode = String(modal?.querySelector('input[name="jobs-secure-global-mode"]:checked')?.value || 'skip').trim();
       if (globalMode) {
         selectedRows.forEach((row) => {
           const key = String(row?.job_key || '').trim();
@@ -3789,11 +3885,22 @@ async function settingsTransferRunSecureJobsWizard(preview, importableRows, file
     },
   });
   if (!action || typeof action !== 'object') return null;
+  const selectedRows = Array.isArray(action.selectedRows) ? action.selectedRows : [];
+  if (!selectedRows.length) throw new Error(settingsT('transfer.noJobsSelected'));
   const confirmed = await _openSettingsDialog({
     title: settingsT('transfer.importWizardTitle'),
     dialogClass: 'modal-transfer-wizard',
     html: renderSettingsTransferConfirmStep(preview, selectedRows, fileName, action),
     confirmText: settingsT('transfer.startImport'),
+    onOpen: ({ modal, okBtn, addCleanup }) => {
+      const cb = modal.querySelector('[data-settings-transfer-confirm-overwrite]');
+      const update = () => { if (cb) okBtn.disabled = !cb.checked; };
+      if (cb) {
+        cb.addEventListener('change', update);
+        addCleanup(() => cb.removeEventListener('change', update));
+      }
+      update();
+    },
   });
   return confirmed ? action : null;
 }
@@ -4137,6 +4244,146 @@ async function importProfileSecretsPreviewSelectFile() {
   }
 }
 
+function settingsTransferProfileSecretStats(preview) {
+  const entries = Array.isArray(preview?.entries) ? preview.entries : [];
+  const settingsPreview = preview?.settings_preview || {};
+  const profiles = Number(settingsPreview?.profiles_total || 0);
+  const existing = entries.filter((row) => ['present_match', 'present_mismatch'].includes(String(row?.status || ''))).length;
+  const missing = entries.filter((row) => String(row?.status || '') === 'missing').length;
+  const invalid = entries.filter((row) => String(row?.status || '') === 'profile_missing').length;
+  return { entries: entries.length, profiles, existing, missing, invalid };
+}
+
+function renderSettingsProfileSecretsFileSummary(preview, fileName) {
+  const stats = settingsTransferProfileSecretStats(preview);
+  return `<div class="settings-transfer-wizard-summary">
+    <strong>${escHtml(fileName || settingsT('transfer.file'))}</strong>
+    <span>${settingsT('transfer.profilesImportPackageSummary', {
+      profiles: stats.profiles,
+      entries: Number(preview?.count || stats.entries || 0),
+    })}</span>
+  </div>`;
+}
+
+function renderProfileSecretsImportKindStep(preview, fileName) {
+  return `
+    ${renderSettingsTransferStepHeader(1, settingsT('transfer.profilesWizardStepKindTitle'), settingsT('transfer.profilesWizardStepKindText'), 3)}
+    ${renderSettingsProfileSecretsFileSummary(preview, fileName)}
+    <div class="settings-transfer-kind-stack">
+      <label class="settings-transfer-kind-card settings-transfer-kind-card-profiles">
+        <input type="radio" name="profile-secrets-scope" value="profiles_secrets" checked>
+        <span class="settings-transfer-kind-card-body">
+          <span class="settings-transfer-kind-card-top">
+            <strong>${settingsT('transfer.importScopeProfilesSecrets')}</strong>
+            <em>${settingsT('transfer.importKindSelectiveBadge')}</em>
+          </span>
+          <small>${settingsT('transfer.profilesWizardProfilesSecretsHelp')}</small>
+        </span>
+      </label>
+      <label class="settings-transfer-kind-card">
+        <input type="radio" name="profile-secrets-scope" value="secrets_only">
+        <span class="settings-transfer-kind-card-body">
+          <span class="settings-transfer-kind-card-top">
+            <strong>${settingsT('transfer.importScopeSecretsOnly')}</strong>
+            <em>${settingsT('transfer.importAdvancedOptions')}</em>
+          </span>
+          <small>${settingsT('transfer.profilesWizardSecretsOnlyHelp')}</small>
+        </span>
+      </label>
+    </div>
+  `;
+}
+
+function renderProfileSecretsImportActionStep(preview, fileName, scope) {
+  const stats = settingsTransferProfileSecretStats(preview);
+  return `
+    ${renderSettingsTransferStepHeader(2, settingsT('transfer.profilesWizardStepActionTitle'), settingsT('transfer.profilesWizardStepActionText'), 3)}
+    ${renderSettingsProfileSecretsFileSummary(preview, fileName)}
+    <div class="settings-transfer-review-stats">
+      <div class="settings-transfer-stat-card state-profiles"><span>${settingsT('transfer.profile')}</span><strong>${stats.profiles}</strong><small>${settingsT('transfer.profilesWizardProfilesDetail')}</small></div>
+      <div class="settings-transfer-stat-card state-warning"><span>${settingsT('transfer.secret')}</span><strong>${stats.entries}</strong><small>${settingsT('transfer.profilesWizardSecretsDetail')}</small></div>
+      <div class="settings-transfer-stat-card ${stats.invalid ? 'state-error' : 'state-success'}"><span>${settingsT('transfer.checkOk')}</span><strong>${stats.invalid ? stats.invalid : 'OK'}</strong><small>${stats.invalid ? settingsT('transfer.profilesWizardInvalidDetail') : settingsT('transfer.profilesWizardOkDetail')}</small></div>
+    </div>
+    <div class="settings-transfer-info-box settings-transfer-info-box-profiles">
+      <strong>${settingsT('transfer.profilesWizardWhatImportsTitle')}</strong>
+      <span>${scope === 'profiles_secrets' ? settingsT('transfer.profilesWizardWhatImportsProfilesSecrets') : settingsT('transfer.profilesWizardWhatImportsSecretsOnly')}</span>
+    </div>
+    <div class="settings-transfer-action-list">
+      <div class="settings-transfer-job-picker-title">${settingsT('transfer.secretImportMode')}</div>
+      <div class="settings-transfer-segmented">
+        <label><input type="radio" name="profile-secrets-file-mode" value="skip" checked><span>${settingsT('transfer.secretImportSkipExisting')}</span></label>
+        <label><input type="radio" name="profile-secrets-file-mode" value="overwrite"><span>${settingsT('transfer.secretImportOverwriteExisting')}</span></label>
+      </div>
+    </div>
+  `;
+}
+
+function renderProfileSecretsImportConfirmStep(preview, fileName, decision) {
+  const stats = settingsTransferProfileSecretStats(preview);
+  const overwrite = String(decision?.mode || '') === 'overwrite';
+  return `
+    ${renderSettingsTransferStepHeader(3, settingsT('transfer.importStepConfirmTitle'), settingsT('transfer.profilesWizardConfirmText'), 3)}
+    ${renderSettingsProfileSecretsFileSummary(preview, fileName)}
+    <div class="settings-transfer-review-stats">
+      <div class="settings-transfer-stat-card state-profiles"><span>${settingsT('transfer.profile')}</span><strong>${decision?.scope === 'profiles_secrets' ? stats.profiles : 0}</strong><small>${decision?.scope === 'profiles_secrets' ? settingsT('transfer.profilesWizardProfilesImported') : settingsT('transfer.profilesWizardProfilesUnchanged')}</small></div>
+      <div class="settings-transfer-stat-card state-warning"><span>${settingsT('transfer.secret')}</span><strong>${stats.entries}</strong><small>${overwrite ? settingsT('transfer.secretImportOverwriteExisting') : settingsT('transfer.secretImportSkipExisting')}</small></div>
+      <div class="settings-transfer-stat-card state-success"><span>${settingsT('transfer.checkOk')}</span><strong>OK</strong><small>${settingsT('transfer.profilesWizardOkDetail')}</small></div>
+    </div>
+    <div class="settings-transfer-plan-list">
+      <div class="settings-transfer-plan-row">
+        <header><span><strong>${settingsT('transfer.profilesWizardPlanProfilesTitle')}</strong><small>${decision?.scope === 'profiles_secrets' ? settingsT('transfer.profilesWizardWhatImportsProfilesSecrets') : settingsT('transfer.profilesWizardWhatImportsSecretsOnly')}</small></span><em>${decision?.scope === 'profiles_secrets' ? settingsT('transfer.settingsApplied') : settingsT('transfer.ignoreMode')}</em></header>
+      </div>
+      <div class="settings-transfer-plan-row">
+        <header><span><strong>${settingsT('transfer.profilesWizardPlanSecretsTitle')}</strong><small>${settingsT('transfer.profilesWizardSecretsPlan', { count: stats.entries })}</small></span><em>${overwrite ? settingsT('transfer.secretImportOverwriteExisting') : settingsT('transfer.secretImportSkipExisting')}</em></header>
+      </div>
+    </div>
+    ${overwrite ? `
+      <label class="settings-transfer-confirm-check">
+        <input type="checkbox" data-settings-transfer-confirm-overwrite>
+        <span>${settingsT('transfer.profilesOverwriteAck')}</span>
+      </label>
+    ` : ''}
+  `;
+}
+
+async function settingsTransferRunProfileSecretsWizard(preview, fileName) {
+  const scope = await _openSettingsDialog({
+    title: settingsT('transfer.profilesImportTitle'),
+    dialogClass: 'modal-transfer-wizard',
+    html: renderProfileSecretsImportKindStep(preview, fileName),
+    confirmText: settingsT('transfer.continue'),
+    resolveValue: ({ modal }) => String(modal?.querySelector('input[name="profile-secrets-scope"]:checked')?.value || 'profiles_secrets'),
+  });
+  if (!scope) return null;
+  const action = await _openSettingsDialog({
+    title: settingsT('transfer.profilesImportTitle'),
+    dialogClass: 'modal-transfer-wizard',
+    html: renderProfileSecretsImportActionStep(preview, fileName, scope),
+    confirmText: settingsT('transfer.continue'),
+    resolveValue: ({ modal }) => ({
+      scope,
+      mode: String(modal?.querySelector('input[name="profile-secrets-file-mode"]:checked')?.value || 'skip'),
+    }),
+  });
+  if (!action || typeof action !== 'object') return null;
+  const confirmed = await _openSettingsDialog({
+    title: settingsT('transfer.profilesImportTitle'),
+    dialogClass: 'modal-transfer-wizard',
+    html: renderProfileSecretsImportConfirmStep(preview, fileName, action),
+    confirmText: settingsT('transfer.startImport'),
+    onOpen: ({ modal, okBtn, addCleanup }) => {
+      const cb = modal.querySelector('[data-settings-transfer-confirm-overwrite]');
+      const update = () => { if (cb) okBtn.disabled = !cb.checked; };
+      if (cb) {
+        cb.addEventListener('change', update);
+        addCleanup(() => cb.removeEventListener('change', update));
+      }
+      update();
+    },
+  });
+  return confirmed ? action : null;
+}
+
 async function importProfileSecretsApplySelected(options = {}) {
   hideEl('settings-transfer-msg');
   try {
@@ -4159,37 +4406,13 @@ async function importProfileSecretsApplySelected(options = {}) {
       }
     });
     if (!usedVisibleSelection) {
-      selected = (preview.entries || []).map((r) => `${String(r.profile_type || '').toLowerCase()}:${String(r.profile_key || '').toLowerCase()}:${String(r.secret_type || '')}`);
+      const sp = preview?.settings_preview || null;
+      selected = (preview.entries || [])
+        .filter((r) => String(r.status) !== 'profile_missing' || !!(sp && sp.present))
+        .map((r) => `${String(r.profile_type || '').toLowerCase()}:${String(r.profile_key || '').toLowerCase()}:${String(r.secret_type || '')}`);
     }
     if (!selected.length) throw new Error(settingsT('transfer.noProfilesSelected'));
-    const decision = await _openSettingsDialog({
-      title: settingsT('transfer.profilesImportTitle'),
-      html: `
-        <div class="settings-transfer-wizard-summary">
-          <strong>${escHtml(options.fileName || settingsT('transfer.file'))}</strong>
-          <span>${settingsT('transfer.profilesImportPackageSummary', {
-            entries: Number(preview?.count || selected.length || 0),
-            profiles: Number(preview?.settings_preview?.profiles_total || 0),
-          })}</span>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-          <label class="form-checkbox-row"><input type="radio" name="profile-secrets-scope" value="profiles_secrets" checked> ${settingsT('transfer.importScopeProfilesSecrets')}</label>
-          <label class="form-checkbox-row"><input type="radio" name="profile-secrets-scope" value="secrets_only"> ${settingsT('transfer.importScopeSecretsOnly')}</label>
-        </div>
-        <div class="form-group" style="margin-top:12px">
-          <label class="form-label">${settingsT('transfer.secretImportMode')}</label>
-          <select class="form-select" id="profile-secrets-file-mode">
-            <option value="skip" selected>${settingsT('transfer.secretImportSkipExisting')}</option>
-            <option value="overwrite">${settingsT('transfer.secretImportOverwriteExisting')}</option>
-          </select>
-        </div>
-      `,
-      confirmText: settingsT('transfer.startImport'),
-      resolveValue: ({ modal }) => ({
-        scope: String(modal?.querySelector('input[name="profile-secrets-scope"]:checked')?.value || 'profiles_secrets'),
-        mode: String(modal?.querySelector('#profile-secrets-file-mode')?.value || 'skip'),
-      }),
-    });
+    const decision = await settingsTransferRunProfileSecretsWizard(preview, options.fileName || settingsT('transfer.file'));
     if (!decision || typeof decision !== 'object') return;
     const settingsMode = decision.scope === 'profiles_secrets' ? 'merge' : 'ignore';
     const mode = ['skip', 'overwrite'].includes(decision.mode) ? decision.mode : 'skip';

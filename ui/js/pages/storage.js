@@ -779,6 +779,27 @@ async function storageReadFileAsBase64(file) {
   return btoa(binary);
 }
 
+function storageRepositoryKeyWizardHeader(step, title, text) {
+  const stepper = typeof renderSettingsTransferStepper === 'function'
+    ? renderSettingsTransferStepper(step, 3)
+    : '';
+  return `<div class="settings-transfer-step-header">
+    <div class="settings-transfer-step-top">
+      <span>${escHtml(storageT('storage.repositoryKeyImportStep', { step, total: 3 }))}</span>
+      ${stepper}
+    </div>
+    <strong>${escHtml(title)}</strong>
+    <small>${escHtml(text)}</small>
+  </div>`;
+}
+
+function storageRepositoryKeyFileSummary(file, preview = null) {
+  return `<div class="settings-transfer-wizard-summary">
+    <strong>${escHtml(file?.name || storageT('storage.repositoryKeyBackupFile'))}</strong>
+    <span>${escHtml(preview?.repository_id ? storageT('storage.repositoryKeyBackupFound', { count: 1 }) : storageT('storage.repositoryKeyBackupEncrypted'))}</span>
+  </div>`;
+}
+
 async function exportRepositoryKey(repositoryKey, button) {
   const key = String(repositoryKey || '').trim();
   if (!key) return;
@@ -810,7 +831,15 @@ async function importRepositoryKey(repositoryKey, file, input) {
     const payload_b64 = await storageReadFileAsBase64(file);
     const password = await _openSettingsDialog({
       title: storageT('storage.repositoryKeyBackupPasswordTitle'),
-      html: `<div class="modal-info-item warning">${storageT('storage.repositoryKeyBackupPasswordMessage')}</div>`,
+      dialogClass: 'modal-transfer-wizard',
+      html: `
+        ${storageRepositoryKeyWizardHeader(1, storageT('storage.repositoryKeyBackupSelectTitle'), storageT('storage.repositoryKeyBackupSelectText'))}
+        ${storageRepositoryKeyFileSummary(file)}
+        <div class="settings-transfer-info-box settings-transfer-info-box-warning">
+          <strong>${escHtml(storageT('storage.repositoryKeyBackupEmergencyTitle'))}</strong>
+          <span>${escHtml(storageT('storage.repositoryKeyBackupPasswordMessage'))}</span>
+        </div>
+      `,
       input: { label: storageT('storage.repositoryKeyBackupPassword'), type: 'password', value: '', validate: (v) => String(v || '').length >= 1 },
       confirmText: storageT('storage.repositoryKeyBackupCheck'),
     });
@@ -824,20 +853,38 @@ async function importRepositoryKey(repositoryKey, file, input) {
     if (!previewResponse.ok) throw new Error(apiErrorMessage(preview, previewResponse.status));
     const confirmed = await _openSettingsDialog({
       title: storageT('storage.repositoryKeyBackupReviewTitle'),
+      dialogClass: 'modal-transfer-wizard',
       html: `
-        <div class="modal-info-list">
-          <div class="modal-info-item">
-            <span class="modal-info-text">
-              <strong>${escHtml(preview.repository_name || key)}</strong><br>
-              ${escHtml(preview.repository_path || '')}<br>
-              ${escHtml(storageT('storage.repositoryKeyRecoveryRepositoryId'))}: ${escHtml(preview.repository_id || '')}
-            </span>
+        ${storageRepositoryKeyWizardHeader(3, storageT('storage.repositoryKeyBackupConfirmTitle'), storageT('storage.repositoryKeyBackupConfirmText'))}
+        ${storageRepositoryKeyFileSummary(file, preview)}
+        <div class="settings-transfer-review-stats">
+          <div class="settings-transfer-stat-card state-info"><span>${escHtml(storageT('storage.repository'))}</span><strong>${escHtml(preview.repository_name || key)}</strong><small>${escHtml(preview.repository_path || '')}</small></div>
+          <div class="settings-transfer-stat-card state-success"><span>${escHtml(storageT('storage.repositoryKeyIdCheck'))}</span><strong>OK</strong><small>${escHtml(preview.repository_id || '')}</small></div>
+          <div class="settings-transfer-stat-card state-warning"><span>${escHtml(storageT('storage.repositoryKeyAction'))}</span><strong>${escHtml(storageT('storage.repositoryKeyActionReplace'))}</strong><small>${escHtml(storageT('storage.repositoryKeyActionReplaceHint'))}</small></div>
+        </div>
+        <div class="settings-transfer-info-box settings-transfer-info-box-warning">
+          <strong>${escHtml(storageT('storage.repositoryKeyBackupEmergencyTitle'))}</strong>
+          <span>${escHtml(storageT('storage.repositoryKeyBackupReviewMessage'))}</span>
+        </div>
+        <div class="settings-transfer-plan-list">
+          <div class="settings-transfer-plan-row">
+            <header><span><strong>${escHtml(storageT('storage.repositoryKeyPlannedChange'))}</strong><small>${escHtml(storageT('storage.repositoryKeyPlannedChangeText', { id: preview.repository_id || '', name: preview.repository_name || key }))}</small></span><em>${escHtml(storageT('storage.repositoryKeyBackupImportConfirm'))}</em></header>
           </div>
-          <div class="modal-info-item success">
-            <span class="modal-info-text">${escHtml(storageT('storage.repositoryKeyBackupReviewMessage'))}</span>
-          </div>
-        </div>`,
+        </div>
+        <label class="settings-transfer-confirm-check">
+          <input type="checkbox" data-storage-key-import-confirm>
+          <span>${escHtml(storageT('storage.repositoryKeyImportAck'))}</span>
+        </label>`,
       confirmText: storageT('storage.repositoryKeyBackupImportConfirm'),
+      onOpen: ({ modal, okBtn, addCleanup }) => {
+        const cb = modal.querySelector('[data-storage-key-import-confirm]');
+        const update = () => { okBtn.disabled = !cb?.checked; };
+        if (cb) {
+          cb.addEventListener('change', update);
+          addCleanup(() => cb.removeEventListener('change', update));
+        }
+        update();
+      },
     });
     if (!confirmed) return;
     const response = await fetch('/api/repositories/key-backup-import', {
