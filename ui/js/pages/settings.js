@@ -2622,6 +2622,7 @@ function renderSettingsTransferTools() {
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
         <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-repository-keys">${settingsT('transfer.repositoryKeysExport')}</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-repository-keys">${settingsT('transfer.repositoryKeysImport')}</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
         <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-profile-secrets">${settingsT('transfer.profilesExport')}</button>
@@ -3114,6 +3115,13 @@ async function exportRepositoryKeysBackup() {
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.repositoryKeysFailed', { message: err.message }));
   }
+}
+
+function openRepositoryKeyImportGuide() {
+  window.BBUI.storageState = window.BBUI.storageState || {};
+  window.BBUI.storageState.selectedTab = 'management';
+  window.BBUI.storageState.pendingRepositoryKeyImportGuide = true;
+  window.BBUI?.core?.navigate?.('storage');
 }
 
 async function exportSupportBundle() {
@@ -5682,6 +5690,7 @@ async function onSettingsContentClick(event) {
   if (action === 'export-jobs') return exportJobsBundle();
   if (action === 'export-jobs-secure') return exportJobsBundleSecure();
   if (action === 'export-repository-keys') return exportRepositoryKeysBackup();
+  if (action === 'import-repository-keys') return openRepositoryKeyImportGuide();
   if (action === 'import-jobs-select-file') return importJobsPreviewSelectFile();
   if (action === 'import-jobs-secure-select-file') return importJobsSecurePreviewSelectFile();
   if (action === 'import-jobs-apply') return importJobsApplySelected();

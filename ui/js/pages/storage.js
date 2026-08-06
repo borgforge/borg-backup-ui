@@ -13,6 +13,7 @@ window.BBUI.storageState = window.BBUI.storageState || {
   lifecycleCache: {},
   maintenanceState: { running: false },
   search: '',
+  pendingRepositoryKeyImportGuide: false,
 };
 const storageState = window.BBUI.storageState;
 storageState.archiveCache = storageState.archiveCache || {};
@@ -20,6 +21,7 @@ storageState.lifecycleCache = storageState.lifecycleCache || {};
 storageState.maintenanceState = storageState.maintenanceState || { running: false };
 storageState.maintenanceConfirmation = null;
 storageState.lifecycleConfirmation = null;
+storageState.pendingRepositoryKeyImportGuide = !!storageState.pendingRepositoryKeyImportGuide;
 
 function storageT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
@@ -185,6 +187,10 @@ async function refreshStorage() {
     renderStorage(storageState.data);
     if (storageState.selectedTab === 'management' && storageState.selectedRepositoryKey) {
       await loadRepositoryLifecycle(storageState.selectedRepositoryKey, true);
+    }
+    if (storageState.pendingRepositoryKeyImportGuide) {
+      storageState.pendingRepositoryKeyImportGuide = false;
+      showMsg('storage-message', 'info', storageT('storage.repositoryKeyImportGuide'));
     }
   } catch (err) {
     showMsg('storage-message', 'error', storageT('storage.errorPrefix', { message: err.message }));
