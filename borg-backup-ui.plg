@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.06.0120">
+<!ENTITY version   "2026.08.06.1729">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -10,6 +10,7 @@
 ]>
 
 <PLUGIN name="&name;"
+        Title="Borg Backup UI"
         author="&author;"
         version="&version;"
         launch="Settings/borg-backup-ui"
@@ -19,6 +20,12 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.06.1729###
+- Added a human-readable Unraid plugin title and Plugin Manager README so supported plugin lists can show `Borg Backup UI` while the internal plugin name remains unchanged for compatibility.
+- Fixed a Docker backup concurrency race: overlapping Docker-enabled jobs now acquire the Docker control lock whenever Docker runtime control is configured, and Docker/VM restart recovery state is written safely across processes.
+- Automatic repository information refresh is now disabled by default for new installations, with clearer settings text about possible Unraid disk wake-ups when the feature is enabled.
+- Added Borg key recovery for encrypted repositories: jobs/passphrases, repository keys, and profiles/secrets are handled as separate encrypted transfer flows, repository-key backups can contain all exported repository keys, restoring a key is done only from the selected repository with repository-ID validation, and the job import wizard now focuses on complete or selective job/passphrase recovery with clearer review details.
+
 ###2026.08.06.0120###
 - Updated the bundled BorgBackup 1.x stable runtime from 1.4.4 to 1.4.5, including Borg's latest 1.x fixes.
 - Borg Backup UI no longer adds its own autostart block to `/boot/config/go`; updates clean up the old block while the plugin still starts through the normal plugin flow.
@@ -29,9 +36,6 @@
 - Show the next scheduled backup run on the Dashboard job overview, including clear states for jobs without a schedule or with a disabled schedule.
 - Recover incomplete manual plugin deletions during reinstall: if Unraid still reports the package as installed but plugin payload or Apprise vendor metadata is missing, the installer now re-extracts the verified package before continuing.
 - Added an Unraid control page recovery action for forgotten Borg Backup UI admin credentials. The control page now creates a short-lived one-time recovery link for an existing admin account and shows it as a clear action button; the recovery page displays the selected admin, the new password is entered in Borg Backup UI, all UI sessions are signed out, and jobs, repositories, secrets, settings, and logs remain untouched.
-
-###2026.08.02.1320###
-- Fixed the Unraid control page so applying a changed port or bind address restarts Borg Backup UI and redirects to the correct UI URL with the configured port instead of leaving the browser on a blank Settings page.
 
 ]]>
 </CHANGES>
@@ -57,7 +61,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="16f18dcc54ef9d52ba672142116bcd58"
+EXPECTED_MD5="68b40da313a8db4789554de9b87d3279"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
