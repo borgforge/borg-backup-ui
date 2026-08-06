@@ -3753,10 +3753,9 @@ function renderSettingsTransferConfirmStep(preview, selectedRows, fileName, deci
   return `
     ${renderSettingsTransferStepHeader(3, settingsT('transfer.importStepConfirmTitle'), settingsT('transfer.importStepConfirmText'), 3)}
     ${renderSettingsTransferFileSummary(preview, fileName)}
-    <div class="settings-transfer-review-stats">
+    <div class="settings-transfer-review-stats settings-transfer-review-stats-two">
       <div class="settings-transfer-stat-card state-info"><span>${settingsT('transfer.selectedJobs')}</span><strong>${selectedRows.length}</strong><small>${settingsT('transfer.importReviewJobsDetail', { selected: selectedRows.length, existing: existingCount, new: newCount })}</small></div>
       <div class="settings-transfer-stat-card state-warning"><span>${settingsT('transfer.passphrase')}</span><strong>${passphraseCount}</strong><small>${settingsT('transfer.importReviewPassphrases')}</small></div>
-      <div class="settings-transfer-stat-card state-neutral"><span>${settingsT('transfer.borgKeyTarget')}</span><strong>0</strong><small>${settingsT('transfer.importReviewNoBorgKeys')}</small></div>
     </div>
     <div class="settings-transfer-info-box">
       <strong>${settingsT('transfer.importReviewNoBorgKeysTitle')}</strong>

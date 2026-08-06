@@ -2925,6 +2925,10 @@ body.wizard-modal-open {
   margin-top: 12px;
 }
 
+.settings-transfer-review-stats-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .settings-transfer-stat-card {
   display: grid;
   gap: 3px;
