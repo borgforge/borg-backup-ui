@@ -281,6 +281,18 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
     jobs = bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []
     schedules = bundle.get("schedules") if isinstance(bundle.get("schedules"), dict) else {}
     pp_meta = bundle.get("passphrase_meta") if isinstance(bundle.get("passphrase_meta"), dict) else {}
+    repositories = bundle.get("repositories") if isinstance(bundle.get("repositories"), list) else []
+    storages = bundle.get("storages") if isinstance(bundle.get("storages"), list) else []
+    repo_by_key = {
+        str(row.get("repository_key") or "").strip(): row
+        for row in repositories
+        if isinstance(row, dict)
+    }
+    storage_by_key = {
+        str(row.get("storage_key") or "").strip(): row
+        for row in storages
+        if isinstance(row, dict)
+    }
     jobs_dir = _jobs_dir(config)
     existing = {p.stem for p in jobs_dir.glob("*.json")}
     rows: list[dict] = []
@@ -297,6 +309,17 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
         schedule = schedules.get(src_key, {})
         feats = raw.get("features") if isinstance(raw.get("features"), dict) else {}
         repository_key = str(raw.get("repository_key") or "").strip()
+        repository = repo_by_key.get(repository_key) or {}
+        repo_path = str(repository.get("path_display") or repository.get("path_raw") or repository.get("repo_path") or "").strip()
+        if not repo_path:
+            relative_path = str(repository.get("relative_path") or "").strip()
+            storage_key = str(repository.get("storage_key") or "").strip()
+            storage = storage_by_key.get(storage_key) or {}
+            base_path = str(storage.get("base_path") or storage.get("path") or "").strip()
+            if base_path and relative_path:
+                repo_path = f"{base_path.rstrip('/')}/{relative_path.lstrip('/')}"
+            else:
+                repo_path = relative_path
         pp = pp_meta.get(repository_key) if isinstance(pp_meta.get(repository_key), dict) else {}
         pp_status = "unknown"
         pp_local = None
@@ -319,6 +342,14 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
             "name": str(raw.get("name") or src_key),
             "backup_type": str(raw.get("backup_type") or ""),
             "location": str(raw.get("location") or ""),
+            "repository_key": repository_key,
+            "repository": {
+                "repository_key": repository_key,
+                "display_name": str(repository.get("display_name") or repository.get("repository_name") or repository_key),
+                "repository_name": str(repository.get("repository_name") or ""),
+                "path": repo_path,
+                "repository_id": str(repository.get("borg_repository_id") or repository.get("borg_key_repository_id") or "").strip().lower(),
+            },
             "features": {"docker": bool(feats.get("docker")), "vm": bool(feats.get("vm"))},
             "schedule": schedule if isinstance(schedule, dict) else {},
             "conflict": conflict,
@@ -1211,6 +1242,21 @@ def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str)
     borg_key_exports = payload.get("borg_key_exports") if isinstance(payload.get("borg_key_exports"), dict) else {}
     out["borg_key_export_count"] = sum(1 for row in borg_key_exports.values() if isinstance(row, dict) and row.get("exists"))
     out["borg_key_export_failed_count"] = sum(1 for row in borg_key_exports.values() if isinstance(row, dict) and not row.get("exists"))
+    for row in out.get("jobs") if isinstance(out.get("jobs"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        repository_key = str(row.get("repository_key") or "").strip()
+        key_row = borg_key_exports.get(repository_key)
+        if isinstance(key_row, dict):
+            row["borg_key"] = {
+                "exists": bool(key_row.get("exists")),
+                "repository_id": str(key_row.get("repository_id") or "").strip().lower(),
+                "sha256": str(key_row.get("sha256") or ""),
+                "size": int(key_row.get("size") or 0),
+                "error": str(key_row.get("error") or ""),
+            }
+        else:
+            row["borg_key"] = {"exists": False, "repository_id": "", "sha256": "", "size": 0, "error": ""}
     out.update(_encryption_preview_metadata(encryption_format))
     return out
 

@@ -3403,6 +3403,65 @@ function settingsTransferJobModeLabel(mode, row) {
   })[mode] || settingsT('transfer.jobImportSkipExisting');
 }
 
+function settingsTransferScopeIncludesJobs(scope) {
+  return scope === 'all' || scope === 'jobs_only';
+}
+
+function settingsTransferScopeIncludesPassphrases(scope) {
+  return scope === 'all' || scope === 'passphrases_only';
+}
+
+function settingsTransferScopeIncludesBorgKeys(scope) {
+  return scope === 'all' || scope === 'borg_keys_only';
+}
+
+function settingsTransferRepositoryName(row) {
+  const repo = row?.repository || {};
+  return String(repo.display_name || repo.repository_name || row?.repository_key || '').trim() || settingsT('transfer.unknown');
+}
+
+function settingsTransferPlannedActionLines(row, scope, rowModes) {
+  const jobKey = String(row?.job_key || '').trim();
+  const jobName = String(row?.name || jobKey).trim() || jobKey;
+  const conflict = String(row?.conflict || 'new');
+  const mode = String(rowModes?.[jobKey] || 'skip');
+  const lines = [];
+  if (settingsTransferScopeIncludesJobs(scope)) {
+    if (conflict !== 'exists') {
+      lines.push(settingsT('transfer.planJobCreate', { job: jobName }));
+    } else if (mode === 'overwrite') {
+      lines.push(settingsT('transfer.planJobOverwrite', { job: jobName }));
+    } else if (mode === 'rename') {
+      lines.push(settingsT('transfer.planJobCopy', { job: jobName }));
+    } else {
+      lines.push(settingsT('transfer.planJobSkip', { job: jobName }));
+    }
+  } else {
+    lines.push(settingsT('transfer.planJobUnchanged', { job: jobName }));
+  }
+
+  if (settingsTransferScopeIncludesPassphrases(scope)) {
+    const path = String(row?.passphrase?.bundle?.path || '').trim();
+    if (path) {
+      const exists = !!row?.passphrase?.local;
+      lines.push(settingsT(exists ? 'transfer.planPassphraseReplace' : 'transfer.planPassphraseCreate', { path }));
+    }
+  }
+
+  if (settingsTransferScopeIncludesBorgKeys(scope)) {
+    const key = row?.borg_key || {};
+    const repoName = settingsTransferRepositoryName(row);
+    const repositoryId = String(key.repository_id || row?.repository?.repository_id || '').trim();
+    if (key.exists && repositoryId) {
+      lines.push(settingsT('transfer.planBorgKeyImport', { id: repositoryId, repository: repoName }));
+    } else if (scope === 'borg_keys_only') {
+      lines.push(settingsT('transfer.planBorgKeyMissing', { repository: repoName }));
+    }
+  }
+
+  return lines;
+}
+
 function renderSettingsTransferStepHeader(step, title, text) {
   return `<div class="settings-transfer-step-header">
     <span>${settingsT('transfer.importStep', { step, total: 3 })}</span>
@@ -3509,13 +3568,17 @@ function renderSettingsTransferConfirmStep(preview, selectedRows, fileName, deci
       <div><span>${settingsT('transfer.jobStatusExists')}</span><strong>${existingCount}</strong></div>
       <div><span>${settingsT('transfer.jobStatusNew')}</span><strong>${newCount}</strong></div>
     </div>
-    <div class="settings-transfer-confirm-list">
+    <div class="settings-transfer-plan-list">
       ${selectedRows.map((row) => {
         const jobKey = String(row?.job_key || '').trim();
         const mode = String(rowModes[jobKey] || 'skip');
-        return `<div class="settings-transfer-confirm-row">
-          <span><strong>${escHtml(row?.name || jobKey)}</strong><small>${escHtml(settingsTransferJobSubline(row))}</small></span>
-          <em>${escHtml(settingsTransferJobModeLabel(mode, row))}</em>
+        const lines = settingsTransferPlannedActionLines(row, scope, rowModes);
+        return `<div class="settings-transfer-plan-row">
+          <header>
+            <span><strong>${escHtml(row?.name || jobKey)}</strong><small>${escHtml(settingsTransferJobSubline(row))}</small></span>
+            <em>${escHtml(settingsTransferJobModeLabel(mode, row))}</em>
+          </header>
+          <ul>${lines.map((line) => `<li>${escHtml(line)}</li>`).join('')}</ul>
         </div>`;
       }).join('')}
     </div>

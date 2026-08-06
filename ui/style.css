@@ -2407,7 +2407,8 @@ body.wizard-modal-open {
 
 .settings-transfer-job-list,
 .settings-transfer-action-list,
-.settings-transfer-confirm-list {
+.settings-transfer-confirm-list,
+.settings-transfer-plan-list {
   display: grid;
   gap: 6px;
   margin-top: 12px;
@@ -2608,6 +2609,56 @@ body.wizard-modal-open {
   white-space: nowrap;
 }
 
+.settings-transfer-plan-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.settings-transfer-plan-row header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-transfer-plan-row header span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-transfer-plan-row header strong {
+  color: var(--text);
+}
+
+.settings-transfer-plan-row header small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-plan-row header em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.settings-transfer-plan-row ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+
+.settings-transfer-plan-row li {
+  line-height: 1.45;
+}
+
 .settings-transfer-job-action .form-select {
   width: 100%;
   min-width: 130px;
@@ -2638,7 +2689,8 @@ body.wizard-modal-open {
   .settings-transfer-scope-grid,
   .settings-transfer-action-row,
   .settings-transfer-confirm-grid,
-  .settings-transfer-confirm-row {
+  .settings-transfer-confirm-row,
+  .settings-transfer-plan-row header {
     grid-template-columns: minmax(0, 1fr);
   }
 
