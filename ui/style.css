@@ -2405,21 +2405,21 @@ body.wizard-modal-open {
   margin-top: 12px;
 }
 
-.settings-transfer-mode-note {
+.settings-transfer-context-strip {
   display: grid;
   gap: 3px;
   margin-top: 12px;
   padding: 10px 12px;
-  border: 1px solid var(--state-info-border);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--state-info-dim);
+  background: var(--bg-tertiary);
 }
 
-.settings-transfer-mode-note strong {
+.settings-transfer-context-strip strong {
   color: var(--text);
 }
 
-.settings-transfer-mode-note span {
+.settings-transfer-context-strip span {
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -2510,6 +2510,80 @@ body.wizard-modal-open {
   white-space: nowrap;
 }
 
+.settings-transfer-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settings-transfer-kind-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 138px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.settings-transfer-kind-card:hover {
+  border-color: var(--accent);
+  background: var(--state-info-dim);
+}
+
+.settings-transfer-kind-card:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--state-info-dim);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.settings-transfer-kind-card input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.settings-transfer-kind-card-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-transfer-kind-card-top {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.settings-transfer-kind-card-top strong {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.settings-transfer-kind-card-top em {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.settings-transfer-kind-card-body small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .settings-transfer-scope-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2584,30 +2658,55 @@ body.wizard-modal-open {
   color: var(--text);
 }
 
-.settings-transfer-confirm-grid {
+.settings-transfer-review-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
-}
-
-.settings-transfer-confirm-grid > div {
-  display: grid;
-  gap: 3px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-secondary);
 }
 
-.settings-transfer-confirm-grid span {
+.settings-transfer-review-summary header {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-transfer-review-summary header strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.settings-transfer-review-summary header span {
   color: var(--text-muted);
   font-size: 12px;
 }
 
-.settings-transfer-confirm-grid strong {
+.settings-transfer-review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-transfer-review-summary-grid > div {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.settings-transfer-review-summary-grid span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-transfer-review-summary-grid strong {
   color: var(--text);
-  font-size: 16px;
+  font-size: 14px;
+  line-height: 1.35;
 }
 
 .settings-transfer-confirm-row {
@@ -2705,9 +2804,10 @@ body.wizard-modal-open {
 
 @media (max-width: 700px) {
   .settings-transfer-job-card,
+  .settings-transfer-kind-grid,
   .settings-transfer-scope-grid,
   .settings-transfer-action-row,
-  .settings-transfer-confirm-grid,
+  .settings-transfer-review-summary-grid,
   .settings-transfer-confirm-row,
   .settings-transfer-plan-row header {
     grid-template-columns: minmax(0, 1fr);

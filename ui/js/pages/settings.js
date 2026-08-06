@@ -3526,14 +3526,26 @@ function renderSettingsTransferKindStep(preview, fileName) {
   return `
     ${renderSettingsTransferStepHeader(1, settingsT('transfer.importStepKindTitle'), settingsT('transfer.importStepKindText'))}
     ${renderSettingsTransferFileSummary(preview, fileName)}
-    <div class="settings-transfer-scope-grid">
-      <label class="settings-transfer-scope-card settings-transfer-scope-card-primary">
+    <div class="settings-transfer-kind-grid">
+      <label class="settings-transfer-kind-card">
         <input type="radio" name="jobs-secure-kind" value="selective" checked>
-        <span><strong>${settingsT('transfer.importKindSelective')}</strong><small>${settingsT('transfer.importKindSelectiveHelp')}</small></span>
+        <span class="settings-transfer-kind-card-body">
+          <span class="settings-transfer-kind-card-top">
+            <strong>${settingsT('transfer.importKindSelective')}</strong>
+            <em>${settingsT('transfer.importKindSelectiveBadge')}</em>
+          </span>
+          <small>${settingsT('transfer.importKindSelectiveHelp')}</small>
+        </span>
       </label>
-      <label class="settings-transfer-scope-card">
+      <label class="settings-transfer-kind-card">
         <input type="radio" name="jobs-secure-kind" value="complete">
-        <span><strong>${settingsT('transfer.importKindComplete')}</strong><small>${settingsT('transfer.importKindCompleteHelp')}</small></span>
+        <span class="settings-transfer-kind-card-body">
+          <span class="settings-transfer-kind-card-top">
+            <strong>${settingsT('transfer.importKindComplete')}</strong>
+            <em>${settingsT('transfer.importKindCompleteBadge')}</em>
+          </span>
+          <small>${settingsT('transfer.importKindCompleteHelp')}</small>
+        </span>
       </label>
     </div>
   `;
@@ -3570,7 +3582,7 @@ function renderSettingsTransferActionStep(preview, selectedRows, fileName, kind 
   return `
     ${renderSettingsTransferStepHeader(step, settingsT('transfer.importStepActionTitle'), settingsT('transfer.importStepActionText'), total)}
     ${renderSettingsTransferFileSummary(preview, fileName)}
-    <div class="settings-transfer-mode-note">
+    <div class="settings-transfer-context-strip">
       <strong>${escHtml(settingsTransferImportKindLabel(kind))}</strong>
       <span>${escHtml(complete ? settingsT('transfer.importKindCompleteReview') : settingsT('transfer.importKindSelectiveReview', { count: selectedRows.length }))}</span>
     </div>
@@ -3640,12 +3652,17 @@ function renderSettingsTransferConfirmStep(preview, selectedRows, fileName, deci
   return `
     ${renderSettingsTransferStepHeader(total, settingsT('transfer.importStepConfirmTitle'), settingsT('transfer.importStepConfirmText'), total)}
     ${renderSettingsTransferFileSummary(preview, fileName)}
-    <div class="settings-transfer-confirm-grid">
-      <div><span>${settingsT('transfer.importKind')}</span><strong>${escHtml(settingsTransferImportKindLabel(decision?.kind))}</strong></div>
-      <div><span>${settingsT('transfer.importContent')}</span><strong>${escHtml(settingsTransferImportScopeLabel(scope))}</strong></div>
-      <div><span>${settingsT('transfer.selectedJobs')}</span><strong>${selectedRows.length}</strong></div>
-      <div><span>${settingsT('transfer.jobStatusExists')}</span><strong>${existingCount}</strong></div>
-    </div>
+    <section class="settings-transfer-review-summary">
+      <header>
+        <strong>${settingsT('transfer.importReviewTitle')}</strong>
+        <span>${settingsT('transfer.importReviewText')}</span>
+      </header>
+      <div class="settings-transfer-review-summary-grid">
+        <div><span>${settingsT('transfer.importKind')}</span><strong>${escHtml(settingsTransferImportKindLabel(decision?.kind))}</strong></div>
+        <div><span>${settingsT('transfer.importContent')}</span><strong>${escHtml(settingsTransferImportScopeLabel(scope))}</strong></div>
+        <div><span>${settingsT('transfer.selectedJobs')}</span><strong>${settingsT('transfer.importReviewJobsDetail', { selected: selectedRows.length, existing: existingCount, new: newCount })}</strong></div>
+      </div>
+    </section>
     <div class="settings-transfer-plan-list">
       ${selectedRows.map((row) => {
         const jobKey = String(row?.job_key || '').trim();
