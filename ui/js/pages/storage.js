@@ -857,9 +857,9 @@ async function importRepositoryKey(repositoryKey, file, input) {
       html: `
         ${storageRepositoryKeyWizardHeader(3, storageT('storage.repositoryKeyBackupConfirmTitle'), storageT('storage.repositoryKeyBackupConfirmText'))}
         ${storageRepositoryKeyFileSummary(file, preview)}
-        <div class="settings-transfer-review-stats">
+        <div class="settings-transfer-review-stats settings-transfer-review-stats-key">
           <div class="settings-transfer-stat-card state-info"><span>${escHtml(storageT('storage.repository'))}</span><strong>${escHtml(preview.repository_name || key)}</strong><small>${escHtml(preview.repository_path || '')}</small></div>
-          <div class="settings-transfer-stat-card state-success"><span>${escHtml(storageT('storage.repositoryKeyIdCheck'))}</span><strong>OK</strong><small>${escHtml(preview.repository_id || '')}</small></div>
+          <div class="settings-transfer-stat-card settings-transfer-stat-card-key-id state-success"><span>${escHtml(storageT('storage.repositoryKeyIdCheck'))}</span><strong>OK</strong><small>${escHtml(preview.repository_id || '')}</small></div>
           <div class="settings-transfer-stat-card state-warning"><span>${escHtml(storageT('storage.repositoryKeyAction'))}</span><strong>${escHtml(storageT('storage.repositoryKeyActionReplace'))}</strong><small>${escHtml(storageT('storage.repositoryKeyActionReplaceHint'))}</small></div>
         </div>
         <div class="settings-transfer-info-box settings-transfer-info-box-warning">

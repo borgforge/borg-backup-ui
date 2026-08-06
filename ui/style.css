@@ -2929,9 +2929,14 @@ body.wizard-modal-open {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.settings-transfer-review-stats-key {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(150px, .75fr);
+}
+
 .settings-transfer-stat-card {
   display: grid;
   gap: 3px;
+  min-width: 0;
   min-height: 82px;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -2950,12 +2955,21 @@ body.wizard-modal-open {
   font-size: 20px;
   line-height: 1.15;
   overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .settings-transfer-stat-card small {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.settings-transfer-stat-card-key-id small {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
 }
 
 .settings-transfer-stat-card.state-info {
@@ -3034,6 +3048,8 @@ body.wizard-modal-open {
 .settings-transfer-plan-row header small {
   color: var(--text-muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .settings-transfer-plan-row header em {
