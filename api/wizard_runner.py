@@ -508,6 +508,18 @@ def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
     return sess
 
 
+def _runtime_control_enabled_for_lock(meta: dict, kind: str) -> bool:
+    raw = meta.get(f"{kind}_control") if isinstance(meta.get(f"{kind}_control"), dict) else {}
+    features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
+    allowed_modes = {"all", "selected", "none"}
+    if kind == "docker":
+        allowed_modes.add("except_selected")
+    mode = str(raw.get("mode") or "").strip().lower()
+    if mode in allowed_modes:
+        return mode != "none"
+    return bool(features.get(kind, False))
+
+
 def _build_resources(env: dict, meta: dict) -> list[str]:
     resources = [f"repo:{env.get('BORG_REPO', '')}"]
     location = str(meta.get("location") or "").strip().lower()
@@ -516,10 +528,9 @@ def _build_resources(env: dict, meta: dict) -> list[str]:
         smb_key = str(storage.get("profile_key") or "").strip()
         if smb_key:
             resources.append(f"smb-mount:{smb_key}")
-    features = meta.get("features") if isinstance(meta.get("features"), dict) else {}
-    if bool(features.get("docker", False)):
+    if _runtime_control_enabled_for_lock(meta, "docker"):
         resources.append("docker-control")
-    if bool(features.get("vm", False)):
+    if _runtime_control_enabled_for_lock(meta, "vm"):
         resources.append("vm-control")
     return resources
 
