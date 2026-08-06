@@ -2727,7 +2727,7 @@ function renderJobsImportPreview(d) {
   return `
     ${renderLegacyEncryptionWarning(d)}
     ${settingsBlock}
-    <div class="text-muted" style="font-size:12px;margin-bottom:8px">${settingsT('transfer.jobsPreviewTitle', { count: rows.length })}${Number(d?.passphrase_count || 0) ? ` · ${settingsT('transfer.passphrasesInPackage', { count: Number(d.passphrase_count) })}` : ''}${Number(d?.keyfile_count || 0) ? ` · ${settingsT('transfer.keyfilesInPackage', { count: Number(d.keyfile_count) })}` : ''}</div>
+    <div class="text-muted" style="font-size:12px;margin-bottom:8px">${settingsT('transfer.jobsPreviewTitle', { count: rows.length })}${Number(d?.passphrase_count || 0) ? ` · ${settingsT('transfer.passphrasesInPackage', { count: Number(d.passphrase_count) })}` : ''}${Number(d?.keyfile_count || 0) ? ` · ${settingsT('transfer.keyfilesInPackage', { count: Number(d.keyfile_count) })}` : ''}${Number(d?.borg_key_export_count || 0) ? ` · ${settingsT('transfer.borgKeyExportsInPackage', { count: Number(d.borg_key_export_count) })}` : ''}${Number(d?.borg_key_export_failed_count || 0) ? ` · ${settingsT('transfer.borgKeyExportsFailedInPackage', { count: Number(d.borg_key_export_failed_count) })}` : ''}</div>
     <div class="status-message info" style="margin:0 0 8px 0">
       ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.new', { count: stats.new })} · ${settingsT('transfer.existing', { count: stats.exists })} · ${settingsT('transfer.invalid', { count: stats.invalid })}${stats.other ? ` · ${settingsT('transfer.other', { count: stats.other })}` : ''}
     </div>
@@ -3056,7 +3056,7 @@ async function exportJobsBundleSecure() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showMsg('settings-transfer-msg', 'success', settingsT('transfer.secureJobsCreated', { jobs: data.job_count || 0, passphrases: data.passphrase_count || 0, keyfiles: data.keyfile_count || 0 }));
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.secureJobsCreated', { jobs: data.job_count || 0, passphrases: data.passphrase_count || 0, keyfiles: data.keyfile_count || 0, borgkeys: data.borg_key_export_count || 0 }));
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.secureJobsFailed', { message: err.message }));
   }
@@ -3440,7 +3440,9 @@ async function importJobsApplySelected() {
     const stext = srep ? ` · Settings(${srep.mode}): ${srep.applied || 0} ${settingsT('transfer.settingsApplied')}, ${settingsT('transfer.conflicts')} ${srep.conflicts || 0}${data?.settings_backup ? `, Backup: ${data.settings_backup}` : ''}` : '';
     const ppText = Number(data?.restored_passphrases || 0) ? ` · ${settingsT('transfer.passphrasesRestored', { count: Number(data.restored_passphrases) })}` : '';
     const keyText = Number(data?.restored_keyfiles || 0) ? ` · ${settingsT('transfer.keyfilesRestored', { count: Number(data.restored_keyfiles) })}` : '';
-    showMsg('settings-transfer-msg', 'success', settingsT('transfer.importSummary', { jobs: data.imported_count || 0, schedules: data.scheduled_count || 0, details: `${detail}${stext}${ppText}${keyText}` }));
+    const borgKeyText = Number(data?.restored_borg_key_exports || 0) ? ` · ${settingsT('transfer.borgKeyExportsRestored', { count: Number(data.restored_borg_key_exports) })}` : '';
+    const skippedBorgKeyText = Number(data?.skipped_borg_key_exports || 0) ? ` · ${settingsT('transfer.borgKeyExportsSkipped', { count: Number(data.skipped_borg_key_exports) })}` : '';
+    showMsg('settings-transfer-msg', 'success', settingsT('transfer.importSummary', { jobs: data.imported_count || 0, schedules: data.scheduled_count || 0, details: `${detail}${stext}${ppText}${keyText}${borgKeyText}${skippedBorgKeyText}` }));
     settingsState.transferJobsPreview = null;
     settingsState.transferJobsBundleText = '';
     settingsState.transferJobsSecurePayloadB64 = '';

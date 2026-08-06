@@ -181,6 +181,7 @@ def test_every_secret_bearing_export_entry_point_uses_authenticated_format(tmp_p
     })
     monkeypatch.setattr(transfer, "_collect_job_passphrase_files", lambda bundle: {})
     monkeypatch.setattr(transfer, "_collect_job_key_files", lambda config, bundle, include_content: {})
+    monkeypatch.setattr(transfer, "_collect_repository_key_exports", lambda config, bundle: {})
     monkeypatch.setattr(transfer, "_canonical_profile_payload", lambda config: {
         "smb_profiles": [],
         "storage_profiles": [],

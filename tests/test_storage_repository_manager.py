@@ -45,9 +45,13 @@ def test_repository_key_recovery_controls_are_available_in_management_tab():
     assert "data-storage-action=\"repository-key-import-select\"" in storage_js
     assert "/api/repositories/key-export" in storage_js
     assert "/api/repositories/key-import" in storage_js
+    assert "storageRepositoryNeedsExternalKeyBackup" in storage_js
+    assert "data-storage-action=\"open-repository-management\"" in storage_js
     assert "onStorageContentChange" in bindings_js
     assert de["storage"]["repositoryKeyRecovery"]
+    assert de["storage"]["repositoryKeyBackupMissing"]
     assert en["storage"]["repositoryKeyRecovery"]
+    assert en["storage"]["repositoryKeyBackupMissing"]
 
 
 def test_create_local_storage_target_is_stable_and_testable(tmp_path: Path, monkeypatch):

@@ -195,6 +195,42 @@ def _collect_job_key_files(config: dict, bundle: dict, *, include_content: bool)
     return out
 
 
+def _repository_needs_borg_key_export(repository: dict) -> bool:
+    mode = str(repository.get("encryption") or "").strip().lower()
+    return mode.startswith("repokey") or mode.startswith("authenticated")
+
+
+def _collect_repository_key_exports(config: dict, bundle: dict) -> dict[str, dict]:
+    from repositories_api import export_repository_key
+
+    out: dict[str, dict] = {}
+    repositories = bundle.get("repositories") if isinstance(bundle.get("repositories"), list) else []
+    for repository in repositories:
+        if not isinstance(repository, dict) or not _repository_needs_borg_key_export(repository):
+            continue
+        repository_key = str(repository.get("repository_key") or "").strip()
+        if not repository_key:
+            continue
+        try:
+            exported = export_repository_key(config, repository_key)
+            key_data = str(exported.get("key_data") or "")
+            encoded = key_data.encode("utf-8")
+            out[repository_key] = {
+                "exists": True,
+                "repository_id": str(exported.get("repository_id") or "").strip().lower(),
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+                "size": len(encoded),
+                "content_b64": base64.b64encode(encoded).decode("ascii"),
+            }
+        except Exception as exc:
+            out[repository_key] = {
+                "exists": False,
+                "repository_id": str(repository.get("borg_repository_id") or "").strip().lower(),
+                "error": type(exc).__name__,
+            }
+    return out
+
+
 def _normalize_job_key(base: str) -> str:
     out = "".join(ch.lower() if ch.isalnum() else "_" for ch in str(base or "").strip())
     while "__" in out:
@@ -1137,20 +1173,25 @@ def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: lis
     bundle.pop("settings_payload", None)
     passphrase_files = _collect_job_passphrase_files(bundle)
     key_files = _collect_job_key_files(config, bundle, include_content=True)
+    borg_key_exports = _collect_repository_key_exports(config, bundle)
     payload = {
         "format": "bbui-job-bundle-secure-v2",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "bundle": bundle,
         "passphrase_files": passphrase_files,
         "key_files": key_files,
+        "borg_key_exports": borg_key_exports,
     }
     encrypted = _encrypt_authenticated_export(json.dumps(payload, ensure_ascii=False).encode("utf-8"), pw)
+    borg_key_export_count = sum(1 for row in borg_key_exports.values() if row.get("exists"))
     return {
         "filename": f"bbui-jobs-secure-{datetime.now().strftime('%Y%m%d-%H%M%S')}.jobs.enc",
         "payload_b64": base64.b64encode(encrypted).decode("ascii"),
         "job_count": int(plain.get("job_count") or 0),
         "passphrase_count": len(passphrase_files),
         "keyfile_count": sum(1 for row in key_files.values() if row.get("exists")),
+        "borg_key_export_count": borg_key_export_count,
+        "borg_key_export_failed_count": len(borg_key_exports) - borg_key_export_count,
     }
 
 
@@ -1167,6 +1208,9 @@ def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str)
     out["secure_format"] = payload.get("format")
     out["passphrase_count"] = len(payload.get("passphrase_files") or {})
     out["keyfile_count"] = len(payload.get("key_files") or {})
+    borg_key_exports = payload.get("borg_key_exports") if isinstance(payload.get("borg_key_exports"), dict) else {}
+    out["borg_key_export_count"] = sum(1 for row in borg_key_exports.values() if isinstance(row, dict) and row.get("exists"))
+    out["borg_key_export_failed_count"] = sum(1 for row in borg_key_exports.values() if isinstance(row, dict) and not row.get("exists"))
     out.update(_encryption_preview_metadata(encryption_format))
     return out
 
@@ -1194,6 +1238,7 @@ def import_jobs_bundle_encrypted(
         raise ValueError("Invalid bundle")
     passphrase_files = payload.get("passphrase_files") if isinstance(payload.get("passphrase_files"), dict) else {}
     key_files = payload.get("key_files") if isinstance(payload.get("key_files"), dict) else {}
+    borg_key_exports = payload.get("borg_key_exports") if isinstance(payload.get("borg_key_exports"), dict) else {}
 
     # Secure jobs import intentionally ignores settings payload.
     bundle = dict(bundle)
@@ -1293,6 +1338,32 @@ def import_jobs_bundle_encrypted(
         if changed:
             write_repository_store(config, {"repositories": list(repositories.values())})
     result["restored_keyfiles"] = restored_keys
+    restored_borg_key_exports = 0
+    skipped_borg_key_exports = 0
+    if not dry_run and import_passphrases and borg_key_exports:
+        from repositories_api import import_repository_key
+
+        for repository_key, raw_file in borg_key_exports.items():
+            key_row = raw_file if isinstance(raw_file, dict) else {}
+            if not key_row.get("exists"):
+                skipped_borg_key_exports += 1
+                continue
+            try:
+                content = base64.b64decode(str(key_row.get("content_b64") or "").encode("ascii"), validate=False)
+            except Exception:
+                skipped_borg_key_exports += 1
+                continue
+            if not content or len(content) > 1024 * 1024:
+                skipped_borg_key_exports += 1
+                continue
+            try:
+                import_repository_key(config, str(repository_key or ""), content.decode("utf-8", "replace"))
+            except Exception:
+                skipped_borg_key_exports += 1
+                continue
+            restored_borg_key_exports += 1
+    result["restored_borg_key_exports"] = restored_borg_key_exports
+    result["skipped_borg_key_exports"] = skipped_borg_key_exports
     result.update(_encryption_preview_metadata(encryption_format))
     return result
 

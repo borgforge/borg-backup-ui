@@ -322,13 +322,18 @@ function renderStorageWorkspaceHeader(repo, job) {
   const infoStateMarkup = infoRefreshEnabled
     ? `<small>${escHtml(infoState)}</small>`
     : `<button type="button" class="storage-repository-info-disabled" data-storage-action="open-repository-refresh-settings">${escHtml(infoState)}</button>`;
+  const keyBackupMissing = storageRepositoryNeedsExternalKeyBackup(repo);
+  const keyBackupMarkup = keyBackupMissing
+    ? `<button type="button" class="storage-repository-key-backup-link" data-storage-action="open-repository-management">${escHtml(storageT('storage.repositoryKeyBackupMissing'))}</button>`
+    : '';
   header.innerHTML = `
     <div class="storage-repository-workspace-identity">
       ${storageRepositoryIcon(repo, job, true)}
       <span><small>${storageT('storage.repository')}</small><h2>${escHtml(storageRepositoryTitle(repo, job))}</h2><span><b>${escHtml(storageT('storage.repositoryPathLabel'))}:</b> ${escHtml(repo.path_display || repo.path_raw || '')}</span></span>
     </div>
-    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span>${infoStateMarkup}</div>`;
+    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span>${keyBackupMarkup}${infoStateMarkup}</div>`;
   header.querySelector('[data-storage-action="open-repository-refresh-settings"]')?.addEventListener('click', openRepositoryRefreshSettings);
+  header.querySelector('[data-storage-action="open-repository-management"]')?.addEventListener('click', openRepositoryManagementTab);
 }
 
 function openRepositoryRefreshSettings() {
@@ -345,6 +350,12 @@ function openRepositoryRefreshSettings() {
     if (attempts < 12) window.setTimeout(activate, 100);
   };
   window.setTimeout(activate, 80);
+}
+
+function openRepositoryManagementTab() {
+  storageState.selectedTab = 'management';
+  renderStorage(storageState.data);
+  loadRepositoryLifecycle(storageState.selectedRepositoryKey);
 }
 
 function storageFormatDateTime(value) {
@@ -656,6 +667,12 @@ function storageRepositoryEncryption(repo, job) {
 function storageRepositoryKeyRecoverySupported(repo) {
   const mode = String(repo?.encryption || '').trim().toLowerCase();
   return !!mode && mode !== 'none' && mode !== 'unknown';
+}
+
+function storageRepositoryNeedsExternalKeyBackup(repo) {
+  const mode = String(repo?.encryption || '').trim().toLowerCase();
+  if (!(mode.startsWith('repokey') || mode.startsWith('authenticated'))) return false;
+  return !String(repo?.borg_key_exported_at || '').trim();
 }
 
 function storageJobForRepository(repo) {
