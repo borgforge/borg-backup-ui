@@ -300,13 +300,14 @@ def package_install_block(md5: str) -> str:
     if not re.fullmatch(r"[0-9a-fA-F]{32}", md5):
         raise RuntimeError("Package MD5 must be a 32 character hexadecimal digest")
     return f"""{PACKAGE_INSTALL_BEGIN}
-<FILE Name="/tmp/borg-backup-ui-package-install.sh" Run="/bin/bash">
+<FILE Name="/tmp/borg-backup-ui-package-install-&version;.sh" Run="/bin/bash">
 <INLINE>
 #!/bin/bash
 set -e
 
 NAME="borg-backup-ui"
 VERSION="&version;"
+PACKAGE_INSTALL_SCRIPT="/tmp/borg-backup-ui-package-install-${{VERSION}}.sh"
 PLUGIN_DIR="/boot/config/plugins/${{NAME}}"
 PACKAGE_FILE="${{PLUGIN_DIR}}/${{NAME}}-${{VERSION}}.txz"
 PACKAGE_TMP="${{PACKAGE_FILE}}.tmp"
@@ -318,6 +319,11 @@ VENDOR_BUNDLE_DIR="${{PLUGIN_DIR}}/runtime/vendor-bundles"
 VENDOR_META="${{VENDOR_BUNDLE_DIR}}/apprise-vendor.json"
 VENDOR_MARKER="${{VENDOR_DIR}}/.apprise-vendor.json"
 VENDOR_TMP="${{PLUGIN_DIR}}/runtime/vendor.tmp.$$"
+
+cleanup_package_install_script() {{
+  rm -f "${{PACKAGE_INSTALL_SCRIPT}}" 2>/dev/null || true
+}}
+trap cleanup_package_install_script EXIT
 
 file_md5() {{
   if command -v md5sum >/dev/null 2>/dev/null; then
@@ -515,7 +521,6 @@ if ! package_payload_present; then
 fi
 ensure_apprise_vendor
 echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
-rm -f /tmp/borg-backup-ui-package-install.sh
 </INLINE>
 </FILE>
 {PACKAGE_INSTALL_END}"""

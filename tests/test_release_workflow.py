@@ -193,6 +193,9 @@ def test_package_installer_rewrite_adds_checksum_and_skip_logic() -> None:
     )
 
     assert "borg-backup-ui package installer" in rendered
+    assert 'Name="/tmp/borg-backup-ui-package-install-&version;.sh"' in rendered
+    assert 'PACKAGE_INSTALL_SCRIPT="/tmp/borg-backup-ui-package-install-${VERSION}.sh"' in rendered
+    assert "trap cleanup_package_install_script EXIT" in rendered
     assert 'EXPECTED_MD5="abcdef0123456789abcdef0123456789"' in rendered
     assert "existing package matches MD5" in rendered
     assert "version ${VERSION} is already installed" in rendered
