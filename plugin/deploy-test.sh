@@ -100,6 +100,23 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
+display_title = "Borg Backup UI"
+if re.search(r'<PLUGIN\b[^>]*\bTitle="[^"]*"', text, re.S):
+    text = re.sub(
+        r'(<PLUGIN\b[^>]*?)\bTitle="[^"]*"',
+        lambda match: match.group(1) + f'Title="{display_title}"',
+        text,
+        count=1,
+        flags=re.S,
+    )
+else:
+    text = re.sub(
+        r'(<PLUGIN\b[^>]*?\bname="[^"]*")',
+        lambda match: match.group(1) + f'\n        Title="{display_title}"',
+        text,
+        count=1,
+        flags=re.S,
+    )
 if re.search(r'<PLUGIN\b[^>]*\blaunch="[^"]*"', text, re.S):
     text = re.sub(
         r'(<PLUGIN\b[^>]*?)\blaunch="[^"]*"',

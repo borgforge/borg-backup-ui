@@ -31,6 +31,7 @@ def test_plugin_manifest_uses_github_stable_channel_urls() -> None:
 def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     script = (ROOT / "plugin" / "deploy-test.sh").read_text(encoding="utf-8")
     workflow = (ROOT / "plugin" / "release_workflow.py").read_text(encoding="utf-8")
+    build = (ROOT / "plugin" / "build.sh").read_text(encoding="utf-8")
 
     assert 'release_workflow.py" package-provenance' in script
     assert 'f"boot/config/plugins/{NAME}/borg_backup_ui.py"' in workflow
@@ -41,9 +42,13 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     assert 'f"boot/config/plugins/{NAME}/ui/index.html"' in workflow
     assert 'f"boot/config/plugins/{NAME}/runtime/config/backup.conf.example"' in workflow
     assert 'f"boot/config/plugins/{NAME}/runtime/vendor-bundles/apprise-vendor.json"' in workflow
+    assert 'f"usr/local/emhttp/plugins/{NAME}/README.md"' in workflow
     assert '"etc/rc.d/rc.borg_backup_ui"' in workflow
     assert "ET.parse(sys.argv[1])" in script
+    assert 'display_title = "Borg Backup UI"' in script
+    assert 'Title="{display_title}"' in script
     assert 'launch="Settings/borg-backup-ui"' in script
+    assert '"${SCRIPT_DIR}/README.md"' in build
 
 
 def test_build_removes_stale_generated_packages() -> None:
@@ -131,9 +136,11 @@ def test_test_channel_publisher_uses_exact_force_with_lease() -> None:
     assert 'if [ "$TEST_BRANCH" != "test-channel" ]; then' in script
 
 
-def test_release_promotion_copies_tested_settings_launch_target() -> None:
+def test_release_promotion_copies_tested_display_title_and_settings_launch_target() -> None:
     script = (ROOT / "plugin" / "promote-release.sh").read_text(encoding="utf-8")
 
+    assert "Test manifest has no tested display title" in script
+    assert "display_title" in script
     assert "Test manifest has no tested launch target" in script
     assert "launch_target" in script
 
