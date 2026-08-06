@@ -73,6 +73,20 @@ def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
         assert f"{key}=" in example
 
 
+def test_repository_page_shows_disabled_auto_refresh_hint() -> None:
+    script = _read("ui/js/pages/storage.js")
+    css = _read("ui/remaining-ui-redesign.css")
+    de = json.loads(_read("ui/i18n/de.json"))
+    en = json.loads(_read("ui/i18n/en.json"))
+
+    assert "repository_info_refresh?.enabled !== false" in script
+    assert "repositoryInfoAutoRefreshDisabled" in script
+    assert "storage-repository-info-disabled" in script
+    assert ".storage-repository-workspace-status .storage-repository-info-disabled" in css
+    assert de["storage"]["repositoryInfoAutoRefreshDisabled"] == "Info-Automatik deaktiviert"
+    assert en["storage"]["repositoryInfoAutoRefreshDisabled"] == "Info auto-refresh disabled"
+
+
 def test_repository_settings_stay_in_single_operations_menu_group() -> None:
     script = _read("ui/js/pages/settings.js")
 

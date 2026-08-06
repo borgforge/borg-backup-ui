@@ -312,15 +312,20 @@ function renderStorageWorkspaceHeader(repo, job) {
   }
   const status = storageRepositoryStatus(repo);
   const infoUpdatedAt = repo.last_info_refresh_at || repo.last_seen_at || '';
-  const infoState = infoUpdatedAt
-    ? storageT('storage.repositoryInfoLastUpdated', { date: storageFormatDateTime(infoUpdatedAt) })
-    : storageT('storage.repositoryInfoPending');
+  const infoRefreshEnabled = storageState.data?.repository_info_refresh?.enabled !== false;
+  let infoState = storageT('storage.repositoryInfoPending');
+  if (!infoRefreshEnabled) {
+    infoState = storageT('storage.repositoryInfoAutoRefreshDisabled');
+  } else if (infoUpdatedAt) {
+    infoState = storageT('storage.repositoryInfoLastUpdated', { date: storageFormatDateTime(infoUpdatedAt) });
+  }
+  const infoStateClass = infoRefreshEnabled ? '' : ' class="storage-repository-info-disabled"';
   header.innerHTML = `
     <div class="storage-repository-workspace-identity">
       ${storageRepositoryIcon(repo, job, true)}
       <span><small>${storageT('storage.repository')}</small><h2>${escHtml(storageRepositoryTitle(repo, job))}</h2><span><b>${escHtml(storageT('storage.repositoryPathLabel'))}:</b> ${escHtml(repo.path_display || repo.path_raw || '')}</span></span>
     </div>
-    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span><small>${escHtml(infoState)}</small></div>`;
+    <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span><small${infoStateClass}>${escHtml(infoState)}</small></div>`;
 }
 
 function storageFormatDateTime(value) {

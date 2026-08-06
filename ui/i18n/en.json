@@ -348,6 +348,7 @@
     "repositoryInfoMissing": "Repository information has not been loaded yet. Automatic refresh runs in the background.",
     "repositoryInfoBusy": "This repository is currently used by a backup or another Borg operation. The refresh will be retried automatically.",
     "repositoryInfoLastUpdated": "Info updated: {date}",
+    "repositoryInfoAutoRefreshDisabled": "Info auto-refresh disabled",
     "repositoryInfoPending": "Automatic refresh pending",
     "repositoryNotRun": "Not run yet",
     "repositoryNoResult": "No result available",

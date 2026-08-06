@@ -348,6 +348,7 @@
     "repositoryInfoMissing": "Noch keine Repository-Informationen geladen. Die automatische Aktualisierung läuft im Hintergrund.",
     "repositoryInfoBusy": "Dieses Repository wird gerade von einem Backup oder einer Borg-Aktion verwendet. Die Aktualisierung wird automatisch nachgeholt.",
     "repositoryInfoLastUpdated": "Info aktualisiert: {date}",
+    "repositoryInfoAutoRefreshDisabled": "Info-Automatik deaktiviert",
     "repositoryInfoPending": "Automatische Aktualisierung ausstehend",
     "repositoryNotRun": "Noch nicht ausgeführt",
     "repositoryNoResult": "Kein Ergebnis vorhanden",

@@ -722,6 +722,10 @@
   font-size: var(--ui-font-size-xs);
 }
 
+.storage-repository-workspace-status .storage-repository-info-disabled {
+  color: var(--ui-color-accent);
+}
+
 .storage-repository-master-detail {
   min-height: 34rem;
 }
