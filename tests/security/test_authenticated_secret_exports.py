@@ -272,6 +272,10 @@ def test_secure_jobs_import_uses_guided_per_job_selection():
     assert "renderSettingsTransferActionStep" in source
     assert "renderSettingsTransferConfirmStep" in source
     assert "exportRepositoryKeysBackup" in source
+    assert "repositoryKeysExportRunning" in source
+    assert "repositoryKeysExportRunningButton" in source
+    assert "button.disabled = true;" in source
+    assert "button.disabled = false;" in source
     assert "settingsTransferPlannedActionLines" in source
     assert "data-jobs-secure-row-select" in source
     assert "data-jobs-secure-row-mode" in source
@@ -290,7 +294,10 @@ def test_secure_jobs_import_uses_guided_per_job_selection():
         assert transfer_labels["importKindComplete"]
         assert transfer_labels["importAdvancedOptions"]
         assert transfer_labels["importScopeAllHelp"]
-        assert transfer_labels["repositoryKeysExport"]
+        assert "Borg" in transfer_labels["overviewKeysTitle"]
+        assert "Borg" in transfer_labels["repositoryKeysExport"]
+        assert transfer_labels["repositoryKeysExportRunning"]
+        assert transfer_labels["repositoryKeysExportRunningButton"]
         assert transfer_labels["importResultOverwrite"]
         assert transfer_labels["planJobOverwrite"]
         assert transfer_labels["planPassphraseReplace"]

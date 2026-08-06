@@ -3095,8 +3095,10 @@ async function exportJobsBundleSecure() {
   }
 }
 
-async function exportRepositoryKeysBackup() {
+async function exportRepositoryKeysBackup(button = null) {
   hideEl('settings-transfer-msg');
+  let busy = false;
+  const originalText = button ? button.textContent : '';
   try {
     const password = await _openSettingsDialog({
       title: settingsT('transfer.repositoryKeysExportTitle'),
@@ -3105,6 +3107,12 @@ async function exportRepositoryKeysBackup() {
       confirmText: settingsT('transfer.startExport'),
     });
     if (!password) return;
+    busy = true;
+    if (button) {
+      button.disabled = true;
+      button.textContent = settingsT('transfer.repositoryKeysExportRunningButton');
+    }
+    showMsg('settings-transfer-msg', 'info', settingsT('transfer.repositoryKeysExportRunning'));
     const res = await fetch('/api/settings/repository-keys-export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3130,6 +3138,11 @@ async function exportRepositoryKeysBackup() {
     }));
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.repositoryKeysFailed', { message: err.message }));
+  } finally {
+    if (button && busy) {
+      button.disabled = false;
+      button.textContent = originalText || settingsT('transfer.repositoryKeysExport');
+    }
   }
 }
 
@@ -5920,7 +5933,7 @@ async function onSettingsContentClick(event) {
   if (action === 'delete-backups-keep-latest') return deleteConfigBackupsKeepLatest();
   if (action === 'export-jobs') return exportJobsBundle();
   if (action === 'export-jobs-secure') return exportJobsBundleSecure();
-  if (action === 'export-repository-keys') return exportRepositoryKeysBackup();
+  if (action === 'export-repository-keys') return exportRepositoryKeysBackup(el);
   if (action === 'import-jobs-select-file') return importJobsPreviewSelectFile();
   if (action === 'import-jobs-secure-select-file') return importJobsSecurePreviewSelectFile();
   if (action === 'import-jobs-apply') return importJobsApplySelected();

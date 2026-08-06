@@ -46,12 +46,15 @@ def test_repository_key_recovery_controls_are_available_in_management_tab():
     assert "data-storage-action=\"repository-key-export\"" not in storage_js
     assert "/api/repositories/key-export" not in storage_js
     assert "storageRepositoryNeedsExternalKeyBackup" in storage_js
-    assert "data-storage-action=\"open-repository-management\"" in storage_js
+    assert "data-storage-action=\"open-repository-key-export-settings\"" in storage_js
+    assert "openRepositoryKeyExportSettings" in storage_js
+    assert "settingsState.activeTab = 'transfer'" in storage_js
+    assert "data-settings-action=\"export-repository-keys\"" in storage_js
     assert "onStorageContentChange" in bindings_js
     assert de["storage"]["repositoryKeyRecovery"]
-    assert de["storage"]["repositoryKeyBackupMissing"]
+    assert de["storage"]["repositoryKeyBackupMissing"] == "Borg-Key-Export fehlt"
     assert en["storage"]["repositoryKeyRecovery"]
-    assert en["storage"]["repositoryKeyBackupMissing"]
+    assert en["storage"]["repositoryKeyBackupMissing"] == "Borg key export missing"
 
 
 def test_create_local_storage_target_is_stable_and_testable(tmp_path: Path, monkeypatch):
