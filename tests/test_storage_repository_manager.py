@@ -34,6 +34,22 @@ def test_repository_import_compatibility_notice_is_import_only():
     assert "storageBorgVersionLabel" in storage_js
 
 
+def test_repository_key_recovery_controls_are_available_in_management_tab():
+    storage_js = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
+    bindings_js = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(encoding="utf-8")
+    de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
+    en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
+
+    assert "storage.repositoryKeyRecovery" in storage_js
+    assert "data-storage-action=\"repository-key-export\"" in storage_js
+    assert "data-storage-action=\"repository-key-import-select\"" in storage_js
+    assert "/api/repositories/key-export" in storage_js
+    assert "/api/repositories/key-import" in storage_js
+    assert "onStorageContentChange" in bindings_js
+    assert de["storage"]["repositoryKeyRecovery"]
+    assert en["storage"]["repositoryKeyRecovery"]
+
+
 def test_create_local_storage_target_is_stable_and_testable(tmp_path: Path, monkeypatch):
     base = tmp_path / "backup"
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}

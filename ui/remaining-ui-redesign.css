@@ -895,8 +895,13 @@
   gap: 1px;
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--ui-state-error-border);
+  border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-border);
+}
+
+.storage-lifecycle-card.danger dl {
+  border-color: var(--ui-state-error-border);
   background: var(--ui-state-error-border);
 }
 
@@ -917,6 +922,13 @@
   margin: 2px 0 0;
   overflow-wrap: anywhere;
   font-weight: 600;
+}
+
+.storage-lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ui-space-2);
 }
 
 .repository-lifecycle-confirm-field {
@@ -1193,6 +1205,8 @@
   .storage-maintenance-card > button { grid-column: 1 / -1; width: 100%; }
   .storage-lifecycle-card { grid-template-columns: minmax(0, 1fr); }
   .storage-lifecycle-card > button { width: 100%; }
+  .storage-lifecycle-actions { justify-content: stretch; }
+  .storage-lifecycle-actions > button { flex: 1 1 100%; }
   .storage-lifecycle-card dl { grid-template-columns: minmax(0, 1fr); }
   .storage-archive-list > header { display: none; }
   .storage-archive-list article { grid-template-columns: .5rem minmax(0, 1fr); }

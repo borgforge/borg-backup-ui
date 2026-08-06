@@ -514,16 +514,33 @@ function renderStorageRepositoryManagement(repo) {
   const jobs = Array.isArray(state.job_keys) ? state.job_keys : [];
   const blockers = Array.isArray(state.blockers) ? state.blockers : [];
   const blocked = !state.allowed;
+  const keyActionBlocked = blockers.some((item) => String(item || '') !== 'jobs_linked');
   const jobList = jobs.length
     ? `<div class="storage-lifecycle-jobs"><strong>${storageT('storage.repositoryLinkedJobs')}</strong><div>${jobs.map((jobKey) => `<span>${escHtml(storageLifecycleJobLabel(jobKey))}</span>`).join('')}</div></div>`
     : `<div class="status-message success">${storageT('storage.repositoryNoLinkedJobs')}</div>`;
   const blockerText = blockers.length
     ? `<p class="storage-lifecycle-blocker">${escHtml(storageT('storage.repositoryLifecycleBlocked'))}</p>`
     : '';
+  const keyRecoverySupported = storageRepositoryKeyRecoverySupported(repo);
+  const keyExportedAt = String(repo?.borg_key_exported_at || '').trim();
+  const keyImportedAt = String(repo?.borg_key_imported_at || '').trim();
+  const keyRepositoryId = String(repo?.borg_key_repository_id || repo?.borg_repository_id || state.repository_id || '').trim();
+  const keyStatus = keyRecoverySupported
+    ? `<dl><div><dt>${storageT('storage.repositoryKeyRecoveryRepositoryId')}</dt><dd>${escHtml(keyRepositoryId || '—')}</dd></div><div><dt>${storageT('storage.repositoryKeyRecoveryLastExport')}</dt><dd>${escHtml(keyExportedAt ? storageFormatDateTime(keyExportedAt) : storageT('storage.repositoryKeyRecoveryNeverExported'))}</dd></div><div><dt>${storageT('storage.repositoryKeyRecoveryLastImport')}</dt><dd>${escHtml(keyImportedAt ? storageFormatDateTime(keyImportedAt) : storageT('storage.repositoryKeyRecoveryNeverImported'))}</dd></div></dl>`
+    : `<p class="storage-lifecycle-blocker">${escHtml(storageT('storage.repositoryKeyRecoveryUnsupported'))}</p>`;
   return `<div class="storage-repository-management">
     <div class="storage-section-heading"><div><h3>${storageT('storage.repositoryManagement')}</h3><p>${storageT('storage.repositoryManagementHint')}</p></div><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-lifecycle" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
     ${jobList}
     ${blockerText}
+    <section class="storage-lifecycle-card">
+      <div><h4>${storageT('storage.repositoryKeyRecovery')}</h4><p>${storageT('storage.repositoryKeyRecoveryHint')}</p></div>
+      ${keyStatus}
+      <div class="storage-lifecycle-actions">
+        <button class="btn btn-secondary" data-storage-action="repository-key-import-select" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyImportUpload')}</button>
+        <button class="btn btn-primary" data-storage-action="repository-key-export" data-repository-key="${escHtml(key)}"${(!keyRecoverySupported || keyActionBlocked) ? ' disabled' : ''}>${storageT('storage.repositoryKeyExportDownload')}</button>
+        <input type="file" class="hidden" data-storage-key-import-file data-repository-key="${escHtml(key)}" accept=".txt,.key">
+      </div>
+    </section>
     <section class="storage-lifecycle-card">
       <div><h4>${storageT('storage.repositoryRemoveFromUi')}</h4><p>${storageT('storage.repositoryRemoveFromUiHint')}</p></div>
       <button class="btn btn-secondary" data-storage-action="repository-lifecycle" data-lifecycle-mode="remove" data-repository-key="${escHtml(key)}"${blocked ? ' disabled' : ''}>${storageT('storage.repositoryRemoveFromUi')}</button>
@@ -636,6 +653,11 @@ function storageRepositoryEncryption(repo, job) {
   return String(repo?.encryption || job?.encryption || '').trim() || storageT('storage.unknown');
 }
 
+function storageRepositoryKeyRecoverySupported(repo) {
+  const mode = String(repo?.encryption || '').trim().toLowerCase();
+  return !!mode && mode !== 'none' && mode !== 'unknown';
+}
+
 function storageJobForRepository(repo) {
   const jobs = Array.isArray(storageState.jobs) ? storageState.jobs : [];
   const confKey = String(repo?.conf_key || '');
@@ -685,6 +707,85 @@ function onStorageContentClick(event) {
       el.dataset.repositoryKey || storageState.selectedRepositoryKey,
       el.dataset.lifecycleMode || 'remove',
     );
+  }
+  if (action === 'repository-key-export') {
+    return exportRepositoryKey(el.dataset.repositoryKey || storageState.selectedRepositoryKey, el);
+  }
+  if (action === 'repository-key-import-select') {
+    const key = el.dataset.repositoryKey || storageState.selectedRepositoryKey;
+    const input = Array.from(document.querySelectorAll('[data-storage-key-import-file]'))
+      .find((node) => String(node.dataset.repositoryKey || '') === String(key || ''));
+    if (input) input.click();
+  }
+}
+
+function onStorageContentChange(event) {
+  const input = event.target.closest('[data-storage-key-import-file]');
+  if (!input) return;
+  const key = input.dataset.repositoryKey || storageState.selectedRepositoryKey;
+  const file = input.files && input.files[0] ? input.files[0] : null;
+  importRepositoryKey(key, file, input);
+}
+
+function storageDownloadTextFile(filename, content) {
+  const blob = new Blob([String(content || '')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename || 'borg-key-export.txt';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function storageReadTextFile(file) {
+  if (!file) throw new Error(storageT('storage.repositoryKeyImportFileMissing'));
+  return file.text();
+}
+
+async function exportRepositoryKey(repositoryKey, button) {
+  const key = String(repositoryKey || '').trim();
+  if (!key) return;
+  if (button) button.disabled = true;
+  showMsg('storage-message', 'info', storageT('storage.repositoryKeyExportRunning'));
+  try {
+    const response = await fetch('/api/repositories/key-export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repository_key: key }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    storageDownloadTextFile(data.filename, data.key_data);
+    await refreshStorage();
+    showMsg('storage-message', 'success', storageT('storage.repositoryKeyExported'));
+  } catch (error) {
+    showMsg('storage-message', 'error', error.message || storageT('storage.error'));
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function importRepositoryKey(repositoryKey, file, input) {
+  const key = String(repositoryKey || '').trim();
+  if (!key) return;
+  showMsg('storage-message', 'info', storageT('storage.repositoryKeyImportReading'));
+  try {
+    const keyData = await storageReadTextFile(file);
+    const response = await fetch('/api/repositories/key-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repository_key: key, key_data: keyData }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    await refreshStorage();
+    showMsg('storage-message', 'success', storageT('storage.repositoryKeyImported'));
+  } catch (error) {
+    showMsg('storage-message', 'error', error.message || storageT('storage.error'));
+  } finally {
+    if (input) input.value = '';
   }
 }
 

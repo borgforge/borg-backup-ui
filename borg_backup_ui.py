@@ -689,6 +689,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             or p.startswith("/api/wizard")
             or p.startswith("/api/client-log")
             or p in {"/api/jobs/enabled", "/api/jobs", "/api/schedules", "/api/storages", "/api/repositories", "/api/restore-tests", "/api/restore-tests/policy"}
+            or p in {"/api/repositories/key-export", "/api/repositories/key-import"}
         ):
             return "admin"
 
@@ -919,6 +920,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/repositories/validate": self._post_repository_validate,
             "/api/repositories/info": self._post_repository_info,
             "/api/repositories/lifecycle": self._post_repository_lifecycle,
+            "/api/repositories/key-export": self._post_repository_key_export,
+            "/api/repositories/key-import": self._post_repository_key_import,
             "/api/storage/smb-action": self._post_storage_smb_action,
             "/api/wizard/preview": self._post_wizard_preview,
             "/api/wizard/save": self._post_wizard_save,
@@ -1813,10 +1816,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         except RepositoryBusyError as exc:
             raise ApiConflictError(str(exc), code="repository_busy") from exc
 
-    def _delete_repository(self) -> dict:
-        from repositories_api import RepositoryBusyError, RepositoryLifecycleConflict, apply_repository_lifecycle
-
-        body = self._read_json_body()
+    def _repository_audit_context(self, request_id: str = "") -> dict[str, str]:
         session = self._get_current_session_meta() or {}
         actor = _normalize_username(session.get("username", ""))
         actor_role = str(session.get("role", "") or "").strip().lower()
@@ -1830,16 +1830,49 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 actor = "system"
                 actor_role = self._get_current_role() or "system"
                 auth_method = "internal"
+        return {
+            "actor": actor,
+            "actor_role": actor_role,
+            "auth_method": auth_method,
+            "request_id": request_id,
+        }
+
+    def _post_repository_key_export(self) -> dict:
+        from repositories_api import RepositoryBusyError, export_repository_key
+
+        body = self._read_json_body()
+        try:
+            return export_repository_key(
+                self.config,
+                str(body.get("repository_key") or ""),
+                audit_context=self._repository_audit_context(str(getattr(self, "_current_request_id", "") or "")),
+            )
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _post_repository_key_import(self) -> dict:
+        from repositories_api import RepositoryBusyError, import_repository_key
+
+        body = self._read_json_body()
+        try:
+            return import_repository_key(
+                self.config,
+                str(body.get("repository_key") or ""),
+                str(body.get("key_data") or ""),
+                audit_context=self._repository_audit_context(str(getattr(self, "_current_request_id", "") or "")),
+            )
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
+
+    def _delete_repository(self) -> dict:
+        from repositories_api import RepositoryBusyError, RepositoryLifecycleConflict, apply_repository_lifecycle
+
+        body = self._read_json_body()
         try:
             return apply_repository_lifecycle(
                 self.config,
                 body,
-                audit_context={
-                    "actor": actor,
-                    "actor_role": actor_role,
-                    "auth_method": auth_method,
-                    "request_id": str(getattr(self, "_current_request_id", "") or ""),
-                },
+                audit_context=self._repository_audit_context(str(getattr(self, "_current_request_id", "") or "")),
             )
         except RepositoryLifecycleConflict as exc:
             raise ApiConflictError(str(exc), code=exc.code) from exc
@@ -3575,7 +3608,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token"}
+                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)
@@ -3826,6 +3859,10 @@ btn.addEventListener('click',doRecovery);
             return "validate"
         if path == "/api/repositories/info":
             return "refresh-info"
+        if path == "/api/repositories/key-export":
+            return "key-export"
+        if path == "/api/repositories/key-import":
+            return "key-import"
         if path == "/api/repositories/lifecycle" or path == "/api/repositories":
             if method == "DELETE":
                 return str(body.get("mode") or "delete")
