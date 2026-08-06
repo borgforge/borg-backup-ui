@@ -1308,7 +1308,7 @@ def import_jobs_bundle_encrypted(
             restored += 1
     result["restored_passphrases"] = restored
     restored_keys = 0
-    if not dry_run and import_passphrases and key_files:
+    if not dry_run and import_borg_keys and key_files:
         from borg_key_store import ensure_borg_keys_dir, find_key_file, repository_id_from_key_file
         from repositories_api import read_repository_store, write_repository_store
 

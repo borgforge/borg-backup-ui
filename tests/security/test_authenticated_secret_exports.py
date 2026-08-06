@@ -234,7 +234,7 @@ def test_failed_preview_invalidates_previously_loaded_sensitive_state():
     cases = [
         (
             "async function importJobsSecurePreviewSelectFile()",
-            "async function importJobsApplySelected()",
+            "async function importJobsApplySelected",
             "clearJobsImportPreview();",
             "fetch('/api/settings/jobs-import-secure-preview'",
         ),
@@ -246,7 +246,7 @@ def test_failed_preview_invalidates_previously_loaded_sensitive_state():
         ),
         (
             "async function importProfileSecretsPreviewSelectFile()",
-            "async function importProfileSecretsApplySelected()",
+            "async function importProfileSecretsApplySelected",
             "clearProfileSecretsImportPreview();",
             "fetch('/api/settings/profile-secrets-preview'",
         ),

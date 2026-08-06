@@ -2349,6 +2349,21 @@ body.wizard-modal-open {
 }
 .settings-table tr:last-child td { border-bottom: none; }
 
+.settings-transfer-wizard-summary {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+
+.settings-transfer-wizard-summary span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .settings-transfer-job-preview-details {
   border-top: 1px solid var(--border);
   margin-top: 8px;

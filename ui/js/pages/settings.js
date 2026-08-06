@@ -2607,8 +2607,6 @@ function renderSettingsConfigBackups() {
 }
 
 function renderSettingsTransferTools() {
-  const jobsPreview = settingsState.transferJobsPreview;
-  const profileSecretsPreview = settingsState.transferProfileSecretsPreview;
   return settingsCard(settingsT('transfer.title'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
     `<div class="settings-body">
@@ -2620,21 +2618,13 @@ function renderSettingsTransferTools() {
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
         <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-jobs-secure">${settingsT('transfer.jobsExport')}</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-secure-select-file">${settingsT('transfer.jobsPreview')}</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-apply" ${jobsPreview ? '' : 'disabled'}>${settingsT('transfer.jobsImport')}</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-jobs-secure-select-file">${settingsT('transfer.jobsImport')}</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">
         <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="export-profile-secrets">${settingsT('transfer.profilesExport')}</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-select-file">${settingsT('transfer.profilesPreview')}</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-apply" ${profileSecretsPreview ? '' : 'disabled'}>${settingsT('transfer.profilesImport')}</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" data-settings-action="import-profile-secrets-select-file">${settingsT('transfer.profilesImport')}</button>
       </div>
       <div id="settings-transfer-msg" class="status-message hidden"></div>
-      <div id="settings-transfer-preview-jobs" style="margin-top:10px">
-        ${jobsPreview ? renderJobsImportPreview(jobsPreview) : ''}
-      </div>
-      <div id="settings-transfer-preview-profile-secrets" style="margin-top:10px">
-        ${profileSecretsPreview ? renderProfileSecretsImportPreview(profileSecretsPreview) : ''}
-      </div>
     </div>`);
 }
 
@@ -3336,14 +3326,24 @@ async function importJobsSecurePreviewSelectFile() {
     settingsState.transferProfileSecretsPayloadB64 = '';
     settingsState.transferProfileSecretsPassword = '';
     settingsState.transferSettingsMode = 'merge';
-    await refreshSettings();
-    showMsg('settings-transfer-msg', 'success', settingsT('transfer.previewLoadedJobs', { count: data.job_count || 0, file: picked.name || settingsT('transfer.file') }));
+    await importJobsApplySelected({ fileName: picked.name || settingsT('transfer.file') });
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.previewFailed', { message: err.message }));
   }
 }
 
-async function importJobsApplySelected() {
+function settingsTransferImportableJobRows(preview) {
+  return (Array.isArray(preview?.jobs) ? preview.jobs : [])
+    .filter((row) => row && row.conflict !== 'invalid' && String(row.job_key || '').trim());
+}
+
+function settingsTransferJobOptionLabel(row) {
+  const name = String(row?.name || row?.job_key || '').trim();
+  const location = String(row?.location || '').trim();
+  return location ? `${name} (${location})` : name;
+}
+
+async function importJobsApplySelected(options = {}) {
   hideEl('settings-transfer-msg');
   try {
     const preview = settingsState.transferJobsPreview;
@@ -3351,17 +3351,23 @@ async function importJobsApplySelected() {
       ? !!settingsState.transferJobsSecurePayloadB64
       : !!settingsState.transferJobsBundleText;
     if (!preview || !hasPayload) throw new Error(settingsT('transfer.noJobsPreview'));
-    const selected = [];
+    let selected = [];
     const perMode = {};
     const perProfileMode = {};
+    let usedVisibleJobSelection = false;
     (preview.jobs || []).forEach((r, idx) => {
       const cb = document.querySelector(`[data-job-preview-select="${idx}"]`);
       const modeSel = document.querySelector(`[data-job-preview-mode="${idx}"]`);
+      if (cb) usedVisibleJobSelection = true;
       if (cb?.checked) {
         selected.push(r.job_key);
         if (modeSel?.value) perMode[r.job_key] = modeSel.value;
       }
     });
+    const importableRows = settingsTransferImportableJobRows(preview);
+    if (!usedVisibleJobSelection) {
+      selected = importableRows.map((row) => String(row.job_key || '').trim()).filter(Boolean);
+    }
     const settingsModeEl = document.getElementById('settings-import-mode');
     const settingsMode = String(settingsModeEl?.value || settingsState.transferSettingsMode || 'merge').trim().toLowerCase();
     document.querySelectorAll('[data-settings-profile-mode]').forEach((el) => {
@@ -3377,35 +3383,71 @@ async function importJobsApplySelected() {
     let importPassphrases = true;
     let importBorgKeys = false;
     let scopeLabel = settingsT('transfer.jobsOnly');
+    let globalJobMode = 'skip';
     if (settingsState.transferJobsSecureMode) {
       const hasBorgKeys = Number(preview?.borg_key_export_count || 0) > 0;
       const defaultScope = hasBorgKeys && existsCnt === selected.length ? 'borg_keys_only' : 'all';
+      const borgOptions = importableRows.map((row) => `<option value="${escHtml(String(row.job_key || ''))}">${escHtml(settingsTransferJobOptionLabel(row))}</option>`).join('');
       const scope = await _openSettingsDialog({
         title: settingsT('transfer.importContent'),
         html: `
-          <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="settings-transfer-wizard-summary">
+            <strong>${escHtml(options.fileName || settingsT('transfer.file'))}</strong>
+            <span>${settingsT('transfer.importPackageSummary', {
+              jobs: Number(preview?.job_count || importableRows.length || 0),
+              passphrases: Number(preview?.passphrase_count || 0),
+              borgkeys: Number(preview?.borg_key_export_count || 0),
+            })}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
             <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="all" ${defaultScope === 'all' ? 'checked' : ''}> ${settingsT('transfer.importScopeAll')}</label>
             <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="jobs_only" ${defaultScope === 'jobs_only' ? 'checked' : ''}> ${settingsT('transfer.importScopeJobsOnly')}</label>
             <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="passphrases_only" ${defaultScope === 'passphrases_only' ? 'checked' : ''}> ${settingsT('transfer.importScopePassphrasesOnly')}</label>
-            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="borg_keys_only" ${defaultScope === 'borg_keys_only' ? 'checked' : ''}> ${settingsT('transfer.importScopeBorgKeysOnly')}</label>
+            <label class="form-checkbox-row"><input type="radio" name="jobs-secure-scope" value="borg_keys_only" ${defaultScope === 'borg_keys_only' ? 'checked' : ''} ${hasBorgKeys ? '' : 'disabled'}> ${settingsT('transfer.importScopeBorgKeysOnly')}</label>
+          </div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">${settingsT('transfer.jobImportMode')}</label>
+            <select class="form-select" id="jobs-secure-job-mode">
+              <option value="skip" selected>${settingsT('transfer.jobImportSkipExisting')}</option>
+              <option value="overwrite">${settingsT('transfer.jobImportOverwriteExisting')}</option>
+              <option value="rename">${settingsT('transfer.jobImportRenameExisting')}</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">${settingsT('transfer.borgKeyTarget')}</label>
+            <select class="form-select" id="jobs-secure-borg-target" ${hasBorgKeys ? '' : 'disabled'}>
+              <option value="__all__">${settingsT('transfer.borgKeyTargetAll')}</option>
+              ${borgOptions}
+            </select>
           </div>
         `,
         confirmText: settingsT('transfer.continue'),
         resolveValue: ({ modal }) => {
           const checked = modal?.querySelector('input[name="jobs-secure-scope"]:checked');
-          return String(checked?.value || 'both');
+          return {
+            scope: String(checked?.value || 'all'),
+            jobMode: String(modal?.querySelector('#jobs-secure-job-mode')?.value || 'skip'),
+            borgTarget: String(modal?.querySelector('#jobs-secure-borg-target')?.value || '__all__'),
+          };
         },
       });
-      if (!scope) return;
-      importJobs = scope === 'all' || scope === 'jobs_only';
-      importPassphrases = scope === 'all' || scope === 'passphrases_only';
-      importBorgKeys = scope === 'all' || scope === 'borg_keys_only';
+      if (!scope || typeof scope !== 'object') return;
+      importJobs = scope.scope === 'all' || scope.scope === 'jobs_only';
+      importPassphrases = scope.scope === 'all' || scope.scope === 'passphrases_only';
+      importBorgKeys = scope.scope === 'all' || scope.scope === 'borg_keys_only';
+      globalJobMode = ['skip', 'overwrite', 'rename'].includes(scope.jobMode) ? scope.jobMode : 'skip';
+      if (scope.scope === 'borg_keys_only' && scope.borgTarget && scope.borgTarget !== '__all__') {
+        selected = [scope.borgTarget];
+      }
+      selected.forEach((jobKey) => {
+        if (jobKey) perMode[jobKey] = globalJobMode;
+      });
       scopeLabel = ({
         all: settingsT('transfer.importScopeAll'),
         jobs_only: settingsT('transfer.importScopeJobsOnly'),
         passphrases_only: settingsT('transfer.importScopePassphrasesOnly'),
         borg_keys_only: settingsT('transfer.importScopeBorgKeysOnly'),
-      })[scope] || settingsT('transfer.importScopeAll');
+      })[scope.scope] || settingsT('transfer.importScopeAll');
     }
     if (!selected.length) throw new Error(settingsT('transfer.noJobsSelected'));
     const ok = await _openSettingsDialog({
@@ -3703,24 +3745,25 @@ async function importProfileSecretsPreviewSelectFile() {
     settingsState.transferJobsSecurePayloadB64 = '';
     settingsState.transferJobsSecurePassword = '';
     settingsState.transferJobsSecureMode = false;
-    await refreshSettings();
-    showMsg('settings-transfer-msg', 'success', settingsT('transfer.previewLoadedProfiles', { count: data.count || 0, file: picked.name || settingsT('transfer.file') }));
+    await importProfileSecretsApplySelected({ fileName: picked.name || settingsT('transfer.file') });
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.profilesPreviewFailed', { message: err.message }));
   }
 }
 
-async function importProfileSecretsApplySelected() {
+async function importProfileSecretsApplySelected(options = {}) {
   hideEl('settings-transfer-msg');
   try {
     const preview = settingsState.transferProfileSecretsPreview;
     if (!preview || !settingsState.transferProfileSecretsPayloadB64 || !settingsState.transferProfileSecretsPassword) {
       throw new Error(settingsT('transfer.noProfilesPreview'));
     }
-    const selected = [];
+    let selected = [];
     const profileMap = {};
+    let usedVisibleSelection = false;
     (preview.entries || []).forEach((r, idx) => {
       const cb = document.querySelector(`[data-profile-secret-preview-select="${idx}"]`);
+      if (cb) usedVisibleSelection = true;
       if (cb?.checked) {
         const entryId = `${String(r.profile_type || '').toLowerCase()}:${String(r.profile_key || '').toLowerCase()}:${String(r.secret_type || '')}`;
         selected.push(entryId);
@@ -3729,23 +3772,48 @@ async function importProfileSecretsApplySelected() {
         if (mapped) profileMap[entryId] = mapped;
       }
     });
+    if (!usedVisibleSelection) {
+      selected = (preview.entries || []).map((r) => `${String(r.profile_type || '').toLowerCase()}:${String(r.profile_key || '').toLowerCase()}:${String(r.secret_type || '')}`);
+    }
     if (!selected.length) throw new Error(settingsT('transfer.noProfilesSelected'));
-    const modeRaw = await _openSettingsDialog({
-      title: settingsT('transfer.importMode'),
-      message: settingsT('transfer.existingFilesShortPrompt'),
-      input: { label: settingsT('transfer.importMode'), value: 'skip', placeholder: 'skip | overwrite', validate: (v) => ['skip', 'overwrite'].includes((v || '').trim()) },
+    const decision = await _openSettingsDialog({
+      title: settingsT('transfer.profilesImportTitle'),
+      html: `
+        <div class="settings-transfer-wizard-summary">
+          <strong>${escHtml(options.fileName || settingsT('transfer.file'))}</strong>
+          <span>${settingsT('transfer.profilesImportPackageSummary', {
+            entries: Number(preview?.count || selected.length || 0),
+            profiles: Number(preview?.settings_preview?.profiles_total || 0),
+          })}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+          <label class="form-checkbox-row"><input type="radio" name="profile-secrets-scope" value="profiles_secrets" checked> ${settingsT('transfer.importScopeProfilesSecrets')}</label>
+          <label class="form-checkbox-row"><input type="radio" name="profile-secrets-scope" value="secrets_only"> ${settingsT('transfer.importScopeSecretsOnly')}</label>
+        </div>
+        <div class="form-group" style="margin-top:12px">
+          <label class="form-label">${settingsT('transfer.secretImportMode')}</label>
+          <select class="form-select" id="profile-secrets-file-mode">
+            <option value="skip" selected>${settingsT('transfer.secretImportSkipExisting')}</option>
+            <option value="overwrite">${settingsT('transfer.secretImportOverwriteExisting')}</option>
+          </select>
+        </div>
+      `,
       confirmText: settingsT('transfer.startImport'),
+      resolveValue: ({ modal }) => ({
+        scope: String(modal?.querySelector('input[name="profile-secrets-scope"]:checked')?.value || 'profiles_secrets'),
+        mode: String(modal?.querySelector('#profile-secrets-file-mode')?.value || 'skip'),
+      }),
     });
-    if (!modeRaw) return;
-    const settingsModeEl = document.getElementById('profile-secrets-settings-mode');
-    const settingsMode = String(settingsModeEl?.value || 'merge').trim().toLowerCase();
+    if (!decision || typeof decision !== 'object') return;
+    const settingsMode = decision.scope === 'profiles_secrets' ? 'merge' : 'ignore';
+    const mode = ['skip', 'overwrite'].includes(decision.mode) ? decision.mode : 'skip';
     const res = await fetch('/api/settings/profile-secrets-import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         password: settingsState.transferProfileSecretsPassword,
         payload_b64: settingsState.transferProfileSecretsPayloadB64,
-        mode: modeRaw.trim(),
+        mode,
         settings_mode: settingsMode,
         selected_entries: selected,
         profile_map: profileMap,
