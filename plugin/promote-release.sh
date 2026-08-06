@@ -203,6 +203,27 @@ def limit_changelog(manifest: str) -> str:
 
 stable = limit_changelog(stable)
 
+title = re.search(r'<PLUGIN\b[^>]*\bTitle="([^"]+)"', test, re.DOTALL)
+if not title:
+    raise SystemExit("Test manifest has no tested display title")
+display_title = title.group(1)
+if re.search(r'<PLUGIN\b[^>]*\bTitle="[^"]*"', stable, re.DOTALL):
+    stable = re.sub(
+        r'(<PLUGIN\b[^>]*?)\bTitle="[^"]*"',
+        lambda match: match.group(1) + f'Title="{display_title}"',
+        stable,
+        count=1,
+        flags=re.DOTALL,
+    )
+else:
+    stable = re.sub(
+        r'(<PLUGIN\b[^>]*?\bname="[^"]*")',
+        lambda match: match.group(1) + f'\n        Title="{display_title}"',
+        stable,
+        count=1,
+        flags=re.DOTALL,
+    )
+
 launch = re.search(r'<PLUGIN\b[^>]*\blaunch="([^"]+)"', test, re.DOTALL)
 if not launch:
     raise SystemExit("Test manifest has no tested launch target")

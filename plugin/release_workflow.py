@@ -18,6 +18,7 @@ from pathlib import Path
 
 
 NAME = "borg-backup-ui"
+DISPLAY_TITLE = "Borg Backup UI"
 PROVENANCE_NAME = "build-provenance.json"
 PROVENANCE_MEMBER = f"boot/config/plugins/{NAME}/{PROVENANCE_NAME}"
 MAX_MANIFEST_CHANGELOG_RELEASES = 3
@@ -670,6 +671,7 @@ def verify_release_artifacts(repo: Path, main_ref: str = "HEAD") -> dict[str, ob
         raise RuntimeError("Stable manifest MD5 does not match the package")
     text = manifest.read_text(encoding="utf-8")
     required = (
+        f'Title="{DISPLAY_TITLE}"',
         'launch="Settings/borg-backup-ui"',
         "/main/&name;.plg",
         "/main/releases/&name;-&version;.txz",
