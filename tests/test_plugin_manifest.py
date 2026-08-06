@@ -160,6 +160,7 @@ def test_release_workflow_generates_safe_uninstall_payload_cleanup() -> None:
     workflow = load_release_workflow_module()
     manifest = (ROOT / "borg-backup-ui.plg").read_text(encoding="utf-8")
     rewritten = workflow.rewrite_remove_handler(manifest)
+    ET.fromstring(rewritten)
 
     assert 'Method="remove"' in rewritten
     assert 'PLUGIN_DIR="/boot/config/plugins/${NAME}"' in rewritten
@@ -169,7 +170,7 @@ def test_release_workflow_generates_safe_uninstall_payload_cleanup() -> None:
     assert 'rm -rf "${EMHTTP_DIR}"' in rewritten
     assert 'rm -f "${RC_SCRIPT}"' in rewritten
     assert 'rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}"' in rewritten
-    assert 'if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ]' in rewritten
+    assert 'if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ]; then' in rewritten
     assert "User data outside this" in rewritten
     assert "Borg repositories, jobs, histories, and configured data paths are" in rewritten
 

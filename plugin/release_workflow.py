@@ -581,8 +581,10 @@ rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}" 2>/dev/nul
 # Remove plugin-owned payload from the USB flash. User data outside this
 # directory, Borg repositories, jobs, histories, and configured data paths are
 # intentionally left untouched.
-if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ] && [ -d "${PLUGIN_DIR}" ]; then
-  rm -rf "${PLUGIN_DIR}"
+if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ]; then
+  if [ -d "${PLUGIN_DIR}" ]; then
+    rm -rf "${PLUGIN_DIR}"
+  fi
 fi
 
 rm -f /tmp/borg-backup-ui-remove.sh
