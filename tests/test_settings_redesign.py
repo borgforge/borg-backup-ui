@@ -61,6 +61,8 @@ def test_repository_refresh_controls_are_a_dedicated_settings_area() -> None:
         "repositoryRefreshWorker",
         "repositoryRefreshNextRun",
         "enabled ? 'success' : 'info'",
+        "const workerState = enabled ? _repositoryRefreshStateLabel(refresh?.worker_state) : settingsT('forms.repositoryRefreshWorkerDisabled')",
+        "const runtimeItems = enabled",
         "_renderRepositoryRefreshDetailGroups(details)",
     ):
         assert contract in script

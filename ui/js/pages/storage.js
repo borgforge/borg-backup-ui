@@ -330,7 +330,7 @@ function renderStorageWorkspaceHeader(repo, job) {
     : `<button type="button" class="storage-repository-info-disabled" data-storage-action="open-repository-refresh-settings">${escHtml(infoState)}</button>`;
   const keyBackupMissing = storageRepositoryNeedsExternalKeyBackup(repo);
   const keyBackupMarkup = keyBackupMissing
-    ? `<button type="button" class="storage-repository-key-backup-link" data-storage-action="open-repository-management">${escHtml(storageT('storage.repositoryKeyBackupMissing'))}</button>`
+    ? `<button type="button" class="storage-repository-key-backup-link" data-storage-action="open-repository-key-export-settings">${escHtml(storageT('storage.repositoryKeyBackupMissing'))}</button>`
     : '';
   header.innerHTML = `
     <div class="storage-repository-workspace-identity">
@@ -339,7 +339,7 @@ function renderStorageWorkspaceHeader(repo, job) {
     </div>
     <div class="storage-repository-workspace-status"><span class="badge ${status.className}">${escHtml(status.label)}</span>${keyBackupMarkup}${infoStateMarkup}</div>`;
   header.querySelector('[data-storage-action="open-repository-refresh-settings"]')?.addEventListener('click', openRepositoryRefreshSettings);
-  header.querySelector('[data-storage-action="open-repository-management"]')?.addEventListener('click', openRepositoryManagementTab);
+  header.querySelector('[data-storage-action="open-repository-key-export-settings"]')?.addEventListener('click', openRepositoryKeyExportSettings);
 }
 
 function openRepositoryRefreshSettings() {
@@ -351,6 +351,22 @@ function openRepositoryRefreshSettings() {
     if (typeof activateSettingsTab === 'function' && document.querySelector('#settings-content [data-settings-tab="repository"]')) {
       activateSettingsTab('repository');
       document.querySelector('#settings-content [data-settings-panel="repository"]')?.scrollIntoView({ block: 'start' });
+      return;
+    }
+    if (attempts < 12) window.setTimeout(activate, 100);
+  };
+  window.setTimeout(activate, 80);
+}
+
+function openRepositoryKeyExportSettings() {
+  if (window.BBUI?.settingsState) window.BBUI.settingsState.activeTab = 'transfer';
+  window.BBUI?.core?.navigate?.('settings');
+  let attempts = 0;
+  const activate = () => {
+    attempts += 1;
+    if (typeof activateSettingsTab === 'function' && document.querySelector('#settings-content [data-settings-tab="transfer"]')) {
+      activateSettingsTab('transfer');
+      document.querySelector('#settings-content [data-settings-action="export-repository-keys"]')?.scrollIntoView({ block: 'center' });
       return;
     }
     if (attempts < 12) window.setTimeout(activate, 100);

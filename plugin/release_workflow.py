@@ -49,6 +49,11 @@ LEGACY_PACKAGE_FILE_RE = re.compile(
     r"</FILE>",
     re.DOTALL,
 )
+REMOVE_HANDLER_RE = re.compile(
+    r'<FILE Name="/tmp/borg-backup-ui-remove\.sh" Run="/bin/bash" Method="remove">\s*'
+    r"<INLINE>.*?</INLINE>\s*</FILE>",
+    re.DOTALL,
+)
 
 
 def run_git(repo: Path, *args: str, text: bool = True) -> str | bytes:
@@ -295,13 +300,14 @@ def package_install_block(md5: str) -> str:
     if not re.fullmatch(r"[0-9a-fA-F]{32}", md5):
         raise RuntimeError("Package MD5 must be a 32 character hexadecimal digest")
     return f"""{PACKAGE_INSTALL_BEGIN}
-<FILE Name="/tmp/borg-backup-ui-package-install.sh" Run="/bin/bash">
+<FILE Name="/tmp/borg-backup-ui-package-install-&version;.sh" Run="/bin/bash">
 <INLINE>
 #!/bin/bash
 set -e
 
 NAME="borg-backup-ui"
 VERSION="&version;"
+PACKAGE_INSTALL_SCRIPT="/tmp/borg-backup-ui-package-install-${{VERSION}}.sh"
 PLUGIN_DIR="/boot/config/plugins/${{NAME}}"
 PACKAGE_FILE="${{PLUGIN_DIR}}/${{NAME}}-${{VERSION}}.txz"
 PACKAGE_TMP="${{PACKAGE_FILE}}.tmp"
@@ -313,6 +319,11 @@ VENDOR_BUNDLE_DIR="${{PLUGIN_DIR}}/runtime/vendor-bundles"
 VENDOR_META="${{VENDOR_BUNDLE_DIR}}/apprise-vendor.json"
 VENDOR_MARKER="${{VENDOR_DIR}}/.apprise-vendor.json"
 VENDOR_TMP="${{PLUGIN_DIR}}/runtime/vendor.tmp.$$"
+
+cleanup_package_install_script() {{
+  rm -f "${{PACKAGE_INSTALL_SCRIPT}}" 2>/dev/null || true
+}}
+trap cleanup_package_install_script EXIT
 
 file_md5() {{
   if command -v md5sum >/dev/null 2>/dev/null; then
@@ -351,8 +362,14 @@ core_payload_present() {{
   return 0
 }}
 
+app_payload_version_matches() {{
+  [ -f "${{PLUGIN_DIR}}/borg_backup_ui.py" ] || return 1
+  grep -F -q "APP_VERSION = \\"${{VERSION}}\\"" "${{PLUGIN_DIR}}/borg_backup_ui.py" 2>/dev/null
+}}
+
 package_payload_present() {{
   core_payload_present || return 1
+  app_payload_version_matches || return 1
   [ -f "${{VENDOR_META}}" ] || return 1
   return 0
 }}
@@ -464,11 +481,15 @@ extract_package_payload() {{
 mkdir -p "${{PLUGIN_DIR}}"
 
 if package_registered; then
-  if ! package_payload_present; then
+  if ! core_payload_present; then
     extract_package_payload "package is registered but plugin files are missing; extracting payload again."
+  elif ! app_payload_version_matches; then
+    extract_package_payload "installed payload version differs from ${{VERSION}}; extracting payload again."
+  elif [ ! -f "${{VENDOR_META}}" ]; then
+    extract_package_payload "package is registered but Apprise vendor metadata is missing; extracting payload again."
   fi
 
-  if core_payload_present; then
+  if package_payload_present; then
     marker_md5="$(cat "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true)"
     if [ "${{marker_md5}}" = "${{EXPECTED_MD5}}" ]; then
       ensure_apprise_vendor
@@ -500,7 +521,6 @@ if ! package_payload_present; then
 fi
 ensure_apprise_vendor
 echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
-rm -f /tmp/borg-backup-ui-package-install.sh
 </INLINE>
 </FILE>
 {PACKAGE_INSTALL_END}"""
@@ -541,6 +561,59 @@ fi
     return manifest
 
 
+def remove_handler_block() -> str:
+    return """<FILE Name="/tmp/borg-backup-ui-remove.sh" Run="/bin/bash" Method="remove">
+<INLINE>
+#!/bin/bash
+set -e
+
+NAME="borg-backup-ui"
+PLUGIN_DIR="/boot/config/plugins/${NAME}"
+EMHTTP_DIR="/usr/local/emhttp/plugins/${NAME}"
+GO_FILE="/boot/config/go"
+RC_SCRIPT="/etc/rc.d/rc.borg_backup_ui"
+PIDFILE="/var/run/borg_backup_ui.pid"
+WAIT_PIDFILE="/var/run/borg_backup_ui_start_wait.pid"
+LOGFILE="/var/log/borg_backup_ui.log"
+CLIENT_LOGFILE="/var/log/borg_backup_ui_client.log"
+
+# Stop the service and any delayed start process before deleting payload files.
+if [ -x "${RC_SCRIPT}" ]; then
+  "${RC_SCRIPT}" stop 2>/dev/null || true
+fi
+
+# Remove legacy autostart lines from /boot/config/go.
+if [ -f "${GO_FILE}" ]; then
+  sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
+  sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
+fi
+
+# Remove runtime files installed outside the persistent plugin directory.
+rm -f "${RC_SCRIPT}" 2>/dev/null || true
+rm -rf "${EMHTTP_DIR}" 2>/dev/null || true
+rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}" 2>/dev/null || true
+
+# Remove plugin-owned payload from the USB flash. User data outside this
+# directory, Borg repositories, jobs, histories, and configured data paths are
+# intentionally left untouched.
+if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ]; then
+  if [ -d "${PLUGIN_DIR}" ]; then
+    rm -rf "${PLUGIN_DIR}"
+  fi
+fi
+
+rm -f /tmp/borg-backup-ui-remove.sh
+</INLINE>
+</FILE>"""
+
+
+def rewrite_remove_handler(manifest: str) -> str:
+    block = remove_handler_block()
+    if not REMOVE_HANDLER_RE.search(manifest):
+        raise RuntimeError("Plugin manifest remove handler was not found")
+    return REMOVE_HANDLER_RE.sub(lambda _match: block, manifest, count=1)
+
+
 def prepare_build_tree(
     root: Path,
     version: str,
@@ -562,6 +635,7 @@ def prepare_build_tree(
     )
     manifest = replace_changelog_block(manifest, version, notes)
     manifest = rewrite_go_autostart_handling(manifest)
+    manifest = rewrite_remove_handler(manifest)
     manifest_path.write_text(manifest, encoding="utf-8")
 
     app = app_path.read_text(encoding="utf-8")

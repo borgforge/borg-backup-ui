@@ -2369,6 +2369,7 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
   const statusClass = enabled ? 'success' : 'info';
   const lastRun = _formatHealthTimestamp(refresh?.last_run_at) || '—';
   const nextRun = enabled ? (_formatHealthTimestamp(refresh?.next_run_at) || '—') : settingsT('forms.repositoryRefreshDisabled');
+  const workerState = enabled ? _repositoryRefreshStateLabel(refresh?.worker_state) : settingsT('forms.repositoryRefreshWorkerDisabled');
   const useCurrentCounts = details.length > 0;
   const resultText = settingsT('forms.repositoryRefreshResultCounts', {
     ok: Number(useCurrentCounts ? counts.success : (lastResult.refreshed || 0)),
@@ -2376,6 +2377,12 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
     failed: Number(useCurrentCounts ? counts.error : (lastResult.failed || 0)),
     deferred: Number(useCurrentCounts ? counts.busy : (lastResult.deferred || 0)),
   });
+  const runtimeItems = enabled
+    ? [
+        _repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshPluginPid'), Number(refresh?.plugin_pid || 0) || '—', 'neutral'),
+        _repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshNextRun'), nextRun, 'neutral'),
+      ].join('')
+    : '';
   return settingsCard(settingsT('forms.repositoryRefreshTitle'),
     settingsMenuIcon('repository'),
     `<div class="settings-body">
@@ -2407,10 +2414,9 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
         </div>
       </div>
       <div class="repository-refresh-summary">
-        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshWorker'), _repositoryRefreshStateLabel(refresh?.worker_state), enabled ? 'neutral' : 'warn')}
-        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshPluginPid'), Number(refresh?.plugin_pid || 0) || '—', 'neutral')}
+        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshWorker'), workerState, enabled ? 'neutral' : 'warn')}
+        ${runtimeItems}
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastRun'), lastRun, 'neutral')}
-        ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshNextRun'), nextRun, enabled ? 'neutral' : 'warn')}
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshRepositories'), Number(refresh?.repository_count || details.length || 0), 'neutral')}
         ${_repositoryRefreshSummaryItem(settingsT('forms.repositoryRefreshLastResult'), resultText, Number(useCurrentCounts ? counts.error : (lastResult.failed || 0)) ? 'warn' : 'ok')}
       </div>
@@ -3095,8 +3101,10 @@ async function exportJobsBundleSecure() {
   }
 }
 
-async function exportRepositoryKeysBackup() {
+async function exportRepositoryKeysBackup(button = null) {
   hideEl('settings-transfer-msg');
+  let busy = false;
+  const originalText = button ? button.textContent : '';
   try {
     const password = await _openSettingsDialog({
       title: settingsT('transfer.repositoryKeysExportTitle'),
@@ -3105,6 +3113,12 @@ async function exportRepositoryKeysBackup() {
       confirmText: settingsT('transfer.startExport'),
     });
     if (!password) return;
+    busy = true;
+    if (button) {
+      button.disabled = true;
+      button.textContent = settingsT('transfer.repositoryKeysExportRunningButton');
+    }
+    showMsg('settings-transfer-msg', 'info', settingsT('transfer.repositoryKeysExportRunning'));
     const res = await fetch('/api/settings/repository-keys-export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3130,6 +3144,11 @@ async function exportRepositoryKeysBackup() {
     }));
   } catch (err) {
     showMsg('settings-transfer-msg', 'error', settingsT('transfer.repositoryKeysFailed', { message: err.message }));
+  } finally {
+    if (button && busy) {
+      button.disabled = false;
+      button.textContent = originalText || settingsT('transfer.repositoryKeysExport');
+    }
   }
 }
 
@@ -5920,7 +5939,7 @@ async function onSettingsContentClick(event) {
   if (action === 'delete-backups-keep-latest') return deleteConfigBackupsKeepLatest();
   if (action === 'export-jobs') return exportJobsBundle();
   if (action === 'export-jobs-secure') return exportJobsBundleSecure();
-  if (action === 'export-repository-keys') return exportRepositoryKeysBackup();
+  if (action === 'export-repository-keys') return exportRepositoryKeysBackup(el);
   if (action === 'import-jobs-select-file') return importJobsPreviewSelectFile();
   if (action === 'import-jobs-secure-select-file') return importJobsSecurePreviewSelectFile();
   if (action === 'import-jobs-apply') return importJobsApplySelected();
