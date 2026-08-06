@@ -4,6 +4,9 @@ Borg Backup UI provides an Unraid plugin for BorgBackup with a guided web
 interface for backup jobs, repositories, restore tests, archive browsing,
 reports, notifications, and system health checks.
 
+Runtime requirement: install the separate Python 3 for UNRAID plugin before
+starting Borg Backup UI.
+
 The repository contains the Borg Backup UI plugin, release metadata,
 documentation, screenshots, and Community Apps submission metadata.
 

@@ -39,6 +39,21 @@ def test_plugin_manifest_uses_github_stable_channel_urls() -> None:
     assert 'gitlab.thetwist.de' not in manifest
 
 
+def test_community_apps_metadata_mentions_python_runtime_requirement() -> None:
+    plugin = ROOT / "plugins" / "borg-backup-ui.xml"
+    profile = ROOT / "ca_profile.xml"
+
+    ET.parse(plugin)
+    ET.parse(profile)
+
+    plugin_text = plugin.read_text(encoding="utf-8")
+    profile_text = profile.read_text(encoding="utf-8")
+    assert "Python 3 for UNRAID" in plugin_text
+    assert "Requires the separate Python 3 for UNRAID plugin" in plugin_text
+    assert "Python 3 for UNRAID" in profile_text
+    assert "Runtime requirement" in profile_text
+
+
 def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     script = (ROOT / "plugin" / "deploy-test.sh").read_text(encoding="utf-8")
     workflow = (ROOT / "plugin" / "release_workflow.py").read_text(encoding="utf-8")
