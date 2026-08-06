@@ -6,7 +6,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from wizard_runner import ResourceLockSet  # noqa: E402
+from wizard_runner import ResourceLockSet, _build_resources  # noqa: E402
 
 
 def test_resource_lock_blocks_same_resource_until_released(tmp_path: Path):
@@ -41,3 +41,13 @@ def test_resource_lock_recovers_corrupt_stale_lock_file(tmp_path: Path):
     assert reason == ""
     assert "appdata_local" in lock_path.read_text(encoding="utf-8")
     lock_set.release()
+
+
+def test_docker_control_resource_is_based_on_runtime_control_not_only_features():
+    resources = _build_resources(
+        {"BORG_REPO": "/mnt/backup/testdaten"},
+        {"docker_control": {"mode": "all"}, "features": {"docker": False}},
+    )
+
+    assert "repo:/mnt/backup/testdaten" in resources
+    assert "docker-control" in resources

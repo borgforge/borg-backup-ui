@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import fcntl
 import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 _SCHEMA_VERSION = 1
@@ -65,7 +66,6 @@ def record_runtime_stopped(
     normalized_targets = _normalize_targets(targets)
     if not normalized_targets:
         return ""
-    state = read_runtime_recovery_state(path)
     entry_id = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
     entry = {
         "id": entry_id,
@@ -81,49 +81,57 @@ def record_runtime_stopped(
         "message": "Runtime targets were stopped by Borg Backup UI and have not been marked as restarted.",
         "targets": normalized_targets,
     }
-    entries = [e for e in state.get("entries", []) if isinstance(e, dict)]
-    entries.append(entry)
-    state["entries"] = _prune_completed(entries)
-    _write_state(path, state)
-    return entry_id
+
+    def _mutate(state: dict[str, Any]) -> tuple[str, bool]:
+        entries = [e for e in state.get("entries", []) if isinstance(e, dict)]
+        entries.append(entry)
+        state["entries"] = _prune_completed(entries)
+        return entry_id, True
+
+    return str(_mutate_state(path, _mutate))
 
 
 def mark_runtime_restarted(path: Path, entry_id: str, *, success: bool = True, message: str = "") -> None:
     if not entry_id:
         return
-    state = read_runtime_recovery_state(path)
-    changed = False
-    entries = [entry for entry in state.get("entries", []) if isinstance(entry, dict)]
-    remaining: list[dict[str, Any]] = []
-    for entry in entries:
-        if str(entry.get("id") or "") != entry_id:
+
+    def _mutate(state: dict[str, Any]) -> tuple[None, bool]:
+        changed = False
+        entries = [entry for entry in state.get("entries", []) if isinstance(entry, dict)]
+        remaining: list[dict[str, Any]] = []
+        for entry in entries:
+            if str(entry.get("id") or "") != entry_id:
+                remaining.append(entry)
+                continue
+            if success:
+                changed = True
+                continue
+            entry["state"] = "restart_failed"
+            entry["restarted_at"] = _now()
+            entry["message"] = str(message or "Runtime restart failed.")
             remaining.append(entry)
-            continue
-        if success:
             changed = True
-            continue
-        entry["state"] = "restart_failed"
-        entry["restarted_at"] = _now()
-        entry["message"] = str(message or "Runtime restart failed.")
-        remaining.append(entry)
-        changed = True
-    if changed:
-        state["entries"] = _open_entries(remaining)
-        _write_state(path, state)
+        if changed:
+            state["entries"] = _open_entries(remaining)
+        return None, changed
+
+    _mutate_state(path, _mutate)
 
 
 def acknowledge_runtime_recovery(path: Path, entry_id: str) -> bool:
     clean_id = str(entry_id or "").strip()
     if not clean_id:
         return False
-    state = read_runtime_recovery_state(path)
-    entries = [entry for entry in state.get("entries", []) if isinstance(entry, dict)]
-    remaining = [entry for entry in entries if str(entry.get("id") or "") != clean_id]
-    if len(remaining) == len(entries):
-        return False
-    state["entries"] = _open_entries(remaining)
-    _write_state(path, state)
-    return True
+
+    def _mutate(state: dict[str, Any]) -> tuple[bool, bool]:
+        entries = [entry for entry in state.get("entries", []) if isinstance(entry, dict)]
+        remaining = [entry for entry in entries if str(entry.get("id") or "") != clean_id]
+        if len(remaining) == len(entries):
+            return False, False
+        state["entries"] = _open_entries(remaining)
+        return True, True
+
+    return bool(_mutate_state(path, _mutate))
 
 
 def summarize_runtime_recovery(path: Path) -> dict[str, Any]:
@@ -211,10 +219,44 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _mutate_state(
+    path: Path,
+    mutate: Callable[[dict[str, Any]], tuple[Any, bool]],
+) -> Any:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    with lock_path.open("a+", encoding="utf-8") as lock_handle:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        try:
+            state = read_runtime_recovery_state(path)
+            result, should_write = mutate(state)
+            if should_write:
+                _write_state_unlocked(path, state)
+            return result
+        finally:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+
 def _write_state(path: Path, state: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    with lock_path.open("a+", encoding="utf-8") as lock_handle:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        try:
+            _write_state_unlocked(path, state)
+        finally:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+
+def _write_state_unlocked(path: Path, state: dict[str, Any]) -> None:
     state["schema_version"] = _SCHEMA_VERSION
     state["updated_at"] = _now()
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
     tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    try:
+        tmp.replace(path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
