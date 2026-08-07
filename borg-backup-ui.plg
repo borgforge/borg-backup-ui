@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.06.1729">
+<!ENTITY version   "2026.08.07.0100">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.07.0100###
+- Uninstall now removes the Borg Backup UI plugin payload from `/boot/config/plugins/borg-backup-ui` as well as runtime hooks installed by the plugin, while leaving Borg repositories and user data outside the plugin directory untouched.
+- Repository Borg-key warnings now link to Settings > Import / Export, and the Borg-key export shows a visible running state while the encrypted key backup is being created.
+- Plugin updates now verify the extracted Python app version before skipping package extraction, preventing the Unraid control page and web UI from showing different Borg Backup UI versions.
+
 ###2026.08.06.1729###
 - Added a human-readable Unraid plugin title and Plugin Manager README so supported plugin lists can show `Borg Backup UI` while the internal plugin name remains unchanged for compatibility.
 - Fixed a Docker backup concurrency race: overlapping Docker-enabled jobs now acquire the Docker control lock whenever Docker runtime control is configured, and Docker/VM restart recovery state is written safely across processes.
@@ -30,12 +35,6 @@
 - Updated the bundled BorgBackup 1.x stable runtime from 1.4.4 to 1.4.5, including Borg's latest 1.x fixes.
 - Borg Backup UI no longer adds its own autostart block to `/boot/config/go`; updates clean up the old block while the plugin still starts through the normal plugin flow.
 - Borg Backup UI now detects German or English from the browser on first use and defaults to English for all other languages; an existing browser language selection is kept. Plugin install and service startup messages are now English as well.
-
-###2026.08.04.1237###
-- Clarified the Job Wizard source selection wording: the sources step now separates folders to back up from exclusions, uses shorter labels in the form, clearer validation, and matching help documentation.
-- Show the next scheduled backup run on the Dashboard job overview, including clear states for jobs without a schedule or with a disabled schedule.
-- Recover incomplete manual plugin deletions during reinstall: if Unraid still reports the package as installed but plugin payload or Apprise vendor metadata is missing, the installer now re-extracts the verified package before continuing.
-- Added an Unraid control page recovery action for forgotten Borg Backup UI admin credentials. The control page now creates a short-lived one-time recovery link for an existing admin account and shows it as a clear action button; the recovery page displays the selected admin, the new password is entered in Borg Backup UI, all UI sessions are signed out, and jobs, repositories, secrets, settings, and logs remain untouched.
 
 ]]>
 </CHANGES>
@@ -50,24 +49,30 @@
   ══════════════════════════════════════════════════════════════════════════
 -->
 <!-- BEGIN borg-backup-ui package installer -->
-<FILE Name="/tmp/borg-backup-ui-package-install.sh" Run="/bin/bash">
+<FILE Name="/tmp/borg-backup-ui-package-install-&version;.sh" Run="/bin/bash">
 <INLINE>
 #!/bin/bash
 set -e
 
 NAME="borg-backup-ui"
 VERSION="&version;"
+PACKAGE_INSTALL_SCRIPT="/tmp/borg-backup-ui-package-install-${VERSION}.sh"
 PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="68b40da313a8db4789554de9b87d3279"
+EXPECTED_MD5="fdf6e2c0d64a2f3d8a3550600b07f6e1"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
 VENDOR_META="${VENDOR_BUNDLE_DIR}/apprise-vendor.json"
 VENDOR_MARKER="${VENDOR_DIR}/.apprise-vendor.json"
 VENDOR_TMP="${PLUGIN_DIR}/runtime/vendor.tmp.$$"
+
+cleanup_package_install_script() {
+  rm -f "${PACKAGE_INSTALL_SCRIPT}" 2>/dev/null || true
+}
+trap cleanup_package_install_script EXIT
 
 file_md5() {
   if command -v md5sum >/dev/null 2>/dev/null; then
@@ -106,8 +111,14 @@ core_payload_present() {
   return 0
 }
 
+app_payload_version_matches() {
+  [ -f "${PLUGIN_DIR}/borg_backup_ui.py" ] || return 1
+  grep -F -q "APP_VERSION = \"${VERSION}\"" "${PLUGIN_DIR}/borg_backup_ui.py" 2>/dev/null
+}
+
 package_payload_present() {
   core_payload_present || return 1
+  app_payload_version_matches || return 1
   [ -f "${VENDOR_META}" ] || return 1
   return 0
 }
@@ -219,11 +230,15 @@ extract_package_payload() {
 mkdir -p "${PLUGIN_DIR}"
 
 if package_registered; then
-  if ! package_payload_present; then
+  if ! core_payload_present; then
     extract_package_payload "package is registered but plugin files are missing; extracting payload again."
+  elif ! app_payload_version_matches; then
+    extract_package_payload "installed payload version differs from ${VERSION}; extracting payload again."
+  elif [ ! -f "${VENDOR_META}" ]; then
+    extract_package_payload "package is registered but Apprise vendor metadata is missing; extracting payload again."
   fi
 
-  if core_payload_present; then
+  if package_payload_present; then
     marker_md5="$(cat "${INSTALLED_MD5_FILE}" 2>/dev/null || true)"
     if [ "${marker_md5}" = "${EXPECTED_MD5}" ]; then
       ensure_apprise_vendor
@@ -255,7 +270,6 @@ if ! package_payload_present; then
 fi
 ensure_apprise_vendor
 echo "${EXPECTED_MD5}" > "${INSTALLED_MD5_FILE}" 2>/dev/null || true
-rm -f /tmp/borg-backup-ui-package-install.sh
 </INLINE>
 </FILE>
 <!-- END borg-backup-ui package installer -->
@@ -348,14 +362,42 @@ rm -f /tmp/borg-backup-ui-install-extract.err
 <FILE Name="/tmp/borg-backup-ui-remove.sh" Run="/bin/bash" Method="remove">
 <INLINE>
 #!/bin/bash
+set -e
+
+NAME="borg-backup-ui"
+PLUGIN_DIR="/boot/config/plugins/${NAME}"
+EMHTTP_DIR="/usr/local/emhttp/plugins/${NAME}"
 GO_FILE="/boot/config/go"
+RC_SCRIPT="/etc/rc.d/rc.borg_backup_ui"
+PIDFILE="/var/run/borg_backup_ui.pid"
+WAIT_PIDFILE="/var/run/borg_backup_ui_start_wait.pid"
+LOGFILE="/var/log/borg_backup_ui.log"
+CLIENT_LOGFILE="/var/log/borg_backup_ui_client.log"
 
-# Stop the service
-/etc/rc.d/rc.borg_backup_ui stop 2>/dev/null || true
+# Stop the service and any delayed start process before deleting payload files.
+if [ -x "${RC_SCRIPT}" ]; then
+  "${RC_SCRIPT}" stop 2>/dev/null || true
+fi
 
-# Remove autostart from /boot/config/go
-sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
-sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
+# Remove legacy autostart lines from /boot/config/go.
+if [ -f "${GO_FILE}" ]; then
+  sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
+  sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
+fi
+
+# Remove runtime files installed outside the persistent plugin directory.
+rm -f "${RC_SCRIPT}" 2>/dev/null || true
+rm -rf "${EMHTTP_DIR}" 2>/dev/null || true
+rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}" 2>/dev/null || true
+
+# Remove plugin-owned payload from the USB flash. User data outside this
+# directory, Borg repositories, jobs, histories, and configured data paths are
+# intentionally left untouched.
+if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ]; then
+  if [ -d "${PLUGIN_DIR}" ]; then
+    rm -rf "${PLUGIN_DIR}"
+  fi
+fi
 
 rm -f /tmp/borg-backup-ui-remove.sh
 </INLINE>
