@@ -165,36 +165,39 @@ $mytiles[$pluginname]['column1'] =
 </td></tr>
 <tr data-bbui-body><td>
 <style>
-.bbui-tile-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800}
-.bbui-title-main{display:flex;align-items:center;gap:7px;min-width:0}
-.bbui-title-main b{display:block;font-size:13px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bbui-title-main small{display:block;color:var(--gray-500,#8b98a7);font-size:11px;line-height:1.1;margin-top:1px}
-.bbui-title-icon{width:24px;height:24px;border-radius:6px;object-fit:contain;flex:0 0 auto}
-.bbui-title-actions{display:flex;gap:4px;margin-left:auto}
-.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:rgba(148,163,184,.40);color:var(--gray-900,#f3f4f6)!important;text-decoration:none;font-size:12px}
-.bbui-title-button:hover{background:rgba(148,163,184,.58)}
-.bbui-widget{font-size:12px;line-height:1.25}
+.bbui-tile-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800;padding:2px 1px 0}
+.bbui-title-main{display:flex;align-items:center;gap:8px;min-width:0}
+.bbui-title-main b{display:block;font-size:14px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f3f4f6}
+.bbui-title-main small{display:block;color:#9ca3af;font-size:11px;line-height:1.1;margin-top:2px;font-weight:700}
+.bbui-title-icon{width:28px;height:28px;border-radius:7px;object-fit:contain;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.18)}
+.bbui-title-actions{display:flex;gap:5px;margin-left:auto}
+.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:linear-gradient(180deg,rgba(148,163,184,.42),rgba(55,65,81,.45));border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.10);color:#e5e7eb!important;text-decoration:none;font-size:12px}
+.bbui-title-button:hover{background:linear-gradient(180deg,rgba(148,163,184,.58),rgba(75,85,99,.55))}
+.bbui-widget{font-size:12px;line-height:1.22}
 .bbui-widget a{text-decoration:none}
-.bbui-widget-note{color:#d5a11e;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+.bbui-widget-note{color:#eab308;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.08);border-radius:7px;padding:4px 7px}
 .bbui-widget-note:empty{display:none}
-.bbui-widget-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin-bottom:6px}
-.bbui-widget-metric{border:1px solid rgba(148,163,184,.28);border-radius:6px;padding:4px 5px;min-width:0;background:rgba(148,163,184,.07)}
-.bbui-widget-metric span{display:block;color:var(--gray-500,#8b98a7);font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bbui-widget-metric b{display:block;font-size:15px;line-height:1;color:var(--gray-900,#d8dee9)}
-.bbui-widget-metric.ok b,.bbui-widget-state.ok h4,.bbui-widget-pill.ok{color:#7bbf59}
-.bbui-widget-metric.warn b,.bbui-widget-state.warn h4,.bbui-widget-pill.warn{color:#d5a11e}
-.bbui-widget-metric.err b,.bbui-widget-state.err h4,.bbui-widget-pill.err{color:#d95c59}
-.bbui-widget-metric.run b,.bbui-widget-state.run h4,.bbui-widget-pill.run{color:#5d9cec}
-.bbui-widget-metric.neutral b{color:#cbd5e1}
-.bbui-widget-main{border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px;margin-bottom:5px;background:rgba(148,163,184,.05)}
-.bbui-widget-main-row{display:flex;align-items:center;gap:7px}
-.bbui-widget-status{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;font-weight:900;flex:0 0 auto}
-.bbui-widget-state h4{margin:0 0 1px;font-size:12px;font-weight:800}
-.bbui-widget-state strong{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.bbui-widget-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:6px}
+.bbui-widget-metric{display:flex;align-items:center;gap:6px;border:1px solid rgba(148,163,184,.30);border-radius:7px;padding:5px 6px;min-width:0;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(0,0,0,.07));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.bbui-widget-metric i{font-size:17px;line-height:1;width:18px;text-align:center;flex:0 0 18px;opacity:.95}
+.bbui-widget-metric span{display:block;color:#9ca3af;font-size:10px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-metric b{display:block;font-size:16px;line-height:1.05;color:#d8dee9}
+.bbui-widget-metric.ok i,.bbui-widget-metric.ok b,.bbui-widget-state.ok h4,.bbui-widget-pill.ok{color:#7bbf59}
+.bbui-widget-metric.warn i,.bbui-widget-metric.warn b,.bbui-widget-state.warn h4,.bbui-widget-pill.warn{color:#e0ad2f}
+.bbui-widget-metric.err i,.bbui-widget-metric.err b,.bbui-widget-state.err h4,.bbui-widget-pill.err{color:#e05f5a}
+.bbui-widget-metric.run i,.bbui-widget-metric.run b,.bbui-widget-state.run h4,.bbui-widget-pill.run{color:#5d9cec}
+.bbui-widget-metric.neutral i,.bbui-widget-metric.neutral b{color:#d7dee8}
+.bbui-widget-main{position:relative;border:1px solid rgba(148,163,184,.30);border-radius:8px;padding:7px 7px 7px 10px;margin-bottom:6px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(0,0,0,.08));box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.bbui-widget-main:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:8px 0 0 8px;background:#6b7280}
+.bbui-widget-main.ok:before{background:#7bbf59}.bbui-widget-main.warn:before{background:#e0ad2f}.bbui-widget-main.err:before{background:#e05f5a}.bbui-widget-main.run:before{background:#5d9cec}
+.bbui-widget-main-row{display:flex;align-items:center;gap:8px}
+.bbui-widget-status{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;background:rgba(0,0,0,.18);font-weight:900;flex:0 0 auto;font-size:14px}
+.bbui-widget-state h4{margin:0 0 1px;font-size:12px;font-weight:900}
+.bbui-widget-state strong{display:block;font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:#f3f4f6}
 .bbui-widget-state p{margin:1px 0 0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bbui-widget-pill{margin-left:auto;border:1px solid currentColor;border-radius:6px;padding:2px 6px;font-weight:800;white-space:nowrap}
+.bbui-widget-pill{margin-left:auto;border:1px solid currentColor;border-radius:6px;padding:3px 7px;font-weight:900;white-space:nowrap;background:rgba(0,0,0,.14)}
 .bbui-widget-split{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px}
-.bbui-widget-box{border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px;background:rgba(148,163,184,.04);min-width:0}
+.bbui-widget-box{border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px 7px;background:rgba(148,163,184,.045);min-width:0}
 .bbui-widget-box h4{margin:0 0 3px;font-size:12px;font-weight:800;color:#5d9cec}
 .bbui-widget-next [data-bbui="next_rows"] > div{display:flex;justify-content:space-between;gap:8px;color:var(--gray-500,#8b98a7);padding:1px 0;min-width:0}
 .bbui-widget-next [data-bbui="next_rows"] span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -207,11 +210,11 @@ $mytiles[$pluginname]['column1'] =
 <div id="bbui-widget" class="bbui-widget" data-endpoint="/plugins/borg-backup-ui/widget-status.php">
   <div class="bbui-widget-note" data-bbui="cache_note">{$cache_note}</div>
   <div class="bbui-widget-strip">
-    <div class="bbui-widget-metric ok"><span>Erfolgreich</span><b data-bbui="success">{$success}</b></div>
-    <div class="bbui-widget-metric warn"><span>Warnungen</span><b data-bbui="warnings">{$warnings}</b></div>
-    <div class="bbui-widget-metric err"><span>Fehler</span><b data-bbui="failed">{$failed}</b></div>
-    <div class="bbui-widget-metric run"><span>Laeuft</span><b data-bbui="running">{$running}</b></div>
-    <div class="bbui-widget-metric neutral"><span>Repos online</span><b data-bbui="repos">{$repo_online}/{$repo_total}</b></div>
+    <div class="bbui-widget-metric ok"><i class="fa fa-check-circle-o"></i><span>Erfolgreich</span><b data-bbui="success">{$success}</b></div>
+    <div class="bbui-widget-metric warn"><i class="fa fa-exclamation-triangle"></i><span>Warnungen</span><b data-bbui="warnings">{$warnings}</b></div>
+    <div class="bbui-widget-metric err"><i class="fa fa-times-circle-o"></i><span>Fehler</span><b data-bbui="failed">{$failed}</b></div>
+    <div class="bbui-widget-metric run"><i class="fa fa-play-circle-o"></i><span>Laeuft</span><b data-bbui="running">{$running}</b></div>
+    <div class="bbui-widget-metric neutral"><i class="fa fa-database"></i><span>Repos online</span><b data-bbui="repos">{$repo_online}/{$repo_total}</b></div>
   </div>
   <div class="bbui-widget-main bbui-widget-state {$latest_state}" data-bbui-latest-state>
     <div class="bbui-widget-main-row">
