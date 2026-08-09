@@ -182,6 +182,7 @@ def load_ui_config() -> dict:
         "BIND": "0.0.0.0",
         "BACKUP_SCRIPTS_DIR": "/boot/config/borg-backup",
         "BORG_SCRIPTS_DIR": str(SCRIPT_DIR / "runtime" / "scripts"),
+        "PLUGIN_DIR": str(SCRIPT_DIR),
         "STATUS_DIR": "/mnt/user/backup-status",
         "DEV_MODE": "false",
         "UI_SESSION_TIMEOUT_MINUTES": "30",
@@ -1019,7 +1020,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_status(self) -> dict:
         from status_api import get_status_data
-        return get_status_data(self.config)
+        status = get_status_data(self.config)
+        try:
+            from unraid_dashboard_widget import write_unraid_dashboard_widget_cache
+
+            write_unraid_dashboard_widget_cache(self.config, status, app_version=APP_VERSION)
+        except Exception as exc:
+            self.log_message("WARN Unraid dashboard widget cache could not be written: %s", str(exc))
+        return status
 
     def _get_homepage_widget_summary(self) -> dict:
         from homepage_widget_api import build_homepage_widget_summary

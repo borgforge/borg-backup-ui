@@ -1,0 +1,193 @@
+Menu="Dashboard:0"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.11.9','>')"
+---
+<?PHP
+$pluginname = "borg-backup-ui";
+$plugin_dir = "/boot/config/plugins/borg-backup-ui";
+$cache_file = "$plugin_dir/widget-status.json";
+$conf_file = "$plugin_dir/borg_backup_ui.conf";
+
+function bbui_dash_h($value) {
+  return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function bbui_dash_read_conf($file) {
+  $conf = ['PORT' => '8765'];
+  if (!file_exists($file)) return $conf;
+  foreach (file($file, FILE_IGNORE_NEW_LINES) as $line) {
+    $line = trim($line);
+    if ($line === '' || $line[0] === '#') continue;
+    if (preg_match('/^([A-Z_]+)=(.*)$/', $line, $m)) $conf[$m[1]] = $m[2];
+  }
+  return $conf;
+}
+
+function bbui_dash_ui_url($port) {
+  $host = $_SERVER['SERVER_ADDR'] ?? ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+  $host = preg_replace('/:\d+$/', '', (string)$host);
+  return "http://$host:$port/";
+}
+
+function bbui_dash_value($data, $path, $default = '') {
+  $current = $data;
+  foreach (explode('.', $path) as $part) {
+    if (!is_array($current) || !array_key_exists($part, $current)) return $default;
+    $current = $current[$part];
+  }
+  return $current;
+}
+
+function bbui_dash_int($data, $path) {
+  return max(0, intval(bbui_dash_value($data, $path, 0)));
+}
+
+function bbui_dash_state_class($state) {
+  $state = strtolower((string)$state);
+  if (in_array($state, ['ok', 'healthy', 'success'], true)) return 'ok';
+  if (in_array($state, ['warning', 'attention'], true)) return 'warn';
+  if (in_array($state, ['error', 'critical', 'failed'], true)) return 'err';
+  if (in_array($state, ['running', 'active'], true)) return 'run';
+  return 'neutral';
+}
+
+function bbui_dash_time($value) {
+  $raw = trim((string)$value);
+  if ($raw === '') return 'nie aktualisiert';
+  $ts = strtotime($raw);
+  if (!$ts) return $raw;
+  return date('d.m. H:i', $ts);
+}
+
+$conf = bbui_dash_read_conf($conf_file);
+$ui_url = bbui_dash_ui_url($conf['PORT'] ?? '8765');
+$data = [];
+$cache_error = '';
+if (is_file($cache_file)) {
+  $raw = file_get_contents($cache_file);
+  $decoded = json_decode($raw, true);
+  if (is_array($decoded)) {
+    $data = $decoded;
+  } else {
+    $cache_error = 'Statusdatei konnte nicht gelesen werden.';
+  }
+} else {
+  $cache_error = 'Noch keine Widget-Statusdatei vorhanden.';
+}
+
+$overall_state = bbui_dash_state_class(bbui_dash_value($data, 'status.state', 'neutral'));
+$job_total = bbui_dash_int($data, 'jobs.enabled');
+$job_label = $job_total === 1 ? 'Backup-Job' : 'Backup-Jobs';
+$success = bbui_dash_int($data, 'jobs.successful');
+$warnings = bbui_dash_int($data, 'jobs.warnings');
+$failed = bbui_dash_int($data, 'jobs.failed');
+$running = bbui_dash_int($data, 'jobs.running');
+$repo_online = bbui_dash_int($data, 'repositories.online');
+$repo_total = bbui_dash_int($data, 'repositories.total');
+$latest_name = bbui_dash_value($data, 'latest_backup.name', 'Noch kein Backup');
+$latest_detail = bbui_dash_value($data, 'latest_backup.detail', 'Borg Backup UI einmal oeffnen, um Statusdaten zu erzeugen.');
+$latest_state = bbui_dash_state_class(bbui_dash_value($data, 'latest_backup.status', 'neutral'));
+$latest_label = bbui_dash_value($data, 'latest_backup.status_label', '-');
+$restore_label = bbui_dash_value($data, 'restore_proof.label', 'Nicht geplant');
+$restore_overdue = bbui_dash_int($data, 'restore_proof.overdue');
+$restore_failed = bbui_dash_int($data, 'restore_proof.failed');
+$restore_open = bbui_dash_int($data, 'restore_proof.open');
+$generated = bbui_dash_time(bbui_dash_value($data, 'generated_at', ''));
+$latest_name_h = bbui_dash_h($latest_name);
+$latest_detail_h = bbui_dash_h($latest_detail);
+$latest_label_h = bbui_dash_h($latest_label);
+$restore_label_h = bbui_dash_h($restore_label);
+$overall_label_h = bbui_dash_h(bbui_dash_value($data, 'status.label', '-'));
+$latest_icon = $latest_state === 'ok' ? '&#10003;' : ($latest_state === 'warn' ? '!' : ($latest_state === 'err' ? '&times;' : ($latest_state === 'run' ? '&#9654;' : '-')));
+
+$next_rows = '';
+$next_backups = bbui_dash_value($data, 'next_backups', []);
+if (is_array($next_backups) && count($next_backups)) {
+  foreach (array_slice($next_backups, 0, 2) as $item) {
+    if (!is_array($item)) continue;
+    $next_rows .= '<li><span>' . bbui_dash_h($item['name'] ?? 'Backup') . '</span><b>' . bbui_dash_h($item['time'] ?? '') . '</b></li>';
+  }
+}
+if ($next_rows === '') {
+  $next_rows = '<li><span>Keine geplanten Backups</span><b>-</b></li>';
+}
+
+$cache_note = $cache_error
+  ? '<div class="bbui-widget-note warn">' . bbui_dash_h($cache_error) . '</div>'
+  : '';
+
+$mytiles[$pluginname]['column1'] =
+<<<EOT
+<tbody title="Borg Backup UI overview">
+<tr><td>Borg Backup UI</td></tr>
+<tr><td>
+<style>
+.bbui-widget{font-size:13px;line-height:1.35}
+.bbui-widget a{text-decoration:none}
+.bbui-widget-head{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.bbui-widget-icon{width:42px;height:42px;border-radius:10px;object-fit:contain}
+.bbui-widget-title{font-weight:800;font-size:20px;letter-spacing:.02em;text-transform:uppercase}
+.bbui-widget-sub{color:var(--gray-500,#8b98a7);font-weight:600}
+.bbui-widget-actions{margin-left:auto;display:flex;gap:6px}
+.bbui-widget-action{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(148,163,184,.35);border-radius:8px;color:inherit;background:rgba(148,163,184,.12);font-weight:800}
+.bbui-widget-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-bottom:10px}
+.bbui-widget-tile{border:1px solid rgba(148,163,184,.28);border-radius:8px;padding:7px 8px;background:rgba(148,163,184,.10);min-height:44px}
+.bbui-widget-tile span{display:block;font-size:11px;font-weight:700;color:var(--gray-500,#8b98a7)}
+.bbui-widget-tile b{font-size:20px;line-height:1;color:var(--gray-900,#d8dee9)}
+.bbui-widget-tile.ok b,.bbui-widget-section.ok h4,.bbui-widget-pill.ok{color:#7bbf59}
+.bbui-widget-tile.warn b,.bbui-widget-section.warn h4,.bbui-widget-pill.warn{color:#d5a11e}
+.bbui-widget-tile.err b,.bbui-widget-section.err h4,.bbui-widget-pill.err{color:#d95c59}
+.bbui-widget-tile.run b,.bbui-widget-section.run h4,.bbui-widget-pill.run{color:#5d9cec}
+.bbui-widget-section{border:1px solid rgba(148,163,184,.28);border-radius:8px;padding:10px;margin-top:8px;background:rgba(148,163,184,.07)}
+.bbui-widget-section h4{margin:0 0 4px;font-size:13px;font-weight:800}
+.bbui-widget-section p{margin:0;color:var(--gray-500,#8b98a7)}
+.bbui-widget-section-main{display:flex;gap:10px;align-items:center}
+.bbui-widget-status-dot{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;font-weight:900;flex:0 0 auto}
+.bbui-widget-pill{margin-left:auto;border:1px solid currentColor;border-radius:7px;padding:4px 9px;font-weight:800}
+.bbui-widget-list{list-style:none;margin:5px 0 0;padding:0}
+.bbui-widget-list li{display:flex;justify-content:space-between;gap:10px;padding:2px 0;color:var(--gray-500,#8b98a7)}
+.bbui-widget-list b{color:var(--gray-300,#cbd5e1);white-space:nowrap}
+.bbui-widget-footer{display:flex;justify-content:space-between;gap:10px;margin-top:10px;color:var(--gray-500,#8b98a7);font-size:12px}
+.bbui-widget-note{border:1px solid rgba(213,161,30,.45);border-radius:8px;padding:8px;margin-bottom:8px;color:#d5a11e;background:rgba(213,161,30,.10)}
+</style>
+<div class="bbui-widget">
+  <div class="bbui-widget-head">
+    <img class="bbui-widget-icon" src="/plugins/borg-backup-ui/app-icon.png" alt="">
+    <div>
+      <div class="bbui-widget-title">Borg Backup UI</div>
+      <div class="bbui-widget-sub">{$job_total} {$job_label}</div>
+    </div>
+    <div class="bbui-widget-actions">
+      <a class="bbui-widget-action" href="#" onclick="location.reload();return false;" title="Aktualisieren">&#8635;</a>
+      <a class="bbui-widget-action" href="{$ui_url}" target="_blank" title="Borg Backup UI oeffnen">&#8599;</a>
+      <a class="bbui-widget-action" href="/Settings/borg-backup-ui" title="Einstellungen">&#9881;</a>
+    </div>
+  </div>
+  {$cache_note}
+  <div class="bbui-widget-grid">
+    <div class="bbui-widget-tile ok"><span>Erfolgreich</span><b>{$success}</b></div>
+    <div class="bbui-widget-tile warn"><span>Warnungen</span><b>{$warnings}</b></div>
+    <div class="bbui-widget-tile err"><span>Fehler</span><b>{$failed}</b></div>
+    <div class="bbui-widget-tile run"><span>Laeuft</span><b>{$running}</b></div>
+    <div class="bbui-widget-tile neutral"><span>Repos online</span><b>{$repo_online}/{$repo_total}</b></div>
+  </div>
+  <div class="bbui-widget-section {$latest_state}">
+    <div class="bbui-widget-section-main">
+      <div class="bbui-widget-status-dot">{$latest_icon}</div>
+      <div><h4>Letztes Backup</h4><strong>{$latest_name_h}</strong><p>{$latest_detail_h}</p></div>
+      <div class="bbui-widget-pill {$latest_state}">{$latest_label_h}</div>
+    </div>
+  </div>
+  <div class="bbui-widget-section run">
+    <h4>Naechste Backups</h4>
+    <ul class="bbui-widget-list">{$next_rows}</ul>
+  </div>
+  <div class="bbui-widget-section {$overall_state}">
+    <h4>Restore-Nachweis</h4>
+    <p><strong>{$restore_label_h}</strong> &middot; {$restore_overdue} ueberfaellig &middot; {$restore_failed} fehlgeschlagen &middot; {$restore_open} offen</p>
+  </div>
+  <div class="bbui-widget-footer"><span>Status: {$overall_label_h}</span><span>Aktualisiert: {$generated}</span></div>
+</div>
+</td></tr>
+</tbody>
+EOT;
+?>

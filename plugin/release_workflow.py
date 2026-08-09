@@ -33,6 +33,8 @@ EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/runtime/vendor-bundles/apprise-vendor.json",
     "etc/rc.d/rc.borg_backup_ui",
     f"usr/local/emhttp/plugins/{NAME}/README.md",
+    f"usr/local/emhttp/plugins/{NAME}/{NAME}-dashboard.page",
+    f"usr/local/emhttp/plugins/{NAME}/app-icon.png",
     PROVENANCE_MEMBER,
 )
 
@@ -83,6 +85,7 @@ def is_deployable_path(path: str) -> bool:
         "plugin/build.sh",
         "plugin/README.md",
         "plugin/borg-backup-ui.page",
+        "plugin/borg-backup-ui-dashboard.page",
         "plugin/deploy-test.sh",
         "plugin/promote-release.sh",
         "plugin/rc.borg_backup_ui",
