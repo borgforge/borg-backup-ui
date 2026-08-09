@@ -171,8 +171,8 @@ $mytiles[$pluginname]['column1'] =
 .bbui-title-main small{display:block;color:#9ca3af;font-size:11px;line-height:1.1;margin-top:2px;font-weight:700}
 .bbui-title-icon{width:28px;height:28px;border-radius:7px;object-fit:contain;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.18)}
 .bbui-title-actions{display:flex;gap:5px;margin-left:auto}
-.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:linear-gradient(180deg,rgba(148,163,184,.42),rgba(55,65,81,.45));border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.10);color:#e5e7eb!important;text-decoration:none;font-size:12px}
-.bbui-title-button:hover{background:linear-gradient(180deg,rgba(148,163,184,.58),rgba(75,85,99,.55))}
+.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:linear-gradient(180deg,rgba(107,114,128,.60),rgba(55,65,81,.64));border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.25);color:#e5e7eb!important;text-decoration:none;font-size:12px}
+.bbui-title-button:hover{background:linear-gradient(180deg,rgba(148,163,184,.62),rgba(75,85,99,.66))}
 .bbui-widget{font-size:12px;line-height:1.22}
 .bbui-widget a{text-decoration:none}
 .bbui-widget-note{color:#eab308;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.08);border-radius:7px;padding:4px 7px}
@@ -180,7 +180,8 @@ $mytiles[$pluginname]['column1'] =
 .bbui-widget-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:6px}
 .bbui-widget-metric{display:flex;align-items:center;gap:6px;border:1px solid rgba(148,163,184,.30);border-radius:7px;padding:5px 6px;min-width:0;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(0,0,0,.07));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
 .bbui-widget-metric i{font-size:17px;line-height:1;width:18px;text-align:center;flex:0 0 18px;opacity:.95}
-.bbui-widget-metric span{display:block;color:#9ca3af;font-size:10px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-metric span{display:block;min-width:0}
+.bbui-widget-metric em{display:block;color:#9ca3af;font-size:10px;font-style:normal;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bbui-widget-metric b{display:block;font-size:16px;line-height:1.05;color:#d8dee9}
 .bbui-widget-metric.ok i,.bbui-widget-metric.ok b,.bbui-widget-state.ok h4,.bbui-widget-pill.ok{color:#7bbf59}
 .bbui-widget-metric.warn i,.bbui-widget-metric.warn b,.bbui-widget-state.warn h4,.bbui-widget-pill.warn{color:#e0ad2f}
@@ -197,24 +198,31 @@ $mytiles[$pluginname]['column1'] =
 .bbui-widget-state p{margin:1px 0 0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bbui-widget-pill{margin-left:auto;border:1px solid currentColor;border-radius:6px;padding:3px 7px;font-weight:900;white-space:nowrap;background:rgba(0,0,0,.14)}
 .bbui-widget-split{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px}
-.bbui-widget-box{border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px 7px;background:rgba(148,163,184,.045);min-width:0}
+.bbui-widget-box{display:grid;grid-template-columns:28px minmax(0,1fr);gap:7px;align-items:center;border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px 7px;background:rgba(148,163,184,.045);min-width:0}
+.bbui-widget-section-icon{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;background:rgba(0,0,0,.18);font-size:14px;line-height:1}
+.bbui-widget-next .bbui-widget-section-icon{color:#5d9cec}.bbui-widget-restore .bbui-widget-section-icon{color:#7bbf59}
+.bbui-widget-section-body{min-width:0}
 .bbui-widget-box h4{margin:0 0 3px;font-size:12px;font-weight:800;color:#5d9cec}
 .bbui-widget-next [data-bbui="next_rows"] > div{display:flex;justify-content:space-between;gap:8px;color:var(--gray-500,#8b98a7);padding:1px 0;min-width:0}
 .bbui-widget-next [data-bbui="next_rows"] span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .bbui-widget-next [data-bbui="next_rows"] b{color:var(--gray-300,#cbd5e1);white-space:nowrap;flex:0 0 auto}
 .bbui-widget-restore p{margin:0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bbui-widget-footer{display:flex;justify-content:space-between;gap:8px;color:var(--gray-500,#8b98a7);font-size:11px}
+.bbui-widget-footer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:center;gap:8px;color:#9ca3af;font-size:11px;border-top:1px solid rgba(148,163,184,.16);padding-top:5px;margin-top:3px}
 .bbui-widget-footer span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-footer i{color:#9ca3af;margin-right:4px}
+.bbui-widget-footer strong{color:#cbd5e1}
+.bbui-widget-health-dot{width:9px;height:9px;border-radius:999px;background:#6b7280;box-shadow:0 0 6px rgba(107,114,128,.55)}
+.bbui-widget-health-dot.ok{background:#7bbf59;box-shadow:0 0 7px rgba(123,191,89,.55)}.bbui-widget-health-dot.warn{background:#e0ad2f;box-shadow:0 0 7px rgba(224,173,47,.55)}.bbui-widget-health-dot.err{background:#e05f5a;box-shadow:0 0 7px rgba(224,95,90,.55)}.bbui-widget-health-dot.run{background:#5d9cec;box-shadow:0 0 7px rgba(93,156,236,.55)}
 @media (max-width:520px){.bbui-widget-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.bbui-widget-split{grid-template-columns:1fr}}
 </style>
 <div id="bbui-widget" class="bbui-widget" data-endpoint="/plugins/borg-backup-ui/widget-status.php">
   <div class="bbui-widget-note" data-bbui="cache_note">{$cache_note}</div>
   <div class="bbui-widget-strip">
-    <div class="bbui-widget-metric ok"><i class="fa fa-check-circle-o"></i><span>Erfolgreich</span><b data-bbui="success">{$success}</b></div>
-    <div class="bbui-widget-metric warn"><i class="fa fa-exclamation-triangle"></i><span>Warnungen</span><b data-bbui="warnings">{$warnings}</b></div>
-    <div class="bbui-widget-metric err"><i class="fa fa-times-circle-o"></i><span>Fehler</span><b data-bbui="failed">{$failed}</b></div>
-    <div class="bbui-widget-metric run"><i class="fa fa-play-circle-o"></i><span>Laeuft</span><b data-bbui="running">{$running}</b></div>
-    <div class="bbui-widget-metric neutral"><i class="fa fa-database"></i><span>Repos online</span><b data-bbui="repos">{$repo_online}/{$repo_total}</b></div>
+    <div class="bbui-widget-metric ok"><i class="fa fa-check-circle-o"></i><span><em>Erfolgreich</em><b data-bbui="success">{$success}</b></span></div>
+    <div class="bbui-widget-metric warn"><i class="fa fa-exclamation-triangle"></i><span><em>Warnungen</em><b data-bbui="warnings">{$warnings}</b></span></div>
+    <div class="bbui-widget-metric err"><i class="fa fa-times-circle-o"></i><span><em>Fehler</em><b data-bbui="failed">{$failed}</b></span></div>
+    <div class="bbui-widget-metric run"><i class="fa fa-play-circle-o"></i><span><em>Laeuft</em><b data-bbui="running">{$running}</b></span></div>
+    <div class="bbui-widget-metric neutral"><i class="fa fa-database"></i><span><em>Repos online</em><b data-bbui="repos">{$repo_online}/{$repo_total}</b></span></div>
   </div>
   <div class="bbui-widget-main bbui-widget-state {$latest_state}" data-bbui-latest-state>
     <div class="bbui-widget-main-row">
@@ -225,16 +233,26 @@ $mytiles[$pluginname]['column1'] =
   </div>
   <div class="bbui-widget-split">
     <div class="bbui-widget-box bbui-widget-next">
-      <h4>Naechste Backups</h4>
-      <div data-bbui="next_rows">{$next_rows}</div>
+      <div class="bbui-widget-section-icon"><i class="fa fa-calendar"></i></div>
+      <div class="bbui-widget-section-body">
+        <h4>Naechste Backups</h4>
+        <div data-bbui="next_rows">{$next_rows}</div>
+      </div>
     </div>
     <div class="bbui-widget-box bbui-widget-restore">
-      <h4>Restore-Nachweis</h4>
-      <p><strong data-bbui="restore_label">{$restore_label_h}</strong></p>
-      <p data-bbui="restore_detail">{$restore_overdue} ueberfaellig &middot; {$restore_failed} Fehler &middot; {$restore_open} offen</p>
+      <div class="bbui-widget-section-icon"><i class="fa fa-shield"></i></div>
+      <div class="bbui-widget-section-body">
+        <h4>Restore-Nachweis</h4>
+        <p><strong data-bbui="restore_label">{$restore_label_h}</strong></p>
+        <p data-bbui="restore_detail">{$restore_overdue} ueberfaellig &middot; {$restore_failed} Fehler &middot; {$restore_open} offen</p>
+      </div>
     </div>
   </div>
-  <div class="bbui-widget-footer"><span>Status: <span data-bbui="overall_label">{$overall_label_h}</span></span><span>Aktualisiert: <span data-bbui="generated">{$generated_h}</span></span></div>
+  <div class="bbui-widget-footer">
+    <span><i class="fa fa-exclamation-triangle"></i>Status: <strong data-bbui="overall_label">{$overall_label_h}</strong></span>
+    <span><i class="fa fa-clock-o"></i>Aktualisiert: <strong data-bbui="generated">{$generated_h}</strong></span>
+    <i class="bbui-widget-health-dot {$overall_state}" data-bbui-overall-dot></i>
+  </div>
 </div>
 <script type="application/json" id="bbui-widget-initial">{$initial_json}</script>
 <script>
@@ -250,6 +268,7 @@ $mytiles[$pluginname]['column1'] =
   tile.querySelectorAll('.bbui-tile-title [data-bbui], #bbui-widget [data-bbui]').forEach((node) => fields[node.getAttribute('data-bbui')] = node);
   const latestState = root.querySelector('[data-bbui-latest-state]');
   const latestPill = root.querySelector('[data-bbui-latest-pill]');
+  const overallDot = root.querySelector('[data-bbui-overall-dot]');
 
   function get(data, path, fallback) {
     return path.split('.').reduce((value, part) => value && Object.prototype.hasOwnProperty.call(value, part) ? value[part] : undefined, data) ?? fallback;
@@ -302,12 +321,17 @@ $mytiles[$pluginname]['column1'] =
     latestState && latestState.classList.add(cls);
     latestPill && latestPill.classList.add(cls);
   }
+  function setOverallClass(cls) {
+    ['ok','warn','err','run','neutral'].forEach((name) => overallDot && overallDot.classList.remove(name));
+    overallDot && overallDot.classList.add(cls);
+  }
   function render(data) {
     const total = intValue(data, 'jobs.enabled');
     const repoOnline = intValue(data, 'repositories.online');
     const repoTotal = intValue(data, 'repositories.total');
     const latestStatus = get(data, 'latest_backup.status', 'unknown');
     const latestCls = stateClass(latestStatus);
+    const overallCls = stateClass(get(data, 'status.state', 'unknown'));
     const configured = intValue(data, 'restore_proof.configured');
     const cacheState = String(get(data, 'cache_state', 'missing'));
     const cacheNote = cacheState === 'initial' ? 'Initialstatus' : '';
@@ -333,6 +357,7 @@ $mytiles[$pluginname]['column1'] =
     setText('overall_label', statusLabel(get(data, 'status.state', 'unknown')));
     setText('generated', formatTime(get(data, 'generated_at', '')));
     setLatestClass(latestCls);
+    setOverallClass(overallCls);
 
     const nextRows = Array.isArray(data.next_backups) ? data.next_backups.slice(0, 2) : [];
     if (fields.next_rows) {
