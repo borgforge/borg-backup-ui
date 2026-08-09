@@ -65,25 +65,20 @@ def build_unraid_dashboard_widget_cache(
     warnings = _as_int(summary.get("warning")) + _as_int(summary.get("skipped"))
     if failed:
         state = "error"
-        label = "Fehler"
     elif warnings or restore["failed"] or restore["overdue"]:
         state = "warning"
-        label = "Warnung"
     elif running_jobs:
         state = "running"
-        label = "Laeuft"
     elif not enabled_jobs:
         state = "unknown"
-        label = "Keine Jobs"
     else:
         state = "ok"
-        label = "OK"
 
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": _format_iso(generated),
         "app_version": str(app_version or ""),
-        "status": {"state": state, "label": label},
+        "status": {"state": state},
         "jobs": {
             "total": len(jobs),
             "enabled": len(enabled_jobs),
@@ -158,17 +153,12 @@ def _restore_proof_summary(jobs: list[dict[str, Any]]) -> dict[str, Any]:
             open_count += 1
         if status == "stale" or bool(job.get("restore_verification_is_overdue", False)):
             overdue += 1
-    if configured:
-        label = f"{verified}/{configured} verifiziert"
-    else:
-        label = "Nicht geplant"
     return {
         "configured": configured,
         "verified": verified,
         "failed": failed,
         "overdue": overdue,
         "open": open_count,
-        "label": label,
     }
 
 
@@ -183,7 +173,7 @@ def _latest_backup(backups: list[dict[str, Any]], jobs: list[dict[str, Any]]) ->
             latest = row
             latest_dt = parsed
     if latest is None:
-        return {"name": "Noch kein Backup", "detail": "Kein Lauf gefunden", "status": "unknown", "status_label": "-"}
+        return {"name": "No backup", "detail": "No run found", "status": "unknown"}
 
     by_key = {str(job.get("key") or ""): job for job in jobs}
     job = by_key.get(str(latest.get("key") or ""))
@@ -193,7 +183,6 @@ def _latest_backup(backups: list[dict[str, Any]], jobs: list[dict[str, Any]]) ->
         "name": name or "Backup",
         "detail": _latest_backup_detail(latest),
         "status": _normalize_status(status),
-        "status_label": _status_label(status),
     }
 
 
@@ -284,15 +273,6 @@ def _normalize_status(status: str) -> str:
     if value in {"error", "failed", "failure"}:
         return "error"
     return "unknown"
-
-
-def _status_label(status: str) -> str:
-    normalized = _normalize_status(status)
-    return {
-        "ok": "OK",
-        "warning": "Warnung",
-        "error": "Fehler",
-    }.get(normalized, "-")
 
 
 def _as_int(value: Any) -> int:

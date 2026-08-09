@@ -58,6 +58,21 @@ function bbui_dash_time($value) {
   return date('d.m. H:i', $ts);
 }
 
+function bbui_dash_status_label($state) {
+  $state = bbui_dash_state_class($state);
+  if ($state === 'ok') return 'OK';
+  if ($state === 'warn') return 'Warnung';
+  if ($state === 'err') return 'Fehler';
+  if ($state === 'run') return 'Laeuft';
+  return '-';
+}
+
+function bbui_dash_restore_label($data) {
+  $configured = bbui_dash_int($data, 'restore_proof.configured');
+  if ($configured < 1) return 'Nicht geplant';
+  return bbui_dash_int($data, 'restore_proof.verified') . '/' . $configured . ' verifiziert';
+}
+
 $conf = bbui_dash_read_conf($conf_file);
 $ui_url = bbui_dash_ui_url($conf['PORT'] ?? '8765');
 $data = [];
@@ -86,8 +101,8 @@ $repo_total = bbui_dash_int($data, 'repositories.total');
 $latest_name = bbui_dash_value($data, 'latest_backup.name', 'Noch kein Backup');
 $latest_detail = bbui_dash_value($data, 'latest_backup.detail', 'Borg Backup UI einmal oeffnen, um Statusdaten zu erzeugen.');
 $latest_state = bbui_dash_state_class(bbui_dash_value($data, 'latest_backup.status', 'neutral'));
-$latest_label = bbui_dash_value($data, 'latest_backup.status_label', '-');
-$restore_label = bbui_dash_value($data, 'restore_proof.label', 'Nicht geplant');
+$latest_label = bbui_dash_status_label(bbui_dash_value($data, 'latest_backup.status', 'neutral'));
+$restore_label = bbui_dash_restore_label($data);
 $restore_overdue = bbui_dash_int($data, 'restore_proof.overdue');
 $restore_failed = bbui_dash_int($data, 'restore_proof.failed');
 $restore_open = bbui_dash_int($data, 'restore_proof.open');
@@ -96,7 +111,7 @@ $latest_name_h = bbui_dash_h($latest_name);
 $latest_detail_h = bbui_dash_h($latest_detail);
 $latest_label_h = bbui_dash_h($latest_label);
 $restore_label_h = bbui_dash_h($restore_label);
-$overall_label_h = bbui_dash_h(bbui_dash_value($data, 'status.label', '-'));
+$overall_label_h = bbui_dash_h(bbui_dash_status_label(bbui_dash_value($data, 'status.state', 'neutral')));
 $latest_icon = $latest_state === 'ok' ? '&#10003;' : ($latest_state === 'warn' ? '!' : ($latest_state === 'err' ? '&times;' : ($latest_state === 'run' ? '&#9654;' : '-')));
 
 $next_rows = '';

@@ -220,7 +220,13 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
     assert result["jobs"]["warnings"] == 1
     assert result["repositories"] == {"online": 2, "total": 3}
     assert result["latest_backup"]["name"] == "Appdata - Lokal"
-    assert result["restore_proof"]["label"] == "1/1 verifiziert"
+    assert result["restore_proof"] == {
+        "configured": 1,
+        "verified": 1,
+        "failed": 0,
+        "overdue": 0,
+        "open": 0,
+    }
 
     serialized = cache_file.read_text(encoding="utf-8").lower()
     for forbidden in ("/mnt/", "secret", "repo_path", "error_message", "passphrase"):
