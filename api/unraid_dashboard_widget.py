@@ -45,6 +45,27 @@ def write_unraid_dashboard_widget_cache(
     return payload
 
 
+def write_unraid_dashboard_widget_startup_cache(
+    config: dict,
+    *,
+    app_version: str = "",
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Write a lightweight widget cache at service start.
+
+    This intentionally avoids reading backup status files. If the configured
+    data root lives on /mnt, static job and repository metadata are skipped as
+    well so the dashboard tile does not wake array disks during boot.
+    """
+    payload = build_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version=app_version,
+        now=now,
+    )
+    atomic_write_json(widget_cache_path(config), payload, mode=0o600)
+    return payload
+
+
 def build_unraid_dashboard_widget_cache(
     config: dict,
     status_data: dict[str, Any],
@@ -76,6 +97,7 @@ def build_unraid_dashboard_widget_cache(
 
     return {
         "schema_version": SCHEMA_VERSION,
+        "cache_state": "fresh",
         "generated_at": _format_iso(generated),
         "app_version": str(app_version or ""),
         "status": {"state": state},
@@ -91,6 +113,47 @@ def build_unraid_dashboard_widget_cache(
         "latest_backup": _latest_backup(backups, jobs),
         "next_backups": _next_backups(config, enabled_jobs, generated),
         "restore_proof": restore,
+    }
+
+
+def build_unraid_dashboard_widget_startup_cache(
+    config: dict,
+    *,
+    app_version: str = "",
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    generated = now or datetime.now(timezone.utc)
+    jobs = _read_static_jobs(config)
+    enabled_jobs = [job for job in jobs if job.get("enabled", True) and not job.get("is_utility")]
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "cache_state": "initial",
+        "generated_at": _format_iso(generated),
+        "app_version": str(app_version or ""),
+        "status": {"state": "unknown"},
+        "jobs": {
+            "total": len(jobs),
+            "enabled": len(enabled_jobs),
+            "successful": 0,
+            "warnings": 0,
+            "failed": 0,
+            "running": 0,
+        },
+        "repositories": _repository_summary(config, skip_if_array_root=True) if jobs else {"online": 0, "total": 0},
+        "latest_backup": {
+            "name": "",
+            "detail": "",
+            "status": "unknown",
+        },
+        "next_backups": _next_backups(config, enabled_jobs, generated),
+        "restore_proof": {
+            "configured": 0,
+            "verified": 0,
+            "failed": 0,
+            "overdue": 0,
+            "open": 0,
+        },
     }
 
 
@@ -121,7 +184,45 @@ def _read_jobs(config: dict, backups: list[dict[str, Any]]) -> list[dict[str, An
         ]
 
 
-def _repository_summary(config: dict) -> dict[str, int]:
+def _read_static_jobs(config: dict) -> list[dict[str, Any]]:
+    try:
+        from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
+
+        data_root = resolve_data_root(config)
+        if _path_may_wake_disks(data_root):
+            return []
+        scripts_dir = resolve_scripts_dir(config)
+        if _path_may_wake_disks(scripts_dir):
+            return []
+        jobs = []
+        for info in discover_jobs(scripts_dir, data_root):
+            jobs.append({
+                "key": info.key,
+                "display_name": info.name or info.display_name,
+                "name": info.name or info.display_name,
+                "enabled": info.enabled,
+                "running": False,
+                "is_utility": info.is_utility,
+            })
+        return jobs
+    except Exception:
+        return []
+
+
+def _path_may_wake_disks(path: Path) -> bool:
+    text = str(path)
+    return text == "/mnt" or text.startswith("/mnt/")
+
+
+def _repository_summary(config: dict, *, skip_if_array_root: bool = False) -> dict[str, int]:
+    if skip_if_array_root:
+        try:
+            from jobs_api import resolve_data_root
+
+            if _path_may_wake_disks(resolve_data_root(config)):
+                return {"online": 0, "total": 0}
+        except Exception:
+            pass
     try:
         from repositories_api import get_repository_info_refresh_status
 

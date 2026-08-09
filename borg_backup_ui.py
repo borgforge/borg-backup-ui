@@ -4363,6 +4363,13 @@ def main():
 
     BackupUIHandler.config = config
 
+    try:
+        from unraid_dashboard_widget import write_unraid_dashboard_widget_startup_cache
+
+        write_unraid_dashboard_widget_startup_cache(config, app_version=APP_VERSION)
+    except Exception as exc:
+        _log(f"WARNING: Unraid dashboard widget startup cache could not be written: {_mask_secrets(str(exc))}")
+
     _activate_runtime_services(config, startup_ready)
 
     port = int(config["PORT"])
