@@ -122,12 +122,12 @@ if (!$cache_note_text && $cache_state === 'initial') {
 }
 $cache_note = $cache_note_text ? bbui_dash_h($cache_note_text) : '';
 $latest_icon = $latest_state === 'ok'
-  ? '<i class="fa fa-check"></i>'
+  ? '<i class="fa fa-check-circle-o"></i>'
   : ($latest_state === 'warn'
     ? '<i class="fa fa-exclamation-triangle"></i>'
     : ($latest_state === 'err'
-      ? '<i class="fa fa-times"></i>'
-      : ($latest_state === 'run' ? '<i class="fa fa-play"></i>' : '<i class="fa fa-minus"></i>')));
+      ? '<i class="fa fa-times-circle-o"></i>'
+      : ($latest_state === 'run' ? '<i class="fa fa-play-circle-o"></i>' : '<i class="fa fa-minus"></i>')));
 
 $next_rows = '';
 $next_backups = bbui_dash_value($data, 'next_backups', []);
@@ -171,8 +171,8 @@ $mytiles[$pluginname]['column1'] =
 .bbui-title-main small{display:block;color:#9ca3af;font-size:11px;line-height:1.1;margin-top:2px;font-weight:700}
 .bbui-title-icon{width:28px;height:28px;border-radius:7px;object-fit:contain;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.18)}
 .bbui-title-actions{display:flex;gap:5px;margin-left:auto}
-.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:linear-gradient(180deg,rgba(107,114,128,.60),rgba(55,65,81,.64));border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.25);color:#e5e7eb!important;text-decoration:none;font-size:12px}
-.bbui-title-button:hover{background:linear-gradient(180deg,rgba(148,163,184,.62),rgba(75,85,99,.66))}
+.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#6f747c;border:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 1px 2px rgba(0,0,0,.30);color:#1f242b!important;text-decoration:none;font-size:12px}
+.bbui-title-button:hover{background:#858b94;color:#111827!important}
 .bbui-widget{font-size:12px;line-height:1.22}
 .bbui-widget a{text-decoration:none}
 .bbui-widget-note{color:#eab308;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.08);border-radius:7px;padding:4px 7px}
@@ -181,7 +181,7 @@ $mytiles[$pluginname]['column1'] =
 .bbui-widget-metric{display:flex;align-items:center;gap:6px;border:1px solid rgba(148,163,184,.30);border-radius:7px;padding:5px 6px;min-width:0;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(0,0,0,.07));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
 .bbui-widget-metric i{font-size:17px;line-height:1;width:18px;text-align:center;flex:0 0 18px;opacity:.95}
 .bbui-widget-metric span{display:block;min-width:0}
-.bbui-widget-metric em{display:block;color:#9ca3af;font-size:10px;font-style:normal;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-metric em{display:block;color:#aeb6c2;font-size:11px;font-style:normal;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bbui-widget-metric b{display:block;font-size:16px;line-height:1.05;color:#d8dee9}
 .bbui-widget-metric.ok i,.bbui-widget-metric.ok b,.bbui-widget-state.ok h4,.bbui-widget-pill.ok{color:#7bbf59}
 .bbui-widget-metric.warn i,.bbui-widget-metric.warn b,.bbui-widget-state.warn h4,.bbui-widget-pill.warn{color:#e0ad2f}
@@ -192,7 +192,7 @@ $mytiles[$pluginname]['column1'] =
 .bbui-widget-main:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:8px 0 0 8px;background:#6b7280}
 .bbui-widget-main.ok:before{background:#7bbf59}.bbui-widget-main.warn:before{background:#e0ad2f}.bbui-widget-main.err:before{background:#e05f5a}.bbui-widget-main.run:before{background:#5d9cec}
 .bbui-widget-main-row{display:flex;align-items:center;gap:8px}
-.bbui-widget-status{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;background:rgba(0,0,0,.18);font-weight:900;flex:0 0 auto;font-size:14px}
+.bbui-widget-status{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;background:rgba(0,0,0,.18);font-weight:900;flex:0 0 auto;font-size:19px}
 .bbui-widget-state h4{margin:0 0 1px;font-size:12px;font-weight:900}
 .bbui-widget-state strong{display:block;font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:#f3f4f6}
 .bbui-widget-state p{margin:1px 0 0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -295,10 +295,10 @@ $mytiles[$pluginname]['column1'] =
   }
   function latestIcon(value) {
     const state = stateClass(value);
-    if (state === 'ok') return 'fa-check';
+    if (state === 'ok') return 'fa-check-circle-o';
     if (state === 'warn') return 'fa-exclamation-triangle';
-    if (state === 'err') return 'fa-times';
-    if (state === 'run') return 'fa-play';
+    if (state === 'err') return 'fa-times-circle-o';
+    if (state === 'run') return 'fa-play-circle-o';
     return 'fa-minus';
   }
   function formatTime(value) {
