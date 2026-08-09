@@ -142,7 +142,13 @@ $mytiles[$pluginname]['column1'] =
 <tbody title="Borg Backup UI overview">
 <tr><td>
 <div class="bbui-tile-title">
-  <span>Borg Backup UI</span>
+  <span class="bbui-title-main">
+    <img class="bbui-title-icon" src="/plugins/borg-backup-ui/app-icon.png" alt="">
+    <span>
+      <b>Borg Backup UI</b>
+      <small><span data-bbui="job_total">{$job_total}</span> <span data-bbui="job_label">{$job_label}</span></small>
+    </span>
+  </span>
   <span class="bbui-title-actions">
     <a class="bbui-title-button" href="#" data-bbui-refresh title="Aktualisieren"><i class="fa fa-refresh"></i></a>
     <a class="bbui-title-button" href="{$ui_url}" target="_blank" title="Borg Backup UI oeffnen"><i class="fa fa-external-link"></i></a>
@@ -154,15 +160,17 @@ $mytiles[$pluginname]['column1'] =
 <tr data-bbui-body><td>
 <style>
 .bbui-tile-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800}
+.bbui-title-main{display:flex;align-items:center;gap:7px;min-width:0}
+.bbui-title-main b{display:block;font-size:13px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-title-main small{display:block;color:var(--gray-500,#8b98a7);font-size:11px;line-height:1.1;margin-top:1px}
+.bbui-title-icon{width:24px;height:24px;border-radius:6px;object-fit:contain;flex:0 0 auto}
 .bbui-title-actions{display:flex;gap:4px;margin-left:auto}
 .bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:rgba(148,163,184,.40);color:var(--gray-900,#f3f4f6)!important;text-decoration:none;font-size:12px}
 .bbui-title-button:hover{background:rgba(148,163,184,.58)}
 .bbui-widget{font-size:12px;line-height:1.25}
 .bbui-widget a{text-decoration:none}
-.bbui-widget-head{display:flex;align-items:center;gap:7px;margin-bottom:6px}
-.bbui-widget-icon{width:24px;height:24px;border-radius:6px;object-fit:contain;flex:0 0 auto}
-.bbui-widget-count{font-weight:800;font-size:13px}
-.bbui-widget-note{color:#d5a11e;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-note{color:#d5a11e;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+.bbui-widget-note:empty{display:none}
 .bbui-widget-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin-bottom:6px}
 .bbui-widget-metric{border:1px solid rgba(148,163,184,.28);border-radius:6px;padding:4px 5px;min-width:0;background:rgba(148,163,184,.07)}
 .bbui-widget-metric span{display:block;color:var(--gray-500,#8b98a7);font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -171,6 +179,7 @@ $mytiles[$pluginname]['column1'] =
 .bbui-widget-metric.warn b,.bbui-widget-state.warn h4,.bbui-widget-pill.warn{color:#d5a11e}
 .bbui-widget-metric.err b,.bbui-widget-state.err h4,.bbui-widget-pill.err{color:#d95c59}
 .bbui-widget-metric.run b,.bbui-widget-state.run h4,.bbui-widget-pill.run{color:#5d9cec}
+.bbui-widget-metric.neutral b{color:#cbd5e1}
 .bbui-widget-main{border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px;margin-bottom:5px;background:rgba(148,163,184,.05)}
 .bbui-widget-main-row{display:flex;align-items:center;gap:7px}
 .bbui-widget-status{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;font-weight:900;flex:0 0 auto}
@@ -181,28 +190,22 @@ $mytiles[$pluginname]['column1'] =
 .bbui-widget-split{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px}
 .bbui-widget-box{border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px;background:rgba(148,163,184,.04);min-width:0}
 .bbui-widget-box h4{margin:0 0 3px;font-size:12px;font-weight:800;color:#5d9cec}
-.bbui-widget-next div{display:flex;justify-content:space-between;gap:8px;color:var(--gray-500,#8b98a7);padding:1px 0}
-.bbui-widget-next span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bbui-widget-next b{color:var(--gray-300,#cbd5e1);white-space:nowrap}
+.bbui-widget-next [data-bbui="next_rows"] > div{display:flex;justify-content:space-between;gap:8px;color:var(--gray-500,#8b98a7);padding:1px 0;min-width:0}
+.bbui-widget-next [data-bbui="next_rows"] span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.bbui-widget-next [data-bbui="next_rows"] b{color:var(--gray-300,#cbd5e1);white-space:nowrap;flex:0 0 auto}
 .bbui-widget-restore p{margin:0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bbui-widget-footer{display:flex;justify-content:space-between;gap:8px;color:var(--gray-500,#8b98a7);font-size:11px}
 .bbui-widget-footer span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:520px){.bbui-widget-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.bbui-widget-split{grid-template-columns:1fr}}
 </style>
 <div id="bbui-widget" class="bbui-widget" data-endpoint="/plugins/borg-backup-ui/widget-status.php">
-  <div class="bbui-widget-head">
-    <img class="bbui-widget-icon" src="/plugins/borg-backup-ui/app-icon.png" alt="">
-    <div style="min-width:0">
-      <div class="bbui-widget-count"><span data-bbui="job_total">{$job_total}</span> <span data-bbui="job_label">{$job_label}</span></div>
-      <div class="bbui-widget-note" data-bbui="cache_note">{$cache_note}</div>
-    </div>
-  </div>
+  <div class="bbui-widget-note" data-bbui="cache_note">{$cache_note}</div>
   <div class="bbui-widget-strip">
     <div class="bbui-widget-metric ok"><span>Erfolgreich</span><b data-bbui="success">{$success}</b></div>
     <div class="bbui-widget-metric warn"><span>Warnungen</span><b data-bbui="warnings">{$warnings}</b></div>
     <div class="bbui-widget-metric err"><span>Fehler</span><b data-bbui="failed">{$failed}</b></div>
     <div class="bbui-widget-metric run"><span>Laeuft</span><b data-bbui="running">{$running}</b></div>
-    <div class="bbui-widget-metric"><span>Repos online</span><b data-bbui="repos">{$repo_online}/{$repo_total}</b></div>
+    <div class="bbui-widget-metric neutral"><span>Repos online</span><b data-bbui="repos">{$repo_online}/{$repo_total}</b></div>
   </div>
   <div class="bbui-widget-main bbui-widget-state {$latest_state}" data-bbui-latest-state>
     <div class="bbui-widget-main-row">
@@ -230,11 +233,12 @@ $mytiles[$pluginname]['column1'] =
   const root = document.getElementById('bbui-widget');
   if (!root) return;
   const endpoint = root.getAttribute('data-endpoint');
-  const body = document.querySelector('[data-bbui-body]');
-  const refreshButton = document.querySelector('[data-bbui-refresh]');
-  const collapseButton = document.querySelector('[data-bbui-collapse]');
+  const tile = root.closest('tbody') || document;
+  const body = tile.querySelector('[data-bbui-body]');
+  const refreshButton = tile.querySelector('[data-bbui-refresh]');
+  const collapseButton = tile.querySelector('[data-bbui-collapse]');
   const fields = {};
-  root.querySelectorAll('[data-bbui]').forEach((node) => fields[node.getAttribute('data-bbui')] = node);
+  tile.querySelectorAll('.bbui-tile-title [data-bbui], #bbui-widget [data-bbui]').forEach((node) => fields[node.getAttribute('data-bbui')] = node);
   const latestState = root.querySelector('[data-bbui-latest-state]');
   const latestPill = root.querySelector('[data-bbui-latest-pill]');
 
