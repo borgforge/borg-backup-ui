@@ -121,7 +121,13 @@ if (!$cache_note_text && $cache_state === 'initial') {
   $cache_note_text = 'Initialstatus';
 }
 $cache_note = $cache_note_text ? bbui_dash_h($cache_note_text) : '';
-$latest_icon = $latest_state === 'ok' ? '&#10003;' : ($latest_state === 'warn' ? '!' : ($latest_state === 'err' ? '&times;' : ($latest_state === 'run' ? '&#9654;' : '-')));
+$latest_icon = $latest_state === 'ok'
+  ? '<i class="fa fa-check"></i>'
+  : ($latest_state === 'warn'
+    ? '<i class="fa fa-exclamation-triangle"></i>'
+    : ($latest_state === 'err'
+      ? '<i class="fa fa-times"></i>'
+      : ($latest_state === 'run' ? '<i class="fa fa-play"></i>' : '<i class="fa fa-minus"></i>')));
 
 $next_rows = '';
 $next_backups = bbui_dash_value($data, 'next_backups', []);
@@ -267,11 +273,11 @@ $mytiles[$pluginname]['column1'] =
   }
   function latestIcon(value) {
     const state = stateClass(value);
-    if (state === 'ok') return 'v';
-    if (state === 'warn') return '!';
-    if (state === 'err') return 'x';
-    if (state === 'run') return '>';
-    return '-';
+    if (state === 'ok') return 'fa-check';
+    if (state === 'warn') return 'fa-exclamation-triangle';
+    if (state === 'err') return 'fa-times';
+    if (state === 'run') return 'fa-play';
+    return 'fa-minus';
   }
   function formatTime(value) {
     if (!value) return 'nie aktualisiert';
@@ -281,6 +287,9 @@ $mytiles[$pluginname]['column1'] =
   }
   function setText(name, value) {
     if (fields[name]) fields[name].textContent = String(value);
+  }
+  function setIcon(name, iconClass) {
+    if (fields[name]) fields[name].innerHTML = '<i class="fa ' + iconClass + '"></i>';
   }
   function setLatestClass(cls) {
     ['ok','warn','err','run','neutral'].forEach((name) => {
@@ -312,7 +321,7 @@ $mytiles[$pluginname]['column1'] =
     setText('failed', intValue(data, 'jobs.failed'));
     setText('running', intValue(data, 'jobs.running'));
     setText('repos', repoOnline + '/' + repoTotal);
-    setText('latest_icon', latestIcon(latestStatus));
+    setIcon('latest_icon', latestIcon(latestStatus));
     setText('latest_name', latestName);
     setText('latest_detail', latestDetail);
     setText('latest_label', statusLabel(latestStatus));

@@ -4112,6 +4112,38 @@ def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None
         return None
 
 
+def _start_unraid_dashboard_widget_cache_loop(config: dict) -> threading.Thread | None:
+    """Keep the flash-based Unraid dashboard widget cache warm."""
+
+    def _interval_seconds() -> int:
+        raw = str(config.get("UNRAID_DASHBOARD_WIDGET_REFRESH_SECONDS") or "30").strip()
+        try:
+            return max(15, min(3600, int(raw)))
+        except ValueError:
+            return 30
+
+    def _run() -> None:
+        time.sleep(5)
+        while True:
+            try:
+                from status_api import get_status_data
+                from unraid_dashboard_widget import write_unraid_dashboard_widget_cache
+
+                status = get_status_data(config)
+                write_unraid_dashboard_widget_cache(config, status, app_version=APP_VERSION)
+            except Exception as exc:
+                _log(f"WARNING: Unraid dashboard widget cache refresh failed: {_mask_secrets(str(exc))}")
+            time.sleep(_interval_seconds())
+
+    try:
+        thread = threading.Thread(target=_run, name="unraid-dashboard-widget-cache", daemon=True)
+        thread.start()
+        return thread
+    except Exception as exc:
+        _log(f"WARNING: Unraid dashboard widget cache loop could not be started: {_mask_secrets(str(exc))}")
+        return None
+
+
 def _start_apprise_runtime_warmup(config: dict) -> threading.Thread | None:
     """Warm the bundled Apprise runtime so the first profile API call is not cold."""
 
@@ -4369,6 +4401,8 @@ def main():
         write_unraid_dashboard_widget_startup_cache(config, app_version=APP_VERSION)
     except Exception as exc:
         _log(f"WARNING: Unraid dashboard widget startup cache could not be written: {_mask_secrets(str(exc))}")
+
+    _start_unraid_dashboard_widget_cache_loop(config)
 
     _activate_runtime_services(config, startup_ready)
 
