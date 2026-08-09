@@ -316,7 +316,9 @@ def test_unraid_dashboard_widget_page_and_assets_are_packaged():
     assert "{bbui_dash_h(" not in page
     assert "bbui-widget-strip" in page
     assert "font-size:20px" not in page
+    assert "widget-status.php" in page
     assert '${SCRIPT_DIR}/${NAME}-dashboard.page' in build
+    assert '${SCRIPT_DIR}/widget-status.php' in build
     assert 'ui/assets/app-icon.png' in build
     assert '"${EMHTTP_DST}/app-icon.png"' in build
 

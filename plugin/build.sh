@@ -205,6 +205,7 @@ mkdir -p "${EMHTTP_DST}"
 find "${SCRIPT_DIR}" -maxdepth 1 -type f -name 'plugin-icon*.png' -exec cp {} "${EMHTTP_DST}/" \;
 [ -f "${SCRIPT_DIR}/${NAME}.page" ]    && cp "${SCRIPT_DIR}/${NAME}.page"    "${EMHTTP_DST}/"
 [ -f "${SCRIPT_DIR}/${NAME}-dashboard.page" ] && cp "${SCRIPT_DIR}/${NAME}-dashboard.page" "${EMHTTP_DST}/"
+[ -f "${SCRIPT_DIR}/widget-status.php" ] && cp "${SCRIPT_DIR}/widget-status.php" "${EMHTTP_DST}/widget-status.php"
 [ -f "${REPO_DIR}/ui/assets/app-icon.png" ] && cp "${REPO_DIR}/ui/assets/app-icon.png" "${EMHTTP_DST}/app-icon.png"
 [ -f "${SCRIPT_DIR}/README.md" ]        && cp "${SCRIPT_DIR}/README.md"        "${EMHTTP_DST}/"
 
