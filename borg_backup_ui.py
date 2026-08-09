@@ -4123,14 +4123,11 @@ def _start_unraid_dashboard_widget_cache_loop(config: dict) -> threading.Thread 
             return 30
 
     def _run() -> None:
-        time.sleep(5)
         while True:
             try:
-                from status_api import get_status_data
-                from unraid_dashboard_widget import write_unraid_dashboard_widget_cache
+                from unraid_dashboard_widget import write_unraid_dashboard_widget_status_file_cache
 
-                status = get_status_data(config)
-                write_unraid_dashboard_widget_cache(config, status, app_version=APP_VERSION)
+                write_unraid_dashboard_widget_status_file_cache(config, app_version=APP_VERSION)
             except Exception as exc:
                 _log(f"WARNING: Unraid dashboard widget cache refresh failed: {_mask_secrets(str(exc))}")
             time.sleep(_interval_seconds())

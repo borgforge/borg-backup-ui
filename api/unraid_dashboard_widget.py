@@ -66,6 +66,29 @@ def write_unraid_dashboard_widget_startup_cache(
     return payload
 
 
+def write_unraid_dashboard_widget_status_file_cache(
+    config: dict,
+    *,
+    app_version: str = "",
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Write a fresh widget cache from existing status files only.
+
+    This is used by the service-start background refresher. It deliberately
+    avoids the full dashboard status API because that path also maintains
+    weekly snapshots and is normally triggered by an authenticated UI request.
+    The Unraid dashboard widget must become useful without a login first.
+    """
+    payload = build_unraid_dashboard_widget_cache(
+        config,
+        _read_status_file_data(config),
+        app_version=app_version,
+        now=now,
+    )
+    atomic_write_json(widget_cache_path(config), payload, mode=0o600)
+    return payload
+
+
 def build_unraid_dashboard_widget_cache(
     config: dict,
     status_data: dict[str, Any],
@@ -154,6 +177,52 @@ def build_unraid_dashboard_widget_startup_cache(
             "overdue": 0,
             "open": 0,
         },
+    }
+
+
+def _read_status_file_data(config: dict) -> dict[str, Any]:
+    try:
+        from status import StatusStore, format_duration, time_ago
+
+        status_dir = Path(str(config.get("STATUS_DIR") or ""))
+        store = StatusStore(status_dir)
+        latest = store.get_latest_per_key(store.load())
+    except Exception:
+        latest = {}
+
+    backups: list[dict[str, Any]] = []
+    for key, st in sorted(latest.items()):
+        backups.append({
+            "key": str(key),
+            "backup_type": st.backup_type,
+            "location": st.location,
+            "status": st.status,
+            "timestamp": st.timestamp,
+            "time_ago": time_ago(st.timestamp) if st.timestamp else "",
+            "duration_seconds": st.duration_seconds,
+            "duration_formatted": format_duration(st.duration_seconds),
+            "exit_code": st.exit_code,
+            "failure_code": getattr(st, "failure_code", "") or "",
+            "missing_source_paths": list(getattr(st, "missing_source_paths", []) or []),
+            "error_message": st.error_message or "",
+            "skip_reason_code": getattr(st, "skip_reason_code", "") or "",
+            "skip_reason_text": getattr(st, "skip_reason_text", "") or "",
+            "archive_name": st.archive_name or "",
+            "repository_check_status": st.repository_check_status,
+            "repository_check_date": st.repository_check_date or "",
+            "repository_next_check": st.repository_next_check or "",
+        })
+
+    return {
+        "backups": backups,
+        "summary": {
+            "total": len(backups),
+            "success": sum(1 for row in backups if row["status"] == "success"),
+            "warning": sum(1 for row in backups if row["status"] in {"warning", "cancelled"}),
+            "skipped": sum(1 for row in backups if row["status"] == "skipped"),
+            "error": sum(1 for row in backups if row["status"] == "error"),
+        },
+        "snapshots": {},
     }
 
 

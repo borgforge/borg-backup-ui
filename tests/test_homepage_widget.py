@@ -234,6 +234,62 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
         assert forbidden not in serialized
 
 
+def test_unraid_dashboard_widget_status_file_cache_does_not_need_ui_status_call(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+    snapshot_file = tmp_path / "weekly-snapshots.json"
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(status_dir),
+        "SNAPSHOT_FILE": str(snapshot_file),
+    }
+    (status_dir / "2026-08-09_12-00-00_flash_local.status").write_text(
+        json.dumps({
+            "backup_type": "flash",
+            "location": "local",
+            "timestamp": "2026-08-09 12:00:00",
+            "duration_seconds": 33,
+            "status": "success",
+            "exit_code": 0,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_read_jobs",
+        lambda _config, _backups: [
+            {
+                "key": "flash_local",
+                "display_name": "Flash - Lokal",
+                "enabled": True,
+                "running": False,
+                "restore_verification_status": "verified",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_repository_summary",
+        lambda _config: {"online": 1, "total": 1},
+    )
+    monkeypatch.setattr(unraid_dashboard_widget, "_next_backups", lambda *_args: [])
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_status_file_cache(
+        config,
+        app_version="2026.08.09.1300",
+        now=datetime(2026, 8, 9, 12, 1, tzinfo=timezone.utc),
+    )
+
+    assert result["cache_state"] == "fresh"
+    assert result["jobs"]["enabled"] == 1
+    assert result["jobs"]["successful"] == 1
+    assert result["latest_backup"]["name"] == "Flash - Lokal"
+    assert result["latest_backup"]["status"] == "ok"
+    assert cache_file.exists()
+    assert not snapshot_file.exists()
+
+
 def test_unraid_dashboard_widget_startup_cache_is_written_without_backup_status(tmp_path: Path, monkeypatch):
     cache_file = tmp_path / "widget-status.json"
     scripts_dir = tmp_path / "scripts"
