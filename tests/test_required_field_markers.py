@@ -39,7 +39,6 @@ def test_restore_job_and_repository_wizards_mark_required_fields() -> None:
     for key in (
         "restore.selectJob",
         "restore.selectArchive",
-        "restore.sourcePath",
         "restore.targetDirectory",
         "storage.storageTargetExistingLabel",
         "storage.repositoryDisplayName",
@@ -53,6 +52,15 @@ def test_restore_job_and_repository_wizards_mark_required_fields() -> None:
         "wizard.repositorySelect",
     ):
         _assert_required_i18n_label(html, key)
+
+    archive_path_label = re.search(
+        r'<label[^>]*>[^<]*(?:(?!</label>).)*data-i18n="restore.sourcePath"(?:(?!</label>).)*</label>',
+        html,
+        re.S,
+    )
+    assert archive_path_label
+    assert "form-label-required" not in archive_path_label.group(0)
+    assert "form-required-marker" not in archive_path_label.group(0)
 
     exclude_label = re.search(
         r'<label[^>]*>[^<]*(?:(?!</label>).)*data-i18n="wizard.excludePaths"(?:(?!</label>).)*</label>',

@@ -458,7 +458,7 @@ Durchsuchen Sie das Archiv und wählen Sie Dateien oder Verzeichnisse aus. Die A
 
 #### Schritt 4: Ziel & Modus
 
-Legen Sie Zielordner und Verhalten bei Konflikten fest.
+Prüfen Sie den schreibgeschützten **Archiv-Pfad** und legen Sie Zielordner sowie Verhalten bei Konflikten fest. Repository und Archiv werden unter dem Archiv-Pfad separat angezeigt, damit die Herkunft der Auswahl eindeutig bleibt.
 
 Konfliktstrategien:
 
