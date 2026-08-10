@@ -50,10 +50,28 @@ if _LIB_DIR.is_dir():
 
 # Config-Laden: entweder via lib.status oder direkt
 try:
-    from lib.status import load_config as _lib_load_config
+    from lib.status import (
+        ensure_status_storage_directory as _ensure_status_storage_directory,
+        load_config as _lib_load_config,
+    )
     def _load_conf_file(path: Path) -> dict:
         return _lib_load_config(path)
 except ImportError:
+    def _ensure_status_storage_directory(path: Path) -> None:
+        normalized = Path(os.path.abspath(os.fspath(path.expanduser())))
+        parts = normalized.parts
+        mount_path = None
+        if len(parts) >= 3 and parts[0] == "/" and parts[1] == "mnt":
+            if parts[2] in {"disks", "remotes"} and len(parts) >= 4:
+                mount_path = Path("/") / "mnt" / parts[2] / parts[3]
+            else:
+                mount_path = Path("/") / "mnt" / parts[2]
+        if mount_path is not None and not mount_path.is_mount():
+            raise OSError(
+                f"Status storage is not available yet ({mount_path} is not mounted): {path}"
+            )
+        path.mkdir(parents=True, exist_ok=True)
+
     def _load_conf_file(path: Path) -> dict:
         conf = {}
         for raw in path.read_text(encoding="utf-8").splitlines():
@@ -909,7 +927,7 @@ class RestoreTest:
                l3_details: dict = None, error_category: str = "none",
                error_details: str = "", error_output: str = "", reason: str = "",
                steps: list | None = None, failure_code: str = "", failure_hint: str = "") -> None:
-        self.status_dir.mkdir(parents=True, exist_ok=True)
+        _ensure_status_storage_directory(self.status_dir)
         test_file = self.status_dir / f"{key}.test"
         now = datetime.now()
         start_ts = now.timestamp() - max(0, int(duration))

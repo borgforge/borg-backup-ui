@@ -123,6 +123,12 @@ Andere Pfade sind erlaubt, muessen aber im Testprotokoll festgehalten werden.
 - [ ] **A3.4 (P)** Es gibt keine fehlgeschlagene Startmigration. Eventuelle
   Hinweise fuer eine leere Neuinstallation sind verstaendlich und nicht als
   erfolgreicher Backup-Nachweis dargestellt.
+- [ ] **A3.5 (P)** Nach einem Unraid-Neustart nennt
+  `/var/log/borg_backup_ui.log` die gestartete Borg-Backup-UI-Version. Falls der
+  fuer `GLOBAL_DATA_DIR` benoetigte Mount spaeter bereit wird, protokolliert die
+  Anwendung Wartebeginn und Wartezeit und startet erst danach Scheduler,
+  Status-Worker und Webserver. Unter einem noch nicht gemounteten `/mnt`-Pfad
+  werden keine Statusverzeichnisse angelegt.
 
 ### A4 - Sprache Deutsch und Englisch
 

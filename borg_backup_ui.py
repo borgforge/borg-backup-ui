@@ -292,6 +292,95 @@ def setup_lib_path(config: dict) -> bool:
     return plugin_lib_dir.exists()
 
 
+def _wait_for_configured_data_storage(
+    config: dict,
+    *,
+    include_runtime_paths: bool = True,
+    wait_seconds: int | None = None,
+    step_seconds: int | None = None,
+    sleep_fn=time.sleep,
+) -> bool:
+    """Wait until mounts backing the configured runtime data paths are ready."""
+    data_dir = str(config.get("GLOBAL_DATA_DIR", "")).strip()
+    if not data_dir:
+        return True
+
+    from status import required_storage_mount, storage_mount_is_mounted
+
+    configured_paths = [data_dir]
+    if include_runtime_paths:
+        configured_paths.extend(
+            [
+                str(config.get("STATUS_DIR", "")).strip(),
+                str(config.get("RESTORE_TEST_STATUS_DIR", "")).strip(),
+                str(config.get("GLOBAL_LOG_DIR", "")).strip(),
+                str(config.get("GLOBAL_BORG_CACHE_BASE", "")).strip(),
+            ]
+        )
+    required_mounts = sorted(
+        {
+            mount
+            for raw_path in configured_paths
+            if raw_path
+            for mount in [required_storage_mount(Path(raw_path))]
+            if mount is not None
+        },
+        key=str,
+    )
+    if not required_mounts:
+        return True
+
+    wait_seconds = max(
+        0,
+        int(
+            wait_seconds
+            if wait_seconds is not None
+            else os.environ.get("BBUI_STORAGE_WAIT_SECONDS", "300")
+        ),
+    )
+    step_seconds = max(
+        1,
+        int(
+            step_seconds
+            if step_seconds is not None
+            else os.environ.get("BBUI_STORAGE_WAIT_STEP_SECONDS", "3")
+        ),
+    )
+
+    pending = [mount for mount in required_mounts if not storage_mount_is_mounted(mount)]
+    if not pending:
+        return True
+
+    mount_list = ", ".join(str(mount) for mount in pending)
+    _log(
+        "Runtime storage is not available yet, waiting up to "
+        f"{wait_seconds}s for mount(s) {mount_list} "
+        f"(configured data directory: {data_dir})..."
+    )
+
+    waited = 0
+    while pending and waited < wait_seconds:
+        current_step = min(step_seconds, wait_seconds - waited)
+        sleep_fn(current_step)
+        waited += current_step
+        pending = [mount for mount in required_mounts if not storage_mount_is_mounted(mount)]
+
+    if pending:
+        mount_list = ", ".join(str(mount) for mount in pending)
+        _log(
+            "ERROR: Runtime storage mount(s) did not become available after "
+            f"{waited}s: {mount_list}. Borg Backup UI was not started to prevent "
+            "writes to the wrong filesystem."
+        )
+        return False
+
+    _log(
+        "Runtime storage became available after "
+        f"{waited}s: {', '.join(str(mount) for mount in required_mounts)}"
+    )
+    return True
+
+
 class BackupUIHandler(BaseHTTPRequestHandler):
     _CLIENT_LOG_BUCKET: dict[str, list[float]] = {}
     _CLIENT_LOG_LAST_SIG: dict[str, tuple[str, float]] = {}
@@ -4180,10 +4269,13 @@ def _apply_runtime_dirs_from_conf(config: dict) -> None:
     try:
         from config_api import read_expanded_conf
         conf = read_expanded_conf(config)
+        global_data_dir = str(conf.get("GLOBAL_DATA_DIR", "")).strip()
         status_dir = str(conf.get("STATUS_DIR", "")).strip()
         restore_test_status_dir = str(conf.get("RESTORE_TEST_STATUS_DIR", "")).strip()
         global_log_dir = str(conf.get("GLOBAL_LOG_DIR", "")).strip()
         global_cache_dir = str(conf.get("GLOBAL_BORG_CACHE_BASE", "")).strip()
+        if global_data_dir:
+            config["GLOBAL_DATA_DIR"] = global_data_dir
         if status_dir:
             config["STATUS_DIR"] = status_dir
         if restore_test_status_dir:
@@ -4364,23 +4456,30 @@ def main():
         sys.path.insert(0, str(api_dir))
 
     config = load_ui_config()
+    _log(f"Borg Backup UI version: {APP_VERSION}")
     if dev_mode:
         config["DEV_MODE"] = "true"
+
+    lib_found = setup_lib_path(config)
+    if not lib_found:
+        _log("WARNING: plugin runtime/lib was not found.")
 
     try:
         bootstrap_data_layout(config)
     except Exception as exc:
         _log(f"WARNING: Bootstrap skipped: {exc}")
 
+    _apply_runtime_dirs_from_conf(config)
+    if not _wait_for_configured_data_storage(config, include_runtime_paths=False):
+        return
+
     startup_ready, _startup_mig = _evaluate_startup_migrations(config)
     if startup_ready:
         _remove_obsolete_persistent_backup_conf_schema(config)
 
-    lib_found = setup_lib_path(config)
-    if not lib_found:
-        _log("WARNING: plugin runtime/lib was not found.")
-
     _apply_runtime_dirs_from_conf(config)
+    if not _wait_for_configured_data_storage(config):
+        return
 
     if config.get("DEV_MODE", "false").lower() == "true":
         test_data = Path(config["BACKUP_SCRIPTS_DIR"]) / "test-data"

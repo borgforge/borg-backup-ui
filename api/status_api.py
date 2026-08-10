@@ -243,9 +243,11 @@ def _apply_backup_overdue_metadata(
 
 
 def _read_snapshot_data(*paths: Path) -> Dict[str, List[Dict]]:
+    from status import status_storage_unavailable_reason
+
     for p in paths:
         try:
-            if p and p.exists():
+            if p and not status_storage_unavailable_reason(p) and p.exists():
                 return json.loads(p.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
@@ -253,6 +255,13 @@ def _read_snapshot_data(*paths: Path) -> Dict[str, List[Dict]]:
 
 
 def _import_legacy_snapshot_if_needed(snapshot_file: Path, legacy_snapshot_file: Path) -> None:
+    from status import status_storage_unavailable_reason
+
+    if (
+        status_storage_unavailable_reason(snapshot_file)
+        or status_storage_unavailable_reason(legacy_snapshot_file)
+    ):
+        return
     if snapshot_file == legacy_snapshot_file or snapshot_file.exists() or not legacy_snapshot_file.exists():
         return
     try:
@@ -262,7 +271,9 @@ def _import_legacy_snapshot_if_needed(snapshot_file: Path, legacy_snapshot_file:
     if not isinstance(data, dict):
         return
     try:
-        snapshot_file.parent.mkdir(parents=True, exist_ok=True)
+        from status import ensure_status_storage_directory
+
+        ensure_status_storage_directory(snapshot_file.parent)
         snapshot_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError:
         pass
@@ -277,6 +288,11 @@ def _auto_write_weekly_snapshot(
     Schreibt einmal pro Woche (Montags-Datum als Tag) einen Snapshot-Eintrag.
     Ersetzt den externen borg_summary_mail.py-Aufruf.
     """
+    from status import status_storage_unavailable_reason
+
+    if status_storage_unavailable_reason(snapshot_file):
+        return
+
     today = date.today()
     week_tag = (today - timedelta(days=today.weekday())).isoformat()  # Dieser Montag
 
@@ -297,7 +313,9 @@ def _auto_write_weekly_snapshot(
 
     if changed or force_write:
         try:
-            snapshot_file.parent.mkdir(parents=True, exist_ok=True)
+            from status import ensure_status_storage_directory
+
+            ensure_status_storage_directory(snapshot_file.parent)
             snapshot_file.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
             )
