@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.07.0100">
+<!ENTITY version   "2026.08.10.1229">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,14 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.10.1229###
+- Community Apps metadata now mentions the Python 3 for UNRAID plugin as a runtime requirement before installation.
+- Add an Unraid dashboard widget that shows backup health, last and next backups, repository reachability, and restore-proof status from a precomputed flash-based cache.
+- Clarifies the restore source as an archive path and shows its repository and archive directly in the target step.
+- Wait for the mount backing the configured data directory before starting runtime services, including user shares, pools, array disks, and Unassigned Devices paths.
+- Prevent status, restore-test, and snapshot paths from being created below an unavailable `/mnt` mount.
+- Improve early-start storage diagnostics and include the Borg Backup UI version in the startup log.
+
 ###2026.08.07.0100###
 - Uninstall now removes the Borg Backup UI plugin payload from `/boot/config/plugins/borg-backup-ui` as well as runtime hooks installed by the plugin, while leaving Borg repositories and user data outside the plugin directory untouched.
 - Repository Borg-key warnings now link to Settings > Import / Export, and the Borg-key export shows a visible running state while the encrypted key backup is being created.
@@ -30,11 +38,6 @@
 - Fixed a Docker backup concurrency race: overlapping Docker-enabled jobs now acquire the Docker control lock whenever Docker runtime control is configured, and Docker/VM restart recovery state is written safely across processes.
 - Automatic repository information refresh is now disabled by default for new installations, with clearer settings text about possible Unraid disk wake-ups when the feature is enabled.
 - Added Borg key recovery for encrypted repositories: jobs/passphrases, repository keys, and profiles/secrets are handled as separate encrypted transfer flows, repository-key backups can contain all exported repository keys, restoring a key is done only from the selected repository with repository-ID validation, and the job import wizard now focuses on complete or selective job/passphrase recovery with clearer review details.
-
-###2026.08.06.0120###
-- Updated the bundled BorgBackup 1.x stable runtime from 1.4.4 to 1.4.5, including Borg's latest 1.x fixes.
-- Borg Backup UI no longer adds its own autostart block to `/boot/config/go`; updates clean up the old block while the plugin still starts through the normal plugin flow.
-- Borg Backup UI now detects German or English from the browser on first use and defaults to English for all other languages; an existing browser language selection is kept. Plugin install and service startup messages are now English as well.
 
 ]]>
 </CHANGES>
@@ -61,7 +64,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="fdf6e2c0d64a2f3d8a3550600b07f6e1"
+EXPECTED_MD5="a7035786a933579d2ba39d4827423e26"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
