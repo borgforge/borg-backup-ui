@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -23,6 +24,68 @@ logger = logging.getLogger(__name__)
 
 BACKUP_TYPES = ["flash", "appdata", "photos", "VMs", "sonstiges"]
 LOCATIONS = ["local", "usb", "storagebox"]
+
+_unavailable_status_paths_logged: set[str] = set()
+
+
+class StatusStorageUnavailableError(OSError):
+    """Raised when Unraid status storage is below an unavailable mount."""
+
+
+def _normalized_absolute_path(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path.expanduser())))
+
+
+def required_storage_mount(path: Path) -> Optional[Path]:
+    """Return the Unraid mount that must back a configured path below /mnt."""
+    normalized = _normalized_absolute_path(path)
+    parts = normalized.parts
+    if len(parts) < 3 or parts[0] != "/" or parts[1] != "mnt":
+        return None
+    if parts[2] in {"disks", "remotes"} and len(parts) >= 4:
+        return Path("/") / "mnt" / parts[2] / parts[3]
+    return Path("/") / "mnt" / parts[2]
+
+
+def storage_mount_is_mounted(mount_path: Path) -> bool:
+    try:
+        return mount_path.is_mount()
+    except OSError:
+        return False
+
+
+def status_storage_unavailable_reason(path: Path) -> str:
+    """Return a reason when writing below *path* would be unsafe."""
+    mount_path = required_storage_mount(path)
+    if mount_path is not None and not storage_mount_is_mounted(mount_path):
+        return f"{mount_path} is not mounted"
+    return ""
+
+
+def ensure_status_storage_directory(path: Path) -> None:
+    """Create a status directory only when its backing storage is available."""
+    reason = status_storage_unavailable_reason(path)
+    if reason:
+        raise StatusStorageUnavailableError(
+            f"Status storage is not available yet ({reason}): {path}"
+        )
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _log_unavailable_status_path_once(path: Path, message: str) -> None:
+    key = f"{_normalized_absolute_path(path)}:{message}"
+    if key in _unavailable_status_paths_logged:
+        return
+    _unavailable_status_paths_logged.add(key)
+    logger.warning("%s: %s", message, path)
+
+
+def _clear_unavailable_status_path_log(path: Path) -> None:
+    prefix = f"{_normalized_absolute_path(path)}:"
+    matching_keys = {
+        key for key in _unavailable_status_paths_logged if key.startswith(prefix)
+    }
+    _unavailable_status_paths_logged.difference_update(matching_keys)
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +200,7 @@ class BackupStatus:
 
     def save(self, status_dir: Path) -> Path:
         """Schreibt Status als JSON-Datei in status_dir. Gibt den Dateipfad zurück."""
-        status_dir.mkdir(parents=True, exist_ok=True)
+        ensure_status_storage_directory(status_dir)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         path = status_dir / f"{timestamp}_{self.backup_type}_{self.location}.status"
         data = {k: v for k, v in asdict(self).items() if k != "source_path"}
@@ -320,9 +383,22 @@ class StatusStore:
             move_to_archive: Wenn True, werden Dateien nach dem Lesen ins
                              Archiv-Verzeichnis verschoben (für Summary-Mail).
         """
-        if not self.status_dir.exists():
-            logger.warning("Status directory not found: %s", self.status_dir)
+        reason = status_storage_unavailable_reason(self.status_dir)
+        if reason:
+            _log_unavailable_status_path_once(
+                self.status_dir,
+                f"Status storage is not available yet because {reason}",
+            )
             return []
+
+        if not self.status_dir.exists():
+            _log_unavailable_status_path_once(
+                self.status_dir,
+                "Status directory does not exist yet",
+            )
+            return []
+
+        _clear_unavailable_status_path_log(self.status_dir)
 
         statuses: List[BackupStatus] = []
         files = sorted(self.status_dir.glob("*.status"))
@@ -332,7 +408,7 @@ class StatusStore:
             statuses.append(st)
 
             if move_to_archive and self.archive_dir is not None:
-                self.archive_dir.mkdir(parents=True, exist_ok=True)
+                ensure_status_storage_directory(self.archive_dir)
                 try:
                     dest = self.archive_dir / f.name
                     f.rename(dest)
@@ -453,6 +529,10 @@ class SnapshotManager:
     def _load(self) -> None:
         if self._loaded:
             return
+        if status_storage_unavailable_reason(self.snapshot_file):
+            self._data = {}
+            self._loaded = True
+            return
         if self.snapshot_file.exists():
             try:
                 self._data = json.loads(
@@ -521,7 +601,7 @@ class SnapshotManager:
             )
 
     def _save(self) -> None:
-        self.snapshot_file.parent.mkdir(parents=True, exist_ok=True)
+        ensure_status_storage_directory(self.snapshot_file.parent)
         self.snapshot_file.write_text(
             json.dumps(self._data, indent=2, ensure_ascii=False),
             encoding="utf-8",

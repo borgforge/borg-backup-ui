@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +13,7 @@ if str(RUNTIME_LIB) not in sys.path:
     sys.path.insert(0, str(RUNTIME_LIB))
 
 import status_api  # noqa: E402
+import status  # noqa: E402
 from status_api import get_status_data, _auto_write_weekly_snapshot, _import_legacy_snapshot_if_needed  # noqa: E402
 
 
@@ -37,6 +39,23 @@ def test_weekly_snapshots_import_legacy_once_and_write_only_canonical(tmp_path: 
 
     assert canonical["appdata_local"][-1]["size"] == 200
     assert legacy == {"appdata_local": [{"week": "2026-06-22", "size": 100}]}
+
+
+def test_weekly_snapshot_does_not_create_path_below_unmounted_user_share(monkeypatch):
+    monkeypatch.setattr(status, "storage_mount_is_mounted", lambda _path: False)
+
+    with (
+        patch.object(Path, "mkdir") as mkdir_mock,
+        patch.object(Path, "write_text") as write_mock,
+    ):
+        _auto_write_weekly_snapshot(
+            Path("/mnt/user/borg_backup_ui/weekly-snapshots.json"),
+            {"appdata_local": SimpleNamespace(repository_size=200)},
+            force_write=True,
+        )
+
+    mkdir_mock.assert_not_called()
+    write_mock.assert_not_called()
 
 
 def _write_status(status_dir: Path, name: str, payload: dict) -> None:

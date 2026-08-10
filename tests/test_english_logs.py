@@ -79,3 +79,9 @@ def test_public_plugin_install_and_service_messages_are_english():
     assert "installing package" in installer
     assert "Python runtime is not available yet" in service_script
     assert "Borg Backup UI started" in service_script
+
+
+def test_application_startup_log_includes_version():
+    source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
+
+    assert '_log(f"Borg Backup UI version: {APP_VERSION}")' in source
