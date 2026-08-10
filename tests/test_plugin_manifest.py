@@ -69,7 +69,12 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     assert 'f"boot/config/plugins/{NAME}/runtime/config/backup.conf.example"' in workflow
     assert 'f"boot/config/plugins/{NAME}/runtime/vendor-bundles/apprise-vendor.json"' in workflow
     assert 'f"usr/local/emhttp/plugins/{NAME}/README.md"' in workflow
+    assert 'f"usr/local/emhttp/plugins/{NAME}/{NAME}-dashboard.page"' in workflow
+    assert 'f"usr/local/emhttp/plugins/{NAME}/widget-status.php"' in workflow
+    assert 'f"usr/local/emhttp/plugins/{NAME}/app-icon.png"' in workflow
     assert '"etc/rc.d/rc.borg_backup_ui"' in workflow
+    assert '"plugin/borg-backup-ui-dashboard.page"' in workflow
+    assert '"plugin/widget-status.php"' in workflow
     assert "ET.parse(sys.argv[1])" in script
     assert 'display_title = "Borg Backup UI"' in script
     assert 'Title="{display_title}"' in script

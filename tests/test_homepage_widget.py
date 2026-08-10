@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,7 @@ from api.auth_store import (
     rotate_homepage_widget_token,
 )
 import api.homepage_widget_api as homepage_widget_api
+import api.unraid_dashboard_widget as unraid_dashboard_widget
 from borg_backup_ui import BackupUIHandler
 
 
@@ -159,6 +161,222 @@ def test_homepage_widget_module_does_not_start_external_processes():
     assert "subprocess" not in source
     assert "Popen" not in source
     assert "borg info" not in source.lower()
+
+
+def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {"UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file)}
+    status = {
+        "summary": {"success": 1, "warning": 1, "skipped": 0, "error": 0},
+        "backups": [
+            {
+                "key": "appdata_local",
+                "backup_type": "appdata",
+                "location": "local",
+                "status": "success",
+                "timestamp": "2026-08-08 09:00:00",
+                "time_ago": "vor 2 Stunden",
+                "duration_formatted": "3 Min.",
+                "repo_path": "/mnt/user/private",
+                "error_message": "secret details",
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_read_jobs",
+        lambda _config, _backups: [
+            {
+                "key": "appdata_local",
+                "display_name": "Appdata - Lokal",
+                "enabled": True,
+                "running": False,
+                "restore_verification_status": "verified",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_repository_summary",
+        lambda _config: {"online": 2, "total": 3},
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_next_backups",
+        lambda *_args: [{"name": "Appdata - Lokal", "time": "Heute 09:00"}],
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_cache(
+        config,
+        status,
+        app_version="2026.08.09.1200",
+        now=datetime(2026, 8, 8, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert cache_file.exists()
+    assert os.stat(cache_file).st_mode & 0o777 == 0o600
+    assert result["schema_version"] == 1
+    assert result["app_version"] == "2026.08.09.1200"
+    assert result["jobs"]["successful"] == 1
+    assert result["jobs"]["warnings"] == 1
+    assert result["repositories"] == {"online": 2, "total": 3}
+    assert result["latest_backup"]["name"] == "Appdata - Lokal"
+    assert result["restore_proof"] == {
+        "configured": 1,
+        "verified": 1,
+        "failed": 0,
+        "overdue": 0,
+        "open": 0,
+    }
+
+    serialized = cache_file.read_text(encoding="utf-8").lower()
+    for forbidden in ("/mnt/", "secret", "repo_path", "error_message", "passphrase"):
+        assert forbidden not in serialized
+
+
+def test_unraid_dashboard_widget_status_file_cache_does_not_need_ui_status_call(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+    snapshot_file = tmp_path / "weekly-snapshots.json"
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(status_dir),
+        "SNAPSHOT_FILE": str(snapshot_file),
+    }
+    (status_dir / "2026-08-09_12-00-00_flash_local.status").write_text(
+        json.dumps({
+            "backup_type": "flash",
+            "location": "local",
+            "timestamp": "2026-08-09 12:00:00",
+            "duration_seconds": 33,
+            "status": "success",
+            "exit_code": 0,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_read_jobs",
+        lambda _config, _backups: [
+            {
+                "key": "flash_local",
+                "display_name": "Flash - Lokal",
+                "enabled": True,
+                "running": False,
+                "restore_verification_status": "verified",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_repository_summary",
+        lambda _config: {"online": 1, "total": 1},
+    )
+    monkeypatch.setattr(unraid_dashboard_widget, "_next_backups", lambda *_args: [])
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_status_file_cache(
+        config,
+        app_version="2026.08.09.1300",
+        now=datetime(2026, 8, 9, 12, 1, tzinfo=timezone.utc),
+    )
+
+    assert result["cache_state"] == "fresh"
+    assert result["jobs"]["enabled"] == 1
+    assert result["jobs"]["successful"] == 1
+    assert result["latest_backup"]["name"] == "Flash - Lokal"
+    assert result["latest_backup"]["status"] == "ok"
+    assert cache_file.exists()
+    assert not snapshot_file.exists()
+
+
+def test_unraid_dashboard_widget_startup_cache_is_written_without_backup_status(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    config = {"UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file), "BACKUP_SCRIPTS_DIR": str(tmp_path)}
+
+    monkeypatch.setattr(jobs_api, "resolve_data_root", lambda _config: tmp_path)
+    monkeypatch.setattr(jobs_api, "resolve_scripts_dir", lambda _config: scripts_dir)
+    monkeypatch.setattr(
+        jobs_api,
+        "discover_jobs",
+        lambda _scripts_dir, _data_root: [
+            SimpleNamespace(
+                key="flash_local",
+                name="Flash",
+                display_name="Flash - Lokal",
+                enabled=True,
+                is_utility=False,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_repository_summary",
+        lambda _config, *, skip_if_array_root=False: {"online": 1, "total": 1},
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_next_backups",
+        lambda *_args: [{"name": "Flash - Lokal", "time": "Heute 09:00"}],
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.09.1300",
+        now=datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert cache_file.exists()
+    assert os.stat(cache_file).st_mode & 0o777 == 0o600
+    assert result["cache_state"] == "initial"
+    assert result["jobs"]["enabled"] == 1
+    assert result["jobs"]["successful"] == 0
+    assert result["latest_backup"]["status"] == "unknown"
+    assert result["next_backups"] == [{"name": "Flash - Lokal", "time": "Heute 09:00"}]
+
+    serialized = cache_file.read_text(encoding="utf-8").lower()
+    for forbidden in ("/mnt/", "secret", "repo_path", "error_message", "passphrase"):
+        assert forbidden not in serialized
+
+
+def test_unraid_dashboard_widget_startup_cache_skips_array_backed_metadata(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {"UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file), "BACKUP_SCRIPTS_DIR": "/mnt/user/borg-backup-ui"}
+
+    monkeypatch.setattr(jobs_api, "resolve_data_root", lambda _config: Path("/mnt/user/borg-backup-ui"))
+    monkeypatch.setattr(
+        jobs_api,
+        "discover_jobs",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("array metadata should not be read")),
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        now=datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["cache_state"] == "initial"
+    assert result["jobs"]["enabled"] == 0
+    assert result["repositories"] == {"online": 0, "total": 0}
+
+
+def test_unraid_dashboard_widget_page_and_assets_are_packaged():
+    build = (ROOT / "plugin" / "build.sh").read_text(encoding="utf-8")
+    page = (ROOT / "plugin" / "borg-backup-ui-dashboard.page").read_text(encoding="utf-8")
+
+    assert 'Menu="Dashboard:0"' in page
+    assert "$mytiles[$pluginname]['column1']" in page
+    assert "/plugins/borg-backup-ui/app-icon.png" in page
+    assert "{bbui_dash_h(" not in page
+    assert "bbui-widget-strip" in page
+    assert "font-size:20px" not in page
+    assert "widget-status.php" in page
+    assert '${SCRIPT_DIR}/${NAME}-dashboard.page' in build
+    assert '${SCRIPT_DIR}/widget-status.php' in build
+    assert 'ui/assets/app-icon.png' in build
+    assert '"${EMHTTP_DST}/app-icon.png"' in build
 
 
 def test_settings_javascript_contains_homepage_custom_api_configuration():

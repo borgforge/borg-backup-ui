@@ -1,0 +1,418 @@
+Menu="Dashboard:0"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.11.9','>')"
+---
+<?PHP
+$pluginname = "borg-backup-ui";
+$plugin_dir = "/boot/config/plugins/borg-backup-ui";
+$cache_file = "$plugin_dir/widget-status.json";
+$conf_file = "$plugin_dir/borg_backup_ui.conf";
+
+function bbui_dash_h($value) {
+  return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function bbui_dash_read_conf($file) {
+  $conf = ['PORT' => '8765'];
+  if (!file_exists($file)) return $conf;
+  foreach (file($file, FILE_IGNORE_NEW_LINES) as $line) {
+    $line = trim($line);
+    if ($line === '' || $line[0] === '#') continue;
+    if (preg_match('/^([A-Z_]+)=(.*)$/', $line, $m)) $conf[$m[1]] = $m[2];
+  }
+  return $conf;
+}
+
+function bbui_dash_ui_url($port) {
+  $host = $_SERVER['SERVER_ADDR'] ?? ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+  $host = preg_replace('/:\d+$/', '', (string)$host);
+  return "http://$host:$port/";
+}
+
+function bbui_dash_value($data, $path, $default = '') {
+  $current = $data;
+  foreach (explode('.', $path) as $part) {
+    if (!is_array($current) || !array_key_exists($part, $current)) return $default;
+    $current = $current[$part];
+  }
+  return $current;
+}
+
+function bbui_dash_int($data, $path) {
+  return max(0, intval(bbui_dash_value($data, $path, 0)));
+}
+
+function bbui_dash_state_class($state) {
+  $state = strtolower((string)$state);
+  if (in_array($state, ['ok', 'healthy', 'success'], true)) return 'ok';
+  if (in_array($state, ['warning', 'attention'], true)) return 'warn';
+  if (in_array($state, ['error', 'critical', 'failed'], true)) return 'err';
+  if (in_array($state, ['running', 'active'], true)) return 'run';
+  return 'neutral';
+}
+
+function bbui_dash_time($value) {
+  $raw = trim((string)$value);
+  if ($raw === '') return 'nie aktualisiert';
+  $ts = strtotime($raw);
+  if (!$ts) return $raw;
+  return date('d.m. H:i', $ts);
+}
+
+function bbui_dash_status_label($state) {
+  $state = bbui_dash_state_class($state);
+  if ($state === 'ok') return 'OK';
+  if ($state === 'warn') return 'Warnung';
+  if ($state === 'err') return 'Fehler';
+  if ($state === 'run') return 'Laeuft';
+  return '-';
+}
+
+function bbui_dash_restore_label($data) {
+  $configured = bbui_dash_int($data, 'restore_proof.configured');
+  if ($configured < 1) return 'nicht geplant';
+  return bbui_dash_int($data, 'restore_proof.verified') . '/' . $configured . ' verifiziert';
+}
+
+$conf = bbui_dash_read_conf($conf_file);
+$ui_url = bbui_dash_ui_url($conf['PORT'] ?? '8765');
+$data = [];
+$cache_error = '';
+if (is_file($cache_file)) {
+  $raw = file_get_contents($cache_file);
+  $decoded = json_decode($raw, true);
+  if (is_array($decoded)) {
+    $data = $decoded;
+  } else {
+    $cache_error = 'Statusdatei konnte nicht gelesen werden.';
+  }
+} else {
+  $cache_error = 'Status wird nach dem naechsten Start von Borg Backup UI erstellt.';
+}
+
+$cache_state = strtolower((string)bbui_dash_value($data, 'cache_state', 'missing'));
+$overall_state = bbui_dash_state_class(bbui_dash_value($data, 'status.state', 'neutral'));
+$job_total = bbui_dash_int($data, 'jobs.enabled');
+$job_label = $job_total === 1 ? 'Backup-Job' : 'Backup-Jobs';
+$success = bbui_dash_int($data, 'jobs.successful');
+$warnings = bbui_dash_int($data, 'jobs.warnings');
+$failed = bbui_dash_int($data, 'jobs.failed');
+$running = bbui_dash_int($data, 'jobs.running');
+$repo_online = bbui_dash_int($data, 'repositories.online');
+$repo_total = bbui_dash_int($data, 'repositories.total');
+$latest_name = bbui_dash_value($data, 'latest_backup.name', 'Noch kein Status');
+$latest_detail = bbui_dash_value($data, 'latest_backup.detail', 'Status wird beim naechsten UI-Statusabruf aktualisiert.');
+if (trim((string)$latest_name) === '') $latest_name = 'Noch kein Status';
+if (trim((string)$latest_detail) === '') $latest_detail = 'Status wird beim naechsten UI-Statusabruf aktualisiert.';
+$latest_state = bbui_dash_state_class(bbui_dash_value($data, 'latest_backup.status', 'neutral'));
+$latest_label = bbui_dash_status_label(bbui_dash_value($data, 'latest_backup.status', 'neutral'));
+$restore_label = bbui_dash_restore_label($data);
+$restore_overdue = bbui_dash_int($data, 'restore_proof.overdue');
+$restore_failed = bbui_dash_int($data, 'restore_proof.failed');
+$restore_open = bbui_dash_int($data, 'restore_proof.open');
+$generated = bbui_dash_time(bbui_dash_value($data, 'generated_at', ''));
+$latest_name_h = bbui_dash_h($latest_name);
+$latest_detail_h = bbui_dash_h($latest_detail);
+$latest_label_h = bbui_dash_h($latest_label);
+$restore_label_h = bbui_dash_h($restore_label);
+$generated_h = bbui_dash_h($generated);
+$overall_label_h = bbui_dash_h(bbui_dash_status_label(bbui_dash_value($data, 'status.state', 'neutral')));
+$cache_note_text = $cache_error;
+if (!$cache_note_text && $cache_state === 'initial') {
+  $cache_note_text = 'Initialstatus';
+}
+$cache_note = $cache_note_text ? bbui_dash_h($cache_note_text) : '';
+$latest_icon = $latest_state === 'ok'
+  ? '<i class="fa fa-check-circle-o"></i>'
+  : ($latest_state === 'warn'
+    ? '<i class="fa fa-exclamation-triangle"></i>'
+    : ($latest_state === 'err'
+      ? '<i class="fa fa-times-circle-o"></i>'
+      : ($latest_state === 'run' ? '<i class="fa fa-play-circle-o"></i>' : '<i class="fa fa-minus"></i>')));
+
+$next_rows = '';
+$next_backups = bbui_dash_value($data, 'next_backups', []);
+if (is_array($next_backups) && count($next_backups)) {
+  foreach (array_slice($next_backups, 0, 2) as $item) {
+    if (!is_array($item)) continue;
+    $next_rows .= '<div><span>' . bbui_dash_h($item['name'] ?? 'Backup') . '</span><b>' . bbui_dash_h($item['time'] ?? '') . '</b></div>';
+  }
+}
+if ($next_rows === '') {
+  $next_rows = '<div><span>Keine geplanten Backups</span><b>-</b></div>';
+}
+$initial_json = json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
+if (!$initial_json) $initial_json = '{}';
+
+$mytiles[$pluginname]['column1'] =
+<<<EOT
+<tbody title="Borg Backup UI overview">
+<tr><td>
+<div class="bbui-tile-title">
+  <span class="bbui-title-main">
+    <img class="bbui-title-icon" src="/plugins/borg-backup-ui/app-icon.png" alt="">
+    <span>
+      <b>Borg Backup UI</b>
+      <small><span data-bbui="job_total">{$job_total}</span> <span data-bbui="job_label">{$job_label}</span></small>
+    </span>
+  </span>
+  <span class="bbui-title-actions">
+    <a class="bbui-title-button" href="#" data-bbui-refresh title="Aktualisieren"><i class="fa fa-refresh"></i></a>
+    <a class="bbui-title-button" href="{$ui_url}" target="_blank" title="Borg Backup UI oeffnen"><i class="fa fa-external-link"></i></a>
+    <a class="bbui-title-button" href="/Settings/borg-backup-ui" title="Einstellungen"><i class="fa fa-cog"></i></a>
+    <a class="bbui-title-button" href="#" data-bbui-collapse title="Einklappen"><i class="fa fa-chevron-up"></i></a>
+  </span>
+</div>
+</td></tr>
+<tr data-bbui-body><td>
+<style>
+.bbui-tile-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800;padding:2px 1px 0}
+.bbui-title-main{display:flex;align-items:center;gap:8px;min-width:0}
+.bbui-title-main b{display:block;font-size:14px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f3f4f6}
+.bbui-title-main small{display:block;color:#9ca3af;font-size:11px;line-height:1.1;margin-top:2px;font-weight:700}
+.bbui-title-icon{width:28px;height:28px;border-radius:7px;object-fit:contain;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.18)}
+.bbui-title-actions{display:flex;gap:5px;margin-left:auto}
+.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#6f747c;border:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 1px 2px rgba(0,0,0,.30);color:#1f242b!important;text-decoration:none;font-size:12px}
+.bbui-title-button:hover{background:#858b94;color:#111827!important}
+.bbui-widget{font-size:12px;line-height:1.22}
+.bbui-widget a{text-decoration:none}
+.bbui-widget-note{color:#eab308;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.08);border-radius:7px;padding:4px 7px}
+.bbui-widget-note:empty{display:none}
+.bbui-widget-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:6px}
+.bbui-widget-metric{display:flex;align-items:center;gap:6px;border:1px solid rgba(148,163,184,.30);border-radius:7px;padding:5px 6px;min-width:0;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(0,0,0,.07));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.bbui-widget-metric i{font-size:17px;line-height:1;width:18px;text-align:center;flex:0 0 18px;opacity:.95}
+.bbui-widget-metric span{display:block;min-width:0}
+.bbui-widget-metric em{display:block;color:#aeb6c2;font-size:11px;font-style:normal;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-metric b{display:block;font-size:16px;line-height:1.05;color:#d8dee9}
+.bbui-widget-metric.ok i,.bbui-widget-metric.ok b,.bbui-widget-state.ok h4,.bbui-widget-state.ok .bbui-widget-status,.bbui-widget-pill.ok{color:#7bbf59}
+.bbui-widget-metric.warn i,.bbui-widget-metric.warn b,.bbui-widget-state.warn h4,.bbui-widget-state.warn .bbui-widget-status,.bbui-widget-pill.warn{color:#e0ad2f}
+.bbui-widget-metric.err i,.bbui-widget-metric.err b,.bbui-widget-state.err h4,.bbui-widget-state.err .bbui-widget-status,.bbui-widget-pill.err{color:#e05f5a}
+.bbui-widget-metric.run i,.bbui-widget-metric.run b,.bbui-widget-state.run h4,.bbui-widget-state.run .bbui-widget-status,.bbui-widget-pill.run{color:#5d9cec}
+.bbui-widget-metric.neutral i,.bbui-widget-metric.neutral b{color:#d7dee8}
+.bbui-widget-main{position:relative;border:1px solid rgba(148,163,184,.30);border-radius:8px;padding:7px 7px 7px 10px;margin-bottom:6px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(0,0,0,.08));box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.bbui-widget-main:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:8px 0 0 8px;background:#6b7280}
+.bbui-widget-main.ok:before{background:#7bbf59}.bbui-widget-main.warn:before{background:#e0ad2f}.bbui-widget-main.err:before{background:#e05f5a}.bbui-widget-main.run:before{background:#5d9cec}
+.bbui-widget-main-row{display:flex;align-items:center;gap:8px}
+.bbui-widget-status{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-weight:900;flex:0 0 auto;font-size:22px}
+.bbui-widget-state h4{margin:0 0 1px;font-size:12px;font-weight:900}
+.bbui-widget-state strong{display:block;font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:#d8dee9}
+.bbui-widget-state p{margin:1px 0 0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-pill{margin-left:auto;border:1px solid currentColor;border-radius:6px;padding:3px 7px;font-weight:900;white-space:nowrap;background:rgba(0,0,0,.14)}
+.bbui-widget-split{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px}
+.bbui-widget-box{display:grid;grid-template-columns:28px minmax(0,1fr);gap:7px;align-items:center;border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px 7px;background:rgba(148,163,184,.045);min-width:0}
+.bbui-widget-section-icon{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;background:rgba(0,0,0,.18);font-size:14px;line-height:1}
+.bbui-widget-next .bbui-widget-section-icon{color:#5d9cec}.bbui-widget-restore .bbui-widget-section-icon{color:#7bbf59}
+.bbui-widget-section-body{min-width:0}
+.bbui-widget-box h4{margin:0 0 3px;font-size:12px;font-weight:800;color:#5d9cec}
+.bbui-widget-next [data-bbui="next_rows"] > div{display:flex;justify-content:space-between;gap:8px;color:var(--gray-500,#8b98a7);padding:1px 0;min-width:0}
+.bbui-widget-next [data-bbui="next_rows"] span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.bbui-widget-next [data-bbui="next_rows"] b{color:var(--gray-300,#cbd5e1);white-space:nowrap;flex:0 0 auto}
+.bbui-widget-restore p{margin:0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-footer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:center;gap:8px;color:#9ca3af;font-size:11px;border-top:1px solid rgba(148,163,184,.16);padding-top:5px;margin-top:3px}
+.bbui-widget-footer span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-footer i{color:#9ca3af;margin-right:4px}
+.bbui-widget-footer strong{color:#cbd5e1}
+.bbui-widget-health-dot{width:9px;height:9px;border-radius:999px;background:#6b7280;box-shadow:0 0 6px rgba(107,114,128,.55)}
+.bbui-widget-health-dot.ok{background:#7bbf59;box-shadow:0 0 7px rgba(123,191,89,.55)}.bbui-widget-health-dot.warn{background:#e0ad2f;box-shadow:0 0 7px rgba(224,173,47,.55)}.bbui-widget-health-dot.err{background:#e05f5a;box-shadow:0 0 7px rgba(224,95,90,.55)}.bbui-widget-health-dot.run{background:#5d9cec;box-shadow:0 0 7px rgba(93,156,236,.55)}
+@media (max-width:520px){.bbui-widget-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.bbui-widget-split{grid-template-columns:1fr}}
+</style>
+<div id="bbui-widget" class="bbui-widget" data-endpoint="/plugins/borg-backup-ui/widget-status.php">
+  <div class="bbui-widget-note" data-bbui="cache_note">{$cache_note}</div>
+  <div class="bbui-widget-strip">
+    <div class="bbui-widget-metric ok"><i class="fa fa-check-circle-o"></i><span><em>Erfolgreich</em><b data-bbui="success">{$success}</b></span></div>
+    <div class="bbui-widget-metric warn"><i class="fa fa-exclamation-triangle"></i><span><em>Warnungen</em><b data-bbui="warnings">{$warnings}</b></span></div>
+    <div class="bbui-widget-metric err"><i class="fa fa-times-circle-o"></i><span><em>Fehler</em><b data-bbui="failed">{$failed}</b></span></div>
+    <div class="bbui-widget-metric run"><i class="fa fa-play-circle-o"></i><span><em>Laeuft</em><b data-bbui="running">{$running}</b></span></div>
+    <div class="bbui-widget-metric neutral"><i class="fa fa-database"></i><span><em>Repos online</em><b data-bbui="repos">{$repo_online}/{$repo_total}</b></span></div>
+  </div>
+  <div class="bbui-widget-main bbui-widget-state {$latest_state}" data-bbui-latest-state>
+    <div class="bbui-widget-main-row">
+      <div class="bbui-widget-status" data-bbui="latest_icon">{$latest_icon}</div>
+      <div style="min-width:0"><h4>Letztes Backup</h4><strong data-bbui="latest_name">{$latest_name_h}</strong><p data-bbui="latest_detail">{$latest_detail_h}</p></div>
+      <div class="bbui-widget-pill {$latest_state}" data-bbui-latest-pill data-bbui="latest_label">{$latest_label_h}</div>
+    </div>
+  </div>
+  <div class="bbui-widget-split">
+    <div class="bbui-widget-box bbui-widget-next">
+      <div class="bbui-widget-section-icon"><i class="fa fa-calendar"></i></div>
+      <div class="bbui-widget-section-body">
+        <h4>Naechste Backups</h4>
+        <div data-bbui="next_rows">{$next_rows}</div>
+      </div>
+    </div>
+    <div class="bbui-widget-box bbui-widget-restore">
+      <div class="bbui-widget-section-icon"><i class="fa fa-shield"></i></div>
+      <div class="bbui-widget-section-body">
+        <h4>Restore-Nachweis</h4>
+        <p><strong data-bbui="restore_label">{$restore_label_h}</strong></p>
+        <p data-bbui="restore_detail">{$restore_overdue} ueberfaellig &middot; {$restore_failed} Fehler &middot; {$restore_open} offen</p>
+      </div>
+    </div>
+  </div>
+  <div class="bbui-widget-footer">
+    <span><i class="fa fa-exclamation-triangle"></i>Status: <strong data-bbui="overall_label">{$overall_label_h}</strong></span>
+    <span><i class="fa fa-clock-o"></i>Aktualisiert: <strong data-bbui="generated">{$generated_h}</strong></span>
+    <i class="bbui-widget-health-dot {$overall_state}" data-bbui-overall-dot></i>
+  </div>
+</div>
+<script type="application/json" id="bbui-widget-initial">{$initial_json}</script>
+<script>
+(function(){
+  const root = document.getElementById('bbui-widget');
+  if (!root) return;
+  const endpoint = root.getAttribute('data-endpoint');
+  const tile = root.closest('tbody') || document;
+  const body = tile.querySelector('[data-bbui-body]');
+  const refreshButton = tile.querySelector('[data-bbui-refresh]');
+  const collapseButton = tile.querySelector('[data-bbui-collapse]');
+  const fields = {};
+  tile.querySelectorAll('.bbui-tile-title [data-bbui], #bbui-widget [data-bbui]').forEach((node) => fields[node.getAttribute('data-bbui')] = node);
+  const latestState = root.querySelector('[data-bbui-latest-state]');
+  const latestPill = root.querySelector('[data-bbui-latest-pill]');
+  const overallDot = root.querySelector('[data-bbui-overall-dot]');
+
+  function get(data, path, fallback) {
+    return path.split('.').reduce((value, part) => value && Object.prototype.hasOwnProperty.call(value, part) ? value[part] : undefined, data) ?? fallback;
+  }
+  function intValue(data, path) {
+    const value = parseInt(get(data, path, 0), 10);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+  function stateClass(value) {
+    value = String(value || '').toLowerCase();
+    if (['ok','healthy','success'].includes(value)) return 'ok';
+    if (['warning','attention'].includes(value)) return 'warn';
+    if (['error','critical','failed'].includes(value)) return 'err';
+    if (['running','active'].includes(value)) return 'run';
+    return 'neutral';
+  }
+  function statusLabel(value) {
+    const state = stateClass(value);
+    if (state === 'ok') return 'OK';
+    if (state === 'warn') return 'Warnung';
+    if (state === 'err') return 'Fehler';
+    if (state === 'run') return 'Laeuft';
+    return '-';
+  }
+  function latestIcon(value) {
+    const state = stateClass(value);
+    if (state === 'ok') return 'fa-check-circle-o';
+    if (state === 'warn') return 'fa-exclamation-triangle';
+    if (state === 'err') return 'fa-times-circle-o';
+    if (state === 'run') return 'fa-play-circle-o';
+    return 'fa-minus';
+  }
+  function formatTime(value) {
+    if (!value) return 'nie aktualisiert';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('de-DE', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+  }
+  function setText(name, value) {
+    if (fields[name]) fields[name].textContent = String(value);
+  }
+  function setIcon(name, iconClass) {
+    if (fields[name]) fields[name].innerHTML = '<i class="fa ' + iconClass + '"></i>';
+  }
+  function setLatestClass(cls) {
+    ['ok','warn','err','run','neutral'].forEach((name) => {
+      latestState && latestState.classList.remove(name);
+      latestPill && latestPill.classList.remove(name);
+    });
+    latestState && latestState.classList.add(cls);
+    latestPill && latestPill.classList.add(cls);
+  }
+  function setOverallClass(cls) {
+    ['ok','warn','err','run','neutral'].forEach((name) => overallDot && overallDot.classList.remove(name));
+    overallDot && overallDot.classList.add(cls);
+  }
+  function render(data) {
+    const total = intValue(data, 'jobs.enabled');
+    const repoOnline = intValue(data, 'repositories.online');
+    const repoTotal = intValue(data, 'repositories.total');
+    const latestStatus = get(data, 'latest_backup.status', 'unknown');
+    const latestCls = stateClass(latestStatus);
+    const overallCls = stateClass(get(data, 'status.state', 'unknown'));
+    const configured = intValue(data, 'restore_proof.configured');
+    const cacheState = String(get(data, 'cache_state', 'missing'));
+    const cacheNote = cacheState === 'initial' ? 'Initialstatus' : '';
+    let latestName = String(get(data, 'latest_backup.name', '') || '').trim();
+    let latestDetail = String(get(data, 'latest_backup.detail', '') || '').trim();
+    if (!latestName) latestName = 'Noch kein Status';
+    if (!latestDetail) latestDetail = 'Status wird beim naechsten UI-Statusabruf aktualisiert.';
+
+    setText('job_total', total);
+    setText('job_label', total === 1 ? 'Backup-Job' : 'Backup-Jobs');
+    setText('cache_note', cacheNote);
+    setText('success', intValue(data, 'jobs.successful'));
+    setText('warnings', intValue(data, 'jobs.warnings'));
+    setText('failed', intValue(data, 'jobs.failed'));
+    setText('running', intValue(data, 'jobs.running'));
+    setText('repos', repoOnline + '/' + repoTotal);
+    setIcon('latest_icon', latestIcon(latestStatus));
+    setText('latest_name', latestName);
+    setText('latest_detail', latestDetail);
+    setText('latest_label', statusLabel(latestStatus));
+    setText('restore_label', configured < 1 ? 'nicht geplant' : intValue(data, 'restore_proof.verified') + '/' + configured + ' verifiziert');
+    setText('restore_detail', intValue(data, 'restore_proof.overdue') + ' ueberfaellig - ' + intValue(data, 'restore_proof.failed') + ' Fehler - ' + intValue(data, 'restore_proof.open') + ' offen');
+    setText('overall_label', statusLabel(get(data, 'status.state', 'unknown')));
+    setText('generated', formatTime(get(data, 'generated_at', '')));
+    setLatestClass(latestCls);
+    setOverallClass(overallCls);
+
+    const nextRows = Array.isArray(data.next_backups) ? data.next_backups.slice(0, 2) : [];
+    if (fields.next_rows) {
+      fields.next_rows.textContent = '';
+      if (!nextRows.length) {
+        const row = document.createElement('div');
+        row.innerHTML = '<span>Keine geplanten Backups</span><b>-</b>';
+        fields.next_rows.appendChild(row);
+      } else {
+        nextRows.forEach((item) => {
+          const row = document.createElement('div');
+          const name = document.createElement('span');
+          const time = document.createElement('b');
+          name.textContent = item && item.name ? item.name : 'Backup';
+          time.textContent = item && item.time ? item.time : '';
+          row.appendChild(name);
+          row.appendChild(time);
+          fields.next_rows.appendChild(row);
+        });
+      }
+    }
+  }
+  async function update() {
+    try {
+      const response = await fetch(endpoint + '?_=' + Date.now(), {cache: 'no-store'});
+      if (!response.ok) throw new Error('status ' + response.status);
+      const data = await response.json();
+      render(data);
+    } catch (_error) {
+      setText('cache_note', 'Statusdatei nicht erreichbar');
+    }
+  }
+  try {
+    const initial = JSON.parse(document.getElementById('bbui-widget-initial').textContent || '{}');
+    render(initial);
+  } catch (_error) {}
+  refreshButton && refreshButton.addEventListener('click', function(event) {
+    event.preventDefault();
+    update();
+  });
+  collapseButton && collapseButton.addEventListener('click', function(event) {
+    event.preventDefault();
+    if (!body) return;
+    const hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    const icon = collapseButton.querySelector('i');
+    if (icon) {
+      icon.className = hidden ? 'fa fa-chevron-up' : 'fa fa-chevron-down';
+    }
+  });
+  window.setInterval(update, 15000);
+  update();
+})();
+</script>
+</td></tr>
+</tbody>
+EOT;
+?>
