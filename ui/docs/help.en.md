@@ -171,7 +171,7 @@ Reports show metrics and trends for each job. They include run totals, success r
 
 ## 11. Browse & Restore
 
-The restore wizard walks through job, archive, selection, target, and review. Restores may only write to approved target roots.
+The restore wizard walks through job, archive, selection, target, and review. In the target step, **Archive path** identifies the selection inside the archive; repository and archive are shown separately below it. Restores may only write to approved target roots.
 
 ### Safe Workflow
 

@@ -671,12 +671,16 @@
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-4">
-            <header class="restore-workspace-header"><div><small data-i18n="restore.stepFour">Schritt 4</small><h2 data-i18n="restore.targetModeTitle">Ziel und Wiederherstellungsmodus</h2><p data-i18n="restore.targetModeSubtitle">Quelle und Ziel vor der Vorprüfung festlegen.</p></div><span class="ui-badge" data-i18n="restore.dryRunActive">Testlauf aktiv</span></header>
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepFour">Schritt 4</small><h2 data-i18n="restore.targetModeTitle">Ziel und Wiederherstellungsmodus</h2><p data-i18n="restore.targetModeSubtitle">Archiv-Auswahl prüfen und Ziel vor der Vorprüfung festlegen.</p></div><span class="ui-badge" data-i18n="restore.dryRunActive">Testlauf aktiv</span></header>
             <div class="restore-target-grid">
-            <section class="restore-form-section"><header data-i18n="restore.sourceTarget">Quell- und Zielpfad</header>
+            <section class="restore-form-section"><header data-i18n="restore.sourceTarget">Archiv- und Zielpfad</header>
             <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.sourcePath">Quellpfad (Archiv)</span></label>
+              <label class="form-label"><span data-i18n="restore.sourcePath">Archiv-Pfad</span></label>
               <input id="restore-source-path" class="form-input mono" type="text" readonly value="">
+              <div class="restore-source-context">
+                <span><span data-i18n="restore.sourceRepository">Repository:</span> <strong id="restore-source-repository">—</strong></span>
+                <span><span data-i18n="restore.sourceArchive">Archiv:</span> <strong id="restore-source-archive">—</strong></span>
+              </div>
             </div>
             <div class="form-group" style="grid-column:1/-1">
               <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.targetDirectory">Zielordner</span></label>

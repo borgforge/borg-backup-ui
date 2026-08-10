@@ -193,6 +193,16 @@ function renderRestoreArchiveList() {
   }).join('') || `<div class="restore-sidebar-empty">${escHtml(restoreT('noArchives'))}</div>`;
 }
 
+function renderRestoreSourceContext() {
+  const repository = document.getElementById('restore-source-repository');
+  const archive = document.getElementById('restore-source-archive');
+  const job = (restoreState.jobs || []).find((item) => String(item.key) === String(restoreState.job));
+  if (repository) {
+    repository.textContent = job?.repository_name || job?.repository_key || '—';
+  }
+  if (archive) archive.textContent = restoreState.archive || '—';
+}
+
 function onRestoreRedesignClick(event) {
   const jobButton = event.target.closest('[data-restore-sidebar-job]');
   if (jobButton) {
@@ -762,6 +772,7 @@ async function restoreInit() {
     }
     renderRestoreJobSidebar();
     renderRestoreSelectedJob();
+    renderRestoreSourceContext();
   } catch (e) {
     _restoreMsg(restoreT('loadJobsError', { message: e.message }), true);
   }
@@ -777,6 +788,7 @@ async function restoreLoadArchives() {
   restoreState.selectedType = '';
   restoreState.autoPrecheckKey = '';
   restoreState.archives = [];
+  renderRestoreSourceContext();
   const sel = document.getElementById('restore-archive-sel');
   if (sel) sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
   _restoreMsg('');
@@ -820,6 +832,7 @@ async function restoreBrowse(path) {
 
   restoreState.archive = archive;
   restoreState.path = path;
+  renderRestoreSourceContext();
   _restoreRenderSelectionSummary();
   renderRestoreArchiveList();
   _restoreMsg('');
@@ -976,6 +989,7 @@ function restorePrepare(path, name, type) {
   const startBtn = document.getElementById('restore-start-btn');
   const confirmCheck = document.getElementById('restore-confirm-check');
   if (src) src.value = path || '';
+  renderRestoreSourceContext();
   if (out) out.textContent = '';
   if (startBtn) startBtn.disabled = true;
   if (confirmCheck) confirmCheck.checked = false;
@@ -1005,6 +1019,7 @@ function restoreClearSelection() {
   const preserveOwner = document.getElementById('restore-preserve-owner');
   const startBtn = document.getElementById('restore-start-btn');
   if (src) src.value = '';
+  renderRestoreSourceContext();
   if (out) out.textContent = '';
   if (confirmCheck) confirmCheck.checked = false;
   if (targetInput) targetInput.value = '/mnt/user/';

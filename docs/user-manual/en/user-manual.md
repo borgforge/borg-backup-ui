@@ -458,7 +458,7 @@ Browse the archive and select files or directories. The selection determines wha
 
 #### Step 4: Target & Mode
 
-Set target directory and conflict behavior.
+Review the read-only **Archive path**, then set the target directory and conflict behavior. The repository and archive are shown separately below the archive path so the origin of the selection remains clear.
 
 Conflict strategies:
 

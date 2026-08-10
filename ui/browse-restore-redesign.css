@@ -110,6 +110,8 @@
 .restore-target-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-3); }
 .restore-form-section > .form-group, .restore-form-section > .form-checkbox-row { margin: 0; padding: var(--ui-space-3); }
 .restore-form-section > .form-group + .form-group, .restore-form-section > .form-checkbox-row { border-top: 1px solid var(--ui-color-border); }
+.restore-source-context { display: flex; flex-wrap: wrap; gap: 4px var(--ui-space-3); margin-top: 6px; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-source-context strong { color: var(--ui-color-text); font-weight: 600; overflow-wrap: anywhere; }
 .restore-review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ui-space-3); }
 .restore-precheck-verdict { display: flex; align-items: center; gap: var(--ui-space-3); margin-bottom: var(--ui-space-3); padding: var(--ui-space-3); border: 1px solid var(--ui-state-success-border); border-radius: var(--ui-radius-md); background: var(--ui-state-success-bg); }
 .restore-precheck-verdict.error { border-color: var(--ui-state-error-border); background: var(--ui-state-error-bg); }

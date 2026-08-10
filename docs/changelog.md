@@ -6,6 +6,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #389
+- Renamed the read-only restore source field to Archive path, removed its required-field marker and added the selected repository and archive as separate context in the target step.
+
 ### Issue #370
 - Added first-use browser language detection for German and English, with English as the default for unsupported or unknown browser languages.
 - Changed user-visible plugin install and service startup messages to English for international Unraid users.
