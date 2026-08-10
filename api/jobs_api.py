@@ -839,9 +839,14 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
             )
             repo_path = str(repository_context.get("repository_path") or "")
             repository_key = str(repository_context.get("repository_key") or "")
+            repository = repository_context.get("repository")
+            repository_name = str(
+                repository.get("display_name") or repository.get("repository_name") or repository_key
+            ) if isinstance(repository, dict) else repository_key
         except Exception:
             repo_path = ""
             repository_key = ""
+            repository_name = ""
 
         result.append(
             {
@@ -866,6 +871,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "retention_monthly": info.retention_monthly,
                 "retention_yearly": info.retention_yearly,
                 "repository_key": repository_key,
+                "repository_name": repository_name,
                 "repo_path": repo_path,
                 "restore_test_policy": {
                     "mode": info.restore_test_policy_mode,

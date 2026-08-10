@@ -171,7 +171,7 @@ Berichte zeigen Kennzahlen und Trends pro Job. Dazu gehören Laufzahlen, Erfolgs
 
 ## 11. Browse & Restore
 
-Der Restore-Wizard führt durch Job, Archiv, Auswahl, Ziel und Prüfung. Wiederherstellungen dürfen nur in freigegebene Zielbereiche geschrieben werden.
+Der Restore-Wizard führt durch Job, Archiv, Auswahl, Ziel und Prüfung. Im Zielschritt bezeichnet **Archiv-Pfad** die Auswahl innerhalb des Archivs; Repository und Archiv werden darunter separat angezeigt. Wiederherstellungen dürfen nur in freigegebene Zielbereiche geschrieben werden.
 
 ### Sicherer Ablauf
 
