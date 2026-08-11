@@ -1061,15 +1061,44 @@ def derive_data_dirs(global_data_dir: str) -> dict:
     }
 
 
+def _required_storage_mount_for_path(path: str | Path) -> Path | None:
+    try:
+        from status import required_storage_mount
+
+        return required_storage_mount(Path(path))
+    except Exception:
+        normalized = Path(os.path.abspath(os.fspath(Path(path).expanduser())))
+        parts = normalized.parts
+        if len(parts) < 3 or parts[0] != "/" or parts[1] != "mnt":
+            return None
+        if parts[2] in {"disks", "remotes"} and len(parts) >= 4:
+            return Path("/") / "mnt" / parts[2] / parts[3]
+        return Path("/") / "mnt" / parts[2]
+
+
+def _is_required_storage_mount_available(mount_path: Path) -> bool:
+    try:
+        from status import storage_mount_is_mounted
+
+        return storage_mount_is_mounted(mount_path)
+    except Exception:
+        try:
+            return mount_path.is_mount()
+        except OSError:
+            return False
+
+
 def ensure_data_dirs(global_data_dir: str) -> dict:
     root = (global_data_dir or "").strip()
     if not root:
         raise ValueError("GLOBAL_DATA_DIR is not set")
-    # Unraid-spezifischer Guard:
-    # /mnt/user darf erst beschrieben werden, wenn das Array gestartet ist.
-    if root == "/mnt/user" or root.startswith("/mnt/user/"):
-        if not _is_unraid_array_started():
-            raise RuntimeError("The Unraid array has not started yet (/mnt/user is unavailable)")
+    # Unraid-specific guard: never create a configured /mnt/<storage> root by
+    # accident. The backing mount must already exist and be mounted.
+    required_mount = _required_storage_mount_for_path(root)
+    if required_mount is not None and not _is_required_storage_mount_available(required_mount):
+        raise RuntimeError(f"Required storage mount {required_mount} is unavailable")
+    if required_mount == Path("/mnt/user") and not _is_unraid_array_started():
+        raise RuntimeError("The Unraid array has not started yet (/mnt/user is unavailable)")
     paths = derive_data_dirs(root)
     created = []
     for key in ("base", "logs", "status", "restore_status", "cache", "remotes"):

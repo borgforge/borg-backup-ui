@@ -20,6 +20,7 @@ import borg_backup_ui  # noqa: E402
     [
         ("/mnt/user/borg-backup-ui/status", "/mnt/user"),
         ("/mnt/cache/borg-backup-ui/status", "/mnt/cache"),
+        ("/mnt/datapool2/borg-backup-ui/status", "/mnt/datapool2"),
         ("/mnt/disk12/borg-backup-ui/status", "/mnt/disk12"),
         ("/mnt/disks/USB-A/borg-backup-ui/status", "/mnt/disks/USB-A"),
         ("/mnt/remotes/NAS/borg-backup-ui/status", "/mnt/remotes/NAS"),
@@ -132,6 +133,48 @@ def test_startup_stops_when_configured_storage_mount_stays_unavailable(monkeypat
     assert "was not started" in messages[-1]
 
 
+def test_initial_setup_does_not_start_runtime_writers(monkeypatch):
+    calls = []
+    messages = []
+    monkeypatch.setattr(borg_backup_ui, "_log", messages.append)
+
+    started = borg_backup_ui._start_configured_runtime_writers(
+        {"STATUS_DIR": "/mnt/user/backup-status"},
+        True,
+        app_version="test",
+        widget_startup_writer=lambda *_args, **_kwargs: calls.append("widget-startup"),
+        widget_loop_starter=lambda *_args, **_kwargs: calls.append("widget-loop"),
+        runtime_activator=lambda *_args, **_kwargs: calls.append("runtime"),
+    )
+
+    assert started is False
+    assert calls == []
+    assert messages == [
+        "Initial setup pending: GLOBAL_DATA_DIR is not configured yet; "
+        "runtime write services are disabled until the setup wizard completes."
+    ]
+
+
+def test_configured_setup_starts_runtime_writers(monkeypatch):
+    calls = []
+    monkeypatch.setattr(borg_backup_ui, "_log", lambda _message: None)
+
+    started = borg_backup_ui._start_configured_runtime_writers(
+        {
+            "GLOBAL_DATA_DIR": "/mnt/user/borg_backup_ui",
+            "STATUS_DIR": "/mnt/user/borg_backup_ui/status",
+        },
+        True,
+        app_version="test",
+        widget_startup_writer=lambda *_args, **_kwargs: calls.append("widget-startup"),
+        widget_loop_starter=lambda *_args, **_kwargs: calls.append("widget-loop"),
+        runtime_activator=lambda *_args, **_kwargs: calls.append("runtime"),
+    )
+
+    assert started is True
+    assert calls == ["widget-startup", "widget-loop", "runtime"]
+
+
 def test_main_waits_for_storage_before_migrations_and_runtime_services():
     source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
     main_source = source[source.index("def main():") :]
@@ -141,6 +184,6 @@ def test_main_waits_for_storage_before_migrations_and_runtime_services():
     )
     migrations = main_source.index("_evaluate_startup_migrations(config)")
     final_wait = main_source.index("_wait_for_configured_data_storage(config):")
-    runtime_services = main_source.index("_activate_runtime_services(config, startup_ready)")
+    runtime_services = main_source.index("_start_configured_runtime_writers(config, startup_ready)")
 
     assert first_wait < migrations < final_wait < runtime_services

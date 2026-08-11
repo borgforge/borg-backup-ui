@@ -381,6 +381,10 @@ def _wait_for_configured_data_storage(
     return True
 
 
+def _runtime_data_directory_configured(config: dict) -> bool:
+    return bool(str(config.get("GLOBAL_DATA_DIR", "")).strip())
+
+
 class BackupUIHandler(BaseHTTPRequestHandler):
     _CLIENT_LOG_BUCKET: dict[str, list[float]] = {}
     _CLIENT_LOG_LAST_SIG: dict[str, tuple[str, float]] = {}
@@ -4418,6 +4422,41 @@ def _activate_runtime_services(config: dict, startup_ready: bool, starter=None) 
     return True
 
 
+def _start_configured_runtime_writers(
+    config: dict,
+    startup_ready: bool,
+    *,
+    app_version: str = APP_VERSION,
+    widget_startup_writer=None,
+    widget_loop_starter=None,
+    runtime_activator=None,
+) -> bool:
+    if not _runtime_data_directory_configured(config):
+        _log(
+            "Initial setup pending: GLOBAL_DATA_DIR is not configured yet; "
+            "runtime write services are disabled until the setup wizard completes."
+        )
+        return False
+
+    if widget_startup_writer is None:
+        from unraid_dashboard_widget import write_unraid_dashboard_widget_startup_cache
+
+        widget_startup_writer = write_unraid_dashboard_widget_startup_cache
+    if widget_loop_starter is None:
+        widget_loop_starter = _start_unraid_dashboard_widget_cache_loop
+    if runtime_activator is None:
+        runtime_activator = _activate_runtime_services
+
+    try:
+        widget_startup_writer(config, app_version=app_version)
+    except Exception as exc:
+        _log(f"WARNING: Unraid dashboard widget startup cache could not be written: {_mask_secrets(str(exc))}")
+
+    widget_loop_starter(config)
+    runtime_activator(config, startup_ready)
+    return True
+
+
 def _public_startup_state(config: dict) -> dict:
     state = _get_startup_state(config)
     return {
@@ -4491,16 +4530,7 @@ def main():
 
     BackupUIHandler.config = config
 
-    try:
-        from unraid_dashboard_widget import write_unraid_dashboard_widget_startup_cache
-
-        write_unraid_dashboard_widget_startup_cache(config, app_version=APP_VERSION)
-    except Exception as exc:
-        _log(f"WARNING: Unraid dashboard widget startup cache could not be written: {_mask_secrets(str(exc))}")
-
-    _start_unraid_dashboard_widget_cache_loop(config)
-
-    _activate_runtime_services(config, startup_ready)
+    _start_configured_runtime_writers(config, startup_ready)
 
     port = int(config["PORT"])
     bind = config["BIND"]
