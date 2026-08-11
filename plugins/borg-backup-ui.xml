@@ -6,7 +6,7 @@
   <Support>https://github.com/borgforge/borg-backup-ui/issues</Support>
   <Project>https://github.com/borgforge/borg-backup-ui</Project>
   <ReadMe>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/README.md</ReadMe>
-  <Category>Tools:System</Category>
+  <Category>Backup: Tools:System Plugins:</Category>
   <Beta>true</Beta>
   <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/ui/assets/app-icon.png</Icon>
   <License>MIT</License>
