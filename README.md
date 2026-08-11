@@ -123,6 +123,13 @@ one overview.
 
 ![Dashboard](docs/assets/readme/dashboard.png)
 
+### Access Model
+
+Transparent overview of what Borg Backup UI touches, when background activity
+can happen, and which operations may wake storage or access repositories.
+
+![Access model](docs/assets/readme/access-model.png)
+
 ### Jobs
 
 Grouped backup jobs with operational status, next run information, restore

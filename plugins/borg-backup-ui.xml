@@ -12,6 +12,7 @@
   <License>MIT</License>
   <ExtraSearchTerms>borg borgbackup backup restore repository repositories unraid snapshots</ExtraSearchTerms>
   <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/dashboard.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/access-model.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/jobs.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/restore-wizard.png</Screenshot>
 </Plugin>
