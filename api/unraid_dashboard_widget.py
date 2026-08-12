@@ -75,13 +75,16 @@ def write_unraid_dashboard_widget_status_file_cache(
     """Write a fresh widget cache from existing status files only.
 
     This is used by the service-start background refresher. It deliberately
-    avoids the full dashboard status API because that path also maintains
-    weekly snapshots and is normally triggered by an authenticated UI request.
-    The Unraid dashboard widget must become useful without a login first.
+    avoids Borg calls and the full dashboard status API snapshot writer, but it
+    still applies the same schedule-overdue classification as the UI dashboard.
+    Otherwise a widget refresh could overwrite a warning cache with stale OK
+    counts while the in-app dashboard still shows the job as overdue.
     """
+    status_data = _read_status_file_data(config)
+    _apply_status_file_overdue_metadata(config, status_data, now=now)
     payload = build_unraid_dashboard_widget_cache(
         config,
-        _read_status_file_data(config),
+        status_data,
         app_version=app_version,
         now=now,
     )
@@ -223,6 +226,35 @@ def _read_status_file_data(config: dict) -> dict[str, Any]:
             "error": sum(1 for row in backups if row["status"] == "error"),
         },
         "snapshots": {},
+    }
+
+
+def _apply_status_file_overdue_metadata(
+    config: dict,
+    status_data: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> None:
+    backups = status_data.get("backups")
+    if not isinstance(backups, list):
+        return
+    rows = [row for row in backups if isinstance(row, dict)]
+    try:
+        from status_api import _apply_backup_overdue_metadata
+
+        local_now = now
+        if local_now is not None and local_now.tzinfo is not None:
+            local_now = local_now.astimezone().replace(tzinfo=None)
+        _apply_backup_overdue_metadata(config, rows, now=local_now)
+    except Exception:
+        return
+
+    status_data["summary"] = {
+        "total": len(rows),
+        "success": sum(1 for row in rows if row.get("status") == "success" and not bool(row.get("backup_overdue"))),
+        "warning": sum(1 for row in rows if row.get("status") in {"warning", "cancelled"} or bool(row.get("backup_overdue"))),
+        "skipped": sum(1 for row in rows if row.get("status") == "skipped"),
+        "error": sum(1 for row in rows if row.get("status") == "error"),
     }
 
 
