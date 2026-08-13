@@ -10,12 +10,17 @@ starting Borg Backup UI.
 The repository contains the Borg Backup UI plugin, release metadata,
 documentation, screenshots, and Community Apps submission metadata.
 
-Support and issue tracking are handled through GitHub Issues:
+For discussion, questions, feedback, feature suggestions, and bug reports, use
+the Unraid forum support thread:
+https://forums.unraid.net/topic/198728-plugin-borg-backup-ui-web-ui-for-borg-backup-on-unraid/
+
+Bug reports can also be submitted directly through GitHub Issues in English or
+German:
 https://github.com/borgforge/borg-backup-ui/issues
   ]]></Profile>
   <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/ui/assets/app-icon.png</Icon>
   <WebPage>https://github.com/borgforge/borg-backup-ui</WebPage>
-  <Forum>https://github.com/borgforge/borg-backup-ui/issues</Forum>
+  <Forum>https://forums.unraid.net/topic/198728-plugin-borg-backup-ui-web-ui-for-borg-backup-on-unraid/</Forum>
   <Photo>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/dashboard.png</Photo>
   <Photo>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/access-model.png</Photo>
   <Photo>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/docs/assets/readme/jobs.png</Photo>

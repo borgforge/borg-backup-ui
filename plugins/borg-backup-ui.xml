@@ -3,7 +3,7 @@
   <Overview>Guided BorgBackup web interface for Unraid backups, repositories, restore tests, reports, archive browsing, and notifications. Requires the separate Python 3 for UNRAID plugin.</Overview>
   <PluginURL>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/borg-backup-ui.plg</PluginURL>
   <PluginAuthor>Thorsten Steinberg</PluginAuthor>
-  <Support>https://github.com/borgforge/borg-backup-ui/issues</Support>
+  <Support>https://forums.unraid.net/topic/198728-plugin-borg-backup-ui-web-ui-for-borg-backup-on-unraid/</Support>
   <Project>https://github.com/borgforge/borg-backup-ui</Project>
   <ReadMe>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/README.md</ReadMe>
   <Category>Backup: Tools:System Plugins:</Category>
