@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 for import_root in (ROOT, ROOT / "api", ROOT / "runtime" / "lib"):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
+if str(ROOT / "runtime") not in sys.path:
+    sys.path.insert(0, str(ROOT / "runtime"))
 
 import jobs_api
 from api.auth_store import (
@@ -234,7 +236,7 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
         assert forbidden not in serialized
 
 
-def test_unraid_dashboard_widget_status_file_cache_does_not_need_ui_status_call(tmp_path: Path, monkeypatch):
+def test_unraid_dashboard_widget_status_file_cache_marks_overdue_jobs(tmp_path: Path, monkeypatch):
     cache_file = tmp_path / "widget-status.json"
     status_dir = tmp_path / "status"
     status_dir.mkdir()
@@ -243,6 +245,7 @@ def test_unraid_dashboard_widget_status_file_cache_does_not_need_ui_status_call(
         "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
         "STATUS_DIR": str(status_dir),
         "SNAPSHOT_FILE": str(snapshot_file),
+        "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "1",
     }
     (status_dir / "2026-08-09_12-00-00_flash_local.status").write_text(
         json.dumps({
@@ -255,6 +258,9 @@ def test_unraid_dashboard_widget_status_file_cache_does_not_need_ui_status_call(
         }),
         encoding="utf-8",
     )
+    monkeypatch.setattr("schedule_api.get_schedules", lambda _config: {
+        "flash_local": {"enabled": True, "cron": "0 12 * * *"},
+    })
     monkeypatch.setattr(
         unraid_dashboard_widget,
         "_read_jobs",
@@ -269,6 +275,16 @@ def test_unraid_dashboard_widget_status_file_cache_does_not_need_ui_status_call(
         ],
     )
     monkeypatch.setattr(
+        "jobs_api.list_jobs",
+        lambda _config, _context: [
+            {
+                "key": "flash_local",
+                "display_name": "Flash - Lokal",
+                "enabled": True,
+            }
+        ],
+    )
+    monkeypatch.setattr(
         unraid_dashboard_widget,
         "_repository_summary",
         lambda _config: {"online": 1, "total": 1},
@@ -278,12 +294,14 @@ def test_unraid_dashboard_widget_status_file_cache_does_not_need_ui_status_call(
     result = unraid_dashboard_widget.write_unraid_dashboard_widget_status_file_cache(
         config,
         app_version="2026.08.09.1300",
-        now=datetime(2026, 8, 9, 12, 1, tzinfo=timezone.utc),
+        now=datetime(2026, 8, 10, 13, 1, tzinfo=timezone.utc),
     )
 
     assert result["cache_state"] == "fresh"
     assert result["jobs"]["enabled"] == 1
-    assert result["jobs"]["successful"] == 1
+    assert result["jobs"]["successful"] == 0
+    assert result["jobs"]["warnings"] == 1
+    assert result["status"]["state"] == "warning"
     assert result["latest_backup"]["name"] == "Flash - Lokal"
     assert result["latest_backup"]["status"] == "ok"
     assert cache_file.exists()

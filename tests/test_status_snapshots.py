@@ -9,6 +9,8 @@ API_ROOT = ROOT / "api"
 RUNTIME_LIB = ROOT / "runtime" / "lib"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
+if str(ROOT / "runtime") not in sys.path:
+    sys.path.insert(0, str(ROOT / "runtime"))
 if str(RUNTIME_LIB) not in sys.path:
     sys.path.insert(0, str(RUNTIME_LIB))
 
