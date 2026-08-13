@@ -54,6 +54,22 @@ def test_community_apps_metadata_mentions_python_runtime_requirement() -> None:
     assert "Runtime requirement" in profile_text
 
 
+def test_community_apps_metadata_uses_unraid_forum_support_thread() -> None:
+    plugin = ROOT / "plugins" / "borg-backup-ui.xml"
+    profile = ROOT / "ca_profile.xml"
+    forum_url = (
+        "https://forums.unraid.net/topic/198728-plugin-borg-backup-ui-web-ui-for-borg-backup-on-unraid/"
+    )
+
+    plugin_root = ET.parse(plugin).getroot()
+    profile_root = ET.parse(profile).getroot()
+
+    assert plugin_root.findtext("Support") == forum_url
+    assert profile_root.findtext("Forum") == forum_url
+    assert forum_url in profile.read_text(encoding="utf-8")
+    assert "https://github.com/borgforge/borg-backup-ui/issues" in profile.read_text(encoding="utf-8")
+
+
 def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     script = (ROOT / "plugin" / "deploy-test.sh").read_text(encoding="utf-8")
     workflow = (ROOT / "plugin" / "release_workflow.py").read_text(encoding="utf-8")
