@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.11.0934">
+<!ENTITY version   "2026.08.14.1905">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.14.1905###
+- Fixed the Unraid dashboard widget cache so overdue backup jobs keep their warning state during startup and dashboard refreshes.
+- Updated Community Apps support metadata to use the Unraid forum thread as the primary support channel while keeping GitHub Issues available for optional bug reports.
+- Updated the Unraid dashboard widget to use English labels consistently, matching other technical surfaces such as logs.
+
 ###2026.08.11.0934###
 - Fresh installations no longer start runtime write services with fallback `/mnt/user` status paths before the setup wizard has configured the data directory, and configured `/mnt` data directories are only created once their storage mount is available.
 
@@ -30,11 +35,6 @@
 - Wait for the mount backing the configured data directory before starting runtime services, including user shares, pools, array disks, and Unassigned Devices paths.
 - Prevent status, restore-test, and snapshot paths from being created below an unavailable `/mnt` mount.
 - Improve early-start storage diagnostics and include the Borg Backup UI version in the startup log.
-
-###2026.08.07.0100###
-- Uninstall now removes the Borg Backup UI plugin payload from `/boot/config/plugins/borg-backup-ui` as well as runtime hooks installed by the plugin, while leaving Borg repositories and user data outside the plugin directory untouched.
-- Repository Borg-key warnings now link to Settings > Import / Export, and the Borg-key export shows a visible running state while the encrypted key backup is being created.
-- Plugin updates now verify the extracted Python app version before skipping package extraction, preventing the Unraid control page and web UI from showing different Borg Backup UI versions.
 
 ]]>
 </CHANGES>
@@ -61,7 +61,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="123d52634278f83c06c8ff5076206664"
+EXPECTED_MD5="0bd959d406c8745afa3ff51875889f0b"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
