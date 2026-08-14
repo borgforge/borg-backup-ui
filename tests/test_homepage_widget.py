@@ -205,7 +205,7 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
     monkeypatch.setattr(
         unraid_dashboard_widget,
         "_next_backups",
-        lambda *_args: [{"name": "Appdata - Lokal", "time": "Heute 09:00"}],
+        lambda *_args: [{"name": "Appdata - Lokal", "time": "Today 09:00"}],
     )
 
     result = unraid_dashboard_widget.write_unraid_dashboard_widget_cache(
@@ -337,7 +337,7 @@ def test_unraid_dashboard_widget_startup_cache_is_written_without_backup_status(
     monkeypatch.setattr(
         unraid_dashboard_widget,
         "_next_backups",
-        lambda *_args: [{"name": "Flash - Lokal", "time": "Heute 09:00"}],
+        lambda *_args: [{"name": "Flash - Lokal", "time": "Today 09:00"}],
     )
 
     result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
@@ -352,7 +352,7 @@ def test_unraid_dashboard_widget_startup_cache_is_written_without_backup_status(
     assert result["jobs"]["enabled"] == 1
     assert result["jobs"]["successful"] == 0
     assert result["latest_backup"]["status"] == "unknown"
-    assert result["next_backups"] == [{"name": "Flash - Lokal", "time": "Heute 09:00"}]
+    assert result["next_backups"] == [{"name": "Flash - Lokal", "time": "Today 09:00"}]
 
     serialized = cache_file.read_text(encoding="utf-8").lower()
     for forbidden in ("/mnt/", "secret", "repo_path", "error_message", "passphrase"):
@@ -391,6 +391,15 @@ def test_unraid_dashboard_widget_page_and_assets_are_packaged():
     assert "bbui-widget-strip" in page
     assert "font-size:20px" not in page
     assert "widget-status.php" in page
+    assert "Successful" in page
+    assert "Warnings" in page
+    assert "Latest backup" in page
+    assert "Next backups" in page
+    assert "Restore proof" in page
+    assert "Erfolgreich" not in page
+    assert "Warnungen" not in page
+    assert "Letztes Backup" not in page
+    assert "Statusdatei" not in page
     assert '${SCRIPT_DIR}/${NAME}-dashboard.page' in build
     assert '${SCRIPT_DIR}/widget-status.php' in build
     assert 'ui/assets/app-icon.png' in build

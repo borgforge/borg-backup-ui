@@ -395,8 +395,8 @@ def _latest_backup_detail(row: dict[str, Any]) -> str:
     if time_ago:
         parts.append(time_ago)
     if duration:
-        parts.append(f"Dauer {duration}")
-    return " - ".join(parts) if parts else "Zeit unbekannt"
+        parts.append(f"Duration {duration}")
+    return " - ".join(parts) if parts else "Time unknown"
 
 
 def _next_backups(config: dict, jobs: list[dict[str, Any]], now: datetime) -> list[dict[str, str]]:
@@ -458,9 +458,9 @@ def _format_iso(value: datetime) -> str:
 def _format_short_datetime(value: datetime, now: datetime) -> str:
     prefix = ""
     if value.date() == now.date():
-        prefix = "Heute "
+        prefix = "Today "
     elif value.date() == now.date() + timedelta(days=1):
-        prefix = "Morgen "
+        prefix = "Tomorrow "
     else:
         prefix = value.strftime("%d.%m. ")
     return f"{prefix}{value.strftime('%H:%M')}"

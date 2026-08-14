@@ -52,25 +52,25 @@ function bbui_dash_state_class($state) {
 
 function bbui_dash_time($value) {
   $raw = trim((string)$value);
-  if ($raw === '') return 'nie aktualisiert';
+  if ($raw === '') return 'never updated';
   $ts = strtotime($raw);
   if (!$ts) return $raw;
-  return date('d.m. H:i', $ts);
+  return date('m/d H:i', $ts);
 }
 
 function bbui_dash_status_label($state) {
   $state = bbui_dash_state_class($state);
   if ($state === 'ok') return 'OK';
-  if ($state === 'warn') return 'Warnung';
-  if ($state === 'err') return 'Fehler';
-  if ($state === 'run') return 'Laeuft';
+  if ($state === 'warn') return 'Warning';
+  if ($state === 'err') return 'Failed';
+  if ($state === 'run') return 'Running';
   return '-';
 }
 
 function bbui_dash_restore_label($data) {
   $configured = bbui_dash_int($data, 'restore_proof.configured');
-  if ($configured < 1) return 'nicht geplant';
-  return bbui_dash_int($data, 'restore_proof.verified') . '/' . $configured . ' verifiziert';
+  if ($configured < 1) return 'not planned';
+  return bbui_dash_int($data, 'restore_proof.verified') . '/' . $configured . ' verified';
 }
 
 $conf = bbui_dash_read_conf($conf_file);
@@ -83,26 +83,26 @@ if (is_file($cache_file)) {
   if (is_array($decoded)) {
     $data = $decoded;
   } else {
-    $cache_error = 'Statusdatei konnte nicht gelesen werden.';
+    $cache_error = 'Status cache could not be read.';
   }
 } else {
-  $cache_error = 'Status wird nach dem naechsten Start von Borg Backup UI erstellt.';
+  $cache_error = 'Status cache will be created after the next Borg Backup UI start.';
 }
 
 $cache_state = strtolower((string)bbui_dash_value($data, 'cache_state', 'missing'));
 $overall_state = bbui_dash_state_class(bbui_dash_value($data, 'status.state', 'neutral'));
 $job_total = bbui_dash_int($data, 'jobs.enabled');
-$job_label = $job_total === 1 ? 'Backup-Job' : 'Backup-Jobs';
+$job_label = $job_total === 1 ? 'backup job' : 'backup jobs';
 $success = bbui_dash_int($data, 'jobs.successful');
 $warnings = bbui_dash_int($data, 'jobs.warnings');
 $failed = bbui_dash_int($data, 'jobs.failed');
 $running = bbui_dash_int($data, 'jobs.running');
 $repo_online = bbui_dash_int($data, 'repositories.online');
 $repo_total = bbui_dash_int($data, 'repositories.total');
-$latest_name = bbui_dash_value($data, 'latest_backup.name', 'Noch kein Status');
-$latest_detail = bbui_dash_value($data, 'latest_backup.detail', 'Status wird beim naechsten UI-Statusabruf aktualisiert.');
-if (trim((string)$latest_name) === '') $latest_name = 'Noch kein Status';
-if (trim((string)$latest_detail) === '') $latest_detail = 'Status wird beim naechsten UI-Statusabruf aktualisiert.';
+$latest_name = bbui_dash_value($data, 'latest_backup.name', 'No status yet');
+$latest_detail = bbui_dash_value($data, 'latest_backup.detail', 'Status will update with the next UI status refresh.');
+if (trim((string)$latest_name) === '') $latest_name = 'No status yet';
+if (trim((string)$latest_detail) === '') $latest_detail = 'Status will update with the next UI status refresh.';
 $latest_state = bbui_dash_state_class(bbui_dash_value($data, 'latest_backup.status', 'neutral'));
 $latest_label = bbui_dash_status_label(bbui_dash_value($data, 'latest_backup.status', 'neutral'));
 $restore_label = bbui_dash_restore_label($data);
@@ -118,7 +118,7 @@ $generated_h = bbui_dash_h($generated);
 $overall_label_h = bbui_dash_h(bbui_dash_status_label(bbui_dash_value($data, 'status.state', 'neutral')));
 $cache_note_text = $cache_error;
 if (!$cache_note_text && $cache_state === 'initial') {
-  $cache_note_text = 'Initialstatus';
+  $cache_note_text = 'Initial status';
 }
 $cache_note = $cache_note_text ? bbui_dash_h($cache_note_text) : '';
 $latest_icon = $latest_state === 'ok'
@@ -138,7 +138,7 @@ if (is_array($next_backups) && count($next_backups)) {
   }
 }
 if ($next_rows === '') {
-  $next_rows = '<div><span>Keine geplanten Backups</span><b>-</b></div>';
+  $next_rows = '<div><span>No scheduled backups</span><b>-</b></div>';
 }
 $initial_json = json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
 if (!$initial_json) $initial_json = '{}';
@@ -156,10 +156,10 @@ $mytiles[$pluginname]['column1'] =
     </span>
   </span>
   <span class="bbui-title-actions">
-    <a class="bbui-title-button" href="#" data-bbui-refresh title="Aktualisieren"><i class="fa fa-refresh"></i></a>
-    <a class="bbui-title-button" href="{$ui_url}" target="_blank" title="Borg Backup UI oeffnen"><i class="fa fa-external-link"></i></a>
-    <a class="bbui-title-button" href="/Settings/borg-backup-ui" title="Einstellungen"><i class="fa fa-cog"></i></a>
-    <a class="bbui-title-button" href="#" data-bbui-collapse title="Einklappen"><i class="fa fa-chevron-up"></i></a>
+    <a class="bbui-title-button" href="#" data-bbui-refresh title="Refresh"><i class="fa fa-refresh"></i></a>
+    <a class="bbui-title-button" href="{$ui_url}" target="_blank" title="Open Borg Backup UI"><i class="fa fa-external-link"></i></a>
+    <a class="bbui-title-button" href="/Settings/borg-backup-ui" title="Settings"><i class="fa fa-cog"></i></a>
+    <a class="bbui-title-button" href="#" data-bbui-collapse title="Collapse"><i class="fa fa-chevron-up"></i></a>
   </span>
 </div>
 </td></tr>
@@ -218,16 +218,16 @@ $mytiles[$pluginname]['column1'] =
 <div id="bbui-widget" class="bbui-widget" data-endpoint="/plugins/borg-backup-ui/widget-status.php">
   <div class="bbui-widget-note" data-bbui="cache_note">{$cache_note}</div>
   <div class="bbui-widget-strip">
-    <div class="bbui-widget-metric ok"><i class="fa fa-check-circle-o"></i><span><em>Erfolgreich</em><b data-bbui="success">{$success}</b></span></div>
-    <div class="bbui-widget-metric warn"><i class="fa fa-exclamation-triangle"></i><span><em>Warnungen</em><b data-bbui="warnings">{$warnings}</b></span></div>
-    <div class="bbui-widget-metric err"><i class="fa fa-times-circle-o"></i><span><em>Fehler</em><b data-bbui="failed">{$failed}</b></span></div>
-    <div class="bbui-widget-metric run"><i class="fa fa-play-circle-o"></i><span><em>Laeuft</em><b data-bbui="running">{$running}</b></span></div>
+    <div class="bbui-widget-metric ok"><i class="fa fa-check-circle-o"></i><span><em>Successful</em><b data-bbui="success">{$success}</b></span></div>
+    <div class="bbui-widget-metric warn"><i class="fa fa-exclamation-triangle"></i><span><em>Warnings</em><b data-bbui="warnings">{$warnings}</b></span></div>
+    <div class="bbui-widget-metric err"><i class="fa fa-times-circle-o"></i><span><em>Failed</em><b data-bbui="failed">{$failed}</b></span></div>
+    <div class="bbui-widget-metric run"><i class="fa fa-play-circle-o"></i><span><em>Running</em><b data-bbui="running">{$running}</b></span></div>
     <div class="bbui-widget-metric neutral"><i class="fa fa-database"></i><span><em>Repos online</em><b data-bbui="repos">{$repo_online}/{$repo_total}</b></span></div>
   </div>
   <div class="bbui-widget-main bbui-widget-state {$latest_state}" data-bbui-latest-state>
     <div class="bbui-widget-main-row">
       <div class="bbui-widget-status" data-bbui="latest_icon">{$latest_icon}</div>
-      <div style="min-width:0"><h4>Letztes Backup</h4><strong data-bbui="latest_name">{$latest_name_h}</strong><p data-bbui="latest_detail">{$latest_detail_h}</p></div>
+      <div style="min-width:0"><h4>Latest backup</h4><strong data-bbui="latest_name">{$latest_name_h}</strong><p data-bbui="latest_detail">{$latest_detail_h}</p></div>
       <div class="bbui-widget-pill {$latest_state}" data-bbui-latest-pill data-bbui="latest_label">{$latest_label_h}</div>
     </div>
   </div>
@@ -235,22 +235,22 @@ $mytiles[$pluginname]['column1'] =
     <div class="bbui-widget-box bbui-widget-next">
       <div class="bbui-widget-section-icon"><i class="fa fa-calendar"></i></div>
       <div class="bbui-widget-section-body">
-        <h4>Naechste Backups</h4>
+        <h4>Next backups</h4>
         <div data-bbui="next_rows">{$next_rows}</div>
       </div>
     </div>
     <div class="bbui-widget-box bbui-widget-restore">
       <div class="bbui-widget-section-icon"><i class="fa fa-shield"></i></div>
       <div class="bbui-widget-section-body">
-        <h4>Restore-Nachweis</h4>
+        <h4>Restore proof</h4>
         <p><strong data-bbui="restore_label">{$restore_label_h}</strong></p>
-        <p data-bbui="restore_detail">{$restore_overdue} ueberfaellig &middot; {$restore_failed} Fehler &middot; {$restore_open} offen</p>
+        <p data-bbui="restore_detail">{$restore_overdue} overdue &middot; {$restore_failed} failed &middot; {$restore_open} open</p>
       </div>
     </div>
   </div>
   <div class="bbui-widget-footer">
     <span><i class="fa fa-exclamation-triangle"></i>Status: <strong data-bbui="overall_label">{$overall_label_h}</strong></span>
-    <span><i class="fa fa-clock-o"></i>Aktualisiert: <strong data-bbui="generated">{$generated_h}</strong></span>
+    <span><i class="fa fa-clock-o"></i>Updated: <strong data-bbui="generated">{$generated_h}</strong></span>
     <i class="bbui-widget-health-dot {$overall_state}" data-bbui-overall-dot></i>
   </div>
 </div>
@@ -288,9 +288,9 @@ $mytiles[$pluginname]['column1'] =
   function statusLabel(value) {
     const state = stateClass(value);
     if (state === 'ok') return 'OK';
-    if (state === 'warn') return 'Warnung';
-    if (state === 'err') return 'Fehler';
-    if (state === 'run') return 'Laeuft';
+    if (state === 'warn') return 'Warning';
+    if (state === 'err') return 'Failed';
+    if (state === 'run') return 'Running';
     return '-';
   }
   function latestIcon(value) {
@@ -302,10 +302,10 @@ $mytiles[$pluginname]['column1'] =
     return 'fa-minus';
   }
   function formatTime(value) {
-    if (!value) return 'nie aktualisiert';
+    if (!value) return 'never updated';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString('de-DE', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+    return date.toLocaleString('en-US', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
   }
   function setText(name, value) {
     if (fields[name]) fields[name].textContent = String(value);
@@ -334,14 +334,14 @@ $mytiles[$pluginname]['column1'] =
     const overallCls = stateClass(get(data, 'status.state', 'unknown'));
     const configured = intValue(data, 'restore_proof.configured');
     const cacheState = String(get(data, 'cache_state', 'missing'));
-    const cacheNote = cacheState === 'initial' ? 'Initialstatus' : '';
+    const cacheNote = cacheState === 'initial' ? 'Initial status' : '';
     let latestName = String(get(data, 'latest_backup.name', '') || '').trim();
     let latestDetail = String(get(data, 'latest_backup.detail', '') || '').trim();
-    if (!latestName) latestName = 'Noch kein Status';
-    if (!latestDetail) latestDetail = 'Status wird beim naechsten UI-Statusabruf aktualisiert.';
+    if (!latestName) latestName = 'No status yet';
+    if (!latestDetail) latestDetail = 'Status will update with the next UI status refresh.';
 
     setText('job_total', total);
-    setText('job_label', total === 1 ? 'Backup-Job' : 'Backup-Jobs');
+    setText('job_label', total === 1 ? 'backup job' : 'backup jobs');
     setText('cache_note', cacheNote);
     setText('success', intValue(data, 'jobs.successful'));
     setText('warnings', intValue(data, 'jobs.warnings'));
@@ -352,8 +352,8 @@ $mytiles[$pluginname]['column1'] =
     setText('latest_name', latestName);
     setText('latest_detail', latestDetail);
     setText('latest_label', statusLabel(latestStatus));
-    setText('restore_label', configured < 1 ? 'nicht geplant' : intValue(data, 'restore_proof.verified') + '/' + configured + ' verifiziert');
-    setText('restore_detail', intValue(data, 'restore_proof.overdue') + ' ueberfaellig - ' + intValue(data, 'restore_proof.failed') + ' Fehler - ' + intValue(data, 'restore_proof.open') + ' offen');
+    setText('restore_label', configured < 1 ? 'not planned' : intValue(data, 'restore_proof.verified') + '/' + configured + ' verified');
+    setText('restore_detail', intValue(data, 'restore_proof.overdue') + ' overdue - ' + intValue(data, 'restore_proof.failed') + ' failed - ' + intValue(data, 'restore_proof.open') + ' open');
     setText('overall_label', statusLabel(get(data, 'status.state', 'unknown')));
     setText('generated', formatTime(get(data, 'generated_at', '')));
     setLatestClass(latestCls);
@@ -364,7 +364,7 @@ $mytiles[$pluginname]['column1'] =
       fields.next_rows.textContent = '';
       if (!nextRows.length) {
         const row = document.createElement('div');
-        row.innerHTML = '<span>Keine geplanten Backups</span><b>-</b>';
+        row.innerHTML = '<span>No scheduled backups</span><b>-</b>';
         fields.next_rows.appendChild(row);
       } else {
         nextRows.forEach((item) => {
@@ -387,7 +387,7 @@ $mytiles[$pluginname]['column1'] =
       const data = await response.json();
       render(data);
     } catch (_error) {
-      setText('cache_note', 'Statusdatei nicht erreichbar');
+      setText('cache_note', 'Status cache is not reachable');
     }
   }
   try {
