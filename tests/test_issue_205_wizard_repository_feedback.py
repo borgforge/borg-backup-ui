@@ -242,6 +242,17 @@ def test_job_wizard_does_not_mount_smb_profiles_during_job_creation() -> None:
     assert "wizardMountSelectedSmbProfile" not in bindings
 
 
+def test_job_wizard_storage_target_change_preserves_user_selection() -> None:
+    script = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
+    bindings = (ROOT / "ui" / "js" / "components" / "app-bindings.js").read_text(encoding="utf-8")
+
+    assert "function wizardStorageTargetChanged()" in script
+    assert "wizardState.selectedStorageKey = String(document.getElementById('wiz-storage-key')" in script
+    assert "wizardSetRepositoryOptions();" in script
+    assert "document.getElementById('wiz-storage-key')?.addEventListener('change', wizardStorageTargetChanged);" in bindings
+    assert "document.getElementById('wiz-storage-key')?.addEventListener('change', wizardAutoFill);" not in bindings
+
+
 def test_only_job_wizard_steps_offer_validated_direct_navigation() -> None:
     html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
     script = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
