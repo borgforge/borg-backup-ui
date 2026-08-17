@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.14.1905">
+<!ENTITY version   "2026.08.17.1225">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,9 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.17.1225###
+- Fixed the job wizard storage target selector so secondary SSH/Storagebox targets remain selected and refresh the matching repository list correctly.
+
 ###2026.08.14.1905###
 - Fixed the Unraid dashboard widget cache so overdue backup jobs keep their warning state during startup and dashboard refreshes.
 - Updated Community Apps support metadata to use the Unraid forum thread as the primary support channel while keeping GitHub Issues available for optional bug reports.
@@ -27,14 +30,6 @@
 
 ###2026.08.11.0934###
 - Fresh installations no longer start runtime write services with fallback `/mnt/user` status paths before the setup wizard has configured the data directory, and configured `/mnt` data directories are only created once their storage mount is available.
-
-###2026.08.10.1229###
-- Community Apps metadata now mentions the Python 3 for UNRAID plugin as a runtime requirement before installation.
-- Add an Unraid dashboard widget that shows backup health, last and next backups, repository reachability, and restore-proof status from a precomputed flash-based cache.
-- Clarifies the restore source as an archive path and shows its repository and archive directly in the target step.
-- Wait for the mount backing the configured data directory before starting runtime services, including user shares, pools, array disks, and Unassigned Devices paths.
-- Prevent status, restore-test, and snapshot paths from being created below an unavailable `/mnt` mount.
-- Improve early-start storage diagnostics and include the Borg Backup UI version in the startup log.
 
 ]]>
 </CHANGES>
@@ -61,7 +56,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="0bd959d406c8745afa3ff51875889f0b"
+EXPECTED_MD5="a42306470b965d50c4029c5420c5d0ad"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
