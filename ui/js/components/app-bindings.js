@@ -301,7 +301,7 @@
       wizardClearError(1);
     });
     document.getElementById('wiz-location')?.addEventListener('change', wizardAutoFill);
-    document.getElementById('wiz-storage-key')?.addEventListener('change', wizardAutoFill);
+    document.getElementById('wiz-storage-key')?.addEventListener('change', wizardStorageTargetChanged);
     document.getElementById('wiz-repository-key')?.addEventListener('change', wizardApplySelectedRepository);
     document.getElementById('wiz-icon')?.addEventListener('change', wizardUpdateIconPreview);
     document.getElementById('wiz-icon-color')?.addEventListener('change', wizardUpdateIconPreview);

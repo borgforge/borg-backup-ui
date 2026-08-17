@@ -269,6 +269,23 @@ function wizardSelectedStorage() {
     .find((storage) => String(storage.storage_key || '') === key) || null;
 }
 
+function wizardUpdateStorageTargetHint(storage = null) {
+  const hint = document.getElementById('wiz-storage-target-hint');
+  if (!hint) return;
+  hint.textContent = storage ? '' : wizardT('wizard.noStorageTargetSelectedHint');
+  hint.hidden = !!storage;
+  hint.classList.toggle('warning-state', !storage);
+}
+
+function wizardStorageTargetChanged() {
+  wizardState.selectedStorageKey = String(document.getElementById('wiz-storage-key')?.value || '').trim();
+  wizardState.selectedRepositoryKey = '';
+  const storage = wizardSelectedStorage();
+  wizardUpdateStorageTargetHint(storage);
+  wizardSetRepositoryOptions();
+  wizardClearError(2);
+}
+
 function wizardRepositoryPath(repo) {
   return String(repo?.path_raw || '').trim();
 }
@@ -564,12 +581,7 @@ function wizardAutoFill() {
   const iconEl = document.getElementById('wiz-icon');
   wizardSetStorageOptions();
   const storage = wizardSelectedStorage();
-  const hint = document.getElementById('wiz-storage-target-hint');
-  if (hint) {
-    hint.textContent = storage ? '' : wizardT('wizard.noStorageTargetSelectedHint');
-    hint.hidden = !!storage;
-    hint.classList.toggle('warning-state', !storage);
-  }
+  wizardUpdateStorageTargetHint(storage);
   // If icon not explicitly chosen, keep "auto" (empty) and let rendering
   // derive it from backup_type/type_id.
   if (iconEl && iconEl.value === '') iconEl.value = '';
