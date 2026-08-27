@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.17.1225">
+<!ENTITY version   "2026.08.27.1844">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,17 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.27.1844###
+- Changed the Unraid dashboard widget to use event-based cache updates instead of periodic status scans, so dashboard refreshes continue to read only the flash cache and do not wake storage disks.
+- Added cached job metadata so the dashboard widget can still show newly overdue backups based on the cached data timestamp.
+- Builds the first usable widget cache once from existing status and restore-test files when no compatible flash cache exists yet.
+- Keeps the widget cache timestamp stable during normal Borg Backup UI status polling; it now changes only when the widget cache is actually rebuilt.
+- Added a Borg Server target type for SSH storage profiles so restricted SSH targets without a normal shell can be used for Borg repositories.
+- Skipped shell-based path and write checks for Borg Server profiles; repository access is validated by Borg during repository import or creation.
+- Improved live log resilience for backup jobs and restore tests: temporary SSE connection drops now keep the running state instead of showing a false error or long reconnecting badge.
+- Added periodic live-log heartbeats so long quiet backup phases are less likely to be treated as disconnected by browsers or proxies.
+- Changed VM backup shutdown notices in Unraid from warning notifications to informational notifications.
+
 ###2026.08.17.1225###
 - Fixed the job wizard storage target selector so secondary SSH/Storagebox targets remain selected and refresh the matching repository list correctly.
 
@@ -27,9 +38,6 @@
 - Fixed the Unraid dashboard widget cache so overdue backup jobs keep their warning state during startup and dashboard refreshes.
 - Updated Community Apps support metadata to use the Unraid forum thread as the primary support channel while keeping GitHub Issues available for optional bug reports.
 - Updated the Unraid dashboard widget to use English labels consistently, matching other technical surfaces such as logs.
-
-###2026.08.11.0934###
-- Fresh installations no longer start runtime write services with fallback `/mnt/user` status paths before the setup wizard has configured the data directory, and configured `/mnt` data directories are only created once their storage mount is available.
 
 ]]>
 </CHANGES>
@@ -56,7 +64,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="a42306470b965d50c4029c5420c5d0ad"
+EXPECTED_MD5="04bb955c3e98bac83d616b53546c3390"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
