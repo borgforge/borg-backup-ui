@@ -136,7 +136,7 @@ def _start_bounded_stderr_collector(stream, *, limit: int = 8192):
     return thread, snapshot
 
 
-APP_VERSION = "2026.08.27.1844"
+APP_VERSION = "2026.08.27.2013"
 APP_AUTHOR  = "Thorsten Steinberg"
 APP_CONTACT_EMAIL = "thorsten.steinberg@gmx.de"
 APP_REPOSITORY_URL = "https://github.com/borgforge/borg-backup-ui"

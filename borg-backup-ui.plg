@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.27.1844">
+<!ENTITY version   "2026.08.27.2013">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.27.2013###
+- Restore precheck failures now show the concrete backend validation reason instead of only the generic invalid-request message.
+- Prevented empty startup status scans from being saved or displayed as a fresh OK Unraid dashboard widget cache.
+
 ###2026.08.27.1844###
 - Changed the Unraid dashboard widget to use event-based cache updates instead of periodic status scans, so dashboard refreshes continue to read only the flash cache and do not wake storage disks.
 - Added cached job metadata so the dashboard widget can still show newly overdue backups based on the cached data timestamp.
@@ -33,11 +37,6 @@
 
 ###2026.08.17.1225###
 - Fixed the job wizard storage target selector so secondary SSH/Storagebox targets remain selected and refresh the matching repository list correctly.
-
-###2026.08.14.1905###
-- Fixed the Unraid dashboard widget cache so overdue backup jobs keep their warning state during startup and dashboard refreshes.
-- Updated Community Apps support metadata to use the Unraid forum thread as the primary support channel while keeping GitHub Issues available for optional bug reports.
-- Updated the Unraid dashboard widget to use English labels consistently, matching other technical surfaces such as logs.
 
 ]]>
 </CHANGES>
@@ -64,7 +63,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="04bb955c3e98bac83d616b53546c3390"
+EXPECTED_MD5="4de08b651fdbbb1d6a2465696f4986bb"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
