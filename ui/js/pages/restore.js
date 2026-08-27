@@ -41,6 +41,14 @@ function restoreT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(`restore.${key}`, params) || `restore.${key}`;
 }
 
+function restorePrecheckErrorMessage(payload, status = 0) {
+  const data = payload && typeof payload === 'object' ? payload : {};
+  const code = String(data.code || '').trim();
+  const serverMessage = String(data.message || data.details || data.error || '').trim();
+  if (code === 'bad_request' && serverMessage) return serverMessage;
+  return apiErrorMessage(payload, status);
+}
+
 function restoreStatusIcon(status) {
   const icons = {
     success: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.2 2.2 4.8-5.4"/>',
@@ -1152,7 +1160,7 @@ async function restoreRunPrecheck() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) throw new Error(restorePrecheckErrorMessage(data, res.status));
     restoreState.precheck = data;
     renderRestorePrecheck(data);
     const combinedDryRun = [data.dry_run_stdout || '', data.dry_run_stderr || '']
