@@ -33,3 +33,22 @@ def test_restore_tests_ui_opens_live_log_when_refresh_detects_running_test() -> 
     assert "function resumeRestoreTestLiveLog" in source
     assert "_openRTLogPanel();" in source
     assert "resumeRestoreTestLiveLog('runningWithoutFinalLog');" in refresh_handler
+
+
+def test_restore_tests_live_log_transport_errors_do_not_show_false_failure() -> None:
+    source = (ROOT / "ui/js/pages/restore-tests.js").read_text(encoding="utf-8")
+    german = (ROOT / "ui/i18n/de.json").read_text(encoding="utf-8")
+    english = (ROOT / "ui/i18n/en.json").read_text(encoding="utf-8")
+
+    assert "function handleRTLogTransportError(es)" in source
+    assert "es.addEventListener('open'" in source
+    assert "typeof e.data === 'string' && e.data" in source
+    assert "setRTLogStatus('running', null);\n  restoreTestsState.logTransportCheckTimer = setTimeout" in source
+    assert "if (restoreTestsState.logTransportCheckTimer) {\n    return;" in source
+    assert "if (state.running) {\n        setRTLogStatus('running', null);" in source
+    assert "fetch('/api/restore-tests/running')" in source
+    assert "setRTLogStatus('unknown', null)" in source
+    assert '"logReconnecting"' not in german
+    assert '"logStatusUnknown": "Live-Protokoll getrennt - Status aktualisieren"' in german
+    assert '"logReconnecting"' not in english
+    assert '"logStatusUnknown": "Live log disconnected - refresh status"' in english

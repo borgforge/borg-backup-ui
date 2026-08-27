@@ -1446,6 +1446,7 @@
     "running": "Läuft...",
     "alreadyRunningOpenLog": "Ein Restore-Test läuft bereits. Das Live-Protokoll wurde geöffnet.",
     "runningWithoutFinalLog": "Ein Restore-Test läuft noch oder hat noch keine Abschlussmeldung geschrieben. Das Live-Protokoll zeigt den aktuellen Stand.",
+    "logStatusUnknown": "Live-Protokoll getrennt - Status aktualisieren",
     "finishedExit": "Fertig (Exit {exit})",
     "errorExit": "Fehler (Exit {exit})",
     "planUnavailable": "Plan nicht verfügbar.",

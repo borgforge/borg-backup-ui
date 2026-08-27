@@ -9,6 +9,7 @@ window.BBUI.restoreTestsState = window.BBUI.restoreTestsState || {
   plan: null,
   pollingTimer: null,
   activeEventSource: null,
+  logTransportCheckTimer: null,
   jobs: [],
   defaultsInitialized: false,
   rowBusy: {},
@@ -253,10 +254,24 @@ function _openRTLogPanel() {
   if (restoreTestsState.activeEventSource) {
     restoreTestsState.activeEventSource.close();
   }
+  if (restoreTestsState.logTransportCheckTimer) {
+    clearTimeout(restoreTestsState.logTransportCheckTimer);
+    restoreTestsState.logTransportCheckTimer = null;
+  }
   const es = new EventSource('/api/restore-tests/log/stream');
   restoreTestsState.activeEventSource = es;
 
+  es.addEventListener('open', () => {
+    if (restoreTestsState.activeEventSource !== es) return;
+    setRTLogStatus('running', null);
+    if (restoreTestsState.logTransportCheckTimer) {
+      clearTimeout(restoreTestsState.logTransportCheckTimer);
+      restoreTestsState.logTransportCheckTimer = null;
+    }
+  });
+
   es.onmessage = (e) => {
+    if (restoreTestsState.activeEventSource === es) setRTLogStatus('running', null);
     output.textContent += e.data + '\n';
     output.scrollTop = output.scrollHeight;
   };
@@ -265,15 +280,52 @@ function _openRTLogPanel() {
     setRTLogStatus(code === 0 ? 'success' : 'error', code);
     es.close();
     restoreTestsState.activeEventSource = null;
+    if (restoreTestsState.logTransportCheckTimer) {
+      clearTimeout(restoreTestsState.logTransportCheckTimer);
+      restoreTestsState.logTransportCheckTimer = null;
+    }
     stopRTPolling();
     refreshRestoreTests();
   });
-  es.onerror = () => {
-    setRTLogStatus('error', -1);
-    es.close();
-    restoreTestsState.activeEventSource = null;
-    stopRTPolling();
-  };
+  es.addEventListener('error', (e) => {
+    if (typeof e.data === 'string' && e.data) {
+      setRTLogStatus('error', -1);
+      es.close();
+      restoreTestsState.activeEventSource = null;
+      stopRTPolling();
+      return;
+    }
+    handleRTLogTransportError(es);
+  });
+}
+
+function handleRTLogTransportError(es) {
+  if (restoreTestsState.activeEventSource !== es) return;
+  startRTPolling();
+  if (restoreTestsState.logTransportCheckTimer) {
+    return;
+  }
+  setRTLogStatus('running', null);
+  restoreTestsState.logTransportCheckTimer = setTimeout(async () => {
+    restoreTestsState.logTransportCheckTimer = null;
+    if (restoreTestsState.activeEventSource !== es) return;
+    try {
+      const res = await fetch('/api/restore-tests/running');
+      if (!res.ok) return;
+      const state = await res.json().catch(() => ({}));
+      if (state.running) {
+        setRTLogStatus('running', null);
+        return;
+      }
+      es.close();
+      restoreTestsState.activeEventSource = null;
+      stopRTPolling();
+      setRTLogStatus('unknown', null);
+      refreshRestoreTests();
+    } catch (_) {
+      // Keep the running state; a later browser reconnect or manual refresh can resolve it.
+    }
+  }, 1500);
 }
 
 function setRTLogStatus(state, exitCode) {
@@ -295,6 +347,9 @@ function setRTLogStatus(state, exitCode) {
     const dot = document.createElement('span');
     dot.className = 'badge-dot';
     badge.append(dot, document.createTextNode(restoreTestsT('finishedExit', { exit })));
+  } else if (state === 'unknown') {
+    badge.className = 'badge warning';
+    badge.textContent = restoreTestsT('logStatusUnknown');
   } else {
     badge.className = 'badge error';
     badge.textContent = '';
@@ -310,6 +365,10 @@ function closeRTLogPanel() {
   if (restoreTestsState.activeEventSource) {
     restoreTestsState.activeEventSource.close();
     restoreTestsState.activeEventSource = null;
+  }
+  if (restoreTestsState.logTransportCheckTimer) {
+    clearTimeout(restoreTestsState.logTransportCheckTimer);
+    restoreTestsState.logTransportCheckTimer = null;
   }
 }
 
