@@ -56,13 +56,24 @@ def write_unraid_dashboard_widget_startup_cache(
     This intentionally avoids reading backup status files. If the configured
     data root lives on /mnt, static job and repository metadata are skipped as
     well so the dashboard tile does not wake array disks during boot. A
-    previously written fresh cache is preserved so the dashboard can continue
-    to show the last event-based status after a reboot.
+    previously written fresh cache with job metadata is preserved so the
+    dashboard can continue to show the last event-based status after a reboot.
+    If no usable fresh cache exists yet, one initial event-style cache is built
+    from existing status and restore-test files after runtime storage is ready.
     """
     cache_path = widget_cache_path(config)
     existing = _read_existing_cache(cache_path)
-    if isinstance(existing, dict) and str(existing.get("cache_state") or "").strip().lower() == "fresh":
+    if _is_usable_fresh_cache(existing):
         return existing
+    if _startup_status_scan_configured(config):
+        try:
+            return write_unraid_dashboard_widget_status_file_cache(
+                config,
+                app_version=app_version,
+                now=now,
+            )
+        except Exception:
+            pass
     payload = build_unraid_dashboard_widget_startup_cache(
         config,
         app_version=app_version,
@@ -260,6 +271,19 @@ def _read_existing_cache(path: Path) -> dict[str, Any] | None:
         return data if isinstance(data, dict) else None
     except Exception:
         return None
+
+
+def _is_usable_fresh_cache(cache: dict[str, Any] | None) -> bool:
+    if not isinstance(cache, dict):
+        return False
+    if str(cache.get("cache_state") or "").strip().lower() != "fresh":
+        return False
+    jobs = cache.get("jobs") if isinstance(cache.get("jobs"), dict) else {}
+    return isinstance(jobs.get("items"), list)
+
+
+def _startup_status_scan_configured(config: dict) -> bool:
+    return bool(str(config.get("STATUS_DIR") or "").strip())
 
 
 def _job_cache_items(jobs: list[dict[str, Any]], backups_by_key: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:

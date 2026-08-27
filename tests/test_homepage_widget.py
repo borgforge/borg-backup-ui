@@ -416,6 +416,74 @@ def test_unraid_dashboard_widget_startup_cache_preserves_existing_fresh_cache(tm
     assert json.loads(cache_file.read_text(encoding="utf-8")) == existing
 
 
+def test_unraid_dashboard_widget_startup_cache_builds_fresh_cache_when_missing(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(tmp_path / "status"),
+    }
+    built = {
+        "schema_version": 1,
+        "cache_state": "fresh",
+        "generated_at": "2026-08-10T12:00:00Z",
+        "jobs": {"items": []},
+    }
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "write_unraid_dashboard_widget_status_file_cache",
+        lambda *_args, **_kwargs: built,
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "build_unraid_dashboard_widget_startup_cache",
+        lambda *_args, **_kwargs: {"cache_state": "initial"},
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.09.1300",
+        now=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result == built
+
+
+def test_unraid_dashboard_widget_startup_cache_rebuilds_old_fresh_cache_without_job_items(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(tmp_path / "status"),
+    }
+    cache_file.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "cache_state": "fresh",
+            "generated_at": "2026-08-09T12:00:00Z",
+            "jobs": {"enabled": 1, "successful": 1},
+        }),
+        encoding="utf-8",
+    )
+    rebuilt = {
+        "schema_version": 1,
+        "cache_state": "fresh",
+        "generated_at": "2026-08-10T12:00:00Z",
+        "jobs": {"items": [{"key": "flash_local"}]},
+    }
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "write_unraid_dashboard_widget_status_file_cache",
+        lambda *_args, **_kwargs: rebuilt,
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.09.1300",
+        now=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result == rebuilt
+
+
 def test_unraid_dashboard_widget_does_not_start_periodic_status_scans():
     source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
     page = (ROOT / "plugin" / "borg-backup-ui-dashboard.page").read_text(encoding="utf-8")
