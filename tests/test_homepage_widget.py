@@ -494,6 +494,22 @@ def test_unraid_dashboard_widget_does_not_start_periodic_status_scans():
     assert "adjustedJobCounts" in page
 
 
+def test_api_status_does_not_refresh_unraid_dashboard_widget_cache(tmp_path: Path, monkeypatch):
+    handler = _handler({"STATUS_DIR": str(tmp_path / "status")})
+    status_payload = {"summary": {"success": 1}, "backups": []}
+    calls = []
+
+    monkeypatch.setattr("status_api.get_status_data", lambda _config: status_payload)
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "write_unraid_dashboard_widget_cache",
+        lambda *_args, **_kwargs: calls.append("widget-cache"),
+    )
+
+    assert handler._get_status() == status_payload
+    assert calls == []
+
+
 def test_unraid_dashboard_widget_startup_cache_skips_array_backed_metadata(tmp_path: Path, monkeypatch):
     cache_file = tmp_path / "widget-status.json"
     config = {"UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file), "BACKUP_SCRIPTS_DIR": "/mnt/user/borg-backup-ui"}

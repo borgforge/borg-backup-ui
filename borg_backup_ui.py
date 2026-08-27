@@ -1113,14 +1113,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_status(self) -> dict:
         from status_api import get_status_data
-        status = get_status_data(self.config)
-        try:
-            from unraid_dashboard_widget import write_unraid_dashboard_widget_cache
-
-            write_unraid_dashboard_widget_cache(self.config, status, app_version=APP_VERSION)
-        except Exception as exc:
-            self.log_message("WARN Unraid dashboard widget cache could not be written: %s", str(exc))
-        return status
+        return get_status_data(self.config)
 
     def _get_homepage_widget_summary(self) -> dict:
         from homepage_widget_api import build_homepage_widget_summary
