@@ -12,6 +12,26 @@ if str(RUNTIME) not in sys.path:
 from lib.vm_manager import VmManager  # noqa: E402
 
 
+def test_vm_shutdown_unraid_notification_is_informational(monkeypatch):
+    manager = VmManager()
+    captured = {}
+
+    monkeypatch.setattr("lib.vm_manager.qemu_agent_available", lambda _vm_name: False)
+
+    def fake_notify(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr("lib.notifications.notify", fake_notify)
+
+    manager._warn_single_vm("LinuxMint", "Backup shutdown notice")
+
+    assert captured["level"] == "info"
+    assert captured["subject"] == "VM backup shutdown notice"
+    assert captured["job_name"] == "Borg Backup (VMs)"
+    assert "LinuxMint" in captured["description"]
+
+
 def test_notify_send_runs_as_guest_user(monkeypatch):
     manager = VmManager()
     captured = {}
