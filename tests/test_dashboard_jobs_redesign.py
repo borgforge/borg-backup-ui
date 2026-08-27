@@ -95,13 +95,14 @@ def test_jobs_live_log_transport_errors_reconnect_instead_of_false_failure() -> 
     assert "function handleLogTransportError(es, jobKey)" in script
     assert "es.addEventListener('open'" in script
     assert "typeof e.data === 'string' && e.data" in script
-    assert "setLogStatus('reconnecting')" in script
+    assert "setLogStatus('running');\n  jobsState.logTransportCheckTimer = setTimeout" in script
+    assert "if (jobsState.logTransportCheckTimer) {\n    return;" in script
     assert "if (state.running) {\n        setLogStatus('running');" in script
     assert "fetch('/api/jobs/running')" in script
     assert "setLogStatus('error', '?');" in script
-    assert "logReconnecting" in script
-    assert '"logReconnecting": "Live-Protokoll verbindet neu..."' in german
-    assert '"logReconnecting": "Live log reconnecting..."' in english
+    assert "logReconnecting" not in script
+    assert '"logReconnecting"' not in german
+    assert '"logReconnecting"' not in english
 
 
 def test_wizard_and_jobs_support_docker_exclusion_mode() -> None:

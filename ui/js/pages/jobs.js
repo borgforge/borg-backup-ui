@@ -954,10 +954,10 @@ function openLogPanel(jobKey) {
 
 function handleLogTransportError(es, jobKey) {
   if (jobsState.activeEventSource !== es) return;
-  setLogStatus('reconnecting');
   if (jobsState.logTransportCheckTimer) {
-    clearTimeout(jobsState.logTransportCheckTimer);
+    return;
   }
+  setLogStatus('running');
   jobsState.logTransportCheckTimer = setTimeout(async () => {
     jobsState.logTransportCheckTimer = null;
     if (jobsState.activeEventSource !== es) return;
@@ -984,7 +984,7 @@ function handleLogTransportError(es, jobKey) {
       }
       setTimeout(refreshJobs, 500);
     } catch (_) {
-      // Keep the reconnecting state; a later browser reconnect or manual refresh can resolve it.
+      // Keep the running state; a later browser reconnect or manual refresh can resolve it.
     }
   }, 1500);
 }
@@ -1048,13 +1048,6 @@ function setLogStatus(state, exitCode) {
   } else if (state === 'skipped') {
     badge.className = 'badge skipped';
     badge.textContent = jobsT('jobs.logSkipped', { code: exit });
-  } else if (state === 'reconnecting') {
-    badge.className = 'badge warning';
-    badge.textContent = '';
-    const dot = document.createElement('span');
-    dot.className = 'running-dot';
-    dot.style.marginRight = '4px';
-    badge.append(dot, document.createTextNode(jobsT('jobs.logReconnecting')));
   } else {
     badge.className = 'badge error';
     badge.textContent = '';

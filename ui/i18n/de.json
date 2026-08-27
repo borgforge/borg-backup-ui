@@ -656,8 +656,7 @@
     "logDone": "Fertig (Exit {code})",
     "logFailed": "Fehler (Exit {code})",
     "logSkipped": "Übersprungen (Exit {code})",
-    "logCancelled": "Abgebrochen (Exit {code})",
-    "logReconnecting": "Live-Protokoll verbindet neu..."
+    "logCancelled": "Abgebrochen (Exit {code})"
   },
   "schedule": {
     "title": "Zeitplan",
@@ -1447,7 +1446,6 @@
     "running": "Läuft...",
     "alreadyRunningOpenLog": "Ein Restore-Test läuft bereits. Das Live-Protokoll wurde geöffnet.",
     "runningWithoutFinalLog": "Ein Restore-Test läuft noch oder hat noch keine Abschlussmeldung geschrieben. Das Live-Protokoll zeigt den aktuellen Stand.",
-    "logReconnecting": "Live-Protokoll verbindet neu...",
     "logStatusUnknown": "Live-Protokoll getrennt - Status aktualisieren",
     "finishedExit": "Fertig (Exit {exit})",
     "errorExit": "Fehler (Exit {exit})",

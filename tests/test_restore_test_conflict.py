@@ -43,11 +43,12 @@ def test_restore_tests_live_log_transport_errors_do_not_show_false_failure() -> 
     assert "function handleRTLogTransportError(es)" in source
     assert "es.addEventListener('open'" in source
     assert "typeof e.data === 'string' && e.data" in source
-    assert "setRTLogStatus('reconnecting', null)" in source
+    assert "setRTLogStatus('running', null);\n  restoreTestsState.logTransportCheckTimer = setTimeout" in source
+    assert "if (restoreTestsState.logTransportCheckTimer) {\n    return;" in source
     assert "if (state.running) {\n        setRTLogStatus('running', null);" in source
     assert "fetch('/api/restore-tests/running')" in source
     assert "setRTLogStatus('unknown', null)" in source
-    assert '"logReconnecting": "Live-Protokoll verbindet neu..."' in german
+    assert '"logReconnecting"' not in german
     assert '"logStatusUnknown": "Live-Protokoll getrennt - Status aktualisieren"' in german
-    assert '"logReconnecting": "Live log reconnecting..."' in english
+    assert '"logReconnecting"' not in english
     assert '"logStatusUnknown": "Live log disconnected - refresh status"' in english

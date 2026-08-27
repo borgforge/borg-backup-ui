@@ -301,11 +301,11 @@ function _openRTLogPanel() {
 
 function handleRTLogTransportError(es) {
   if (restoreTestsState.activeEventSource !== es) return;
-  setRTLogStatus('reconnecting', null);
   startRTPolling();
   if (restoreTestsState.logTransportCheckTimer) {
-    clearTimeout(restoreTestsState.logTransportCheckTimer);
+    return;
   }
+  setRTLogStatus('running', null);
   restoreTestsState.logTransportCheckTimer = setTimeout(async () => {
     restoreTestsState.logTransportCheckTimer = null;
     if (restoreTestsState.activeEventSource !== es) return;
@@ -323,7 +323,7 @@ function handleRTLogTransportError(es) {
       setRTLogStatus('unknown', null);
       refreshRestoreTests();
     } catch (_) {
-      // Keep the reconnecting state; a later browser reconnect or manual refresh can resolve it.
+      // Keep the running state; a later browser reconnect or manual refresh can resolve it.
     }
   }, 1500);
 }
@@ -347,13 +347,6 @@ function setRTLogStatus(state, exitCode) {
     const dot = document.createElement('span');
     dot.className = 'badge-dot';
     badge.append(dot, document.createTextNode(restoreTestsT('finishedExit', { exit })));
-  } else if (state === 'reconnecting') {
-    badge.className = 'badge warning';
-    badge.textContent = '';
-    const dot = document.createElement('span');
-    dot.className = 'running-dot';
-    dot.style.marginRight = '4px';
-    badge.append(dot, document.createTextNode(restoreTestsT('logReconnecting')));
   } else if (state === 'unknown') {
     badge.className = 'badge warning';
     badge.textContent = restoreTestsT('logStatusUnknown');
