@@ -84,6 +84,24 @@ def test_jobs_log_shows_resource_lock_exit_as_skipped() -> None:
     assert '"logSkipped": "Skipped (exit {code})"' in english
 
 
+def test_jobs_live_log_transport_errors_reconnect_instead_of_false_failure() -> None:
+    script = _read("ui/js/pages/jobs.js")
+    backend = _read("api/jobs_api.py")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+
+    assert "SSE_HEARTBEAT_INTERVAL_SECONDS = 15.0" in backend
+    assert "time.monotonic() - last_heartbeat >= SSE_HEARTBEAT_INTERVAL_SECONDS" in backend
+    assert "function handleLogTransportError(es, jobKey)" in script
+    assert "typeof e.data === 'string' && e.data" in script
+    assert "setLogStatus('reconnecting')" in script
+    assert "fetch('/api/jobs/running')" in script
+    assert "setLogStatus('error', '?');" in script
+    assert "logReconnecting" in script
+    assert '"logReconnecting": "Live-Protokoll verbindet neu..."' in german
+    assert '"logReconnecting": "Live log reconnecting..."' in english
+
+
 def test_wizard_and_jobs_support_docker_exclusion_mode() -> None:
     html = _read("ui/index.html")
     wizard = _read("ui/js/pages/wizard.js")

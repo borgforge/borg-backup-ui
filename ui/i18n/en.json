@@ -656,7 +656,8 @@
     "logDone": "Done (exit {code})",
     "logFailed": "Error (exit {code})",
     "logSkipped": "Skipped (exit {code})",
-    "logCancelled": "Cancelled (exit {code})"
+    "logCancelled": "Cancelled (exit {code})",
+    "logReconnecting": "Live log reconnecting..."
   },
   "schedule": {
     "title": "Schedule",
@@ -1446,6 +1447,8 @@
     "running": "Running...",
     "alreadyRunningOpenLog": "A restore test is already running. The live log has been opened.",
     "runningWithoutFinalLog": "A restore test is still running or has not written a final log line yet. The live log shows the current state.",
+    "logReconnecting": "Live log reconnecting...",
+    "logStatusUnknown": "Live log disconnected - refresh status",
     "finishedExit": "Finished (exit {exit})",
     "errorExit": "Error (exit {exit})",
     "planUnavailable": "Plan unavailable.",

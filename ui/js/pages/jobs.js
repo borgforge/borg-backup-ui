@@ -12,6 +12,7 @@ window.BBUI.jobsState = window.BBUI.jobsState || {
   pendingDeleteJobKey: null,
   confirmAction: 'start',
   activeEventSource: null,
+  logTransportCheckTimer: null,
   logAutoScroll: true,
   pollingTimer: null,
   lastRunningSnapshot: '{}',  // JSON-String der zuletzt bekannten Running-States
@@ -900,12 +901,17 @@ function openLogPanel(jobKey) {
   if (jobsState.activeEventSource) {
     jobsState.activeEventSource.close();
   }
+  if (jobsState.logTransportCheckTimer) {
+    clearTimeout(jobsState.logTransportCheckTimer);
+    jobsState.logTransportCheckTimer = null;
+  }
 
   const es = new EventSource(`/api/jobs/log/stream?job=${encodeURIComponent(jobKey)}`);
   jobsState.activeEventSource = es;
   jobsState.logAutoScroll = true;
 
   es.onmessage = (e) => {
+    if (jobsState.activeEventSource === es) setLogStatus('running');
     appendLogLine(e.data);
   };
 
@@ -918,21 +924,60 @@ function openLogPanel(jobKey) {
     setLogStatus(state, code);
     es.close();
     jobsState.activeEventSource = null;
+    if (jobsState.logTransportCheckTimer) {
+      clearTimeout(jobsState.logTransportCheckTimer);
+      jobsState.logTransportCheckTimer = null;
+    }
     setTimeout(refreshJobs, 1500);
   });
 
   es.addEventListener('error', (e) => {
-    if (e.data) appendLogLine(jobsT('jobs.logError', { message: e.data }));
-    setLogStatus('error', '?');
-    es.close();
-    jobsState.activeEventSource = null;
-  });
-
-  es.onerror = () => {
-    if (es.readyState === EventSource.CLOSED) {
-      // Verbindung wurde geschlossen – normal nach 'done'
+    if (typeof e.data === 'string' && e.data) {
+      appendLogLine(jobsT('jobs.logError', { message: e.data }));
+      setLogStatus('error', '?');
+      es.close();
+      jobsState.activeEventSource = null;
+      return;
     }
-  };
+    handleLogTransportError(es, jobKey);
+  });
+}
+
+function handleLogTransportError(es, jobKey) {
+  if (jobsState.activeEventSource !== es) return;
+  setLogStatus('reconnecting');
+  if (jobsState.logTransportCheckTimer) {
+    clearTimeout(jobsState.logTransportCheckTimer);
+  }
+  jobsState.logTransportCheckTimer = setTimeout(async () => {
+    jobsState.logTransportCheckTimer = null;
+    if (jobsState.activeEventSource !== es) return;
+    try {
+      const res = await fetch('/api/jobs/running');
+      if (!res.ok) return;
+      const running = await res.json();
+      const state = running?.[jobKey] || {};
+      if (state.running) {
+        setLogStatus('reconnecting');
+        return;
+      }
+      if (state.exit_code !== undefined && state.exit_code !== null) {
+        const code = String(state.exit_code);
+        const numericCode = parseInt(code, 10);
+        const finalState = numericCode === 0
+          ? 'success'
+          : (numericCode === 130 ? 'cancelled' : (isResourceLockSkipExit(code) ? 'skipped' : 'error'));
+        setLogStatus(finalState, code);
+        es.close();
+        jobsState.activeEventSource = null;
+        setTimeout(refreshJobs, 500);
+        return;
+      }
+      setTimeout(refreshJobs, 500);
+    } catch (_) {
+      // Keep the reconnecting state; a later browser reconnect or manual refresh can resolve it.
+    }
+  }, 1500);
 }
 
 function isResourceLockSkipExit(exitCode) {
@@ -994,6 +1039,13 @@ function setLogStatus(state, exitCode) {
   } else if (state === 'skipped') {
     badge.className = 'badge skipped';
     badge.textContent = jobsT('jobs.logSkipped', { code: exit });
+  } else if (state === 'reconnecting') {
+    badge.className = 'badge warning';
+    badge.textContent = '';
+    const dot = document.createElement('span');
+    dot.className = 'running-dot';
+    dot.style.marginRight = '4px';
+    badge.append(dot, document.createTextNode(jobsT('jobs.logReconnecting')));
   } else {
     badge.className = 'badge error';
     badge.textContent = '';
@@ -1013,6 +1065,10 @@ function closeLogPanel() {
   if (jobsState.activeEventSource) {
     jobsState.activeEventSource.close();
     jobsState.activeEventSource = null;
+  }
+  if (jobsState.logTransportCheckTimer) {
+    clearTimeout(jobsState.logTransportCheckTimer);
+    jobsState.logTransportCheckTimer = null;
   }
 }
 

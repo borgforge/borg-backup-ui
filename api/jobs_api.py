@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Dict, Generator, List, Optional
 
 DEFAULT_DATA_ROOT = Path("/boot/config/borg-backup")
+SSE_HEARTBEAT_INTERVAL_SECONDS = 15.0
 _JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _RUNTIME_MODES = {"all", "selected", "none"}
 _DOCKER_RUNTIME_MODES = _RUNTIME_MODES | {"except_selected"}
@@ -514,6 +515,7 @@ class JobManager:
         yield ": heartbeat\n\n"
 
         idx = 0
+        last_heartbeat = time.monotonic()
         while True:
             lines, finished, exit_code = state.snapshot()
             new_lines = lines[idx:]
@@ -522,10 +524,15 @@ class JobManager:
                 # Escape colons in data lines is not needed for SSE
                 yield f"data: {line}\n\n"
             idx += len(new_lines)
+            if new_lines:
+                last_heartbeat = time.monotonic()
 
             if finished and not new_lines:
                 yield f"event: done\ndata: {exit_code if exit_code is not None else '?'}\n\n"
                 return
+            if not new_lines and time.monotonic() - last_heartbeat >= SSE_HEARTBEAT_INTERVAL_SECONDS:
+                yield ": heartbeat\n\n"
+                last_heartbeat = time.monotonic()
 
             time.sleep(0.1)
 
@@ -562,6 +569,7 @@ def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
     yield ": heartbeat\n\n"
     position = 0
     idle_after_finish = 0
+    last_heartbeat = time.monotonic()
     while True:
         emitted = False
         try:
@@ -572,6 +580,8 @@ def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
                     clean_line = line.rstrip("\r\n")
                     yield f"data: {clean_line}\n\n"
                 position = handle.tell()
+                if emitted:
+                    last_heartbeat = time.monotonic()
         except OSError:
             yield "event: error\ndata: Live log could not be read.\n\n"
             return
@@ -585,6 +595,9 @@ def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
                 return
         else:
             idle_after_finish = 0
+        if not emitted and time.monotonic() - last_heartbeat >= SSE_HEARTBEAT_INTERVAL_SECONDS:
+            yield ": heartbeat\n\n"
+            last_heartbeat = time.monotonic()
         time.sleep(0.5)
 
 
