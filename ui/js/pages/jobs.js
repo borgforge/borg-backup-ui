@@ -910,6 +910,15 @@ function openLogPanel(jobKey) {
   jobsState.activeEventSource = es;
   jobsState.logAutoScroll = true;
 
+  es.addEventListener('open', () => {
+    if (jobsState.activeEventSource !== es) return;
+    setLogStatus('running');
+    if (jobsState.logTransportCheckTimer) {
+      clearTimeout(jobsState.logTransportCheckTimer);
+      jobsState.logTransportCheckTimer = null;
+    }
+  });
+
   es.onmessage = (e) => {
     if (jobsState.activeEventSource === es) setLogStatus('running');
     appendLogLine(e.data);
@@ -958,7 +967,7 @@ function handleLogTransportError(es, jobKey) {
       const running = await res.json();
       const state = running?.[jobKey] || {};
       if (state.running) {
-        setLogStatus('reconnecting');
+        setLogStatus('running');
         return;
       }
       if (state.exit_code !== undefined && state.exit_code !== null) {

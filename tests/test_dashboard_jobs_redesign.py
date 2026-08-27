@@ -93,8 +93,10 @@ def test_jobs_live_log_transport_errors_reconnect_instead_of_false_failure() -> 
     assert "SSE_HEARTBEAT_INTERVAL_SECONDS = 15.0" in backend
     assert "time.monotonic() - last_heartbeat >= SSE_HEARTBEAT_INTERVAL_SECONDS" in backend
     assert "function handleLogTransportError(es, jobKey)" in script
+    assert "es.addEventListener('open'" in script
     assert "typeof e.data === 'string' && e.data" in script
     assert "setLogStatus('reconnecting')" in script
+    assert "if (state.running) {\n        setLogStatus('running');" in script
     assert "fetch('/api/jobs/running')" in script
     assert "setLogStatus('error', '?');" in script
     assert "logReconnecting" in script

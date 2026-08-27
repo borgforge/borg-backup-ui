@@ -261,6 +261,15 @@ function _openRTLogPanel() {
   const es = new EventSource('/api/restore-tests/log/stream');
   restoreTestsState.activeEventSource = es;
 
+  es.addEventListener('open', () => {
+    if (restoreTestsState.activeEventSource !== es) return;
+    setRTLogStatus('running', null);
+    if (restoreTestsState.logTransportCheckTimer) {
+      clearTimeout(restoreTestsState.logTransportCheckTimer);
+      restoreTestsState.logTransportCheckTimer = null;
+    }
+  });
+
   es.onmessage = (e) => {
     if (restoreTestsState.activeEventSource === es) setRTLogStatus('running', null);
     output.textContent += e.data + '\n';
@@ -305,7 +314,7 @@ function handleRTLogTransportError(es) {
       if (!res.ok) return;
       const state = await res.json().catch(() => ({}));
       if (state.running) {
-        setRTLogStatus('reconnecting', null);
+        setRTLogStatus('running', null);
         return;
       }
       es.close();

@@ -41,8 +41,10 @@ def test_restore_tests_live_log_transport_errors_do_not_show_false_failure() -> 
     english = (ROOT / "ui/i18n/en.json").read_text(encoding="utf-8")
 
     assert "function handleRTLogTransportError(es)" in source
+    assert "es.addEventListener('open'" in source
     assert "typeof e.data === 'string' && e.data" in source
     assert "setRTLogStatus('reconnecting', null)" in source
+    assert "if (state.running) {\n        setRTLogStatus('running', null);" in source
     assert "fetch('/api/restore-tests/running')" in source
     assert "setRTLogStatus('unknown', null)" in source
     assert '"logReconnecting": "Live-Protokoll verbindet neu..."' in german
