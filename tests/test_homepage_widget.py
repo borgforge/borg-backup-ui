@@ -416,6 +416,105 @@ def test_unraid_dashboard_widget_startup_cache_preserves_existing_fresh_cache(tm
     assert json.loads(cache_file.read_text(encoding="utf-8")) == existing
 
 
+def test_unraid_dashboard_widget_startup_cache_rejects_empty_fresh_status_scan(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(status_dir),
+    }
+    cache_file.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "cache_state": "fresh",
+            "generated_at": "2026-08-09T12:00:00Z",
+            "jobs": {
+                "enabled": 1,
+                "successful": 0,
+                "warnings": 0,
+                "failed": 0,
+                "running": 0,
+                "items": [{"key": "flash_local", "enabled": True, "last_status": "", "last_timestamp": ""}],
+            },
+            "status": {"state": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    job = {
+        "key": "flash_local",
+        "display_name": "Flash - Lokal",
+        "enabled": True,
+        "running": False,
+        "restore_verification_status": "verified",
+    }
+    monkeypatch.setattr(unraid_dashboard_widget, "_read_jobs", lambda _config, _backups: [job])
+    monkeypatch.setattr(jobs_api, "resolve_data_root", lambda _config: tmp_path)
+    monkeypatch.setattr(jobs_api, "resolve_scripts_dir", lambda _config: scripts_dir)
+    monkeypatch.setattr(
+        jobs_api,
+        "discover_jobs",
+        lambda _scripts_dir, _data_root: [
+            SimpleNamespace(
+                key="flash_local",
+                name="Flash",
+                display_name="Flash - Lokal",
+                enabled=True,
+                is_utility=False,
+            )
+        ],
+    )
+    monkeypatch.setattr(unraid_dashboard_widget, "_repository_summary", lambda *_args, **_kwargs: {"online": 0, "total": 0})
+    monkeypatch.setattr(unraid_dashboard_widget, "_next_backups", lambda *_args: [])
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.27.2000",
+        now=datetime(2026, 8, 27, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["cache_state"] == "initial"
+    assert result["status"]["state"] == "unknown"
+    assert result[unraid_dashboard_widget.STARTUP_IMPORT_KEY]["state"] == "skipped"
+    assert result[unraid_dashboard_widget.STARTUP_IMPORT_KEY]["reason"] == "no_backup_status_rows"
+    assert json.loads(cache_file.read_text(encoding="utf-8")) == result
+
+
+def test_unraid_dashboard_widget_startup_cache_import_is_one_time(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(tmp_path / "status"),
+    }
+    existing = {
+        "schema_version": 1,
+        "cache_state": "initial",
+        "generated_at": "2026-08-09T12:00:00Z",
+        unraid_dashboard_widget.STARTUP_IMPORT_KEY: {
+            "schema_version": 1,
+            "state": "skipped",
+            "reason": "no_backup_status_rows",
+        },
+        "jobs": {"enabled": 1, "items": [{"key": "flash_local"}]},
+    }
+    cache_file.write_text(json.dumps(existing), encoding="utf-8")
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "write_unraid_dashboard_widget_status_file_cache",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("startup import must not repeat")),
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.27.2000",
+        now=datetime(2026, 8, 27, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert result == existing
+
+
 def test_unraid_dashboard_widget_startup_cache_builds_fresh_cache_when_missing(tmp_path: Path, monkeypatch):
     cache_file = tmp_path / "widget-status.json"
     config = {
@@ -492,6 +591,8 @@ def test_unraid_dashboard_widget_does_not_start_periodic_status_scans():
     assert "UNRAID_DASHBOARD_WIDGET_REFRESH_SECONDS" not in source
     assert "Based on:" in page
     assert "adjustedJobCounts" in page
+    assert "function jobStatusEvidence(data)" in page
+    assert "cacheState !== 'fresh' || (counts.total && !hasEvidence)" in page
 
 
 def test_api_status_does_not_refresh_unraid_dashboard_widget_cache(tmp_path: Path, monkeypatch):

@@ -16,6 +16,7 @@ from inventory_store import atomic_write_json
 
 SCHEMA_VERSION = 1
 DEFAULT_CACHE_PATH = "/boot/config/plugins/borg-backup-ui/widget-status.json"
+STARTUP_IMPORT_KEY = "startup_status_import_v1"
 
 
 def widget_cache_path(config: dict) -> Path:
@@ -65,12 +66,15 @@ def write_unraid_dashboard_widget_startup_cache(
     existing = _read_existing_cache(cache_path)
     if _is_usable_fresh_cache(existing):
         return existing
+    if _startup_import_attempted(existing):
+        return existing
     if _startup_status_scan_configured(config):
         try:
             return write_unraid_dashboard_widget_status_file_cache(
                 config,
                 app_version=app_version,
                 now=now,
+                startup_import=True,
             )
         except Exception:
             pass
@@ -79,6 +83,7 @@ def write_unraid_dashboard_widget_startup_cache(
         app_version=app_version,
         now=now,
     )
+    _mark_startup_import(payload, "skipped", "status_scan_unavailable")
     atomic_write_json(cache_path, payload, mode=0o600)
     return payload
 
@@ -88,6 +93,7 @@ def write_unraid_dashboard_widget_status_file_cache(
     *,
     app_version: str = "",
     now: datetime | None = None,
+    startup_import: bool = False,
 ) -> dict[str, Any]:
     """Write a fresh widget cache from existing status files only.
 
@@ -107,7 +113,22 @@ def write_unraid_dashboard_widget_status_file_cache(
         app_version=app_version,
         now=now,
     )
-    atomic_write_json(widget_cache_path(config), payload, mode=0o600)
+    if _has_enabled_jobs_without_backup_status_evidence(payload):
+        payload = build_unraid_dashboard_widget_startup_cache(
+            config,
+            app_version=app_version,
+            now=now,
+        )
+        if startup_import:
+            _mark_startup_import(payload, "skipped", "no_backup_status_rows")
+    elif startup_import:
+        _mark_startup_import(payload, "applied", "status_files")
+
+    cache_path = widget_cache_path(config)
+    existing = _read_existing_cache(cache_path)
+    if _has_enabled_jobs_without_backup_status_evidence(payload) and _is_usable_fresh_cache(existing):
+        return existing
+    atomic_write_json(cache_path, payload, mode=0o600)
     return payload
 
 
@@ -279,7 +300,52 @@ def _is_usable_fresh_cache(cache: dict[str, Any] | None) -> bool:
     if str(cache.get("cache_state") or "").strip().lower() != "fresh":
         return False
     jobs = cache.get("jobs") if isinstance(cache.get("jobs"), dict) else {}
-    return isinstance(jobs.get("items"), list)
+    if not isinstance(jobs.get("items"), list):
+        return False
+    return not _has_enabled_jobs_without_backup_status_evidence(cache)
+
+
+def _startup_import_attempted(cache: dict[str, Any] | None) -> bool:
+    if not isinstance(cache, dict):
+        return False
+    marker = cache.get(STARTUP_IMPORT_KEY)
+    return isinstance(marker, dict) and str(marker.get("state") or "").strip() != ""
+
+
+def _mark_startup_import(payload: dict[str, Any], state: str, reason: str) -> None:
+    payload[STARTUP_IMPORT_KEY] = {
+        "schema_version": 1,
+        "state": str(state or "").strip(),
+        "reason": str(reason or "").strip(),
+    }
+
+
+def _has_enabled_jobs_without_backup_status_evidence(cache: dict[str, Any] | None) -> bool:
+    if not isinstance(cache, dict):
+        return False
+    jobs = cache.get("jobs") if isinstance(cache.get("jobs"), dict) else {}
+    enabled = _as_int(jobs.get("enabled"))
+    items = jobs.get("items") if isinstance(jobs.get("items"), list) else []
+    if enabled <= 0 and items:
+        enabled = sum(1 for item in items if isinstance(item, dict) and item.get("enabled", True))
+    if enabled <= 0:
+        return False
+    counters = (
+        _as_int(jobs.get("successful"))
+        + _as_int(jobs.get("warnings"))
+        + _as_int(jobs.get("failed"))
+        + _as_int(jobs.get("running"))
+    )
+    if counters > 0:
+        return False
+    for item in items:
+        if not isinstance(item, dict) or item.get("enabled") is False:
+            continue
+        if str(item.get("last_status") or "").strip():
+            return False
+        if str(item.get("last_timestamp") or "").strip():
+            return False
+    return True
 
 
 def _startup_status_scan_configured(config: dict) -> bool:

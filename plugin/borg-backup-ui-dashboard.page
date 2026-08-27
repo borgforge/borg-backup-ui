@@ -375,10 +375,15 @@ $mytiles[$pluginname]['column1'] =
     });
     return proof;
   }
-  function overallStateFromCounts(counts, restore) {
+  function jobStatusEvidence(data) {
+    const items = Array.isArray(get(data, 'jobs.items', [])) ? get(data, 'jobs.items', []) : [];
+    return items.some((item) => item && item.enabled !== false && (String(item.last_status || '').trim() || String(item.last_timestamp || '').trim()));
+  }
+  function overallStateFromCounts(counts, restore, cacheState, hasEvidence) {
     if (counts.failed || restore.failed) return 'error';
     if (counts.warnings || restore.overdue) return 'warning';
     if (counts.running) return 'running';
+    if (cacheState !== 'fresh' || (counts.total && !hasEvidence)) return 'unknown';
     if (!counts.total) return 'unknown';
     return 'ok';
   }
@@ -409,10 +414,11 @@ $mytiles[$pluginname]['column1'] =
     const repoTotal = intValue(data, 'repositories.total');
     const latestStatus = get(data, 'latest_backup.status', 'unknown');
     const latestCls = stateClass(latestStatus);
-    const overallState = overallStateFromCounts(counts, restore);
-    const overallCls = stateClass(overallState);
     const configured = restore.configured;
-    const cacheState = String(get(data, 'cache_state', 'missing'));
+    const cacheState = String(get(data, 'cache_state', 'missing')).toLowerCase();
+    const hasEvidence = jobStatusEvidence(data);
+    const overallState = overallStateFromCounts(counts, restore, cacheState, hasEvidence);
+    const overallCls = stateClass(overallState);
     const cacheNote = cacheState === 'initial' ? 'Initial status' : '';
     let latestName = String(get(data, 'latest_backup.name', '') || '').trim();
     let latestDetail = String(get(data, 'latest_backup.detail', '') || '').trim();
