@@ -74,6 +74,7 @@ def test_storage_profile_normalization_keeps_incomplete_profile_with_key():
         "user": "u123",
         "base_path": "/./backup",
         "target_type": "storagebox",
+        "ssh_mode": "shell",
         "ssh_key_path": "",
     }]
 
@@ -88,6 +89,21 @@ def test_storage_repo_uri_builder_normalizes_relative_base_path():
 
     assert storage_repo_base_path_for_uri("./backup") == "/./backup"
     assert build_storage_repo_uri(profile, "flash") == "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-flash"
+
+
+def test_storage_profile_normalization_preserves_borg_serve_mode():
+    rows = normalize_storage_profile_rows([{
+        "key": "borg",
+        "name": "Borg Server",
+        "host": "borg.example.test",
+        "port": "2222",
+        "user": "borg",
+        "base_path": "/repositories",
+        "target_type": "generic",
+        "ssh_mode": "borg-serve",
+    }])
+
+    assert rows[0]["ssh_mode"] == "borg_serve"
 
 
 def test_resolve_storage_profile_returns_requested_canonical_profile(tmp_path: Path):

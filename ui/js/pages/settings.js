@@ -823,6 +823,7 @@ function normalizeStorageProfileRows(rows) {
     const port = String(r?.port || '23').trim() || '23';
     const base_path = String(r?.base_path || '/./backup').trim() || '/./backup';
     const target_type = String(r?.target_type || 'storagebox').trim().toLowerCase() || 'storagebox';
+    const ssh_mode = String(r?.ssh_mode || 'shell').trim().toLowerCase() === 'borg_serve' ? 'borg_serve' : 'shell';
     const ssh_key_path = String(r?.ssh_key_path || '').trim();
     const jobs_count = Number(r?.jobs_count || 0);
     const job_refs = Array.isArray(r?.job_refs) ? r.job_refs.map((v) => String(v || '')).filter(Boolean) : [];
@@ -831,7 +832,7 @@ function normalizeStorageProfileRows(rows) {
     if (!key) key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `storage-${idx + 1}`;
     while (seen.has(key)) key = `${key}-${idx + 1}`;
     seen.add(key);
-    out.push({ key, name, host, port, user, base_path, target_type, ssh_key_path, jobs_count, job_refs });
+    out.push({ key, name, host, port, user, base_path, target_type, ssh_mode, ssh_key_path, jobs_count, job_refs });
   });
   return out;
 }
@@ -847,6 +848,7 @@ function getStorageProfilesFromDom() {
       user: row.querySelector('[data-storage-profile-user]')?.value || '',
       base_path: row.querySelector('[data-storage-profile-base-path]')?.value || '/./backup',
       target_type: row.querySelector('[data-storage-profile-target-type]')?.value || 'storagebox',
+      ssh_mode: row.querySelector('[data-storage-profile-ssh-mode]')?.value || 'shell',
       ssh_key_path: row.querySelector('[data-storage-profile-ssh-key]')?.value || '',
     };
     const hasMeaningfulInput = ['key', 'name', 'host', 'user', 'base_path', 'ssh_key_path'].some((k) => String(item[k] || '').trim());
@@ -878,6 +880,7 @@ function addStorageProfileRow(row = {}) {
   const user = String(row.user || '').trim();
   const basePath = String(row.base_path || '/./backup').trim() || '/./backup';
   const targetType = String(row.target_type || 'storagebox').trim().toLowerCase() || 'storagebox';
+  const sshMode = String(row.ssh_mode || 'shell').trim().toLowerCase() || 'shell';
   const sshKeyPath = String(row.ssh_key_path || '').trim();
   if (key) wrap.dataset.profileKey = key;
   wrap.dataset.storageJobsCount = String(Number(row.jobs_count || 0));
@@ -893,6 +896,10 @@ function addStorageProfileRow(row = {}) {
       <option value="storagebox" ${targetType === 'storagebox' ? 'selected' : ''}>Storagebox</option>
       <option value="synology" ${targetType === 'synology' ? 'selected' : ''}>Synology</option>
       <option value="generic" ${targetType === 'generic' ? 'selected' : ''}>Generic SSH</option>
+    </select>
+    <select class="form-select" data-storage-profile-ssh-mode onchange="onStorageProfileInputChanged()">
+      <option value="shell" ${sshMode === 'shell' ? 'selected' : ''}>${settingsT('profiles.sshModeShell')}</option>
+      <option value="borg_serve" ${sshMode === 'borg_serve' ? 'selected' : ''}>${settingsT('profiles.sshModeBorgServe')}</option>
     </select>
     <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(row.jobs_count || 0) })}</span>
     <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">${settingsT('common.remove')}</button>
@@ -914,6 +921,10 @@ function renderSettingsStorageProfiles(rows) {
         <option value="storagebox" ${String(r.target_type || 'storagebox') === 'storagebox' ? 'selected' : ''}>Storagebox</option>
         <option value="synology" ${String(r.target_type || '') === 'synology' ? 'selected' : ''}>Synology</option>
         <option value="generic" ${String(r.target_type || '') === 'generic' ? 'selected' : ''}>Generic SSH</option>
+      </select>
+      <select class="form-select" data-storage-profile-ssh-mode onchange="onStorageProfileInputChanged()">
+        <option value="shell" ${String(r.ssh_mode || 'shell') === 'shell' ? 'selected' : ''}>${settingsT('profiles.sshModeShell')}</option>
+        <option value="borg_serve" ${String(r.ssh_mode || '') === 'borg_serve' ? 'selected' : ''}>${settingsT('profiles.sshModeBorgServe')}</option>
       </select>
       <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(r.jobs_count || 0) })}</span>
       <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">${settingsT('common.remove')}</button>
@@ -6143,7 +6154,7 @@ async function onSettingsContentClick(event) {
     return;
   }
   if (action === 'storage-profile-add') {
-    addStorageProfileRow({ target_type: 'storagebox', port: '23', base_path: './backup' });
+    addStorageProfileRow({ target_type: 'storagebox', ssh_mode: 'shell', port: '23', base_path: './backup' });
     onStorageProfileInputChanged();
     settingsState.profileEditing = 'storagebox';
     syncSettingsProfileManager('storagebox', true);
@@ -6687,12 +6698,14 @@ async function storageboxTest() {
     settingsState.storageboxConnOk = !!d.success;
     settingsState.storageboxConnMsg = apiMessage(d, d.success ? settingsT('storagebox.sshReachable') : settingsT('storagebox.sshFailed'));
     const details = String(d.details || '').trim();
+    const borgServeMode = String(d?.ssh_mode || '') === 'borg_serve';
+    const skipped = settingsT('storagebox.shellChecksSkipped');
     settingsState.storageboxChecks = {
       rows: [
         { label: settingsT('storagebox.sshConnection'), ok: d?.steps?.ssh_ok === true, message: d?.steps?.ssh_ok === true ? settingsT('storagebox.sshReachable') : (d?.steps?.ssh_ok === false ? settingsT('storagebox.sshFailed') : settingsT('common.notChecked')) },
-        { label: settingsT('storagebox.borgAvailable'), ok: d?.steps?.borg_ok === true, message: d?.steps?.borg_ok === true ? settingsT('storagebox.borgPresent') : (d?.steps?.borg_ok === false ? settingsT('storagebox.borgMissing') : settingsT('common.notChecked')) },
-        { label: settingsT('storagebox.repoPathFound'), ok: d?.steps?.path_exists === true, message: d?.steps?.path_exists === true ? settingsT('storagebox.pathPresent') : (d?.steps?.path_exists === false ? settingsT('storagebox.pathMissing') : settingsT('common.notChecked')) },
-        { label: settingsT('storagebox.writeTest'), ok: d?.steps?.path_writable === true, message: d?.steps?.path_writable === true ? settingsT('storagebox.writeSuccess') : (d?.steps?.path_writable === false ? settingsT('storagebox.writeFailed') : settingsT('common.notChecked')) },
+        { label: borgServeMode ? settingsT('storagebox.borgServeMode') : settingsT('storagebox.borgAvailable'), ok: d?.steps?.borg_ok === true || borgServeMode, message: borgServeMode ? settingsT('storagebox.borgValidatedByRepository') : (d?.steps?.borg_ok === true ? settingsT('storagebox.borgPresent') : (d?.steps?.borg_ok === false ? settingsT('storagebox.borgMissing') : settingsT('common.notChecked'))) },
+        { label: settingsT('storagebox.repoPathFound'), ok: d?.steps?.path_exists === true || borgServeMode, message: borgServeMode ? skipped : (d?.steps?.path_exists === true ? settingsT('storagebox.pathPresent') : (d?.steps?.path_exists === false ? settingsT('storagebox.pathMissing') : settingsT('common.notChecked'))) },
+        { label: settingsT('storagebox.writeTest'), ok: d?.steps?.path_writable === true || borgServeMode, message: borgServeMode ? skipped : (d?.steps?.path_writable === true ? settingsT('storagebox.writeSuccess') : (d?.steps?.path_writable === false ? settingsT('storagebox.writeFailed') : settingsT('common.notChecked'))) },
       ],
       details: details || apiMessage(d, ''),
     };

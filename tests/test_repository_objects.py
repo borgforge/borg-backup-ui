@@ -885,6 +885,30 @@ def test_repository_browser_lists_storagebox_directories_with_quoted_path(tmp_pa
     assert all(row["supported"] is False for row in result["directories"])
 
 
+def test_repository_browser_rejects_borg_serve_only_storage(tmp_path: Path, monkeypatch):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_storagebox_test",
+        "display_name": "Borg Server",
+        "storage_type": "ssh",
+        "location": "storagebox",
+        "base_path": "/repositories",
+        "host": "borg.example.test",
+        "port": "2222",
+        "user": "borg",
+        "ssh_mode": "borg_serve",
+    }]})
+
+    monkeypatch.setattr(
+        repositories_api,
+        "_list_ssh_storage_directories",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("SSH shell browse must not run")),
+    )
+
+    with pytest.raises(ValueError, match="Borg serve only"):
+        browse_repository_directories(config, "storage_storagebox_test")
+
+
 def test_repository_test_uses_repository_object_passphrase(tmp_path: Path, monkeypatch):
     secret = tmp_path / "secrets" / ".borg-passphrase-repo_test"
     secret.parent.mkdir(parents=True)

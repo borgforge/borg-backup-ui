@@ -14,6 +14,7 @@ from storagebox_api import (
     _storagebox_profile,
     _storagebox_ssh_base_cmd,
     get_storagebox_setup_status,
+    storagebox_connection_test,
 )
 
 
@@ -131,3 +132,31 @@ def test_storagebox_setup_status_can_skip_remote_probe(monkeypatch, tmp_path):
     assert result["auth_checked"] is False
     assert result["auth_ok"] is False
     assert result["key_exists"] is True
+
+
+def test_borg_serve_connection_test_skips_shell_checks(monkeypatch):
+    monkeypatch.setattr(
+        "storagebox_api._storage_context",
+        lambda _config, _profile_key="": {
+            "profile_key": "borg",
+            "profile_name": "Borg Server",
+            "host": "borg.example.test",
+            "port": "2222",
+            "user": "borg",
+            "base_path": "/repositories",
+            "ssh_mode": "borg_serve",
+            "ssh_key": "/root/.ssh/id_borg",
+        },
+    )
+    monkeypatch.setattr("storagebox_api._storagebox_auth_test", lambda _profile: (True, "ok"))
+    monkeypatch.setattr(
+        "storagebox_api._storagebox_remote_borg_test",
+        lambda _profile: (_ for _ in ()).throw(AssertionError("remote shell Borg check must not run")),
+    )
+
+    result = storagebox_connection_test({}, "borg")
+
+    assert result["success"] is True
+    assert result["ssh_mode"] == "borg_serve"
+    assert result["steps"] == {"ssh_ok": True, "borg_ok": None, "path_exists": None, "path_writable": None}
+    assert result["message_code"] == "storagebox_borg_serve_connection_success"

@@ -7,6 +7,15 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
+SSH_MODES = {"shell", "borg_serve"}
+
+
+def normalize_ssh_mode(raw: str) -> str:
+    value = str(raw or "").strip().lower().replace("-", "_")
+    if value in {"borgserve", "borg_server", "borg_only", "restricted", "restricted_ssh"}:
+        value = "borg_serve"
+    return value if value in SSH_MODES else "shell"
+
 
 def normalize_storage_base_path(raw: str) -> str:
     base = str(raw or "").strip()
@@ -71,6 +80,7 @@ def normalize_storage_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str,
         port = str(row.get("port", "23")).strip() or "23"
         base_path = normalize_storage_base_path(str(row.get("base_path", "/./backup")))
         target_type = str(row.get("target_type", "storagebox")).strip().lower() or "storagebox"
+        ssh_mode = normalize_ssh_mode(str(row.get("ssh_mode") or "shell"))
         ssh_key_path = str(row.get("ssh_key_path", "")).strip()
         out.append({
             "key": key,
@@ -80,6 +90,7 @@ def normalize_storage_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str,
             "user": user,
             "base_path": base_path,
             "target_type": target_type,
+            "ssh_mode": ssh_mode,
             "ssh_key_path": ssh_key_path,
         })
     return out
