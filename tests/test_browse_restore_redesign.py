@@ -47,6 +47,16 @@ def test_browse_restore_uses_configured_icons_and_structured_precheck() -> None:
     assert ".restore-precheck-verdict-mark { display: grid; place-items: center; width: 2.125rem; height: 2.125rem; color: var(--ui-state-success-fg); }" in css
 
 
+def test_browse_restore_precheck_shows_backend_validation_reason() -> None:
+    script = _read("ui/js/pages/restore.js")
+    assert "function restorePrecheckErrorMessage(payload, status = 0)" in script
+    helper = script.split("function restorePrecheckErrorMessage(payload, status = 0)", 1)[1].split("function restoreStatusIcon", 1)[0]
+    assert "code === 'bad_request' && serverMessage" in helper
+    assert "return apiErrorMessage(payload, status);" in helper
+    precheck = script.split("async function restoreRunPrecheck()", 1)[1].split("function renderRestorePrecheck", 1)[0]
+    assert "throw new Error(restorePrecheckErrorMessage(data, res.status));" in precheck
+
+
 def test_browse_restore_layout_is_responsive_and_contained() -> None:
     css = _read("ui/browse-restore-redesign.css")
     assert "@media (max-width: 1100px)" in css
