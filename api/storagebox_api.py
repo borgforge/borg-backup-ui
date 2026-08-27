@@ -17,6 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from storage_profiles_api import normalize_ssh_mode
+
 
 def _storagebox_profile(*, storage_profile: Optional[dict] = None) -> dict:
     def _normalize_storagebox_base_path(raw: str) -> str:
@@ -32,6 +34,8 @@ def _storagebox_profile(*, storage_profile: Optional[dict] = None) -> dict:
         return f"/{v}"
 
     row = storage_profile if isinstance(storage_profile, dict) else {}
+    target_type = str(row.get("target_type") or "").strip().lower()
+    ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(row.get("ssh_mode") or "shell"))
     return {
         "profile_key": str(row.get("key", "")).strip(),
         "profile_name": str(row.get("name", "")).strip(),
@@ -39,12 +43,19 @@ def _storagebox_profile(*, storage_profile: Optional[dict] = None) -> dict:
         "port": str(row.get("port", "23")).strip() or "23",
         "user": str(row.get("user", "")).strip(),
         "base_path": _normalize_storagebox_base_path(row.get("base_path", "/./backup")),
+        "ssh_mode": ssh_mode,
         "ssh_key": str(row.get("ssh_key_path", "")).strip(),
     }
 
 
 def _storagebox_is_profile_complete(p: dict) -> bool:
     return bool(p.get("host") and p.get("user") and p.get("base_path"))
+
+
+def _is_borg_serve_mode(p: dict) -> bool:
+    if str(p.get("target_type") or "").strip().lower() == "borg_server":
+        return True
+    return normalize_ssh_mode(str(p.get("ssh_mode") or "shell")) == "borg_serve"
 
 
 def _storagebox_ssh_base_cmd(p: dict, *, batch_mode: bool = True, force_tty: bool = False) -> list[str]:
@@ -118,6 +129,8 @@ def _storagebox_auth_test(p: dict) -> tuple[bool, str]:
 
 
 def _storagebox_remote_borg_test(p: dict) -> tuple[bool, str]:
+    if _is_borg_serve_mode(p):
+        return True, "Remote Borg shell check skipped for Borg serve mode."
     target = _detect_storage_target_type(p)
     if target.get("target_type") == "storagebox":
         return True, "Borg check skipped for Storage Box (restricted shell)."
@@ -201,6 +214,7 @@ def get_storagebox_setup_status(ui_config: dict, profile_key: str = "", *, probe
         "auth_checked": bool(probe_auth),
         "message": auth_msg,
         "target_type": target.get("target_type", "generic"),
+        "ssh_mode": p.get("ssh_mode", "shell"),
         "target_detection_method": target.get("method", "none"),
         "target_detection_hint": target.get("hint", ""),
         "profile_key": p.get("profile_key", ""),
@@ -281,9 +295,27 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
             "message_code": "storagebox_ssh_failed",
             "details": auth_msg[:500],
             "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "shell"),
             "target_detection_method": target.get("method", "none"),
             "target_detection_hint": target.get("hint", ""),
             "steps": {"ssh_ok": False, "borg_ok": None, "path_exists": None, "path_writable": None},
+        }
+
+    if _is_borg_serve_mode(p):
+        return {
+            "success": True,
+            "message": "Restricted SSH/Borg serve access was verified.",
+            "message_code": "storagebox_borg_serve_connection_success",
+            "details": (
+                "SSH key authentication succeeded. Shell-based Borg, path, and write checks were skipped "
+                "because this profile uses Borg serve only. Repository access is validated with Borg during "
+                "repository import or creation."
+            ),
+            "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "borg_serve"),
+            "target_detection_method": target.get("method", "none"),
+            "target_detection_hint": target.get("hint", ""),
+            "steps": {"ssh_ok": True, "borg_ok": None, "path_exists": None, "path_writable": None},
         }
 
     borg_ok, borg_msg = _storagebox_remote_borg_test(p)
@@ -294,6 +326,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
             "message_code": "storagebox_borg_missing",
             "details": borg_msg[:500],
             "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "shell"),
             "target_detection_method": target.get("method", "none"),
             "target_detection_hint": target.get("hint", ""),
             "steps": {"ssh_ok": True, "borg_ok": False, "path_exists": None, "path_writable": None},
@@ -322,6 +355,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
             "message_params": {"path": base},
             "details": detail[:500],
             "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "shell"),
             "target_detection_method": target.get("method", "none"),
             "target_detection_hint": target.get("hint", ""),
             "steps": {"ssh_ok": True, "borg_ok": True, "path_exists": False, "path_writable": None},
@@ -346,6 +380,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
             "message_params": {"path": base},
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "shell"),
             "target_detection_method": target.get("method", "none"),
             "target_detection_hint": target.get("hint", ""),
             "steps": {"ssh_ok": True, "borg_ok": True, "path_exists": True, "path_writable": False},
@@ -361,6 +396,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
             "message_params": {"path": base},
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "shell"),
             "target_detection_method": target.get("method", "none"),
             "target_detection_hint": target.get("hint", ""),
             "steps": {"ssh_ok": True, "borg_ok": True, "path_exists": True, "path_writable": False},
@@ -376,6 +412,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
             "message_code": "storagebox_write_verify_failed",
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "shell"),
             "target_detection_method": target.get("method", "none"),
             "target_detection_hint": target.get("hint", ""),
             "steps": {"ssh_ok": True, "borg_ok": True, "path_exists": True, "path_writable": False},
@@ -390,6 +427,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
             "message_code": "storagebox_write_cleanup_failed",
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "shell"),
             "target_detection_method": target.get("method", "none"),
             "target_detection_hint": target.get("hint", ""),
             "steps": {"ssh_ok": True, "borg_ok": True, "path_exists": True, "path_writable": False},
@@ -403,6 +441,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
             "message_code": "storagebox_write_cleanup_failed",
             "details": msg[:500],
             "target_type": target.get("target_type", "generic"),
+            "ssh_mode": p.get("ssh_mode", "shell"),
             "target_detection_method": target.get("method", "none"),
             "target_detection_hint": target.get("hint", ""),
             "steps": {"ssh_ok": True, "borg_ok": True, "path_exists": True, "path_writable": False},
@@ -413,6 +452,7 @@ def storagebox_connection_test(ui_config: dict, profile_key: str = "") -> dict:
         "message_code": "storagebox_connection_success",
         "details": "SSH key authentication, remote Borg check, and write test (mkdir/touch/stat/rm/rmdir) succeeded.",
         "target_type": target.get("target_type", "generic"),
+        "ssh_mode": p.get("ssh_mode", "shell"),
         "target_detection_method": target.get("method", "none"),
         "target_detection_hint": target.get("hint", ""),
         "steps": {"ssh_ok": True, "borg_ok": True, "path_exists": True, "path_writable": True},

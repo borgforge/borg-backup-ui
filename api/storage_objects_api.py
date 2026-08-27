@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from inventory_store import atomic_write_bytes, atomic_write_inventory, inventory_lock, read_inventory
 from smb_protocol import normalize_smb_version
+from storage_profiles_api import normalize_ssh_mode
 
 
 SCHEMA_VERSION = 1
@@ -141,6 +142,10 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
                 "smb": "SMB",
                 "storagebox": "Storagebox",
             }.get(storage_type, key)
+        target_type = str(row.get("target_type") or "").strip().lower()
+        ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(row.get("ssh_mode") or "shell"))
+        if ssh_mode == "borg_serve":
+            target_type = "borg_server"
         out.append({
             "storage_key": key,
             "display_name": display_name,
@@ -162,7 +167,8 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
             "sec": str(row.get("sec") or "").strip(),
             "mount_at_start": bool(row.get("mount_at_start", False)),
             "keep_mounted": bool(row.get("keep_mounted", False)),
-            "target_type": str(row.get("target_type") or "").strip(),
+            "target_type": target_type,
+            "ssh_mode": ssh_mode,
             "ssh_key_path": str(row.get("ssh_key_path") or "").strip(),
             "created_by": str(row.get("created_by") or "migration").strip(),
             "created_at": str(row.get("created_at") or "").strip(),
@@ -279,13 +285,18 @@ def settings_profiles_from_storages(config: dict) -> dict[str, list[dict[str, An
                 "keep_mounted": bool(row.get("keep_mounted", False)),
             })
         elif location == "storagebox" or str(row.get("storage_type") or "") == "ssh":
+            target_type = str(row.get("target_type") or "storagebox").strip().lower() or "storagebox"
+            ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(row.get("ssh_mode") or "shell"))
+            if ssh_mode == "borg_serve":
+                target_type = "borg_server"
             result["storage_profiles"].append({
                 **common,
                 "host": str(row.get("host") or ""),
                 "port": str(row.get("port") or "23"),
                 "user": str(row.get("user") or ""),
                 "base_path": str(row.get("base_path") or ""),
-                "target_type": str(row.get("target_type") or "storagebox"),
+                "target_type": target_type,
+                "ssh_mode": ssh_mode,
                 "ssh_key_path": str(row.get("ssh_key_path") or ""),
             })
     return result
@@ -361,12 +372,17 @@ def _replace_profile_storages_locked(config: dict, location: str, profiles: list
                 if not values["server"] or not values["share"] or not values["username"]:
                     raise ValueError("SMB server, share and username are required")
             else:
+                target_type = str(raw.get("target_type") or "storagebox").strip().lower() or "storagebox"
+                ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(raw.get("ssh_mode") or "shell"))
+                if ssh_mode == "borg_serve":
+                    target_type = "borg_server"
                 values = {
                     "base_path": str(raw.get("base_path") or "").strip(),
                     "host": str(raw.get("host") or "").strip(),
                     "port": str(raw.get("port") or "23").strip() or "23",
                     "user": str(raw.get("user") or "").strip(),
-                    "target_type": str(raw.get("target_type") or "storagebox").strip(),
+                    "target_type": target_type,
+                    "ssh_mode": ssh_mode,
                     "ssh_key_path": str(raw.get("ssh_key_path") or "").strip(),
                 }
                 if not values["base_path"] or not values["host"] or not values["user"]:
@@ -546,6 +562,10 @@ def _create_storage_target_locked(config: dict, payload: dict[str, Any]) -> dict
             raise ValueError("SSH port is out of range")
         if ssh_key_path and not Path(ssh_key_path).is_absolute():
             raise ValueError("SSH key path must be absolute")
+        target_type = str(payload.get("target_type") or "storagebox").strip().lower() or "storagebox"
+        ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(payload.get("ssh_mode") or "shell"))
+        if ssh_mode == "borg_serve":
+            target_type = "borg_server"
         profile = {
             "key": key,
             "name": display_name,
@@ -553,7 +573,8 @@ def _create_storage_target_locked(config: dict, payload: dict[str, Any]) -> dict
             "port": str(port_num),
             "user": user,
             "base_path": base_path,
-            "target_type": str(payload.get("target_type") or "storagebox").strip() or "storagebox",
+            "target_type": target_type,
+            "ssh_mode": ssh_mode,
             "ssh_key_path": ssh_key_path,
         }
 
@@ -626,6 +647,7 @@ def storage_from_repository(repo: dict[str, Any], settings: dict[str, Any] | Non
     server = ""
     share = ""
     target_type = ""
+    ssh_mode = "shell"
     ssh_key_path = ""
     source = "repository"
     identity = ""
@@ -667,7 +689,10 @@ def storage_from_repository(repo: dict[str, Any], settings: dict[str, Any] | Non
             host = str(profile.get("host") or "").strip()
             port = str(profile.get("port") or "").strip()
             user = str(profile.get("user") or "").strip()
-            target_type = str(profile.get("target_type") or "").strip()
+            target_type = str(profile.get("target_type") or "").strip().lower()
+            ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(profile.get("ssh_mode") or "shell"))
+            if ssh_mode == "borg_serve":
+                target_type = "borg_server"
             ssh_key_path = str(profile.get("ssh_key_path") or "").strip()
             endpoint = ":".join(part for part in (host, port) if part)
             base_path = str(profile.get("base_path") or "").strip()
@@ -707,6 +732,7 @@ def storage_from_repository(repo: dict[str, Any], settings: dict[str, Any] | Non
         "server": server,
         "share": share,
         "target_type": target_type,
+        "ssh_mode": ssh_mode,
         "ssh_key_path": ssh_key_path,
         "created_by": "migration",
         "created_at": ts,
@@ -833,6 +859,10 @@ def upsert_storages_from_settings(config: dict, settings: dict[str, Any] | None)
         if not profile_key or not host or not base_path:
             continue
         port = str(profile.get("port") or "").strip()
+        target_type = str(profile.get("target_type") or "storagebox").strip().lower() or "storagebox"
+        ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(profile.get("ssh_mode") or "shell"))
+        if ssh_mode == "borg_serve":
+            target_type = "borg_server"
         merge({
             "storage_key": storage_key_for("storagebox", f"storagebox-profile:{profile_key}"),
             "display_name": str(profile.get("name") or profile_key).strip(),
@@ -845,7 +875,8 @@ def upsert_storages_from_settings(config: dict, settings: dict[str, Any] | None)
             "host": host,
             "port": port,
             "user": str(profile.get("user") or "").strip(),
-            "target_type": str(profile.get("target_type") or "storagebox").strip(),
+            "target_type": target_type,
+            "ssh_mode": ssh_mode,
             "ssh_key_path": str(profile.get("ssh_key_path") or "").strip(),
             "source": "storage_profile",
             "created_by": "settings",

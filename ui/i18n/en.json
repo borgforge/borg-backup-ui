@@ -223,6 +223,7 @@
       "storagebox_write_verify_failed": "The write test could not verify the probe file.",
       "storagebox_write_cleanup_failed": "The write test succeeded, but cleanup failed.",
       "storagebox_connection_success": "SSH, Borg, and write access were verified successfully.",
+      "storagebox_borg_serve_connection_success": "Restricted SSH/Borg serve access was verified.",
       "smtp_host_missing": "GLOBAL_SMTP_HOST is not configured.",
       "smtp_recipient_missing": "No email recipient is configured.",
       "smtp_sender_missing": "No email sender is configured.",
@@ -1668,6 +1669,7 @@
       "basePath": "Base path",
       "sshKey": "SSH key",
       "targetType": "Target type",
+      "targetTypeBorgServer": "Borg Server",
       "unchecked": "Unchecked",
       "localTitle": "Local profiles",
       "localDescription": "Defines local storage targets on Unraid pools. Concrete targets below /mnt are allowed; /mnt itself and the collection roots /mnt/disks and /mnt/remotes are blocked.",
@@ -2424,12 +2426,15 @@
       "borgAvailable": "Borg available",
       "borgPresent": "Borg present",
       "borgMissing": "Borg missing/error",
+      "borgServeMode": "Borg serve mode",
+      "borgValidatedByRepository": "Validated during repository import/create",
       "repoPathFound": "Repository path found",
       "pathPresent": "Path present",
       "pathMissing": "Path missing",
       "writeTest": "Write test",
       "writeSuccess": "Write access successful",
-      "writeFailed": "Write access failed"
+      "writeFailed": "Write access failed",
+      "shellChecksSkipped": "Skipped for restricted SSH"
     },
     "health": {
       "title": "System health & migration",

@@ -223,6 +223,7 @@
       "storagebox_write_verify_failed": "Der Schreibtest konnte die Probe-Datei nicht verifizieren.",
       "storagebox_write_cleanup_failed": "Der Schreibtest war erfolgreich, aber das Aufräumen ist fehlgeschlagen.",
       "storagebox_connection_success": "SSH, Borg und Schreibzugriff wurden erfolgreich geprüft.",
+      "storagebox_borg_serve_connection_success": "Restricted SSH/Borg-Serve-Zugriff wurde erfolgreich geprüft.",
       "smtp_host_missing": "GLOBAL_SMTP_HOST ist nicht konfiguriert.",
       "smtp_recipient_missing": "Es ist kein E-Mail-Empfänger konfiguriert.",
       "smtp_sender_missing": "Es ist kein E-Mail-Absender konfiguriert.",
@@ -1668,6 +1669,7 @@
       "basePath": "Basis-Pfad",
       "sshKey": "SSH-Key",
       "targetType": "Zieltyp",
+      "targetTypeBorgServer": "Borg Server",
       "unchecked": "Ungeprüft",
       "localTitle": "Lokale Profile",
       "localDescription": "Definiert lokale Speicherziele auf Unraid-Pools. Erlaubt sind konkrete Ziele unter /mnt; /mnt selbst sowie die Sammelwurzeln /mnt/disks und /mnt/remotes sind gesperrt.",
@@ -2424,12 +2426,15 @@
       "borgAvailable": "Borg verfügbar",
       "borgPresent": "Borg vorhanden",
       "borgMissing": "Borg fehlt/Fehler",
+      "borgServeMode": "Borg-Serve-Modus",
+      "borgValidatedByRepository": "Prüfung beim Repository-Import/Erstellen",
       "repoPathFound": "Repository-Pfad gefunden",
       "pathPresent": "Pfad vorhanden",
       "pathMissing": "Pfad fehlt",
       "writeTest": "Schreibtest",
       "writeSuccess": "Schreibzugriff erfolgreich",
-      "writeFailed": "Schreibzugriff fehlgeschlagen"
+      "writeFailed": "Schreibzugriff fehlgeschlagen",
+      "shellChecksSkipped": "Bei Restricted SSH übersprungen"
     },
     "health": {
       "title": "Systemzustand & Migration",

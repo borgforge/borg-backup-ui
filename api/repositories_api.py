@@ -23,6 +23,7 @@ from typing import Any, Callable
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from inventory_store import atomic_write_bytes, atomic_write_inventory, atomic_write_json, inventory_lock, read_inventory
+from storage_profiles_api import normalize_ssh_mode
 
 
 SCHEMA_VERSION = 1
@@ -783,6 +784,8 @@ def browse_repository_directories(config: dict, storage_key: str, relative_path:
     current = _browse_relative_path(relative_path)
     storage_type = str(storage.get("storage_type") or storage.get("location") or "").strip().lower()
     if storage_type == "ssh" or str(storage.get("location") or "").strip().lower() == "storagebox":
+        if normalize_ssh_mode(str(storage.get("ssh_mode") or "shell")) == "borg_serve":
+            raise ValueError("Directory browsing is not available for Borg serve only SSH profiles")
         entries = [
             {"name": name, "borg_repository": False}
             for name in _list_ssh_storage_directories(storage, current)
