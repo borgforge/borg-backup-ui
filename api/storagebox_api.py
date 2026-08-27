@@ -34,6 +34,8 @@ def _storagebox_profile(*, storage_profile: Optional[dict] = None) -> dict:
         return f"/{v}"
 
     row = storage_profile if isinstance(storage_profile, dict) else {}
+    target_type = str(row.get("target_type") or "").strip().lower()
+    ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(row.get("ssh_mode") or "shell"))
     return {
         "profile_key": str(row.get("key", "")).strip(),
         "profile_name": str(row.get("name", "")).strip(),
@@ -41,7 +43,7 @@ def _storagebox_profile(*, storage_profile: Optional[dict] = None) -> dict:
         "port": str(row.get("port", "23")).strip() or "23",
         "user": str(row.get("user", "")).strip(),
         "base_path": _normalize_storagebox_base_path(row.get("base_path", "/./backup")),
-        "ssh_mode": normalize_ssh_mode(str(row.get("ssh_mode") or "shell")),
+        "ssh_mode": ssh_mode,
         "ssh_key": str(row.get("ssh_key_path", "")).strip(),
     }
 
@@ -51,6 +53,8 @@ def _storagebox_is_profile_complete(p: dict) -> bool:
 
 
 def _is_borg_serve_mode(p: dict) -> bool:
+    if str(p.get("target_type") or "").strip().lower() == "borg_server":
+        return True
     return normalize_ssh_mode(str(p.get("ssh_mode") or "shell")) == "borg_serve"
 
 

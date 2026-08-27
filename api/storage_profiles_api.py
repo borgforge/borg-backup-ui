@@ -80,7 +80,9 @@ def normalize_storage_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str,
         port = str(row.get("port", "23")).strip() or "23"
         base_path = normalize_storage_base_path(str(row.get("base_path", "/./backup")))
         target_type = str(row.get("target_type", "storagebox")).strip().lower() or "storagebox"
-        ssh_mode = normalize_ssh_mode(str(row.get("ssh_mode") or "shell"))
+        ssh_mode = "borg_serve" if target_type == "borg_server" else normalize_ssh_mode(str(row.get("ssh_mode") or "shell"))
+        if ssh_mode == "borg_serve":
+            target_type = "borg_server"
         ssh_key_path = str(row.get("ssh_key_path", "")).strip()
         out.append({
             "key": key,

@@ -144,7 +144,7 @@ def test_borg_serve_connection_test_skips_shell_checks(monkeypatch):
             "port": "2222",
             "user": "borg",
             "base_path": "/repositories",
-            "ssh_mode": "borg_serve",
+            "target_type": "borg_server",
             "ssh_key": "/root/.ssh/id_borg",
         },
     )

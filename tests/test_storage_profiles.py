@@ -99,10 +99,10 @@ def test_storage_profile_normalization_preserves_borg_serve_mode():
         "port": "2222",
         "user": "borg",
         "base_path": "/repositories",
-        "target_type": "generic",
-        "ssh_mode": "borg-serve",
+        "target_type": "borg_server",
     }])
 
+    assert rows[0]["target_type"] == "borg_server"
     assert rows[0]["ssh_mode"] == "borg_serve"
 
 

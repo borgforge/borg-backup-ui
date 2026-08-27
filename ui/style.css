@@ -3438,7 +3438,7 @@ body.wizard-modal-open {
 
 .storage-profile-row {
   display: grid;
-  grid-template-columns: minmax(110px, 1fr) minmax(150px, 1.1fr) minmax(72px, 0.45fr) minmax(100px, 0.75fr) minmax(135px, 1fr) minmax(160px, 1.1fr) minmax(115px, 0.8fr) minmax(130px, 0.9fr) auto auto;
+  grid-template-columns: minmax(120px, 1fr) minmax(170px, 1.1fr) minmax(72px, 0.5fr) minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(190px, 1.2fr) minmax(140px, 0.9fr) auto auto;
   gap: 8px;
   align-items: center;
 }

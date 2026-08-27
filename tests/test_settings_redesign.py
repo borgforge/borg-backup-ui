@@ -461,6 +461,14 @@ def test_settings_status_checks_do_not_reload_the_page() -> None:
     assert "_storageboxRenderChecks()" in connection_test
 
 
+def test_storage_profiles_use_borg_server_target_type_without_visible_ssh_mode() -> None:
+    script = _read("ui/js/pages/settings.js")
+
+    assert "profiles.targetTypeBorgServer" in script
+    assert "data-storage-profile-ssh-mode" not in script
+    assert "targetType) === 'borg_server' ? 'borg_serve' : 'shell'" in script
+
+
 def test_existing_storagebox_ssh_key_is_shown_as_warning() -> None:
     script = _read("ui/js/pages/settings.js")
     generate = script.split("async function storageboxKeyGenerate()", 1)[1].split(

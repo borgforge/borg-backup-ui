@@ -822,8 +822,10 @@ function normalizeStorageProfileRows(rows) {
     const user = String(r?.user || '').trim();
     const port = String(r?.port || '23').trim() || '23';
     const base_path = String(r?.base_path || '/./backup').trim() || '/./backup';
-    const target_type = String(r?.target_type || 'storagebox').trim().toLowerCase() || 'storagebox';
-    const ssh_mode = String(r?.ssh_mode || 'shell').trim().toLowerCase() === 'borg_serve' ? 'borg_serve' : 'shell';
+    const raw_target_type = String(r?.target_type || 'storagebox').trim().toLowerCase() || 'storagebox';
+    const raw_ssh_mode = String(r?.ssh_mode || '').trim().toLowerCase();
+    const target_type = raw_ssh_mode === 'borg_serve' ? 'borg_server' : raw_target_type;
+    const ssh_mode = target_type === 'borg_server' ? 'borg_serve' : 'shell';
     const ssh_key_path = String(r?.ssh_key_path || '').trim();
     const jobs_count = Number(r?.jobs_count || 0);
     const job_refs = Array.isArray(r?.job_refs) ? r.job_refs.map((v) => String(v || '')).filter(Boolean) : [];
@@ -840,6 +842,7 @@ function normalizeStorageProfileRows(rows) {
 function getStorageProfilesFromDom() {
   const rows = [];
   document.querySelectorAll('#storage-profiles-rows .storage-profile-row').forEach((row, idx) => {
+    const targetType = row.querySelector('[data-storage-profile-target-type]')?.value || 'storagebox';
     const item = {
       key: row.dataset.profileKey || `storage-${idx + 1}`,
       name: row.querySelector('[data-storage-profile-name]')?.value || '',
@@ -847,8 +850,8 @@ function getStorageProfilesFromDom() {
       port: row.querySelector('[data-storage-profile-port]')?.value || '23',
       user: row.querySelector('[data-storage-profile-user]')?.value || '',
       base_path: row.querySelector('[data-storage-profile-base-path]')?.value || '/./backup',
-      target_type: row.querySelector('[data-storage-profile-target-type]')?.value || 'storagebox',
-      ssh_mode: row.querySelector('[data-storage-profile-ssh-mode]')?.value || 'shell',
+      target_type: targetType,
+      ssh_mode: String(targetType) === 'borg_server' ? 'borg_serve' : 'shell',
       ssh_key_path: row.querySelector('[data-storage-profile-ssh-key]')?.value || '',
     };
     const hasMeaningfulInput = ['key', 'name', 'host', 'user', 'base_path', 'ssh_key_path'].some((k) => String(item[k] || '').trim());
@@ -879,8 +882,9 @@ function addStorageProfileRow(row = {}) {
   const port = String(row.port || '23').trim() || '23';
   const user = String(row.user || '').trim();
   const basePath = String(row.base_path || '/./backup').trim() || '/./backup';
-  const targetType = String(row.target_type || 'storagebox').trim().toLowerCase() || 'storagebox';
-  const sshMode = String(row.ssh_mode || 'shell').trim().toLowerCase() || 'shell';
+  const targetType = String(row.ssh_mode || '').trim().toLowerCase() === 'borg_serve'
+    ? 'borg_server'
+    : (String(row.target_type || 'storagebox').trim().toLowerCase() || 'storagebox');
   const sshKeyPath = String(row.ssh_key_path || '').trim();
   if (key) wrap.dataset.profileKey = key;
   wrap.dataset.storageJobsCount = String(Number(row.jobs_count || 0));
@@ -896,10 +900,7 @@ function addStorageProfileRow(row = {}) {
       <option value="storagebox" ${targetType === 'storagebox' ? 'selected' : ''}>Storagebox</option>
       <option value="synology" ${targetType === 'synology' ? 'selected' : ''}>Synology</option>
       <option value="generic" ${targetType === 'generic' ? 'selected' : ''}>Generic SSH</option>
-    </select>
-    <select class="form-select" data-storage-profile-ssh-mode onchange="onStorageProfileInputChanged()">
-      <option value="shell" ${sshMode === 'shell' ? 'selected' : ''}>${settingsT('profiles.sshModeShell')}</option>
-      <option value="borg_serve" ${sshMode === 'borg_serve' ? 'selected' : ''}>${settingsT('profiles.sshModeBorgServe')}</option>
+      <option value="borg_server" ${targetType === 'borg_server' ? 'selected' : ''}>${settingsT('profiles.targetTypeBorgServer')}</option>
     </select>
     <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(row.jobs_count || 0) })}</span>
     <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">${settingsT('common.remove')}</button>
@@ -921,10 +922,7 @@ function renderSettingsStorageProfiles(rows) {
         <option value="storagebox" ${String(r.target_type || 'storagebox') === 'storagebox' ? 'selected' : ''}>Storagebox</option>
         <option value="synology" ${String(r.target_type || '') === 'synology' ? 'selected' : ''}>Synology</option>
         <option value="generic" ${String(r.target_type || '') === 'generic' ? 'selected' : ''}>Generic SSH</option>
-      </select>
-      <select class="form-select" data-storage-profile-ssh-mode onchange="onStorageProfileInputChanged()">
-        <option value="shell" ${String(r.ssh_mode || 'shell') === 'shell' ? 'selected' : ''}>${settingsT('profiles.sshModeShell')}</option>
-        <option value="borg_serve" ${String(r.ssh_mode || '') === 'borg_serve' ? 'selected' : ''}>${settingsT('profiles.sshModeBorgServe')}</option>
+        <option value="borg_server" ${String(r.target_type || '') === 'borg_server' ? 'selected' : ''}>${settingsT('profiles.targetTypeBorgServer')}</option>
       </select>
       <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(r.jobs_count || 0) })}</span>
       <button type="button" class="btn btn-danger btn-sm" data-settings-action="storage-profile-remove">${settingsT('common.remove')}</button>
@@ -6154,7 +6152,7 @@ async function onSettingsContentClick(event) {
     return;
   }
   if (action === 'storage-profile-add') {
-    addStorageProfileRow({ target_type: 'storagebox', ssh_mode: 'shell', port: '23', base_path: './backup' });
+    addStorageProfileRow({ target_type: 'storagebox', port: '23', base_path: './backup' });
     onStorageProfileInputChanged();
     settingsState.profileEditing = 'storagebox';
     syncSettingsProfileManager('storagebox', true);
