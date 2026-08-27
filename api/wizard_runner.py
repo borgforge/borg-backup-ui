@@ -40,6 +40,22 @@ def _ensure_runtime_import_paths(backup_scripts_dir: Path) -> None:
         sys.path.insert(0, raw)
 
 
+def _refresh_unraid_dashboard_widget_cache(config: dict, reason: str) -> None:
+    try:
+        from unraid_dashboard_widget import write_unraid_dashboard_widget_status_file_cache
+
+        effective = dict(config)
+        effective.setdefault("BACKUP_SCRIPTS_DIR", str(config.get("BACKUP_SCRIPTS_DIR") or ""))
+        effective.setdefault("PLUGIN_DIR", str(ROOT_DIR))
+        write_unraid_dashboard_widget_status_file_cache(
+            effective,
+            app_version=os.environ.get("BORG_UI_APP_VERSION", ""),
+        )
+        logging.info("Unraid dashboard widget cache updated (%s)", reason)
+    except Exception as exc:
+        logging.warning("Unraid dashboard widget cache update skipped (%s): %s", reason, exc)
+
+
 def _type_upper(type_id: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in type_id.upper())
 
@@ -605,10 +621,12 @@ def main() -> int:
 
     borg_scripts_dir = Path(borg_scripts_dir_raw)
     backup_scripts_dir = Path(backup_scripts_dir_raw)
+    env_for_widget_cache: dict | None = None
     try:
         borg_bin = _ensure_borg_available()
         logging.info("Active Borg binary: %s", borg_bin)
         env, meta = _load_env_from_job(job_key, borg_scripts_dir, backup_scripts_dir)
+        env_for_widget_cache = dict(env)
     except Exception as exc:
         logging.error("Loading job failed: %s", exc)
         control.update_phase("failed", cancel_allowed=False, finished=True, exit_code=2)
@@ -801,6 +819,8 @@ def main() -> int:
                     finished=True,
                     exit_code=result_code,
                 )
+                if env_for_widget_cache is not None:
+                    _refresh_unraid_dashboard_widget_cache(env_for_widget_cache, "backup job finished")
 
 
 if __name__ == "__main__":

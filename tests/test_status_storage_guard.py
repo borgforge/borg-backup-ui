@@ -143,7 +143,6 @@ def test_initial_setup_does_not_start_runtime_writers(monkeypatch):
         True,
         app_version="test",
         widget_startup_writer=lambda *_args, **_kwargs: calls.append("widget-startup"),
-        widget_loop_starter=lambda *_args, **_kwargs: calls.append("widget-loop"),
         runtime_activator=lambda *_args, **_kwargs: calls.append("runtime"),
     )
 
@@ -167,12 +166,11 @@ def test_configured_setup_starts_runtime_writers(monkeypatch):
         True,
         app_version="test",
         widget_startup_writer=lambda *_args, **_kwargs: calls.append("widget-startup"),
-        widget_loop_starter=lambda *_args, **_kwargs: calls.append("widget-loop"),
         runtime_activator=lambda *_args, **_kwargs: calls.append("runtime"),
     )
 
     assert started is True
-    assert calls == ["widget-startup", "widget-loop", "runtime"]
+    assert calls == ["widget-startup", "runtime"]
 
 
 def test_main_waits_for_storage_before_migrations_and_runtime_services():

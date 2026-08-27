@@ -55,14 +55,31 @@ def write_unraid_dashboard_widget_startup_cache(
 
     This intentionally avoids reading backup status files. If the configured
     data root lives on /mnt, static job and repository metadata are skipped as
-    well so the dashboard tile does not wake array disks during boot.
+    well so the dashboard tile does not wake array disks during boot. A
+    previously written fresh cache with job metadata is preserved so the
+    dashboard can continue to show the last event-based status after a reboot.
+    If no usable fresh cache exists yet, one initial event-style cache is built
+    from existing status and restore-test files after runtime storage is ready.
     """
+    cache_path = widget_cache_path(config)
+    existing = _read_existing_cache(cache_path)
+    if _is_usable_fresh_cache(existing):
+        return existing
+    if _startup_status_scan_configured(config):
+        try:
+            return write_unraid_dashboard_widget_status_file_cache(
+                config,
+                app_version=app_version,
+                now=now,
+            )
+        except Exception:
+            pass
     payload = build_unraid_dashboard_widget_startup_cache(
         config,
         app_version=app_version,
         now=now,
     )
-    atomic_write_json(widget_cache_path(config), payload, mode=0o600)
+    atomic_write_json(cache_path, payload, mode=0o600)
     return payload
 
 
@@ -74,11 +91,13 @@ def write_unraid_dashboard_widget_status_file_cache(
 ) -> dict[str, Any]:
     """Write a fresh widget cache from existing status files only.
 
-    This is used by the service-start background refresher. It deliberately
-    avoids Borg calls and the full dashboard status API snapshot writer, but it
-    still applies the same schedule-overdue classification as the UI dashboard.
-    Otherwise a widget refresh could overwrite a warning cache with stale OK
-    counts while the in-app dashboard still shows the job as overdue.
+    This is used after backup and restore-test activity, and by explicit UI
+    status refreshes that already read the runtime status directory. It
+    deliberately avoids Borg calls and the full dashboard status API snapshot
+    writer, but it still applies the same schedule-overdue classification as
+    the UI dashboard. Otherwise an event cache refresh could overwrite a
+    warning cache with stale OK counts while the in-app dashboard still shows
+    the job as overdue.
     """
     status_data = _read_status_file_data(config)
     _apply_status_file_overdue_metadata(config, status_data, now=now)
@@ -107,6 +126,8 @@ def build_unraid_dashboard_widget_cache(
     running_jobs = [job for job in enabled_jobs if job.get("running")]
     restore = _restore_proof_summary(enabled_jobs)
     repositories = _repository_summary(config)
+    backup_rows_by_key = _backup_rows_by_key(backups)
+    job_items = _job_cache_items(enabled_jobs, backup_rows_by_key)
 
     failed = _as_int(summary.get("error"))
     warnings = _as_int(summary.get("warning")) + _as_int(summary.get("skipped"))
@@ -134,6 +155,7 @@ def build_unraid_dashboard_widget_cache(
             "warnings": warnings,
             "failed": failed,
             "running": len(running_jobs),
+            "items": job_items,
         },
         "repositories": repositories,
         "latest_backup": _latest_backup(backups, jobs),
@@ -165,6 +187,7 @@ def build_unraid_dashboard_widget_startup_cache(
             "warnings": 0,
             "failed": 0,
             "running": 0,
+            "items": _job_cache_items(enabled_jobs, {}),
         },
         "repositories": _repository_summary(config, skip_if_array_root=True) if jobs else {"online": 0, "total": 0},
         "latest_backup": {
@@ -227,6 +250,67 @@ def _read_status_file_data(config: dict) -> dict[str, Any]:
         },
         "snapshots": {},
     }
+
+
+def _backup_rows_by_key(backups: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    rows = {}
+    for row in backups:
+        key = str(row.get("key") or "").strip()
+        if key:
+            rows[key] = row
+    return rows
+
+
+def _read_existing_cache(path: Path) -> dict[str, Any] | None:
+    try:
+        if not path.is_file():
+            return None
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def _is_usable_fresh_cache(cache: dict[str, Any] | None) -> bool:
+    if not isinstance(cache, dict):
+        return False
+    if str(cache.get("cache_state") or "").strip().lower() != "fresh":
+        return False
+    jobs = cache.get("jobs") if isinstance(cache.get("jobs"), dict) else {}
+    return isinstance(jobs.get("items"), list)
+
+
+def _startup_status_scan_configured(config: dict) -> bool:
+    return bool(str(config.get("STATUS_DIR") or "").strip())
+
+
+def _job_cache_items(jobs: list[dict[str, Any]], backups_by_key: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    items = []
+    for job in jobs:
+        key = str(job.get("key") or "").strip()
+        if not key:
+            continue
+        latest = backups_by_key.get(key) or {}
+        name = str(job.get("display_name") or job.get("name") or key).strip()
+        items.append({
+            "key": key,
+            "name": name or key,
+            "enabled": bool(job.get("enabled", True)),
+            "running": bool(job.get("running", False)),
+            "last_status": str(job.get("last_status") or latest.get("status") or "").strip().lower(),
+            "last_timestamp": str(job.get("last_timestamp") or latest.get("timestamp") or "").strip(),
+            "backup_overdue": bool(latest.get("backup_overdue", False)),
+            "backup_overdue_state": str(latest.get("backup_overdue_state") or "").strip(),
+            "backup_overdue_after": str(latest.get("backup_overdue_after") or "").strip(),
+            "backup_overdue_expected_run": str(latest.get("backup_overdue_expected_run") or "").strip(),
+            "backup_overdue_next_run": str(latest.get("backup_overdue_next_run") or "").strip(),
+            "restore_verification_status": str(job.get("restore_verification_status") or "never").strip().lower(),
+            "restore_verification_valid_until": str(job.get("restore_verification_valid_until") or "").strip(),
+            "restore_verification_is_overdue": bool(job.get("restore_verification_is_overdue", False)),
+        })
+    return items
 
 
 def _apply_status_file_overdue_metadata(

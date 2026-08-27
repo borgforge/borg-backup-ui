@@ -151,6 +151,24 @@ def _repository_data_root() -> Path:
     return SCRIPT_DIR.parent
 
 
+def _refresh_unraid_dashboard_widget_cache(conf: dict, reason: str, log_fn=None) -> None:
+    try:
+        from unraid_dashboard_widget import write_unraid_dashboard_widget_status_file_cache
+
+        effective = dict(conf)
+        effective.setdefault("BACKUP_SCRIPTS_DIR", str(_repository_data_root()))
+        effective.setdefault("PLUGIN_DIR", str(SCRIPT_DIR.parent.parent))
+        write_unraid_dashboard_widget_status_file_cache(
+            effective,
+            app_version=os.environ.get("BORG_UI_APP_VERSION", ""),
+        )
+        if log_fn:
+            log_fn(f"  Unraid dashboard widget cache updated ({reason})")
+    except Exception as exc:
+        if log_fn:
+            log_fn(f"  Unraid dashboard widget cache update skipped ({reason}): {exc}")
+
+
 def discover_repos(conf: dict) -> list:
     """Build the restore-test list from canonical job/repository links."""
     data_root = _repository_data_root()
@@ -985,6 +1003,7 @@ class RestoreTest:
 
         test_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         self.log(f"  → Ergebnis: {test_file}")
+        _refresh_unraid_dashboard_widget_cache(self.conf, "restore test result written", self.log)
         if result_str == "success":
             self._notify_event("restore_test_success", repo, "Successful", duration, coverage)
         elif result_str in {"failed", "unavailable"}:

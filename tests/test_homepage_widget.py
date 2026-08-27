@@ -221,6 +221,24 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
     assert result["app_version"] == "2026.08.09.1200"
     assert result["jobs"]["successful"] == 1
     assert result["jobs"]["warnings"] == 1
+    assert result["jobs"]["items"] == [
+        {
+            "key": "appdata_local",
+            "name": "Appdata - Lokal",
+            "enabled": True,
+            "running": False,
+            "last_status": "success",
+            "last_timestamp": "2026-08-08 09:00:00",
+            "backup_overdue": False,
+            "backup_overdue_state": "",
+            "backup_overdue_after": "",
+            "backup_overdue_expected_run": "",
+            "backup_overdue_next_run": "",
+            "restore_verification_status": "verified",
+            "restore_verification_valid_until": "",
+            "restore_verification_is_overdue": False,
+        }
+    ]
     assert result["repositories"] == {"online": 2, "total": 3}
     assert result["latest_backup"]["name"] == "Appdata - Lokal"
     assert result["restore_proof"] == {
@@ -302,6 +320,8 @@ def test_unraid_dashboard_widget_status_file_cache_marks_overdue_jobs(tmp_path: 
     assert result["jobs"]["successful"] == 0
     assert result["jobs"]["warnings"] == 1
     assert result["status"]["state"] == "warning"
+    assert result["jobs"]["items"][0]["backup_overdue"] is True
+    assert result["jobs"]["items"][0]["backup_overdue_after"]
     assert result["latest_backup"]["name"] == "Flash - Lokal"
     assert result["latest_backup"]["status"] == "ok"
     assert cache_file.exists()
@@ -352,11 +372,142 @@ def test_unraid_dashboard_widget_startup_cache_is_written_without_backup_status(
     assert result["jobs"]["enabled"] == 1
     assert result["jobs"]["successful"] == 0
     assert result["latest_backup"]["status"] == "unknown"
+    assert result["jobs"]["items"][0]["last_status"] == ""
     assert result["next_backups"] == [{"name": "Flash - Lokal", "time": "Today 09:00"}]
 
     serialized = cache_file.read_text(encoding="utf-8").lower()
     for forbidden in ("/mnt/", "secret", "repo_path", "error_message", "passphrase"):
         assert forbidden not in serialized
+
+
+def test_unraid_dashboard_widget_startup_cache_preserves_existing_fresh_cache(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "BACKUP_SCRIPTS_DIR": "/mnt/user/borg-backup-ui",
+    }
+    existing = {
+        "schema_version": 1,
+        "cache_state": "fresh",
+        "generated_at": "2026-08-09T12:00:00Z",
+        "jobs": {
+            "enabled": 1,
+            "successful": 1,
+            "warnings": 0,
+            "failed": 0,
+            "running": 0,
+            "items": [{"key": "flash_local", "last_status": "success"}],
+        },
+    }
+    cache_file.write_text(json.dumps(existing), encoding="utf-8")
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "build_unraid_dashboard_widget_startup_cache",
+        lambda *_args, **_kwargs: {"cache_state": "initial"},
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.09.1300",
+        now=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result == existing
+    assert json.loads(cache_file.read_text(encoding="utf-8")) == existing
+
+
+def test_unraid_dashboard_widget_startup_cache_builds_fresh_cache_when_missing(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(tmp_path / "status"),
+    }
+    built = {
+        "schema_version": 1,
+        "cache_state": "fresh",
+        "generated_at": "2026-08-10T12:00:00Z",
+        "jobs": {"items": []},
+    }
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "write_unraid_dashboard_widget_status_file_cache",
+        lambda *_args, **_kwargs: built,
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "build_unraid_dashboard_widget_startup_cache",
+        lambda *_args, **_kwargs: {"cache_state": "initial"},
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.09.1300",
+        now=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result == built
+
+
+def test_unraid_dashboard_widget_startup_cache_rebuilds_old_fresh_cache_without_job_items(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(tmp_path / "status"),
+    }
+    cache_file.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "cache_state": "fresh",
+            "generated_at": "2026-08-09T12:00:00Z",
+            "jobs": {"enabled": 1, "successful": 1},
+        }),
+        encoding="utf-8",
+    )
+    rebuilt = {
+        "schema_version": 1,
+        "cache_state": "fresh",
+        "generated_at": "2026-08-10T12:00:00Z",
+        "jobs": {"items": [{"key": "flash_local"}]},
+    }
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "write_unraid_dashboard_widget_status_file_cache",
+        lambda *_args, **_kwargs: rebuilt,
+    )
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.09.1300",
+        now=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result == rebuilt
+
+
+def test_unraid_dashboard_widget_does_not_start_periodic_status_scans():
+    source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
+    page = (ROOT / "plugin" / "borg-backup-ui-dashboard.page").read_text(encoding="utf-8")
+
+    assert "_start_unraid_dashboard_widget_cache_loop" not in source
+    assert "UNRAID_DASHBOARD_WIDGET_REFRESH_SECONDS" not in source
+    assert "Based on:" in page
+    assert "adjustedJobCounts" in page
+
+
+def test_api_status_does_not_refresh_unraid_dashboard_widget_cache(tmp_path: Path, monkeypatch):
+    handler = _handler({"STATUS_DIR": str(tmp_path / "status")})
+    status_payload = {"summary": {"success": 1}, "backups": []}
+    calls = []
+
+    monkeypatch.setattr("status_api.get_status_data", lambda _config: status_payload)
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "write_unraid_dashboard_widget_cache",
+        lambda *_args, **_kwargs: calls.append("widget-cache"),
+    )
+
+    assert handler._get_status() == status_payload
+    assert calls == []
 
 
 def test_unraid_dashboard_widget_startup_cache_skips_array_backed_metadata(tmp_path: Path, monkeypatch):
