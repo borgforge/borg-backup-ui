@@ -2629,6 +2629,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             backup_scripts_dir,
             extra_env={
                 "BORG_UI_DATA_ROOT": str(backup_scripts_dir),
+                "BORG_UI_APP_VERSION": APP_VERSION,
                 "BORG_UI_REQUEST_ID": request_id,
                 "BORG_UI_REQUEST_SOURCE": source,
                 "BORG_UI_REQUEST_ACTOR": actor,
@@ -3311,6 +3312,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         extra_env = {
             "BORG_UI_BORG_SCRIPTS_DIR": str(borg_scripts_dir),
             "BORG_UI_JOB_KEY": job_key,
+            "BORG_UI_APP_VERSION": APP_VERSION,
             "BORG_UI_REQUEST_ID": request_id,
             "BORG_UI_REQUEST_SOURCE": source,
             "BORG_UI_REQUEST_ACTOR": actor,
@@ -4205,35 +4207,6 @@ def _start_repository_info_refresh_loop(config: dict) -> threading.Thread | None
         return None
 
 
-def _start_unraid_dashboard_widget_cache_loop(config: dict) -> threading.Thread | None:
-    """Keep the flash-based Unraid dashboard widget cache warm."""
-
-    def _interval_seconds() -> int:
-        raw = str(config.get("UNRAID_DASHBOARD_WIDGET_REFRESH_SECONDS") or "30").strip()
-        try:
-            return max(15, min(3600, int(raw)))
-        except ValueError:
-            return 30
-
-    def _run() -> None:
-        while True:
-            try:
-                from unraid_dashboard_widget import write_unraid_dashboard_widget_status_file_cache
-
-                write_unraid_dashboard_widget_status_file_cache(config, app_version=APP_VERSION)
-            except Exception as exc:
-                _log(f"WARNING: Unraid dashboard widget cache refresh failed: {_mask_secrets(str(exc))}")
-            time.sleep(_interval_seconds())
-
-    try:
-        thread = threading.Thread(target=_run, name="unraid-dashboard-widget-cache", daemon=True)
-        thread.start()
-        return thread
-    except Exception as exc:
-        _log(f"WARNING: Unraid dashboard widget cache loop could not be started: {_mask_secrets(str(exc))}")
-        return None
-
-
 def _start_apprise_runtime_warmup(config: dict) -> threading.Thread | None:
     """Warm the bundled Apprise runtime so the first profile API call is not cold."""
 
@@ -4428,7 +4401,6 @@ def _start_configured_runtime_writers(
     *,
     app_version: str = APP_VERSION,
     widget_startup_writer=None,
-    widget_loop_starter=None,
     runtime_activator=None,
 ) -> bool:
     if not _runtime_data_directory_configured(config):
@@ -4442,8 +4414,6 @@ def _start_configured_runtime_writers(
         from unraid_dashboard_widget import write_unraid_dashboard_widget_startup_cache
 
         widget_startup_writer = write_unraid_dashboard_widget_startup_cache
-    if widget_loop_starter is None:
-        widget_loop_starter = _start_unraid_dashboard_widget_cache_loop
     if runtime_activator is None:
         runtime_activator = _activate_runtime_services
 
@@ -4452,7 +4422,7 @@ def _start_configured_runtime_writers(
     except Exception as exc:
         _log(f"WARNING: Unraid dashboard widget startup cache could not be written: {_mask_secrets(str(exc))}")
 
-    widget_loop_starter(config)
+    _log("Unraid dashboard widget cache updates are event-based; periodic status scans are disabled.")
     runtime_activator(config, startup_ready)
     return True
 
