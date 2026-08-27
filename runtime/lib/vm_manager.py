@@ -541,8 +541,8 @@ class VmManager:
         """Sendet Warnung an eine einzelne VM."""
         from lib.notifications import notify
         notify(
-            level="warning",
-            subject="VM backup warning",
+            level="info",
+            subject="VM backup shutdown notice",
             description=f"VM '{vm_name}' will shut down for backup in {self.config.warning_minutes} minutes",
             job_name="Borg Backup (VMs)",
         )
