@@ -1753,6 +1753,28 @@
           </div>
           <div id="wizard-preview-mode-info" class="wizard-preview-mode-info"></div>
           <div id="wizard-remote-repo-status" class="status-message hidden"></div>
+          <div id="wiz-final-risk-list" class="wizard-final-risk-list hidden">
+            <div id="wiz-final-appdata-risk" class="status-message warning wizard-runtime-risk hidden">
+              <div class="wizard-runtime-risk-copy">
+                <strong data-i18n="wizard.appdataRiskTitle">Appdata-Hinweis</strong>
+                <span data-i18n="wizard.appdataFinalRiskText">Docker-Container bleiben während dieses Backups aktiv. Dateien in appdata können sich während des Borg-Laufs ändern; Borg kann dadurch mit Return Code 1 als Warnung abschließen.</span>
+              </div>
+              <label class="form-checkbox-row wizard-runtime-risk-ack">
+                <input type="checkbox" id="wiz-final-ack-appdata-risk">
+                <span data-i18n="wizard.ackRisk">Ich habe den Hinweis verstanden.</span>
+              </label>
+            </div>
+            <div id="wiz-final-domains-risk" class="status-message warning wizard-runtime-risk hidden">
+              <div class="wizard-runtime-risk-copy">
+                <strong data-i18n="wizard.domainsRiskTitle">VM-Domains-Hinweis</strong>
+                <span data-i18n="wizard.domainsFinalRiskText">Virtuelle Maschinen bleiben während dieses Backups aktiv. VM-Images können sich während des Borg-Laufs ändern und dadurch inkonsistent gesichert werden.</span>
+              </div>
+              <label class="form-checkbox-row wizard-runtime-risk-ack">
+                <input type="checkbox" id="wiz-final-ack-domains-risk">
+                <span data-i18n="wizard.ackRisk">Ich habe den Hinweis verstanden.</span>
+              </label>
+            </div>
+          </div>
           <pre id="wizard-preview-code" class="code-preview"></pre>
         </div>
       </div>

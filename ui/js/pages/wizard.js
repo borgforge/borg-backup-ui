@@ -195,22 +195,73 @@ function _wizardHasExactSourcePath(path) {
   return (wizardState.sourcePaths || []).some((raw) => String(raw || '').replace(/\/+$/, '') === normalized);
 }
 
+function _wizardAppdataRiskRequired() {
+  return _wizardHasExactSourcePath('/mnt/user/appdata') && _wizardRuntimeMode('docker') !== 'all';
+}
+
+function _wizardDomainsRiskRequired() {
+  return _wizardHasExactSourcePath('/mnt/user/domains') && _wizardRuntimeMode('vm') !== 'all';
+}
+
+function _wizardRiskAcknowledged(kind) {
+  const ids = kind === 'docker'
+    ? ['wiz-ack-appdata-risk', 'wiz-final-ack-appdata-risk']
+    : ['wiz-ack-domains-risk', 'wiz-final-ack-domains-risk'];
+  return ids.some((id) => !!document.getElementById(id)?.checked);
+}
+
+function _wizardSyncRiskAcknowledgement(kind, checked) {
+  const ids = kind === 'docker'
+    ? ['wiz-ack-appdata-risk', 'wiz-final-ack-appdata-risk']
+    : ['wiz-ack-domains-risk', 'wiz-final-ack-domains-risk'];
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!checked;
+  });
+}
+
+function wizardUpdateFinalRiskAcknowledgements() {
+  const appdataRisk = _wizardAppdataRiskRequired() && !_wizardRiskAcknowledged('docker');
+  const domainsRisk = _wizardDomainsRiskRequired() && !_wizardRiskAcknowledged('vm');
+  const pending = appdataRisk || domainsRisk;
+  document.getElementById('wiz-final-appdata-risk')?.classList.toggle('hidden', !appdataRisk);
+  document.getElementById('wiz-final-domains-risk')?.classList.toggle('hidden', !domainsRisk);
+  document.getElementById('wiz-final-risk-list')?.classList.toggle('hidden', !pending);
+  const saveBtn = document.getElementById('wizard-save-btn');
+  if (saveBtn && Number(wizardState.step || 0) === 9) saveBtn.disabled = pending;
+}
+
 function wizardUpdateRuntimeRiskWarnings() {
-  const appdataRisk = _wizardHasExactSourcePath('/mnt/user/appdata') && _wizardRuntimeMode('docker') !== 'all';
-  const domainsRisk = _wizardHasExactSourcePath('/mnt/user/domains') && _wizardRuntimeMode('vm') !== 'all';
+  const appdataRisk = _wizardAppdataRiskRequired();
+  const domainsRisk = _wizardDomainsRiskRequired();
   document.getElementById('wiz-appdata-risk')?.classList.toggle('hidden', !appdataRisk);
   document.getElementById('wiz-domains-risk')?.classList.toggle('hidden', !domainsRisk);
   if (!appdataRisk) document.getElementById('wiz-appdata-risk')?.classList.remove('wizard-runtime-attention');
   if (!domainsRisk) document.getElementById('wiz-domains-risk')?.classList.remove('wizard-runtime-attention');
+  wizardUpdateFinalRiskAcknowledgements();
 }
 
 function wizardBindRuntimeControls() {
-  ['wiz-use-docker', 'wiz-use-vm', 'wiz-docker-mode', 'wiz-vm-mode', 'wiz-ack-appdata-risk', 'wiz-ack-domains-risk'].forEach((id) => {
+  [
+    'wiz-use-docker',
+    'wiz-use-vm',
+    'wiz-docker-mode',
+    'wiz-vm-mode',
+    'wiz-ack-appdata-risk',
+    'wiz-ack-domains-risk',
+    'wiz-final-ack-appdata-risk',
+    'wiz-final-ack-domains-risk',
+  ].forEach((id) => {
     const el = document.getElementById(id);
     if (!el || el.dataset.runtimeBound === '1') return;
     el.dataset.runtimeBound = '1';
     el.addEventListener('change', () => {
       el.closest('.status-message')?.classList.remove('wizard-runtime-attention');
+      if (id === 'wiz-ack-appdata-risk' || id === 'wiz-final-ack-appdata-risk') {
+        _wizardSyncRiskAcknowledgement('docker', el.checked);
+      } else if (id === 'wiz-ack-domains-risk' || id === 'wiz-final-ack-domains-risk') {
+        _wizardSyncRiskAcknowledgement('vm', el.checked);
+      }
       wizardRenderRuntimeControls();
     });
   });
@@ -379,8 +430,8 @@ function openWizard() {
   document.getElementById('wiz-use-vm').checked = false;
   document.getElementById('wiz-docker-mode').value = 'all';
   document.getElementById('wiz-vm-mode').value = 'all';
-  document.getElementById('wiz-ack-appdata-risk').checked = false;
-  document.getElementById('wiz-ack-domains-risk').checked = false;
+  _wizardSyncRiskAcknowledgement('docker', false);
+  _wizardSyncRiskAcknowledgement('vm', false);
   // Ensure feature toggles are visible even if stale DOM/CSS state hid them before.
   const dockerGroup = document.getElementById('wiz-use-docker')?.closest('.form-group');
   const vmGroup = document.getElementById('wiz-use-vm')?.closest('.form-group');
@@ -541,6 +592,8 @@ function _renderWizardStep(n) {
   nextBtn.classList.toggle('hidden', n === 9);
   saveBtn.classList.toggle('hidden', n !== 9);
   wizardState.step = n;
+  if (n !== 9) saveBtn.disabled = false;
+  wizardUpdateFinalRiskAcknowledgements();
   _wizardUpdateStepNavigation();
 }
 
@@ -656,12 +709,12 @@ function _wizardCollectParams() {
     docker_control: {
       mode: dockerMode,
       selected: ['selected', 'except_selected'].includes(dockerMode) ? _wizardUniqueList(wizardState.selectedDockerContainers) : [],
-      ack_appdata_risk: !!document.getElementById('wiz-ack-appdata-risk')?.checked,
+      ack_appdata_risk: _wizardRiskAcknowledged('docker'),
     },
     vm_control: {
       mode: vmMode,
       selected: vmMode === 'selected' ? _wizardUniqueList(wizardState.selectedVms) : [],
-      ack_domains_risk: !!document.getElementById('wiz-ack-domains-risk')?.checked,
+      ack_domains_risk: _wizardRiskAcknowledged('vm'),
     },
     source_paths: rawPaths,
     exclude_paths: _wizardUniqueList(wizardState.excludePaths || []),
@@ -998,7 +1051,7 @@ function _wizardValidate(step) {
       _wizardShowError(3, wizardT('wizard.validationDockerSelection'));
       return false;
     }
-    if (_wizardHasExactSourcePath('/mnt/user/appdata') && p.docker_control.mode !== 'all' && !p.docker_control.ack_appdata_risk) {
+    if (_wizardAppdataRiskRequired() && !p.docker_control.ack_appdata_risk) {
       _wizardFocusRuntimeRisk('wiz-appdata-risk');
       return false;
     }
@@ -1008,8 +1061,18 @@ function _wizardValidate(step) {
       _wizardShowError(4, wizardT('wizard.validationVmSelection'));
       return false;
     }
-    if (_wizardHasExactSourcePath('/mnt/user/domains') && p.vm_control.mode !== 'all' && !p.vm_control.ack_domains_risk) {
+    if (_wizardDomainsRiskRequired() && !p.vm_control.ack_domains_risk) {
       _wizardFocusRuntimeRisk('wiz-domains-risk');
+      return false;
+    }
+  }
+  if (step === 9) {
+    if (_wizardAppdataRiskRequired() && !p.docker_control.ack_appdata_risk) {
+      _wizardFocusRuntimeRisk('wiz-final-appdata-risk');
+      return false;
+    }
+    if (_wizardDomainsRiskRequired() && !p.vm_control.ack_domains_risk) {
+      _wizardFocusRuntimeRisk('wiz-final-domains-risk');
       return false;
     }
   }
@@ -1070,6 +1133,7 @@ async function _wizardPreview() {
     repoStatusEl.className = 'status-message hidden';
     repoStatusEl.textContent = '';
   }
+  wizardUpdateFinalRiskAcknowledgements();
 
   const params = _wizardCollectParams();
   const modeInfoEl = document.getElementById('wizard-preview-mode-info');
@@ -1184,6 +1248,7 @@ function _wizardRuntimePreviewText(kind, summary) {
 async function saveWizardJob() {
   const btn   = document.getElementById('wizard-save-btn');
   const errEl = document.getElementById('wizard-error-9');
+  if (!_wizardValidate(9)) return;
   btn.classList.add('loading');
   errEl.classList.add('hidden');
 

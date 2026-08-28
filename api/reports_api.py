@@ -30,7 +30,7 @@ def _fmt_duration(secs):
 
 def _parse_job_key(job_key: str):
     """Split 'appdata_local' → ('appdata', 'local'). Handles multi-underscore locations."""
-    known_locations = ("local", "usb", "storagebox")
+    known_locations = ("local", "usb", "smb", "storagebox")
     for loc in known_locations:
         if job_key.endswith("_" + loc):
             btype = job_key[: -(len(loc) + 1)]
@@ -39,17 +39,22 @@ def _parse_job_key(job_key: str):
     return (parts[0], parts[1]) if len(parts) == 2 else (job_key, "")
 
 
+def _parse_status_file_stem(stem: str):
+    """Split '<date>_<time>_<job_key>' into backup type and location."""
+    parts = str(stem or "").split("_", 2)
+    if len(parts) < 3:
+        return "", ""
+    return _parse_job_key(parts[2])
+
+
 def get_report_jobs(config: dict) -> List[dict]:
     """Returns all unique jobs found in status files."""
     status_dir = Path(config["STATUS_DIR"])
     seen = {}
     for f in sorted(status_dir.glob("*.status")):
-        stem = f.stem
-        parts = stem.split("_")
-        if len(parts) < 4:
+        backup_type, location = _parse_status_file_stem(f.stem)
+        if not backup_type or not location:
             continue
-        backup_type = parts[2]
-        location = "_".join(parts[3:])
         key = f"{backup_type}_{location}"
         if key not in seen:
             seen[key] = {
@@ -68,12 +73,7 @@ def get_report_data(config: dict, job_key: str) -> dict:
 
     runs = []
     for f in sorted(status_dir.glob("*.status")):
-        stem = f.stem
-        parts = stem.split("_")
-        if len(parts) < 4:
-            continue
-        ftype = parts[2]
-        floc = "_".join(parts[3:])
+        ftype, floc = _parse_status_file_stem(f.stem)
         if ftype != backup_type or floc != location:
             continue
         try:
