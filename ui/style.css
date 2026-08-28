@@ -5698,6 +5698,13 @@ body.wizard-modal-open {
   gap: 10px;
 }
 
+.wizard-final-risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
 .wizard-runtime-risk {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

@@ -15,7 +15,7 @@ if str(API_ROOT) not in sys.path:
 
 from repositories_api import write_repository_store
 from storage_objects_api import write_storage_store
-from wizard_api import generate_flow_preview, load_job_for_wizard, save_job
+from wizard_api import generate_flow_preview, load_job_for_wizard, save_job, validate_params
 
 
 def _storagebox_params() -> dict:
@@ -126,6 +126,46 @@ def test_wizard_preview_supports_docker_exclusion_mode(monkeypatch):
     assert flow["summary"]["docker_mode"] == "except_selected"
     assert flow["summary"]["docker_selected"] == ["AdGuard-Home"]
     assert "Stop all Docker containers except selected containers (1 kept running)" in flow["steps"]
+
+
+def test_wizard_preview_validation_defers_appdata_risk_ack_until_save(tmp_path: Path) -> None:
+    source = tmp_path / "mnt" / "cache" / "appdata"
+    source.mkdir(parents=True)
+    params = _storagebox_params()
+    params.update({
+        "source_paths": [str(source)],
+        "location": "local",
+        "storage_key": "storage_local_test",
+        "repository_key": "repo_appdata_local_test",
+        "docker_control": {"mode": "none", "selected": [], "ack_appdata_risk": False},
+    })
+
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "data")}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "storage_local_test",
+        "display_name": "Local",
+        "storage_type": "local",
+        "location": "local",
+        "path_raw": str(tmp_path / "repo-root"),
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_appdata_local_test",
+        "display_name": "Appdata Local",
+        "storage_key": "storage_local_test",
+        "relative_path": "borg-backup-appdata",
+        "encryption": "none",
+    }]})
+
+    validate_params(
+        params,
+        tmp_path / "scripts",
+        tmp_path / "data",
+        ui_config=config,
+        require_runtime_ack=False,
+    )
+
+    with pytest.raises(ValueError, match="Appdata backup risk must be acknowledged"):
+        validate_params(params, tmp_path / "scripts", tmp_path / "data", ui_config=config)
 
 
 def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):

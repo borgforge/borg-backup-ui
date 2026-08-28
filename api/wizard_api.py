@@ -166,11 +166,13 @@ def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
     }
 
 
-def _source_matches(raw_sources: list[str], prefix: str) -> bool:
-    prefix_norm = prefix.rstrip("/")
+def _source_contains_path_component(raw_sources: list[str], component: str) -> bool:
+    wanted = str(component or "").strip().lower()
+    if not wanted:
+        return False
     for src in raw_sources:
-        src_norm = str(src or "").rstrip("/")
-        if src_norm == prefix_norm:
+        parts = [part.strip().lower() for part in str(src or "").split("/") if part.strip()]
+        if wanted in parts:
             return True
     return False
 
@@ -182,6 +184,7 @@ def validate_params(
     *,
     allow_existing: bool = False,
     ui_config: Optional[dict] = None,
+    require_runtime_ack: bool = True,
 ) -> None:
     """Wirft ValueError bei ungültigen Parametern."""
     type_id = params.get("type_id", "").strip()
@@ -234,10 +237,10 @@ def validate_params(
         raise ValueError("At least one Docker container must be selected")
     if vm_control["mode"] == "selected" and not vm_control["selected"]:
         raise ValueError("At least one VM must be selected")
-    if _source_matches(raw_sources, "/mnt/user/appdata") and docker_control["mode"] != "all":
+    if require_runtime_ack and _source_contains_path_component(raw_sources, "appdata") and docker_control["mode"] != "all":
         if not bool(docker_control.get("ack_appdata_risk", False)):
             raise ValueError("Appdata backup risk must be acknowledged when not stopping all Docker containers")
-    if _source_matches(raw_sources, "/mnt/user/domains") and vm_control["mode"] != "all":
+    if require_runtime_ack and _source_contains_path_component(raw_sources, "domains") and vm_control["mode"] != "all":
         if not bool(vm_control.get("ack_domains_risk", False)):
             raise ValueError("VM domain backup risk must be acknowledged when not shutting down all VMs")
 
