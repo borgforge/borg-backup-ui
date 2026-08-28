@@ -665,10 +665,12 @@ def test_unraid_dashboard_widget_startup_cache_rebuilds_old_fresh_cache_without_
 def test_unraid_dashboard_widget_does_not_start_periodic_status_scans():
     source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
     widget_source = (ROOT / "api" / "unraid_dashboard_widget.py").read_text(encoding="utf-8")
+    runner_source = (ROOT / "api" / "wizard_runner.py").read_text(encoding="utf-8")
     page = (ROOT / "plugin" / "borg-backup-ui-dashboard.page").read_text(encoding="utf-8")
 
     assert "_start_unraid_dashboard_widget_cache_loop" not in source
     assert "UNRAID_DASHBOARD_WIDGET_REFRESH_SECONDS" not in source
+    assert "backup job finished" not in runner_source
     assert "from lib.status import StatusStore" in widget_source
     assert "Based on:" in page
     assert "adjustedJobCounts" in page
