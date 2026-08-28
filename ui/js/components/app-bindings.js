@@ -144,6 +144,9 @@
     document.getElementById('storage-maintenance-confirm-close-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(false));
     document.getElementById('storage-maintenance-confirm-cancel-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(false));
     document.getElementById('storage-maintenance-confirm-start-btn')?.addEventListener('click', () => closeStorageMaintenanceConfirm(true));
+    document.getElementById('storage-maintenance-confirm-info')?.addEventListener('change', (event) => {
+      if (event.target?.id === 'storage-maintenance-retention-job') updateStorageMaintenanceRetentionPreview();
+    });
     document.getElementById('storage-maintenance-confirm-modal')?.addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeStorageMaintenanceConfirm(false);
     });

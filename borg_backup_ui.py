@@ -2257,7 +2257,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise ValueError("Invalid mode parameter")
         from check_api import CheckManager
         action = str(body.get("action") or "check").strip().lower()
-        ok, err = CheckManager.get().start_repository(self.config, repository_key, action, mode)
+        job_key = str(body.get("job_key") or "").strip()
+        ok, err = CheckManager.get().start_repository(
+            self.config,
+            repository_key,
+            action,
+            mode,
+            job_key=job_key,
+        )
         if not ok:
             raise RuntimeError(err)
         return {"ok": True}

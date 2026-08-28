@@ -135,6 +135,82 @@ def test_repository_prune_archive_prefix_preserves_type_ids_with_underscores() -
     assert _archive_prefix_from_job_key("appdata_storagebox") == "appdata-backup"
 
 
+def test_repository_prune_requires_explicit_retention_source_for_shared_repository(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    jobs = tmp_path / "config" / "jobs"
+    jobs.mkdir(parents=True)
+    for job_key in ("photos_local", "appdata_local"):
+        (jobs / f"{job_key}.json").write_text(json.dumps({
+            "job_key": job_key,
+            "repository_key": "repo_shared",
+            "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
+        }), encoding="utf-8")
+
+    manager = CheckManager()
+    repository = {"repository_key": "repo_shared", "used_by": ["photos_local", "appdata_local"]}
+
+    with pytest.raises(ValueError, match="select a retention source job"):
+        manager._repository_command(config, repository, "/mnt/backup/shared", "prune", "quick")
+
+
+def test_repository_prune_uses_selected_job_retention_source(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    jobs = tmp_path / "config" / "jobs"
+    jobs.mkdir(parents=True)
+    (jobs / "photos_local.json").write_text(json.dumps({
+        "job_key": "photos_local",
+        "repository_key": "repo_shared",
+        "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
+    }), encoding="utf-8")
+    (jobs / "appdata_local.json").write_text(json.dumps({
+        "job_key": "appdata_local",
+        "repository_key": "repo_shared",
+        "retention": {"daily": "14", "weekly": "8", "monthly": "3", "yearly": "1"},
+    }), encoding="utf-8")
+
+    command = CheckManager()._repository_command(
+        config,
+        {"repository_key": "repo_shared", "used_by": ["photos_local", "appdata_local"]},
+        "/mnt/backup/shared",
+        "prune",
+        "quick",
+        job_key="appdata_local",
+    )
+
+    assert command == [
+        "borg", "prune", "--lock-wait", "30", "--list", "--progress",
+        "--glob-archives", "appdata-backup-*",
+        "--keep-daily", "14", "--keep-weekly", "8", "--keep-monthly", "3", "--keep-yearly", "1",
+        "/mnt/backup/shared",
+    ]
+
+
+def test_repository_prune_rejects_retention_source_from_other_repository(tmp_path: Path):
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    jobs = tmp_path / "config" / "jobs"
+    jobs.mkdir(parents=True)
+    (jobs / "photos_local.json").write_text(json.dumps({
+        "job_key": "photos_local",
+        "repository_key": "repo_photos",
+        "retention": {"daily": "7"},
+    }), encoding="utf-8")
+    (jobs / "appdata_local.json").write_text(json.dumps({
+        "job_key": "appdata_local",
+        "repository_key": "repo_appdata",
+        "retention": {"daily": "14"},
+    }), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="does not use this repository"):
+        CheckManager()._repository_command(
+            config,
+            {"repository_key": "repo_photos", "used_by": ["photos_local"]},
+            "/mnt/backup/photos",
+            "prune",
+            "quick",
+            job_key="appdata_local",
+        )
+
+
 def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: Path, monkeypatch):
     secret = tmp_path / "secrets" / ".borg-passphrase-repo_test"
     secret.parent.mkdir(parents=True)

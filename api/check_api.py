@@ -86,7 +86,15 @@ class CheckManager:
                     cls._instance = cls()
         return cls._instance
 
-    def start_repository(self, config: dict, repository_key: str, action: str = "check", mode: str = "quick") -> tuple:
+    def start_repository(
+        self,
+        config: dict,
+        repository_key: str,
+        action: str = "check",
+        mode: str = "quick",
+        *,
+        job_key: str = "",
+    ) -> tuple:
         """Start a maintenance action for one managed repository object."""
         with self._lock:
             if self._state is not None and not self._state.finished:
@@ -136,7 +144,7 @@ class CheckManager:
                 config,
                 encryption=str(repository.get("encryption") or ""),
             )
-            cmd = self._repository_command(config, repository, repo_path, action, mode)
+            cmd = self._repository_command(config, repository, repo_path, action, mode, job_key=job_key)
         except Exception as exc:
             return False, f"Repository information is not readable: {exc}"
 
@@ -175,7 +183,16 @@ class CheckManager:
         ).start()
         return True, None
 
-    def _repository_command(self, config: dict, repository: dict, repo_path: str, action: str, mode: str) -> list[str]:
+    def _repository_command(
+        self,
+        config: dict,
+        repository: dict,
+        repo_path: str,
+        action: str,
+        mode: str,
+        *,
+        job_key: str = "",
+    ) -> list[str]:
         if action == "check":
             return [
                 "borg", "check", "--lock-wait", self._LOCK_WAIT_SECONDS,
@@ -189,11 +206,19 @@ class CheckManager:
 
         from repository_context import jobs_using_repository
         used_by = jobs_using_repository(config, str(repository.get("repository_key") or ""))
-        job_key = next((str(item or "").strip() for item in used_by if str(item or "").strip()), "")
-        if not job_key:
+        job_keys = [str(item or "").strip() for item in used_by if str(item or "").strip()]
+        selected_job_key = str(job_key or "").strip()
+        if selected_job_key:
+            if selected_job_key not in job_keys:
+                raise ValueError("The selected retention source job does not use this repository")
+        elif len(job_keys) > 1:
+            raise ValueError("Multiple backup jobs use this repository; select a retention source job")
+        else:
+            selected_job_key = next(iter(job_keys), "")
+        if not selected_job_key:
             raise ValueError("Prune requires a backup job with a retention policy")
-        retention = self._job_retention(config, job_key)
-        archive_prefix = _archive_prefix_from_job_key(job_key)
+        retention = self._job_retention(config, selected_job_key)
+        archive_prefix = _archive_prefix_from_job_key(selected_job_key)
         cmd = [
             "borg", "prune", "--lock-wait", self._LOCK_WAIT_SECONDS,
             "--list", "--progress",
