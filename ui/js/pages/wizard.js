@@ -1011,8 +1011,7 @@ function wizardSourcePathKeydown(event) {
     event.preventDefault();
     const input = document.getElementById('wiz-source-path-input');
     if (!input) return;
-    const selected = rows[wizardState.sourceSuggestIndex]?.path;
-    wizardAddSourcePath(selected || input.value);
+    wizardAddSourcePath(input.value);
   }
 }
 

@@ -29,12 +29,36 @@ def test_source_autocomplete_lists_base_and_nested_directories(tmp_path: Path):
     ]
     assert partial_rows == [{"path": f"{base}/user/"}]
     assert user_rows == [
+        {"path": f"{user}/"},
         {"path": f"{user}/appdata/"},
         {"path": f"{user}/domains/"},
     ]
 
 
-def test_source_autocomplete_rejects_paths_outside_base_and_symlinks(tmp_path: Path):
+def test_source_autocomplete_preserves_typed_share_root_prefix(tmp_path: Path):
+    base = tmp_path / "mnt"
+    pool_appdata = base / "performance" / "appdata"
+    user = base / "user"
+    pool_appdata.mkdir(parents=True)
+    (pool_appdata / "adguard").mkdir()
+    (pool_appdata / "immich").mkdir()
+    user.mkdir(parents=True)
+    (user / "appdata").symlink_to(pool_appdata, target_is_directory=True)
+
+    partial_rows = list_source_directories(str(user / "appdat"), base_path=base)
+    full_rows = list_source_directories(str(user / "appdata"), base_path=base)
+
+    assert partial_rows == [
+        {"path": f"{user}/appdata/"},
+    ]
+    assert full_rows == [
+        {"path": f"{user}/appdata/"},
+        {"path": f"{user}/appdata/adguard/"},
+        {"path": f"{user}/appdata/immich/"},
+    ]
+
+
+def test_source_autocomplete_rejects_paths_outside_base_and_symlink_escapes(tmp_path: Path):
     base = tmp_path / "mnt"
     outside = tmp_path / "outside"
     base.mkdir()

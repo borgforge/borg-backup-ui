@@ -103,6 +103,12 @@ def test_wizard_source_autocomplete_cancels_stale_requests() -> None:
     assert "}, 180);" in script
     assert "event.key === 'ArrowRight' && rows.length" in script
     assert "input.value = selected" in script
+    source_keydown = script.split("function wizardSourcePathKeydown(event)", 1)[1].split(
+        "function wizardSourcePathsClick(event)", 1
+    )[0]
+    enter_block = source_keydown.split("if (event.key === 'Enter')", 1)[1].split("}", 1)[0]
+    assert "wizardAddSourcePath(input.value)" in enter_block
+    assert "selected || input.value" not in enter_block
     assert "→ Verzeichnis öffnen" in german
     assert "→ open directory" in english
 
