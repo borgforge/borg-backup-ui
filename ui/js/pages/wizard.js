@@ -1051,18 +1051,10 @@ function _wizardValidate(step) {
       _wizardShowError(3, wizardT('wizard.validationDockerSelection'));
       return false;
     }
-    if (_wizardAppdataRiskRequired() && !p.docker_control.ack_appdata_risk) {
-      _wizardFocusRuntimeRisk('wiz-appdata-risk');
-      return false;
-    }
   }
   if (step === 4) {
     if (p.vm_control.mode === 'selected' && !p.vm_control.selected.length) {
       _wizardShowError(4, wizardT('wizard.validationVmSelection'));
-      return false;
-    }
-    if (_wizardDomainsRiskRequired() && !p.vm_control.ack_domains_risk) {
-      _wizardFocusRuntimeRisk('wiz-domains-risk');
       return false;
     }
   }

@@ -2515,7 +2515,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
         mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"), ui_config=self.config)
+        validate_params(
+            body,
+            scripts_dir,
+            data_root,
+            allow_existing=(mode == "edit"),
+            ui_config=self.config,
+            require_runtime_ack=False,
+        )
         return {"flow": generate_flow_preview(body, self.config, scripts_dir)}
 
     def _post_wizard_save(self) -> dict:
