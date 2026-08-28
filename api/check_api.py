@@ -16,6 +16,18 @@ from pathlib import Path
 from typing import Generator, List, Optional
 
 
+def _archive_prefix_from_job_key(job_key: str) -> str:
+    """Return the archive prefix used by wizard jobs, e.g. appdata-backup."""
+    key = str(job_key or "").strip()
+    for location in ("storagebox", "local", "usb", "smb"):
+        suffix = f"_{location}"
+        if key.endswith(suffix):
+            backup_type = key[: -len(suffix)]
+            return f"{backup_type}-backup" if backup_type else ""
+    backup_type = key.rsplit("_", 1)[0] if "_" in key else key
+    return f"{backup_type}-backup" if backup_type else ""
+
+
 class _CheckState:
     def __init__(
         self,
@@ -181,10 +193,13 @@ class CheckManager:
         if not job_key:
             raise ValueError("Prune requires a backup job with a retention policy")
         retention = self._job_retention(config, job_key)
+        archive_prefix = _archive_prefix_from_job_key(job_key)
         cmd = [
             "borg", "prune", "--lock-wait", self._LOCK_WAIT_SECONDS,
             "--list", "--progress",
         ]
+        if archive_prefix:
+            cmd.extend(["--glob-archives", f"{archive_prefix}-*"])
         for key, option in (("daily", "--keep-daily"), ("weekly", "--keep-weekly"), ("monthly", "--keep-monthly"), ("yearly", "--keep-yearly")):
             value = str(retention.get(key) or "").strip()
             if value:

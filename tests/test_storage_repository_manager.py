@@ -15,7 +15,7 @@ if str(API_ROOT) not in sys.path:
 import storage_objects_api  # noqa: E402
 import check_api  # noqa: E402
 import repositories_api  # noqa: E402
-from check_api import CheckManager  # noqa: E402
+from check_api import CheckManager, _archive_prefix_from_job_key  # noqa: E402
 from repositories_api import RepositoryLifecycleConflict, apply_repository_lifecycle, prepare_repository_lifecycle, read_repository_store, unlink_job_from_repositories, write_repository_store  # noqa: E402
 from storage_objects_api import create_storage_target, read_storage_store, test_storage_target as run_storage_target_test, write_storage_store  # noqa: E402
 
@@ -123,9 +123,16 @@ def test_repository_maintenance_commands_use_repository_and_job_retention(tmp_pa
     ]
     assert manager._repository_command(config, repository, "/mnt/backup/photos", "prune", "quick") == [
         "borg", "prune", "--lock-wait", "30", "--list", "--progress",
+        "--glob-archives", "photos-backup-*",
         "--keep-daily", "7", "--keep-weekly", "4", "--keep-monthly", "6", "--keep-yearly", "3",
         "/mnt/backup/photos",
     ]
+
+
+def test_repository_prune_archive_prefix_preserves_type_ids_with_underscores() -> None:
+    assert _archive_prefix_from_job_key("borg_backup_taeglich_local") == "borg_backup_taeglich-backup"
+    assert _archive_prefix_from_job_key("photos_smb") == "photos-backup"
+    assert _archive_prefix_from_job_key("appdata_storagebox") == "appdata-backup"
 
 
 def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: Path, monkeypatch):
