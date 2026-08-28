@@ -58,6 +58,19 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
     assert "storage.repositoryPathLabel', repo.path_display || repo.path_raw || '', 'span-3'" in script
 
 
+def test_storage_prune_confirmation_shows_archive_filter() -> None:
+    script = _read("ui/js/pages/storage.js")
+    de = _read("ui/i18n/de.json")
+    en = _read("ui/i18n/en.json")
+
+    assert "function storageArchivePrefixFromJob(job)" in script
+    assert "function storageArchiveFilterFromJob(job)" in script
+    assert "action === 'prune' ? storageArchiveFilterFromJob(job) : ''" in script
+    assert "storage.repositoryMaintenanceArchiveFilter" in script
+    assert '"repositoryMaintenanceArchiveFilter": "Archivfilter: {filter}"' in de
+    assert '"repositoryMaintenanceArchiveFilter": "Archive filter: {filter}"' in en
+
+
 def test_repository_information_has_a_background_refresh_loop() -> None:
     backend = _read("borg_backup_ui.py")
     repository_api = _read("api/repositories_api.py")

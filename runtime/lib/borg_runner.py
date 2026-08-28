@@ -186,16 +186,25 @@ class BorgRunner:
         if self.phase_callback:
             self.phase_callback("borg_prune")
         archive_prefix = str(archive_prefix or "").strip()
-        logger.info(
-            "Borg prune: deleting old backups "
-            "(keep: %dd/%dw/%dm/%dy)",
-            self.config.keep_daily,
-            self.config.keep_weekly,
-            self.config.keep_monthly,
-            self.config.keep_yearly,
-        )
         if archive_prefix:
-            logger.info("Borg prune archive filter: %s-*", archive_prefix)
+            logger.info(
+                "Borg prune: applying retention only to archives matching %s-* "
+                "(keep: %dd/%dw/%dm/%dy)",
+                archive_prefix,
+                self.config.keep_daily,
+                self.config.keep_weekly,
+                self.config.keep_monthly,
+                self.config.keep_yearly,
+            )
+        else:
+            logger.info(
+                "Borg prune: applying retention to all repository archives "
+                "(keep: %dd/%dw/%dm/%dy)",
+                self.config.keep_daily,
+                self.config.keep_weekly,
+                self.config.keep_monthly,
+                self.config.keep_yearly,
+            )
 
         cmd = [
             "borg", "prune",

@@ -119,6 +119,24 @@ function storageJobName(repo, job) {
   return String(repo?.job_name || job?.name || repo?.display_name || repo?.used_by?.[0] || repo?.source_job_keys?.[0] || '').trim();
 }
 
+function storageArchivePrefixFromJob(job) {
+  const key = String(job?.key || job?.job_key || '').trim();
+  for (const location of ['storagebox', 'local', 'usb', 'smb']) {
+    const suffix = `_${location}`;
+    if (key.endsWith(suffix)) {
+      const typeId = key.slice(0, -suffix.length);
+      return typeId ? `${typeId}-backup` : '';
+    }
+  }
+  const typeId = key.includes('_') ? key.split('_').slice(0, -1).join('_') : key;
+  return typeId ? `${typeId}-backup` : '';
+}
+
+function storageArchiveFilterFromJob(job) {
+  const prefix = storageArchivePrefixFromJob(job);
+  return prefix ? `${prefix}-*` : '';
+}
+
 function storageName(repo) {
   const raw = String(repo?.storage_name || '').trim();
   const location = String(repo?.location || '').trim().toLowerCase();
@@ -1408,7 +1426,11 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
     const info = document.getElementById('storage-maintenance-confirm-info');
     if (title) title.textContent = storageT('storage.repositoryMaintenanceConfirmTitle');
     if (description) description.textContent = storageT(confirmKey);
-    if (info) info.innerHTML = `<div class="modal-info-item warning"><span class="modal-info-text"><strong>${escHtml(storageRepositoryTitle(repo || {}, job))}</strong><br>${escHtml(storageT('storage.repositoryMaintenanceConfirmAction', { action: storageMaintenanceTitle(resultKey) }))}</span></div>`;
+    const archiveFilter = action === 'prune' ? storageArchiveFilterFromJob(job) : '';
+    const filterLine = archiveFilter
+      ? `<br>${escHtml(storageT('storage.repositoryMaintenanceArchiveFilter', { filter: archiveFilter }))}`
+      : '';
+    if (info) info.innerHTML = `<div class="modal-info-item warning"><span class="modal-info-text"><strong>${escHtml(storageRepositoryTitle(repo || {}, job))}</strong><br>${escHtml(storageT('storage.repositoryMaintenanceConfirmAction', { action: storageMaintenanceTitle(resultKey) }))}${filterLine}</span></div>`;
     storageState.maintenanceConfirmation = { resolve };
     modal.classList.remove('hidden');
   });

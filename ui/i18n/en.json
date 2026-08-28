@@ -303,6 +303,7 @@
     "repositoryMaintenanceHint": "Actions apply only to this repository.",
     "repositoryMaintenanceConfirmTitle": "Start repository maintenance",
     "repositoryMaintenanceConfirmAction": "Maintenance action: {action}",
+    "repositoryMaintenanceArchiveFilter": "Archive filter: {filter}",
     "repositoryMaintenanceConfirmStart": "Start now",
     "repositoryCheck": "Check",
     "repositoryVerifyData": "Verify data",
