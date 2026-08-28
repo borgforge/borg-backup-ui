@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.27.2013">
+<!ENTITY version   "2026.08.28.1623">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,10 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.28.1623###
+- Fixed report data loading for backup type IDs containing underscores, including SMB jobs.
+- Made the appdata risk acknowledgement reachable in the final job wizard review when Docker stopping is intentionally disabled, including appdata paths on cache or custom pools.
+
 ###2026.08.27.2013###
 - Restore precheck failures now show the concrete backend validation reason instead of only the generic invalid-request message.
 - Prevented empty startup status scans from being saved or displayed as a fresh OK Unraid dashboard widget cache.
@@ -34,9 +38,6 @@
 - Improved live log resilience for backup jobs and restore tests: temporary SSE connection drops now keep the running state instead of showing a false error or long reconnecting badge.
 - Added periodic live-log heartbeats so long quiet backup phases are less likely to be treated as disconnected by browsers or proxies.
 - Changed VM backup shutdown notices in Unraid from warning notifications to informational notifications.
-
-###2026.08.17.1225###
-- Fixed the job wizard storage target selector so secondary SSH/Storagebox targets remain selected and refresh the matching repository list correctly.
 
 ]]>
 </CHANGES>
@@ -63,7 +64,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="4de08b651fdbbb1d6a2465696f4986bb"
+EXPECTED_MD5="9adff80d17075efc444d4b4eba19b012"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
