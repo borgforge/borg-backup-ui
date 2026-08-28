@@ -30,6 +30,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -232,6 +233,7 @@ class BackupJob:
         self._failure_code: str = ""
         self._cancelled: bool = False
         self._missing_source_paths: List[str] = []
+        self._last_status_file: Path | None = None
         self._lock_fd = None
 
     # ------------------------------------------------------------------
@@ -345,6 +347,11 @@ class BackupJob:
             except Exception as lock_exc:
                 self._record_cleanup_error(
                     "lock release", lock_exc, cleanup_errors
+                )
+            finally:
+                self._refresh_unraid_dashboard_widget_cache(
+                    self._last_status_file,
+                    "backup finalization",
                 )
 
         if cleanup_errors and not original_failure:
@@ -844,6 +851,7 @@ class BackupJob:
             )
 
         status_file = self._save_status(duration)
+        self._last_status_file = status_file
         self._emit_lifecycle_finished(
             status=self._result_status(exit_code),
             exit_code=exit_code,
@@ -854,6 +862,55 @@ class BackupJob:
 
         logger.info("End: %s", self.config.job_name)
         _log_section("BACKUP COMPLETED")
+
+    def _refresh_unraid_dashboard_widget_cache(self, status_file: Path | None, reason: str) -> None:
+        """Refresh the Unraid dashboard cache after an event changed status files."""
+        if status_file is None:
+            return
+        try:
+            plugin_dir = self._widget_plugin_dir()
+            for import_path in (
+                plugin_dir / "api",
+                plugin_dir / "runtime",
+                plugin_dir / "runtime" / "lib",
+            ):
+                raw = str(import_path)
+                if raw not in sys.path:
+                    sys.path.insert(0, raw)
+
+            from unraid_dashboard_widget import write_unraid_dashboard_widget_status_file_cache
+
+            effective = {
+                "BACKUP_SCRIPTS_DIR": (
+                    os.environ.get("BACKUP_SCRIPTS_DIR")
+                    or os.environ.get("BORG_UI_DATA_ROOT")
+                    or "/boot/config/borg-backup"
+                ),
+                "PLUGIN_DIR": str(plugin_dir),
+                "STATUS_DIR": str(self.config.status_dir),
+                "RESTORE_TEST_STATUS_DIR": os.environ.get("RESTORE_TEST_STATUS_DIR", ""),
+            }
+            widget_file = str(os.environ.get("UNRAID_DASHBOARD_WIDGET_FILE") or "").strip()
+            if widget_file:
+                effective["UNRAID_DASHBOARD_WIDGET_FILE"] = widget_file
+            write_unraid_dashboard_widget_status_file_cache(
+                effective,
+                app_version=os.environ.get("BORG_UI_APP_VERSION", ""),
+            )
+            logger.info("Unraid dashboard widget cache updated (%s)", reason)
+        except Exception as exc:
+            logger.warning("Unraid dashboard widget cache update skipped (%s): %s", reason, exc)
+
+    @staticmethod
+    def _widget_plugin_dir() -> Path:
+        configured = (
+            os.environ.get("BORG_UI_PLUGIN_DIR")
+            or os.environ.get("PLUGIN_DIR")
+            or ""
+        ).strip()
+        if configured:
+            return Path(configured)
+        return Path(__file__).resolve().parents[2]
 
     def _result_status(self, exit_code: int) -> str:
         if self._cancelled:
@@ -908,6 +965,7 @@ class BackupJob:
         except OSError as exc:
             logger.warning("Could not save skipped status: %s", exc)
             status_file = None
+        self._last_status_file = status_file
         self._emit_lifecycle_finished(
             status="skipped",
             exit_code=0,

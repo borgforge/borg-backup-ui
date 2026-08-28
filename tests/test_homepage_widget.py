@@ -416,6 +416,85 @@ def test_unraid_dashboard_widget_startup_cache_preserves_existing_fresh_cache(tm
     assert json.loads(cache_file.read_text(encoding="utf-8")) == existing
 
 
+def test_unraid_dashboard_widget_startup_cache_rebuilds_running_only_fresh_cache(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(status_dir),
+    }
+    cache_file.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "cache_state": "fresh",
+            "generated_at": "2026-08-28T08:00:00Z",
+            "status": {"state": "running"},
+            "jobs": {
+                "enabled": 1,
+                "successful": 0,
+                "warnings": 0,
+                "failed": 0,
+                "running": 1,
+                "items": [
+                    {
+                        "key": "flash_local",
+                        "enabled": True,
+                        "last_status": "",
+                        "last_timestamp": "",
+                    }
+                ],
+            },
+        }),
+        encoding="utf-8",
+    )
+    (status_dir / "2026-08-28_12-30-00_flash_local.status").write_text(
+        json.dumps({
+            "backup_type": "flash",
+            "location": "local",
+            "timestamp": "2026-08-28 12:30:00",
+            "duration_seconds": 33,
+            "status": "success",
+            "exit_code": 0,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_read_jobs",
+        lambda _config, _backups: [
+            {
+                "key": "flash_local",
+                "display_name": "Flash - Lokal",
+                "enabled": True,
+                "running": False,
+                "restore_verification_status": "verified",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_repository_summary",
+        lambda *_args, **_kwargs: {"online": 1, "total": 1},
+    )
+    monkeypatch.setattr(unraid_dashboard_widget, "_next_backups", lambda *_args: [])
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_startup_cache(
+        config,
+        app_version="2026.08.28.1913",
+        now=datetime(2026, 8, 28, 12, 31, tzinfo=timezone.utc),
+    )
+
+    assert result["cache_state"] == "fresh"
+    assert result["status"]["state"] == "ok"
+    assert result["jobs"]["running"] == 0
+    assert result["jobs"]["successful"] == 1
+    assert result["latest_backup"]["name"] == "Flash - Lokal"
+    assert result["latest_backup"]["status"] == "ok"
+    assert result["generated_at"] == "2026-08-28T12:31:00Z"
+    assert json.loads(cache_file.read_text(encoding="utf-8")) == result
+
+
 def test_unraid_dashboard_widget_startup_cache_rejects_empty_fresh_status_scan(tmp_path: Path, monkeypatch):
     cache_file = tmp_path / "widget-status.json"
     status_dir = tmp_path / "status"
@@ -585,10 +664,12 @@ def test_unraid_dashboard_widget_startup_cache_rebuilds_old_fresh_cache_without_
 
 def test_unraid_dashboard_widget_does_not_start_periodic_status_scans():
     source = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
+    widget_source = (ROOT / "api" / "unraid_dashboard_widget.py").read_text(encoding="utf-8")
     page = (ROOT / "plugin" / "borg-backup-ui-dashboard.page").read_text(encoding="utf-8")
 
     assert "_start_unraid_dashboard_widget_cache_loop" not in source
     assert "UNRAID_DASHBOARD_WIDGET_REFRESH_SECONDS" not in source
+    assert "from lib.status import StatusStore" in widget_source
     assert "Based on:" in page
     assert "adjustedJobCounts" in page
     assert "function jobStatusEvidence(data)" in page

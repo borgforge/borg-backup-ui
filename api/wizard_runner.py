@@ -33,7 +33,7 @@ BORG_TMP_BIN = Path("/tmp/borg")
 def _ensure_runtime_import_paths(backup_scripts_dir: Path) -> None:
     """Prefer the installed plugin runtime while keeping data-root fallbacks."""
     plugin_runtime = ROOT_DIR / "runtime"
-    for path in (backup_scripts_dir, plugin_runtime):
+    for path in (backup_scripts_dir, plugin_runtime, plugin_runtime / "lib"):
         raw = str(path)
         while raw in sys.path:
             sys.path.remove(raw)
