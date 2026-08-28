@@ -58,6 +58,34 @@ def test_storage_uses_approved_variant_a_and_preserves_controls() -> None:
     assert "storage.repositoryPathLabel', repo.path_display || repo.path_raw || '', 'span-3'" in script
 
 
+def test_storage_prune_confirmation_shows_archive_filter() -> None:
+    script = _read("ui/js/pages/storage.js")
+    bindings = _read("ui/js/components/app-bindings.js")
+    de = _read("ui/i18n/de.json")
+    en = _read("ui/i18n/en.json")
+
+    assert "function storageJobsForRepository(repo)" in script
+    assert "function storageArchivePrefixFromJob(job)" in script
+    assert "function storageArchiveFilterFromJob(job)" in script
+    assert "function storageRetentionSummary(job)" in script
+    assert "function storageMaintenancePruneDetailsHtml(repo, job)" in script
+    assert "function updateStorageMaintenanceRetentionPreview()" in script
+    assert 'id="storage-maintenance-retention-job"' in script
+    assert 'id="storage-maintenance-retention-preview"' in script
+    assert "if (action === 'prune' && confirmation.jobKey) payload.job_key = confirmation.jobKey" in script
+    assert "updateStorageMaintenanceRetentionPreview()" in bindings
+    assert "storage.repositoryMaintenanceRetentionSource" in script
+    assert "storage.repositoryMaintenanceArchiveFilter" in script
+    assert "storage.repositoryMaintenanceRetention" in script
+    assert "storage.repositoryMaintenanceMultipleJobsHint" in script
+    assert '"repositoryMaintenanceRetentionSource": "Retention-Quelle: {job}"' in de
+    assert '"repositoryMaintenanceArchiveFilter": "Archivfilter: {filter}"' in de
+    assert '"repositoryMaintenanceRetention": "Retention: {retention}"' in de
+    assert '"repositoryMaintenanceRetentionSource": "Retention source: {job}"' in en
+    assert '"repositoryMaintenanceArchiveFilter": "Archive filter: {filter}"' in en
+    assert '"repositoryMaintenanceRetention": "Retention: {retention}"' in en
+
+
 def test_repository_information_has_a_background_refresh_loop() -> None:
     backend = _read("borg_backup_ui.py")
     repository_api = _read("api/repositories_api.py")

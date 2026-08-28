@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 from pathlib import Path
 import sys
 
@@ -79,3 +80,54 @@ def test_borg_create_uses_safe_path_prefix_patterns(monkeypatch, tmp_path: Path)
     index = command.index("--exclude")
     assert command[index + 1] == f"pp:{str(tmp_path / 'source' / 'cache').lstrip('/')}"
     assert index < next(i for i, arg in enumerate(command) if "::test-backup-" in arg)
+
+
+def test_borg_prune_scopes_retention_to_archive_prefix(monkeypatch, tmp_path: Path, caplog):
+    captured = {}
+
+    class Process:
+        def __init__(self, command, **kwargs):
+            captured["command"] = command
+            self.stdout = io.StringIO("")
+            self.returncode = 0
+
+        def wait(self):
+            return self.returncode
+
+    monkeypatch.setattr("runtime.lib.borg_runner.subprocess.Popen", Process)
+    runner = BorgRunner(BorgConfig(repo=str(tmp_path / "repo"), max_runtime_hours=0))
+    caplog.set_level(logging.INFO)
+
+    result = runner.prune("nas-backup")
+
+    assert result == 0
+    command = captured["command"]
+    assert command[0:4] == ["borg", "prune", "--verbose", "--list"]
+    index = command.index("--glob-archives")
+    assert command[index + 1] == "nas-backup-*"
+    assert index < command.index("--keep-daily")
+    assert command[-1] == str(tmp_path / "repo")
+    assert (
+        "Borg prune: applying retention only to archives matching nas-backup-* "
+        "(keep: 7d/4w/6m/2y)"
+    ) in caplog.text
+
+
+def test_borg_prune_logs_unfiltered_fallback(monkeypatch, tmp_path: Path, caplog):
+    class Process:
+        def __init__(self, command, **kwargs):
+            self.stdout = io.StringIO("")
+            self.returncode = 0
+
+        def wait(self):
+            return self.returncode
+
+    monkeypatch.setattr("runtime.lib.borg_runner.subprocess.Popen", Process)
+    runner = BorgRunner(BorgConfig(repo=str(tmp_path / "repo"), max_runtime_hours=0))
+    caplog.set_level(logging.INFO)
+
+    assert runner.prune() == 0
+    assert (
+        "Borg prune: applying retention to all repository archives "
+        "(keep: 7d/4w/6m/2y)"
+    ) in caplog.text

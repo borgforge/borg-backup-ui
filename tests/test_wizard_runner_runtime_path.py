@@ -46,6 +46,13 @@ def test_wizard_runner_preserves_docker_exclusion_runtime_control():
     }
 
 
+def test_wizard_runner_passes_archive_prefix_to_maintenance() -> None:
+    source = (ROOT / "api" / "wizard_runner.py").read_text(encoding="utf-8")
+
+    assert "archive_prefix = f\"{env.get('BACKUP_TYPE', 'job')}-backup\"" in source
+    assert "runner.maintenance(archive_prefix=archive_prefix)" in source
+
+
 def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
     tmp_path: Path,
     monkeypatch,

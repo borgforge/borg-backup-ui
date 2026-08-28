@@ -169,32 +169,49 @@ class BorgRunner:
         self.process_controller = process_controller
         self.phase_callback = phase_callback
 
-    def prune(self) -> int:
+    def prune(self, archive_prefix: str = "") -> int:
         """
         Löscht alte Backups nach der konfigurierten Retention Policy.
 
         Entspricht borg_prune() in borg-common.sh.
         Exit 0 = OK, 1 = Warnungen (Backup nutzbar), >1 = Fehler.
 
+        Args:
+            archive_prefix: Optional job-specific archive prefix. When set,
+                prune is scoped to archives matching '<prefix>-*'.
+
         Returns:
             Borg Exit-Code (0, 1 oder 2)
         """
         if self.phase_callback:
             self.phase_callback("borg_prune")
-        logger.info(
-            "Borg prune: deleting old backups "
-            "(keep: %dd/%dw/%dm/%dy)",
-            self.config.keep_daily,
-            self.config.keep_weekly,
-            self.config.keep_monthly,
-            self.config.keep_yearly,
-        )
+        archive_prefix = str(archive_prefix or "").strip()
+        if archive_prefix:
+            logger.info(
+                "Borg prune: applying retention only to archives matching %s-* "
+                "(keep: %dd/%dw/%dm/%dy)",
+                archive_prefix,
+                self.config.keep_daily,
+                self.config.keep_weekly,
+                self.config.keep_monthly,
+                self.config.keep_yearly,
+            )
+        else:
+            logger.info(
+                "Borg prune: applying retention to all repository archives "
+                "(keep: %dd/%dw/%dm/%dy)",
+                self.config.keep_daily,
+                self.config.keep_weekly,
+                self.config.keep_monthly,
+                self.config.keep_yearly,
+            )
 
         cmd = [
             "borg", "prune",
             "--verbose",
             "--list",
             "--show-rc",
+            *(["--glob-archives", f"{archive_prefix}-*"] if archive_prefix else []),
             "--keep-daily",   str(self.config.keep_daily),
             "--keep-weekly",  str(self.config.keep_weekly),
             "--keep-monthly", str(self.config.keep_monthly),
@@ -402,12 +419,15 @@ class BorgRunner:
 
         return exit_code
 
-    def maintenance(self) -> int:
+    def maintenance(self, archive_prefix: str = "") -> int:
         """
         Führt Wartungssequenz aus: prune → compact → check.
 
         Entspricht dem PHASE Wartung-Block in allen Backup-Skripten.
         Abbricht sofort bei exit ≥ 2 (Fehler). Sammelt Warnungen (exit 1).
+
+        Args:
+            archive_prefix: Optional job-specific archive prefix for prune.
 
         Returns:
             Schlechtester Exit-Code der drei Operationen (0, 1 oder ≥2)
@@ -416,7 +436,7 @@ class BorgRunner:
         worst = BORG_EXIT_OK
 
         steps = [
-            ("prune",   self.prune),
+            ("prune",   lambda: self.prune(archive_prefix)),
             ("compact", self.compact),
             ("check",   self.check),
         ]
