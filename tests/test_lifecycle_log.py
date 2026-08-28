@@ -83,6 +83,41 @@ def test_backup_finish_emits_lifecycle_summary(tmp_path: Path, monkeypatch):
     assert "status_file=" in text
 
 
+def test_backup_exit_refreshes_unraid_widget_cache_after_status_and_lock_release(tmp_path: Path, monkeypatch):
+    calls: list[tuple[str, object]] = []
+
+    def fake_widget_refresh(config, *, app_version=""):
+        calls.append(("widget", {"config": dict(config), "app_version": app_version}))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "unraid_dashboard_widget",
+        SimpleNamespace(write_unraid_dashboard_widget_status_file_cache=fake_widget_refresh),
+    )
+    monkeypatch.setenv("BACKUP_SCRIPTS_DIR", str(tmp_path))
+    monkeypatch.setenv("BORG_UI_APP_VERSION", "2026.08.28.1913")
+
+    job = BackupJob(_backup_job_config(tmp_path))
+    job._start_time = 100.0
+    monkeypatch.setattr("lib.backup_job.time.time", lambda: 145.0)
+    monkeypatch.setattr(job, "_send_notification_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        job,
+        "_save_status",
+        lambda _duration: calls.append(("status", _duration)) or (tmp_path / "status" / "flash.status"),
+    )
+    monkeypatch.setattr(job, "_remove_lock", lambda: calls.append(("lock", None)))
+
+    job.set_result(0)
+    job.__exit__(None, None, None)
+
+    assert [name for name, _payload in calls] == ["status", "lock", "widget"]
+    widget_payload = calls[-1][1]
+    assert widget_payload["config"]["STATUS_DIR"] == str(tmp_path / "status")
+    assert widget_payload["config"]["BACKUP_SCRIPTS_DIR"] == str(tmp_path)
+    assert widget_payload["app_version"] == "2026.08.28.1913"
+
+
 def test_notification_event_emits_lifecycle_summary(tmp_path: Path, monkeypatch):
     log_file = tmp_path / "borg_backup_ui.log"
     monkeypatch.setenv("BORG_UI_MAIN_LOG", str(log_file))

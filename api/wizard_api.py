@@ -46,9 +46,11 @@ def list_source_directories(prefix: str = "", limit: int = 40, base_path: Path |
         has_trailing = raw.endswith("/")
         if has_trailing or candidate.is_dir():
             search_parent = candidate.resolve()
+            display_parent = candidate
             name_prefix = ""
         else:
             search_parent = candidate.parent.resolve()
+            display_parent = candidate.parent
             name_prefix = candidate.name
         search_parent.relative_to(base)
     except (OSError, ValueError):
@@ -57,9 +59,13 @@ def list_source_directories(prefix: str = "", limit: int = 40, base_path: Path |
         return []
     result: list[dict] = []
     safe_limit = max(1, min(int(limit or 40), 100))
+    if not name_prefix and candidate != base and search_parent.is_dir():
+        result.append({"path": f"{display_parent.as_posix().rstrip('/')}/"})
+        if len(result) >= safe_limit:
+            return result
     try:
         for child in sorted(search_parent.iterdir(), key=lambda path: path.name.lower()):
-            if not child.is_dir() or child.is_symlink():
+            if not child.is_dir():
                 continue
             if name_prefix and not child.name.lower().startswith(name_prefix.lower()):
                 continue
@@ -67,7 +73,7 @@ def list_source_directories(prefix: str = "", limit: int = 40, base_path: Path |
                 child.resolve().relative_to(base)
             except (OSError, ValueError):
                 continue
-            result.append({"path": f"{child.as_posix().rstrip('/')}/"})
+            result.append({"path": f"{display_parent.as_posix().rstrip('/')}/{child.name}/"})
             if len(result) >= safe_limit:
                 break
     except OSError:

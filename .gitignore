@@ -2,6 +2,7 @@
 plugin/build/
 plugin/build/*.txz
 plugin/build/pkg/
+widget-status.json
 
 # Python
 __pycache__/

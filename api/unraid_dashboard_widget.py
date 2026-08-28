@@ -229,7 +229,10 @@ def build_unraid_dashboard_widget_startup_cache(
 
 def _read_status_file_data(config: dict) -> dict[str, Any]:
     try:
-        from status import StatusStore, format_duration, time_ago
+        try:
+            from status import StatusStore, format_duration, time_ago
+        except ImportError:
+            from lib.status import StatusStore, format_duration, time_ago
 
         status_dir = Path(str(config.get("STATUS_DIR") or ""))
         store = StatusStore(status_dir)
@@ -334,7 +337,6 @@ def _has_enabled_jobs_without_backup_status_evidence(cache: dict[str, Any] | Non
         _as_int(jobs.get("successful"))
         + _as_int(jobs.get("warnings"))
         + _as_int(jobs.get("failed"))
-        + _as_int(jobs.get("running"))
     )
     if counters > 0:
         return False
