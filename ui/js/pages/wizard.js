@@ -190,17 +190,21 @@ function _wizardRuntimeStateClass(state) {
   return 'is-unknown';
 }
 
-function _wizardHasExactSourcePath(path) {
-  const normalized = String(path || '').replace(/\/+$/, '');
-  return (wizardState.sourcePaths || []).some((raw) => String(raw || '').replace(/\/+$/, '') === normalized);
+function _wizardHasSourcePathComponent(name) {
+  const wanted = String(name || '').trim().toLowerCase();
+  if (!wanted) return false;
+  return (wizardState.sourcePaths || []).some((raw) => String(raw || '')
+    .split('/')
+    .map((part) => part.trim().toLowerCase())
+    .includes(wanted));
 }
 
 function _wizardAppdataRiskRequired() {
-  return _wizardHasExactSourcePath('/mnt/user/appdata') && _wizardRuntimeMode('docker') !== 'all';
+  return _wizardHasSourcePathComponent('appdata') && _wizardRuntimeMode('docker') !== 'all';
 }
 
 function _wizardDomainsRiskRequired() {
-  return _wizardHasExactSourcePath('/mnt/user/domains') && _wizardRuntimeMode('vm') !== 'all';
+  return _wizardHasSourcePathComponent('domains') && _wizardRuntimeMode('vm') !== 'all';
 }
 
 function _wizardRiskAcknowledged(kind) {

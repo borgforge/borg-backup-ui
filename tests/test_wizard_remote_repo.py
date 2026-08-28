@@ -128,10 +128,8 @@ def test_wizard_preview_supports_docker_exclusion_mode(monkeypatch):
     assert "Stop all Docker containers except selected containers (1 kept running)" in flow["steps"]
 
 
-def test_wizard_preview_validation_defers_appdata_risk_ack_until_save(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    source = tmp_path / "mnt" / "user" / "appdata"
+def test_wizard_preview_validation_defers_appdata_risk_ack_until_save(tmp_path: Path) -> None:
+    source = tmp_path / "mnt" / "cache" / "appdata"
     source.mkdir(parents=True)
     params = _storagebox_params()
     params.update({
@@ -157,10 +155,6 @@ def test_wizard_preview_validation_defers_appdata_risk_ack_until_save(
         "relative_path": "borg-backup-appdata",
         "encryption": "none",
     }]})
-    monkeypatch.setattr(
-        "wizard_api._source_matches",
-        lambda _sources, prefix: prefix == "/mnt/user/appdata",
-    )
 
     validate_params(
         params,
