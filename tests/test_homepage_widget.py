@@ -181,6 +181,7 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
                 "duration_formatted": "3 Min.",
                 "repo_path": "/mnt/user/private",
                 "error_message": "secret details",
+                "restore_verification_status": "verified",
             }
         ],
     }
@@ -326,6 +327,68 @@ def test_unraid_dashboard_widget_status_file_cache_marks_overdue_jobs(tmp_path: 
     assert result["latest_backup"]["status"] == "ok"
     assert cache_file.exists()
     assert not snapshot_file.exists()
+
+
+def test_unraid_dashboard_widget_restore_proof_matches_dashboard_backup_rows(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {"UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file)}
+    status = {
+        "summary": {"success": 14, "warning": 0, "skipped": 0, "error": 0},
+        "backups": [
+            {"key": "one", "status": "success", "restore_verification_status": "verified"},
+            {"key": "two", "status": "success", "restore_verification_status": "verified"},
+            {"key": "three", "status": "success", "restore_verification_status": "verified"},
+            {"key": "four", "status": "success", "restore_verification_status": "verified"},
+            {"key": "not_planned", "status": "success", "restore_verification_status": "not_required"},
+        ],
+    }
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_read_jobs",
+        lambda _config, _backups: [
+            {"key": "one", "display_name": "One", "enabled": True, "restore_verification_status": "verified"},
+            {"key": "two", "display_name": "Two", "enabled": True, "restore_verification_status": "verified"},
+            {"key": "three", "display_name": "Three", "enabled": True, "restore_verification_status": "verified"},
+            {"key": "four", "display_name": "Four", "enabled": True, "restore_verification_status": "verified"},
+            {"key": "not_planned", "display_name": "Not planned", "enabled": True, "restore_verification_status": "never"},
+        ],
+    )
+    monkeypatch.setattr(unraid_dashboard_widget, "_repository_summary", lambda _config: {"online": 1, "total": 1})
+    monkeypatch.setattr(unraid_dashboard_widget, "_next_backups", lambda *_args: [])
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_cache(
+        config,
+        status,
+        app_version="2026.08.29.2235",
+        now=datetime(2026, 8, 29, 22, 35, tzinfo=timezone.utc),
+    )
+
+    assert result["restore_proof"] == {
+        "configured": 4,
+        "verified": 4,
+        "failed": 0,
+        "overdue": 0,
+        "open": 0,
+    }
+    assert result["jobs"]["items"][-1]["restore_verification_status"] == "not_required"
+
+
+def test_unraid_dashboard_widget_repository_summary_counts_not_known_offline_as_online(monkeypatch):
+    monkeypatch.setattr(
+        "repositories_api.get_repository_info_refresh_status",
+        lambda _config: {
+            "repository_count": 13,
+            "counts": {
+                "success": 9,
+                "warning": 0,
+                "error": 0,
+                "busy": 1,
+                "pending": 3,
+            },
+        },
+    )
+
+    assert unraid_dashboard_widget._repository_summary({}) == {"online": 13, "total": 13}
 
 
 def test_unraid_dashboard_widget_status_file_cache_clears_finished_running_lock(tmp_path: Path, monkeypatch):

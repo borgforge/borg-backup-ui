@@ -147,7 +147,7 @@ def build_unraid_dashboard_widget_cache(
     jobs = _clear_finished_running_states(jobs, backup_rows_by_key)
     enabled_jobs = [job for job in jobs if job.get("enabled", True) and not job.get("is_utility")]
     running_jobs = [job for job in enabled_jobs if job.get("running")]
-    restore = _restore_proof_summary(enabled_jobs)
+    restore = _restore_proof_summary(backups)
     repositories = _repository_summary(config)
     job_items = _job_cache_items(enabled_jobs, backup_rows_by_key)
 
@@ -263,6 +263,8 @@ def _read_status_file_data(config: dict) -> dict[str, Any]:
             "repository_check_date": st.repository_check_date or "",
             "repository_next_check": st.repository_next_check or "",
         })
+
+    _apply_status_file_restore_verification_metadata(config, backups)
 
     return {
         "backups": backups,
@@ -435,11 +437,64 @@ def _job_cache_items(jobs: list[dict[str, Any]], backups_by_key: dict[str, dict[
             "backup_overdue_after": str(latest.get("backup_overdue_after") or "").strip(),
             "backup_overdue_expected_run": str(latest.get("backup_overdue_expected_run") or "").strip(),
             "backup_overdue_next_run": str(latest.get("backup_overdue_next_run") or "").strip(),
-            "restore_verification_status": str(job.get("restore_verification_status") or "never").strip().lower(),
-            "restore_verification_valid_until": str(job.get("restore_verification_valid_until") or "").strip(),
-            "restore_verification_is_overdue": bool(job.get("restore_verification_is_overdue", False)),
+            "restore_verification_status": str(
+                latest.get("restore_verification_status")
+                or job.get("restore_verification_status")
+                or "never"
+            ).strip().lower(),
+            "restore_verification_valid_until": str(
+                latest.get("restore_verification_valid_until")
+                or job.get("restore_verification_valid_until")
+                or ""
+            ).strip(),
+            "restore_verification_is_overdue": bool(
+                latest.get("restore_verification_is_overdue", job.get("restore_verification_is_overdue", False))
+            ),
         })
     return items
+
+
+def _apply_status_file_restore_verification_metadata(config: dict, backups: list[dict[str, Any]]) -> None:
+    try:
+        from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
+        from restore_tests_api import build_restore_verification_map
+
+        scripts_dir = resolve_scripts_dir(config)
+        data_root = resolve_data_root(config)
+        jobs = [
+            {
+                "key": info.key,
+                "location": info.location,
+                "restore_test_policy": {
+                    "mode": info.restore_test_policy_mode,
+                    "interval_days": info.restore_test_interval_days,
+                    "validity_days": info.restore_test_validity_days,
+                    "level": info.restore_test_level,
+                    "max_runtime_minutes": info.restore_test_max_runtime_minutes,
+                },
+            }
+            for info in discover_jobs(scripts_dir, data_root)
+        ]
+        verification = build_restore_verification_map(config, jobs)
+    except Exception:
+        verification = {}
+
+    for row in backups:
+        key = str(row.get("key") or "").strip()
+        meta = verification.get(key, {})
+        row["restore_verification_status"] = meta.get("status", row.get("restore_verification_status") or "never")
+        row["restore_verification_reason"] = meta.get("reason", row.get("restore_verification_reason") or "")
+        row["restore_verification_last_test_date"] = meta.get(
+            "last_test_date",
+            row.get("restore_verification_last_test_date") or "",
+        )
+        row["restore_verification_valid_until"] = meta.get(
+            "valid_until",
+            row.get("restore_verification_valid_until") or "",
+        )
+        row["restore_verification_is_overdue"] = bool(
+            meta.get("is_overdue", row.get("restore_verification_is_overdue", False))
+        )
 
 
 def _apply_status_file_overdue_metadata(
@@ -543,20 +598,21 @@ def _repository_summary(config: dict, *, skip_if_array_root: bool = False) -> di
         status = get_repository_info_refresh_status(config)
         counts = status.get("counts") if isinstance(status.get("counts"), dict) else {}
         total = _as_int(status.get("repository_count"))
-        online = _as_int(counts.get("success"))
+        offline = _as_int(counts.get("warning")) + _as_int(counts.get("error"))
+        online = max(0, total - offline)
         return {"online": online, "total": total}
     except Exception:
         return {"online": 0, "total": 0}
 
 
-def _restore_proof_summary(jobs: list[dict[str, Any]]) -> dict[str, Any]:
+def _restore_proof_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     configured = 0
     verified = 0
     failed = 0
     overdue = 0
     open_count = 0
-    for job in jobs:
-        status = str(job.get("restore_verification_status") or "never").strip().lower()
+    for row in rows:
+        status = str(row.get("restore_verification_status") or "never").strip().lower()
         if status == "not_required":
             continue
         configured += 1
@@ -566,7 +622,7 @@ def _restore_proof_summary(jobs: list[dict[str, Any]]) -> dict[str, Any]:
             failed += 1
         elif status in {"never", ""}:
             open_count += 1
-        if status == "stale" or bool(job.get("restore_verification_is_overdue", False)):
+        if status == "stale" or bool(row.get("restore_verification_is_overdue", False)):
             overdue += 1
     return {
         "configured": configured,
