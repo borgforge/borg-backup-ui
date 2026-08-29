@@ -90,10 +90,20 @@ function wizardRenderArchivePrefixSummary() {
     return;
   }
   el.hidden = false;
-  const hasPrevious = rows.some((row) => !row.current);
-  el.innerHTML = `<span>${escHtml(wizardT(hasPrevious ? 'wizard.archiveFilterHistory' : 'wizard.archiveFilterCurrent'))}</span>${rows.map((row) => `
-    <code class="wizard-archive-prefix-chip ${row.current ? 'is-current' : 'is-previous'}">${escHtml(row.filter)}<small>${escHtml(wizardT(row.current ? 'wizard.archiveFilterCurrentBadge' : 'wizard.archiveFilterPreviousBadge'))}</small></code>
-  `).join('')}`;
+  const current = rows.find((row) => row.current) || rows[0];
+  el.innerHTML = `<span>${escHtml(wizardT('wizard.archivePatternCurrentLabel'))}</span><code class="wizard-archive-prefix-chip is-current">${escHtml(current.filter)}</code>${wizardArchivePrefixPopover(rows)}`;
+}
+
+function wizardArchivePrefixPopover(rows) {
+  const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => String(row?.filter || '').trim());
+  if (cleanRows.length <= 1) return '';
+  return `<span class="archive-pattern-popover">
+    <button type="button" class="archive-pattern-popover-button" aria-haspopup="true" aria-label="${escHtml(wizardT('wizard.archivePatternHistoryButton'))}">i</button>
+    <span class="archive-pattern-popover-panel" role="tooltip">
+      <strong>${escHtml(wizardT('wizard.archivePatternHistoryTitle'))}</strong>
+      ${cleanRows.map((row) => `<span><em>${escHtml(wizardT(row.current ? 'wizard.archiveFilterCurrentBadge' : 'wizard.archiveFilterPreviousBadge'))}</em><code>${escHtml(row.filter)}</code></span>`).join('')}
+    </span>
+  </span>`;
 }
 
 async function wizardLoadRuntimeInventory() {

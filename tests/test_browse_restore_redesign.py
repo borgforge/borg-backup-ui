@@ -55,12 +55,18 @@ def test_browse_restore_shows_archive_filters() -> None:
     english = _read("ui/i18n/en.json")
     assert "restoreState.archiveFilters" in script
     assert "data.archive_filters" in script
+    assert "function restoreArchiveFilterPopover(filters)" in script
+    assert "archiveFilterHistoryButton" in script
+    assert "archiveFilterHistoryTitle" in script
     assert "archiveFilterCurrent" in script
     assert "archiveFilterPrevious" in script
     assert ".restore-archive-filter-summary" in css
     assert ".restore-archive-filter-chip.is-current" in css
-    assert '"archiveFiltersLabel": "Angezeigt werden Archive passend zu"' in german
-    assert '"archiveFiltersLabel": "Showing archives matching"' in english
+    css_global = _read("ui/style.css")
+    assert ".archive-pattern-popover-panel" in css_global
+    assert "position: absolute;" in css_global
+    assert '"archiveFilterLabel": "Archivfilter"' in german
+    assert '"archiveFilterLabel": "Archive filter"' in english
 
 
 def test_wizard_shows_stored_archive_prefix_history() -> None:
@@ -73,10 +79,14 @@ def test_wizard_shows_stored_archive_prefix_history() -> None:
     assert 'id="wiz-archive-prefix-summary"' in html
     assert "wizardState.archivePrefixes" in script
     assert "function wizardRenderArchivePrefixSummary()" in script
+    assert "function wizardArchivePrefixPopover(rows)" in script
+    assert "wizard.archivePatternCurrentLabel" in script
+    assert "wizard.archivePatternHistoryTitle" in script
     assert "wizardRenderArchivePrefixSummary();" in bindings
     assert ".wizard-archive-prefix-summary" in css
-    assert '"archiveFilterHistory": "Gespeicherte Archivfilter"' in german
-    assert '"archiveFilterHistory": "Stored archive filters"' in english
+    assert ".archive-pattern-popover-panel" in css
+    assert '"archivePatternCurrentLabel": "Aktuelles Archivnamensmuster"' in german
+    assert '"archivePatternCurrentLabel": "Current archive name pattern"' in english
 
 
 def test_browse_restore_precheck_shows_backend_validation_reason() -> None:

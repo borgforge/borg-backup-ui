@@ -5604,6 +5604,7 @@ body.wizard-modal-open {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  min-height: 28px;
   margin-top: 6px;
   color: var(--text-muted);
   font-size: 12px;
@@ -5617,19 +5618,83 @@ body.wizard-modal-open {
   padding: 2px 7px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-elev-1);
+  background: var(--bg-card);
   color: var(--text);
   overflow-wrap: anywhere;
 }
 
 .wizard-archive-prefix-chip small {
   color: var(--text-muted);
-  font-family: var(--font-sans);
   font-size: 11px;
 }
 
 .wizard-archive-prefix-chip.is-current {
   border-color: var(--accent);
+}
+
+.archive-pattern-popover {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.archive-pattern-popover-button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font: 700 12px/1 inherit;
+  cursor: pointer;
+}
+
+.archive-pattern-popover-button:hover,
+.archive-pattern-popover-button:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
+.archive-pattern-popover-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 50%;
+  display: none;
+  width: max-content;
+  max-width: min(420px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--text);
+  transform: translateX(-50%);
+}
+
+.archive-pattern-popover:hover .archive-pattern-popover-panel,
+.archive-pattern-popover:focus-within .archive-pattern-popover-panel {
+  display: grid;
+  gap: 7px;
+}
+
+.archive-pattern-popover-panel strong,
+.archive-pattern-popover-panel span {
+  display: grid;
+  gap: 2px;
+}
+
+.archive-pattern-popover-panel em {
+  color: var(--text-muted);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.archive-pattern-popover-panel code {
+  white-space: nowrap;
 }
 
 #wizard-step-1 .wizard-feature-grid {

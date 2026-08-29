@@ -198,13 +198,11 @@ function renderRestoreArchiveList() {
   if (count) count.textContent = restoreT('archiveCount', { count: restoreState.archives.length });
   if (filtersEl) {
     const filters = Array.isArray(restoreState.archiveFilters) ? restoreState.archiveFilters : [];
-    filtersEl.innerHTML = filters.length
-      ? `<span>${escHtml(restoreT(filters.length === 1 ? 'archiveFilterLabel' : 'archiveFiltersLabel'))}</span>${filters.map((item) => {
-        const filter = String(item?.filter || '').trim();
-        if (!filter) return '';
-        const current = !!item?.current;
-        return `<code class="restore-archive-filter-chip ${current ? 'is-current' : 'is-previous'}">${escHtml(filter)}<small>${escHtml(restoreT(current ? 'archiveFilterCurrent' : 'archiveFilterPrevious'))}</small></code>`;
-      }).join('')}`
+    const current = filters.find((item) => item?.current) || filters[0] || null;
+    const currentFilter = String(current?.filter || '').trim();
+    filtersEl.hidden = !currentFilter;
+    filtersEl.innerHTML = currentFilter
+      ? `<span>${escHtml(restoreT('archiveFilterLabel'))}</span><code class="restore-archive-filter-chip is-current">${escHtml(currentFilter)}</code>${restoreArchiveFilterPopover(filters)}`
       : '';
   }
   list.innerHTML = restoreState.archives.map((archive) => {
@@ -212,6 +210,23 @@ function renderRestoreArchiveList() {
     const date = archive.start ? String(archive.start).substring(0, 19).replace('T', ' ') : '';
     return `<button type="button" class="restore-archive-row ${active ? 'is-selected' : ''}" data-restore-archive="${escHtml(archive.name)}"><span class="restore-archive-radio">${active ? '●' : '○'}</span><span><strong>${escHtml(archive.name)}</strong><small>${escHtml(date)}</small></span><span class="ui-badge">${escHtml(restoreT('available'))}</span></button>`;
   }).join('') || `<div class="restore-sidebar-empty">${escHtml(restoreT('noArchives'))}</div>`;
+}
+
+function restoreArchiveFilterPopover(filters) {
+  const rows = (Array.isArray(filters) ? filters : [])
+    .map((item) => ({
+      filter: String(item?.filter || '').trim(),
+      current: !!item?.current,
+    }))
+    .filter((item) => item.filter);
+  if (rows.length <= 1) return '';
+  return `<span class="archive-pattern-popover">
+    <button type="button" class="archive-pattern-popover-button" aria-haspopup="true" aria-label="${escHtml(restoreT('archiveFilterHistoryButton'))}">i</button>
+    <span class="archive-pattern-popover-panel" role="tooltip">
+      <strong>${escHtml(restoreT('archiveFilterHistoryTitle'))}</strong>
+      ${rows.map((row) => `<span><em>${escHtml(restoreT(row.current ? 'archiveFilterCurrent' : 'archiveFilterPrevious'))}</em><code>${escHtml(row.filter)}</code></span>`).join('')}
+    </span>
+  </span>`;
 }
 
 function renderRestoreSourceContext() {
