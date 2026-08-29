@@ -598,7 +598,7 @@ def _repository_summary(config: dict, *, skip_if_array_root: bool = False) -> di
         status = get_repository_info_refresh_status(config)
         counts = status.get("counts") if isinstance(status.get("counts"), dict) else {}
         total = _as_int(status.get("repository_count"))
-        offline = _as_int(counts.get("warning")) + _as_int(counts.get("error"))
+        offline = _as_int(counts.get("error"))
         online = max(0, total - offline)
         return {"online": online, "total": total}
     except Exception:

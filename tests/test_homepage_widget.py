@@ -380,10 +380,10 @@ def test_unraid_dashboard_widget_repository_summary_counts_not_known_offline_as_
             "repository_count": 13,
             "counts": {
                 "success": 9,
-                "warning": 0,
+                "warning": 2,
                 "error": 0,
                 "busy": 1,
-                "pending": 3,
+                "pending": 1,
             },
         },
     )
