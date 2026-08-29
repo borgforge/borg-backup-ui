@@ -5599,6 +5599,39 @@ body.wizard-modal-open {
   gap: 8px 10px;
 }
 
+.wizard-archive-prefix-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.wizard-archive-prefix-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-1);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.wizard-archive-prefix-chip small {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+.wizard-archive-prefix-chip.is-current {
+  border-color: var(--accent);
+}
+
 #wizard-step-1 .wizard-feature-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -31,6 +31,7 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   selectedVms: [],
   unlockedStep: 1,
   originalSchedule: null,
+  archivePrefixes: [],
 };
 const wizardState = window.BBUI.wizardState;
 
@@ -57,6 +58,42 @@ function _wizardUniqueList(values) {
     out.push(val);
   });
   return out;
+}
+
+function _wizardArchivePrefixFromTypeId(typeId) {
+  const clean = String(typeId || '').trim().toLowerCase();
+  return /^[a-z0-9_]+$/.test(clean) ? `${clean}-backup` : '';
+}
+
+function wizardArchivePrefixRows() {
+  const currentPrefix = _wizardArchivePrefixFromTypeId(document.getElementById('wiz-type-id')?.value || '');
+  const prefixes = _wizardUniqueList([
+    currentPrefix,
+    ...(Array.isArray(wizardState.archivePrefixes) ? wizardState.archivePrefixes : []),
+  ]);
+  return prefixes
+    .filter(Boolean)
+    .map((prefix) => ({
+      prefix,
+      filter: `${prefix}-*`,
+      current: !!currentPrefix && prefix === currentPrefix,
+    }));
+}
+
+function wizardRenderArchivePrefixSummary() {
+  const el = document.getElementById('wiz-archive-prefix-summary');
+  if (!el) return;
+  const rows = wizardArchivePrefixRows();
+  if (!rows.length) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
+  const hasPrevious = rows.some((row) => !row.current);
+  el.innerHTML = `<span>${escHtml(wizardT(hasPrevious ? 'wizard.archiveFilterHistory' : 'wizard.archiveFilterCurrent'))}</span>${rows.map((row) => `
+    <code class="wizard-archive-prefix-chip ${row.current ? 'is-current' : 'is-previous'}">${escHtml(row.filter)}<small>${escHtml(wizardT(row.current ? 'wizard.archiveFilterCurrentBadge' : 'wizard.archiveFilterPreviousBadge'))}</small></code>
+  `).join('')}`;
 }
 
 async function wizardLoadRuntimeInventory() {
@@ -417,6 +454,7 @@ function openWizard() {
   wizardState.step = 1;
   wizardState.unlockedStep = 1;
   wizardState.originalSchedule = null;
+  wizardState.archivePrefixes = [];
   const title = document.getElementById('wizard-modal-title');
   if (title) title.textContent = wizardT('wizard.newTitle');
   document.getElementById('wiz-job-name').value = '';
@@ -473,6 +511,7 @@ function openWizard() {
   _wizardScheduleApplyUI('daily');
   wizardSchedulePreview();
   wizardUpdateIconPreview();
+  wizardRenderArchivePrefixSummary();
   wizardState.loadingPromise = Promise.all([
     wizardLoadStorageTargets(),
     wizardLoadRepositories(),
@@ -487,6 +526,7 @@ function openWizard() {
 
 function _wizardFillFromJob(job) {
   wizardState.remoteRepoStatus = null;
+  wizardState.archivePrefixes = _wizardUniqueList(Array.isArray(job.archive_prefixes) ? job.archive_prefixes : []);
   document.getElementById('wiz-job-name').value = job.job_name || '';
   document.getElementById('wiz-type-id').value = (job.type_id || '').toLowerCase();
   document.getElementById('wiz-icon').value = (job.icon || '').toLowerCase();
@@ -513,6 +553,7 @@ function _wizardFillFromJob(job) {
   document.getElementById('wiz-keep-yearly').value = job.keep_yearly || '3';
   _wizardApplySchedule(job.schedule);
   wizardUpdateIconPreview();
+  wizardRenderArchivePrefixSummary();
   wizardAutoFill();
   if (job.repository_assignment_error) {
     _wizardShowError(2, wizardT('wizard.repositoryAssignmentRepair', {
@@ -1380,6 +1421,7 @@ window.addEventListener?.('bbui:language-changed', () => {
   wizardRenderSourcePaths();
   wizardRenderExcludePaths();
   wizardUpdateIconPreview();
+  wizardRenderArchivePrefixSummary();
   wizardAutoFill();
   wizardRenderRuntimeControls();
   wizardSchedulePreview();

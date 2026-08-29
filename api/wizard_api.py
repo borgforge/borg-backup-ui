@@ -292,6 +292,7 @@ def _repository_encryption(repo: Optional[dict], fallback: str = "repokey-blake2
 
 
 def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dict:
+    from archive_prefix import archive_prefix_from_backup_type, normalize_archive_prefixes
     from jobs_api import discover_jobs, get_jobs_meta_dirs, resolve_data_root
     from config_api import read_expanded_conf
 
@@ -316,6 +317,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     meta_repository_key = ""
     meta_mount_before_run = True
     meta_unmount_after_run = True
+    meta_archive_prefixes: list[str] = []
     meta: dict = {}
     meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False}
     meta_vm_control = {"mode": "all" if bool(info.has_vm) else "none", "selected": [], "ack_domains_risk": False}
@@ -350,6 +352,10 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
             meta_repository_key = str(meta.get("repository_key") or "").strip()
             meta_mount_before_run = bool(meta.get("mount_before_run", True))
             meta_unmount_after_run = bool(meta.get("unmount_after_run", True))
+            meta_archive_prefixes = normalize_archive_prefixes([
+                archive_prefix_from_backup_type(type_id),
+                *(meta.get("archive_prefixes") if isinstance(meta.get("archive_prefixes"), list) else []),
+            ])
             meta_docker_control = _runtime_control_from_meta(meta, "docker")
             meta_vm_control = _runtime_control_from_meta(meta, "vm")
             break
@@ -409,6 +415,9 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "keep_monthly": meta_keep_monthly or conf.get(f"RETENTION_{_type_upper(type_id)}_MONTHLY", "6"),
         "keep_yearly": meta_keep_yearly or conf.get(f"RETENTION_{_type_upper(type_id)}_YEARLY", "3"),
         "standard": info.standard,
+        "archive_prefixes": meta_archive_prefixes or normalize_archive_prefixes([
+            archive_prefix_from_backup_type(type_id),
+        ]),
         "schedule": {
             "cron": str(schedule.get("cron") or "").strip(),
             "enabled": bool(schedule.get("enabled", True)),

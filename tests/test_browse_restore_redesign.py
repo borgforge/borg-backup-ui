@@ -59,8 +59,24 @@ def test_browse_restore_shows_archive_filters() -> None:
     assert "archiveFilterPrevious" in script
     assert ".restore-archive-filter-summary" in css
     assert ".restore-archive-filter-chip.is-current" in css
-    assert '"archiveFiltersLabel": "Archivfilter"' in german
-    assert '"archiveFiltersLabel": "Archive filters"' in english
+    assert '"archiveFiltersLabel": "Angezeigt werden Archive passend zu"' in german
+    assert '"archiveFiltersLabel": "Showing archives matching"' in english
+
+
+def test_wizard_shows_stored_archive_prefix_history() -> None:
+    html = _read("ui/index.html")
+    script = _read("ui/js/pages/wizard.js")
+    bindings = _read("ui/js/components/app-bindings.js")
+    css = _read("ui/style.css")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+    assert 'id="wiz-archive-prefix-summary"' in html
+    assert "wizardState.archivePrefixes" in script
+    assert "function wizardRenderArchivePrefixSummary()" in script
+    assert "wizardRenderArchivePrefixSummary();" in bindings
+    assert ".wizard-archive-prefix-summary" in css
+    assert '"archiveFilterHistory": "Gespeicherte Archivfilter"' in german
+    assert '"archiveFilterHistory": "Stored archive filters"' in english
 
 
 def test_browse_restore_precheck_shows_backend_validation_reason() -> None:
