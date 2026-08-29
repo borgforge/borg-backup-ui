@@ -5629,7 +5629,7 @@ body.wizard-modal-open {
 }
 
 .wizard-archive-prefix-chip.is-current {
-  border-color: var(--accent);
+  border-color: var(--border);
 }
 
 .archive-pattern-popover {

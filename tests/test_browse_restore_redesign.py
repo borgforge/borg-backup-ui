@@ -85,8 +85,8 @@ def test_wizard_shows_stored_archive_prefix_history() -> None:
     assert "wizardRenderArchivePrefixSummary();" in bindings
     assert ".wizard-archive-prefix-summary" in css
     assert ".archive-pattern-popover-panel" in css
-    assert '"archivePatternCurrentLabel": "Aktuelles Archivnamensmuster"' in german
-    assert '"archivePatternCurrentLabel": "Current archive name pattern"' in english
+    assert '"archivePatternCurrentLabel": "Aktuelles Archivmuster"' in german
+    assert '"archivePatternCurrentLabel": "Current archive pattern"' in english
 
 
 def test_browse_restore_precheck_shows_backend_validation_reason() -> None:

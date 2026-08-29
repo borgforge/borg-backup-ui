@@ -717,7 +717,7 @@
     "typeIdPlaceholder": "z.B. meinedaten",
     "archiveFilterCurrent": "Neue Archive verwenden",
     "archiveFilterHistory": "Gespeicherte Archivfilter",
-    "archivePatternCurrentLabel": "Aktuelles Archivnamensmuster",
+    "archivePatternCurrentLabel": "Aktuelles Archivmuster",
     "archivePatternHistoryButton": "Archivmuster-Historie anzeigen",
     "archivePatternHistoryTitle": "Gespeicherte Archivmuster",
     "archiveFilterCurrentBadge": "aktuell",

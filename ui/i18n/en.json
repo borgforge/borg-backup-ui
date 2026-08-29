@@ -717,7 +717,7 @@
     "typeIdPlaceholder": "e.g. mydata",
     "archiveFilterCurrent": "New archives will use",
     "archiveFilterHistory": "Stored archive filters",
-    "archivePatternCurrentLabel": "Current archive name pattern",
+    "archivePatternCurrentLabel": "Current archive pattern",
     "archivePatternHistoryButton": "Show archive name pattern history",
     "archivePatternHistoryTitle": "Stored archive name patterns",
     "archiveFilterCurrentBadge": "current",
