@@ -181,6 +181,7 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
                 "duration_formatted": "3 Min.",
                 "repo_path": "/mnt/user/private",
                 "error_message": "secret details",
+                "restore_verification_status": "verified",
             }
         ],
     }
@@ -326,6 +327,174 @@ def test_unraid_dashboard_widget_status_file_cache_marks_overdue_jobs(tmp_path: 
     assert result["latest_backup"]["status"] == "ok"
     assert cache_file.exists()
     assert not snapshot_file.exists()
+
+
+def test_unraid_dashboard_widget_restore_proof_matches_dashboard_backup_rows(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    config = {"UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file)}
+    status = {
+        "summary": {"success": 14, "warning": 0, "skipped": 0, "error": 0},
+        "backups": [
+            {"key": "one", "status": "success", "restore_verification_status": "verified"},
+            {"key": "two", "status": "success", "restore_verification_status": "verified"},
+            {"key": "three", "status": "success", "restore_verification_status": "verified"},
+            {"key": "four", "status": "success", "restore_verification_status": "verified"},
+            {"key": "not_planned", "status": "success", "restore_verification_status": "not_required"},
+        ],
+    }
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_read_jobs",
+        lambda _config, _backups: [
+            {"key": "one", "display_name": "One", "enabled": True, "restore_verification_status": "verified"},
+            {"key": "two", "display_name": "Two", "enabled": True, "restore_verification_status": "verified"},
+            {"key": "three", "display_name": "Three", "enabled": True, "restore_verification_status": "verified"},
+            {"key": "four", "display_name": "Four", "enabled": True, "restore_verification_status": "verified"},
+            {"key": "not_planned", "display_name": "Not planned", "enabled": True, "restore_verification_status": "never"},
+        ],
+    )
+    monkeypatch.setattr(unraid_dashboard_widget, "_repository_summary", lambda _config: {"online": 1, "total": 1})
+    monkeypatch.setattr(unraid_dashboard_widget, "_next_backups", lambda *_args: [])
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_cache(
+        config,
+        status,
+        app_version="2026.08.29.2235",
+        now=datetime(2026, 8, 29, 22, 35, tzinfo=timezone.utc),
+    )
+
+    assert result["restore_proof"] == {
+        "configured": 4,
+        "verified": 4,
+        "failed": 0,
+        "overdue": 0,
+        "open": 0,
+    }
+    assert result["jobs"]["items"][-1]["restore_verification_status"] == "not_required"
+
+
+def test_unraid_dashboard_widget_repository_summary_counts_not_known_offline_as_online(monkeypatch):
+    monkeypatch.setattr(
+        "repositories_api.get_repository_info_refresh_status",
+        lambda _config: {
+            "repository_count": 13,
+            "counts": {
+                "success": 9,
+                "warning": 2,
+                "error": 0,
+                "busy": 1,
+                "pending": 1,
+            },
+        },
+    )
+
+    assert unraid_dashboard_widget._repository_summary({}) == {"online": 13, "total": 13}
+
+
+def test_unraid_dashboard_widget_status_file_cache_clears_finished_running_lock(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(status_dir),
+    }
+    (status_dir / "2026-08-29_22-20-06_sonstiges_usb.status").write_text(
+        json.dumps({
+            "backup_type": "sonstiges",
+            "location": "usb",
+            "timestamp": "2026-08-29 22:20:06",
+            "duration_seconds": 183,
+            "status": "success",
+            "exit_code": 0,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_read_jobs",
+        lambda _config, _backups: [
+            {
+                "key": "sonstiges_usb",
+                "display_name": "Sonstiges - USB",
+                "enabled": True,
+                "running": True,
+                "run_start_time": "2026-08-29 22:17:00",
+                "restore_verification_status": "not_required",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_repository_summary",
+        lambda _config: {"online": 1, "total": 1},
+    )
+    monkeypatch.setattr(unraid_dashboard_widget, "_next_backups", lambda *_args: [])
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_status_file_cache(
+        config,
+        app_version="2026.08.29.2210",
+        now=datetime(2026, 8, 29, 22, 20, 7, tzinfo=timezone.utc),
+    )
+
+    assert result["status"]["state"] == "ok"
+    assert result["jobs"]["successful"] == 1
+    assert result["jobs"]["running"] == 0
+    assert result["jobs"]["items"][0]["running"] is False
+    assert result["latest_backup"]["name"] == "Sonstiges - USB"
+    assert result["latest_backup"]["status"] == "ok"
+
+
+def test_unraid_dashboard_widget_status_file_cache_keeps_newer_running_job(tmp_path: Path, monkeypatch):
+    cache_file = tmp_path / "widget-status.json"
+    status_dir = tmp_path / "status"
+    status_dir.mkdir()
+    config = {
+        "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
+        "STATUS_DIR": str(status_dir),
+    }
+    (status_dir / "2026-08-29_22-20-06_sonstiges_usb.status").write_text(
+        json.dumps({
+            "backup_type": "sonstiges",
+            "location": "usb",
+            "timestamp": "2026-08-29 22:20:06",
+            "duration_seconds": 183,
+            "status": "success",
+            "exit_code": 0,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_read_jobs",
+        lambda _config, _backups: [
+            {
+                "key": "sonstiges_usb",
+                "display_name": "Sonstiges - USB",
+                "enabled": True,
+                "running": True,
+                "run_start_time": "2026-08-29 22:25:00",
+                "restore_verification_status": "not_required",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        unraid_dashboard_widget,
+        "_repository_summary",
+        lambda _config: {"online": 1, "total": 1},
+    )
+    monkeypatch.setattr(unraid_dashboard_widget, "_next_backups", lambda *_args: [])
+
+    result = unraid_dashboard_widget.write_unraid_dashboard_widget_status_file_cache(
+        config,
+        app_version="2026.08.29.2210",
+        now=datetime(2026, 8, 29, 22, 25, 30, tzinfo=timezone.utc),
+    )
+
+    assert result["status"]["state"] == "running"
+    assert result["jobs"]["successful"] == 1
+    assert result["jobs"]["running"] == 1
+    assert result["jobs"]["items"][0]["running"] is True
 
 
 def test_unraid_dashboard_widget_startup_cache_is_written_without_backup_status(tmp_path: Path, monkeypatch):
