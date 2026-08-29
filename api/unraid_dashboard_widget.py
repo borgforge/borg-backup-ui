@@ -143,11 +143,12 @@ def build_unraid_dashboard_widget_cache(
     backups = [row for row in status_data.get("backups", []) if isinstance(row, dict)]
     summary = status_data.get("summary") if isinstance(status_data.get("summary"), dict) else {}
     jobs = _read_jobs(config, backups)
+    backup_rows_by_key = _backup_rows_by_key(backups)
+    jobs = _clear_finished_running_states(jobs, backup_rows_by_key)
     enabled_jobs = [job for job in jobs if job.get("enabled", True) and not job.get("is_utility")]
     running_jobs = [job for job in enabled_jobs if job.get("running")]
     restore = _restore_proof_summary(enabled_jobs)
     repositories = _repository_summary(config)
-    backup_rows_by_key = _backup_rows_by_key(backups)
     job_items = _job_cache_items(enabled_jobs, backup_rows_by_key)
 
     failed = _as_int(summary.get("error"))
@@ -283,6 +284,66 @@ def _backup_rows_by_key(backups: list[dict[str, Any]]) -> dict[str, dict[str, An
         if key:
             rows[key] = row
     return rows
+
+
+def _parse_status_timestamp(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        pass
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone().replace(tzinfo=None)
+    return parsed
+
+
+def _parse_run_start_time(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return _parse_status_timestamp(raw)
+    if parsed.tzinfo is not None:
+        return parsed.astimezone().replace(tzinfo=None)
+    return parsed
+
+
+def _latest_status_closes_running_state(job: dict[str, Any], latest: dict[str, Any]) -> bool:
+    if not job.get("running"):
+        return False
+    status = str(latest.get("status") or "").strip().lower()
+    if status not in {"success", "warning", "error", "skipped", "cancelled"}:
+        return False
+    status_time = _parse_status_timestamp(latest.get("timestamp"))
+    run_start = _parse_run_start_time(job.get("run_start_time"))
+    if status_time is None or run_start is None:
+        return False
+    return status_time >= run_start
+
+
+def _clear_finished_running_states(
+    jobs: list[dict[str, Any]],
+    backups_by_key: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    cleared: list[dict[str, Any]] = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        key = str(job.get("key") or "").strip()
+        latest = backups_by_key.get(key) or {}
+        if _latest_status_closes_running_state(job, latest):
+            cleared.append({**job, "running": False, "run_start_time": None})
+        else:
+            cleared.append(job)
+    return cleared
 
 
 def _read_existing_cache(path: Path) -> dict[str, Any] | None:
