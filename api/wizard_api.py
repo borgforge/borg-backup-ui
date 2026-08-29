@@ -502,6 +502,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
 
 def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
     """Speichert Job-eigene Wizard-Metadaten mit kanonischer Repository-Referenz."""
+    from archive_prefix import archive_prefix_from_backup_type, normalize_archive_prefixes
     from jobs_api import get_jobs_meta_dir
     type_id     = params["type_id"].strip()
     location    = params.get("location", "local")
@@ -541,6 +542,11 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     unmount_after_run = bool(params.get("unmount_after_run", existing.get("unmount_after_run", True)))
     docker_control = _runtime_control_from_params(params, "docker", existing)
     vm_control = _runtime_control_from_params(params, "vm", existing)
+    archive_prefixes = normalize_archive_prefixes([
+        archive_prefix_from_backup_type(type_id),
+        archive_prefix_from_backup_type(existing.get("backup_type")),
+        *(existing.get("archive_prefixes") if isinstance(existing.get("archive_prefixes"), list) else []),
+    ])
 
     metadata = {
         "schema_version": JOB_SCHEMA_VERSION,
@@ -552,6 +558,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "enabled": bool(existing.get("enabled", True)),
         "standard": "wizard",
         "backup_type": type_id,
+        "archive_prefixes": archive_prefixes,
         "location": location,
         "mount_before_run": mount_before_run if location == "smb" else True,
         "unmount_after_run": unmount_after_run if location == "smb" else True,
