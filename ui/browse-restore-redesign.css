@@ -83,6 +83,10 @@
 .restore-selected-job-card .ready { margin-left: auto; color: var(--ui-state-success-fg); }
 
 .restore-archive-list { display: grid; gap: var(--ui-space-2); }
+.restore-archive-filter-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); margin: calc(-1 * var(--ui-space-2)) 0 var(--ui-space-3); color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-archive-filter-chip { display: inline-flex; align-items: center; gap: var(--ui-space-1); min-width: 0; max-width: 100%; padding: 2px var(--ui-space-2); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); background: var(--ui-color-surface-subtle); color: var(--ui-color-text); overflow-wrap: anywhere; }
+.restore-archive-filter-chip small { color: var(--ui-color-text-subtle); font-family: var(--ui-font-sans); font-size: var(--ui-font-size-xs); }
+.restore-archive-filter-chip.is-current { border-color: var(--ui-color-accent); }
 .restore-archive-row { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto; align-items: center; gap: var(--ui-space-2); width: 100%; padding: var(--ui-space-3); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-sm); background: var(--ui-color-surface); color: var(--ui-color-text); text-align: left; }
 .restore-archive-row.is-selected { border-color: var(--ui-color-accent); box-shadow: inset 3px 0 var(--ui-color-accent); }
 .restore-archive-row strong, .restore-archive-row small { display: block; }

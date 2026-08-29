@@ -18,6 +18,7 @@ def test_browse_restore_keeps_five_step_workflow_and_api_contracts() -> None:
     script = _read("ui/js/pages/restore.js")
     for element_id in (
         "restore-sidebar-job-list", "restore-job-sel", "restore-archive-sel",
+        "restore-archive-filter-summary",
         "restore-browser", "restore-target-path", "restore-conflict-mode",
         "restore-dry-run", "restore-preserve-owner", "restore-confirm-check",
         "restore-start-btn", "restore-precheck-output",
@@ -45,6 +46,21 @@ def test_browse_restore_uses_configured_icons_and_structured_precheck() -> None:
     assert ".restore-precheck-verdict-mark svg" in css
     assert ".restore-precheck-verdict.error .restore-precheck-verdict-mark { color: var(--ui-state-error-fg); }" in css
     assert ".restore-precheck-verdict-mark { display: grid; place-items: center; width: 2.125rem; height: 2.125rem; color: var(--ui-state-success-fg); }" in css
+
+
+def test_browse_restore_shows_archive_filters() -> None:
+    script = _read("ui/js/pages/restore.js")
+    css = _read("ui/browse-restore-redesign.css")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+    assert "restoreState.archiveFilters" in script
+    assert "data.archive_filters" in script
+    assert "archiveFilterCurrent" in script
+    assert "archiveFilterPrevious" in script
+    assert ".restore-archive-filter-summary" in css
+    assert ".restore-archive-filter-chip.is-current" in css
+    assert '"archiveFiltersLabel": "Archivfilter"' in german
+    assert '"archiveFiltersLabel": "Archive filters"' in english
 
 
 def test_browse_restore_precheck_shows_backend_validation_reason() -> None:

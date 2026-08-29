@@ -27,6 +27,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   files: [],
   jobs: [],
   archives: [],
+  archiveFilters: [],
   runs: [],
   history: [],
   historyTotal: 0,
@@ -190,10 +191,22 @@ function renderRestoreArchiveList() {
   const list = document.getElementById('restore-archive-list');
   const count = document.getElementById('restore-archive-count');
   const context = document.getElementById('restore-archive-context');
+  const filtersEl = document.getElementById('restore-archive-filter-summary');
   if (!list) return;
   const job = (restoreState.jobs || []).find((item) => String(item.key) === String(restoreState.job));
   if (context) context.textContent = job?.display_name || job?.name || restoreState.job || '';
   if (count) count.textContent = restoreT('archiveCount', { count: restoreState.archives.length });
+  if (filtersEl) {
+    const filters = Array.isArray(restoreState.archiveFilters) ? restoreState.archiveFilters : [];
+    filtersEl.innerHTML = filters.length
+      ? `<span>${escHtml(restoreT(filters.length === 1 ? 'archiveFilterLabel' : 'archiveFiltersLabel'))}</span>${filters.map((item) => {
+        const filter = String(item?.filter || '').trim();
+        if (!filter) return '';
+        const current = !!item?.current;
+        return `<code class="restore-archive-filter-chip ${current ? 'is-current' : 'is-previous'}">${escHtml(filter)}<small>${escHtml(restoreT(current ? 'archiveFilterCurrent' : 'archiveFilterPrevious'))}</small></code>`;
+      }).join('')}`
+      : '';
+  }
   list.innerHTML = restoreState.archives.map((archive) => {
     const active = String(archive.name) === String(restoreState.archive);
     const date = archive.start ? String(archive.start).substring(0, 19).replace('T', ' ') : '';
@@ -796,6 +809,7 @@ async function restoreLoadArchives() {
   restoreState.selectedType = '';
   restoreState.autoPrecheckKey = '';
   restoreState.archives = [];
+  restoreState.archiveFilters = [];
   renderRestoreSourceContext();
   const sel = document.getElementById('restore-archive-sel');
   if (sel) sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
@@ -818,6 +832,7 @@ async function restoreLoadArchives() {
     const sel = document.getElementById('restore-archive-sel');
     sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
     restoreState.archives = data.archives || [];
+    restoreState.archiveFilters = Array.isArray(data.archive_filters) ? data.archive_filters : [];
     for (const a of restoreState.archives) {
       const opt = document.createElement('option');
       opt.value = a.name;

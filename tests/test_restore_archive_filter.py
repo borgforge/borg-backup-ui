@@ -64,13 +64,17 @@ def test_browse_restore_filters_archives_by_job_prefix_history(tmp_path: Path, m
     monkeypatch.setattr(restore_api, "_repository_borg_env", lambda _config, _info: {})
     monkeypatch.setattr(restore_api.subprocess, "run", fake_run)
 
-    result = restore_api.list_archives(cfg, "testdaten_local")
+    result = restore_api.list_archives_with_context(cfg, "testdaten_local")
 
     assert [cmd[cmd.index("--glob-archives") + 1] for cmd in calls] == [
         "testdaten-backup-*",
         "oldtestdaten-backup-*",
     ]
-    assert [row["name"] for row in result] == [
+    assert result["archive_filters"] == [
+        {"prefix": "testdaten-backup", "filter": "testdaten-backup-*", "current": True},
+        {"prefix": "oldtestdaten-backup", "filter": "oldtestdaten-backup-*", "current": False},
+    ]
+    assert [row["name"] for row in result["archives"]] == [
         "testdaten-backup-2026-08-29_22-00-00",
         "oldtestdaten-backup-2026-08-28_22-00-00",
     ]
@@ -101,7 +105,7 @@ def test_browse_restore_falls_back_to_unfiltered_archive_list_without_prefix(tmp
     })
     monkeypatch.setattr(restore_api, "ensure_restore_repository_available", lambda _config, _info: None)
     monkeypatch.setattr(restore_api, "_repository_borg_env", lambda _config, _info: {})
-    monkeypatch.setattr(restore_api, "_archive_prefixes_for_restore_job", lambda _job_key, _info: [])
+    monkeypatch.setattr(restore_api, "_archive_filter_rows_for_restore_job", lambda _job_key, _info: [])
     monkeypatch.setattr(restore_api.subprocess, "run", fake_run)
 
     assert restore_api.list_archives(cfg, "legacy_local")[0]["name"] == "archive-1"

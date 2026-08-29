@@ -458,14 +458,27 @@ def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, rest
     _raise_repository_busy(resource, holder or reason)
 
 
-def _archive_prefixes_for_restore_job(job_key: str, info: dict) -> list[str]:
+def _archive_filter_rows_for_restore_job(job_key: str, info: dict) -> list[dict]:
     job = info.get("job") if isinstance(info.get("job"), dict) else {}
+    current_prefix = archive_prefix_from_backup_type(job.get("backup_type") if isinstance(job, dict) else "")
     stored = job.get("archive_prefixes") if isinstance(job.get("archive_prefixes"), list) else []
-    return normalize_archive_prefixes([
-        archive_prefix_from_backup_type(job.get("backup_type") if isinstance(job, dict) else ""),
+    prefixes = normalize_archive_prefixes([
+        current_prefix,
         *stored,
         archive_prefix_from_job_key(job_key),
     ])
+    return [
+        {
+            "prefix": prefix,
+            "filter": f"{prefix}-*",
+            "current": bool(current_prefix and prefix == current_prefix),
+        }
+        for prefix in prefixes
+    ]
+
+
+def _archive_prefixes_for_restore_job(job_key: str, info: dict) -> list[str]:
+    return [str(row["prefix"]) for row in _archive_filter_rows_for_restore_job(job_key, info)]
 
 
 def _run_borg_archive_list(repo: str, env: dict, archive_filter: str = "") -> dict:
@@ -513,7 +526,7 @@ def _get_max_runtime_hours(config: dict) -> int:
         return 0
 
 
-def list_archives(config: dict, job_key: str) -> List[dict]:
+def list_archives_with_context(config: dict, job_key: str) -> dict:
     job_key = _validate_job_key(job_key)
     from smb_mount import ensure_smb_mount_for_job
     guard = ensure_smb_mount_for_job(config, job_key)
@@ -521,7 +534,8 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
         info = _get_job_repo_info(config, job_key)
         ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
-        prefixes = _archive_prefixes_for_restore_job(job_key, info)
+        archive_filters = _archive_filter_rows_for_restore_job(job_key, info)
+        prefixes = [str(row["prefix"]) for row in archive_filters]
 
         archives: list[dict] = []
         if prefixes:
@@ -535,9 +549,16 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
             ))
 
         by_name = {str(row.get("name") or ""): row for row in archives if str(row.get("name") or "")}
-        return sorted(by_name.values(), key=lambda row: str(row.get("start") or ""), reverse=True)
+        return {
+            "archives": sorted(by_name.values(), key=lambda row: str(row.get("start") or ""), reverse=True),
+            "archive_filters": archive_filters,
+        }
     finally:
         guard.cleanup()
+
+
+def list_archives(config: dict, job_key: str) -> List[dict]:
+    return list_archives_with_context(config, job_key)["archives"]
 
 
 def _build_index(repo: str, archive: str, env: dict) -> dict:
