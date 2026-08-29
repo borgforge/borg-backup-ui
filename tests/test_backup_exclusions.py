@@ -54,6 +54,41 @@ def test_backup_job_config_preserves_multiple_source_paths_with_spaces(tmp_path:
     assert cfg.backup_paths == [first, second]
 
 
+def test_backup_job_config_resolves_symlinked_source_root_for_borg(tmp_path: Path):
+    real_root = tmp_path / "performance" / "appdata"
+    visible_root = tmp_path / "user" / "appdata"
+    real_cache = real_root / "cache"
+    real_cache.mkdir(parents=True)
+    visible_root.parent.mkdir(parents=True)
+    visible_root.symlink_to(real_root, target_is_directory=True)
+
+    cfg = BackupJobConfig.from_config({
+        "BACKUP_PATHS_JSON": json.dumps([str(visible_root)]),
+        "BACKUP_EXCLUDE_PATHS_JSON": json.dumps([str(visible_root / "cache")]),
+    })
+
+    assert cfg.backup_paths == [real_root]
+    assert cfg.exclude_paths == [real_cache]
+
+
+def test_backup_job_config_resolves_nested_path_below_symlinked_share_for_borg(tmp_path: Path):
+    real_root = tmp_path / "performance" / "appdata"
+    visible_root = tmp_path / "user" / "appdata"
+    real_adguard = real_root / "adguard"
+    real_cache = real_adguard / "cache"
+    real_cache.mkdir(parents=True)
+    visible_root.parent.mkdir(parents=True)
+    visible_root.symlink_to(real_root, target_is_directory=True)
+
+    cfg = BackupJobConfig.from_config({
+        "BACKUP_PATHS_JSON": json.dumps([str(visible_root / "adguard")]),
+        "BACKUP_EXCLUDE_PATHS_JSON": json.dumps([str(visible_root / "adguard" / "cache")]),
+    })
+
+    assert cfg.backup_paths == [real_adguard]
+    assert cfg.exclude_paths == [real_cache]
+
+
 def test_borg_create_uses_safe_path_prefix_patterns(monkeypatch, tmp_path: Path):
     captured = {}
 

@@ -51,6 +51,41 @@ RUNTIME_RECOVERY_FAILED = "runtime_recovery_failed"
 USER_CANCELLED = "user_cancelled"
 
 
+def _path_uses_symlink(path: Path) -> bool:
+    current = Path(path.anchor or "/")
+    for part in path.parts[1:]:
+        current = current / part
+        try:
+            if current.is_symlink():
+                return True
+        except OSError:
+            return False
+    return False
+
+
+def _resolve_path_for_borg(path: Path) -> Path:
+    try:
+        if _path_uses_symlink(path):
+            return path.resolve(strict=True)
+    except OSError:
+        return path
+    return path
+
+
+def _resolve_exclude_path_for_borg(
+    path: Path,
+    source_mappings: list[tuple[Path, Path]],
+) -> Path:
+    for original, resolved in source_mappings:
+        if original == resolved:
+            continue
+        try:
+            return resolved / path.relative_to(original)
+        except ValueError:
+            continue
+    return _resolve_path_for_borg(path)
+
+
 class RequiredSourcePathsMissing(RuntimeError):
     """Raised before runtime services or Borg are touched when sources are absent."""
 
@@ -123,6 +158,7 @@ class BackupJobConfig:
         if not isinstance(raw_paths, list) or not raw_paths:
             raise ValueError("BACKUP_PATHS_JSON must contain at least one source path")
         backup_paths: List[Path] = []
+        source_mappings: list[tuple[Path, Path]] = []
         for index, raw_path in enumerate(raw_paths):
             if not isinstance(raw_path, str) or not raw_path.strip():
                 raise ValueError(f"BACKUP_PATHS_JSON entry {index + 1} is invalid")
@@ -131,12 +167,24 @@ class BackupJobConfig:
             path = Path(raw_path.strip())
             if not path.is_absolute():
                 raise ValueError(f"BACKUP_PATHS_JSON entry {index + 1} is not absolute")
-            backup_paths.append(path)
+            resolved_path = _resolve_path_for_borg(path)
+            if resolved_path != path:
+                logger.info(
+                    "Resolved symlinked backup source for Borg: %s -> %s",
+                    path,
+                    resolved_path,
+                )
+            backup_paths.append(resolved_path)
+            source_mappings.append((path, resolved_path))
         exclude_paths: List[Path] = []
         try:
             raw_excludes = json.loads(env.get("BACKUP_EXCLUDE_PATHS_JSON", "[]") or "[]")
             if isinstance(raw_excludes, list):
-                exclude_paths = [Path(str(path)) for path in raw_excludes if str(path).strip()]
+                exclude_paths = [
+                    _resolve_exclude_path_for_borg(Path(str(path).strip()), source_mappings)
+                    for path in raw_excludes
+                    if str(path).strip()
+                ]
         except (json.JSONDecodeError, TypeError, ValueError):
             logger.warning("Invalid BACKUP_EXCLUDE_PATHS_JSON; no paths will be excluded")
 
