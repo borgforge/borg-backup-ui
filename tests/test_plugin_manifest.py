@@ -54,6 +54,14 @@ def test_community_apps_metadata_mentions_python_runtime_requirement() -> None:
     assert "Runtime requirement" in profile_text
 
 
+def test_community_apps_metadata_requires_supported_openssh_runtime() -> None:
+    plugin = ROOT / "plugins" / "borg-backup-ui.xml"
+
+    plugin_root = ET.parse(plugin).getroot()
+
+    assert plugin_root.findtext("MinVer") == "7.2.0"
+
+
 def test_community_apps_metadata_uses_unraid_forum_support_thread() -> None:
     plugin = ROOT / "plugins" / "borg-backup-ui.xml"
     profile = ROOT / "ca_profile.xml"
