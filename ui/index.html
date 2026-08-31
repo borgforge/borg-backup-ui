@@ -641,6 +641,7 @@
 
           <div class="form-group" style="grid-column:1/-1; display:none" id="restore-step-panel-2">
             <header class="restore-workspace-header"><div><small data-i18n="restore.stepTwo">Schritt 2</small><h2 data-i18n="restore.selectArchive">Archiv auswählen</h2><p id="restore-archive-context"></p></div><span id="restore-archive-count" class="ui-badge"></span></header>
+            <div id="restore-archive-filter-summary" class="restore-archive-filter-summary"></div>
             <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.selectArchive">2. Archiv auswählen</span></label>
             <select id="restore-archive-sel" class="restore-select">
               <option value="" data-i18n="restore.chooseArchive">— Archiv wählen —</option>
@@ -1415,6 +1416,7 @@
             <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.typeId">Typ-ID</span> <span class="form-hint" data-i18n="wizard.typeIdHint">(nur a–z, 0–9, _)</span></label>
             <input class="form-input mono" type="text" id="wiz-type-id"
               placeholder="z.B. meinedaten" data-i18n-placeholder="wizard.typeIdPlaceholder">
+            <div id="wiz-archive-prefix-summary" class="wizard-archive-prefix-summary" hidden></div>
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="wizard.icon">Icon</label>

@@ -301,6 +301,7 @@
     document.getElementById('wiz-job-name')?.addEventListener('input', () => wizardClearError(1));
     document.getElementById('wiz-type-id')?.addEventListener('input', () => {
       wizardAutoFill();
+      wizardRenderArchivePrefixSummary();
       wizardClearError(1);
     });
     document.getElementById('wiz-location')?.addEventListener('change', wizardAutoFill);

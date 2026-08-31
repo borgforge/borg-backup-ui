@@ -15,17 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator, List, Optional
 
-
-def _archive_prefix_from_job_key(job_key: str) -> str:
-    """Return the archive prefix used by wizard jobs, e.g. appdata-backup."""
-    key = str(job_key or "").strip()
-    for location in ("storagebox", "local", "usb", "smb"):
-        suffix = f"_{location}"
-        if key.endswith(suffix):
-            backup_type = key[: -len(suffix)]
-            return f"{backup_type}-backup" if backup_type else ""
-    backup_type = key.rsplit("_", 1)[0] if "_" in key else key
-    return f"{backup_type}-backup" if backup_type else ""
+from archive_prefix import archive_prefix_from_job_key as _archive_prefix_from_job_key
 
 
 class _CheckState:

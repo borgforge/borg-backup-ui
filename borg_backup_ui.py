@@ -2169,13 +2169,13 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_restore_archives(self, qs_str: str) -> dict:
         self._require_data_dir_ready()
-        from restore_api import list_archives
+        from restore_api import list_archives_with_context
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
         job_key = (qs.get("job") or [""])[0]
         if not job_key:
             raise ValueError("job parameter is required")
-        return {"archives": list_archives(self.config, job_key)}
+        return list_archives_with_context(self.config, job_key)
 
     def _get_restore_files(self, qs_str: str) -> dict:
         self._require_data_dir_ready()

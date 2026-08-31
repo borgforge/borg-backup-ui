@@ -14,6 +14,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
+from archive_prefix import (
+    archive_prefix_from_backup_type,
+    archive_prefix_from_job_key,
+    normalize_archive_prefixes,
+)
+
 # In-memory cache: (repo, archive) → {expires, index}
 # index: parent_path → {child_name: entry_dict}
 _CACHE: dict = {}
@@ -359,6 +365,7 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
         "repository_key": context["repository_key"],
         "storage_key": context["storage_key"],
         "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
+        "job": context.get("job") if isinstance(context.get("job"), dict) else {},
     }
 
 
@@ -451,6 +458,56 @@ def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, rest
     _raise_repository_busy(resource, holder or reason)
 
 
+def _archive_filter_rows_for_restore_job(job_key: str, info: dict) -> list[dict]:
+    job = info.get("job") if isinstance(info.get("job"), dict) else {}
+    current_prefix = archive_prefix_from_backup_type(job.get("backup_type") if isinstance(job, dict) else "")
+    stored = job.get("archive_prefixes") if isinstance(job.get("archive_prefixes"), list) else []
+    prefixes = normalize_archive_prefixes([
+        current_prefix,
+        *stored,
+        archive_prefix_from_job_key(job_key),
+    ])
+    return [
+        {
+            "prefix": prefix,
+            "filter": f"{prefix}-*",
+            "current": bool(current_prefix and prefix == current_prefix),
+        }
+        for prefix in prefixes
+    ]
+
+
+def _archive_prefixes_for_restore_job(job_key: str, info: dict) -> list[str]:
+    return [str(row["prefix"]) for row in _archive_filter_rows_for_restore_job(job_key, info)]
+
+
+def _run_borg_archive_list(repo: str, env: dict, archive_filter: str = "") -> dict:
+    cmd = ["borg", "list", "--json"]
+    if archive_filter:
+        cmd.extend(["--glob-archives", archive_filter])
+    cmd.append(repo)
+    r = subprocess.run(
+        cmd,
+        capture_output=True, text=True, env=env, timeout=30,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"borg list failed: {r.stderr.strip()}")
+    return json.loads(r.stdout)
+
+
+def _archive_rows_from_borg_payload(payload: dict) -> list[dict]:
+    rows: list[dict] = []
+    for archive in payload.get("archives", []):
+        if not isinstance(archive, dict):
+            continue
+        rows.append({
+            "name": archive["name"],
+            "start": archive["start"],
+            "end": archive.get("end", archive["start"]),
+        })
+    return rows
+
+
 def _get_max_runtime_hours(config: dict) -> int:
     """
     Liefert den konfigurierten Hard-Limit-Wert in Stunden.
@@ -469,7 +526,7 @@ def _get_max_runtime_hours(config: dict) -> int:
         return 0
 
 
-def list_archives(config: dict, job_key: str) -> List[dict]:
+def list_archives_with_context(config: dict, job_key: str) -> dict:
     job_key = _validate_job_key(job_key)
     from smb_mount import ensure_smb_mount_for_job
     guard = ensure_smb_mount_for_job(config, job_key)
@@ -477,21 +534,31 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
         info = _get_job_repo_info(config, job_key)
         ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
+        archive_filters = _archive_filter_rows_for_restore_job(job_key, info)
+        prefixes = [str(row["prefix"]) for row in archive_filters]
 
-        r = subprocess.run(
-            ["borg", "list", "--json", info["repo"]],
-            capture_output=True, text=True, env=env, timeout=30,
-        )
-        if r.returncode != 0:
-            raise RuntimeError(f"borg list failed: {r.stderr.strip()}")
+        archives: list[dict] = []
+        if prefixes:
+            for prefix in prefixes:
+                archives.extend(_archive_rows_from_borg_payload(
+                    _run_borg_archive_list(info["repo"], env, f"{prefix}-*")
+                ))
+        else:
+            archives.extend(_archive_rows_from_borg_payload(
+                _run_borg_archive_list(info["repo"], env)
+            ))
 
-        data = json.loads(r.stdout)
-        return list(reversed([
-            {"name": a["name"], "start": a["start"], "end": a.get("end", a["start"])}
-            for a in data.get("archives", [])
-        ]))
+        by_name = {str(row.get("name") or ""): row for row in archives if str(row.get("name") or "")}
+        return {
+            "archives": sorted(by_name.values(), key=lambda row: str(row.get("start") or ""), reverse=True),
+            "archive_filters": archive_filters,
+        }
     finally:
         guard.cleanup()
+
+
+def list_archives(config: dict, job_key: str) -> List[dict]:
+    return list_archives_with_context(config, job_key)["archives"]
 
 
 def _build_index(repo: str, archive: str, env: dict) -> dict:

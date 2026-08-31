@@ -18,6 +18,7 @@ def test_browse_restore_keeps_five_step_workflow_and_api_contracts() -> None:
     script = _read("ui/js/pages/restore.js")
     for element_id in (
         "restore-sidebar-job-list", "restore-job-sel", "restore-archive-sel",
+        "restore-archive-filter-summary",
         "restore-browser", "restore-target-path", "restore-conflict-mode",
         "restore-dry-run", "restore-preserve-owner", "restore-confirm-check",
         "restore-start-btn", "restore-precheck-output",
@@ -45,6 +46,47 @@ def test_browse_restore_uses_configured_icons_and_structured_precheck() -> None:
     assert ".restore-precheck-verdict-mark svg" in css
     assert ".restore-precheck-verdict.error .restore-precheck-verdict-mark { color: var(--ui-state-error-fg); }" in css
     assert ".restore-precheck-verdict-mark { display: grid; place-items: center; width: 2.125rem; height: 2.125rem; color: var(--ui-state-success-fg); }" in css
+
+
+def test_browse_restore_shows_archive_filters() -> None:
+    script = _read("ui/js/pages/restore.js")
+    css = _read("ui/browse-restore-redesign.css")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+    assert "restoreState.archiveFilters" in script
+    assert "data.archive_filters" in script
+    assert "function restoreArchiveFilterPopover(filters)" in script
+    assert "archiveFilterHistoryButton" in script
+    assert "archiveFilterHistoryTitle" in script
+    assert "archiveFilterCurrent" in script
+    assert "archiveFilterPrevious" in script
+    assert ".restore-archive-filter-summary" in css
+    assert ".restore-archive-filter-chip.is-current" in css
+    css_global = _read("ui/style.css")
+    assert ".archive-pattern-popover-panel" in css_global
+    assert "position: absolute;" in css_global
+    assert '"archiveFilterLabel": "Archivfilter"' in german
+    assert '"archiveFilterLabel": "Archive filter"' in english
+
+
+def test_wizard_shows_stored_archive_prefix_history() -> None:
+    html = _read("ui/index.html")
+    script = _read("ui/js/pages/wizard.js")
+    bindings = _read("ui/js/components/app-bindings.js")
+    css = _read("ui/style.css")
+    german = _read("ui/i18n/de.json")
+    english = _read("ui/i18n/en.json")
+    assert 'id="wiz-archive-prefix-summary"' in html
+    assert "wizardState.archivePrefixes" in script
+    assert "function wizardRenderArchivePrefixSummary()" in script
+    assert "function wizardArchivePrefixPopover(rows)" in script
+    assert "wizard.archivePatternCurrentLabel" in script
+    assert "wizard.archivePatternHistoryTitle" in script
+    assert "wizardRenderArchivePrefixSummary();" in bindings
+    assert ".wizard-archive-prefix-summary" in css
+    assert ".archive-pattern-popover-panel" in css
+    assert '"archivePatternCurrentLabel": "Aktuelles Archivmuster"' in german
+    assert '"archivePatternCurrentLabel": "Current archive pattern"' in english
 
 
 def test_browse_restore_precheck_shows_backend_validation_reason() -> None:

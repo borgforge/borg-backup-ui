@@ -27,6 +27,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   files: [],
   jobs: [],
   archives: [],
+  archiveFilters: [],
   runs: [],
   history: [],
   historyTotal: 0,
@@ -190,15 +191,42 @@ function renderRestoreArchiveList() {
   const list = document.getElementById('restore-archive-list');
   const count = document.getElementById('restore-archive-count');
   const context = document.getElementById('restore-archive-context');
+  const filtersEl = document.getElementById('restore-archive-filter-summary');
   if (!list) return;
   const job = (restoreState.jobs || []).find((item) => String(item.key) === String(restoreState.job));
   if (context) context.textContent = job?.display_name || job?.name || restoreState.job || '';
   if (count) count.textContent = restoreT('archiveCount', { count: restoreState.archives.length });
+  if (filtersEl) {
+    const filters = Array.isArray(restoreState.archiveFilters) ? restoreState.archiveFilters : [];
+    const current = filters.find((item) => item?.current) || filters[0] || null;
+    const currentFilter = String(current?.filter || '').trim();
+    filtersEl.hidden = !currentFilter;
+    filtersEl.innerHTML = currentFilter
+      ? `<span>${escHtml(restoreT('archiveFilterLabel'))}</span><code class="restore-archive-filter-chip is-current">${escHtml(currentFilter)}</code>${restoreArchiveFilterPopover(filters)}`
+      : '';
+  }
   list.innerHTML = restoreState.archives.map((archive) => {
     const active = String(archive.name) === String(restoreState.archive);
     const date = archive.start ? String(archive.start).substring(0, 19).replace('T', ' ') : '';
     return `<button type="button" class="restore-archive-row ${active ? 'is-selected' : ''}" data-restore-archive="${escHtml(archive.name)}"><span class="restore-archive-radio">${active ? '●' : '○'}</span><span><strong>${escHtml(archive.name)}</strong><small>${escHtml(date)}</small></span><span class="ui-badge">${escHtml(restoreT('available'))}</span></button>`;
   }).join('') || `<div class="restore-sidebar-empty">${escHtml(restoreT('noArchives'))}</div>`;
+}
+
+function restoreArchiveFilterPopover(filters) {
+  const rows = (Array.isArray(filters) ? filters : [])
+    .map((item) => ({
+      filter: String(item?.filter || '').trim(),
+      current: !!item?.current,
+    }))
+    .filter((item) => item.filter);
+  if (rows.length <= 1) return '';
+  return `<span class="archive-pattern-popover">
+    <button type="button" class="archive-pattern-popover-button" aria-haspopup="true" aria-label="${escHtml(restoreT('archiveFilterHistoryButton'))}">i</button>
+    <span class="archive-pattern-popover-panel" role="tooltip">
+      <strong>${escHtml(restoreT('archiveFilterHistoryTitle'))}</strong>
+      ${rows.map((row) => `<span><em>${escHtml(restoreT(row.current ? 'archiveFilterCurrent' : 'archiveFilterPrevious'))}</em><code>${escHtml(row.filter)}</code></span>`).join('')}
+    </span>
+  </span>`;
 }
 
 function renderRestoreSourceContext() {
@@ -796,6 +824,7 @@ async function restoreLoadArchives() {
   restoreState.selectedType = '';
   restoreState.autoPrecheckKey = '';
   restoreState.archives = [];
+  restoreState.archiveFilters = [];
   renderRestoreSourceContext();
   const sel = document.getElementById('restore-archive-sel');
   if (sel) sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
@@ -818,6 +847,7 @@ async function restoreLoadArchives() {
     const sel = document.getElementById('restore-archive-sel');
     sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
     restoreState.archives = data.archives || [];
+    restoreState.archiveFilters = Array.isArray(data.archive_filters) ? data.archive_filters : [];
     for (const a of restoreState.archives) {
       const opt = document.createElement('option');
       opt.value = a.name;

@@ -31,6 +31,7 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   selectedVms: [],
   unlockedStep: 1,
   originalSchedule: null,
+  archivePrefixes: [],
 };
 const wizardState = window.BBUI.wizardState;
 
@@ -57,6 +58,52 @@ function _wizardUniqueList(values) {
     out.push(val);
   });
   return out;
+}
+
+function _wizardArchivePrefixFromTypeId(typeId) {
+  const clean = String(typeId || '').trim().toLowerCase();
+  return /^[a-z0-9_]+$/.test(clean) ? `${clean}-backup` : '';
+}
+
+function wizardArchivePrefixRows() {
+  const currentPrefix = _wizardArchivePrefixFromTypeId(document.getElementById('wiz-type-id')?.value || '');
+  const prefixes = _wizardUniqueList([
+    currentPrefix,
+    ...(Array.isArray(wizardState.archivePrefixes) ? wizardState.archivePrefixes : []),
+  ]);
+  return prefixes
+    .filter(Boolean)
+    .map((prefix) => ({
+      prefix,
+      filter: `${prefix}-*`,
+      current: !!currentPrefix && prefix === currentPrefix,
+    }));
+}
+
+function wizardRenderArchivePrefixSummary() {
+  const el = document.getElementById('wiz-archive-prefix-summary');
+  if (!el) return;
+  const rows = wizardArchivePrefixRows();
+  if (!rows.length) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
+  const current = rows.find((row) => row.current) || rows[0];
+  el.innerHTML = `<span>${escHtml(wizardT('wizard.archivePatternCurrentLabel'))}</span><code class="wizard-archive-prefix-chip is-current">${escHtml(current.filter)}</code>${wizardArchivePrefixPopover(rows)}`;
+}
+
+function wizardArchivePrefixPopover(rows) {
+  const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => String(row?.filter || '').trim());
+  if (cleanRows.length <= 1) return '';
+  return `<span class="archive-pattern-popover">
+    <button type="button" class="archive-pattern-popover-button" aria-haspopup="true" aria-label="${escHtml(wizardT('wizard.archivePatternHistoryButton'))}">i</button>
+    <span class="archive-pattern-popover-panel" role="tooltip">
+      <strong>${escHtml(wizardT('wizard.archivePatternHistoryTitle'))}</strong>
+      ${cleanRows.map((row) => `<span><em>${escHtml(wizardT(row.current ? 'wizard.archiveFilterCurrentBadge' : 'wizard.archiveFilterPreviousBadge'))}</em><code>${escHtml(row.filter)}</code></span>`).join('')}
+    </span>
+  </span>`;
 }
 
 async function wizardLoadRuntimeInventory() {
@@ -417,6 +464,7 @@ function openWizard() {
   wizardState.step = 1;
   wizardState.unlockedStep = 1;
   wizardState.originalSchedule = null;
+  wizardState.archivePrefixes = [];
   const title = document.getElementById('wizard-modal-title');
   if (title) title.textContent = wizardT('wizard.newTitle');
   document.getElementById('wiz-job-name').value = '';
@@ -473,6 +521,7 @@ function openWizard() {
   _wizardScheduleApplyUI('daily');
   wizardSchedulePreview();
   wizardUpdateIconPreview();
+  wizardRenderArchivePrefixSummary();
   wizardState.loadingPromise = Promise.all([
     wizardLoadStorageTargets(),
     wizardLoadRepositories(),
@@ -487,6 +536,7 @@ function openWizard() {
 
 function _wizardFillFromJob(job) {
   wizardState.remoteRepoStatus = null;
+  wizardState.archivePrefixes = _wizardUniqueList(Array.isArray(job.archive_prefixes) ? job.archive_prefixes : []);
   document.getElementById('wiz-job-name').value = job.job_name || '';
   document.getElementById('wiz-type-id').value = (job.type_id || '').toLowerCase();
   document.getElementById('wiz-icon').value = (job.icon || '').toLowerCase();
@@ -513,6 +563,7 @@ function _wizardFillFromJob(job) {
   document.getElementById('wiz-keep-yearly').value = job.keep_yearly || '3';
   _wizardApplySchedule(job.schedule);
   wizardUpdateIconPreview();
+  wizardRenderArchivePrefixSummary();
   wizardAutoFill();
   if (job.repository_assignment_error) {
     _wizardShowError(2, wizardT('wizard.repositoryAssignmentRepair', {
@@ -1380,6 +1431,7 @@ window.addEventListener?.('bbui:language-changed', () => {
   wizardRenderSourcePaths();
   wizardRenderExcludePaths();
   wizardUpdateIconPreview();
+  wizardRenderArchivePrefixSummary();
   wizardAutoFill();
   wizardRenderRuntimeControls();
   wizardSchedulePreview();

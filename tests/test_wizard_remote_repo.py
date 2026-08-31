@@ -226,6 +226,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
             "runner": "scriptless-wizard-runner",
             "repository_key": "repo_vms_local_test",
             "source_paths": ["/mnt/user/domains"],
+            "archive_prefixes": ["oldvms-backup"],
         }),
         encoding="utf-8",
     )
@@ -261,6 +262,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
 
     assert loaded["repo_path"] == "/mnt/remotes/192.168.1.5_raid_backup/borg-backup-vms"
     assert loaded["source_paths"] == ["/mnt/user/domains"]
+    assert loaded["archive_prefixes"] == ["vms-backup", "oldvms-backup"]
 
 
 def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypatch):
