@@ -144,6 +144,10 @@
   },
   "common": {
     "close": "Close",
+    "unsavedChangesTitle": "Unsaved changes",
+    "discardUnsavedChangesMessage": "Your entries in this dialog have not been saved yet.",
+    "keepEditing": "Keep editing",
+    "discardChanges": "Discard changes",
     "error": "Error",
     "success": "Success",
     "notice": "Notice",

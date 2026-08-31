@@ -12,6 +12,8 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   repositories: [],
   selectedRepositoryKey: '',
   loadingPromise: null,
+  closeSnapshot: '',
+  closeSnapshotTouched: false,
   sourcePaths: [],
   sourceSuggest: [],
   sourceSuggestIndex: -1,
@@ -46,6 +48,54 @@ function wizardApiErrorMessage(payload, status = 0) {
     if (value && value !== String(data.code || '').trim()) return value;
   }
   return apiErrorMessage(payload, status);
+}
+
+function _wizardModalHelpers() {
+  return window.BBUI?.components?.modal || {};
+}
+
+function _wizardCloseSnapshotPayload() {
+  const modal = document.getElementById('wizard-modal');
+  return JSON.stringify({
+    form: _wizardModalHelpers().formSnapshot?.(modal) || '',
+    sourcePaths: wizardState.sourcePaths || [],
+    excludePaths: wizardState.excludePaths || [],
+    dockerSelected: wizardState.selectedDockerContainers || [],
+    vmSelected: wizardState.selectedVms || [],
+    scheduleFrequency: wizardSchedState?.frequency || '',
+    scheduleDow: wizardSchedState?.dow ?? '',
+  });
+}
+
+function _wizardCaptureCloseSnapshot() {
+  wizardState.closeSnapshot = _wizardCloseSnapshotPayload();
+  wizardState.closeSnapshotTouched = false;
+}
+
+function _wizardHasUnsavedChanges() {
+  const modal = document.getElementById('wizard-modal');
+  if (!modal || modal.classList.contains('hidden')) return false;
+  return !!wizardState.closeSnapshot && _wizardCloseSnapshotPayload() !== wizardState.closeSnapshot;
+}
+
+function _wizardConfirmDiscard() {
+  return _wizardModalHelpers().confirmDiscardIfDirty?.(
+    _wizardHasUnsavedChanges(),
+    () => closeWizard({ force: true })
+  ) !== false;
+}
+
+function wizardMarkCloseSnapshotTouched() {
+  const modal = document.getElementById('wizard-modal');
+  if (modal && !modal.classList.contains('hidden')) wizardState.closeSnapshotTouched = true;
+}
+
+function wizardBindCloseDirtyTracking() {
+  const modal = document.getElementById('wizard-modal');
+  if (!modal || modal.dataset.closeDirtyBound === 'true') return;
+  modal.dataset.closeDirtyBound = 'true';
+  modal.addEventListener('input', wizardMarkCloseSnapshotTouched);
+  modal.addEventListener('change', wizardMarkCloseSnapshotTouched);
 }
 
 function _wizardUniqueList(values) {
@@ -457,6 +507,7 @@ function _setWizardFormDisabled(disabled) {
 }
 
 function openWizard() {
+  wizardBindCloseDirtyTracking();
   wizardBindRuntimeControls();
   wizardState.mode = 'create';
   wizardState.existingJobKey = '';
@@ -526,12 +577,16 @@ function openWizard() {
     wizardLoadStorageTargets(),
     wizardLoadRepositories(),
     wizardLoadRuntimeInventory(),
-  ]).finally(() => wizardAutoFill());
+  ]).finally(() => {
+    wizardAutoFill();
+    if (!wizardState.closeSnapshotTouched) _wizardCaptureCloseSnapshot();
+  });
   [1,2,3,4,5,6,7,8,9].forEach(n => wizardClearError(n));
   wizardRenderRuntimeControls();
   _renderWizardStep(1);
   document.getElementById('wizard-modal').classList.remove('hidden');
   document.body.classList.add('wizard-modal-open');
+  _wizardCaptureCloseSnapshot();
 }
 
 function _wizardFillFromJob(job) {
@@ -601,8 +656,9 @@ async function openWizardForJob(jobKey, mode = 'edit') {
       : null;
     wizardState.unlockedStep = 9;
     _renderWizardStep(wizardState.step);
+    _wizardCaptureCloseSnapshot();
   } catch (err) {
-    closeWizard();
+    closeWizard({ force: true });
     showMsg('jobs-message', 'error', wizardT('wizard.loadFailed', { message: err.message }));
   } finally {
     _setWizardFormDisabled(false);
@@ -624,9 +680,13 @@ function wizardNeedsScriptRegeneration(params) {
   return false;
 }
 
-function closeWizard() {
+function closeWizard(options = {}) {
+  if (!options?.force && !_wizardConfirmDiscard()) return false;
   document.getElementById('wizard-modal').classList.add('hidden');
   document.body.classList.remove('wizard-modal-open');
+  wizardState.closeSnapshot = '';
+  wizardState.closeSnapshotTouched = false;
+  return true;
 }
 
 function _renderWizardStep(n) {
@@ -1329,7 +1389,7 @@ async function saveWizardJob() {
       window.BBUI.core.setSchedulesData(schedules);
     }
 
-    closeWizard();
+    closeWizard({ force: true });
     jobsState.loaded = false;
     await refreshJobs();
     showMsg('jobs-message', 'success', wizardT('wizard.saved', { key: `${params.type_id}_${params.location}` }));

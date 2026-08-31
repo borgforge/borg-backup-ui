@@ -17,6 +17,7 @@ window.BBUI.jobsState = window.BBUI.jobsState || {
   pollingTimer: null,
   lastRunningSnapshot: '{}',  // JSON-String der zuletzt bekannten Running-States
   selectedLocation: 'all',
+  confirmCloseSnapshot: '',
 };
 const jobsState = window.BBUI.jobsState;
 const JOBS_LOCATION_ORDER = ['local', 'usb', 'smb', 'storagebox', 'utility'];
@@ -25,11 +26,46 @@ window.BBUI.scheduleModalState = window.BBUI.scheduleModalState || {
   jobKey: null,
   frequency: 'daily', // 'daily' | 'weekly' | 'monthly' | 'custom'
   dow: 1,             // 0=So..6=Sa
+  closeSnapshot: '',
 };
 const scheduleModalState = window.BBUI.scheduleModalState;
 
 function jobsT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
+}
+
+function scheduleModalHelpers() {
+  return window.BBUI?.components?.modal || {};
+}
+
+function scheduleCloseSnapshotPayload() {
+  const modal = document.getElementById('schedule-modal');
+  return JSON.stringify({
+    form: scheduleModalHelpers().formSnapshot?.(modal) || '',
+    frequency: scheduleModalState.frequency || '',
+    dow: scheduleModalState.dow ?? '',
+  });
+}
+
+function scheduleCaptureCloseSnapshot() {
+  scheduleModalState.closeSnapshot = scheduleCloseSnapshotPayload();
+}
+
+function scheduleHasUnsavedChanges() {
+  const modal = document.getElementById('schedule-modal');
+  if (!modal || modal.classList.contains('hidden')) return false;
+  return !!scheduleModalState.closeSnapshot && scheduleCloseSnapshotPayload() !== scheduleModalState.closeSnapshot;
+}
+
+function captureConfirmModalCloseSnapshot() {
+  jobsState.confirmCloseSnapshot = scheduleModalHelpers().formSnapshot?.(document.getElementById('confirm-modal')) || '';
+}
+
+function confirmModalHasUnsavedInput() {
+  const modal = document.getElementById('confirm-modal');
+  if (!modal || modal.classList.contains('hidden')) return false;
+  return !!jobsState.confirmCloseSnapshot
+    && scheduleModalHelpers().formSnapshot?.(modal) !== jobsState.confirmCloseSnapshot;
 }
 
 function jobsLocationLabel(location) {
@@ -687,6 +723,7 @@ function showStartModal(jobKey) {
   if (pwCb) pwCb.checked = false;
   if (pwPath) pwPath.textContent = '';
   document.getElementById('confirm-modal').classList.remove('hidden');
+  captureConfirmModalCloseSnapshot();
 }
 
 function showCancelJobModal(jobKey) {
@@ -711,13 +748,19 @@ function showCancelJobModal(jobKey) {
   confirmBtn.textContent = jobsT('jobs.cancelNow');
   confirmBtn.disabled = false;
   document.getElementById('confirm-modal').classList.remove('hidden');
+  captureConfirmModalCloseSnapshot();
 }
 
-function closeModal() {
+function closeModal(options = {}) {
+  if (!options?.force && scheduleModalHelpers().confirmDiscardIfDirty?.(
+    confirmModalHasUnsavedInput(),
+    () => closeModal({ force: true })
+  ) === false) return false;
   document.getElementById('confirm-modal').classList.add('hidden');
   jobsState.pendingJobKey = null;
   jobsState.pendingDeleteJobKey = null;
   jobsState.confirmAction = 'start';
+  jobsState.confirmCloseSnapshot = '';
   const confirmBtn = document.getElementById('modal-confirm-btn');
   if (confirmBtn) {
     confirmBtn.className = 'btn btn-primary';
@@ -789,6 +832,7 @@ async function showDeleteJobModal(jobKey, displayName, typeId, location) {
   confirmBtn.className = 'btn btn-danger';
   confirmBtn.disabled = true;
   document.getElementById('confirm-modal').classList.remove('hidden');
+  captureConfirmModalCloseSnapshot();
 }
 
 function checkDeleteConfirmInput() {
@@ -809,7 +853,7 @@ async function confirmJobCancel() {
   const jobKey = jobsState.pendingJobKey;
   const job = jobsState.jobs.find(j => j.key === jobKey);
   if (!job?.run_id) return;
-  closeModal();
+  closeModal({ force: true });
   try {
     const res = await fetch('/api/jobs/cancel', {
       method: 'POST',
@@ -830,7 +874,7 @@ async function confirmJobDelete() {
   if (!jobKey) return;
   const deletePassphrase = document.getElementById('modal-delete-passphrase').checked;
   const deleteArtifacts = document.getElementById('modal-delete-artifacts')?.checked || false;
-  closeModal();
+  closeModal({ force: true });
   try {
     const res = await fetch('/api/jobs', {
       method: 'DELETE',
@@ -857,7 +901,7 @@ async function confirmJobStart() {
   const jobKey = jobsState.pendingJobKey;
   if (!jobKey) return;
 
-  closeModal();
+  closeModal({ force: true });
 
   const btn = document.getElementById('modal-confirm-btn');
   if (btn) btn.disabled = true;
@@ -1123,11 +1167,18 @@ function showScheduleModal(jobKey, displayName) {
   _applyFrequencyUI(scheduleModalState.frequency);
   updateSchedulePreview();
   document.getElementById('schedule-modal').classList.remove('hidden');
+  scheduleCaptureCloseSnapshot();
 }
 
-function closeScheduleModal() {
+function closeScheduleModal(options = {}) {
+  if (!options?.force && scheduleModalHelpers().confirmDiscardIfDirty?.(
+    scheduleHasUnsavedChanges(),
+    () => closeScheduleModal({ force: true })
+  ) === false) return false;
   document.getElementById('schedule-modal').classList.add('hidden');
   scheduleModalState.jobKey = null;
+  scheduleModalState.closeSnapshot = '';
+  return true;
 }
 
 function setFrequency(freq) {
@@ -1201,7 +1252,7 @@ async function saveScheduleAction() {
     const schedules = _coreSchedules();
     schedules[jobKey] = { cron, enabled };
     _coreSetSchedules(schedules);
-    closeScheduleModal();
+    closeScheduleModal({ force: true });
     _onScheduleChanged(jobKey);
   } catch (err) {
     if (window.BBUI?.components?.toast?.error) {
@@ -1227,7 +1278,7 @@ async function deleteScheduleAction() {
     const schedules = _coreSchedules();
     delete schedules[jobKey];
     _coreSetSchedules(schedules);
-    closeScheduleModal();
+    closeScheduleModal({ force: true });
     _onScheduleChanged(jobKey);
   } catch (err) {
     if (window.BBUI?.components?.toast?.error) {

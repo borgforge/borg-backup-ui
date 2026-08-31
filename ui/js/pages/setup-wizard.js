@@ -5,6 +5,7 @@
   const namespace = window.BBUI.setupWizard || {};
   let currentStatus = null;
   let returnContext = null;
+  let closeSnapshot = '';
 
   function setupT(key, params = {}) {
     return window.BBUI?.components?.i18n?.t?.(`setupWizard.${key}`, params) || `setupWizard.${key}`;
@@ -12,6 +13,24 @@
 
   function core() {
     return window.BBUI?.core;
+  }
+
+  function modalHelpers() {
+    return window.BBUI?.components?.modal || {};
+  }
+
+  function modalSnapshot() {
+    return modalHelpers().formSnapshot?.(document.getElementById('setup-wizard-modal')) || '';
+  }
+
+  function captureCloseSnapshot() {
+    closeSnapshot = modalSnapshot();
+  }
+
+  function hasUnsavedChanges() {
+    const modal = document.getElementById('setup-wizard-modal');
+    if (!modal || modal.classList.contains('hidden')) return false;
+    return !!closeSnapshot && modalSnapshot() !== closeSnapshot;
   }
 
   async function fetchStatus(force = false) {
@@ -117,10 +136,18 @@
     namespace.currentStatus = currentStatus;
     renderModal(currentStatus);
     modal.classList.remove('hidden');
+    captureCloseSnapshot();
   }
 
-  function close() {
+  function close(options = {}) {
+    if (!options?.force && !currentStatus?.global_data_dir_set) return false;
+    if (!options?.force && modalHelpers().confirmDiscardIfDirty?.(
+      hasUnsavedChanges(),
+      () => close({ force: true })
+    ) === false) return false;
     document.getElementById('setup-wizard-modal')?.classList.add('hidden');
+    closeSnapshot = '';
+    return true;
   }
 
   async function maybeOpen(forceRequired = false) {
@@ -159,6 +186,7 @@
       currentStatus = await fetchStatus(true);
       core()?.updateDataDirWarning?.();
       renderModal(currentStatus);
+      captureCloseSnapshot();
       renderDashboardPanel(currentStatus);
     } catch (err) {
       showMsg('setup-wizard-message', 'error', setupT('saveFailed', { message: err.message }));
@@ -178,7 +206,7 @@
     } catch (_) {
       // The dashboard action panel remains visible even if persisting fails.
     }
-    close();
+    close({ force: true });
     renderDashboardPanel(await fetchStatus(true));
   }
 
@@ -218,7 +246,7 @@
 
   function navigateSettingsTab(tab) {
     if (['local', 'usb', 'smb', 'storagebox'].includes(String(tab || ''))) armReturn('storage');
-    close();
+    close({ force: true });
     core()?.navigate?.('settings');
     window.setTimeout(() => {
       if (typeof activateSettingsTab === 'function') activateSettingsTab(tab);
@@ -227,7 +255,7 @@
 
   function openRepositoryFlow() {
     armReturn('repository');
-    close();
+    close({ force: true });
     core()?.navigate?.('storage');
     window.setTimeout(() => {
       if (typeof openRepositoryManager === 'function') openRepositoryManager({ forceRefresh: true });
@@ -236,7 +264,7 @@
 
   function openJobFlow() {
     armReturn('job');
-    close();
+    close({ force: true });
     core()?.navigate?.('jobs');
     window.setTimeout(() => {
       if (typeof openWizard === 'function') openWizard();
