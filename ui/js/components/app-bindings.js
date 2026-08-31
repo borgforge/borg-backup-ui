@@ -147,17 +147,11 @@
     document.getElementById('storage-maintenance-confirm-info')?.addEventListener('change', (event) => {
       if (event.target?.id === 'storage-maintenance-retention-job') updateStorageMaintenanceRetentionPreview();
     });
-    document.getElementById('storage-maintenance-confirm-modal')?.addEventListener('click', (event) => {
-      if (event.target === event.currentTarget) closeStorageMaintenanceConfirm(false);
-    });
     document.getElementById('repository-lifecycle-close-btn')?.addEventListener('click', closeRepositoryLifecycle);
     document.getElementById('repository-lifecycle-cancel-btn')?.addEventListener('click', closeRepositoryLifecycle);
     document.getElementById('repository-lifecycle-confirm-btn')?.addEventListener('click', confirmRepositoryLifecycle);
     document.getElementById('repository-lifecycle-name-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
     document.getElementById('repository-lifecycle-phrase-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
-    document.getElementById('repository-lifecycle-modal')?.addEventListener('click', (event) => {
-      if (event.target === event.currentTarget) closeRepositoryLifecycle();
-    });
     document.getElementById('history-filter-type')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-location')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-status')?.addEventListener('change', applyHistoryFilters);
@@ -246,12 +240,8 @@
     document.getElementById('repository-manager-browser-list')?.addEventListener('click', repositoryManagerBrowserClick);
     document.getElementById('repository-manager-passphrase')?.addEventListener('input', repositoryManagerUpdateSummary);
     document.getElementById('setup-wizard-modal')?.addEventListener('click', (event) => {
-      if (event.target === event.currentTarget) {
-        const required = !window.BBUI?.setupWizard?.currentStatus?.global_data_dir_set;
-        if (!required) window.BBUI?.setupWizard?.close?.();
-      } else {
-        window.BBUI?.setupWizard?.handleAction?.(event);
-      }
+      if (event.target === event.currentTarget) return;
+      window.BBUI?.setupWizard?.handleAction?.(event);
     });
     document.getElementById('storage-deploy-close-btn')?.addEventListener('click', closeStorageDeployModal);
     document.getElementById('storage-deploy-ok-btn')?.addEventListener('click', closeStorageDeployModal);
@@ -362,6 +352,10 @@
     m.setAction('closeWizardHelpModal', typeof closeWizardDescriptionHelp === 'function' ? closeWizardDescriptionHelp : null);
     m.setAction('closeRepositoryManager', typeof closeRepositoryManager === 'function' ? closeRepositoryManager : null);
     m.setAction('closeStorageDeployModal', typeof closeStorageDeployModal === 'function' ? closeStorageDeployModal : null);
+    m.setAction('closeStorageMaintenanceConfirm', typeof closeStorageMaintenanceConfirm === 'function' ? closeStorageMaintenanceConfirm : null);
+    m.setAction('closeRepositoryLifecycle', typeof closeRepositoryLifecycle === 'function' ? closeRepositoryLifecycle : null);
+    m.setAction('closeWizard', typeof closeWizard === 'function' ? closeWizard : null);
+    m.setAction('closeSetupWizard', window.BBUI?.setupWizard?.close || null);
   }
 
   function runStartup() {

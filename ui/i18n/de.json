@@ -144,6 +144,10 @@
   },
   "common": {
     "close": "Schließen",
+    "unsavedChangesTitle": "Ungespeicherte Änderungen",
+    "discardUnsavedChangesMessage": "Deine Eingaben in diesem Dialog wurden noch nicht gespeichert.",
+    "keepEditing": "Weiter bearbeiten",
+    "discardChanges": "Änderungen verwerfen",
     "error": "Fehler",
     "success": "Erfolg",
     "notice": "Hinweis",

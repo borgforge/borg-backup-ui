@@ -31,6 +31,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   transferProfileSecretsPassword: '',
   storageDeploySessionId: '',
   storageDeployPollTimer: null,
+  storageDeployCloseSnapshot: '',
   storageboxProfileKey: '',
   smbCleanupKeys: [],
   smbSecretCleanupKeys: [],
@@ -3011,7 +3012,15 @@ function _openSettingsDialog(cfg) {
     update();
 
     let done = false;
+    let closeSnapshot = '';
     const extraCleanup = [];
+    const modalHelpers = window.BBUI?.components?.modal || {};
+    const captureCloseSnapshot = () => {
+      closeSnapshot = modalHelpers.formSnapshot?.(modal) || '';
+    };
+    const hasUnsavedChanges = () => (
+      !!closeSnapshot && modalHelpers.formSnapshot?.(modal) !== closeSnapshot
+    );
     const finish = (val) => {
       if (done) return;
       done = true;
@@ -3020,9 +3029,9 @@ function _openSettingsDialog(cfg) {
       okBtn.removeEventListener('click', onOk);
       cancelBtn.removeEventListener('click', onCancel);
       closeBtn.removeEventListener('click', onCancel);
-      modal.removeEventListener('click', onBackdrop);
       input.removeEventListener('input', update);
       input.removeEventListener('keydown', onEnter);
+      modalHelpers.setAction?.('closeSettingsDialog', null);
       extraCleanup.forEach((fn) => { try { fn(); } catch (_) {} });
       resolve(val);
     };
@@ -3030,8 +3039,13 @@ function _openSettingsDialog(cfg) {
       ? cfg.resolveValue
       : (() => (needInput ? input.value : true));
     const onOk = () => finish(resolveValue({ modal, input }));
-    const onCancel = () => finish(null);
-    const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
+    const onCancel = (options = {}) => {
+      if (!options?.force && modalHelpers.confirmDiscardIfDirty?.(
+        hasUnsavedChanges(),
+        () => onCancel({ force: true })
+      ) === false) return;
+      finish(null);
+    };
     const onEnter = (e) => {
       if (e.key === 'Enter' && !okBtn.disabled) {
         e.preventDefault();
@@ -3042,7 +3056,6 @@ function _openSettingsDialog(cfg) {
     okBtn.addEventListener('click', onOk);
     cancelBtn.addEventListener('click', onCancel);
     closeBtn.addEventListener('click', onCancel);
-    modal.addEventListener('click', onBackdrop);
     input.addEventListener('input', update);
     input.addEventListener('keydown', onEnter);
     modal.classList.remove('hidden');
@@ -3058,6 +3071,8 @@ function _openSettingsDialog(cfg) {
         });
       } catch (_) {}
     }
+    captureCloseSnapshot();
+    modalHelpers.setAction?.('closeSettingsDialog', onCancel);
     if (needInput) setTimeout(() => input.focus(), 0);
   });
 }
@@ -6609,13 +6624,24 @@ async function storageboxKeyDeploy() {
   }
 }
 
-function closeStorageDeployModal() {
+function closeStorageDeployModal(options = {}) {
   const m = document.getElementById('storage-deploy-modal');
+  const modalHelpers = window.BBUI?.components?.modal || {};
+  const dirty = !!settingsState.storageDeployCloseSnapshot
+    && m
+    && !m.classList.contains('hidden')
+    && modalHelpers.formSnapshot?.(m) !== settingsState.storageDeployCloseSnapshot;
+  if (!options?.force && modalHelpers.confirmDiscardIfDirty?.(
+    dirty,
+    () => closeStorageDeployModal({ force: true })
+  ) === false) return false;
   if (m) m.classList.add('hidden');
   if (settingsState.storageDeployPollTimer) {
     clearInterval(settingsState.storageDeployPollTimer);
     settingsState.storageDeployPollTimer = null;
   }
+  settingsState.storageDeployCloseSnapshot = '';
+  return true;
 }
 
 async function openStorageDeployModal(sessionId, targetType) {
@@ -6636,6 +6662,7 @@ async function openStorageDeployModal(sessionId, targetType) {
   cancelBtn.disabled = false;
   okBtn.disabled = false;
   modal.classList.remove('hidden');
+  settingsState.storageDeployCloseSnapshot = window.BBUI?.components?.modal?.formSnapshot?.(modal) || '';
 
   const poll = async () => {
     if (!settingsState.storageDeploySessionId) return;
@@ -6681,7 +6708,7 @@ async function storageDeploySendInput() {
 async function storageDeployCancel() {
   const sid = settingsState.storageDeploySessionId;
   // UI sofort schließen, unabhängig vom Backend-Response
-  closeStorageDeployModal();
+  closeStorageDeployModal({ force: true });
   settingsState.storageDeploySessionId = '';
   if (!sid) return;
   try {

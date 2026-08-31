@@ -22,9 +22,31 @@ storageState.maintenanceState = storageState.maintenanceState || { running: fals
 storageState.maintenanceConfirmation = null;
 storageState.lifecycleConfirmation = null;
 storageState.pendingRepositoryKeyImportGuide = !!storageState.pendingRepositoryKeyImportGuide;
+storageState.repositoryManagerCloseSnapshot = '';
+storageState.lifecycleCloseSnapshot = '';
+storageState.maintenanceCloseSnapshot = '';
 
 function storageT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
+}
+
+function storageModalHelpers() {
+  return window.BBUI?.components?.modal || {};
+}
+
+function storageConfirmDiscard(dirty, onConfirm) {
+  return storageModalHelpers().confirmDiscardIfDirty?.(dirty, onConfirm) !== false;
+}
+
+function storageModalSnapshot(modalId) {
+  const modal = document.getElementById(modalId);
+  return storageModalHelpers().formSnapshot?.(modal) || '';
+}
+
+function storageModalDirty(modalId, snapshot) {
+  const modal = document.getElementById(modalId);
+  if (!modal || modal.classList.contains('hidden')) return false;
+  return !!snapshot && storageModalSnapshot(modalId) !== snapshot;
 }
 
 function storageBorgVersionLabel() {
@@ -1167,15 +1189,22 @@ async function openRepositoryManager(options = {}) {
   repositoryManagerSyncFields();
   repositoryManagerRenderStep(1);
   modal.classList.remove('hidden');
+  storageState.repositoryManagerCloseSnapshot = storageModalSnapshot('repository-manager-modal');
 }
 
-function closeRepositoryManager() {
+function closeRepositoryManager(options = {}) {
+  if (!options?.force && !storageConfirmDiscard(
+    storageModalDirty('repository-manager-modal', storageState.repositoryManagerCloseSnapshot),
+    () => closeRepositoryManager({ force: true })
+  )) return false;
   const passphrase = document.getElementById('repository-manager-passphrase');
   const keyData = document.getElementById('repository-manager-key-data');
   if (passphrase) passphrase.value = '';
   if (keyData) keyData.value = '';
   repositoryManagerCloseBrowser();
   document.getElementById('repository-manager-modal')?.classList.add('hidden');
+  storageState.repositoryManagerCloseSnapshot = '';
+  return true;
 }
 
 function repositoryManagerCloseBrowser() {
@@ -1450,7 +1479,7 @@ async function saveRepositoryManager() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(repositoryManagerErrorMessage(data, res.status));
-    closeRepositoryManager();
+    closeRepositoryManager({ force: true });
     await refreshStorage();
     showMsg('storage-message', 'success', storageT('storage.repositorySaved'));
     await window.BBUI?.setupWizard?.resumeAfterExternalSave?.('repository');
@@ -1503,13 +1532,19 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
       jobs,
     };
     modal.classList.remove('hidden');
+    storageState.maintenanceCloseSnapshot = storageModalSnapshot('storage-maintenance-confirm-modal');
   });
 }
 
-function closeStorageMaintenanceConfirm(confirmed = false) {
+function closeStorageMaintenanceConfirm(confirmed = false, options = {}) {
+  if (!confirmed && !options?.force && !storageConfirmDiscard(
+    storageModalDirty('storage-maintenance-confirm-modal', storageState.maintenanceCloseSnapshot),
+    () => closeStorageMaintenanceConfirm(false, { force: true })
+  )) return false;
   const pending = storageState.maintenanceConfirmation;
   storageState.maintenanceConfirmation = null;
   document.getElementById('storage-maintenance-confirm-modal')?.classList.add('hidden');
+  storageState.maintenanceCloseSnapshot = '';
   const selectedJobKey = confirmed && pending?.action === 'prune'
     ? String(document.getElementById('storage-maintenance-retention-job')?.value || pending.selectedJobKey || '').trim()
     : '';
@@ -1570,6 +1605,7 @@ async function openRepositoryLifecycle(repositoryKey, mode = 'remove') {
     }
     hideEl('storage-message');
     modal.classList.remove('hidden');
+    storageState.lifecycleCloseSnapshot = storageModalSnapshot('repository-lifecycle-modal');
     nameInput?.focus();
   } catch (error) {
     showMsg('storage-message', 'error', error.message || storageT('storage.error'));
@@ -1586,13 +1622,19 @@ function updateRepositoryLifecycleConfirmation() {
   confirm.disabled = !(nameMatches && (pending.mode !== 'delete' || phrase === 'DELETE'));
 }
 
-function closeRepositoryLifecycle() {
+function closeRepositoryLifecycle(options = {}) {
+  if (!options?.force && !storageConfirmDiscard(
+    storageModalDirty('repository-lifecycle-modal', storageState.lifecycleCloseSnapshot),
+    () => closeRepositoryLifecycle({ force: true })
+  )) return false;
   storageState.lifecycleConfirmation = null;
   document.getElementById('repository-lifecycle-modal')?.classList.add('hidden');
   const nameInput = document.getElementById('repository-lifecycle-name-input');
   const phraseInput = document.getElementById('repository-lifecycle-phrase-input');
   if (nameInput) nameInput.value = '';
   if (phraseInput) phraseInput.value = '';
+  storageState.lifecycleCloseSnapshot = '';
+  return true;
 }
 
 async function confirmRepositoryLifecycle() {
@@ -1619,7 +1661,7 @@ async function confirmRepositoryLifecycle() {
     if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
     const key = pending.repositoryKey;
     const mode = pending.mode;
-    closeRepositoryLifecycle();
+    closeRepositoryLifecycle({ force: true });
     delete storageState.lifecycleCache[key];
     delete storageState.archiveCache[key];
     storageState.selectedRepositoryKey = '';
