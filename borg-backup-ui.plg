@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.08.29.2323">
+<!ENTITY version   "2026.08.31.0907">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,15 +20,16 @@
 
 <CHANGES>
 <![CDATA[
+###2026.08.31.0907###
+- Browse and Restore now filters archives by the selected job archive prefix, keeps prefix history for edited jobs, and shows the active archive pattern with a compact history popover in both the archive selection and job editor.
+- Requires Unraid 7.2.0 or newer so managed Borg SSH connections use a compatible OpenSSH runtime.
+- Dialogs with unsaved input now ignore backdrop clicks and ask before discarding changed job, repository, schedule, setup, and settings form values.
+
 ###2026.08.29.2323###
 - Fixed the Unraid dashboard widget so completed backups no longer remain shown as running, Restore proof matches the in-app dashboard counters, and Repos online only subtracts repositories with an explicit cached error state.
 
 ###2026.08.29.1712###
 - Resolved symlinked backup source paths before Borg create so visible share paths that point to another directory back up the target contents instead of creating symlink-only archives.
-
-###2026.08.28.1953###
-- Fixed the Unraid dashboard widget cache so a stale running-only snapshot no longer blocks rebuilding from completed backup status files, and backup finalization now refreshes the widget cache after status persistence.
-- Fixed backup source path entry so pressing Enter keeps the manually typed share-root path and autocomplete suggestions preserve the visible `/mnt/user/...` prefix instead of switching to a resolved pool path.
 
 ]]>
 </CHANGES>
@@ -55,7 +56,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="f17e015d66ce906e9f998b9b443704dc"
+EXPECTED_MD5="33936dfd2a918313344695b11b12fbdf"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
