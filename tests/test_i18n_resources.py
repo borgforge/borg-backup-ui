@@ -1,6 +1,7 @@
 import json
 import importlib.util
 import re
+import struct
 import sys
 from pathlib import Path
 
@@ -213,6 +214,59 @@ def test_user_manuals_cover_core_workflows_and_reference_existing_assets():
             assert term in content
         for target in re.findall(r"!\[[^]]*\]\(([^)]+)\)", content):
             assert (path.parent / target).resolve().is_file(), target
+
+
+def test_user_manuals_cover_current_stable_safety_and_runtime_guidance():
+    manual_de = (ROOT / "docs" / "user-manual" / "de" / "user-manual.md").read_text(encoding="utf-8")
+    manual_en = (ROOT / "docs" / "user-manual" / "en" / "user-manual.md").read_text(encoding="utf-8")
+
+    required_shared = (
+        "2026.08.31.0907",
+        "Unraid 7.2.0",
+        "Python 3 for Unraid",
+        "backup.start.priority=1",
+        "Borg Server",
+        "borg serve",
+        "Apprise `1.12.0`",
+        "137",
+    )
+    for manual in (manual_de, manual_en):
+        for term in required_shared:
+            assert term in manual
+
+    required_de = (
+        "<typ-id>-backup-*",
+        "Migrationssnapshot",
+        "Unraid-Dashboard-Widget",
+        "Informations-Popover",
+    )
+    required_en = (
+        "<type-id>-backup-*",
+        "migration snapshot",
+        "Unraid Dashboard Widget",
+        "information popover",
+    )
+    for term in required_de:
+        assert term in manual_de
+    for term in required_en:
+        assert term in manual_en
+
+
+def test_user_manual_screenshots_are_aligned_high_resolution_pngs():
+    expected_size = (1600, 1100)
+    asset_sets = {}
+
+    for language in ("de", "en"):
+        asset_dir = ROOT / "docs" / "user-manual" / "assets" / language
+        assets = sorted(asset_dir.glob("*.png"))
+        asset_sets[language] = [path.name for path in assets]
+        assert assets
+        for path in assets:
+            header = path.read_bytes()[:24]
+            assert header[:8] == b"\x89PNG\r\n\x1a\n", path
+            assert struct.unpack(">II", header[16:24]) == expected_size, path
+
+    assert asset_sets["de"] == asset_sets["en"]
 
 
 def test_settings_dynamic_content_uses_localization_helpers():
