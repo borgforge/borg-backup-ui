@@ -15,7 +15,9 @@ The manual follows the current application menu order and is intended to become 
 
 The manuals are the canonical long-form documentation. The in-app help uses the same subject order as a concise, searchable operational guide. Contextual quick hints should link to stable help topics instead of duplicating complete explanations.
 
-The four guide images in each language are annotated overview images. Numbered
-callouts are explained directly below each image. Older page captures remain
-available as supporting detail images only where their visible workflow still
-matches the current application.
+The screenshot sets were refreshed from stable `2026.08.31.0907` on
+2026-09-03. German and English images use the same light theme, a uniform
+1600 x 1100 pixel canvas, and sanitized example values. The four guide images
+in each language are annotated overview images; their numbered callouts are
+explained directly below each image. Supporting page captures show the same
+stable UI state without the guide overlays.

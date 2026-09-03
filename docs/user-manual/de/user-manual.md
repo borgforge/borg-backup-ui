@@ -1,6 +1,6 @@
 # Borg-Backup-UI Benutzerhandbuch
 
-Stand: 16.07.2026
+Stand: 03.09.2026 (Stable 2026.08.31.0907)
 Sprache: Deutsch  
 Zielgruppe: Einsteiger, fortgeschrittene Anwender und Administratoren eines Unraid-Systems
 
@@ -32,7 +32,7 @@ Borg-Backup-UI ist eine Weboberfläche für BorgBackup auf Unraid. Die Anwendung
 
 ### 1.1 Grundbegriffe
 
-- **Job:** Eine Backup-Definition mit zu sichernden Ordnern oder Dateien, Ziel, Borg-Optionen, Retention, Passphrase und optionalem Zeitplan.
+- **Job:** Eine Backup-Definition mit zu sichernden Ordnern oder Dateien, Ziel, jobbezogenen Borg-Optionen, Retention und optionalem Zeitplan.
 - **Repository:** Das BorgBackup-Ziel, in dem Archive gespeichert werden.
 - **Archiv:** Ein einzelner BorgBackup-Snapshot innerhalb eines Repositorys.
 - **Standort:** Eine Zielgruppe wie `Lokal`, `USB`, `SMB` oder `Storagebox`.
@@ -45,7 +45,7 @@ Borg-Backup-UI ist eine Weboberfläche für BorgBackup auf Unraid. Die Anwendung
 
 Nach der Anmeldung zeigt die linke Seitenleiste das Hauptmenü, den Systemstatus, die Sprachauswahl, die Abmeldung, den angemeldeten Benutzer und die installierte Version.
 
-Die Sprache kann unten links zwischen Deutsch und Englisch umgeschaltet werden. Die Änderung betrifft die Weboberfläche, nicht die technischen Logdateien. Logs, maschinenlesbare Werte und technische Fehlercodes können weiterhin englische Begriffe enthalten.
+Beim ersten Aufruf folgt die Oberfläche einer unterstützten deutschen oder englischen Browsersprache; bei anderen oder unbekannten Sprachen wird Englisch verwendet. Danach kann die Sprache unten links zwischen Deutsch und Englisch umgeschaltet werden und bleibt für diesen Browser gespeichert. Die Änderung betrifft die Weboberfläche, nicht die technischen Logdateien. Logs, maschinenlesbare Werte und technische Fehlercodes können weiterhin englische Begriffe enthalten.
 
 Die Anwendung kennt die Rollen `admin`, `operator` und `viewer`:
 
@@ -55,11 +55,29 @@ Die Anwendung kennt die Rollen `admin`, `operator` und `viewer`:
 
 > **Warnung:** Bewahren Sie Passwörter, Borg-Passphrasen, SSH-Keys und Export-Passwörter sicher auf. Borg-Backup-UI maskiert Secrets in Diagnoseausgaben, trotzdem sollten Support-Pakete vor einer Weitergabe geprüft werden.
 
+### 1.3 Installation und Erstkonfiguration
+
+Borg Backup UI befindet sich in der **Public Beta** und wird über **Unraid Community Apps** installiert. Voraussetzungen sind **Unraid 7.2.0 oder neuer** sowie **Python 3.10 oder neuer**. Installieren Sie das separate Plugin **Python 3 for Unraid** zuerst über Community Apps. BorgBackup selbst ist im Borg-Backup-UI-Paket enthalten; eine zusätzliche Borg- oder pip-Installation ist nicht erforderlich.
+
+1. Öffnen Sie in Unraid **Apps**.
+2. Installieren Sie **Python 3 for Unraid**, falls es noch nicht vorhanden ist.
+3. Suchen Sie nach **Borg Backup UI**, lesen Sie den Public-Beta-Hinweis und installieren Sie das Plugin.
+4. Öffnen Sie **Einstellungen > Borg Backup UI**, starten Sie den Dienst und rufen Sie die Weboberfläche auf.
+5. Legen Sie das erste Administratorkonto mit einem Passwort von mindestens zwölf Zeichen an.
+6. Wählen und bestätigen Sie ein konkretes Hauptverzeichnis für Logs, Status- und Restore-Daten.
+7. Beginnen Sie mit nicht kritischen Testdaten, führen Sie den ersten Lauf manuell aus und prüfen Sie eine Wiederherstellung in ein separates Testziel.
+
+> **Warnung:** Ein geschriebenes Backup ist noch kein Wiederherstellungsnachweis. Verlassen Sie sich erst auf die Einrichtung, nachdem ein manueller Restore und ein Restore-Test erfolgreich waren.
+
+Das Hauptverzeichnis darf unter einem Unraid-Share, Pool, Array-Datenträger, Unassigned-Devices- oder Remote-Mount liegen. Beim Start wartet Borg Backup UI auf den tatsächlich dahinterliegenden Mount, bevor Migrationen, Scheduler oder Status-Worker darauf schreiben. Ist noch kein Hauptverzeichnis eingerichtet oder der Mount nicht verfügbar, bleiben nur die für Einrichtung und Diagnose notwendigen Funktionen aktiv; die Anwendung erzeugt keine vermeintlichen Laufzeitverzeichnisse auf dem Root-Dateisystem.
+
+Start, Stopp und Autostart des Dienstes werden durch das Plugin verwaltet. Ergänzen Sie dafür keinen eigenen Aufruf in `/boot/config/go`.
+
 ## 2. Dashboard
 
 ![Dashboard mit markierten Status- und Filterbereichen](../assets/de/dashboard-guide.png)
 
-**Abbildung 1 - Dashboard:** (1) Gesamtstatus fuer Backup-Laeufe und Restore-Nachweise, (2) Standortfilter, (3) Detailtabelle der gefilterten Jobs.
+**Abbildung 1 - Dashboard:** (1) Gesamtstatus für Backup-Läufe und Restore-Nachweise, (2) Standortfilter, (3) Detailtabelle der gefilterten Jobs.
 
 Das Dashboard ist die zentrale Übersicht über Backup-Zustand, Restore-Nachweise, Speicherentwicklung und Repository-Prüfungen.
 
@@ -108,6 +126,14 @@ Die Seite besteht aus:
 
 > **Hinweis:** Das Dashboard zeigt die zuletzt bekannten Statusdaten. Wenn ein Repository nicht erreichbar ist oder ein Statusfile fehlt, kann die Tabelle veraltete oder unvollständige Werte anzeigen. Prüfen Sie in diesem Fall **History**, **Repositories** und die Logs.
 
+### 2.6 Unraid-Dashboard-Widget
+
+Das Plugin ergänzt das normale Unraid-Dashboard um ein eigenes, ausschließlich lesendes Widget. Es zeigt unter anderem Backup-Zähler, laufende Jobs, den letzten und die nächsten Backups, den Restore-Nachweis sowie die Zahl erreichbarer Repositorys.
+
+Das Widget liest eine vorberechnete Statusdatei auf dem Flash-Laufwerk. Sein Aktualisieren startet weder Borg noch einen Repository-Check und soll keine Array-Datenträger nur für die Anzeige aufwecken. Der Cache wird nach Backup- und Restore-Test-Ereignissen sowie bei passenden Statusaktualisierungen erneuert. Ein Zustand wie **Initial**, **Unbekannt** oder eine sichtbar alte Aktualisierungszeit ist kein aktueller Backup-Nachweis; öffnen Sie dann Borg Backup UI und prüfen Sie Dashboard, History und Systemzustand.
+
+> **Hinweis:** Dieses native Unraid-Widget ist von der optionalen **Homepage**-Integration unter **Einstellungen > Allgemein** zu unterscheiden. Homepage verwendet einen eigenen, eingeschränkten Token.
+
 ## 3. Jobs
 
 ![Job-Seite mit Standortfilter, Neuer-Job-Aktion und Jobliste](../assets/de/jobs-guide.png)
@@ -124,7 +150,7 @@ Jobs definieren, welche Daten wohin gesichert werden. Ein Job enthält:
 - Standort und Repository
 - Zu sichernde Ordner oder Dateien
 - Docker- und VM-Steuerung
-- Borg-Optionen wie Kompression, Retention und Passphrase
+- Borg-Optionen wie Kompression und Retention
 - Zeitplan
 - Beschreibung und Icon
 
@@ -160,6 +186,8 @@ Ein aktiver Borg-Schritt wird mit einem Interrupt beendet. Wird der Abbruch wäh
 
 > **Hinweis:** Ein kontrolliert abgebrochener Lauf wird als **Abgebrochen** gespeichert. Die Anwendung startet nach einem Abbruch nicht automatisch `borg check`, entfernt keine Borg-Locks und repariert kein Repository. Prüfen Sie bei auffälligen Borg-Meldungen das Log und verwenden Sie die Repository-Wartung gezielt.
 
+Die Verbindungsanzeige des Live-Logs beschreibt die Browser-Verbindung zum Log-Stream, nicht unmittelbar das Ergebnis des Backup-Prozesses. Bei einem kurzen Übertragungsfehler versucht die Oberfläche erneut zu verbinden. Bewerten Sie den Lauf anhand seines abschließenden Status und des gespeicherten Logs.
+
 ### 3.5 Job-Wizard
 
 Der Job-Wizard führt in festen Schritten durch die Erstellung oder Bearbeitung eines Jobs.
@@ -176,6 +204,8 @@ Wichtige Felder:
 - **Docker vor dem Backup stoppen:** Aktiviert Docker-Steuerung.
 - **VMs vor dem Backup herunterfahren:** Aktiviert VM-Steuerung.
 
+Die Typ-ID bildet zusammen mit dem Standort den technischen Job-Schlüssel, beispielsweise `appdata_local`. Außerdem entsteht daraus das Archivmuster `<typ-id>-backup-*`. Wenn Sie die Typ-ID eines vorhandenen Jobs ändern, erhalten nur zukünftige Archive das neue Präfix. Borg Backup UI speichert die bisherigen Archivpräfixe im Job und zeigt sie im Informations-Popover des Editors; vorhandene Archive werden weder umbenannt noch verschoben.
+
 #### Schritt 2: Quellen & Ziel
 
 Die kompakte Ansicht zeigt links **Zu sichernde Ordner** und **Ausschlüsse** und rechts das **Backup-Ziel**. Links legen Sie fest, welche Ordner oder Dateien in das Backup aufgenommen werden und welche Unterordner oder Dateien ausgelassen werden sollen. Rechts werden Speichertyp, konkretes Speicherziel, ein vorhandenes Repository und die Job-Kompression gewählt. Die Repository-Liste zeigt ausschließlich Repositorys, die zum ausgewählten Speicherziel gehören. Repository-Pfade werden im Job nicht mehr frei eingegeben.
@@ -189,7 +219,11 @@ Typische Ordner, die gesichert werden:
 
 > **Hinweis:** Die ausgewählten Ordner oder Dateien müssen auf dem Unraid-System existieren und für den Backup-Prozess lesbar sein. Technisch werden sie als Quellpfade des Jobs gespeichert.
 
+Eine vollständig eingegebene, gültige Quelle kann mit **Enter** übernommen werden, auch wenn die Autovervollständigung weitere Unterordner anzeigt. Share-Wurzeln wie `/mnt/user/appdata` sind erlaubt, sofern sie existieren. Ist die gewählte Quelle selbst ein Symlink oder liegt ein Teil ihres Pfads hinter einem Symlink, löst Borg Backup UI sie erst zur Laufzeit zum tatsächlichen Ziel auf und passt zugehörige Ausschlüsse entsprechend an. Im Job bleibt der vom Benutzer gewählte, verständliche Pfad gespeichert; die Auflösung wird im Laufprotokoll vermerkt.
+
 Ausschlüsse sind konkrete Dateien oder Verzeichnisse unterhalb eines ausgewählten Backup-Ordners. Sie werden nicht in das Borg-Archiv aufgenommen. Bei vielen Einträgen scrollen nur die Pfadlisten innerhalb ihres Bereichs.
+
+Beim Bearbeiten eines Jobs kann ein anderes vorhandenes Repository gewählt werden. Diese Änderung gilt nur für zukünftige Backups. Bestehende Archive werden nicht verschoben und sind danach über diesen Job in **Browse & Restore** nicht mehr erreichbar; der Wizard verlangt dafür eine ausdrückliche Bestätigung.
 
 #### Docker- und VM-Schritte
 
@@ -197,12 +231,46 @@ Wenn Docker- oder VM-Steuerung aktiviert ist, zeigt der Wizard eigene Schritte f
 
 Optionen:
 
-- **Alle laufenden Container** oder **nur ausgewählte Container**
+- **Alle laufenden Container**, **nur ausgewählte Container** oder **alle außer den ausgewählten Containern**
 - **Alle laufenden VMs** oder **nur ausgewählte VMs**
 
 Bei `/mnt/user/appdata` empfiehlt die Anwendung, alle Docker-Container zu stoppen. Bei `/mnt/user/domains` empfiehlt sie, alle VMs herunterzufahren. Wenn nur einzelne Dienste gestoppt werden, muss der Hinweis bewusst bestätigt werden.
 
+Ist Docker- beziehungsweise VM-Steuerung deaktiviert, werden die zugehörigen Auswahlschritte übersprungen. Bei geschützten Appdata- oder Domains-Quellen erscheint die erforderliche Risikobestätigung spätestens in der Abschlussprüfung, damit ein bewusstes Backup ohne Stoppen der Dienste möglich bleibt.
+
 > **Warnung:** Appdata- und VM-Backups können Warnungen oder inkonsistente Daten erzeugen, wenn während des Backups Dateien geändert werden. Stoppen Sie bei vollständigen Appdata- oder Domains-Backups möglichst alle betroffenen Dienste.
+
+Das planmäßige Herunterfahren einer VM wird als Information gemeldet. Erst ein fehlgeschlagener Shutdown oder Neustart erzeugt eine Warnung beziehungsweise einen Fehler. Nach jedem Lauf werden nur die Container und VMs wieder gestartet, die vor diesem Lauf tatsächlich aktiv waren.
+
+#### Neustart-Priorität für Docker-Container
+
+Die Priorität bestimmt ausschließlich, in welcher Reihenfolge die von Borg Backup UI gestoppten Container nach einem Job wieder gestartet werden. Sie ändert weder die Stopp-Reihenfolge noch die normale Unraid-Autostart-Reihenfolge.
+
+Konfigurieren Sie das Label für jeden betroffenen Container direkt in Unraid:
+
+1. Öffnen Sie den Unraid-Reiter **Docker**.
+2. Bearbeiten Sie den Container.
+3. Aktivieren Sie **Advanced View**.
+4. Ergänzen Sie unter **Extra Parameters** beispielsweise:
+
+   ```text
+   --label backup.start.priority=1
+   ```
+
+5. Behalten Sie bereits vorhandene Extra Parameters unverändert bei und fügen Sie das Label zusätzlich hinzu.
+6. Übernehmen Sie die Container-Konfiguration.
+
+Unterstützte Werte:
+
+- `1`: kritische Infrastruktur, beispielsweise Datenbanken oder Caches
+- `2`: Standardanwendungen, die von Diensten der Priorität 1 abhängen
+- `3`: übrige Container
+
+Ein fehlender, leerer, ungültiger oder nicht unterstützter Wert wird als Priorität `3` behandelt. Niedrigere Prioritätsgruppen starten zuerst; zwischen belegten Gruppen wartet Borg Backup UI entsprechend seiner Laufzeitkonfiguration. Das Label gehört zum Container und gilt deshalb bei jedem Job, der diesen Container nach einem Backup neu startet.
+
+Beispiel: Setzen Sie PostgreSQL oder MariaDB auf Priorität `1` und die davon abhängige Anwendung auf Priorität `2`. Führen Sie die erste Prüfung in einem Wartungsfenster aus und kontrollieren Sie im Live-Log die Meldungen **Phase 1**, **Phase 2** und **Phase 3**. Für die Fehlersuche genügt die Prioritätsangabe; veröffentlichen Sie keine vollständige Container-Konfiguration mit Secrets.
+
+> **Hinweis:** Unraids normale Autostart-Reihenfolge wirkt beim Start des Docker-Dienstes. `backup.start.priority` wird nur von Borg Backup UI für die Wiederanlaufphase nach einem Backup verwendet.
 
 #### Retention, Kompression und Beschreibung
 
@@ -230,7 +298,9 @@ Dieser Ausdruck startet täglich um 03:00 Uhr.
 
 Der letzte Schritt zeigt eine technische Vorschau des geplanten Ablaufs. Hier werden Repository, zu sichernde Ordner oder Dateien, Docker-/VM-Auswahl und geplante Aktionen zusammengefasst.
 
-### 3.5 Zeitplanung und Cron
+Formulare und mehrstufige Assistenten mit ungespeicherten Eingaben werden nicht durch einen Klick auf den Hintergrund geschlossen. **Abbrechen** oder die Schließen-Schaltfläche bleiben verfügbar; bei geänderten Eingaben fragt Borg Backup UI vor dem Verwerfen ausdrücklich nach.
+
+### 3.6 Zeitplanung und Cron
 
 Zeitpläne können im Job-Wizard oder über die Job-Aktionen geändert werden. Beim Speichern wird der Cron-Eintrag für die Anwendung aktualisiert.
 
@@ -241,7 +311,7 @@ Best Practices:
 - Zeitpläne mit ausreichend Abstand planen, damit sich große Backups nicht überlappen.
 - Bei externen Zielen prüfen, ob Netzwerk und Mounts zur geplanten Zeit verfügbar sind.
 
-### 3.6 Typische Meldungen
+### 3.7 Typische Meldungen
 
 - **Vorschau Fehler / ungültige Angaben:** Ein Feld im Wizard ist nicht plausibel. Prüfen Sie die zu sichernden Ordner oder Dateien, Typ-ID, Speicherziel und Repository-Auswahl.
 - **Kein Speicherziel oder Repository vorhanden:** Richten Sie das Speicherziel zuerst unter **Einstellungen** ein. Erstellen oder importieren Sie danach das Repository unter **Repositories**.
@@ -273,7 +343,7 @@ Die Seite trennt Speicherziele, Borg-Repositorys und Backup-Jobs. Ein Speicherzi
 - **Verwaltung:** Zeigt aktuelle Job-Verknüpfungen, Borg-Key-Export/Import und trennt das nicht-destruktive Entfernen aus der UI von der endgültigen Repository-Löschung.
 - **Repository hinzufügen:** Öffnet einen Assistenten zum Auswählen eines vorhandenen Speicherziels und zum Erstellen oder Importieren eines Repositorys.
 
-Die Borg-Kennzahlen werden im Hintergrund alle 24 Stunden aktualisiert und in `repositories.json` zwischengespeichert. Fehlt die Information oder ist sie älter, wird sie beim nächsten stündlichen Prüflauf geladen. Fehlgeschlagene Aktualisierungen werden nach einer Stunde erneut versucht. Der Seitenaufruf selbst wartet dadurch nicht auf alle lokalen und entfernten Repositorys.
+Die automatische Aktualisierung der Borg-Kennzahlen ist standardmäßig deaktiviert, damit Repositorys und Datenträger nicht unerwartet angesprochen werden. Unter **Einstellungen > Repositories** kann sie bewusst aktiviert und ihr Intervall eingestellt werden; der voreingestellte Aktualisierungsabstand beträgt 24 Stunden, ein fehlgeschlagener Zugriff wird standardmäßig nach einer Stunde erneut versucht. Ergebnisse werden in `repositories.json` zwischengespeichert. Der Repository-Seitenaufruf zeigt den Cache und wartet nicht auf eine Aktualisierung aller lokalen und entfernten Repositorys. **Info aktualisieren** startet die Abfrage für das ausgewählte Repository manuell.
 
 Der Repository-Kopf verwendet den beim Erstellen oder Importieren vergebenen **Anzeigenamen**. Das **Repository-Verzeichnis** ist der letzte Verzeichnisname, der **Repository-Pfad** ist der vollständige lokale oder entfernte Zielpfad und **Pfad im Speicherziel** ist der relative Pfad innerhalb des ausgewählten Speicherziels.
 
@@ -289,6 +359,8 @@ Der Repository-Kopf verwendet den beim Erstellen oder Importieren vergebenen **A
 8. Prüfen Sie die Zusammenfassung und speichern Sie.
 
 > **Warnung:** Ein Import initialisiert oder verändert das Repository nicht. Ein Erstellen führt ausdrücklich `borg init` aus.
+
+> **Hinweis:** Stable `2026.08.31.0907` verwendet das gebündelte BorgBackup `1.4.5`. Prüfen Sie ein importiertes Repository nach dem Import mit **Info aktualisieren**, **Check** und einem Restore-Test. Der Import aktualisiert oder konvertiert das Borg-Repository nicht automatisch.
 
 > **Warnung:** Bei `keyfile` und `keyfile-blake2` benötigen Sie für eine Wiederherstellung sowohl die Passphrase als auch die lokale Schlüsseldatei. Verwenden Sie für einen Systemumzug den verschlüsselten Jobs-/Secrets-Export und bewahren Sie zusätzlich einen unabhängigen `borg key export` auf.
 
@@ -328,7 +400,7 @@ Repository aus der Anwendung entfernen oder endgültig löschen:
 
 ### 4.5 Hinweise
 
-> **Hinweis:** Prune nutzt die Retention des verknüpften Jobs. Ohne Job-Zuordnung bleibt Prune deaktiviert.
+> **Hinweis:** Prune nutzt die Retention eines verknüpften Jobs und beschränkt die Aktion auf dessen Archivmuster `<typ-id>-backup-*`. Verwenden mehrere Jobs dasselbe Repository, muss bei einem manuellen Prune der Job als Retention-Quelle ausdrücklich gewählt werden. Der Bestätigungsdialog zeigt Job, Archivfilter und Retention; Archive der anderen Jobs bleiben unberührt. Ohne passende Job-Zuordnung bleibt Prune deaktiviert.
 
 > **Hinweis:** Prune listet entfernte Archive im Ergebnis. Compact zeigt den freigegebenen Speicherplatz nur dann numerisch an, wenn Borg diesen Wert ausgibt.
 
@@ -416,7 +488,7 @@ Berichte helfen bei der Auswertung von Trends:
 
 ![Restore-Wizard mit markierten Bedienbereichen](../assets/de/restore-guide.png)
 
-**Abbildung 3 - Browse & Restore:** (1) Wechsel zwischen Restore und History, (2) Jobauswahl nach Standort, (3) Fortschritt der fuenf Wizard-Schritte, (4) Inhalt des aktuellen Schritts.
+**Abbildung 3 - Browse & Restore:** (1) Wechsel zwischen Restore und History, (2) Jobauswahl nach Standort, (3) Fortschritt der fünf Wizard-Schritte, (4) Inhalt des aktuellen Schritts.
 
 **Browse & Restore** führt durch die Wiederherstellung von Daten aus Borg-Archiven.
 
@@ -450,7 +522,9 @@ Wählen Sie den Job, dessen Archiv Sie durchsuchen möchten. Die Sidebar gruppie
 
 #### Schritt 2: Archiv auswählen
 
-Wählen Sie ein Archiv aus dem Repository. Wenn keine Archive sichtbar sind, prüfen Sie Repository-Zugriff, Passphrase und Storage-Status.
+Wählen Sie ein Archiv aus dem Repository. Die Liste wird auf die zum Job gehörenden Archivpräfixe begrenzt. Das aktuelle Muster, beispielsweise `testdaten-backup-*`, steht oberhalb der Liste. Wurde die Typ-ID des Jobs früher geändert, zeigt ein kompaktes Informations-Popover zusätzlich die gespeicherten historischen Muster. So bleiben ältere Archive innerhalb des aktuell zugeordneten Repositorys erreichbar, ohne Archive anderer Jobs in einem gemeinsam genutzten Repository anzubieten.
+
+Wenn keine Archive sichtbar sind, prüfen Sie Repository-Zugriff, Passphrase, Storage-Status und das angezeigte Archivmuster. Nach einem Wechsel des Job-Repositorys bleiben frühere Archive im alten Repository und erscheinen hier nicht; sie werden durch die Änderung weder verschoben noch kopiert.
 
 #### Schritt 3: Auswahl
 
@@ -493,7 +567,9 @@ Erlaubte Beispiele, wenn bewusst konfiguriert:
 
 #### Schritt 5: Prüfen & Start
 
-Der letzte Schritt zeigt Zusammenfassung und Systemprüfung. Je nach Auswahl kann die technische Precheck-Ausgabe aufgeklappt werden. Nach Bestätigung startet der Restore.
+Der letzte Schritt zeigt Zusammenfassung und Systemprüfung. Je nach Auswahl kann die technische Precheck-Ausgabe aufgeklappt werden. Validierungsfehler nennen den konkreten Grund, beispielsweise ein fehlendes oder nicht beschreibbares Ziel, ein Ziel außerhalb der erlaubten Restore-Wurzeln oder eine fehlende Archivauswahl. Mit **Abbrechen** wird der Startdialog ohne Restore geschlossen; nach der ausdrücklichen Bestätigung startet der Restore.
+
+Vor dem Start prüft Borg Backup UI den Repository-Lock. Ein gleichzeitig laufendes Backup, ein anderer Restore, Restore-Test oder eine Wartungsaktion auf demselben Repository blockiert den neuen Restore, statt parallele Schreib- oder Lesevorgänge zu riskieren.
 
 ### 7.4 Aktive Restore-Läufe
 
@@ -577,6 +653,8 @@ Die Anwendung zeigt Restore-Testlevel als `L1`, `L2` oder `L3`.
 
 > **Hinweis:** Diese Aktion startet nur fällige geplante Tests, nicht automatisch jeden Job.
 
+Läuft bereits ein Restore-Test, startet Borg Backup UI keinen zweiten parallelen Lauf. Stattdessen erscheint ein Konflikthinweis und das vorhandene Live-Protokoll wird geöffnet.
+
 ### 8.5 Prüfberichte
 
 ![Restore Tests - Prüfberichte](../assets/de/restore-tests-reports.png)
@@ -608,7 +686,7 @@ Typische Statuswerte:
 
 ![Einstellungen mit Navigation, Systemzustand und Konfigurationsbereich](../assets/de/settings-guide.png)
 
-**Abbildung 4 - Einstellungen:** (1) Bereichsnavigation, (2) Systemzustand und Migration, (3) Einstellungen des gewaehlten Bereichs, (4) zentrale Speicheraktion.
+**Abbildung 4 - Einstellungen:** (1) Bereichsnavigation, (2) Systemzustand und Migration, (3) Einstellungen des gewählten Bereichs, (4) zentrale Speicheraktion.
 
 Die Seite **Einstellungen** verwaltet die Anwendungskonfiguration. Sie ist in Gruppen aufgeteilt: System, Betrieb, Speicherziele und Wartung.
 
@@ -628,21 +706,24 @@ Typische Inhalte:
 
 #### Benachrichtigungen
 
-Borg-Backup-UI verwaltet Benachrichtigungskanäle in **Einstellungen > Benachrichtigungen**. Ereignisse koennen ueber mehrere Kanaele gemeldet werden:
+Borg Backup UI verwaltet Benachrichtigungskanäle in **Einstellungen > Benachrichtigungen**. Es gibt drei getrennte Versandwege:
 
 - Unraid-Benachrichtigungen
 - E-Mail/SMTP
-- Apprise-Profile fuer ntfy, Rocket.Chat, Discord und andere unterstuetzte Provider
+- Apprise-Benachrichtigungsprofile
 
-Apprise-Profile koennen angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Die Providerliste wird aus der gebuendelten Apprise-Version geladen. Provider-URL-Formate werden aus Apprise-Metadaten erzeugt, und gespeicherte Apprise-URLs werden als Secret gespeichert und nie zurueck in die Seite gerendert. Ab der Beta ist Apprise der initiale Push- und Webhook-Benachrichtigungsweg; alte interne native-ntfy-Testversionen sind keine unterstuetzte direkte Upgrade-Quelle.
+Apprise-Profile können angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Stable `2026.08.31.0907` bündelt Apprise `1.12.0`; Borg Backup UI bietet die 137 von dieser Version erkannten Provider an. Dazu gehören beispielsweise ntfy, Rocket.Chat, Discord und E-Mail-fähige Apprise-Dienste. Provider-URL-Formate werden aus Apprise-Metadaten erzeugt, und gespeicherte Apprise-URLs werden als Secret gespeichert und nie zurück in die Seite gerendert. Eine spätere Apprise-Version kann Zahl, Namen oder Parameter der Provider ändern.
 
-Echte Backup-, Restore-Test- und Reminder-Ereignisse werden fuer Apprise im Hintergrund zugestellt. Der ausloesende Job legt einen Queue-Eintrag ab und wartet nicht auf den externen Provider. Der UI-Dienst verarbeitet die Queue regelmaessig, beachtet Timeout, Versuche und Backoff des Profils und setzt nach einem Neustart mit noch offenen Eintraegen fort. Sanitizte Zustellstaende stehen im Systemzustand und im Support-Paket; die Queue mit Nachrichtentexten und die Apprise-Secret-URLs werden nicht in Support-Pakete exportiert.
+Für direkte E-Mail-Benachrichtigungen wird die gespeicherte globale Empfängeradresse verwendet; ist sie leer, dient der Empfänger des Wochenberichts als Rückfall. Speichern Sie geänderte SMTP- und E-Mail-Felder vor einer Testmail. Port `465` verwendet implizites TLS, während TLS auf Port `587` per STARTTLS aufgebaut wird.
+
+Echte Backup-, Restore-Test- und Reminder-Ereignisse werden für Apprise im Hintergrund zugestellt. Der auslösende Job legt einen Queue-Eintrag ab und wartet nicht auf den externen Provider. Der UI-Dienst verarbeitet die Queue regelmäßig, beachtet Timeout, Versuche und Backoff des Profils und setzt nach einem Neustart mit noch offenen Einträgen fort. Bereinigte Zustellstände stehen im Systemzustand und im Support-Paket; die Queue mit Nachrichtentexten und die Apprise-Secret-URLs werden nicht in Support-Pakete exportiert.
 
 Konfigurierbare Ereignisse koennen unter anderem sein:
 
 - Backup erfolgreich
 - Backup fehlgeschlagen
 - Backup übersprungen
+- Backup mit Warnung
 - Backup überfällig
 - Restore-Test erfolgreich
 - Restore-Test fehlgeschlagen
@@ -656,7 +737,11 @@ Die Reminder-Einstellungen gelten kanalübergreifend. Das Reminder-Intervall ver
 
 Das Homepage-Widget stellt eine kompakte, token-geschützte Statusübersicht für das Projekt **Homepage** bereit. Die Oberfläche erzeugt eine YAML-Vorlage mit Status, erfolgreichen Backups, Restore-Tests und aktiven Läufen. Behandeln Sie den Widget-Token wie ein Passwort und geben Sie ihn nicht in Screenshots oder Support-Paketen weiter.
 
-### 9.2 Benutzer
+### 9.2 About
+
+Der Bereich **About** zeigt die installierte Borg-Backup-UI-Version, die gebündelte BorgBackup-Version, Projekt- und Lizenzangaben sowie die Hinweise zu mitgelieferten Drittanbieter-Komponenten. Verwenden Sie diese Versionsangaben bei Supportanfragen. Primärer öffentlicher Supportkanal ist der Unraid-Forum-Thread; GitHub Issues eignen sich ergänzend für nachvollziehbare Fehlerberichte.
+
+### 9.3 Benutzer
 
 ![Einstellungen - Benutzer](../assets/de/settings-users.png)
 
@@ -688,7 +773,7 @@ Admin-Konto auswählen und dessen Passwort zurücksetzen. Dabei werden alle
 Borg-Backup-UI-Sessions abgemeldet; Jobs, Repositorys, Secrets, Einstellungen
 und Logs bleiben unverändert.
 
-### 9.3 Backup
+### 9.4 Backup
 
 ![Einstellungen - Backup](../assets/de/settings-backup.png)
 
@@ -704,7 +789,7 @@ Typische Einstellungen:
 
 Diese Werte beeinflussen neue Jobs oder globale Laufzeitgrenzen. Job-spezifische Einstellungen können im Job-Wizard davon abweichen.
 
-### 9.4 Restore
+### 9.5 Restore
 
 ![Einstellungen - Restore](../assets/de/settings-restore.png)
 
@@ -723,7 +808,7 @@ Hier werden erlaubte Restore-Zielbereiche verwaltet. Standardmäßig ist nur `/m
 
 > **Warnung:** Tragen Sie keine zu breiten Pfade wie `/`, `/mnt`, `/mnt/disks` oder `/mnt/remotes` ein. Verwenden Sie konkrete Ziele wie `/mnt/disks/<name>` oder `/mnt/remotes/<name>`.
 
-### 9.5 Lokale Profile
+### 9.6 Lokale Profile
 
 Lokale Profile definieren konkrete Speicherziele unter `/mnt`, beispielsweise `/mnt/backup`, `/mnt/cache/backups` oder einen eigenen Pool. Der Repository-Assistent bietet nur zuvor angelegte und geprüfte Speicherziele an.
 
@@ -739,7 +824,7 @@ Zu breite oder gefährliche Ziele wie `/`, `/mnt` und Systemverzeichnisse werden
 
 > **Empfehlung:** Verwenden Sie pro physischem Pool oder Mount ein eigenes Profil mit einem verständlichen Namen, zum Beispiel `Backup-Lokal` oder `USB-5TB`.
 
-### 9.6 USB-Profile
+### 9.7 USB-Profile
 
 ![Einstellungen - USB-Profile](../assets/de/settings-usb.png)
 
@@ -759,7 +844,7 @@ Wichtige Felder:
 
 > **Hinweis:** Ein USB-Profil macht ein Gerät nicht automatisch verfügbar. Das Ziel muss auf Unraid gemountet sein, wenn ein Backup läuft.
 
-### 9.7 SMB-Profile
+### 9.8 SMB-Profile
 
 ![Einstellungen - SMB-Profile](../assets/de/settings-smb.png)
 
@@ -789,7 +874,7 @@ Typische Aktionen:
 4. Status prüfen.
 5. Repository unter **Repositories** öffnen und die Informationen aktualisieren.
 
-### 9.8 SSH-Profile
+### 9.9 SSH-Profile
 
 ![Einstellungen - SSH-Profile](../assets/de/settings-storagebox.png)
 
@@ -813,9 +898,15 @@ Funktionen:
 - Verbindung testen
 - Profil speichern
 
+Beim Erzeugen eines SSH-Keys werden vorhandene Schlüsseldateien nicht überschrieben. Ist am konfigurierten Pfad bereits ein Schlüssel vorhanden, zeigt die Oberfläche eine Warnung und verwendet den bestehenden Schlüssel weiter.
+
 > **Hinweis:** Für Hetzner Storage Box ist ein relativer Basispfad wie `./backup` typisch. Prüfen Sie den aufgelösten Repository-Pfad auf der Seite **Repositories**.
 
-### 9.9 Import / Export
+Der Zieltyp **Borg Server** ist für eingeschränkte SSH-Zugänge vorgesehen, die nach der Anmeldung direkt `borg serve` starten und keine normale Remote-Shell bereitstellen. Bei diesem Typ überspringt der Profiltest deshalb shellbasierte Pfad-, Borg-Binary- und Schreibtests. Die eigentliche Repository-Erreichbarkeit wird beim Erstellen oder Importieren geprüft. Weil kein Verzeichnislisting per Shell möglich ist, ist der Repository-Verzeichnisbrowser deaktiviert; geben Sie den relativen Repository-Pfad manuell ein.
+
+Die Zieltypen **Storagebox**, **Synology** und **Generic SSH** verwenden weiterhin den normalen Shell-Modus. Wählen Sie **Borg Server** nur, wenn das Zielkonto tatsächlich auf `borg serve` beschränkt ist.
+
+### 9.10 Import / Export
 
 ![Einstellungen - Import / Export](../assets/de/settings-import-export.png)
 
@@ -838,7 +929,7 @@ Importstrategien können je nach Importtyp vorhandene Einträge behalten, ersetz
 
 Neue verschlüsselte Exporte verwenden eine versionierte, authentifizierte Hülle. Ein falsches Passwort sowie beschädigte, abgeschnittene oder manipulierte Dateien werden geprüft, bevor Importdaten geschrieben werden. Ältere AES-CBC-Exporte bleiben importierbar, erscheinen in der Vorschau jedoch mit einem Legacy-Hinweis. Erstellen Sie nach einem Legacy-Import einen neuen Export im aktuellen Format.
 
-### 9.10 Erweitert
+### 9.11 Erweitert
 
 ![Einstellungen - Erweitert](../assets/de/settings-advanced.png)
 
@@ -851,7 +942,7 @@ Unterbereiche:
 
 Die Reminder-Diagnose zeigt, wann ein Lauf erwartet wurde, ab wann er als überfällig gilt, wann zuletzt gesendet wurde und wann der nächste Reminder möglich ist. Diese Ansicht sendet keine Benachrichtigungen; sie ist rein diagnostisch.
 
-### 9.11 Werkseinstellungen
+### 9.12 Werkseinstellungen
 
 **Werkseinstellungen** ist der letzte Eintrag im Bereich **Wartung**. Die Funktion entfernt die Anwendungskonfiguration und die konfigurierten Betriebsdaten und startet Borg Backup UI anschließend mit der Admin-Erstkonfiguration neu.
 
@@ -861,7 +952,7 @@ Für die Freigabe sind alle Risikobestätigungen, der Servername, das aktuelle A
 
 > **Warnung:** Benutzer, Jobs, Zeitpläne, Speicherziele, Repository-Zuordnungen, Secrets, Borg-Keyfiles, Logs, Status- und Verlaufsdaten werden dauerhaft entfernt. Erstellen Sie vorher eine Sicherung von `/boot/config/borg-backup`.
 
-### 9.12 Systemstatus und Migration
+### 9.13 Systemstatus und Migration
 
 ![Einstellungen - Systemstatus und Migration](../assets/de/settings-system-health.png)
 
@@ -889,6 +980,10 @@ Bei älteren Installationen kann der historische Ausführungszeitpunkt fehlen,
 wenn frühere Versionen ihn nicht getrennt protokolliert haben und kein
 erfolgreicher Audit-Eintrag vorhanden ist. Die Anwendung weist dann darauf hin,
 statt das aktuelle Startdatum als Ausführungszeitpunkt auszugeben.
+
+Beim Pluginstart laufen erforderliche Datenmigrationen vor dem Normalbetrieb. Sie sind idempotent, schreiben einen strukturierten Audit-Eintrag und sichern betroffene Konfigurationsdaten in einem Migrationssnapshot. Schlägt eine Pflichtmigration fehl, werden nachfolgende Migrationen und schreibende Funktionen blockiert; Anmeldung, Systemstatus, Migrationsdetails und Supportpaket bleiben für die Diagnose erreichbar.
+
+> **Warnung:** Sichern Sie vor einem Plugin-Update mindestens `/boot/config/borg-backup` unabhängig vom Server. Ein automatisch erzeugter Migrationssnapshot schützt die betroffenen Daten, ist aber weder ein vollständiges Systembackup noch ein automatisches Plugin-Downgrade. Unraid installiert regulär nur die aktuelle Plugin-Version. Eine Reparatur oder manuelle Wiederherstellung muss deshalb mit der installierten beziehungsweise einer korrigierten Version nachvollziehbar durchgeführt werden.
 
 Runtime-Recovery weist darauf hin, wenn Docker-Container oder VMs während eines Backups gestoppt wurden und nach einem Crash, Abbruch oder Neustart geprüft werden müssen.
 
@@ -1085,6 +1180,10 @@ Nein. Prüfen Sie zusätzlich Repository-Zustand, Benachrichtigungen, Restore-Te
 ### Ist ein Support-Paket anonym?
 
 Nein. Es ist **sanitized**, aber nicht vollständig anonym. Secrets werden maskiert, technische Pfade, Namen oder Infrastrukturbezüge können trotzdem Rückschlüsse erlauben. Prüfen Sie das Paket vor jeder Weitergabe.
+
+### Was wird beim Deinstallieren des Plugins entfernt?
+
+Die Deinstallation stoppt den Dienst und entfernt den plugin-eigenen Programmumfang unter `/boot/config/plugins/borg-backup-ui` sowie verbliebene alte Start- und Laufzeiteinträge. Nutzerdaten außerhalb dieses Plugin-Verzeichnisses bleiben erhalten, insbesondere Jobs, Historien, konfigurierte Datenpfade und Borg-Repositories. Eine Deinstallation ersetzt trotzdem kein geprüftes Konfigurations- und Repository-Backup.
 
 ## 15. Empfohlene Betriebspraxis
 
