@@ -1,8 +1,8 @@
 # Borg Backup UI
 
-Unraid plugin for BorgBackup with guided backup jobs, repository management,
-restore verification, archive browsing, reports, notifications, and system
-health checks.
+An Unraid plugin that turns BorgBackup into a guided backup and restore
+workflow: configure jobs and repositories, browse archives, verify restores,
+review reports, and receive notifications from one web interface.
 
 Borg Backup UI is built for Unraid users who want the reliability of BorgBackup
 without maintaining custom shell scripts for everyday operation. BorgBackup
@@ -10,11 +10,29 @@ remains the backup engine; this project adds the Unraid-focused control layer
 around jobs, storage targets, schedules, restore workflows, checks, and support
 diagnostics.
 
-> Status: pre-publication candidate for Unraid Community Apps.
-> Public installation instructions will be added after Community Apps approval.
+> Status: public beta, available through Unraid Community Apps. Start with
+> non-critical data and verify a restore before relying on any backup setup.
 > This project is not affiliated with BorgBackup or other Borg UI projects.
 
+[Community Apps listing](https://ca.unraid.net/apps/borg-backup-ui-17vu3jm06a2wie) |
+[English manual](https://github.com/borgforge/borg-backup-ui/blob/main/docs/user-manual/en/user-manual.md) |
+[Deutsches Handbuch](https://github.com/borgforge/borg-backup-ui/blob/main/docs/user-manual/de/user-manual.md) |
+[Unraid support thread](https://forums.unraid.net/topic/198728-plugin-borg-backup-ui-web-ui-for-borg-backup-on-unraid/) |
+[Issues](https://github.com/borgforge/borg-backup-ui/issues)
+
 ![Borg Backup UI dashboard](docs/assets/readme/dashboard.png)
+
+## Install
+
+1. Open **Apps** in the Unraid web interface.
+2. Install **Python 3 for Unraid** if it is not already installed.
+3. Search for **Borg Backup UI** and open its Community Apps listing.
+4. Review the public beta notice and install the plugin.
+5. Open **Settings > Borg Backup UI**, start the service, and complete the
+   initial setup.
+
+If the Apps tab is unavailable, follow the official
+[Community Applications instructions](https://docs.unraid.net/unraid-os/manual/applications/).
 
 ## Overview
 
@@ -95,20 +113,13 @@ installation is required for normal operation.
 
 ## First Run
 
-1. Install the required Python runtime on Unraid.
-2. Install Borg Backup UI through the approved project or release channel.
-3. Open the Borg Backup UI plugin page from Unraid.
-4. Start Borg Backup UI from the Unraid control page.
-5. Create the first administrator account.
-6. Confirm the main data directory in the setup wizard.
-7. Create or select a storage target and repository.
-8. Create the first backup job with the guided wizard.
-9. Run the first backup manually and review Dashboard, History, and Reports.
-10. Restore a small sample into a separate test folder and verify the result.
-11. Configure restore tests and notifications for ongoing verification.
-
-Public installation instructions will be added after the Community Apps
-publication requirements are complete.
+1. Create the first administrator account.
+2. Confirm the main data directory in the setup wizard.
+3. Create or select a storage target and repository.
+4. Create the first backup job with the guided wizard.
+5. Run the first backup manually and review Dashboard, History, and Reports.
+6. Restore a small sample into a separate test folder and verify the result.
+7. Configure restore tests and notifications for ongoing verification.
 
 For first tests, start with a small test folder or non-critical share. Do not
 begin with irreplaceable data until backup and restore behavior has been
@@ -170,9 +181,13 @@ treats restore tests and restore history as first-class operating data.
 
 ## Support
 
-Use GitHub Issues for bugs, feature requests, and design discussions. When
-reporting runtime problems, include the generated support bundle where possible
-and remove private infrastructure details before sharing logs publicly.
+Use the
+[Unraid support thread](https://forums.unraid.net/topic/198728-plugin-borg-backup-ui-web-ui-for-borg-backup-on-unraid/)
+for setup questions and community discussion. Use
+[GitHub Issues](https://github.com/borgforge/borg-backup-ui/issues) for bugs,
+feature requests, and design discussions. When reporting runtime problems,
+include the generated support bundle where possible and remove private
+infrastructure details before sharing logs publicly.
 
 ## License
 
