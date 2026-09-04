@@ -185,6 +185,17 @@ class BorgRunner:
         """
         if self.phase_callback:
             self.phase_callback("borg_prune")
+        retention_counts = (
+            self.config.keep_daily,
+            self.config.keep_weekly,
+            self.config.keep_monthly,
+            self.config.keep_yearly,
+        )
+        if not any(count > 0 for count in retention_counts):
+            logger.error(
+                "Borg prune blocked: at least one retention value must be greater than zero"
+            )
+            return BORG_EXIT_ERROR
         archive_prefix = str(archive_prefix or "").strip()
         if archive_prefix:
             logger.info(

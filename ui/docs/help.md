@@ -113,10 +113,14 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 2. **Quellen & Ziel:** Zu sichernde Ordner oder Dateien, Ausschlüsse, Speichertyp, Speicherziel, Repository und Kompression.
 3. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten.
 4. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
-5. **Retention:** tägliche, wöchentliche, monatliche und jährliche Aufbewahrung.
+5. **Retention:** tägliche, wöchentliche, monatliche und jährliche Wiederherstellungspunkte.
 6. **Beschreibung:** verständliche Beschreibung mit optionalem Markdown.
 7. **Zeitplan:** einfache Planung oder Cron-Ausdruck.
 8. **Flow-Vorschau:** endgültige Prüfung des geplanten Ablaufs.
+
+> [!IMPORTANT] Retention-Werte zählen Zeiträume, nicht Archive pro Zeitraum. **Täglich: 20** bedeutet höchstens einen Tagesstand für 20 tägliche Zeiträume und nicht 20 Archive pro Tag. Borg Backup UI führt nach jedem erfolgreichen Backup automatisch Prune aus. `0` deaktiviert nur die jeweilige Stufe; mindestens ein Retention-Wert muss größer als `0` sein.
+
+Beispiel: Werden am selben Tag um 08:00 Uhr und 08:30 Uhr Backups erstellt, repräsentiert normalerweise das neuere passende Archiv den täglichen Wiederherstellungspunkt dieses Tages. Details und weitere Beispiele enthält das vollständige Handbuch unter **Backup-Jobs > Retention, Kompression und Beschreibung**.
 
 ### Quellen und Ausschlüsse
 

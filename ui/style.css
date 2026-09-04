@@ -5780,6 +5780,56 @@ body.wizard-modal-open {
   display: none;
 }
 
+.wizard-retention-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wizard-retention-explainer {
+  padding: 13px 15px;
+  border: 1px solid rgba(56, 139, 253, 0.32);
+  border-radius: var(--radius-sm);
+  background: rgba(56, 139, 253, 0.08);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.wizard-retention-explainer > strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.wizard-retention-explainer p {
+  margin: 4px 0;
+}
+
+.wizard-retention-help-link {
+  display: inline-flex;
+  margin-top: 5px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.wizard-retention-help-link:hover {
+  text-decoration: underline;
+}
+
+.wizard-retention-fields {
+  padding: 0;
+}
+
+.wizard-retention-zero-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .wizard-step2-checkboxes {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -183,6 +183,41 @@ def _source_contains_path_component(raw_sources: list[str], component: str) -> b
     return False
 
 
+_RETENTION_DEFAULTS = {
+    "daily": "7",
+    "weekly": "4",
+    "monthly": "6",
+    "yearly": "3",
+}
+
+
+class RetentionValidationError(ValueError):
+    """Expose a stable API code for localized wizard retention errors."""
+
+    def __init__(self, api_code: str, message: str) -> None:
+        super().__init__(message)
+        self.api_code = api_code
+
+
+def _retention_from_params(params: dict) -> dict[str, str]:
+    """Return normalized Borg retention counts and reject unsafe policies."""
+    retention: dict[str, str] = {}
+    for period, default in _RETENTION_DEFAULTS.items():
+        raw = str(params.get(f"keep_{period}", default)).strip() or default
+        if not re.fullmatch(r"\d+", raw):
+            raise RetentionValidationError(
+                "retention_invalid",
+                "Retention values must be non-negative whole numbers",
+            )
+        retention[period] = str(int(raw))
+    if not any(int(value) > 0 for value in retention.values()):
+        raise RetentionValidationError(
+            "retention_all_zero",
+            "At least one retention value must be greater than zero",
+        )
+    return retention
+
+
 def validate_params(
     params: dict,
     scripts_dir: Path,
@@ -200,6 +235,9 @@ def validate_params(
         raise ValueError("Type ID may contain only lowercase letters, digits, and underscores")
     if not params.get("job_name", "").strip():
         raise ValueError("Job name must not be empty")
+    retention = _retention_from_params(params)
+    for period, value in retention.items():
+        params[f"keep_{period}"] = value
     raw_sources = normalize_source_paths(params.get("source_paths"))
     params["source_paths"] = raw_sources
     selected_repo = _repository_from_params(params, ui_config)
@@ -437,6 +475,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     encryption = _repository_encryption(selected_repo, params.get("encryption", "repokey-blake2"))
     docker_control = _runtime_control_from_params(params, "docker")
     vm_control = _runtime_control_from_params(params, "vm")
+    retention = _retention_from_params(params)
     use_docker = docker_control["mode"] != "none"
     use_vm = vm_control["mode"] != "none"
 
@@ -502,6 +541,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "vm_mode": vm_control["mode"],
             "docker_selected": docker_control["selected"],
             "vm_selected": vm_control["selected"],
+            "retention": retention,
         },
         "steps": steps,
         "step_codes": step_codes,
@@ -518,6 +558,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     description = params.get("description", "").strip()
     icon = str(params.get("icon", "")).strip().lower()
     icon_color = str(params.get("icon_color", "")).strip().lower()
+    retention = _retention_from_params(params)
     selected_repo = _repository_from_params(params, ui_config)
     if not selected_repo:
         raise ValueError("Selected repository object was not found")
@@ -582,12 +623,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "docker_control": docker_control,
         "vm_control": vm_control,
         "compression": str(params.get("compression", "lz4")).strip() or "lz4",
-        "retention": {
-            "daily": str(params.get("keep_daily", "7")).strip() or "7",
-            "weekly": str(params.get("keep_weekly", "4")).strip() or "4",
-            "monthly": str(params.get("keep_monthly", "6")).strip() or "6",
-            "yearly": str(params.get("keep_yearly", "3")).strip() or "3",
-        },
+        "retention": retention,
         "created_at": existing.get("created_at", now_iso),
         "updated_at": now_iso,
     }
