@@ -118,9 +118,9 @@ A job connects sources to exactly one existing repository. Encryption belongs to
 7. **Schedule:** Simple schedule or cron expression.
 8. **Flow Preview:** Final review of the planned workflow.
 
-> [!IMPORTANT] Retention values count periods, not archives per period. **Daily: 20** means up to one daily state for 20 daily periods, not 20 archives per day. Borg Backup UI automatically runs prune after every successful backup. `0` disables only that tier; at least one retention value must be greater than `0`.
+> [!IMPORTANT] Retention values count periods, not archives per period. **Daily: 20** means up to one daily state for 20 daily periods, not 20 archives per day. After each successfully created backup, Borg Backup UI automatically applies the retention rules. `0` disables only that tier and does not mean unlimited. Four zero values are rejected because prune would otherwise keep no archives.
 
-Example: If backups are created at 08:00 and 08:30 on the same day, the newer qualifying archive normally represents that day's daily restore point. See the full manual under **Backup Jobs > Retention, Compression, and Description** for details and additional examples.
+Example: If backups are created at 08:00 and 08:30 on the same day, the daily rule keeps only one restore point for that day—normally the newer 08:30 archive. See the full manual under **Backup Jobs > Retention, Compression, and Description** for details and additional examples.
 
 ### Sources and Exclusions
 

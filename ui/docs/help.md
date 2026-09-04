@@ -118,9 +118,9 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 7. **Zeitplan:** einfache Planung oder Cron-Ausdruck.
 8. **Flow-Vorschau:** endgültige Prüfung des geplanten Ablaufs.
 
-> [!IMPORTANT] Retention-Werte zählen Zeiträume, nicht Archive pro Zeitraum. **Täglich: 20** bedeutet höchstens einen Tagesstand für 20 tägliche Zeiträume und nicht 20 Archive pro Tag. Borg Backup UI führt nach jedem erfolgreichen Backup automatisch Prune aus. `0` deaktiviert nur die jeweilige Stufe; mindestens ein Retention-Wert muss größer als `0` sein.
+> [!IMPORTANT] Retention-Werte zählen Zeiträume, nicht Archive pro Zeitraum. **Täglich: 20** bedeutet höchstens einen Tagesstand für 20 tägliche Zeiträume und nicht 20 Archive pro Tag. Nach jedem erfolgreich erstellten Backup wendet Borg Backup UI die Aufbewahrungsregeln automatisch an. `0` deaktiviert nur die jeweilige Stufe und bedeutet nicht „unbegrenzt“. Viermal `0` wird abgelehnt, weil Prune sonst kein Archiv behalten würde.
 
-Beispiel: Werden am selben Tag um 08:00 Uhr und 08:30 Uhr Backups erstellt, repräsentiert normalerweise das neuere passende Archiv den täglichen Wiederherstellungspunkt dieses Tages. Details und weitere Beispiele enthält das vollständige Handbuch unter **Backup-Jobs > Retention, Kompression und Beschreibung**.
+Beispiel: Werden an einem Tag Backups um 08:00 und 08:30 Uhr erstellt, behält die tägliche Regel nur einen Wiederherstellungspunkt für diesen Tag – normalerweise das neuere Archiv von 08:30 Uhr. Details und weitere Beispiele enthält das vollständige Handbuch unter **Backup-Jobs > Retention, Kompression und Beschreibung**.
 
 ### Quellen und Ausschlüsse
 

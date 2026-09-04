@@ -213,7 +213,7 @@ def _retention_from_params(params: dict) -> dict[str, str]:
     if not any(int(value) > 0 for value in retention.values()):
         raise RetentionValidationError(
             "retention_all_zero",
-            "At least one retention value must be greater than zero",
+            "At least one retention rule must be greater than zero; otherwise prune would delete every archive belonging to this job",
         )
     return retention
 

@@ -154,7 +154,7 @@ def test_quick_help_and_manuals_use_the_same_retention_semantics() -> None:
 
     assert "Retention-Werte zählen Zeiträume" in quick_de
     assert "Retention values count periods" in quick_en
-    assert "08:00 Uhr und um 08:30 Uhr" in manual_de
+    assert "Backups um 08:00 und 08:30 Uhr" in manual_de
     assert "08:00 and 08:30" in manual_en
     assert "viermal `0` wird abgelehnt" in manual_de
     assert "four zero values is rejected" in manual_en

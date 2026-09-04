@@ -283,11 +283,11 @@ Retention values count time periods, not the number of archives within a period:
 - **Monthly:** up to one qualifying archive per month.
 - **Yearly:** up to one qualifying archive per year.
 
-Borg normally uses the newest qualifying archive from a period. For example, if backups are created at 08:00 and 08:30 on the same day, **Daily: 20** does not keep 20 archives from that day. The newer state normally represents that day. An archive survives when at least one configured rule selects it.
+Borg normally uses the newest qualifying archive from a period. For example, if backups are created at 08:00 and 08:30 on the same day, the daily rule keeps only one restore point for that day—normally the newer 08:30 archive. **Daily: 20** therefore does not keep 20 archives from the same day. An archive survives when at least one configured rule selects it.
 
-After every successful backup, Borg Backup UI automatically runs prune, followed by compact and the repository check when it is due. Archives that are not selected by any retention rule can therefore be removed immediately after a new backup.
+After each successfully created backup, Borg Backup UI applies the configured retention rules. The plugin runs prune, followed by compact and the repository check when it is due. Prune deletes archives that are not selected by any retention rule.
 
-A value of `0` disables only that retention tier and does not mean unlimited. At least one of the four values must be greater than `0`; a configuration containing four zero values is rejected.
+A value of `0` disables only that retention tier and does not mean unlimited. With four zero values, prune would select no matching archive for retention and could therefore delete all archives belonging to the job. At least one of the four values must consequently be greater than `0`; a configuration containing four zero values is rejected. A future option to keep every archive must instead explicitly disable prune for the job.
 
 #### Schedule
 
