@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #458
+- Clarified in the Job Wizard and both manuals that Borg retention values count time periods rather than archives per period.
+- Added the effective retention policy to the flow preview and made Repository Maintenance describe the maximum restore points per period.
+- Rejected retention policies where daily, weekly, monthly and yearly values are all zero, while keeping zero valid for individual tiers.
+
 ### Issue #389
 - Renamed the read-only restore source field to Archive path, removed its required-field marker and added the selected repository and archive as separate context in the target step.
 

@@ -1636,23 +1636,35 @@
       <!-- Step 5: Retention -->
       <div id="wizard-step-5" class="wizard-step-body hidden">
         <div id="wizard-error-5" class="status-message error hidden"></div>
-        <div class="settings-body two-col">
-          <div class="form-group">
-            <label class="form-label" data-i18n="wizard.keepDaily">Täglich behalten</label>
-            <input class="form-input" type="number" min="0" id="wiz-keep-daily" value="7">
+        <div class="wizard-retention-workspace">
+          <div class="wizard-retention-explainer" role="note">
+            <strong data-i18n="wizard.retentionExplanationTitle">So funktioniert die Aufbewahrung</strong>
+            <p data-i18n="wizard.retentionExplanation">Die Zahlen geben Zeiträume an, nicht Archive pro Zeitraum. Borg behält pro Tag, Woche, Monat oder Jahr höchstens ein passendes Archiv.</p>
+            <p><strong data-i18n="wizard.retentionExampleLabel">Beispiel:</strong> <span data-i18n="wizard.retentionExample">Werden an einem Tag Backups um 08:00 und 08:30 Uhr erstellt, behält die tägliche Regel nur einen Wiederherstellungspunkt für diesen Tag – normalerweise das neuere Archiv von 08:30 Uhr.</span></p>
+            <p data-i18n="wizard.retentionAutomaticPrune">Nach jedem erfolgreich erstellten Backup wendet Borg Backup UI die festgelegten Aufbewahrungsregeln an. Archive, die dabei von keiner Regel ausgewählt werden, werden gelöscht.</p>
+            <a class="wizard-retention-help-link" id="wiz-retention-manual-link"
+              href="https://github.com/borgforge/borg-backup-ui/blob/main/docs/user-manual/de/user-manual.md#retention-kompression-und-beschreibung"
+              target="_blank" rel="noopener" data-i18n="wizard.retentionManualLink">Aufbewahrung im Handbuch öffnen</a>
           </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="wizard.keepWeekly">Wöchentlich behalten</label>
-            <input class="form-input" type="number" min="0" id="wiz-keep-weekly" value="4">
+          <div class="settings-body two-col wizard-retention-fields">
+            <div class="form-group">
+              <label class="form-label"><span data-i18n="wizard.keepDaily">Tägliche Wiederherstellungspunkte</span> <span class="form-hint" data-i18n="wizard.keepDailyHint">(max. einer pro Tag)</span></label>
+              <input class="form-input" type="number" min="0" step="1" id="wiz-keep-daily" value="7">
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span data-i18n="wizard.keepWeekly">Wöchentliche Wiederherstellungspunkte</span> <span class="form-hint" data-i18n="wizard.keepWeeklyHint">(max. einer pro Woche)</span></label>
+              <input class="form-input" type="number" min="0" step="1" id="wiz-keep-weekly" value="4">
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span data-i18n="wizard.keepMonthly">Monatliche Wiederherstellungspunkte</span> <span class="form-hint" data-i18n="wizard.keepMonthlyHint">(max. einer pro Monat)</span></label>
+              <input class="form-input" type="number" min="0" step="1" id="wiz-keep-monthly" value="6">
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span data-i18n="wizard.keepYearly">Jährliche Wiederherstellungspunkte</span> <span class="form-hint" data-i18n="wizard.keepYearlyHint">(max. einer pro Jahr)</span></label>
+              <input class="form-input" type="number" min="0" step="1" id="wiz-keep-yearly" value="3">
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="wizard.keepMonthly">Monatlich behalten</label>
-            <input class="form-input" type="number" min="0" id="wiz-keep-monthly" value="6">
-          </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="wizard.keepYearly">Jährlich behalten</label>
-            <input class="form-input" type="number" min="0" id="wiz-keep-yearly" value="3">
-          </div>
+          <p class="wizard-retention-zero-hint" data-i18n="wizard.retentionZeroHint">0 deaktiviert die jeweilige Aufbewahrungsregel und bedeutet nicht „unbegrenzt behalten“. Mindestens eine Regel muss einen Wert größer als 0 haben, damit Prune nicht alle Archive dieses Jobs löscht.</p>
         </div>
       </div>
 

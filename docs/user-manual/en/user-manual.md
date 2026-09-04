@@ -276,6 +276,19 @@ Example: assign PostgreSQL or MariaDB priority `1` and its dependent application
 
 The wizard configures job-specific Borg options such as compression and retention. Encryption and passphrase belong to the repository and are only set when that repository is created or imported.
 
+Retention values count time periods, not the number of archives within a period:
+
+- **Daily:** up to one qualifying archive per day for the configured number of daily restore points.
+- **Weekly:** up to one qualifying archive per week.
+- **Monthly:** up to one qualifying archive per month.
+- **Yearly:** up to one qualifying archive per year.
+
+Borg normally uses the newest qualifying archive from a period. For example, if backups are created at 08:00 and 08:30 on the same day, the daily rule keeps only one restore point for that day—normally the newer 08:30 archive. **Daily: 20** therefore does not keep 20 archives from the same day. An archive survives when at least one configured rule selects it.
+
+After each successfully created backup, Borg Backup UI applies the configured retention rules. The plugin runs prune, followed by compact and the repository check when it is due. Prune deletes archives that are not selected by any retention rule.
+
+A value of `0` disables only that retention tier and does not mean unlimited. With four zero values, prune would select no matching archive for retention and could therefore delete all archives belonging to the job. At least one of the four values must consequently be greater than `0`; a configuration containing four zero values is rejected. A future option to keep every archive must instead explicitly disable prune for the job.
+
 #### Schedule
 
 The schedule can be set directly in the wizard. The UI supports simple frequencies and a cron expression.
@@ -400,7 +413,7 @@ Remove a repository from the application or delete it permanently:
 
 ### 4.5 Notes
 
-> **Note:** Prune uses a linked job's retention policy and limits the action to its archive pattern `<type-id>-backup-*`. If several jobs use the same repository, a manual prune requires an explicit job as the retention source. The confirmation shows the job, archive filter, and retention policy; archives belonging to other jobs remain untouched. Prune remains disabled without a matching job link.
+> **Note:** Prune uses a linked job's retention policy and limits the action to its archive pattern `<type-id>-backup-*`. If several jobs use the same repository, a manual prune requires an explicit job as the retention source. The confirmation shows the job, archive filter, and periodic restore points; archives belonging to other jobs remain untouched. Prune remains disabled without a matching job link.
 
 > **Note:** Prune lists deleted archives in its result. Compact only shows a numeric reclaimed-space value when Borg reports it.
 

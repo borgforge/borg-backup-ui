@@ -276,6 +276,19 @@ Beispiel: Setzen Sie PostgreSQL oder MariaDB auf Priorität `1` und die davon ab
 
 Der Wizard setzt jobbezogene Borg-Optionen wie Kompression und Aufbewahrung. Verschlüsselung und Passphrase gehören zum Repository und werden ausschließlich beim Erstellen oder Importieren des Repositorys festgelegt.
 
+Die Retention-Werte zählen Zeiträume und nicht die Anzahl der Archive innerhalb eines Zeitraums:
+
+- **Täglich:** höchstens ein passendes Archiv pro Tag für die angegebene Anzahl täglicher Wiederherstellungspunkte.
+- **Wöchentlich:** höchstens ein passendes Archiv pro Woche.
+- **Monatlich:** höchstens ein passendes Archiv pro Monat.
+- **Jährlich:** höchstens ein passendes Archiv pro Jahr.
+
+Borg verwendet normalerweise das neueste passende Archiv eines Zeitraums. Werden beispielsweise an einem Tag Backups um 08:00 und 08:30 Uhr erstellt, behält die tägliche Regel nur einen Wiederherstellungspunkt für diesen Tag – normalerweise das neuere Archiv von 08:30 Uhr. **Täglich: 20** bedeutet daher nicht, dass 20 Archive desselben Tages erhalten bleiben. Ein Archiv bleibt erhalten, wenn mindestens eine der konfigurierten Regeln es auswählt.
+
+Nach jedem erfolgreich erstellten Backup wendet Borg Backup UI die festgelegten Aufbewahrungsregeln an. Dabei führt das Plugin Prune und anschließend Compact sowie den gegebenenfalls fälligen Repository-Check aus. Archive, die von keiner Aufbewahrungsregel ausgewählt werden, werden durch Prune gelöscht.
+
+Der Wert `0` deaktiviert nur die jeweilige Aufbewahrungsstufe und bedeutet nicht „unbegrenzt“. Bei viermal `0` würde Prune kein passendes Archiv zur Aufbewahrung auswählen und damit alle Archive des Jobs löschen können. Deshalb muss mindestens einer der vier Werte größer als `0` sein; eine Konfiguration mit viermal `0` wird abgelehnt. Eine zukünftige Option zum dauerhaften Behalten aller Archive muss stattdessen Prune für den Job ausdrücklich deaktivieren.
+
 #### Zeitplan
 
 Der Zeitplan kann direkt im Wizard gesetzt werden. Die UI unterstützt einfache Frequenzen und einen Cron-Ausdruck.
@@ -400,7 +413,7 @@ Repository aus der Anwendung entfernen oder endgültig löschen:
 
 ### 4.5 Hinweise
 
-> **Hinweis:** Prune nutzt die Retention eines verknüpften Jobs und beschränkt die Aktion auf dessen Archivmuster `<typ-id>-backup-*`. Verwenden mehrere Jobs dasselbe Repository, muss bei einem manuellen Prune der Job als Retention-Quelle ausdrücklich gewählt werden. Der Bestätigungsdialog zeigt Job, Archivfilter und Retention; Archive der anderen Jobs bleiben unberührt. Ohne passende Job-Zuordnung bleibt Prune deaktiviert.
+> **Hinweis:** Prune nutzt die Retention eines verknüpften Jobs und beschränkt die Aktion auf dessen Archivmuster `<typ-id>-backup-*`. Verwenden mehrere Jobs dasselbe Repository, muss bei einem manuellen Prune der Job als Retention-Quelle ausdrücklich gewählt werden. Der Bestätigungsdialog zeigt Job, Archivfilter und die periodischen Wiederherstellungspunkte; Archive der anderen Jobs bleiben unberührt. Ohne passende Job-Zuordnung bleibt Prune deaktiviert.
 
 > **Hinweis:** Prune listet entfernte Archive im Ergebnis. Compact zeigt den freigegebenen Speicherplatz nur dann numerisch an, wenn Borg diesen Wert ausgibt.
 

@@ -308,6 +308,9 @@
     document.getElementById('wiz-exclude-path-input')?.addEventListener('keydown', wizardExcludePathKeydown);
     document.getElementById('wiz-exclude-path-list')?.addEventListener('click', wizardExcludePathsClick);
     document.getElementById('wiz-exclude-path-suggest')?.addEventListener('click', wizardExcludePathsClick);
+    ['daily', 'weekly', 'monthly', 'yearly'].forEach((period) => {
+      document.getElementById(`wiz-keep-${period}`)?.addEventListener('input', () => wizardClearError(5));
+    });
     document.getElementById('wiz-description-help-btn')?.addEventListener('click', openWizardDescriptionHelp);
     document.getElementById('wizard-help-close-btn')?.addEventListener('click', closeWizardDescriptionHelp);
     document.getElementById('wizard-help-ok-btn')?.addEventListener('click', closeWizardDescriptionHelp);

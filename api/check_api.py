@@ -215,12 +215,19 @@ class CheckManager:
         ]
         if archive_prefix:
             cmd.extend(["--glob-archives", f"{archive_prefix}-*"])
+        retention_counts = []
         for key, option in (("daily", "--keep-daily"), ("weekly", "--keep-weekly"), ("monthly", "--keep-monthly"), ("yearly", "--keep-yearly")):
             value = str(retention.get(key) or "").strip()
             if value:
-                cmd.extend([option, value])
-        if len(cmd) == 4:
+                if not re.fullmatch(r"\d+", value):
+                    raise ValueError("Retention values must be non-negative whole numbers")
+                normalized = str(int(value))
+                retention_counts.append(int(normalized))
+                cmd.extend([option, normalized])
+        if not retention_counts:
             raise ValueError("The selected job has no retention policy")
+        if not any(value > 0 for value in retention_counts):
+            raise ValueError("At least one retention value must be greater than zero")
         cmd.append(repo_path)
         return cmd
 

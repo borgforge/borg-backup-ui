@@ -43,6 +43,8 @@ function wizardT(key, params = {}) {
 
 function wizardApiErrorMessage(payload, status = 0) {
   const data = payload && typeof payload === 'object' ? payload : {};
+  if (data.code === 'retention_invalid') return wizardT('wizard.validationRetentionInvalid');
+  if (data.code === 'retention_all_zero') return wizardT('wizard.validationRetentionRequired');
   for (const key of ['details', 'message', 'error']) {
     const value = String(data[key] || '').trim();
     if (value && value !== String(data.code || '').trim()) return value;
@@ -559,6 +561,7 @@ function openWizard() {
   document.getElementById('wiz-keep-weekly').value = '4';
   document.getElementById('wiz-keep-monthly').value = '6';
   document.getElementById('wiz-keep-yearly').value = '3';
+  wizardUpdateRetentionManualLink();
   document.getElementById('wizard-preview-wrap').classList.add('hidden');
   document.getElementById('wizard-preview-loading').classList.add('hidden');
   // Reset schedule step
@@ -796,6 +799,27 @@ function _wizardShowError(step, msg) {
   if (!el) return;
   el.textContent = msg;
   el.classList.remove('hidden');
+}
+
+function wizardUpdateRetentionManualLink() {
+  const link = document.getElementById('wiz-retention-manual-link');
+  if (!link) return;
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en' : 'de';
+  const topic = language === 'en'
+    ? 'retention-compression-and-description'
+    : 'retention-kompression-und-beschreibung';
+  link.href = `https://github.com/borgforge/borg-backup-ui/blob/main/docs/user-manual/${language}/user-manual.md#${topic}`;
+}
+
+function _wizardRetentionValidationKey(params) {
+  const defaults = { daily: '7', weekly: '4', monthly: '6', yearly: '3' };
+  const values = [];
+  for (const period of Object.keys(defaults)) {
+    const raw = String(params?.[`keep_${period}`] ?? '').trim() || defaults[period];
+    if (!/^\d+$/.test(raw)) return 'wizard.validationRetentionInvalid';
+    values.push(Number(raw));
+  }
+  return values.some(value => value > 0) ? '' : 'wizard.validationRetentionRequired';
 }
 
 function _wizardFocusRuntimeRisk(id) {
@@ -1172,6 +1196,13 @@ function _wizardValidate(step) {
       return false;
     }
   }
+  if (step === 5) {
+    const retentionError = _wizardRetentionValidationKey(p);
+    if (retentionError) {
+      _wizardShowError(5, wizardT(retentionError));
+      return false;
+    }
+  }
   if (step === 9) {
     if (_wizardAppdataRiskRequired() && !p.docker_control.ack_appdata_risk) {
       _wizardFocusRuntimeRisk('wiz-final-appdata-risk');
@@ -1288,6 +1319,13 @@ async function _wizardPreview() {
     lines.push(wizardT('wizard.previewSources', { value: summary.sources_count ?? '-' }));
     lines.push(wizardT('wizard.previewExclusions', {
       value: Array.isArray(summary.exclude_paths) && summary.exclude_paths.length ? summary.exclude_paths.join(', ') : wizardT('wizard.none'),
+    }));
+    const retention = summary.retention && typeof summary.retention === 'object' ? summary.retention : {};
+    lines.push(wizardT('wizard.previewRetention', {
+      daily: retention.daily ?? '-',
+      weekly: retention.weekly ?? '-',
+      monthly: retention.monthly ?? '-',
+      yearly: retention.yearly ?? '-',
     }));
     lines.push(wizardT('wizard.previewFeatures', {
       docker: wizardT(summary.docker ? 'wizard.yes' : 'wizard.no'),
@@ -1494,6 +1532,7 @@ window.addEventListener?.('bbui:language-changed', () => {
   wizardRenderArchivePrefixSummary();
   wizardAutoFill();
   wizardRenderRuntimeControls();
+  wizardUpdateRetentionManualLink();
   wizardSchedulePreview();
 });
 
