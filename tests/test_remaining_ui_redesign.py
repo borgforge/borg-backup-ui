@@ -169,7 +169,7 @@ def test_remaining_surfaces_are_responsive_and_modal_content_is_contained() -> N
     assert "@media (max-width: 767px)" in css
     assert ".storage-repository-master-detail" in css
     assert ".storage-repository-tabs { overflow-x: auto; }" in css
-    assert ".storage-archive-list article { grid-template-columns: .5rem minmax(0, 1fr); }" in css
+    assert ".storage-archive-row { grid-template-columns: .5rem minmax(0, 1fr) 1rem; }" in css
     assert ".modal-body" in css
     assert "overflow-y: auto" in css
     assert ".modal-wizard" in css
