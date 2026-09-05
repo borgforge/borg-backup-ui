@@ -183,6 +183,7 @@ def active_resource_locks(config: dict) -> List[dict]:
             "updated_at": str(raw.get("updated_at") or "").strip(),
             "log_file": str(raw.get("log_file") or "").strip(),
             "run_id": str(raw.get("run_id") or "").strip(),
+            "file_activity": raw.get("file_activity") is True,
         })
     return rows
 
@@ -244,6 +245,7 @@ def durable_running_states(config: dict) -> Dict[str, dict]:
             "log_file": str(lock.get("log_file") or ""),
             "source": "resource_lock",
             "run_id": str(lock.get("run_id") or ""),
+            "file_activity": lock.get("file_activity") is True,
         })
         started_at = str(lock.get("started_at") or "")
         if started_at and (not current["start_time"] or started_at < current["start_time"]):
@@ -357,6 +359,7 @@ class JobInfo:
     restore_test_validity_days: int = 30
     restore_test_level: int = 2
     restore_test_max_runtime_minutes: int = 0
+    file_activity: bool = False
 
     @property
     def display_name(self) -> str:
@@ -367,10 +370,11 @@ class JobInfo:
 
 
 class _JobState:
-    def __init__(self, proc: subprocess.Popen, start_time: datetime, run_id: str):
+    def __init__(self, proc: subprocess.Popen, start_time: datetime, run_id: str, log_file: Path | None = None):
         self.proc = proc
         self.start_time = start_time
         self.run_id = run_id
+        self.log_file = log_file
         self.lines: List[str] = []
         self.finished = False
         self.exit_code: Optional[int] = None
@@ -428,10 +432,23 @@ class JobManager:
         if extra_env:
             env.update(extra_env)
 
+        log_file = None
+        log_handle = None
         try:
+            if env.get("BORG_UI_FILE_ACTIVITY_RUN") == "1":
+                from activity_log import activity_log_path
+
+                log_file = activity_log_path(Path(env["BORG_UI_ACTIVITY_LOG_DIR"]), job_key, run_id)
+                log_file.parent.mkdir(parents=True, exist_ok=True)
+                # stdout and stderr go straight to the retained log. No pipe or
+                # browser can apply backpressure to the Borg output reader.
+                log_handle = os.fdopen(os.open(log_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb")
+                env["BORG_UI_CAPTURE_LOG"] = str(log_file)
+                env["PYTHONUNBUFFERED"] = "1"
+                env["PYTHONIOENCODING"] = "utf-8"
             proc = subprocess.Popen(
                 command,
-                stdout=subprocess.PIPE,
+                stdout=log_handle if log_handle is not None else subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=env,
                 text=True,
@@ -440,8 +457,11 @@ class JobManager:
             )
         except OSError as exc:
             return False, f"Start failed: {exc}"
+        finally:
+            if log_handle is not None:
+                log_handle.close()
 
-        new_state = _JobState(proc, datetime.now(), run_id)
+        new_state = _JobState(proc, datetime.now(), run_id, log_file)
         with self._lock:
             self._states[job_key] = new_state
 
@@ -457,8 +477,9 @@ class JobManager:
     def _reader(self, job_key: str, state: _JobState) -> None:
         """Liest stdout des Subprozesses Zeile für Zeile in den Puffer."""
         try:
-            for line in state.proc.stdout:
-                state.append_line(line.rstrip("\n"))
+            if state.log_file is None:
+                for line in state.proc.stdout:
+                    state.append_line(line.rstrip("\n"))
         except Exception:
             pass
         finally:
@@ -475,6 +496,18 @@ class JobManager:
             state = self._states.get(job_key)
         if state is None:
             return {"running": False}
+        if state.log_file is not None:
+            with state._lock:
+                return {
+                    "running": not state.finished,
+                    "exit_code": state.exit_code,
+                    "start_time": state.start_time.isoformat(),
+                    "run_id": state.run_id,
+                    "file_activity": True,
+                    "log_file": str(state.log_file),
+                    "log_available": state.log_file.is_file(),
+                    **_control_state_for_run(state.run_id),
+                }
         lines, finished, exit_code = state.snapshot()
         return {
             "running": not finished,
@@ -509,6 +542,21 @@ class JobManager:
             state = self._states.get(job_key)
         if state is None:
             yield "event: error\ndata: Job not found\n\n"
+            return
+        if state.log_file is not None:
+            # Keep the existing SSE contract for API clients. The activity UI
+            # uses bounded file windows and does not open this per-line stream.
+            with state.log_file.open(encoding="utf-8", errors="replace") as handle:
+                while True:
+                    line = handle.readline()
+                    if line:
+                        yield f"data: {line.rstrip(chr(10))}\n\n"
+                    elif state.finished:
+                        yield f"event: done\ndata: {state.exit_code}\n\n"
+                        return
+                    else:
+                        yield ": heartbeat\n\n"
+                        time.sleep(0.5)
             return
 
         # Heartbeat damit der Browser nicht timeoutet
@@ -635,6 +683,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
         restore_test_max_runtime_minutes: int = 0,
         docker_control: Optional[dict] = None,
         vm_control: Optional[dict] = None,
+        file_activity: bool = False,
     ) -> JobInfo:
         desc_file = py_file.with_suffix(".description") if py_file is not None else None
         desc_text = (
@@ -673,6 +722,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             is_utility=bt_lc in utility_types,
             standard=standard,
             enabled=bool(enabled),
+            file_activity=file_activity,
             compression=str(compression or "").strip(),
             retention_daily=str(retention_daily or "").strip(),
             retention_weekly=str(retention_weekly or "").strip(),
@@ -749,6 +799,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 icon_color=str(raw.get("icon_color") or "").strip().lower(),
                 standard="wizard",
                 enabled=bool(raw.get("enabled", True)),
+                file_activity=str(raw.get("file_activity", False)).strip().lower() in {"1", "true", "yes", "on"},
                 compression=str(raw.get("compression") or "").strip(),
                 retention_daily=str(retention.get("daily") or "").strip(),
                 retention_weekly=str(retention.get("weekly") or "").strip(),
@@ -902,6 +953,8 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "running": run_state.get("running", False),
                 "run_start_time": run_state.get("start_time"),
                 "run_log_available": run_state.get("log_available", True),
+                "run_file_activity": run_state.get("file_activity", False),
+                "run_id": run_state.get("run_id", ""),
             }
         )
     try:

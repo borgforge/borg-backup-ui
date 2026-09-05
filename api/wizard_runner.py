@@ -67,11 +67,15 @@ def _setup_stdout_logging() -> None:
 
 def _setup_full_logging(log_file: Path) -> None:
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    captured = os.environ.get("BORG_UI_CAPTURE_LOG", "")
+    handlers = [logging.StreamHandler(sys.stdout)]
+    if not captured or Path(captured) != log_file:
+        handlers.insert(0, logging.FileHandler(log_file))
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stdout)],
+        handlers=handlers,
         force=True,
     )
 
@@ -159,6 +163,7 @@ class ResourceLockSet:
         log_file: str = "",
         run_id: str = "",
         operation: str = "backup",
+        file_activity: bool = False,
     ) -> None:
         self.lock_dir = lock_dir
         self.job_key = job_key
@@ -168,6 +173,7 @@ class ResourceLockSet:
         self.log_file = str(log_file or "").strip()
         self.run_id = str(run_id or "").strip()
         self.operation = str(operation or "backup").strip().lower() or "backup"
+        self.file_activity = file_activity
         self._owned: list[Path] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -193,6 +199,8 @@ class ResourceLockSet:
             payload["log_file"] = self.log_file
         if self.run_id:
             payload["run_id"] = self.run_id
+        if self.file_activity:
+            payload["file_activity"] = True
         return payload
 
     def _write_new(self, path: Path, payload: dict) -> bool:
@@ -378,6 +386,9 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
 
     meta_compression = str(meta.get("compression") or "").strip()
     meta_file_activity = _env_flag(meta.get("file_activity"), default=False)
+    # A managed run keeps its start-time option even if the job is edited.
+    if os.environ.get("BORG_UI_FILE_ACTIVITY_RUN") in {"0", "1"}:
+        meta_file_activity = os.environ["BORG_UI_FILE_ACTIVITY_RUN"] == "1"
     meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
     meta_keep_daily = str(meta_ret.get("daily") or "").strip()
     meta_keep_weekly = str(meta_ret.get("weekly") or "").strip()
@@ -392,6 +403,9 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     env.setdefault("LOG_DIR", log_dir)
     # Use job_key for log filename so variants like flash_local/flash_usb are separated.
     env.setdefault("LOG_FILE", f"{log_dir}/Borg-Backup_{job_key}--{date_tag}.log")
+    if meta_file_activity and os.environ.get("BORG_UI_CAPTURE_LOG"):
+        env["LOG_FILE"] = os.environ["BORG_UI_CAPTURE_LOG"]
+        env["LOG_DIR"] = str(Path(env["LOG_FILE"]).parent)
     env.setdefault("LOG_RETENTION_DAYS", env.get("GLOBAL_LOG_RETENTION_DAYS", "30"))
     env["BORG_REPO"] = str(repository_context["repository_path"])
     # Storagebox compatibility: if ssh repo URI misses user component, inject STORAGEBOX_USER.
@@ -649,6 +663,7 @@ def main() -> int:
         heartbeat_seconds=heartbeat_seconds,
         log_file=str(env.get("LOG_FILE") or ""),
         run_id=run_id,
+        file_activity=borg_config.file_activity,
     )
     resources = _build_resources(env, meta)
     ok, reason = lock_set.acquire(resources)

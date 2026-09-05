@@ -295,6 +295,8 @@ The per-job **File activity in the live log** option is located under **Basics**
 
 These status values are based on Borg's files cache and its change detection. They are neither a report of the bytes actually transferred nor a complete listing of archive contents. For example, a path can appear as modified while Borg deduplicates existing data chunks and stores only metadata or a small number of new chunks.
 
+When this option is enabled, the live viewer loads the complete run log in sections, starting at the current end. Scroll back or use **Older entries** to load earlier sections; **Go to beginning** and **Jump to end** provide direct navigation. Every emitted line is retained in the log file. **Clear** only clears the view. The log search also searches sections that have not been loaded, is case-sensitive, and advances to the next match when repeated. Browser search and text selection cover only the loaded section. **Download complete log** includes every entry present when the download starts. Jobs without file activity keep the existing live viewer.
+
 > **Privacy note:** When this option is enabled, file and directory names appear in both the live log and the stored run log. Because support bundles can contain recent run logs, those names can also be included there. Support bundles mask secrets but are not anonymous; always review a bundle before sharing it.
 
 #### Schedule

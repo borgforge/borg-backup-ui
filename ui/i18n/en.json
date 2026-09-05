@@ -683,7 +683,17 @@
     "logDone": "Done (exit {code})",
     "logFailed": "Error (exit {code})",
     "logSkipped": "Skipped (exit {code})",
-    "logCancelled": "Cancelled (exit {code})"
+    "logCancelled": "Cancelled (exit {code})",
+    "activityLogStart": "Go to beginning",
+    "activityLogOlder": "Older entries",
+    "activityLogNewer": "Newer entries",
+    "activityLogDownload": "Download complete log",
+    "activityLogSearch": "Search entire log (case-sensitive)",
+    "activityLogFind": "Search / next match",
+    "activityLogComplete": "All entries are retained. Scrolling loads additional sections. Browser search only searches the loaded section.",
+    "activityLogSearching": "Searching the entire log …",
+    "activityLogNoMatch": "No further match. Search again to start from the beginning.",
+    "activityLogEnded": "Run ended; exit code unavailable"
   },
   "schedule": {
     "title": "Schedule",

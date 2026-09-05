@@ -683,7 +683,17 @@
     "logDone": "Fertig (Exit {code})",
     "logFailed": "Fehler (Exit {code})",
     "logSkipped": "Übersprungen (Exit {code})",
-    "logCancelled": "Abgebrochen (Exit {code})"
+    "logCancelled": "Abgebrochen (Exit {code})",
+    "activityLogStart": "Zum Anfang",
+    "activityLogOlder": "Ältere Einträge",
+    "activityLogNewer": "Neuere Einträge",
+    "activityLogDownload": "Vollständiges Log herunterladen",
+    "activityLogSearch": "Im gesamten Log suchen (Groß-/Kleinschreibung beachten)",
+    "activityLogFind": "Suchen / nächster Treffer",
+    "activityLogComplete": "Alle Einträge bleiben erhalten. Beim Scrollen werden weitere Abschnitte geladen. Die Browsersuche durchsucht nur den geladenen Abschnitt.",
+    "activityLogSearching": "Das gesamte Log wird durchsucht …",
+    "activityLogNoMatch": "Kein weiterer Treffer. Erneutes Suchen beginnt am Anfang.",
+    "activityLogEnded": "Lauf beendet; Exit-Code nicht verfügbar"
   },
   "schedule": {
     "title": "Zeitplan",

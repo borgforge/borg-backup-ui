@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import pytest
 from pathlib import Path
 import sys
 
@@ -204,3 +205,22 @@ def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
     assert "`--list --filter=AME`" in manual_en
     assert "vollständige Liste des Archivinhalts" in manual_de
     assert "not anonymous" in manual_en
+
+
+@pytest.mark.parametrize('started_enabled', [False, True])
+def test_managed_run_preserves_start_time_option_and_capture_path(tmp_path, monkeypatch, started_enabled):
+    _local_repository_config(tmp_path)
+    jobs = tmp_path / 'config' / 'jobs'
+    jobs.mkdir()
+    meta = {
+        'schema_version': 3, 'job_key': 'files_local', 'backup_type': 'files', 'location': 'local',
+        'repository_key': 'repo_files_test', 'source_paths': [str(tmp_path / 'source')],
+        'file_activity': not started_enabled,
+    }
+    (jobs / 'files_local.json').write_text(json.dumps(meta))
+    capture = tmp_path / 'logs' / 'Borg-Backup_files_local--activity-test.log'
+    monkeypatch.setenv('BORG_UI_FILE_ACTIVITY_RUN', '1' if started_enabled else '0')
+    monkeypatch.setenv('BORG_UI_CAPTURE_LOG', str(capture))
+    env, _ = wizard_runner._load_env_from_job('files_local', tmp_path / 'scripts', tmp_path)
+    assert env['BORG_FILE_ACTIVITY'] == ('1' if started_enabled else '0')
+    assert (env['LOG_FILE'] == str(capture)) == started_enabled

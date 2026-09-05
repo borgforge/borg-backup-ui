@@ -325,6 +325,21 @@
                 </button>
               </div>
             </div>
+            <div id="activity-log-tools" class="activity-log-tools hidden">
+              <div class="activity-log-navigation">
+                <button type="button" class="btn btn-secondary btn-sm" id="activity-log-start" data-i18n="jobs.activityLogStart">Zum Anfang</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="activity-log-older" data-i18n="jobs.activityLogOlder">Ältere Einträge</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="activity-log-newer" data-i18n="jobs.activityLogNewer">Neuere Einträge</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="activity-log-end" data-i18n="jobs.jumpToEnd">Zum Ende springen</button>
+                <a class="btn btn-secondary btn-sm" id="activity-log-download" download data-i18n="jobs.activityLogDownload">Vollständiges Log herunterladen</a>
+              </div>
+              <form id="activity-log-search-form" class="activity-log-search-form">
+                <label for="activity-log-search" data-i18n="jobs.activityLogSearch">Im gesamten Log suchen (Groß-/Kleinschreibung beachten)</label>
+                <input id="activity-log-search" class="form-input" type="search" maxlength="256" autocomplete="off">
+                <button type="submit" class="btn btn-secondary btn-sm" data-i18n="jobs.activityLogFind">Suchen / nächster Treffer</button>
+              </form>
+              <span id="activity-log-note" role="status"></span>
+            </div>
             <pre id="log-output" class="log-output"></pre>
             <div id="log-scroll-hint" class="log-scroll-hint">
               <button id="jobs-log-scroll-end-btn">&#8595; <span data-i18n="jobs.jumpToEnd">Zum Ende springen</span></button>

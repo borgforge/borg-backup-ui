@@ -295,6 +295,8 @@ Die Job-Option **Dateiaktivität im Live-Log** befindet sich im Wizard unter **G
 
 Diese Statuswerte beruhen auf Borgs Datei-Cache und dessen Änderungserkennung. Sie sind weder eine Anzeige der tatsächlich übertragenen Byte-Menge noch eine vollständige Liste des Archivinhalts. Derselbe Pfad kann beispielsweise als geändert erscheinen, obwohl Borg vorhandene Datenblöcke dedupliziert und nur Metadaten oder wenige neue Blöcke speichert.
 
+Bei aktivierter Option lädt die Live-Anzeige das vollständige Lauf-Log abschnittsweise. Sie beginnt am aktuellen Ende. Beim Zurückscrollen oder über **Ältere Einträge** werden frühere Abschnitte nachgeladen; **Zum Anfang** und **Zum Ende springen** erlauben direkte Sprünge. Alle ausgegebenen Zeilen bleiben in der Logdatei erhalten. **Leeren** leert nur die Anzeige. Die Suchfunktion im Log durchsucht auch noch nicht geladene Abschnitte und beachtet Groß-/Kleinschreibung; erneutes Suchen springt zum nächsten Treffer. Die normale Browsersuche und Textauswahl erfassen nur den geladenen Abschnitt. **Vollständiges Log herunterladen** liefert sämtliche zum Downloadstart vorhandenen Einträge. Ohne aktivierte Dateiaktivität bleibt die bisherige Live-Anzeige erhalten.
+
 > **Datenschutzhinweis:** Bei aktivierter Option erscheinen Datei- und Verzeichnisnamen im Live-Log und im gespeicherten Lauf-Log. Da Support-Pakete aktuelle Lauf-Logs enthalten können, können diese Namen auch dort enthalten sein. Support-Pakete maskieren Secrets, sind aber nicht anonym; prüfen Sie ein Paket immer vor der Weitergabe.
 
 #### Zeitplan

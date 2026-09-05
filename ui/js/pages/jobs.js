@@ -226,6 +226,7 @@ function jobRuntimeState(runtime, previous = {}) {
     running: runtime?.running ?? false,
     run_log_available: runtime?.log_available ?? previous.run_log_available ?? true,
     run_id: runtime?.run_id ?? previous.run_id ?? '',
+    run_file_activity: runtime ? runtime.file_activity === true : (previous.run_file_activity ?? false),
     run_phase: runtime?.phase ?? '',
     cancel_allowed: runtime?.cancel_allowed ?? false,
     cancellation_deferred: runtime?.cancellation_deferred ?? false,
@@ -927,6 +928,8 @@ async function confirmJobStart() {
 // ── Log-Panel & SSE ───────────────────────────────────────────────────────────
 
 function openLogPanel(jobKey) {
+  jobsState.activityLog?.close();
+  jobsState.activityLog = null;
   const job = jobsState.jobs.find(j => j.key === jobKey);
   const title = jobsT('jobs.logTitle', { name: job ? (job.display_name || job.key) : jobKey });
 
@@ -944,10 +947,32 @@ function openLogPanel(jobKey) {
 
   if (jobsState.activeEventSource) {
     jobsState.activeEventSource.close();
+    jobsState.activeEventSource = null;
   }
   if (jobsState.logTransportCheckTimer) {
     clearTimeout(jobsState.logTransportCheckTimer);
     jobsState.logTransportCheckTimer = null;
+  }
+
+  if (job?.run_file_activity) {
+    jobsState.activityLog = window.BBUI.components.activityLog.create({
+      job: jobKey,
+      run: job.run_id,
+      output: document.getElementById('log-output'),
+      onFollow: follow => { jobsState.logAutoScroll = follow; },
+      onStatus: data => {
+        if (data.running) return setLogStatus('running');
+        if (data.exit_code === null) {
+          const badge = document.getElementById('log-status-badge');
+          badge.className = 'badge';
+          badge.textContent = jobsT('jobs.activityLogEnded');
+          return;
+        }
+        const code = Number(data.exit_code);
+        setLogStatus(code === 0 ? 'success' : (code === 130 ? 'cancelled' : (data.phase === 'skipped' ? 'skipped' : 'error')), code);
+      },
+    });
+    return;
   }
 
   const es = new EventSource(`/api/jobs/log/stream?job=${encodeURIComponent(jobKey)}`);
@@ -964,11 +989,13 @@ function openLogPanel(jobKey) {
   });
 
   es.onmessage = (e) => {
-    if (jobsState.activeEventSource === es) setLogStatus('running');
+    if (jobsState.activeEventSource !== es) return;
+    setLogStatus('running');
     appendLogLine(e.data);
   };
 
   es.addEventListener('done', (e) => {
+    if (jobsState.activeEventSource !== es) return;
     const code = e.data;
     const numericCode = parseInt(code, 10);
     const state = numericCode === 0
@@ -985,6 +1012,7 @@ function openLogPanel(jobKey) {
   });
 
   es.addEventListener('error', (e) => {
+    if (jobsState.activeEventSource !== es) return;
     if (typeof e.data === 'string' && e.data) {
       appendLogLine(jobsT('jobs.logError', { message: e.data }));
       setLogStatus('error', '?');
@@ -1052,6 +1080,7 @@ function appendLogLine(line) {
 }
 
 function checkScrollHint(logEl) {
+  if (jobsState.activityLog) return jobsState.activityLog.onScroll();
   const hint = document.getElementById('log-scroll-hint');
   if (!hint) return;
   const atBottom = logEl.scrollHeight - logEl.scrollTop <= logEl.clientHeight + 40;
@@ -1060,6 +1089,7 @@ function checkScrollHint(logEl) {
 }
 
 function scrollLogToBottom() {
+  if (jobsState.activityLog) return jobsState.activityLog.tail();
   const el = document.getElementById('log-output');
   if (el) {
     el.scrollTop = el.scrollHeight;
@@ -1102,11 +1132,14 @@ function setLogStatus(state, exitCode) {
 }
 
 function clearLog() {
+  if (jobsState.activityLog) return jobsState.activityLog.clear();
   const el = document.getElementById('log-output');
   if (el) el.textContent = '';
 }
 
 function closeLogPanel() {
+  jobsState.activityLog?.close();
+  jobsState.activityLog = null;
   document.getElementById('log-panel').classList.add('hidden');
   if (jobsState.activeEventSource) {
     jobsState.activeEventSource.close();

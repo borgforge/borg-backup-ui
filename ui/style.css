@@ -1828,6 +1828,37 @@ body.wizard-modal-open {
 .log-output .log-error   { color: #f85149; }
 .log-output .log-success { color: #3fb950; }
 
+.activity-log-tools {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.activity-log-navigation, .activity-log-search-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-log-search-form input {
+  min-width: 140px;
+  flex: 1;
+}
+
+.activity-log-output {
+  height: 400px;
+  overflow-anchor: none;
+}
+
+.activity-log-output mark {
+  color: var(--bg-base);
+  background: var(--text-primary);
+}
+
 .log-scroll-hint {
   display: none;
   padding: 6px 16px;
