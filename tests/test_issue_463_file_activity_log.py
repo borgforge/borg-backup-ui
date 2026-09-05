@@ -183,6 +183,11 @@ def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
 
     assert 'id="wiz-file-activity"' in index
     assert 'data-i18n="wizard.fileActivityPrivacy"' in index
+    basics = index[index.index('id="wizard-step-1"'):index.index('id="wizard-step-2"')]
+    sources_target = index[index.index('id="wizard-step-2"'):index.index('id="wizard-step-3"')]
+    assert 'id="wiz-file-activity"' in basics
+    assert 'id="wiz-file-activity"' not in sources_target
+    assert 'wizard-feature-box wizard-file-activity' in basics
     assert "file_activity: !!document.getElementById('wiz-file-activity').checked" in script
     assert "wizard.previewFileActivity" in script
     assert "Support-Paketen" in de["wizard"]["fileActivityPrivacy"]

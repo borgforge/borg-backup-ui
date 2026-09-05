@@ -1485,6 +1485,16 @@
                 <span data-i18n="wizard.shutdownVmsDescription">Laufende VMs vor dem Backup herunterfahren und danach starten</span>
               </label>
             </div>
+            <div class="form-group wizard-feature-box wizard-file-activity">
+              <div class="wizard-file-activity-setting">
+                <label class="form-label" data-i18n="wizard.fileActivity">Dateiaktivität im Live-Log</label>
+                <label class="form-checkbox-row">
+                  <input type="checkbox" id="wiz-file-activity">
+                  <span data-i18n="wizard.fileActivityDescription">Neue, geänderte und fehlerhafte Einträge während des Backups anzeigen (A/M/E).</span>
+                </label>
+              </div>
+              <div class="status-message warning wizard-file-activity-warning" role="note" data-i18n="wizard.fileActivityPrivacy">Bei Aktivierung erscheinen Datei- und Verzeichnisnamen im Live-Log, in gespeicherten Lauf-Logs und möglicherweise in Support-Paketen. Die Statuswerte stammen aus Borgs Datei-Cache; sie sind keine Byte-Übertragungsanzeige und keine vollständige Archivliste.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1557,16 +1567,6 @@
                 <option value="zstd,9">zstd,9</option>
                 <option value="none" data-i18n="wizard.compressionNone">none (keine Kompression)</option>
               </select>
-            </div>
-            <div class="form-group wizard-file-activity">
-              <label class="form-checkbox-row">
-                <input type="checkbox" id="wiz-file-activity">
-                <span>
-                  <strong data-i18n="wizard.fileActivity">Dateiaktivität im Live-Log</strong>
-                  <span class="form-hint wizard-file-activity-description" data-i18n="wizard.fileActivityDescription">Neue, geänderte und fehlerhafte Einträge während des Backups anzeigen (A/M/E).</span>
-                </span>
-              </label>
-              <div class="status-message warning wizard-file-activity-warning" role="note" data-i18n="wizard.fileActivityPrivacy">Bei Aktivierung erscheinen Datei- und Verzeichnisnamen im Live-Log, in gespeicherten Lauf-Logs und möglicherweise in Support-Paketen. Die Statuswerte stammen aus Borgs Datei-Cache; sie sind keine Byte-Übertragungsanzeige und keine vollständige Archivliste.</div>
             </div>
           </section>
         </div>

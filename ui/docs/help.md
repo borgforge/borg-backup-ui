@@ -162,7 +162,7 @@ Die Anwendung zeichnet vor dem Backup auf, welche Container oder VMs tatsächlic
 
 **History** zeigt Backup-Läufe nach Standort, Typ und Status. Öffnen Sie einen Eintrag für Archivname, Größen, Dauer, Exit-Code, Repository-Check und Logdatei. Laufende Jobs besitzen ein Live-Log; abgeschlossene Läufe verweisen auf das gespeicherte Log.
 
-Im Job-Wizard kann **Dateiaktivität im Live-Log** pro Job aktiviert werden. Borg zeigt dann hinzugefügte (`A`), geänderte (`M`) und fehlerhafte (`E`) Einträge; unveränderte Einträge werden ausgelassen. Diese Angaben stammen aus Borgs Datei-Cache und sind weder eine Byte-Übertragungsanzeige noch eine vollständige Archivliste. Datei- und Verzeichnisnamen werden auch im gespeicherten Lauf-Log sichtbar und können in Support-Paketen enthalten sein.
+Im Schritt **Grunddaten** des Job-Wizards kann **Dateiaktivität im Live-Log** pro Job aktiviert werden. Borg zeigt dann hinzugefügte (`A`), geänderte (`M`) und fehlerhafte (`E`) Einträge; unveränderte Einträge werden ausgelassen. Diese Angaben stammen aus Borgs Datei-Cache und sind weder eine Byte-Übertragungsanzeige noch eine vollständige Archivliste. Datei- und Verzeichnisnamen werden auch im gespeicherten Lauf-Log sichtbar und können in Support-Paketen enthalten sein.
 
 ### Borg-Ergebnisse
 

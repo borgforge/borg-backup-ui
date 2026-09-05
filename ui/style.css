@@ -5715,6 +5715,30 @@ body.wizard-modal-open {
   font-size: 12px;
 }
 
+#wizard-step-1 .wizard-file-activity {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.wizard-file-activity-setting {
+  display: grid;
+  gap: 6px;
+}
+
+.wizard-file-activity-setting .form-checkbox-row {
+  align-items: flex-start;
+}
+
+.wizard-file-activity-warning {
+  margin: 0;
+  padding: 7px 9px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .wizard-step2-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
@@ -5762,21 +5786,6 @@ body.wizard-modal-open {
 .wizard-step2-panel .form-group {
   margin: 0;
   gap: 5px;
-}
-
-.wizard-file-activity .form-checkbox-row {
-  align-items: flex-start;
-}
-
-.wizard-file-activity-description {
-  display: block;
-  margin-top: 3px;
-}
-
-.wizard-file-activity-warning {
-  margin-top: 10px;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .wizard-step2-divider {
@@ -6053,6 +6062,9 @@ body.wizard-modal-open {
   }
   .wizard-runtime-risk-ack {
     white-space: normal;
+  }
+  #wizard-step-1 .wizard-file-activity {
+    grid-template-columns: 1fr;
   }
 }
 
