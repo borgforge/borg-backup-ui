@@ -311,6 +311,14 @@ These are **not migration execution tests**. #472 must run its real detector
 and planner against these inputs, and #479 must test actual on-disk results,
 interruption/resume, no-write blocking and UI/HTTP maintenance behavior.
 
+Phase #472 now provides the inactive planner, dependent-record verification
+and private plan/snapshot/journal primitives described in
+[Identity-migration foundation](identity-migration-foundation.md). Its tests
+exercise actual planning and private recovery-state operations against the
+synthetic inputs. No production apply engine, startup registration or installable
+test candidate is enabled; the execution and integration gates above remain
+owned by #479.
+
 Before the first candidate: cover each journal write/rename boundary, stale
 source fingerprints, unavailable mounts, disk/permission failures, live
 workers, same-second runs, renamed jobs, partial imports, rejected corrupt

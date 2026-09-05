@@ -30,6 +30,21 @@
       "target": "Direct read-only inventory, plan, snapshot, durable mapping/journal, resume and integrity verification; pending approval blocks writers.",
       "files": [
         {
+          "path": "api/migrations/immutable_job_id_v1.py",
+          "anchor": "build_plan",
+          "role": "inactive direct inventory, UUID proposal, exact resume and target verification; never registered for startup"
+        },
+        {
+          "path": "api/migrations/identity_records.py",
+          "anchor": "project_records",
+          "role": "pure persisted-record projection and independent reference validation; no filesystem writes"
+        },
+        {
+          "path": "api/migrations/identity_storage.py",
+          "anchor": "persist_plan",
+          "role": "private immutable plan, verified byte snapshot and audit journal; no installation-data applier"
+        },
+        {
           "path": "api/migrations/registry.py",
           "anchor": "run_startup_migrations",
           "role": "read/write migration state; currently applies immediately"

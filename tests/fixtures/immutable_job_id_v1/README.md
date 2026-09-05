@@ -12,12 +12,13 @@ in #447. They contain no repository data, credentials or real user paths.
 - `cases.json` overlays whole files on that base: `{ "json": ... }` serializes
   JSON; `{ "text": ... }` preserves exact text, including malformed JSON.
   `null` removes a base file. There is no implicit recursive object merge.
-- `allocation_order` injects deterministic UUIDv4 values into future planner
+- `allocation_order` injects deterministic UUIDv4 values into planner
   tests. Production must generate random UUIDs once and persist the mapping.
 - `preconditions` describes controlled test hooks, not a production journal
   format. In particular the journal case models a durable mapping and one
   completed replacement, **not** a real verified snapshot or real journal
-  bytes. #472 must supply its real journal and filesystem failure adapters.
+  bytes. The #472 integration tests supply real persisted-plan, snapshot,
+  journal and filesystem failure adapters rather than trusting these flags.
 - `/fixture/` is relocated by the test materializer to an isolated directory
   under repository-local `.release-tmp/`. No Borg commands, network calls,
   crontab updates, actual process checks or production reads are performed.
@@ -65,8 +66,12 @@ assertions themselves. The materialization self-check passes an expected
 observation to the assertion only to validate the oracle; **it is not evidence
 of an implemented or successful migration**.
 
-Phase #472 must execute the actual read-only detector/planner on each input,
-inject the UUID allocator and model real source fingerprints/journal actions.
+Phase #472 runs the actual read-only detector/planner on materialized inputs,
+injects the UUID allocator and tests real source fingerprints/journal actions.
+The four fixture scenarios requiring live-writer, changed-source, snapshot or
+interruption evidence use separate real-state tests; fixture booleans cannot
+authorize a migration. See `tests/test_identity_planner.py`,
+`tests/test_identity_records.py` and `tests/test_identity_storage.py`.
 Phase #479 must execute the real migration and read back destination files,
 test every interruption boundary, retry/resume, missing mounts/space,
 permissions/symlinks, all live writers and the administrator gate. Extend
@@ -85,6 +90,7 @@ Run focused validation from the repository root:
 
 ```bash
 python -m pytest -q tests/test_immutable_job_identity_contract.py
+python -m pytest -q tests/test_identity_planner.py tests/test_identity_records.py tests/test_identity_storage.py
 ```
 
 No test-channel package or stable release is created in this phase.

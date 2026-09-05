@@ -6,6 +6,14 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #472 (integration work for #447; not released)
+- Added an inactive, read-only migration inventory and UUID planner with exact
+  legacy-reference mapping, archive ownership checks and preserved history.
+- Added private persisted plans, checksummed snapshots, a chained audit journal
+  and fail-closed preconditions. Retries retain the original UUID allocation.
+- Added real-file fixture, failure and integrity tests. Startup registration,
+  installation-data conversion and test-channel publication remain deferred.
+
 ### Issue #471 (integration work for #447; not released)
 - Defined the immutable job identity, migration safety and legacy-data contract.
 - Added a source dependency inventory and synthetic migration fixtures with
