@@ -969,7 +969,10 @@ function openLogPanel(jobKey) {
           return;
         }
         const code = Number(data.exit_code);
-        setLogStatus(code === 0 ? 'success' : (code === 130 ? 'cancelled' : (data.phase === 'skipped' ? 'skipped' : 'error')), code);
+        const status = code === 0 ? 'success'
+          : (code === 1 && data.phase === 'completed' ? 'warning'
+            : (code === 130 ? 'cancelled' : (data.phase === 'skipped' ? 'skipped' : 'error')));
+        setLogStatus(status, code);
       },
     });
     return;
@@ -1116,6 +1119,9 @@ function setLogStatus(state, exitCode) {
     const dot = document.createElement('span');
     dot.className = 'badge-dot';
     badge.append(dot, document.createTextNode(jobsT('jobs.logDone', { code: exit })));
+  } else if (state === 'warning') {
+    badge.className = 'badge warning';
+    badge.textContent = jobsT('jobs.logWarning', { code: exit });
   } else if (state === 'cancelled') {
     badge.className = 'badge warning';
     badge.textContent = jobsT('jobs.logCancelled', { code: exit });

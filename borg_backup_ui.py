@@ -3399,15 +3399,17 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_activity_window(self.config, parse_qs(query_string, keep_blank_values=True))
 
     def _download_activity_log(self, query_string: str) -> None:
-        from activity_log import resolve_activity_run, open_activity_file
+        from contextlib import ExitStack
+        from activity_log import open_activity_run
         qs = parse_qs(query_string)
+        stack = ExitStack()
         try:
-            path, _state = resolve_activity_run(self.config, (qs.get("job") or [""])[0], (qs.get("run") or [""])[0])
-            handle = open_activity_file(path)
+            path, _state, handle = stack.enter_context(open_activity_run(self.config, (qs.get("job") or [""])[0], (qs.get("run") or [""])[0]))
         except (ValueError, OSError):
+            stack.close()
             self._send_api_error(404, "not_found", "Activity log is not available", request_id=self._current_request_id)
             return
-        with handle:
+        with stack:
             # A finite snapshot, including every byte present when opened.
             remaining = os.fstat(handle.fileno()).st_size
             self.send_response(200)

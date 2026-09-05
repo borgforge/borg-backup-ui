@@ -22,7 +22,8 @@ class Element {
   get textContent() { return this.children.length ? this.children.map(child => child.textContent).join('') : this.text || ''; }
   set textContent(value) { this.text = value; this.children = []; }
   get scrollHeight() { return Math.max(400, this.textContent.split('\n').length * 20); }
-  append(child) { child.parent = this; this.children.push(child); }
+  append(...children) { children.forEach(child => { child.parent = this; this.children.push(child); }); }
+  appendData(text) { this.textContent += text; }
   appendChild(child) { this.append(child); }
   prepend(child) { child.parent = this; this.children.unshift(child); }
   replaceChildren(...children) { this.text = ''; this.children = []; children.forEach(child => this.append(child)); }
@@ -66,16 +67,6 @@ function fixture() {
       if (params.has('before')) { end = Number(params.get('before')); start = Math.max(0, end - 65536); }
       const data = { start, end, text: source.subarray(start, end).toString(), size: source.length, running: true, exit_code: null, run_id: 'run-original', file_id: '1:2' };
       if (params.has('status')) delete data.text;
-      if (params.has('search')) {
-        const query = params.get('search');
-        const match = source.indexOf(query, start);
-        Object.assign(data, { match: match < 0 ? null : match, next: match < 0 ? source.length : match + Buffer.byteLength(query), search_end: source.length, search_done: true });
-        if (match >= 0) {
-          data.start = Math.max(0, match - 1024);
-          data.end = Math.min(source.length, data.start + 65536);
-          data.text = source.subarray(data.start, data.end).toString();
-        }
-      }
       return { ok: true, json: async () => data };
     },
   });
@@ -128,19 +119,34 @@ test('a late response cannot change a closed or switched log', async () => {
   assert.equal(f.timers.size, 0);
 });
 
-test('search finds old entries and marks the requested occurrence safely', async () => {
+test('small live updates retain a filled viewport and coalesce within the byte budget', async () => {
   const f = fixture();
   await settle();
-  f.setSource('A <script>old</script>\nA second.stl\n' + 'A newest.stl\n'.repeat(10000));
+  let content = 'A /mnt/user/3D/Modell-Größe.stl\n'.repeat(10000);
+  f.setSource(content);
   await f.viewer.load({}, 'replace-end');
-  assert.ok(!f.output.textContent.includes('<script>'));
-  f.viewer.searchInput.value = '<script>old</script>';
-  await f.viewer.search();
-  assert.ok(f.output.textContent.startsWith('A <script>old</script>'));
-  assert.equal(f.viewer.windows[0].node.children[1].textContent, '<script>old</script>');
-  assert.equal(f.viewer.follow, false);
-  await f.viewer.load({ status: 1 }, 'status');
-  assert.ok(f.output.textContent.startsWith('A <script>old</script>'));
+  const first = f.output.children[0];
+  let evicted = false;
+  for (let i = 0; i < 1200; i++) {
+    const line = `INFO ${i} <script>literal</script> ${'Größe/'.repeat(24)}.stl\n`;
+    content += line;
+    f.setSource(content);
+    await f.viewer.load({ start: f.viewer.end }, 'append');
+    if (i < 4) assert.equal(f.output.children[0], first, 'a few lines must not evict a full block');
+    if (f.output.children[0] !== first) evicted = true;
+    assert.ok(f.output.scrollHeight >= f.output.clientHeight * 2, 'the viewport must not empty during slow output');
+    assert.ok(f.output.children.length <= 3);
+    assert.ok(Buffer.byteLength(f.output.textContent) <= 3 * (65536 + 4));
+    assert.ok(f.output.textContent.endsWith(line));
+    const source = Buffer.from(content);
+    assert.equal(f.output.textContent, source.subarray(f.viewer.start, f.viewer.end).toString());
+  }
+  assert.ok(evicted, 'exercise trimming after the display budget fills');
+  const nodes = [...f.output.children];
+  const before = f.output.textContent;
+  await f.viewer.load({ start: f.viewer.end }, 'append');
+  assert.deepEqual(f.output.children, nodes, 'an empty poll must preserve existing nodes');
+  assert.equal(f.output.textContent, before);
   f.viewer.close();
 });
 
@@ -182,5 +188,28 @@ test('normal runs keep SSE and scheduled runs select their effective mode', () =
   f.output.textContent = 'Current activity log';
   oldStream.onmessage({ data: 'late normal-job output' });
   assert.equal(f.output.textContent, 'Current activity log');
+  f.viewer.close();
+});
+
+test('completed activity runs distinguish Borg warnings from failures', () => {
+  const f = fixture();
+  vm.runInContext(fs.readFileSync('ui/js/pages/jobs.js', 'utf8'), f.context);
+  let onStatus;
+  f.context.window.BBUI.components.activityLog.create = options => { onStatus = options.onStatus; return { close() {} }; };
+  f.context.window.BBUI.jobsState.jobs = [{ key: 'files', run_file_activity: true }];
+  f.context.jobsLocationKey = () => 'local';
+  vm.runInContext("openLogPanel('files')", f.context);
+  const badge = f.elements.get('log-status-badge');
+  onStatus({ running: false, exit_code: 1, phase: 'completed' });
+  assert.equal(badge.className, 'badge warning');
+  assert.equal(badge.textContent, 'jobs.logWarning');
+  onStatus({ running: false, exit_code: 1, phase: 'failed' });
+  assert.equal(badge.className, 'badge error');
+  onStatus({ running: false, exit_code: 2, phase: 'failed' });
+  assert.equal(badge.className, 'badge error');
+  onStatus({ running: false, exit_code: 2, phase: 'skipped' });
+  assert.equal(badge.className, 'badge skipped');
+  onStatus({ running: false, exit_code: 0, phase: 'completed' });
+  assert.equal(badge.className, 'badge success');
   f.viewer.close();
 });

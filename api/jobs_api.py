@@ -6,6 +6,7 @@ Subprozesse gestartet; deren stdout wird live gepuffert und per SSE ausgeliefert
 """
 
 import json
+import io
 import copy
 import os
 import re
@@ -254,6 +255,9 @@ def durable_running_states(config: dict) -> Dict[str, dict]:
             current["log_file"] = str(lock.get("log_file"))
         if not current.get("run_id") and lock.get("run_id"):
             current["run_id"] = str(lock.get("run_id"))
+    from activity_log_capture import running_captures
+    for capture in running_captures():
+        grouped.setdefault(capture['job_key'], capture)
     for job_key, state in grouped.items():
         if not state.get("log_file"):
             state["log_file"] = _fallback_runtime_log(config, job_key, str(state.get("start_time") or ""))
@@ -370,16 +374,23 @@ class JobInfo:
 
 
 class _JobState:
-    def __init__(self, proc: subprocess.Popen, start_time: datetime, run_id: str, log_file: Path | None = None):
+    def __init__(self, proc: subprocess.Popen, start_time: datetime, run_id: str, log_file: Path | None = None, capture_record_file: Path | None = None):
         self.proc = proc
         self.start_time = start_time
         self.run_id = run_id
         self.log_file = log_file
+        self.capture_record_file = capture_record_file
         self.line_count = 0
         self.lines: List[str] = []
         self.finished = False
         self.exit_code: Optional[int] = None
         self._lock = threading.Lock()
+
+    def open_log(self):
+        if self.capture_record_file:
+            from activity_log_capture import open_capture_file
+            return open_capture_file(self.capture_record_file)
+        return self.log_file.open("rb")
 
     def append_line(self, line: str) -> None:
         with self._lock:
@@ -434,17 +445,18 @@ class JobManager:
             env.update(extra_env)
 
         log_file = None
+        capture_record_file = None
         log_handle = None
         try:
             if env.get("BORG_UI_FILE_ACTIVITY_RUN") == "1":
                 from activity_log import activity_log_path
+                from activity_log_capture import prepare_capture
 
-                log_file = activity_log_path(Path(env["BORG_UI_ACTIVITY_LOG_DIR"]), job_key, run_id)
-                log_file.parent.mkdir(parents=True, exist_ok=True)
-                # stdout and stderr go straight to the retained log. No pipe or
-                # browser can apply backpressure to the Borg output reader.
-                log_handle = os.fdopen(os.open(log_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb")
+                log_file, capture_record_file = prepare_capture(job_key, run_id, Path(env["BORG_UI_ACTIVITY_LOG_DIR"]))
+                log_handle = os.fdopen(os.open(log_file, os.O_WRONLY | os.O_NOFOLLOW), "wb")
                 env["BORG_UI_CAPTURE_LOG"] = str(log_file)
+                env["BORG_UI_RETAINED_LOG"] = str(activity_log_path(Path(env["BORG_UI_ACTIVITY_LOG_DIR"]), job_key, run_id))
+                command = [sys.executable, str(Path(__file__).with_name("activity_log_capture.py")), str(capture_record_file), *command]
                 env["PYTHONUNBUFFERED"] = "1"
                 env["PYTHONIOENCODING"] = "utf-8"
             proc = subprocess.Popen(
@@ -462,7 +474,7 @@ class JobManager:
             if log_handle is not None:
                 log_handle.close()
 
-        new_state = _JobState(proc, datetime.now(), run_id, log_file)
+        new_state = _JobState(proc, datetime.now(), run_id, log_file, capture_record_file)
         with self._lock:
             self._states[job_key] = new_state
 
@@ -485,7 +497,7 @@ class JobManager:
                 # Preserve the existing running-state line_count contract.
                 # Count once in blocks, independently of all browser readers.
                 pending_line = False
-                with state.log_file.open("rb") as handle:
+                with state.open_log() as handle:
                     while True:
                         finished = state.proc.poll() is not None
                         chunk = handle.read(65536)
@@ -504,6 +516,11 @@ class JobManager:
             pass
         finally:
             state.proc.wait()
+            if state.capture_record_file:
+                from activity_log_capture import capture_path, read_record
+                record = read_record(state.capture_record_file)
+                if record:
+                    state.log_file = capture_path(record)
             with state._lock:
                 state.exit_code = state.proc.returncode
                 state.finished = True
@@ -567,7 +584,7 @@ class JobManager:
         if state.log_file is not None:
             # Keep the existing SSE contract for API clients. The activity UI
             # uses bounded file windows and does not open this per-line stream.
-            with state.log_file.open(encoding="utf-8", errors="replace") as handle:
+            with io.TextIOWrapper(state.open_log(), encoding="utf-8", errors="replace") as handle:
                 while True:
                     line = handle.readline()
                     if line:
@@ -642,7 +659,16 @@ def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
     while True:
         emitted = False
         try:
-            with log_file.open("r", encoding="utf-8", errors="replace") as handle:
+            if durable.get("file_activity"):
+                from activity_log_capture import capture_record, open_capture_file
+                capture = capture_record(key, str(durable.get("run_id") or ""))
+            else:
+                capture = {}
+            if capture:
+                binary = open_capture_file(Path(capture["active_file"]).parent / "capture.json")
+            else:
+                binary = log_file.open("rb")
+            with io.TextIOWrapper(binary, encoding="utf-8", errors="replace") as handle:
                 handle.seek(position)
                 for line in handle:
                     emitted = True

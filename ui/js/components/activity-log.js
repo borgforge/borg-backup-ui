@@ -4,6 +4,7 @@
 // newer windows fetched on scroll. The complete retained file stays readable.
 (function initActivityLog() {
   const MAX_WINDOWS = 3;
+  const BLOCK_BYTES = 65536 + 4;
   const t = (key, params = {}) => window.BBUI.components.i18n.t(`jobs.${key}`, params);
 
   class ActivityLog {
@@ -19,14 +20,12 @@
       this.statusKey = '';
       this.toolbar = document.getElementById('activity-log-tools');
       this.note = document.getElementById('activity-log-note');
-      this.searchInput = document.getElementById('activity-log-search');
       this.download = document.getElementById('activity-log-download');
       this.bindings = [];
       this.bind('activity-log-start', 'click', () => this.load({ start: 0 }, 'replace-start', false));
       this.bind('activity-log-end', 'click', () => this.tail());
       this.bind('activity-log-older', 'click', () => this.load({ before: this.start }, 'replace-end', false));
       this.bind('activity-log-newer', 'click', () => this.load({ start: this.end }, 'replace-start', false));
-      this.bind('activity-log-search-form', 'submit', event => { event.preventDefault(); this.search(); });
       this.toolbar.classList.remove('hidden');
       this.output.classList.add('activity-log-output');
       this.tail();
@@ -60,6 +59,7 @@
       this.fileId = data.file_id;
       this.size = data.size;
       this.running = data.running;
+      this.persistenceFailed = data.log_persistence_failed === true;
       this.failed = false;
       const downloadUrl = `/api/jobs/log/download?${new URLSearchParams({ job: this.job, run: this.run })}`;
       if (this.downloadUrl !== downloadUrl) {
@@ -119,8 +119,9 @@
       }
       if (data.text) {
         const node = document.createElement('span');
-        node.textContent = data.text;
-        const entry = { start: data.start, end: data.end, node };
+        const text = document.createTextNode(data.text);
+        node.append(text);
+        const entry = { start: data.start, end: data.end, node, text };
         if (action === 'prepend') {
           if (this.windows.length && data.end !== this.start) throw new Error('Non-contiguous log window');
           this.windows.unshift(entry);
@@ -130,8 +131,16 @@
           while (this.windows.length > MAX_WINDOWS) this.windows.pop().node.remove();
         } else {
           if (action === 'append' && this.windows.length && data.start !== this.end) throw new Error('Non-contiguous log window');
-          this.windows.push(entry);
-          this.output.append(node);
+          const last = this.windows[this.windows.length - 1];
+          // Polls often contain only a few lines. Fill a bounded block before
+          // evicting history, so three small updates cannot empty the viewport.
+          if (action === 'append' && last && data.end - last.start <= BLOCK_BYTES) {
+            last.text.appendData(data.text);
+            last.end = data.end;
+          } else {
+            this.windows.push(entry);
+            this.output.append(node);
+          }
           const heightBeforeTrim = this.output.scrollHeight;
           while (this.windows.length > MAX_WINDOWS) this.windows.shift().node.remove();
           if (!this.follow && action === 'append') {
@@ -147,8 +156,8 @@
     }
 
     updateNote(resetText = true) {
-      const text = t('activityLogComplete');
-      if (resetText && this.note.textContent !== text) this.note.textContent = text;
+      const text = t(this.persistenceFailed ? 'activityLogSaveFailed' : 'activityLogComplete');
+      if ((resetText || this.persistenceFailed) && this.note.textContent !== text) this.note.textContent = text;
       const older = document.getElementById('activity-log-older');
       const newer = document.getElementById('activity-log-newer');
       if (older.disabled !== (this.start === 0)) older.disabled = this.start === 0;
@@ -195,58 +204,6 @@
       this.busy = false;
       this.updateNote();
       this.schedule();
-    }
-
-    async search() {
-      const query = this.searchInput.value;
-      if (!query) return;
-      const sequence = this.begin(false);
-      let cursor = this.lastQuery === query ? (this.nextMatch || 0) : 0;
-      let limit;
-      this.lastQuery = query;
-      try {
-        while (!this.closed && sequence === this.sequence) {
-          this.note.textContent = t('activityLogSearching');
-          const params = { search: query, start: cursor };
-          if (limit !== undefined) params.search_end = limit;
-          const data = await this.request(params, sequence);
-          if (!data) return;
-          limit = data.search_end;
-          cursor = data.next;
-          if (data.match !== null) {
-            this.nextMatch = cursor;
-            this.render(data, 'replace-start');
-            // Highlight the exact match rather than an earlier occurrence in
-            // its context. Byte offsets and JS string offsets differ in UTF-8.
-            const prefixBytes = data.match - data.start;
-            const prefix = new TextDecoder().decode(new TextEncoder().encode(data.text).slice(0, prefixBytes));
-            const mark = document.createElement('mark');
-            mark.textContent = query;
-            this.windows[0].node.replaceChildren(
-              document.createTextNode(prefix), mark,
-              document.createTextNode(data.text.slice(prefix.length + query.length)),
-            );
-            this.updateNote();
-            this.output.scrollTop = Math.max(0, mark.offsetTop - this.output.offsetTop - 60);
-            return;
-          }
-          if (data.search_done) {
-            this.nextMatch = 0;
-            this.note.textContent = t('activityLogNoMatch');
-            return;
-          }
-        }
-      } catch (error) {
-        if (error.name !== 'AbortError' && sequence === this.sequence && !this.closed) {
-          this.note.textContent = t('logError', { message: error.message });
-        }
-      } finally {
-        if (sequence === this.sequence && !this.closed) {
-          this.busy = false;
-          // Resume status checks without replacing the search result.
-          this.schedule();
-        }
-      }
     }
 
     close() {

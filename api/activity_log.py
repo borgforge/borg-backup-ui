@@ -10,6 +10,7 @@ import codecs
 import os
 import re
 import stat
+from contextlib import contextmanager
 from pathlib import Path
 
 WINDOW_BYTES = 65536
@@ -57,7 +58,32 @@ def resolve_activity_run(config: dict, job_key: str, run_id: str = "") -> tuple[
         state["phase"] = control.get("phase", "")
         if control.get("finished") and not state.get("running"):
             state["exit_code"] = control.get("exit_code")
+    from activity_log_capture import capture_record, capture_path
+    capture = capture_record(job_key, run_id)
+    if capture:
+        path = capture_path(capture)
+        state["capture"] = capture
+        if capture.get("status") in {"saved", "failed"}:
+            state["running"] = False
+            state["exit_code"] = capture.get("exit_code")
+        state["log_persistence_failed"] = capture.get("status") == "failed" or (capture.get("status") == "running" and not state.get("running"))
     return path, state
+
+
+@contextmanager
+def open_activity_run(config: dict, job_key: str, run_id: str = ""):
+    # RAM can be released between resolving its path and opening it. The saved
+    # location is published first, allowing a retry without resetting cursors.
+    for attempt in range(2):
+        path, state = resolve_activity_run(config, job_key, run_id)
+        try:
+            handle = open_activity_file(path)
+            break
+        except FileNotFoundError:
+            if attempt:
+                raise
+    with handle:
+        yield path, state, handle
 
 
 def _number(qs: dict, name: str, default: int) -> int:
@@ -95,17 +121,24 @@ def read_window(handle, start: int, end: int, *, running: bool = False, align_st
 def get_activity_window(config: dict, qs: dict) -> dict:
     job = (qs.get("job") or [""])[0]
     run = (qs.get("run") or [""])[0]
-    path, state = resolve_activity_run(config, job, run)
-    with open_activity_file(path) as handle:
+    with open_activity_run(config, job, run) as (_path, state, handle):
         info = os.fstat(handle.fileno())
         size = info.st_size
         identity = f"{info.st_dev}:{info.st_ino}"
+        capture = state.get("capture")
+        if capture:
+            expected_identity = capture.get("active_file_id" if _path == Path(capture["active_file"]) else "retained_file_id")
+            if identity != expected_identity:
+                raise ValueError("The log file has been replaced; reopen the log")
+            # The original file identity stays valid across the verified copy.
+            identity = capture["active_file_id"]
         if qs.get("file_id") and qs["file_id"][0] != identity:
             raise ValueError("The log file has been replaced; reopen the log")
         result = {
             "run_id": state["run_id"], "file_id": identity, "size": size,
             "running": bool(state.get("running")), "exit_code": state.get("exit_code"),
             "phase": state.get("phase", ""),
+            "log_persistence_failed": bool(state.get("log_persistence_failed")),
         }
         if "status" in qs:
             return result

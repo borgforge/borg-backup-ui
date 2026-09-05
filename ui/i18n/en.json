@@ -681,6 +681,7 @@
     "logTitle": "Log: {name}",
     "logError": "[Error] {message}",
     "logDone": "Done (exit {code})",
+    "logWarning": "Completed with warnings (exit {code})",
     "logFailed": "Error (exit {code})",
     "logSkipped": "Skipped (exit {code})",
     "logCancelled": "Cancelled (exit {code})",
@@ -688,11 +689,8 @@
     "activityLogOlder": "Older entries",
     "activityLogNewer": "Newer entries",
     "activityLogDownload": "Download complete log",
-    "activityLogSearch": "Search entire log (case-sensitive)",
-    "activityLogFind": "Search / next match",
     "activityLogComplete": "All entries are retained. Scrolling loads additional sections. Browser search only searches the loaded section.",
-    "activityLogSearching": "Searching the entire log …",
-    "activityLogNoMatch": "No further match. Search again to start from the beginning.",
+    "activityLogSaveFailed": "The log could not be saved to the log directory and remains in RAM. Download the complete log before restarting the server.",
     "activityLogEnded": "Run ended; exit code unavailable"
   },
   "schedule": {

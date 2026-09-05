@@ -15,6 +15,7 @@ for root in (ROOT, ROOT / "api"):
         sys.path.insert(0, str(root))
 
 import activity_log
+import activity_log_capture
 import jobs_api
 from borg_backup_ui import BackupUIHandler
 from wizard_runner import ResourceLockSet
@@ -22,6 +23,7 @@ from wizard_runner import ResourceLockSet
 
 @pytest.fixture
 def activity(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_log_capture, "CAPTURE_ROOT", tmp_path / "ram")
     manager = jobs_api.JobManager()
     monkeypatch.setattr(jobs_api.JobManager, "get", classmethod(lambda cls: manager))
     monkeypatch.setattr("job_control.read_control_state", lambda _run: {})
@@ -241,3 +243,133 @@ logging.warning('warning remains visible')
         assert any('A changed file.stl' in line for line in state.lines)
     assert text.count('A changed file.stl') == 1
     assert text.count('warning remains visible') == 1
+
+
+@pytest.mark.parametrize('exit_code', [0, 1, 2, 130, 137])
+def test_ram_log_is_retained_after_runner_exit_without_api_reader(activity, monkeypatch, exit_code):
+    config, path, _params, manager = activity
+    # The supervisor must retain the file without an API-owned reader thread.
+    monkeypatch.setattr(manager, '_reader', lambda *_args: None)
+    ready, release = path.parent / 'ready', path.parent / 'release'
+    script = '''import os, sys, time
+from pathlib import Path
+print('A changed-Größe.stl\\n' * 10000, end='', flush=True)
+Path('ready').touch()
+while not Path('release').exists(): time.sleep(0.01)
+print('INFO Docker recovery finished', flush=True)
+sys.stderr.write('INFO final unterminated line')
+sys.stderr.flush()
+code = int(sys.argv[1])
+if code == 137: os.kill(os.getpid(), 9)
+sys.exit(code)
+'''
+    env = {'BORG_UI_FILE_ACTIVITY_RUN': '1', 'BORG_UI_ACTIVITY_LOG_DIR': str(path.parent)}
+    assert manager.start('files_local', [sys.executable, '-c', script, str(exit_code)], path.parent, env)[0]
+    state = manager._states['files_local']
+    try:
+        deadline = time.monotonic() + 10
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists()
+        record = activity_log_capture.read_record(state.capture_record_file)
+        retained = Path(record['retained_file'])
+        assert not retained.exists(), 'the active log must not change the backed-up log directory'
+        assert state.log_file.is_relative_to(activity_log_capture.CAPTURE_ROOT)
+        # Drop API state entirely. Resource-lock-independent recovery sees the
+        # supervisor and the live file; no parent thread is needed for saving.
+        manager._states.clear()
+        recovered = jobs_api.durable_running_states(config)['files_local']
+        assert recovered['run_id'] == state.run_id and recovered['file_activity']
+        params = {'job': ['files_local'], 'run': [state.run_id]}
+        before = activity_log.get_activity_window(config, params)
+        assert before['running'] is True and 'changed-Größe.stl' in before['text']
+        release.touch()
+        assert state.proc.wait(timeout=10) == exit_code
+        after = activity_log.get_activity_window(config, {**params, 'start': [str(before['end'])], 'file_id': [before['file_id']]})
+        assert after['file_id'] == before['file_id']
+        assert after['text'] == 'INFO Docker recovery finished\nINFO final unterminated line'
+        assert after['running'] is False and after['exit_code'] == exit_code
+        assert not state.log_file.exists(), 'the full RAM allocation must be released'
+        assert retained.read_text() == 'A changed-Größe.stl\n' * 10000 + after['text']
+        assert 'files_local' not in jobs_api.durable_running_states(config)
+    finally:
+        release.touch()
+        state.proc.wait(timeout=10)
+
+
+def test_failed_retention_preserves_complete_ram_log_and_existing_destination(activity):
+    config, path, params, _manager = activity
+    active, record_path = activity_log_capture.prepare_capture('files_local', params['run'][0], path.parent)
+    content = 'A changed-Größe.stl\n' * 10000
+    active.write_text(content)
+    path.write_text('existing log must not be overwritten')
+    assert activity_log_capture.retain_capture(record_path, 0) is False
+    assert path.read_text() == 'existing log must not be overwritten'
+    assert active.read_text() == content
+    result = activity_log.get_activity_window(config, params)
+    assert result['log_persistence_failed'] is True
+    assert 'changed-Größe.stl' in result['text']
+    assert result['exit_code'] == 0
+
+
+def test_partial_copy_failure_keeps_ram_and_removes_incomplete_destination(activity, monkeypatch):
+    config, path, params, _manager = activity
+    path.unlink()
+    active, record_path = activity_log_capture.prepare_capture('files_local', params['run'][0], path.parent)
+    content = b'A changed.stl\n' * 10000
+    active.write_bytes(content)
+    def fail_copy(source, target, length):
+        assert length == 65536
+        target.write(source.read(10))
+        raise OSError('simulated full destination')
+    monkeypatch.setattr(activity_log_capture.shutil, 'copyfileobj', fail_copy)
+    assert activity_log_capture.retain_capture(record_path, 2) is False
+    assert not path.exists()
+    assert active.read_bytes() == content
+    result = activity_log.get_activity_window(config, params)
+    assert result['log_persistence_failed'] is True and result['exit_code'] == 2
+
+
+def test_open_retries_ram_to_retained_transition_and_rejects_replacement(activity, monkeypatch):
+    config, path, params, _manager = activity
+    path.unlink()
+    active, record_path = activity_log_capture.prepare_capture('files_local', params['run'][0], path.parent)
+    active.write_text('A first.stl\nA second.stl\n')
+    before = activity_log.get_activity_window(config, params)
+    original_open = activity_log.open_activity_file
+    def finish_before_open(candidate):
+        if candidate == active:
+            monkeypatch.setattr(activity_log, 'open_activity_file', original_open)
+            assert activity_log_capture.retain_capture(record_path, 0)
+        return original_open(candidate)
+    monkeypatch.setattr(activity_log, 'open_activity_file', finish_before_open)
+    result = activity_log.get_activity_window(config, {**params, 'file_id': [before['file_id']]})
+    assert result['text'] == before['text']
+    assert result['file_id'] == before['file_id']
+    replacement = path.with_suffix('.replacement')
+    replacement.write_text('different file')
+    replacement.replace(path)
+    with pytest.raises(ValueError, match='replaced'):
+        activity_log.get_activity_window(config, {**params, 'file_id': [before['file_id']]})
+
+
+def test_saved_history_references_retained_log_while_active_reads_use_ram(tmp_path):
+    from runtime.lib.backup_job import BackupJob, BackupJobConfig
+    active = tmp_path / 'ram' / 'active.log'
+    retained = tmp_path / 'logs' / 'saved.log'
+    active.parent.mkdir()
+    active.write_text('WARNING source changed\n')
+    cfg = BackupJobConfig(
+        job_name='Files', backup_type='files', backup_location='local',
+        lock_file=tmp_path / 'job.lock', log_dir=retained.parent, log_file=active,
+        backup_paths=[tmp_path], borg_cache_dir=tmp_path / 'cache', date_tag='2026-09-06',
+        status_dir=tmp_path / 'status', retained_log_file=retained,
+    )
+    job = BackupJob(cfg)
+    job.set_result(1)
+    saved = job._save_status(10)
+    status = json.loads(saved.read_text())
+    assert status['log_file'] == str(retained)
+    assert status['status'] == 'warning'
+    assert 'source changed' in status['error_message']
+    assert not retained.exists()

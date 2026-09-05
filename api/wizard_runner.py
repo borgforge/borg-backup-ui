@@ -405,7 +405,8 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     env.setdefault("LOG_FILE", f"{log_dir}/Borg-Backup_{job_key}--{date_tag}.log")
     if meta_file_activity and os.environ.get("BORG_UI_CAPTURE_LOG"):
         env["LOG_FILE"] = os.environ["BORG_UI_CAPTURE_LOG"]
-        env["LOG_DIR"] = str(Path(env["LOG_FILE"]).parent)
+        # Retention still applies to saved logs; only this run's writes use RAM.
+        env["BORG_UI_RETAINED_LOG"] = os.environ.get("BORG_UI_RETAINED_LOG", "")
     env.setdefault("LOG_RETENTION_DAYS", env.get("GLOBAL_LOG_RETENTION_DAYS", "30"))
     env["BORG_REPO"] = str(repository_context["repository_path"])
     # Storagebox compatibility: if ssh repo URI misses user component, inject STORAGEBOX_USER.
@@ -643,6 +644,9 @@ def main() -> int:
 
     job_config = BackupJobConfig.from_config(env)
     _setup_full_logging(job_config.log_file)
+    if job_config.retained_log_file:
+        # Also avoid including the active log if a source covers /run itself.
+        job_config.exclude_paths.append(job_config.log_file.parent)
     from lifecycle_log import emit_lifecycle
     borg_config = BorgConfig.from_config(env)
     mail_config = MailConfig.from_config(env)
