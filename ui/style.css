@@ -5401,6 +5401,18 @@ body.wizard-modal-open {
 
 .modal-wizard { max-width: 960px; width: 95vw; }
 
+#wizard-modal .modal-wizard {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 32px);
+}
+
+#wizard-modal .modal-header,
+#wizard-modal .wizard-stepper,
+#wizard-modal .modal-footer {
+  flex: 0 0 auto;
+}
+
 .setup-wizard-modal { max-width: 760px; }
 
 .setup-wizard-body {
@@ -5574,8 +5586,9 @@ body.wizard-modal-open {
 
 .wizard-body {
   padding: 20px 24px 8px;
-  height: 420px;
-  min-height: 420px;
+  height: 448px;
+  min-height: 0;
+  flex: 1 1 448px;
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }

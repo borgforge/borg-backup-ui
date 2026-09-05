@@ -176,6 +176,7 @@ def test_missing_job_field_is_disabled_and_preview_exposes_setting(tmp_path: Pat
 def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
     index = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
     script = (ROOT / "ui" / "js" / "pages" / "wizard.js").read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "style.css").read_text(encoding="utf-8")
     de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
     en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
     manual_de = (ROOT / "docs" / "user-manual" / "de" / "user-manual.md").read_text(encoding="utf-8")
@@ -188,6 +189,9 @@ def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
     assert 'id="wiz-file-activity"' in basics
     assert 'id="wiz-file-activity"' not in sources_target
     assert 'wizard-feature-box wizard-file-activity' in basics
+    assert "#wizard-modal .modal-wizard" in styles
+    assert "max-height: calc(100vh - 32px)" in styles
+    assert "flex: 1 1 448px" in styles
     assert "file_activity: !!document.getElementById('wiz-file-activity').checked" in script
     assert "wizard.previewFileActivity" in script
     assert "Support-Paketen" in de["wizard"]["fileActivityPrivacy"]
