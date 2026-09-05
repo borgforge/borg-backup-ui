@@ -5734,9 +5734,9 @@ body.wizard-modal-open {
 
 .wizard-file-activity-warning {
   margin: 0;
-  padding: 7px 9px;
+  padding: 5px 8px;
   font-size: 11px;
-  line-height: 1.4;
+  line-height: 1.3;
 }
 
 .wizard-step2-layout {
