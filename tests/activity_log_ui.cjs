@@ -22,6 +22,8 @@ class Element {
   get textContent() { return this.children.length ? this.children.map(child => child.textContent).join('') : this.text || ''; }
   set textContent(value) { this.text = value; this.children = []; }
   get scrollHeight() { return Math.max(400, this.textContent.split('\n').length * 20); }
+  get scrollTop() { return Math.min(this.top || 0, this.scrollHeight - this.clientHeight); }
+  set scrollTop(value) { this.top = Math.max(0, Math.min(value, this.scrollHeight - (this.clientHeight || 400))); }
   append(...children) { children.forEach(child => { child.parent = this; this.children.push(child); }); }
   appendData(text) { this.textContent += text; }
   appendChild(child) { this.append(child); }
@@ -37,6 +39,7 @@ function fixture() {
   const timers = new Map();
   let timerId = 0;
   let source = Buffer.from('A first.stl\n');
+  let running = true;
   let hold;
   const requests = [];
   const statuses = [];
@@ -65,7 +68,7 @@ function fixture() {
       let start = params.has('start') ? Number(params.get('start')) : Math.max(0, source.length - 65536);
       let end = Math.min(source.length, start + 65536);
       if (params.has('before')) { end = Number(params.get('before')); start = Math.max(0, end - 65536); }
-      const data = { start, end, text: source.subarray(start, end).toString(), size: source.length, running: true, exit_code: null, run_id: 'run-original', file_id: '1:2' };
+      const data = { start, end, text: source.subarray(start, end).toString(), size: source.length, running, exit_code: running ? null : 0, run_id: 'run-original', file_id: '1:2' };
       if (params.has('status')) delete data.text;
       return { ok: true, json: async () => data };
     },
@@ -75,11 +78,63 @@ function fixture() {
   const viewer = context.window.BBUI.components.activityLog.create({ job: 'files', run: 'run-original', output, onStatus: data => statuses.push(data), onFollow: () => {} });
   return { viewer, output, elements, timers, requests, statuses, context,
     setSource: value => { source = Buffer.from(value); },
+    finish: () => { running = false; },
     hold: () => { hold = {}; return hold; },
   };
 }
 
 async function settle() { for (let i = 0; i < 12; i++) await Promise.resolve(); }
+
+async function poll(f) {
+  assert.equal(f.timers.size, 1, 'exactly one next poll must be scheduled');
+  const [id, callback] = f.timers.entries().next().value;
+  f.timers.delete(id);
+  callback();
+  await settle();
+}
+
+test('delayed scroll events keep following every catch-up block through the final line', async () => {
+  const f = fixture();
+  await settle();
+  const content = f.output.textContent + 'A file.stl\n'.repeat(50000) + 'INFO BACKUP COMPLETED\n';
+  f.setSource(content);
+  f.finish();
+  let blocks = 0;
+  do {
+    await poll(f);
+    // Native scroll events may arrive after requestAnimationFrame has run.
+    // Job-card refreshes also check the scroll position between log requests.
+    f.viewer.onScroll();
+    assert.equal(f.viewer.follow, true, 'being behind the file cursor must not pause following');
+    assert.equal(f.output.scrollTop, f.output.scrollHeight - f.output.clientHeight);
+    assert.equal(f.elements.get('log-scroll-hint').classes.has('visible'), false);
+    assert.ok(++blocks < 20, 'catch-up must finish');
+  } while (f.timers.size);
+  assert.ok(blocks > 3, 'exercise block eviction while catching up');
+  assert.equal(f.viewer.end, Buffer.byteLength(content));
+  assert.ok(f.output.textContent.endsWith('INFO BACKUP COMPLETED\n'));
+  f.viewer.close();
+});
+
+test('returning from a hidden tab drains a completed log without losing follow mode', async () => {
+  const f = fixture();
+  await settle();
+  f.context.document.hidden = true;
+  f.setSource(f.output.textContent + 'A file.stl\n'.repeat(20000) + 'INFO FINAL LINE\n');
+  f.finish();
+  await poll(f);
+  assert.equal(f.requests.at(-1).params.get('status'), '1');
+  f.viewer.onScroll();
+  assert.equal(f.viewer.follow, true, 'status-only growth must not disable following');
+  f.context.document.hidden = false;
+  for (let i = 0; f.timers.size && i < 10; i++) {
+    await poll(f);
+    f.viewer.onScroll();
+  }
+  assert.ok(f.output.textContent.endsWith('INFO FINAL LINE\n'));
+  assert.equal(f.timers.size, 0);
+  f.viewer.close();
+});
 
 test('complete history is recoverable while the rendered window stays bounded', async () => {
   const f = fixture();
@@ -166,6 +221,61 @@ test('scrolling back aborts an incoming live block and preserves the viewport', 
   held.resolve({ ok: true, json: async () => ({ text: 'stale', start: f.viewer.end, end: f.viewer.end + 5 }) });
   await pending;
   assert.equal(f.output.textContent, before);
+  f.viewer.close();
+});
+
+test('a user scroll awaiting its event is respected before rendering an incoming block', async () => {
+  const f = fixture();
+  await settle();
+  f.setSource('A file.stl\n'.repeat(10000));
+  await f.viewer.load({}, 'replace-end');
+  const held = f.hold();
+  const before = f.output.textContent;
+  const start = f.viewer.end;
+  const pending = f.viewer.load({ start }, 'append');
+  f.output.scrollTop = 500;
+  held.resolve({ ok: true, json: async () => ({
+    text: 'INFO latest\n', start, end: start + 12, size: start + 12,
+    running: true, exit_code: null, run_id: 'run-original', file_id: '1:2',
+  }) });
+  await pending;
+  assert.equal(f.viewer.follow, false);
+  assert.equal(f.output.scrollTop, 500);
+  assert.equal(f.output.textContent, before);
+  f.viewer.close();
+});
+
+test('manual browsing pauses updates and jumping to the end resumes following', async () => {
+  const f = fixture();
+  await settle();
+  let content = 'A file.stl\n'.repeat(10000);
+  f.setSource(content);
+  await f.viewer.load({}, 'replace-end');
+  f.output.scrollTop -= 200;
+  f.viewer.onScroll();
+  assert.equal(f.viewer.follow, false);
+  const before = f.output.textContent;
+  const top = f.output.scrollTop;
+  content += 'INFO new output\n';
+  f.setSource(content);
+  await poll(f);
+  assert.equal(f.requests.at(-1).params.get('status'), '1');
+  assert.equal(f.output.textContent, before);
+  assert.equal(f.output.scrollTop, top);
+  assert.equal(f.elements.get('log-scroll-hint').classes.has('visible'), true);
+  f.elements.get('activity-log-end').listeners.get('click')();
+  await settle();
+  f.viewer.onScroll();
+  assert.equal(f.viewer.follow, true);
+  assert.ok(f.output.textContent.endsWith('INFO new output\n'));
+  assert.equal(f.output.scrollTop, f.output.scrollHeight - f.output.clientHeight);
+  assert.equal(f.elements.get('log-scroll-hint').classes.has('visible'), false);
+  // Reaching the loaded end by hand also resumes a paused view at the file end.
+  f.output.scrollTop -= 200;
+  f.viewer.onScroll();
+  f.output.scrollTop = f.output.scrollHeight;
+  f.viewer.onScroll();
+  assert.equal(f.viewer.follow, true);
   f.viewer.close();
 });
 

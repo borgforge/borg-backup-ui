@@ -353,7 +353,8 @@ def test_open_retries_ram_to_retained_transition_and_rejects_replacement(activit
         activity_log.get_activity_window(config, {**params, 'file_id': [before['file_id']]})
 
 
-def test_saved_history_references_retained_log_while_active_reads_use_ram(tmp_path):
+def test_saved_history_references_retained_log_while_active_reads_use_ram(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'runtime'))
     from runtime.lib.backup_job import BackupJob, BackupJobConfig
     active = tmp_path / 'ram' / 'active.log'
     retained = tmp_path / 'logs' / 'saved.log'

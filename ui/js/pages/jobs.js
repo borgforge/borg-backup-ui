@@ -243,6 +243,7 @@ function renderJobsGrid(jobs) {
   const jobsNewBtn = document.getElementById('jobs-new-btn');
 
   const logOutput = document.getElementById('log-output');
+  jobsState.activityLog?.onScroll();
   const savedLogScrollTop = logOutput ? logOutput.scrollTop : 0;
   const savedLogDistanceFromBottom = logOutput
     ? (logOutput.scrollHeight - logOutput.scrollTop)
@@ -307,7 +308,8 @@ function renderJobsGrid(jobs) {
         logOutput.scrollTop = savedLogScrollTop;
       }
     }
-    checkScrollHint(logOutput);
+    if (jobsState.activityLog) jobsState.activityLog.syncScroll();
+    else checkScrollHint(logOutput);
   }
 }
 

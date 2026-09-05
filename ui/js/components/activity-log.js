@@ -15,6 +15,7 @@
       this.end = 0;
       this.size = 0;
       this.follow = true;
+      this.scrollTop = output.scrollTop;
       this.closed = false;
       this.sequence = 0;
       this.statusKey = '';
@@ -80,6 +81,10 @@
       try {
         const data = await this.request(params, sequence);
         if (!data) return;
+        // A user scroll can precede its scroll event. Respect it before an
+        // incoming live block would move the viewport back to the bottom.
+        if (action === 'append' && this.follow) this.onScroll();
+        if (sequence !== this.sequence) return;
         if (typeof data.text === 'string' && (data.text || action.startsWith('replace'))) this.render(data, action);
         this.updateNote(action !== 'status');
       } catch (error) {
@@ -109,8 +114,6 @@
     }
 
     render(data, action) {
-      this.ignoreScroll = true;
-      cancelAnimationFrame(this.scrollFrame);
       const oldTop = this.output.scrollTop;
       const oldHeight = this.output.scrollHeight;
       if (action.startsWith('replace')) {
@@ -150,9 +153,16 @@
       }
       this.start = this.windows[0]?.start ?? data.start;
       this.end = this.windows[this.windows.length - 1]?.end ?? data.end;
-      if (this.follow || action === 'replace-end') this.output.scrollTop = this.output.scrollHeight;
+      if (action === 'replace-end') this.output.scrollTop = this.output.scrollHeight;
       else if (action === 'replace-start') this.output.scrollTop = 0;
-      this.scrollFrame = requestAnimationFrame(() => { this.ignoreScroll = false; });
+      this.syncScroll();
+    }
+
+    syncScroll() {
+      if (this.follow) this.output.scrollTop = this.output.scrollHeight;
+      // Remember the browser's clamped position after rendering or moving the
+      // panel. Its delayed scroll event must not change the user's follow mode.
+      this.scrollTop = this.output.scrollTop;
     }
 
     updateNote(resetText = true) {
@@ -167,17 +177,18 @@
     }
 
     onScroll() {
-      if (this.closed || this.ignoreScroll) return;
+      if (this.closed || Math.abs(this.output.scrollTop - this.scrollTop) < 1) return;
+      this.scrollTop = this.output.scrollTop;
       const wasFollowing = this.follow;
       const atBottom = this.output.scrollHeight - this.output.scrollTop <= this.output.clientHeight + 40;
-      this.follow = atBottom && this.end >= this.size;
+      this.follow = atBottom && (wasFollowing || this.end >= this.size);
       this.onFollow(this.follow);
       if (this.busy && wasFollowing && !this.follow) {
         this.begin(false);
         this.busy = false;
         this.schedule();
       }
-      if (!this.busy) {
+      if (!this.busy && !this.follow) {
         if (this.output.scrollTop < 40 && this.start > 0) this.older();
         else if (atBottom && this.end < this.size) this.newer();
       }
@@ -201,6 +212,7 @@
       this.output.replaceChildren();
       this.windows = [];
       this.start = this.end;
+      this.syncScroll();
       this.busy = false;
       this.updateNote();
       this.schedule();
@@ -211,7 +223,6 @@
       this.sequence += 1;
       this.controller?.abort();
       clearTimeout(this.timer);
-      cancelAnimationFrame(this.scrollFrame);
       this.bindings.forEach(unbind => unbind());
       this.toolbar.classList.add('hidden');
       this.output.classList.remove('activity-log-output');

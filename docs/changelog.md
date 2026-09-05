@@ -14,6 +14,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Load bounded UTF-8 file windows on demand, retaining at most three windows in the live view. Serialized requests provide backpressure; earlier output stays accessible in the complete file.
 - Add bounded streaming downloads and stale-response cancellation. Existing compact logs continue to use the original SSE viewer.
 - Coalesce small live updates into bounded blocks before evicting older output, keeping the viewport filled after burst output slows down. Remove the in-panel search and use theme colors for the navigation toolbar.
+- Preserve live following across delayed programmatic scroll events, cursor catch-up, background tabs, and job-grid refreshes. Track the actual restored scroll position instead of suppressing all scroll events for one animation frame, and label previous/next section navigation explicitly.
 - Show a warning badge for activity runs that the runner completed with Borg exit code 1; preserve failure, skip, and cancellation states.
 - Cover a million-line round trip, Unicode boundaries, search boundaries, run recovery, direct process capture, access control, and UI navigation races.
 
