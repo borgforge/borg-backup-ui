@@ -377,6 +377,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     exclude_paths = meta.get("exclude_paths") if isinstance(meta.get("exclude_paths"), list) else []
 
     meta_compression = str(meta.get("compression") or "").strip()
+    meta_file_activity = _env_flag(meta.get("file_activity"), default=False)
     meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
     meta_keep_daily = str(meta_ret.get("daily") or "").strip()
     meta_keep_weekly = str(meta_ret.get("weekly") or "").strip()
@@ -403,6 +404,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
             env["BORG_REPO"] = urlunsplit((parts.scheme, f"{storagebox_user}@{netloc}", parts.path, parts.query, parts.fragment))
             logging.info("Storage Box repository URI has no user; using STORAGEBOX_USER=%s", storagebox_user)
     env.setdefault("BORG_COMPRESSION", meta_compression or env.get(f"COMPRESSION_{tu}", "lz4"))
+    env["BORG_FILE_ACTIVITY"] = "1" if meta_file_activity else "0"
     env.setdefault("BORG_CHECKPOINT_INTERVAL", env.get("GLOBAL_BORG_CHECKPOINT_INTERVAL", "1800"))
     env.setdefault("BORG_CACHE_DIR", cache_dir)
     env.setdefault("BORG_CHECK_INTERVAL_DAYS", env.get("GLOBAL_BORG_CHECK_INTERVAL_DAYS", "30"))

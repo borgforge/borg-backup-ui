@@ -162,6 +162,8 @@ Before a backup, the application records which containers or VMs were actually r
 
 **History** lists backup runs by location, type, and status. Expand a run for archive name, sizes, duration, exit code, repository check, and log file. Running jobs provide a live log; completed runs link to the stored log.
 
+The per-job **File activity in the live log** option can be enabled in the Job Wizard. Borg then shows added (`A`), modified (`M`), and errored (`E`) entries; unchanged entries are omitted. These values come from Borg's files cache and are neither a byte-transfer indicator nor a complete archive listing. File and directory names also appear in the stored run log and can be included in support bundles.
+
 ### Borg Results
 
 - Exit code `0` means success.

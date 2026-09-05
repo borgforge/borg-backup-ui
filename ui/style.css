@@ -5764,6 +5764,21 @@ body.wizard-modal-open {
   gap: 5px;
 }
 
+.wizard-file-activity .form-checkbox-row {
+  align-items: flex-start;
+}
+
+.wizard-file-activity-description {
+  display: block;
+  margin-top: 3px;
+}
+
+.wizard-file-activity-warning {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .wizard-step2-divider {
   height: 1px;
   background: var(--border);

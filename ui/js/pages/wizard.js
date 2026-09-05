@@ -557,6 +557,7 @@ function openWizard() {
   wizardState.excludeSuggestIndex = -1;
   wizardRenderExcludePaths();
   document.getElementById('wiz-compression').value = 'lz4';
+  document.getElementById('wiz-file-activity').checked = false;
   document.getElementById('wiz-keep-daily').value = '7';
   document.getElementById('wiz-keep-weekly').value = '4';
   document.getElementById('wiz-keep-monthly').value = '6';
@@ -615,6 +616,7 @@ function _wizardFillFromJob(job) {
   const selectedRepo = (wizardState.repositories || []).find((repo) => String(repo.repository_key || '') === wizardState.selectedRepositoryKey);
   wizardState.selectedStorageKey = String(selectedRepo?.storage_key || job.storage_key || '').trim();
   document.getElementById('wiz-compression').value = job.compression || 'lz4';
+  document.getElementById('wiz-file-activity').checked = !!job.file_activity;
   document.getElementById('wiz-keep-daily').value = job.keep_daily || '7';
   document.getElementById('wiz-keep-weekly').value = job.keep_weekly || '4';
   document.getElementById('wiz-keep-monthly').value = job.keep_monthly || '6';
@@ -859,6 +861,7 @@ function _wizardCollectParams() {
     exclude_paths: _wizardUniqueList(wizardState.excludePaths || []),
     repository_key: (document.getElementById('wiz-repository-key')?.value || wizardState.selectedRepositoryKey || '').trim(),
     compression:  document.getElementById('wiz-compression').value,
+    file_activity: !!document.getElementById('wiz-file-activity').checked,
     encryption: String(repository?.encryption || '').trim(),
     passphrase: '',
     keep_daily:   document.getElementById('wiz-keep-daily').value,
@@ -1326,6 +1329,9 @@ async function _wizardPreview() {
       weekly: retention.weekly ?? '-',
       monthly: retention.monthly ?? '-',
       yearly: retention.yearly ?? '-',
+    }));
+    lines.push(wizardT('wizard.previewFileActivity', {
+      value: wizardT(summary.file_activity ? 'wizard.yes' : 'wizard.no'),
     }));
     lines.push(wizardT('wizard.previewFeatures', {
       docker: wizardT(summary.docker ? 'wizard.yes' : 'wizard.no'),

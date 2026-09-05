@@ -289,6 +289,14 @@ Nach jedem erfolgreich erstellten Backup wendet Borg Backup UI die festgelegten 
 
 Der Wert `0` deaktiviert nur die jeweilige Aufbewahrungsstufe und bedeutet nicht „unbegrenzt“. Bei viermal `0` würde Prune kein passendes Archiv zur Aufbewahrung auswählen und damit alle Archive des Jobs löschen können. Deshalb muss mindestens einer der vier Werte größer als `0` sein; eine Konfiguration mit viermal `0` wird abgelehnt. Eine zukünftige Option zum dauerhaften Behalten aller Archive muss stattdessen Prune für den Job ausdrücklich deaktivieren.
 
+#### Optionale Dateiaktivität im Live-Log
+
+Die Job-Option **Dateiaktivität im Live-Log** ergänzt `borg create` um `--list --filter=AME`. Während eines manuellen oder geplanten Laufs zeigt das Live-Log dadurch Einträge, die Borg als hinzugefügt (`A`), geändert (`M`) oder fehlerhaft (`E`) einstuft. Unveränderte Einträge werden bewusst nicht ausgegeben. Die Einstellung ist standardmäßig deaktiviert und gilt nur für den jeweiligen Job.
+
+Diese Statuswerte beruhen auf Borgs Datei-Cache und dessen Änderungserkennung. Sie sind weder eine Anzeige der tatsächlich übertragenen Byte-Menge noch eine vollständige Liste des Archivinhalts. Derselbe Pfad kann beispielsweise als geändert erscheinen, obwohl Borg vorhandene Datenblöcke dedupliziert und nur Metadaten oder wenige neue Blöcke speichert.
+
+> **Datenschutzhinweis:** Bei aktivierter Option erscheinen Datei- und Verzeichnisnamen im Live-Log und im gespeicherten Lauf-Log. Da Support-Pakete aktuelle Lauf-Logs enthalten können, können diese Namen auch dort enthalten sein. Support-Pakete maskieren Secrets, sind aber nicht anonym; prüfen Sie ein Paket immer vor der Weitergabe.
+
 #### Zeitplan
 
 Der Zeitplan kann direkt im Wizard gesetzt werden. Die UI unterstützt einfache Frequenzen und einen Cron-Ausdruck.

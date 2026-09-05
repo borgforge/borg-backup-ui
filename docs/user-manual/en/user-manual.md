@@ -289,6 +289,14 @@ After each successfully created backup, Borg Backup UI applies the configured re
 
 A value of `0` disables only that retention tier and does not mean unlimited. With four zero values, prune would select no matching archive for retention and could therefore delete all archives belonging to the job. At least one of the four values must consequently be greater than `0`; a configuration containing four zero values is rejected. A future option to keep every archive must instead explicitly disable prune for the job.
 
+#### Optional File Activity in the Live Log
+
+The per-job **File activity in the live log** option adds `--list --filter=AME` to `borg create`. During a manual or scheduled run, the live log then shows entries that Borg classifies as added (`A`), modified (`M`), or errored (`E`). Unchanged entries are intentionally omitted. The option is disabled by default and applies only to the selected job.
+
+These status values are based on Borg's files cache and its change detection. They are neither a report of the bytes actually transferred nor a complete listing of archive contents. For example, a path can appear as modified while Borg deduplicates existing data chunks and stores only metadata or a small number of new chunks.
+
+> **Privacy note:** When this option is enabled, file and directory names appear in both the live log and the stored run log. Because support bundles can contain recent run logs, those names can also be included there. Support bundles mask secrets but are not anonymous; always review a bundle before sharing it.
+
 #### Schedule
 
 The schedule can be set directly in the wizard. The UI supports simple frequencies and a cron expression.
