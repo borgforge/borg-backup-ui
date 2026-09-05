@@ -1319,8 +1319,17 @@
 .storage-archive-browser-table {
   width: 100%;
   min-width: 34rem;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: fixed;
+}
+
+.storage-archive-browser-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--ui-color-surface-raised);
+  box-shadow: 0 1px var(--ui-color-border);
 }
 
 .storage-archive-browser-table th,
@@ -1332,11 +1341,7 @@
 }
 
 .storage-archive-browser-table th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--ui-color-surface-raised);
-  box-shadow: inset 0 -1px var(--ui-color-border);
+  background: inherit;
   color: var(--ui-color-text-muted);
   font-size: var(--ui-font-size-xs);
   text-transform: uppercase;

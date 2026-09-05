@@ -155,7 +155,10 @@ def test_repository_archive_browser_frontend_is_read_only_and_localized():
     assert "/api/repositories/archive-files" in server
     assert de["storage"]["repositoryArchiveBrowserReadOnly"] == "Schreibgeschützte Ansicht"
     assert en["storage"]["repositoryArchiveBrowserReadOnly"] == "Read-only view"
-    sticky_header = css.split(".storage-archive-browser-table th {", 1)[1].split("}", 1)[0]
+    table_layout = css.split(".storage-archive-browser-table {", 1)[1].split("}", 1)[0]
+    sticky_header = css.split(".storage-archive-browser-table thead {", 1)[1].split("}", 1)[0]
+    assert "border-collapse: separate" in table_layout
+    assert "border-spacing: 0" in table_layout
     assert "position: sticky" in sticky_header
     assert "background: var(--ui-color-surface-raised)" in sticky_header
     browser_renderer = script.split("function renderStorageArchiveBrowser", 1)[1].split("async function loadRepositoryArchiveFiles", 1)[0]
