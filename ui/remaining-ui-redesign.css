@@ -1311,14 +1311,18 @@
   margin: var(--ui-space-3);
 }
 
-.storage-archive-browser-table-wrap {
-  max-height: 32rem;
-  overflow: auto;
+.storage-archive-browser-table-viewport {
+  overflow-x: auto;
 }
 
 .storage-archive-browser-table {
   width: 100%;
   min-width: 34rem;
+}
+
+.storage-archive-browser-table-wrap {
+  max-height: calc(32rem - 2.2rem);
+  overflow-y: auto;
 }
 
 .storage-archive-browser-table-header,
@@ -1329,9 +1333,6 @@
 }
 
 .storage-archive-browser-table-header {
-  position: sticky;
-  top: 0;
-  z-index: 3;
   border-bottom: 1px solid var(--ui-color-border);
   background: var(--ui-color-surface-raised);
 }

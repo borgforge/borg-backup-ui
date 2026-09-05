@@ -155,14 +155,16 @@ def test_repository_archive_browser_frontend_is_read_only_and_localized():
     assert "/api/repositories/archive-files" in server
     assert de["storage"]["repositoryArchiveBrowserReadOnly"] == "Schreibgeschützte Ansicht"
     assert en["storage"]["repositoryArchiveBrowserReadOnly"] == "Read-only view"
-    sticky_header = css.split(".storage-archive-browser-table-header {", 1)[1].split("}", 1)[0]
-    assert "position: sticky" in sticky_header
-    assert "top: 0" in sticky_header
-    assert "background: var(--ui-color-surface-raised)" in sticky_header
+    fixed_header = css.split(".storage-archive-browser-table-header {", 1)[1].split("}", 1)[0]
+    assert "position: sticky" not in fixed_header
+    assert "background: var(--ui-color-surface-raised)" in fixed_header
+    row_scroller = css.split(".storage-archive-browser-table-wrap {", 1)[1].split("}", 1)[0]
+    assert "overflow-y: auto" in row_scroller
     header_cells = css.split(".storage-archive-browser-table-header > span {", 1)[1].split("}", 1)[0]
     assert "background: var(--ui-color-surface-raised)" in header_cells
     browser_renderer = script.split("function renderStorageArchiveBrowser", 1)[1].split("async function loadRepositoryArchiveFiles", 1)[0]
     assert '<div class="storage-archive-browser-table" role="table">' in browser_renderer
+    assert '<div class="storage-archive-browser-table-wrap" role="rowgroup">' in browser_renderer
     assert '<table' not in browser_renderer
     assert "download" not in browser_renderer.lower()
     assert "restore" not in browser_renderer.lower()
