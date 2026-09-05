@@ -132,6 +132,13 @@ coordinator work; no such endpoint exists in this phase.
 
 ## Confirmation, quiescence and cron
 
+The approved user-facing sequence is specified in
+[contract C4.1](immutable-job-identity.md#c41-approved-user-initiated-migration-assistant-479):
+automatic read-only detection, explicit preparation, verified snapshot,
+mandatory user backup-check pause, then a separate explicit apply action.
+This remains #479 implementation work; the foundation does not expose an
+assistant or turn snapshot completion/acknowledgement into automatic execution.
+
 `verify_preconditions` denies by default. It requires an applicable pending
 plan, a verified snapshot, an explicit approval tied to `plan_id` and the
 snapshot digest, and acknowledgement that an independent backup is required.

@@ -255,6 +255,64 @@ This validates states observed on each installation, not a claim that one
 production copy represents every user. Unknown states block before rewrites.
 Extend synthetic fixtures when new supported states are discovered.
 
+### C4.1 Approved user-initiated migration assistant (#479)
+
+Maintainer-approved on 2026-09-05. This is the required runtime flow for #479,
+not an activation of the phase-2 libraries. The visible steps below are migration
+execution steps, not the nine development issues.
+
+1. **Migration required.** Startup performs read-only detection. A required or
+   unclear migration keeps Borg Backup UI in maintenance, with normal plugin
+   functions and new scheduled/manual work blocked. Installation, startup and
+   opening the assistant are not consent to prepare or apply. Authentication,
+   migration status, safe diagnostics and protected recovery access remain
+   available. This does not block Unraid itself or its array/pool controls.
+2. **Prepare migration.** An explicit administrator action starts prerequisite
+   checks and preparation. Wait for existing backup/restore/test and detached
+   notification work to finish safely; never kill it to force migration.
+   Validate the actual mounted snapshot location and only then capture a
+   quiescent inventory. If required storage is unavailable, wait/block without
+   creating recovery data on an unmounted path. Persist the complete plan and
+   original UUID allocation only in the dedicated private state directory.
+3. **Create and verify backup.** Create the exact pre-change snapshot and
+   independently verify completeness, sizes and checksums. Show the storage
+   path, creation time, size and verification result. The application performs
+   this technical integrity check; users are not required to audit JSON files.
+4. **Mandatory pause: check and save the backup.** Offer an authenticated,
+   protected download/export and require the administrator to save and check
+   an independent copy. Explain that it may contain credentials or other
+   confidential data. Require explicit acknowledgement, for example: "I have
+   saved and checked a separate copy of the backup. I understand that it may
+   contain confidential data." Acknowledgement cannot prove an external copy
+   exists and never replaces automatic verification. Snapshot completion,
+   download and acknowledgement must not automatically start conversion.
+5. **Run migration now.** A second explicit administrator action authorizes
+   installation-data conversion, bound to this exact plan and snapshot digest.
+   Immediately recheck storage availability, snapshot integrity, unchanged
+   source/cron state and writer exclusion. Changes invalidate the previous
+   approval; do not silently generate a new plan under old consent. Display
+   apply and final-verification progress, with actionable masked failure
+   details. Only successful complete verification and the existing startup
+   gate permit normal operation and the scheduler to resume.
+
+Keep the current step, completed/remaining steps, waiting reason and any failure
+visible. Persist progress using the existing migration statuses and audit
+phases; UI progress must not imply that a pending step has already succeeded.
+Closing the browser or restarting the plugin retains maintenance and the
+original plan/UUIDs/snapshot/journal; it is not automatic apply consent or a
+return to normal operation. Reconnect must show the durable stage and permit
+only validated, explicit continuation of interrupted work. If the previously
+authorized backend operation is still running, reconnect only observes its
+progress; it must not start a duplicate operation. Unknown or inconsistent
+partial states remain blocked. After a migration failure, the existing requirement for a
+failure-free restart remains in force. A partial conversion has no general
+"cancel and resume normal operation" or automatic plugin-downgrade action.
+
+#479 acceptance tests must exercise both user actions, the compulsory snapshot
+pause, rejected/unbound approval, changed inputs after approval, unavailable
+storage, live workers, browser closure, restart and safe continuation. Bypassing
+the UI via an API call must not bypass the same authenticated state gates.
+
 ## C5. Owned storage and excluded data
 
 Resolve roots from configuration, not production paths in a migration script.
