@@ -1326,10 +1326,10 @@
 
 .storage-archive-browser-table thead {
   position: sticky;
-  top: 0;
+  top: -1px;
   z-index: 3;
   background: var(--ui-color-surface-raised);
-  box-shadow: 0 1px var(--ui-color-border);
+  box-shadow: 0 -1px var(--ui-color-surface-raised), 0 1px var(--ui-color-border);
 }
 
 .storage-archive-browser-table th,
@@ -1341,7 +1341,7 @@
 }
 
 .storage-archive-browser-table th {
-  background: inherit;
+  background: var(--ui-color-surface-raised);
   color: var(--ui-color-text-muted);
   font-size: var(--ui-font-size-xs);
   text-transform: uppercase;

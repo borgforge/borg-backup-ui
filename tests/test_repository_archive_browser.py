@@ -160,7 +160,11 @@ def test_repository_archive_browser_frontend_is_read_only_and_localized():
     assert "border-collapse: separate" in table_layout
     assert "border-spacing: 0" in table_layout
     assert "position: sticky" in sticky_header
+    assert "top: -1px" in sticky_header
     assert "background: var(--ui-color-surface-raised)" in sticky_header
+    header_cells = css.split(".storage-archive-browser-table th {", 1)[1].split("}", 1)[0]
+    assert "background: var(--ui-color-surface-raised)" in header_cells
+    assert "background: inherit" not in header_cells
     browser_renderer = script.split("function renderStorageArchiveBrowser", 1)[1].split("async function loadRepositoryArchiveFiles", 1)[0]
     assert "download" not in browser_renderer.lower()
     assert "restore" not in browser_renderer.lower()
