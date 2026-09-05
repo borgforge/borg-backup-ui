@@ -90,6 +90,7 @@ class BorgConfig:
     # 0 = kein Hard-Limit (bewusstes Default).
     # Grund: Initial-Backups (z. B. 1.5TB via 5MB/s) können mehrere Tage laufen.
     max_runtime_hours: int = 0
+    file_activity: bool = False
 
     @classmethod
     def from_config(cls, config: Dict[str, str]) -> "BorgConfig":
@@ -106,6 +107,14 @@ class BorgConfig:
         def _non_negative_int(key: str, default: int) -> int:
             return max(0, _int(key, default))
 
+        def _bool(key: str, default: bool = False) -> bool:
+            raw = str(config.get(key, "")).strip().lower()
+            if raw in {"1", "true", "yes", "on"}:
+                return True
+            if raw in {"0", "false", "no", "off"}:
+                return False
+            return default
+
         flag_raw = config.get("BORG_CHECK_FLAG_FILE", "/tmp/borg_last_check")
         return cls(
             keep_daily=_non_negative_int("BORG_KEEP_DAILY", 7),
@@ -117,6 +126,7 @@ class BorgConfig:
             repo=config.get("BORG_REPO", ""),
             compression=config.get("BORG_COMPRESSION", "lz4") or "lz4",
             checkpoint_interval=_int("BORG_CHECKPOINT_INTERVAL", 1800),
+            file_activity=_bool("BORG_FILE_ACTIVITY"),
             max_runtime_hours=_non_negative_int("BORG_MAX_RUNTIME_HOURS", 0),
         )
 
@@ -356,15 +366,22 @@ class BorgRunner:
             f"--compression={self.config.compression}",
             f"--checkpoint-interval={self.config.checkpoint_interval}",
             "--files-cache=ctime,size",
-            *exclude_args,
-            archive,
-        ] + [str(p) for p in paths]
+        ]
+        if self.config.file_activity:
+            cmd.extend(["--list", "--filter=AME"])
+        cmd.extend(exclude_args)
+        cmd.append(archive)
+        cmd.extend(str(path) for path in paths)
 
         _log_section("PHASE 3: BORG BACKUP (CREATE)")
         logger.info("Repository: %s", repo)
         logger.info("Backup paths: %s", " ".join(str(p) for p in paths))
         logger.info("Excluded paths: %s", ", ".join(str(p) for p in exclusions) or "none")
         logger.info("Performance: Compression=%s", self.config.compression)
+        logger.info(
+            "File activity output: %s",
+            "enabled (A/M/E)" if self.config.file_activity else "disabled",
+        )
         logger.info("Cache: %s", os.environ.get("BORG_CACHE_DIR", ""))
         logger.info("")
         logger.info(

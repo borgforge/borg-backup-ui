@@ -23,6 +23,19 @@ _RUNTIME_MODES = {"all", "selected", "none"}
 _DOCKER_RUNTIME_MODES = _RUNTIME_MODES | {"except_selected"}
 
 
+def _bool_value(value, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    raw = str(value).strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off", ""}:
+        return False
+    return default
+
+
 def _runtime_modes(kind: str) -> set[str]:
     return _DOCKER_RUNTIME_MODES if kind == "docker" else _RUNTIME_MODES
 
@@ -236,6 +249,7 @@ def validate_params(
     if not params.get("job_name", "").strip():
         raise ValueError("Job name must not be empty")
     retention = _retention_from_params(params)
+    params["file_activity"] = _bool_value(params.get("file_activity"), default=False)
     for period, value in retention.items():
         params[f"keep_{period}"] = value
     raw_sources = normalize_source_paths(params.get("source_paths"))
@@ -348,6 +362,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     meta_source_paths: list[str] = []
     meta_exclude_paths: list[str] = []
     meta_compression = ""
+    meta_file_activity = False
     meta_keep_daily = ""
     meta_keep_weekly = ""
     meta_keep_monthly = ""
@@ -382,6 +397,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
             meta = candidate
             meta_exclude_paths = _exclude_paths(meta.get("exclude_paths", []))
             meta_compression = str(meta.get("compression") or "").strip()
+            meta_file_activity = _bool_value(meta.get("file_activity"), default=False)
             meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
             meta_keep_daily = str(meta_ret.get("daily") or "").strip()
             meta_keep_weekly = str(meta_ret.get("weekly") or "").strip()
@@ -446,6 +462,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "mount_before_run": meta_mount_before_run,
         "unmount_after_run": meta_unmount_after_run,
         "compression": compression,
+        "file_activity": meta_file_activity,
         "encryption": str(repository_context.get("encryption") or ""),
         "passphrase": "",
         "keep_daily": meta_keep_daily or conf.get(f"RETENTION_{_type_upper(type_id)}_DAILY", "7"),
@@ -476,6 +493,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     docker_control = _runtime_control_from_params(params, "docker")
     vm_control = _runtime_control_from_params(params, "vm")
     retention = _retention_from_params(params)
+    file_activity = _bool_value(params.get("file_activity"), default=False)
     use_docker = docker_control["mode"] != "none"
     use_vm = vm_control["mode"] != "none"
 
@@ -542,6 +560,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "docker_selected": docker_control["selected"],
             "vm_selected": vm_control["selected"],
             "retention": retention,
+            "file_activity": file_activity,
         },
         "steps": steps,
         "step_codes": step_codes,
@@ -559,6 +578,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     icon = str(params.get("icon", "")).strip().lower()
     icon_color = str(params.get("icon_color", "")).strip().lower()
     retention = _retention_from_params(params)
+    file_activity = _bool_value(params.get("file_activity"), default=False)
     selected_repo = _repository_from_params(params, ui_config)
     if not selected_repo:
         raise ValueError("Selected repository object was not found")
@@ -623,6 +643,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "docker_control": docker_control,
         "vm_control": vm_control,
         "compression": str(params.get("compression", "lz4")).strip() or "lz4",
+        "file_activity": file_activity,
         "retention": retention,
         "created_at": existing.get("created_at", now_iso),
         "updated_at": now_iso,
