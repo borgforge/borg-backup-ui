@@ -1319,48 +1319,51 @@
 .storage-archive-browser-table {
   width: 100%;
   min-width: 34rem;
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
 }
 
-.storage-archive-browser-table thead {
+.storage-archive-browser-table-header,
+.storage-archive-browser-table-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) 7rem 11rem;
+}
+
+.storage-archive-browser-table-header {
   position: sticky;
-  top: -1px;
+  top: 0;
   z-index: 3;
-  background: var(--ui-color-surface-raised);
-  box-shadow: 0 -1px var(--ui-color-surface-raised), 0 1px var(--ui-color-border);
-}
-
-.storage-archive-browser-table th,
-.storage-archive-browser-table td {
-  padding: var(--ui-space-2) var(--ui-space-3);
   border-bottom: 1px solid var(--ui-color-border);
-  text-align: left;
-  vertical-align: middle;
+  background: var(--ui-color-surface-raised);
 }
 
-.storage-archive-browser-table th {
+.storage-archive-browser-table-header > span,
+.storage-archive-browser-table-row > div {
+  padding: var(--ui-space-2) var(--ui-space-3);
+  text-align: left;
+}
+
+.storage-archive-browser-table-header > span {
   background: var(--ui-color-surface-raised);
   color: var(--ui-color-text-muted);
   font-size: var(--ui-font-size-xs);
   text-transform: uppercase;
 }
 
-.storage-archive-browser-table th:first-child { width: auto; }
-.storage-archive-browser-table th:nth-child(2) { width: 7rem; }
-.storage-archive-browser-table th:nth-child(3) { width: 11rem; }
-.storage-archive-browser-table tr:last-child td { border-bottom: 0; }
+.storage-archive-browser-table-row {
+  border-bottom: 1px solid var(--ui-color-border);
+}
 
-.storage-archive-browser-table td:first-child,
-.storage-archive-browser-table td:first-child span,
-.storage-archive-browser-table td:first-child button {
+.storage-archive-browser-table-row:last-child { border-bottom: 0; }
+
+.storage-archive-browser-table-row > div:first-child,
+.storage-archive-browser-table-row > div:first-child span,
+.storage-archive-browser-table-row > div:first-child button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.storage-archive-browser-table td:first-child button {
+.storage-archive-browser-table-row > div:first-child button {
   display: block;
   max-width: 100%;
   padding: 0;
@@ -1372,8 +1375,8 @@
   cursor: pointer;
 }
 
-.storage-archive-browser-table td:nth-child(2),
-.storage-archive-browser-table td:nth-child(3) {
+.storage-archive-browser-table-row > div:nth-child(2),
+.storage-archive-browser-table-row > div:nth-child(3) {
   color: var(--ui-color-text-muted);
   font-size: var(--ui-font-size-xs);
 }

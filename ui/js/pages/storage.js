@@ -677,15 +677,15 @@ function renderStorageArchiveBrowser(browser) {
   } else if (!browser.files.length) {
     content = `<div class="storage-archive-browser-state"><span>${escHtml(storageT('storage.repositoryArchiveBrowserEmpty'))}</span></div>`;
   } else {
-    content = `<div class="storage-archive-browser-table-wrap"><table class="storage-archive-browser-table"><thead><tr><th>${escHtml(storageT('storage.repositoryArchiveBrowserName'))}</th><th>${escHtml(storageT('storage.repositoryArchiveBrowserSize'))}</th><th>${escHtml(storageT('storage.repositoryArchiveBrowserModified'))}</th></tr></thead><tbody>${browser.files.map((file) => {
+    content = `<div class="storage-archive-browser-table-wrap"><div class="storage-archive-browser-table" role="table"><div class="storage-archive-browser-table-header" role="row"><span role="columnheader">${escHtml(storageT('storage.repositoryArchiveBrowserName'))}</span><span role="columnheader">${escHtml(storageT('storage.repositoryArchiveBrowserSize'))}</span><span role="columnheader">${escHtml(storageT('storage.repositoryArchiveBrowserModified'))}</span></div>${browser.files.map((file) => {
       const type = String(file.type || '-');
       const name = String(file.name || '');
       const label = `${storageArchiveEntryIcon(type)} ${escHtml(name)}`;
       const nameCell = type === 'd'
         ? `<button type="button" data-storage-action="browse-repository-archive-path" data-path="${escHtml(file.path || '')}">${label}</button>`
         : `<span>${label}</span>`;
-      return `<tr><td>${nameCell}</td><td>${type === 'd' ? '—' : escHtml(storageFormatBytes(file.size))}</td><td>${escHtml(storageFormatDateTime(file.mtime))}</td></tr>`;
-    }).join('')}</tbody></table></div>`;
+      return `<div class="storage-archive-browser-table-row" role="row"><div role="cell">${nameCell}</div><div role="cell">${type === 'd' ? '—' : escHtml(storageFormatBytes(file.size))}</div><div role="cell">${escHtml(storageFormatDateTime(file.mtime))}</div></div>`;
+    }).join('')}</div></div>`;
   }
   return `<section class="storage-archive-browser" aria-label="${escHtml(storageT('storage.repositoryArchiveBrowserTitle'))}">
     <header><div><small>${escHtml(storageT('storage.repositoryArchiveBrowserReadOnly'))}</small><h3>${escHtml(browser.archive)}</h3></div><button type="button" class="storage-archive-browser-close" data-storage-action="close-repository-archive" aria-label="${escHtml(storageT('storage.repositoryArchiveBrowserClose'))}">×</button></header>
