@@ -82,6 +82,16 @@
       "target": "UUID filename/payload, exact aliases, full prefix and preserved effective settings; remove mutable identity from discovery and editing.",
       "files": [
         {
+          "path": "api/job_model.py",
+          "anchor": "validate_job",
+          "role": "strict canonical schema-v4 identity, prefix lifecycle and settings-preserving wizard patches (#473)"
+        },
+        {
+          "path": "api/job_store.py",
+          "anchor": "save_job_transaction",
+          "role": "strict canonical inventory reads and UUID repository assignment transaction; general API cutover remains #474"
+        },
+        {
           "path": "api/jobs_api.py",
           "anchor": "discover_jobs",
           "role": "metadata discovery and JobManager identity/runtime access; lazy migrations are not read-only"

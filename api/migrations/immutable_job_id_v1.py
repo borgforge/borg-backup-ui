@@ -354,6 +354,15 @@ def _plan_jobs(scan, jobs_dir, conf, allocator, journal):
         for key in _LEGACY:
             target.pop(key, None)
         target.update(schema_version=4, job_id=job_id)
+        # Share the target model's validation, but never its creation/write path.
+        try:
+            try:
+                from ..job_model import validate_job
+            except ImportError:
+                from job_model import validate_job
+            validate_job(target, filename=job_id + ".json")
+        except ValueError as exc:
+            _fail(getattr(exc, "api_code", "invalid_job_settings"), source)
         jobs[job_id], sources[job_id] = target, source
     if seen_legacy and canonical_ids:
         # A mixed on-disk cutover is not a new installation to re-plan. The

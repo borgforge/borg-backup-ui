@@ -5,7 +5,9 @@ window.BBUI = window.BBUI || {};
 window.BBUI.wizardState = window.BBUI.wizardState || {
   step: 1,
   mode: 'create',
-  existingJobKey: '',
+  jobId: '',
+  revision: '',
+  prefixEdited: false,
   original: null,
   storages: [],
   selectedStorageKey: '',
@@ -45,6 +47,14 @@ function wizardApiErrorMessage(payload, status = 0) {
   const data = payload && typeof payload === 'object' ? payload : {};
   if (data.code === 'retention_invalid') return wizardT('wizard.validationRetentionInvalid');
   if (data.code === 'retention_all_zero') return wizardT('wizard.validationRetentionRequired');
+  const identityErrors = {
+    invalid_archive_prefix: 'validationArchivePrefixFormat',
+    job_edit_conflict: 'jobEditConflict',
+    legacy_wizard_request: 'legacyWizardRequest',
+    job_migration_required: 'jobMigrationRequired',
+    ambiguous_archive_ownership: 'ambiguousArchiveOwnership',
+  };
+  if (identityErrors[data.code]) return wizardT(`wizard.${identityErrors[data.code]}`);
   for (const key of ['details', 'message', 'error']) {
     const value = String(data[key] || '').trim();
     if (value && value !== String(data.code || '').trim()) return value;
@@ -112,13 +122,26 @@ function _wizardUniqueList(values) {
   return out;
 }
 
-function _wizardArchivePrefixFromTypeId(typeId) {
-  const clean = String(typeId || '').trim().toLowerCase();
-  return /^[a-z0-9_]+$/.test(clean) ? `${clean}-backup` : '';
+function wizardValidArchivePrefix(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_.-]+$/.test(value) && value !== '.' && value !== '..';
+}
+
+function wizardArchiveNamePreview(prefix) {
+  return wizardValidArchivePrefix(prefix) ? `${prefix}-YYYY-MM-DD_HH-mm-ss` : '';
+}
+
+function wizardSuggestArchivePrefix() {
+  if (wizardState.mode !== 'create' || wizardState.prefixEdited) return;
+  const name = document.getElementById('wiz-job-name')?.value || '';
+  const suggestion = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9_.-]+/g, '-').replace(/^[.-]+|[.-]+$/g, '');
+  document.getElementById('wiz-archive-prefix').value = suggestion ? `${suggestion}-backup` : '';
+  wizardRenderArchivePrefixSummary();
 }
 
 function wizardArchivePrefixRows() {
-  const currentPrefix = _wizardArchivePrefixFromTypeId(document.getElementById('wiz-type-id')?.value || '');
+  const value = document.getElementById('wiz-archive-prefix')?.value || '';
+  const currentPrefix = wizardValidArchivePrefix(value) ? value : '';
   const prefixes = _wizardUniqueList([
     currentPrefix,
     ...(Array.isArray(wizardState.archivePrefixes) ? wizardState.archivePrefixes : []),
@@ -136,14 +159,14 @@ function wizardRenderArchivePrefixSummary() {
   const el = document.getElementById('wiz-archive-prefix-summary');
   if (!el) return;
   const rows = wizardArchivePrefixRows();
-  if (!rows.length) {
+  if (!rows.some((row) => row.current)) {
     el.hidden = true;
     el.innerHTML = '';
     return;
   }
   el.hidden = false;
   const current = rows.find((row) => row.current) || rows[0];
-  el.innerHTML = `<span>${escHtml(wizardT('wizard.archivePatternCurrentLabel'))}</span><code class="wizard-archive-prefix-chip is-current">${escHtml(current.filter)}</code>${wizardArchivePrefixPopover(rows)}`;
+  el.innerHTML = `<span>${escHtml(wizardT('wizard.archiveNamePreview'))}</span><code class="wizard-archive-prefix-chip is-current">${escHtml(wizardArchiveNamePreview(current.prefix))}</code>${wizardArchivePrefixPopover(rows)}`;
 }
 
 function wizardArchivePrefixPopover(rows) {
@@ -153,6 +176,7 @@ function wizardArchivePrefixPopover(rows) {
     <button type="button" class="archive-pattern-popover-button" aria-haspopup="true" aria-label="${escHtml(wizardT('wizard.archivePatternHistoryButton'))}">i</button>
     <span class="archive-pattern-popover-panel" role="tooltip">
       <strong>${escHtml(wizardT('wizard.archivePatternHistoryTitle'))}</strong>
+      <span>${escHtml(wizardT('wizard.archivePrefixHistoryHint'))}</span>
       ${cleanRows.map((row) => `<span><em>${escHtml(wizardT(row.current ? 'wizard.archiveFilterCurrentBadge' : 'wizard.archiveFilterPreviousBadge'))}</em><code>${escHtml(row.filter)}</code></span>`).join('')}
     </span>
   </span>`;
@@ -512,7 +536,9 @@ function openWizard() {
   wizardBindCloseDirtyTracking();
   wizardBindRuntimeControls();
   wizardState.mode = 'create';
-  wizardState.existingJobKey = '';
+  wizardState.jobId = '';
+  wizardState.revision = '';
+  wizardState.prefixEdited = false;
   wizardState.original = null;
   wizardState.step = 1;
   wizardState.unlockedStep = 1;
@@ -521,7 +547,7 @@ function openWizard() {
   const title = document.getElementById('wizard-modal-title');
   if (title) title.textContent = wizardT('wizard.newTitle');
   document.getElementById('wiz-job-name').value = '';
-  document.getElementById('wiz-type-id').value = '';
+  document.getElementById('wiz-archive-prefix').value = '';
   document.getElementById('wiz-icon').value = '';
   document.getElementById('wiz-icon-color').value = '';
   document.getElementById('wiz-description').value = '';
@@ -597,7 +623,9 @@ function _wizardFillFromJob(job) {
   wizardState.remoteRepoStatus = null;
   wizardState.archivePrefixes = _wizardUniqueList(Array.isArray(job.archive_prefixes) ? job.archive_prefixes : []);
   document.getElementById('wiz-job-name').value = job.job_name || '';
-  document.getElementById('wiz-type-id').value = (job.type_id || '').toLowerCase();
+  document.getElementById('wiz-archive-prefix').value = job.archive_prefix || '';
+  wizardState.prefixEdited = true;
+  wizardState.revision = job.revision || '';
   document.getElementById('wiz-icon').value = (job.icon || '').toLowerCase();
   document.getElementById('wiz-icon-color').value = (job.icon_color || '').toLowerCase();
   document.getElementById('wiz-description').value = job.description || '';
@@ -627,28 +655,36 @@ function _wizardFillFromJob(job) {
   wizardAutoFill();
   if (job.repository_assignment_error) {
     _wizardShowError(2, wizardT('wizard.repositoryAssignmentRepair', {
-      job: job.job_name || job.job_key || '',
+      job: job.job_name || '',
       message: job.repository_assignment_error,
     }));
   }
 }
 
-async function openWizardForJob(jobKey, mode = 'edit') {
+async function openWizardForJob(jobId, mode = 'edit') {
   openWizard();
   wizardState.mode = mode;
-  wizardState.existingJobKey = jobKey;
+  wizardState.jobId = jobId;
   const title = document.getElementById('wizard-modal-title');
-  if (title) title.textContent = wizardT('wizard.editTitle');
+  if (title) title.textContent = wizardT(mode === 'duplicate' ? 'wizard.duplicateTitle' : 'wizard.editTitle');
   _setWizardFormDisabled(true);
   try {
     await wizardState.loadingPromise;
-    const res = await fetch(`/api/wizard/job?job_key=${encodeURIComponent(jobKey)}`);
+    const res = await fetch(`/api/wizard/job?job_id=${encodeURIComponent(jobId)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
     const job = data.job || {};
+    if (job.job_id !== jobId) throw new Error(wizardT('wizard.identityMismatch'));
     _wizardFillFromJob(job);
+    if (mode === 'duplicate') {
+      wizardState.archivePrefixes = [];
+      document.getElementById('wiz-job-name').value = wizardT('wizard.duplicateName', { name: job.job_name });
+      document.getElementById('wiz-archive-prefix').value = `copy-${job.archive_prefix}`;
+      _wizardApplySchedule(null);
+      wizardRenderArchivePrefixSummary();
+    }
     wizardState.original = {
-      type_id: (job.type_id || '').toLowerCase(),
+      archive_prefix: job.archive_prefix || '',
       location: job.location || 'local',
       repository_key: String(job.repository_key || '').trim(),
       use_docker: !!job.use_docker,
@@ -656,7 +692,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
       docker_control: job.docker_control || { mode: job.use_docker ? 'all' : 'none', selected: [] },
       vm_control: job.vm_control || { mode: job.use_vm ? 'all' : 'none', selected: [] },
     };
-    wizardState.originalSchedule = job.schedule && typeof job.schedule === 'object'
+    wizardState.originalSchedule = mode !== 'duplicate' && job.schedule && typeof job.schedule === 'object'
       ? { cron: String(job.schedule.cron || '').trim(), enabled: !!job.schedule.enabled }
       : null;
     wizardState.unlockedStep = 9;
@@ -669,20 +705,6 @@ async function openWizardForJob(jobKey, mode = 'edit') {
     _setWizardFormDisabled(false);
     _wizardUpdateStepNavigation();
   }
-}
-
-function wizardNeedsScriptRegeneration(params) {
-  if ((wizardState.mode || 'create') === 'create') return true;
-  const orig = wizardState.original;
-  if (!orig) return true;
-  if (params.type_id !== orig.type_id) return true;
-  if (params.location !== orig.location) return true;
-  if (params.repository_key !== orig.repository_key) return true;
-  if (!!params.use_docker !== !!orig.use_docker) return true;
-  if (!!params.use_vm !== !!orig.use_vm) return true;
-  if (JSON.stringify(params.docker_control || {}) !== JSON.stringify(orig.docker_control || {})) return true;
-  if (JSON.stringify(params.vm_control || {}) !== JSON.stringify(orig.vm_control || {})) return true;
-  return false;
 }
 
 function closeWizard(options = {}) {
@@ -755,8 +777,7 @@ function wizardAutoFill() {
   wizardSetStorageOptions();
   const storage = wizardSelectedStorage();
   wizardUpdateStorageTargetHint(storage);
-  // If icon not explicitly chosen, keep "auto" (empty) and let rendering
-  // derive it from backup_type/type_id.
+  // The default icon is independent of names and archive prefixes.
   if (iconEl && iconEl.value === '') iconEl.value = '';
   wizardUpdateIconPreview();
 }
@@ -769,8 +790,7 @@ function wizardIconMarkup(kind) {
 function wizardEffectiveIcon() {
   const chosen = (document.getElementById('wiz-icon')?.value || '').trim().toLowerCase();
   if (chosen) return chosen;
-  const typeId = (document.getElementById('wiz-type-id')?.value || '').trim().toLowerCase();
-  return typeId || 'sonstiges';
+  return 'sonstiges';
 }
 
 function wizardUpdateIconPreview() {
@@ -838,12 +858,11 @@ function _wizardCollectParams() {
   const dockerMode = _wizardRuntimeMode('docker');
   const vmMode = _wizardRuntimeMode('vm');
   return {
-    type_id:      (document.getElementById('wiz-type-id').value || '').trim().toLowerCase(),
+    archive_prefix: document.getElementById('wiz-archive-prefix').value || '',
     icon:         (document.getElementById('wiz-icon').value || '').trim().toLowerCase(),
     icon_color:   (document.getElementById('wiz-icon-color').value || '').trim().toLowerCase(),
     job_name:     (document.getElementById('wiz-job-name').value || '').trim(),
     description:  (document.getElementById('wiz-description').value || '').trim(),
-    location:     document.getElementById('wiz-location').value,
     storage_key: String(storage?.storage_key || '').trim(),
     use_docker:   dockerMode !== 'none',
     use_vm:       vmMode !== 'none',
@@ -869,7 +888,8 @@ function _wizardCollectParams() {
     keep_monthly: document.getElementById('wiz-keep-monthly').value,
     keep_yearly:  document.getElementById('wiz-keep-yearly').value,
     _wizard_mode: wizardState.mode || 'create',
-    existing_job_key: wizardState.existingJobKey || '',
+    job_id: wizardState.jobId || undefined,
+    expected_revision: wizardState.revision || undefined,
   };
 }
 
@@ -1176,9 +1196,9 @@ function _wizardValidate(step) {
   const p = _wizardCollectParams();
   if (step === 1) {
     if (!p.job_name) { _wizardShowError(1, wizardT('wizard.validationJobName')); return false; }
-    if (!p.type_id)  { _wizardShowError(1, wizardT('wizard.validationTypeId')); return false; }
-    if (!/^[a-z0-9_]+$/.test(p.type_id)) {
-      _wizardShowError(1, wizardT('wizard.validationTypeFormat'));
+    if (!p.archive_prefix) { _wizardShowError(1, wizardT('wizard.validationArchivePrefix')); return false; }
+    if (!wizardValidArchivePrefix(p.archive_prefix)) {
+      _wizardShowError(1, wizardT('wizard.validationArchivePrefixFormat'));
       return false;
     }
   }
@@ -1306,7 +1326,8 @@ async function _wizardPreview() {
     const remoteRepo = flow.remote_repo && typeof flow.remote_repo === 'object' ? flow.remote_repo : null;
     wizardState.remoteRepoStatus = remoteRepo;
     const lines = [];
-    lines.push(wizardT('wizard.previewJob', { value: flow.job_key || '-' }));
+    lines.push(wizardT('wizard.previewJob', { value: flow.job_name || '-' }));
+    lines.push(wizardT('wizard.previewArchiveName', { value: flow.archive_name_preview || '-' }));
     lines.push(wizardT('wizard.previewLocation', { value: summary.location || '-' }));
     lines.push(wizardT('wizard.previewRepository', { value: summary.repo || '-' }));
     if (summary.location === 'storagebox' && remoteRepo) {
@@ -1412,15 +1433,23 @@ async function saveWizardJob() {
     const data = await res.json();
     if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
 
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(data.job_id || '')) {
+      throw new Error(wizardT('wizard.identityMismatch'));
+    }
+    // A schedule error must not make a retry create or duplicate another job.
+    wizardState.jobId = data.job_id;
+    wizardState.revision = data.revision || '';
+    wizardState.mode = 'edit';
+
     // Save schedule changes and surface crontab/application failures.
     const schedEnabled = document.getElementById('wiz-sched-enabled').checked;
     if (schedEnabled || wizardState.originalSchedule) {
-      const jobKey = `${params.type_id}_${params.location}`;
+      const jobId = data.job_id;
       const cron   = _wizardBuildCron();
       const sRes = await fetch('/api/schedules', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_key: jobKey, cron, enabled: schedEnabled }),
+        body: JSON.stringify({ job_id: jobId, cron, enabled: schedEnabled }),
       });
       const sData = await sRes.json().catch(() => ({}));
       if (!sRes.ok) {
@@ -1429,14 +1458,14 @@ async function saveWizardJob() {
         }));
       }
       const schedules = window.BBUI.core.getSchedulesData();
-      schedules[jobKey] = { cron, enabled: schedEnabled };
+      schedules[jobId] = { cron, enabled: schedEnabled };
       window.BBUI.core.setSchedulesData(schedules);
     }
 
     closeWizard({ force: true });
     jobsState.loaded = false;
     await refreshJobs();
-    showMsg('jobs-message', 'success', wizardT('wizard.saved', { key: `${params.type_id}_${params.location}` }));
+    showMsg('jobs-message', 'success', wizardT('wizard.saved', { key: data.job_name || params.job_name }));
     await window.BBUI?.setupWizard?.resumeAfterExternalSave?.('job');
   } catch (err) {
     errEl.textContent = wizardT('wizard.saveError', { message: err.message });
@@ -1528,7 +1557,8 @@ function wizardSchedulePreview() {
 window.addEventListener?.('bbui:language-changed', () => {
   const title = document.getElementById('wizard-modal-title');
   if (title) {
-    const titleKey = wizardState.mode === 'edit' ? 'wizard.editTitle' : 'wizard.newTitle';
+    const titleKey = wizardState.mode === 'duplicate' ? 'wizard.duplicateTitle'
+      : (wizardState.mode === 'edit' ? 'wizard.editTitle' : 'wizard.newTitle');
     title.textContent = wizardT(titleKey);
   }
   wizardSetStorageOptions();

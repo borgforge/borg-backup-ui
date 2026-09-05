@@ -6,6 +6,17 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #473 (integration work for #447; not released)
+- Added strict schema-v4 job validation, UUID-named metadata and canonical
+  create/edit/duplicate operations, retaining unexposed operational settings.
+- Replaced Type ID in the wizard with the complete archive prefix, an exact
+  timestamp-pattern preview and retained prefix history in German and English.
+- Wizard requests use job_id; schedule save retries reuse the returned ID.
+  Added stale-editor detection and strict repository ownership checks.
+- Legacy/corrupt inputs are rejected without implicit conversion. UUID runtime,
+  scheduling, general inventory APIs and the startup migration gate remain
+  subsequent phases; no independently installable package is produced.
+
 ### Issue #472 (integration work for #447; not released)
 - Added an inactive, read-only migration inventory and UUID planner with exact
   legacy-reference mapping, archive ownership checks and preserved history.

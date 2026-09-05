@@ -288,9 +288,12 @@
     document.getElementById('wizard-cancel-btn')?.addEventListener('click', closeWizard);
     document.getElementById('wizard-next-btn')?.addEventListener('click', wizardNext);
     document.getElementById('wizard-save-btn')?.addEventListener('click', saveWizardJob);
-    document.getElementById('wiz-job-name')?.addEventListener('input', () => wizardClearError(1));
-    document.getElementById('wiz-type-id')?.addEventListener('input', () => {
-      wizardAutoFill();
+    document.getElementById('wiz-job-name')?.addEventListener('input', () => {
+      wizardSuggestArchivePrefix();
+      wizardClearError(1);
+    });
+    document.getElementById('wiz-archive-prefix')?.addEventListener('input', () => {
+      wizardState.prefixEdited = true;
       wizardRenderArchivePrefixSummary();
       wizardClearError(1);
     });

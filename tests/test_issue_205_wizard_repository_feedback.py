@@ -1,3 +1,4 @@
+from canonical_wizard_support import canonical_fixture
 import json
 import subprocess
 import sys
@@ -152,7 +153,8 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
     }]})
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
 
-    loaded = load_job_for_wizard("flash_local", scripts_dir, config)
+    ids = canonical_fixture(config)
+    loaded = load_job_for_wizard(ids["flash_local"], scripts_dir, config)
 
     assert loaded["schedule"] == {"cron": "10 6 * * 2", "enabled": True}
 
@@ -210,7 +212,8 @@ def test_edit_wizard_preserves_schedule_inventory_values(
     }]})
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
 
-    loaded = load_job_for_wizard("flash_local", scripts_dir, config)
+    ids = canonical_fixture(config)
+    loaded = load_job_for_wizard(ids["flash_local"], scripts_dir, config)
 
     assert loaded["schedule"] == {"cron": cron, "enabled": enabled}
 
@@ -224,7 +227,7 @@ def test_job_wizard_ui_preloads_schedules_and_surfaces_save_failures() -> None:
     assert "frequency = 'monthly'" in script
     assert "scheduleSaveError" in script
     assert "schedule save failure is non-fatal" not in script
-    assert "body: JSON.stringify({ job_key: jobKey, cron, enabled: schedEnabled })" in script
+    assert "body: JSON.stringify({ job_id: jobId, cron, enabled: schedEnabled })" in script
 
 
 def test_job_wizard_does_not_mount_smb_profiles_during_job_creation() -> None:

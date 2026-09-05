@@ -113,42 +113,29 @@ def test_browse_restore_falls_back_to_unfiltered_archive_list_without_prefix(tmp
 
 
 def test_save_job_preserves_previous_archive_prefixes(tmp_path: Path, monkeypatch) -> None:
+    from canonical_wizard_support import canonical_fixture
+    from repositories_api import write_repository_store
+    from storage_objects_api import write_storage_store
+
     scripts_dir = tmp_path / "scripts"
-    jobs_dir = tmp_path / "config" / "jobs"
-    jobs_dir.mkdir(parents=True)
-    (jobs_dir / "oldtype_local.json").write_text(json.dumps({
-        "schema_version": 2,
-        "job_key": "oldtype_local",
-        "name": "Old type",
-        "backup_type": "oldtype",
-        "archive_prefixes": ["oldertype-backup"],
-        "location": "local",
-        "repository_key": "repo-shared",
-    }), encoding="utf-8")
-    captured: dict = {}
-
-    def fake_transaction(config, metadata_path, metadata, repository_key, job_key, **kwargs):
-        captured["metadata"] = metadata
-        captured["metadata_path"] = metadata_path
-        captured["repository_key"] = repository_key
-        captured["job_key"] = job_key
-
-    monkeypatch.setattr(wizard_api, "_repository_from_params", lambda _params, _config: {
-        "repository_key": "repo-shared",
-    })
-    monkeypatch.setattr("repositories_api.save_job_repository_transaction", fake_transaction)
-
-    wizard_api.save_job({
-        "existing_job_key": "oldtype_local",
-        "type_id": "newtype",
-        "location": "local",
-        "repository_key": "repo-shared",
-        "source_paths": ["/mnt/user/appdata"],
-    }, scripts_dir, tmp_path, {"BACKUP_SCRIPTS_DIR": str(tmp_path)})
-
-    assert captured["job_key"] == "newtype_local"
-    assert captured["metadata"]["archive_prefixes"] == [
-        "newtype-backup",
-        "oldtype-backup",
-        "oldertype-backup",
-    ]
+    source = tmp_path / "source"
+    source.mkdir()
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "local", "storage_type": "local", "location": "local", "base_path": str(tmp_path / "repo-root"),
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_shared", "storage_key": "local", "relative_path": "repo", "encryption": "none",
+    }]})
+    canonical_fixture(config)
+    original = wizard_api.save_job({
+        "job_name": "Original", "archive_prefix": "oldertype-backup",
+        "repository_key": "repo_shared", "source_paths": [str(source)],
+    }, scripts_dir, tmp_path, config)
+    for prefix in ["oldtype-backup", "newtype"]:
+        result = wizard_api.save_job({
+            "_wizard_mode": "edit", "job_id": original["job_id"], "archive_prefix": prefix,
+        }, scripts_dir, tmp_path, config)
+    assert result["job_id"] == original["job_id"]
+    metadata = json.loads(Path(result["metadata_path"]).read_text())
+    assert metadata["archive_prefixes"] == ["newtype", "oldtype-backup", "oldertype-backup"]

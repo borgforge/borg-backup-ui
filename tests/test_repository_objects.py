@@ -1,3 +1,4 @@
+from canonical_wizard_support import canonical_fixture
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import inspect
@@ -167,18 +168,20 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     })
     repo_key = created["repository"]["repository_key"]
     params = {
-        "type_id": "photos",
+        "archive_prefix": "photos-backup",
         "job_name": "Photos",
         "source_paths": [str(source)],
         "repository_key": repo_key,
         "location": "local",
     }
 
+    canonical_fixture(config)
     result = save_job(params, scripts, tmp_path, config)
     job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
-    store = read_repository_store(config)
+    from job_store import read_repositories
+    store = read_repositories(tmp_path / "config" / "repositories.json")
     assert job["repository_key"] == repo_key
-    assert job["schema_version"] == 3
+    assert job["schema_version"] == 4
     assert job["source_paths"] == [str(source)]
     assert "repo" not in job
     assert "passphrase" not in job
@@ -186,10 +189,10 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     assert "create_repo_if_missing" not in job
     assert store["repositories"][0]["repository_key"] == repo_key
     assert store["repositories"][0]["repository_name"] == "borg-backup-photos"
-    assert store["repositories"][0]["job_name"] == "Photos"
     assert store["repositories"][0]["storage_key"].startswith("storage_local_")
     assert store["repositories"][0]["relative_path"] == "borg-backup-photos"
-    assert store["repositories"][0]["used_by"] == ["photos_local"]
+    assert store["repositories"][0]["job_ids"] == [result["job_id"]]
+    assert store["repositories"][0]["source_job_ids"] == [result["job_id"]]
     assert read_storage_store(config)["storages"][0]["base_path"] == "/mnt/backup"
 
     job["restore_test_policy"] = {
@@ -199,7 +202,7 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
         "level": 3,
     }
     Path(result["metadata_path"]).write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
-    save_job({**params, "existing_job_key": "photos_local"}, scripts, tmp_path, config)
+    save_job({**params, "_wizard_mode": "edit", "job_id": result["job_id"]}, scripts, tmp_path, config)
     updated_job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     assert updated_job["restore_test_policy"] == job["restore_test_policy"]
 

@@ -5,18 +5,16 @@ Backup jobs are stored as canonical JSON metadata and executed through the
 scriptless wizard runner.
 """
 
-import json
+from copy import deepcopy
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from job_source_paths import JOB_SCHEMA_VERSION, SourcePathValidationError, normalize_source_paths
-
-
-def _type_upper(type_id: str) -> str:
-    return re.sub(r"[^A-Z0-9]", "_", type_id.upper())
+from job_source_paths import normalize_source_paths
+from job_model import (JobValidationError, apply_wizard_changes, archive_name_preview,
+                       job_to_params, new_job_defaults, validate_archive_prefix, validate_job_id)
 
 
 _RUNTIME_MODES = {"all", "selected", "none"}
@@ -150,11 +148,15 @@ def _runtime_control_from_params(params: dict, kind: str, existing: Optional[dic
     existing = existing if isinstance(existing, dict) else {}
     legacy_key = "use_docker" if kind == "docker" else "use_vm"
     raw = params.get(f"{kind}_control")
+    if f"{kind}_control" in params and not isinstance(raw, dict):
+        raise JobValidationError("invalid_runtime_control", "Runtime control must be an object")
     source = raw if isinstance(raw, dict) else {}
     if not source and isinstance(existing.get(f"{kind}_control"), dict):
         source = existing.get(f"{kind}_control") or {}
 
     mode = str(source.get("mode") or "").strip().lower()
+    if source and mode not in _runtime_modes(kind):
+        raise JobValidationError("invalid_runtime_control", "Unsupported runtime control mode")
     if mode not in _runtime_modes(kind):
         mode = "all" if bool(params.get(legacy_key, False)) else "none"
 
@@ -240,14 +242,22 @@ def validate_params(
     ui_config: Optional[dict] = None,
     require_runtime_ack: bool = True,
 ) -> None:
-    """Wirft ValueError bei ungültigen Parametern."""
-    type_id = params.get("type_id", "").strip()
-    if not type_id:
-        raise ValueError("Type ID must not be empty")
-    if not re.fullmatch(r"[a-z0-9_]+", type_id):
-        raise ValueError("Type ID may contain only lowercase letters, digits, and underscores")
-    if not params.get("job_name", "").strip():
-        raise ValueError("Job name must not be empty")
+    """Validate effective wizard fields; never convert legacy metadata."""
+    from jobs_api import get_jobs_meta_dir
+    from job_store import read_jobs
+    mode, source_id = _request_identity(params)
+    if mode == "edit" and not allow_existing:
+        raise JobValidationError("invalid_wizard_mode", "Editing requires edit mode")
+    jobs = read_jobs(get_jobs_meta_dir(scripts_dir, data_root))
+    existing = jobs.get(source_id) if source_id else None
+    if source_id and existing is None:
+        raise JobValidationError("unknown_job_id", "Unknown job_id; editing cannot create a job")
+    effective = job_to_params(existing if existing is not None else new_job_defaults())
+    effective.update(deepcopy(params))
+    params.update(effective)
+    validate_archive_prefix(params.get("archive_prefix"))
+    if not isinstance(params.get("job_name"), str) or not params["job_name"].strip():
+        raise JobValidationError("invalid_job_name", "Job name must not be empty")
     retention = _retention_from_params(params)
     params["file_activity"] = _bool_value(params.get("file_activity"), default=False)
     for period, value in retention.items():
@@ -260,17 +270,16 @@ def validate_params(
     params["repo_path"] = _repository_path(selected_repo, ui_config)
     params["encryption"] = _repository_encryption(selected_repo, str(params.get("encryption", "repokey-blake2")))
 
-    location = params.get("location", "local")
-    if location not in ("local", "usb", "smb", "storagebox"):
-        raise ValueError(f"Invalid location: {location!r}")
     from repository_context import storage_by_key
     selected_storage_key = str(selected_repo.get("storage_key") or "").strip()
     selected_storage = storage_by_key(ui_config or {}, selected_storage_key)
     repository_location = str(selected_storage.get("location") or selected_storage.get("storage_type") or "").strip().lower()
     if repository_location == "ssh":
         repository_location = "storagebox"
-    if repository_location != location:
-        raise ValueError("Selected repository does not match the selected storage location")
+    location = repository_location
+    if location not in {"local", "usb", "smb", "storagebox"}:
+        raise ValueError("Selected repository has an unsupported storage location")
+    params["location"] = location
     requested_storage_key = str(params.get("storage_key") or "").strip()
     if requested_storage_key and requested_storage_key != selected_storage_key:
         raise ValueError("Selected repository does not belong to the selected storage target")
@@ -302,11 +311,8 @@ def validate_params(
         if not bool(vm_control.get("ack_domains_risk", False)):
             raise ValueError("VM domain backup risk must be acknowledged when not shutting down all VMs")
 
-    from jobs_api import get_jobs_meta_dir
-    job_key = f"{type_id}_{location}"
-    meta_target = get_jobs_meta_dir(scripts_dir, data_root) / f"{job_key}.json"
-    if meta_target.exists() and not allow_existing:
-        raise FileExistsError(f"Job already exists: {type_id}_{location}")
+    params["docker_control"] = docker_control
+    params["vm_control"] = vm_control
 
 
 def _repository_from_params(params: dict, ui_config: Optional[dict]) -> Optional[dict]:
@@ -314,10 +320,11 @@ def _repository_from_params(params: dict, ui_config: Optional[dict]) -> Optional
     if not repository_key or not ui_config:
         return None
     try:
-        from repositories_api import read_repository_store
-        rows = read_repository_store(ui_config).get("repositories", [])
-    except Exception:
-        return None
+        from repositories_api import repositories_file
+        from job_store import read_repositories
+        rows = read_repositories(repositories_file(ui_config))["repositories"]
+    except OSError:
+        raise ValueError("Repository inventory is not readable") from None
     for row in rows if isinstance(rows, list) else []:
         if str(row.get("repository_key") or "").strip() == repository_key:
             return row
@@ -343,147 +350,57 @@ def _repository_encryption(repo: Optional[dict], fallback: str = "repokey-blake2
     return str(repo.get("encryption") or fallback).strip() or fallback
 
 
-def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dict:
-    from archive_prefix import archive_prefix_from_backup_type, normalize_archive_prefixes
-    from jobs_api import discover_jobs, get_jobs_meta_dirs, resolve_data_root
-    from config_api import read_expanded_conf
+def _request_identity(params):
+    if not isinstance(params, dict):
+        raise ValueError("Wizard payload must be an object")
+    if {"type_id", "backup_type", "job_key", "existing_job_key", "legacy_job_keys", "archive_prefixes"}.intersection(params):
+        raise JobValidationError("legacy_wizard_request", "Wizard requests must use job_id and archive_prefix")
+    mode = params.get("_wizard_mode", "create")
+    if not isinstance(mode, str) or mode not in {"create", "edit", "duplicate"}:
+        raise JobValidationError("invalid_wizard_mode", "Unknown wizard operation")
+    source_id = params.get("job_id")
+    if mode == "create" and source_id is not None:
+        raise JobValidationError("immutable_job_id", "New job IDs are assigned by the server")
+    if mode != "create":
+        validate_job_id(source_id)
+    return mode, source_id
 
-    data_root = resolve_data_root(ui_config)
-    jobs = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
-    if job_key not in jobs:
-        raise ValueError(f"Unknown job: {job_key}")
 
-    info = jobs[job_key]
-    conf = read_expanded_conf(ui_config)
-    type_id = str(info.backup_type or "").lower()
-    location = str(info.location or "local").lower()
+def load_job_for_wizard(job_id: str, scripts_dir: Path, ui_config: dict) -> dict:
+    from jobs_api import get_jobs_meta_dir, resolve_data_root
+    from job_store import read_job, read_json, job_revision
+    from repository_context import storage_by_key
 
-    # Prefer explicit wizard metadata values if available.
-    meta_source_paths: list[str] = []
-    meta_exclude_paths: list[str] = []
-    meta_compression = ""
-    meta_file_activity = False
-    meta_keep_daily = ""
-    meta_keep_weekly = ""
-    meta_keep_monthly = ""
-    meta_keep_yearly = ""
-    meta_repository_key = ""
-    meta_mount_before_run = True
-    meta_unmount_after_run = True
-    meta_archive_prefixes: list[str] = []
-    meta: dict = {}
-    meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False}
-    meta_vm_control = {"mode": "all" if bool(info.has_vm) else "none", "selected": [], "ack_domains_risk": False}
-    for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-        meta_file = meta_dir / f"{job_key}.json"
-        if not meta_file.exists():
-            continue
-        try:
-            candidate = json.loads(meta_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError, UnicodeDecodeError, TypeError):
-            continue
-        if not isinstance(candidate, dict):
-            raise ValueError(f"Wizard metadata root is not an object: {job_key}")
-        try:
-            meta_source_paths = normalize_source_paths(
-                candidate.get("source_paths"), field=f"Job '{job_key}' source_paths"
-            )
-        except SourcePathValidationError as exc:
-            raise ValueError(
-                f"Job '{job_key}' has not been migrated to structured source paths: {exc}. "
-                "Review Settings > System Health & Migration before editing or running this job."
-            ) from exc
-        try:
-            meta = candidate
-            meta_exclude_paths = _exclude_paths(meta.get("exclude_paths", []))
-            meta_compression = str(meta.get("compression") or "").strip()
-            meta_file_activity = _bool_value(meta.get("file_activity"), default=False)
-            meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
-            meta_keep_daily = str(meta_ret.get("daily") or "").strip()
-            meta_keep_weekly = str(meta_ret.get("weekly") or "").strip()
-            meta_keep_monthly = str(meta_ret.get("monthly") or "").strip()
-            meta_keep_yearly = str(meta_ret.get("yearly") or "").strip()
-            meta_repository_key = str(meta.get("repository_key") or "").strip()
-            meta_mount_before_run = bool(meta.get("mount_before_run", True))
-            meta_unmount_after_run = bool(meta.get("unmount_after_run", True))
-            meta_archive_prefixes = normalize_archive_prefixes([
-                archive_prefix_from_backup_type(type_id),
-                *(meta.get("archive_prefixes") if isinstance(meta.get("archive_prefixes"), list) else []),
-            ])
-            meta_docker_control = _runtime_control_from_meta(meta, "docker")
-            meta_vm_control = _runtime_control_from_meta(meta, "vm")
-            break
-        except (TypeError, ValueError):
-            continue
-
-    from repository_context import RepositoryContextError, resolve_job_repository_context
-    if not meta:
-        raise ValueError(f"Wizard metadata is missing: {job_key}")
-    assignment_error = ""
-    try:
-        repository_context = resolve_job_repository_context(
-            ui_config,
-            job_key,
-            job=meta,
-            require_passphrase_file=False,
-        )
-        repo_path = str(repository_context["repository_path"])
-    except RepositoryContextError as exc:
-        repository_context = {}
-        repo_path = ""
-        assignment_error = str(exc)
-    compression = meta_compression or conf.get(f"COMPRESSION_{_type_upper(type_id)}", "lz4")
-
-    # Prefer explicit job metadata name (JSON) over display label with location suffix.
-    # This keeps edited names stable (e.g. "Flash" stays "Flash", not "Flash - Lokal").
-    from schedule_api import get_schedules
-
-    schedule = get_schedules(ui_config).get(job_key)
-    if not isinstance(schedule, dict):
-        schedule = None
-
-    params = {
-        "job_key": job_key,
-        "type_id": type_id,
-        "job_name": (info.name or "").strip() or info.display_name or job_key,
-        "description": info.description or "",
-        "icon": str(getattr(info, "icon", "") or "").strip().lower(),
-        "icon_color": str(getattr(info, "icon_color", "") or "").strip().lower(),
-        "location": location,
-        "use_docker": meta_docker_control["mode"] != "none",
-        "use_vm": meta_vm_control["mode"] != "none",
-        "docker_control": meta_docker_control,
-        "vm_control": meta_vm_control,
-        "source_paths": meta_source_paths,
-        "exclude_paths": meta_exclude_paths,
-        "repo_path": repo_path or "",
-        "repository_key": meta_repository_key,
-        "repository_assignment_error": assignment_error,
-        "mount_before_run": meta_mount_before_run,
-        "unmount_after_run": meta_unmount_after_run,
-        "compression": compression,
-        "file_activity": meta_file_activity,
-        "encryption": str(repository_context.get("encryption") or ""),
-        "passphrase": "",
-        "keep_daily": meta_keep_daily or conf.get(f"RETENTION_{_type_upper(type_id)}_DAILY", "7"),
-        "keep_weekly": meta_keep_weekly or conf.get(f"RETENTION_{_type_upper(type_id)}_WEEKLY", "4"),
-        "keep_monthly": meta_keep_monthly or conf.get(f"RETENTION_{_type_upper(type_id)}_MONTHLY", "6"),
-        "keep_yearly": meta_keep_yearly or conf.get(f"RETENTION_{_type_upper(type_id)}_YEARLY", "3"),
-        "standard": info.standard,
-        "archive_prefixes": meta_archive_prefixes or normalize_archive_prefixes([
-            archive_prefix_from_backup_type(type_id),
-        ]),
-        "schedule": {
-            "cron": str(schedule.get("cron") or "").strip(),
-            "enabled": bool(schedule.get("enabled", True)),
-        } if schedule else None,
-    }
+    meta = read_job(get_jobs_meta_dir(scripts_dir, resolve_data_root(ui_config)), job_id)
+    params = job_to_params(meta)
+    params.setdefault("file_activity", False)
+    repo = _repository_from_params(params, ui_config)
+    if repo is None:
+        raise JobValidationError("invalid_job_repository", "The assigned repository is missing")
+    storage = storage_by_key(ui_config, repo.get("storage_key", ""))
+    location = str(storage.get("location") or storage.get("storage_type") or "")
+    if location == "ssh":
+        location = "storagebox"
+    # Read the UUID schedule map directly; get_schedules still owns a legacy
+    # discovery/cleanup path until #474. Reading an editor must never clean it.
+    schedules = read_json(resolve_data_root(ui_config) / "config" / "schedules.json", missing={})
+    schedule = schedules.get(job_id)
+    if schedule is not None and not isinstance(schedule, dict):
+        raise JobValidationError("invalid_job_schedule", "The job schedule is malformed")
+    params.update(
+        job_id=job_id, revision=job_revision(meta), location=location,
+        storage_key=repo.get("storage_key", ""), repo_path=_repository_path(repo, ui_config),
+        encryption=_repository_encryption(repo), passphrase="",
+        archive_prefixes=list(meta["archive_prefixes"]),
+        archive_name_preview=archive_name_preview(meta["archive_prefixes"][0]),
+        schedule=deepcopy(schedule),
+    )
     return params
 
 
 def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, scripts_dir: Optional[Path] = None) -> dict:
     """Erzeugt eine textuelle Backup-Flow-Vorschau fuer den Wizard."""
-    type_id = params["type_id"].strip()
+    prefix = validate_archive_prefix(params.get("archive_prefix"))
     location = params.get("location", "local")
     source_paths = normalize_source_paths(params.get("source_paths"))
     exclude_paths = _exclude_paths(params.get("exclude_paths", []))
@@ -543,7 +460,9 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     } if location == "storagebox" else {"checked": False, "exists": False, "needs_init_confirm": False, "message": ""}
     return {
         "runner": "scriptless-wizard-runner",
-        "job_key": f"{type_id}_{location}",
+        "job_id": params.get("job_id"),
+        "job_name": params.get("job_name", ""),
+        "archive_name_preview": archive_name_preview(prefix),
         "summary": {
             "location": location,
             "repo": repo_path,
@@ -569,109 +488,33 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
 
 
 def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
-    """Speichert Job-eigene Wizard-Metadaten mit kanonischer Repository-Referenz."""
-    from archive_prefix import archive_prefix_from_backup_type, normalize_archive_prefixes
+    """Save one ID-based job and its assignments; never rename an identity."""
+    from uuid import uuid4
     from jobs_api import get_jobs_meta_dir
-    type_id     = params["type_id"].strip()
-    location    = params.get("location", "local")
-    description = params.get("description", "").strip()
-    icon = str(params.get("icon", "")).strip().lower()
-    icon_color = str(params.get("icon_color", "")).strip().lower()
-    retention = _retention_from_params(params)
-    file_activity = _bool_value(params.get("file_activity"), default=False)
-    selected_repo = _repository_from_params(params, ui_config)
-    if not selected_repo:
-        raise ValueError("Selected repository object was not found")
-    selected_repository_key = str((selected_repo or {}).get("repository_key") or params.get("repository_key") or "").strip()
+    from job_store import job_revision, save_job_transaction
+    from repositories_api import repositories_file
 
-    scripts_dir.mkdir(parents=True, exist_ok=True)
-    existing_job_key = str(params.get("existing_job_key", "")).strip()
-
-    # ── Wizard-Metadaten schreiben (Phase 2) ─────────────────────────────────
-    job_key = f"{type_id}_{location}"
-    now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    jobs_meta_dir = get_jobs_meta_dir(scripts_dir, data_root)
-    jobs_meta_dir.mkdir(parents=True, exist_ok=True)
-    meta_path = jobs_meta_dir / f"{job_key}.json"
-
-    existing = {}
-    if meta_path.exists():
-        try:
-            existing = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-            existing = {}
-    elif existing_job_key and existing_job_key != job_key:
-        old_meta_path = jobs_meta_dir / f"{existing_job_key}.json"
-        if old_meta_path.exists():
-            try:
-                existing = json.loads(old_meta_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                existing = {}
-
-    mount_before_run = bool(params.get("mount_before_run", existing.get("mount_before_run", True)))
-    unmount_after_run = bool(params.get("unmount_after_run", existing.get("unmount_after_run", True)))
-    docker_control = _runtime_control_from_params(params, "docker", existing)
-    vm_control = _runtime_control_from_params(params, "vm", existing)
-    archive_prefixes = normalize_archive_prefixes([
-        archive_prefix_from_backup_type(type_id),
-        archive_prefix_from_backup_type(existing.get("backup_type")),
-        *(existing.get("archive_prefixes") if isinstance(existing.get("archive_prefixes"), list) else []),
-    ])
-
-    metadata = {
-        "schema_version": JOB_SCHEMA_VERSION,
-        "job_key": job_key,
-        "name": params.get("job_name", "").strip() or job_key,
-        "description": description,
-        "icon": icon,
-        "icon_color": icon_color,
-        "enabled": bool(existing.get("enabled", True)),
-        "standard": "wizard",
-        "backup_type": type_id,
-        "archive_prefixes": archive_prefixes,
-        "location": location,
-        "mount_before_run": mount_before_run if location == "smb" else True,
-        "unmount_after_run": unmount_after_run if location == "smb" else True,
-        "script": "",
-        "runner": "scriptless-wizard-runner",
-        "source_paths": normalize_source_paths(params.get("source_paths")),
-        "exclude_paths": _exclude_paths(params.get("exclude_paths", [])),
-        "features": {
-            "docker": docker_control["mode"] != "none",
-            "vm": vm_control["mode"] != "none",
-        },
-        "docker_control": docker_control,
-        "vm_control": vm_control,
-        "compression": str(params.get("compression", "lz4")).strip() or "lz4",
-        "file_activity": file_activity,
-        "retention": retention,
-        "created_at": existing.get("created_at", now_iso),
-        "updated_at": now_iso,
-    }
-    metadata["repository_key"] = selected_repository_key
-    if isinstance(existing.get("restore_test_policy"), dict):
-        metadata["restore_test_policy"] = dict(existing["restore_test_policy"])
-
-    repo_config = ui_config or {
+    mode, source_id = _request_identity(params)
+    config = ui_config or {
         "BACKUP_SCRIPTS_DIR": str(data_root or (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)),
     }
-    from repositories_api import save_job_repository_transaction
-    previous_meta_path = jobs_meta_dir / f"{existing_job_key}.json" if existing_job_key else None
-    save_job_repository_transaction(
-        repo_config,
-        meta_path,
-        metadata,
-        selected_repository_key,
-        job_key,
-        previous_repository_key=str(existing.get("repository_key") or ""),
-        previous_job_key=existing_job_key or job_key,
-        previous_metadata_path=previous_meta_path,
-    )
+    original_params = deepcopy(params)
 
+    def build(existing):
+        effective = job_to_params(existing if existing is not None else new_job_defaults())
+        effective.update(deepcopy(original_params))
+        validate_params(effective, scripts_dir, data_root, allow_existing=mode == "edit", ui_config=config)
+        # Allocate only on the write path, after validation, never on preview/read.
+        job_id = source_id if mode == "edit" else str(uuid4())
+        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        return apply_wizard_changes(effective, existing=existing, job_id=job_id, now=now, duplicate=mode == "duplicate")
+
+    metadata, target = save_job_transaction(
+        get_jobs_meta_dir(scripts_dir, data_root), repositories_file(config), build,
+        source_id=source_id, expected_revision=params.get("expected_revision"), duplicate=mode == "duplicate",
+    )
     return {
-        "filename": "",
-        "path": "",
-        "script": "",
-        "metadata_path": str(meta_path),
-        "regenerated_script": False,
+        "job_id": metadata["job_id"], "revision": job_revision(metadata),
+        "job_name": metadata["name"], "archive_name_preview": archive_name_preview(metadata["archive_prefixes"][0]),
+        "filename": "", "path": "", "script": "", "metadata_path": str(target), "regenerated_script": False,
     }

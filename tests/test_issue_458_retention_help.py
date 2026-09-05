@@ -100,7 +100,7 @@ def test_manual_repository_prune_blocks_all_zero_policy(tmp_path: Path) -> None:
 
 def test_flow_preview_exposes_the_effective_retention_policy() -> None:
     flow = generate_flow_preview({
-        "type_id": "appdata",
+        "archive_prefix": "appdata-backup",
         "location": "local",
         "source_paths": ["/mnt/user/appdata"],
         "keep_daily": "20",

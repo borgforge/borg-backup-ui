@@ -1413,15 +1413,16 @@
               placeholder="z.B. Borg Backup (Meine Daten)" data-i18n-placeholder="wizard.jobNamePlaceholder">
           </div>
           <div class="form-group">
-            <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.typeId">Typ-ID</span> <span class="form-hint" data-i18n="wizard.typeIdHint">(nur a–z, 0–9, _)</span></label>
-            <input class="form-input mono" type="text" id="wiz-type-id"
-              placeholder="z.B. meinedaten" data-i18n-placeholder="wizard.typeIdPlaceholder">
+            <label for="wiz-archive-prefix" class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.archivePrefix">Archivpräfix</span></label>
+            <input class="form-input mono" type="text" id="wiz-archive-prefix" aria-describedby="wiz-archive-prefix-hint"
+              placeholder="z.B. meinedaten-backup" data-i18n-placeholder="wizard.archivePrefixPlaceholder">
+            <div id="wiz-archive-prefix-hint" class="form-hint" data-i18n="wizard.archivePrefixHint">Vollständiger Präfix; nur der Zeitstempel wird angehängt. A–Z, a–z, 0–9, Punkt, _ und - sind erlaubt.</div>
             <div id="wiz-archive-prefix-summary" class="wizard-archive-prefix-summary" hidden></div>
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="wizard.icon">Icon</label>
             <select class="form-select" id="wiz-icon">
-              <option value="" data-i18n="wizard.automaticType">Automatisch (Typ)</option>
+              <option value="" data-i18n="wizard.defaultIcon">Standard</option>
               <option value="flash">Flash</option>
               <option value="appdata">Appdata</option>
               <option value="photos" data-i18n="wizard.photos">Fotos</option>

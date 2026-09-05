@@ -1,3 +1,5 @@
+from canonical_wizard_support import canonical_fixture
+import pytest
 import io
 import json
 import logging
@@ -114,13 +116,13 @@ def test_borg_create_preserves_item_errors_and_failure_result(
     assert "Borg create failed (exit 2)" in caplog.text
 
 
-def test_job_metadata_round_trip_and_runner_environment(tmp_path: Path, monkeypatch) -> None:
+def test_job_metadata_round_trip(tmp_path: Path, monkeypatch) -> None:
     config = _local_repository_config(tmp_path)
     scripts_dir = tmp_path / "scripts"
     source = tmp_path / "source"
     source.mkdir()
     params = {
-        "type_id": "files",
+        "archive_prefix": "files-backup",
         "job_name": "Files",
         "location": "local",
         "source_paths": [str(source)],
@@ -128,16 +130,14 @@ def test_job_metadata_round_trip_and_runner_environment(tmp_path: Path, monkeypa
         "file_activity": True,
     }
 
+    canonical_fixture(config)
     result = save_job(params, scripts_dir, tmp_path, config)
     metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     assert metadata["file_activity"] is True
 
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
-    loaded = load_job_for_wizard("files_local", scripts_dir, config)
+    loaded = load_job_for_wizard(result["job_id"], scripts_dir, config)
     assert loaded["file_activity"] is True
-
-    env, _ = wizard_runner._load_env_from_job("files_local", scripts_dir, tmp_path)
-    assert env["BORG_FILE_ACTIVITY"] == "1"
 
 
 def test_missing_job_field_is_disabled_and_preview_exposes_setting(tmp_path: Path, monkeypatch) -> None:
@@ -157,11 +157,10 @@ def test_missing_job_field_is_disabled_and_preview_exposes_setting(tmp_path: Pat
     }) + "\n", encoding="utf-8")
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
 
-    loaded = load_job_for_wizard("files_local", scripts_dir, config)
-    monkeypatch.setenv("BORG_FILE_ACTIVITY", "1")
-    env, _ = wizard_runner._load_env_from_job("files_local", scripts_dir, tmp_path)
+    ids = canonical_fixture(config)
+    loaded = load_job_for_wizard(ids["files_local"], scripts_dir, config)
     preview = generate_flow_preview({
-        "type_id": "files",
+        "archive_prefix": "files-backup",
         "location": "local",
         "source_paths": [str(tmp_path / "source")],
         "repository_key": "repo_files_test",
@@ -169,8 +168,26 @@ def test_missing_job_field_is_disabled_and_preview_exposes_setting(tmp_path: Pat
     }, config, scripts_dir)
 
     assert loaded["file_activity"] is False
-    assert env["BORG_FILE_ACTIVITY"] == "0"
     assert preview["summary"]["file_activity"] is True
+
+
+@pytest.mark.parametrize("file_activity, expected", [(True, "1"), (False, "0"), (None, "0")])
+def test_legacy_runner_file_activity_environment(tmp_path: Path, monkeypatch, file_activity, expected):
+    # The actual UUID runner cutover and end-to-end wiring belong to #475.
+    # Keep the existing runner regression independently of canonical wizard tests.
+    _local_repository_config(tmp_path)
+    jobs = tmp_path / "config" / "jobs"
+    jobs.mkdir()
+    meta = {
+        "schema_version": 3, "job_key": "files_local", "backup_type": "files", "location": "local",
+        "repository_key": "repo_files_test", "source_paths": [str(tmp_path / "source")],
+    }
+    if file_activity is not None:
+        meta["file_activity"] = file_activity
+    (jobs / "files_local.json").write_text(json.dumps(meta))
+    monkeypatch.setenv("BORG_FILE_ACTIVITY", "1")
+    env, _ = wizard_runner._load_env_from_job("files_local", tmp_path / "scripts", tmp_path)
+    assert env["BORG_FILE_ACTIVITY"] == expected
 
 
 def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:

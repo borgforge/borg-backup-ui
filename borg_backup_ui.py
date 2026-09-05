@@ -2148,11 +2148,13 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from wizard_api import load_job_for_wizard
         from jobs_api import resolve_scripts_dir
         params = _pqs(qs)
-        job_key = (params.get("job_key") or [""])[0].strip()
-        if not job_key:
-            raise ValueError("job_key is required")
+        if "job_key" in params:
+            raise ValueError("The wizard requires job_id, not job_key")
+        job_id = (params.get("job_id") or [""])[0]
+        if len(params.get("job_id", [])) != 1:
+            raise ValueError("Exactly one job_id is required")
         scripts_dir = resolve_scripts_dir(self.config)
-        return {"job": load_job_for_wizard(job_key, scripts_dir, self.config)}
+        return {"job": load_job_for_wizard(job_id, scripts_dir, self.config)}
 
     def _get_wizard_source_dirs(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs
@@ -2547,13 +2549,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return {"flow": generate_flow_preview(body, self.config, scripts_dir)}
 
     def _post_wizard_save(self) -> dict:
-        from wizard_api import validate_params, save_job
+        from wizard_api import save_job
         from jobs_api import resolve_scripts_dir, resolve_data_root
         body = self._read_json_body()
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
-        mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"), ui_config=self.config)
         return save_job(body, scripts_dir, data_root, self.config)
 
     def _start_restore_test_from_body(self, body: dict) -> dict:

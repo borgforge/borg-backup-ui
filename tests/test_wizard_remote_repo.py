@@ -13,6 +13,7 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+from canonical_wizard_support import canonical_fixture
 from repositories_api import write_repository_store
 from storage_objects_api import write_storage_store
 from wizard_api import generate_flow_preview, load_job_for_wizard, save_job, validate_params
@@ -20,7 +21,7 @@ from wizard_api import generate_flow_preview, load_job_for_wizard, save_job, val
 
 def _storagebox_params() -> dict:
     return {
-        "type_id": "flash",
+        "archive_prefix": "flash-backup",
         "job_name": "Flash",
         "location": "storagebox",
         "storage_profile_key": "storage-1",
@@ -194,6 +195,10 @@ def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
     }]})
     params = _storagebox_params()
     params["repository_key"] = "repo_flash_storagebox_test"
+    canonical_fixture(config)
+    source = tmp_path / "source"
+    source.mkdir()
+    params["source_paths"] = [str(source)]
     result = save_job(params, tmp_path / "scripts", tmp_path / "data", config)
     metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
 
@@ -205,7 +210,7 @@ def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
 
 
 def test_save_storagebox_job_without_repository_object_is_rejected(tmp_path: Path):
-    with pytest.raises(ValueError, match="Selected repository object was not found"):
+    with pytest.raises(ValueError, match="Repository selection is required"):
         save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})
 
 
@@ -254,8 +259,9 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
         },
     )
 
+    ids = canonical_fixture(config)
     loaded = load_job_for_wizard(
-        "vms_local",
+        ids["vms_local"],
         scripts_dir,
         config,
     )
@@ -265,7 +271,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
     assert loaded["archive_prefixes"] == ["vms-backup", "oldvms-backup"]
 
 
-def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypatch):
+def test_edit_wizard_blocks_broken_assignment_without_silent_repair(tmp_path: Path, monkeypatch):
     data_root = tmp_path / "borg-backup"
     scripts_dir = data_root / "scripts"
     jobs_dir = data_root / "config" / "jobs"
@@ -287,9 +293,8 @@ def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypa
     write_repository_store(config, {"repositories": []})
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _cfg: {})
 
-    loaded = load_job_for_wizard("photos_smb", scripts_dir, config)
-
-    assert loaded["repository_key"] == "repo_missing"
-    assert loaded["repo_path"] == ""
-    assert "Assigned repository was not found" in loaded["repository_assignment_error"]
-    assert loaded["source_paths"] == ["/mnt/user/photos"]
+    ids = canonical_fixture(config)
+    before = (jobs_dir / (ids["photos_smb"] + ".json")).read_bytes()
+    with pytest.raises(ValueError, match="assigned repository is missing"):
+        load_job_for_wizard(ids["photos_smb"], scripts_dir, config)
+    assert (jobs_dir / (ids["photos_smb"] + ".json")).read_bytes() == before

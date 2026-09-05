@@ -5623,6 +5623,12 @@ body.wizard-modal-open {
   font-size: 12px;
 }
 
+#wiz-archive-prefix-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .wizard-archive-prefix-chip {
   display: inline-flex;
   align-items: center;
