@@ -375,6 +375,7 @@ class _JobState:
         self.start_time = start_time
         self.run_id = run_id
         self.log_file = log_file
+        self.line_count = 0
         self.lines: List[str] = []
         self.finished = False
         self.exit_code: Optional[int] = None
@@ -480,6 +481,25 @@ class JobManager:
             if state.log_file is None:
                 for line in state.proc.stdout:
                     state.append_line(line.rstrip("\n"))
+            else:
+                # Preserve the existing running-state line_count contract.
+                # Count once in blocks, independently of all browser readers.
+                pending_line = False
+                with state.log_file.open("rb") as handle:
+                    while True:
+                        finished = state.proc.poll() is not None
+                        chunk = handle.read(65536)
+                        if chunk:
+                            with state._lock:
+                                state.line_count += chunk.count(b"\n")
+                            pending_line = not chunk.endswith(b"\n")
+                        elif finished:
+                            if pending_line:
+                                with state._lock:
+                                    state.line_count += 1
+                            break
+                        else:
+                            time.sleep(0.1)
         except Exception:
             pass
         finally:
@@ -501,6 +521,7 @@ class JobManager:
                 return {
                     "running": not state.finished,
                     "exit_code": state.exit_code,
+                    "line_count": state.line_count,
                     "start_time": state.start_time.isoformat(),
                     "run_id": state.run_id,
                     "file_activity": True,

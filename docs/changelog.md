@@ -8,6 +8,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issue #463 - file activity log performance
 - Capture stdout and stderr directly in the retained run log only for jobs with file activity enabled, avoiding an unbounded API-process line buffer and repeated snapshots.
+- Preserve the existing API line counter with one independent blockwise reader, including a final line without a newline.
 - Preserve the effective option for manual and scheduled runs and in resource locks used after an API restart.
 - Load bounded UTF-8 file windows on demand, retaining at most three windows in the live view. Serialized requests provide backpressure; earlier output stays accessible in the complete file.
 - Add full-log literal search, bounded streaming downloads, and stale-response cancellation. Existing compact logs continue to use the original SSE viewer.

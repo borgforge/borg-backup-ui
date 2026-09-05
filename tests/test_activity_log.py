@@ -141,7 +141,7 @@ def test_symlinks_and_nonregular_files_are_rejected(activity):
 def test_real_process_capture_only_uses_file_when_enabled(activity, enabled):
     config, path, _params, manager = activity
     env = {"BORG_UI_FILE_ACTIVITY_RUN": "1" if enabled else "0", "BORG_UI_ACTIVITY_LOG_DIR": str(path.parent)}
-    script = "import sys; sys.stdout.write('A changed.stl\\n' * 10000); sys.stderr.write('E unreadable\\n'); sys.exit(1)"
+    script = "import sys; sys.stdout.write('A changed.stl\\n' * 10000); sys.stderr.write('E unreadable'); sys.exit(1)"
     assert manager.start("files_local", [sys.executable, "-c", script], path.parent, env) == (True, None)
     state = manager._states["files_local"]
     deadline = time.monotonic() + 10
@@ -154,10 +154,11 @@ def test_real_process_capture_only_uses_file_when_enabled(activity, enabled):
         assert state.proc.stdout is None
         text = state.log_file.read_text()
         assert text.count("A changed.stl\n") == 10000
-        assert text.endswith("E unreadable\n")
+        assert text.endswith("E unreadable")
         assert state.log_file.stat().st_mode & 0o777 == 0o600
         state.snapshot = lambda: pytest.fail("activity status copied an in-memory log")
         assert manager.get_state("files_local")["file_activity"] is True
+        assert manager.get_state("files_local")["line_count"] == 10001
         stream = manager.stream_output("files_local")
         assert sum(1 for item in stream if item.startswith("data:")) == 10001
     else:
