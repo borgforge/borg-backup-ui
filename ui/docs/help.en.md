@@ -97,7 +97,7 @@ Select **Import Existing Repository** and then choose a directory within the sto
 ### Tabs
 
 - **Overview:** Borg sizes, archive count, health, path, storage target, encryption, and job assignment.
-- **Archives:** Archives, technical IDs, timestamps, and duration; newest archives are listed first.
+- **Archives:** Archives, technical IDs, timestamps, and duration; newest archives are listed first. Select an archive to browse its folders and files directly in a read-only view. This also works for imported archives without a job assignment. Reading the archive index for the first time can take longer for large or remote repositories. Restore, download, and file preview remain part of the separate **Browse & Restore** workflow.
 - **Maintenance:** Check, full data verification, prune, and compact.
 - **Administration:** Job links, non-destructive removal from the UI, and protected permanent deletion.
 

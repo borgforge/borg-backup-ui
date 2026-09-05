@@ -97,7 +97,7 @@ Wählen Sie **Vorhandenes Repository importieren** und anschließend ein Verzeic
 ### Reiter
 
 - **Übersicht:** Borg-Größen, Archivanzahl, Zustand, Pfad, Speicherziel, Verschlüsselung und Job-Zuordnung.
-- **Archive:** Archive, technische IDs, Zeitpunkte und Dauer; neueste Archive stehen zuerst.
+- **Archive:** Archive, technische IDs, Zeitpunkte und Dauer; neueste Archive stehen zuerst. Wählen Sie ein Archiv aus, um dessen Ordner und Dateien direkt in einer schreibgeschützten Ansicht zu durchsuchen. Dies funktioniert auch für importierte Archive ohne Job-Zuordnung. Beim ersten Öffnen kann das Einlesen des Archivindex bei großen oder entfernten Repositorys länger dauern. Wiederherstellung, Download und Dateivorschau bleiben dem separaten **Browse & Restore**-Ablauf vorbehalten.
 - **Wartung:** Check, vollständige Datenprüfung, Prune und Compact.
 - **Verwaltung:** Job-Verknüpfungen, Entfernen aus der UI und geschützte endgültige Löschung.
 

@@ -10,6 +10,7 @@ window.BBUI.storageState = window.BBUI.storageState || {
   selectedRepositoryKey: '',
   selectedTab: 'overview',
   archiveCache: {},
+  archiveBrowser: { repositoryKey: '', archive: '', path: '', files: [], loading: false, error: '' },
   lifecycleCache: {},
   maintenanceState: { running: false },
   search: '',
@@ -17,6 +18,7 @@ window.BBUI.storageState = window.BBUI.storageState || {
 };
 const storageState = window.BBUI.storageState;
 storageState.archiveCache = storageState.archiveCache || {};
+storageState.archiveBrowser = storageState.archiveBrowser || { repositoryKey: '', archive: '', path: '', files: [], loading: false, error: '' };
 storageState.lifecycleCache = storageState.lifecycleCache || {};
 storageState.maintenanceState = storageState.maintenanceState || { running: false };
 storageState.maintenanceConfirmation = null;
@@ -316,6 +318,9 @@ function renderStorage(data) {
   if (!visible.some((repo) => String(repo.repository_key || '') === storageState.selectedRepositoryKey)) {
     storageState.selectedRepositoryKey = String(visible[0]?.repository_key || '');
   }
+  if (storageState.archiveBrowser.repositoryKey !== storageState.selectedRepositoryKey) {
+    resetStorageArchiveBrowser();
+  }
   renderStorageLocationSidebar(data, visible);
   const repo = visible.find((row) => String(row.repository_key || '') === storageState.selectedRepositoryKey) || null;
   const job = repo ? storageJobForRepository(repo) : null;
@@ -409,6 +414,7 @@ function onStorageLocationClick(event) {
   if (!button || !storageState.data) return;
   storageState.selectedRepositoryKey = button.dataset.storageRepositoryKey || '';
   storageState.selectedTab = 'overview';
+  resetStorageArchiveBrowser();
   renderStorage(storageState.data);
 }
 
@@ -626,8 +632,96 @@ function renderStorageRepositoryArchives(repo) {
   if (cache.error) return `<div class="status-message error">${escHtml(cache.error)}</div>`;
   const archives = Array.isArray(cache.data?.archives) ? cache.data.archives : [];
   if (!archives.length) return `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryNoArchives')}</p></div>`;
+  const browser = storageState.archiveBrowser.repositoryKey === key ? storageState.archiveBrowser : null;
   return `<div class="storage-archive-toolbar"><strong>${storageCount(cache.data.archive_count || archives.length, 'storage.archiveCountOne', 'storage.archiveCountMany')}</strong><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-archives" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
-    <div class="storage-archive-list"><header><span></span><strong>${storageT('storage.repositoryArchiveName')}</strong><strong>${storageT('storage.repositoryArchiveCreated')}</strong></header>${archives.map((archive) => `<article><span class="storage-archive-dot"></span><div><strong>${escHtml(archive.name || '—')}</strong><small>${escHtml(archive.id || '')}</small></div><time>${escHtml(storageFormatDateTime(archive.start))}</time></article>`).join('')}</div>`;
+    <p class="storage-archive-intro">${escHtml(storageT('storage.repositoryArchiveBrowseHint'))}</p>
+    <div class="storage-archive-layout ${browser?.archive ? 'has-browser' : ''}">
+      <div class="storage-archive-list"><header><span></span><strong>${storageT('storage.repositoryArchiveName')}</strong><strong>${storageT('storage.repositoryArchiveCreated')}</strong><span></span></header>${archives.map((archive) => {
+        const name = String(archive.name || '');
+        const selected = !!browser && name === browser.archive;
+        return `<button type="button" class="storage-archive-row ${selected ? 'is-selected' : ''}" data-storage-action="open-repository-archive" data-repository-key="${escHtml(key)}" data-archive="${escHtml(name)}" ${selected ? 'aria-current="true"' : ''}><span class="storage-archive-dot"></span><span><strong>${escHtml(name || '—')}</strong><small>${escHtml(archive.id || '')}</small></span><time>${escHtml(storageFormatDateTime(archive.start))}</time><span class="storage-archive-open" aria-hidden="true">›</span></button>`;
+      }).join('')}</div>
+      ${browser?.archive ? renderStorageArchiveBrowser(browser) : ''}
+    </div>`;
+}
+
+function resetStorageArchiveBrowser() {
+  storageState.archiveBrowser = { repositoryKey: '', archive: '', path: '', files: [], loading: false, error: '' };
+}
+
+function storageArchiveBrowserBreadcrumb(browser) {
+  const parts = String(browser.path || '').split('/').filter(Boolean);
+  const buttons = [`<button type="button" data-storage-action="browse-repository-archive-path" data-path="">/</button>`];
+  for (let index = 0; index < parts.length; index += 1) {
+    const path = parts.slice(0, index + 1).join('/');
+    const current = index === parts.length - 1;
+    buttons.push(current
+      ? `<span aria-current="location">${escHtml(parts[index])}</span>`
+      : `<button type="button" data-storage-action="browse-repository-archive-path" data-path="${escHtml(path)}">${escHtml(parts[index])}</button>`);
+  }
+  return buttons.join('<i aria-hidden="true">/</i>');
+}
+
+function storageArchiveEntryIcon(type) {
+  if (type === 'd') return '📁';
+  if (type === 'l') return '🔗';
+  return '📄';
+}
+
+function renderStorageArchiveBrowser(browser) {
+  let content = '';
+  if (browser.loading) {
+    content = `<div class="storage-archive-browser-state"><div class="spinner"></div><span>${escHtml(storageT('storage.repositoryArchiveBrowserLoading'))}</span><small>${escHtml(storageT('storage.repositoryArchiveBrowserFirstLoad'))}</small></div>`;
+  } else if (browser.error) {
+    content = `<div class="status-message error">${escHtml(browser.error)}</div>`;
+  } else if (!browser.files.length) {
+    content = `<div class="storage-archive-browser-state"><span>${escHtml(storageT('storage.repositoryArchiveBrowserEmpty'))}</span></div>`;
+  } else {
+    content = `<div class="storage-archive-browser-table-wrap"><table class="storage-archive-browser-table"><thead><tr><th>${escHtml(storageT('storage.repositoryArchiveBrowserName'))}</th><th>${escHtml(storageT('storage.repositoryArchiveBrowserSize'))}</th><th>${escHtml(storageT('storage.repositoryArchiveBrowserModified'))}</th></tr></thead><tbody>${browser.files.map((file) => {
+      const type = String(file.type || '-');
+      const name = String(file.name || '');
+      const label = `${storageArchiveEntryIcon(type)} ${escHtml(name)}`;
+      const nameCell = type === 'd'
+        ? `<button type="button" data-storage-action="browse-repository-archive-path" data-path="${escHtml(file.path || '')}">${label}</button>`
+        : `<span>${label}</span>`;
+      return `<tr><td>${nameCell}</td><td>${type === 'd' ? '—' : escHtml(storageFormatBytes(file.size))}</td><td>${escHtml(storageFormatDateTime(file.mtime))}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
+  }
+  return `<section class="storage-archive-browser" aria-label="${escHtml(storageT('storage.repositoryArchiveBrowserTitle'))}">
+    <header><div><small>${escHtml(storageT('storage.repositoryArchiveBrowserReadOnly'))}</small><h3>${escHtml(browser.archive)}</h3></div><button type="button" class="storage-archive-browser-close" data-storage-action="close-repository-archive" aria-label="${escHtml(storageT('storage.repositoryArchiveBrowserClose'))}">×</button></header>
+    <nav class="storage-archive-browser-breadcrumb" aria-label="${escHtml(storageT('storage.repositoryArchiveBrowserPath'))}">${storageArchiveBrowserBreadcrumb(browser)}</nav>
+    ${content}
+  </section>`;
+}
+
+async function loadRepositoryArchiveFiles(repositoryKey, archive, path = '') {
+  const key = String(repositoryKey || '').trim();
+  const archiveName = String(archive || '');
+  const archivePath = String(path || '');
+  if (!key || !archiveName) return;
+  storageState.archiveBrowser = {
+    repositoryKey: key,
+    archive: archiveName,
+    path: archivePath,
+    files: [],
+    loading: true,
+    error: '',
+  };
+  if (storageState.data && storageState.selectedRepositoryKey === key) renderStorage(storageState.data);
+  try {
+    const query = new URLSearchParams({ repository_key: key, archive: archiveName, path: archivePath });
+    const response = await fetch(`/api/repositories/archive-files?${query.toString()}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    const current = storageState.archiveBrowser;
+    if (current.repositoryKey !== key || current.archive !== archiveName || current.path !== archivePath) return;
+    storageState.archiveBrowser = { ...current, files: Array.isArray(data.files) ? data.files : [], loading: false, error: '' };
+  } catch (error) {
+    const current = storageState.archiveBrowser;
+    if (current.repositoryKey !== key || current.archive !== archiveName || current.path !== archivePath) return;
+    storageState.archiveBrowser = { ...current, files: [], loading: false, error: error.message || storageT('storage.error') };
+  }
+  if (storageState.data && storageState.selectedRepositoryKey === key && storageState.selectedTab === 'archives') renderStorage(storageState.data);
 }
 
 function renderStorageRepositoryMaintenance(repo, job) {
@@ -836,7 +930,24 @@ function onStorageContentClick(event) {
     if (storageState.selectedTab === 'management') loadRepositoryLifecycle(storageState.selectedRepositoryKey);
   }
   if (action === 'refresh-repository-archives') {
+    resetStorageArchiveBrowser();
     return loadRepositoryArchives(el.dataset.repositoryKey || storageState.selectedRepositoryKey, true);
+  }
+  if (action === 'open-repository-archive') {
+    return loadRepositoryArchiveFiles(
+      el.dataset.repositoryKey || storageState.selectedRepositoryKey,
+      el.dataset.archive || '',
+      '',
+    );
+  }
+  if (action === 'browse-repository-archive-path') {
+    const browser = storageState.archiveBrowser;
+    return loadRepositoryArchiveFiles(browser.repositoryKey, browser.archive, el.dataset.path || '');
+  }
+  if (action === 'close-repository-archive') {
+    resetStorageArchiveBrowser();
+    renderStorage(storageState.data);
+    return;
   }
   if (action === 'refresh-repository-lifecycle') {
     return loadRepositoryLifecycle(el.dataset.repositoryKey || storageState.selectedRepositoryKey, true);
