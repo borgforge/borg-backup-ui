@@ -143,6 +143,7 @@ def test_repository_archive_browser_rejects_invalid_paths(tmp_path: Path, path: 
 
 def test_repository_archive_browser_frontend_is_read_only_and_localized():
     script = (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
+    css = (ROOT / "ui" / "remaining-ui-redesign.css").read_text(encoding="utf-8")
     server = (ROOT / "borg_backup_ui.py").read_text(encoding="utf-8")
     de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
     en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
@@ -154,6 +155,9 @@ def test_repository_archive_browser_frontend_is_read_only_and_localized():
     assert "/api/repositories/archive-files" in server
     assert de["storage"]["repositoryArchiveBrowserReadOnly"] == "Schreibgeschützte Ansicht"
     assert en["storage"]["repositoryArchiveBrowserReadOnly"] == "Read-only view"
+    sticky_header = css.split(".storage-archive-browser-table th {", 1)[1].split("}", 1)[0]
+    assert "position: sticky" in sticky_header
+    assert "background: var(--ui-color-surface-raised)" in sticky_header
     browser_renderer = script.split("function renderStorageArchiveBrowser", 1)[1].split("async function loadRepositoryArchiveFiles", 1)[0]
     assert "download" not in browser_renderer.lower()
     assert "restore" not in browser_renderer.lower()

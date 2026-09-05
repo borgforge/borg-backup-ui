@@ -1334,8 +1334,9 @@
 .storage-archive-browser-table th {
   position: sticky;
   top: 0;
-  z-index: 1;
-  background: var(--ui-color-surface-subtle);
+  z-index: 2;
+  background: var(--ui-color-surface-raised);
+  box-shadow: inset 0 -1px var(--ui-color-border);
   color: var(--ui-color-text-muted);
   font-size: var(--ui-font-size-xs);
   text-transform: uppercase;
