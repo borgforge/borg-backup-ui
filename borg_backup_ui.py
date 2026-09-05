@@ -959,6 +959,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/notification-profiles/providers": self._get_apprise_profile_providers,
                 "/api/repositories/browse": lambda: self._get_repository_directories(parsed.query),
                 "/api/repositories/archives": lambda: self._get_repository_archives(parsed.query),
+                "/api/repositories/archive-files": lambda: self._get_repository_archive_files(parsed.query),
                 "/api/settings": self._get_settings,
                 "/api/settings/basic": self._get_settings_basic,
                 "/api/setup-status": self._get_setup_status,
@@ -2015,6 +2016,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         repository_key = str((qs.get("repository_key") or [""])[0]).strip()
         limit = int(str((qs.get("limit") or ["100"])[0]) or "100")
         return get_repository_archives(self.config, repository_key, limit)
+
+    def _get_repository_archive_files(self, qs_str: str) -> dict:
+        from repositories_api import RepositoryBusyError, get_repository_archive_files
+        from urllib.parse import parse_qs
+
+        qs = parse_qs(qs_str)
+        repository_key = str((qs.get("repository_key") or [""])[0]).strip()
+        archive = str((qs.get("archive") or [""])[0])
+        path = str((qs.get("path") or [""])[0])
+        try:
+            return get_repository_archive_files(self.config, repository_key, archive, path)
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
 
     def _post_storage_target(self) -> dict:
         from storage_objects_api import create_storage_target
@@ -3984,6 +3998,8 @@ btn.addEventListener('click',doRecovery);
             return "restore-archives"
         if path == "/api/restore/files":
             return "restore-files"
+        if path == "/api/repositories/archive-files":
+            return "repository-archive-files"
         if path == "/api/restore/download-check":
             return "download-check"
         if path == "/api/restore/state":

@@ -2007,6 +2007,62 @@ def get_repository_archives(config: dict, repository_key: str, limit: int = 100)
     return {"repository_key": key, "archive_count": len(rows), "archives": archives}
 
 
+def _validate_repository_archive_name(value: Any) -> str:
+    name = str(value or "")
+    if not name.strip() or len(name) > 255:
+        raise ValueError("Archive name is invalid")
+    if "::" in name or any(ord(char) < 32 or ord(char) == 127 for char in name):
+        raise ValueError("Archive name is invalid")
+    return name
+
+
+def _validate_repository_archive_path(value: Any) -> str:
+    path = str(value or "").rstrip("/")
+    if not path:
+        return ""
+    if len(path) > 4096 or path.startswith("/"):
+        raise ValueError("Archive path is invalid")
+    if any(ord(char) < 32 or ord(char) == 127 for char in path):
+        raise ValueError("Archive path is invalid")
+    parts = path.split("/")
+    if any(part in {"", ".", ".."} for part in parts) or posixpath.normpath(path) != path:
+        raise ValueError("Archive path is invalid")
+    return path
+
+
+def get_repository_archive_files(
+    config: dict,
+    repository_key: str,
+    archive: str,
+    path: str = "",
+) -> dict[str, Any]:
+    """Browse one repository archive without requiring a backup-job assignment."""
+    repository = _repository_by_key(config, repository_key)
+    archive_name = _validate_repository_archive_name(archive)
+    archive_path = _validate_repository_archive_path(path)
+
+    with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
+        from jobs_api import is_resource_active
+
+        if is_resource_active(config, f"repo:{repo_path}"):
+            raise RepositoryBusyError("Repository is currently in use by another Borg operation.")
+        encryption = str(repository.get("encryption") or "").strip()
+        env = _repo_env(storage, passphrase_file, config, encryption=encryption)
+        from archive_browser import list_archive_directory
+
+        try:
+            files = list_archive_directory(repo_path, archive_name, archive_path, env)
+        except RuntimeError as exc:
+            _raise_borg_command_error(str(exc), "borg archive listing failed")
+
+    return {
+        "repository_key": str(repository.get("repository_key") or ""),
+        "archive": archive_name,
+        "path": archive_path,
+        "files": files,
+    }
+
+
 def _repository_lifecycle_audit_file(config: dict) -> Path:
     return _data_root(config) / "config" / "repository-lifecycle.log.jsonl"
 

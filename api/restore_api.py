@@ -7,7 +7,6 @@ import shlex
 import shutil
 import subprocess
 import threading
-import time
 import traceback
 import uuid
 from datetime import datetime
@@ -19,11 +18,6 @@ from archive_prefix import (
     archive_prefix_from_job_key,
     normalize_archive_prefixes,
 )
-
-# In-memory cache: (repo, archive) → {expires, index}
-# index: parent_path → {child_name: entry_dict}
-_CACHE: dict = {}
-_CACHE_TTL = 300  # 5 minutes
 
 _RESTORE_RUNS: dict = {}
 _RESTORE_LOCK = threading.Lock()
@@ -561,81 +555,6 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
     return list_archives_with_context(config, job_key)["archives"]
 
 
-def _build_index(repo: str, archive: str, env: dict) -> dict:
-    """
-    Load full archive listing once and build parent→children index.
-    Cached for _CACHE_TTL seconds to make all subsequent navigations instant.
-    """
-    key = (repo, archive)
-    cached = _CACHE.get(key)
-    if cached and time.time() < cached["expires"]:
-        return cached["index"]
-
-    repo_archive = f"{repo}::{archive}"
-    r = subprocess.run(
-        ["borg", "list", "--json-lines", repo_archive],
-        capture_output=True, text=True, env=env, timeout=300,
-    )
-    if r.returncode != 0:
-        raise RuntimeError(f"borg list failed: {r.stderr.strip()}")
-
-    # index: parent_path (str) → {child_name: entry_dict}
-    index: dict = {}
-
-    for line in r.stdout.splitlines():
-        if not line.strip():
-            continue
-        item = json.loads(line)
-        ipath = item.get("path", "")
-        if not ipath:
-            continue
-
-        p = Path(ipath)
-        parent = str(p.parent) if str(p.parent) != "." else ""
-        name = p.name
-        if not name:
-            continue
-
-        entry = {
-            "name": name,
-            "path": ipath,
-            "type": item.get("type", "-"),
-            "size": item.get("size", 0),
-            "mtime": item.get("mtime", ""),
-            "mode": item.get("mode", ""),
-        }
-        index.setdefault(parent, {})[name] = entry
-
-    # Ensure every ancestor of every known path is in the index.
-    # Collect all paths first, then walk upward to root for each.
-    all_paths: set = set()
-    for parent_key, children in index.items():
-        if parent_key:
-            all_paths.add(parent_key)
-        for child in children.values():
-            all_paths.add(child["path"])
-
-    for ipath in all_paths:
-        p = Path(ipath)
-        while True:
-            parent_p = p.parent
-            parent_str = str(parent_p) if str(parent_p) != "." else ""
-            name = p.name
-            if not name:
-                break
-            if name not in index.setdefault(parent_str, {}):
-                index[parent_str][name] = {
-                    "name": name, "path": str(p),
-                    "type": "d", "size": 0, "mtime": "", "mode": "",
-                }
-            if not parent_str:
-                break
-            p = parent_p
-
-    _CACHE[key] = {"expires": time.time() + _CACHE_TTL, "index": index}
-    return index
-
-
 def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict]:
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
@@ -646,13 +565,9 @@ def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict
         ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
 
-        index = _build_index(info["repo"], archive, env)
+        from archive_browser import list_archive_directory
 
-        current = path.rstrip("/") if path else ""
-        children = list(index.get(current, {}).values())
-
-        children.sort(key=lambda x: (0 if x["type"] == "d" else 1, x["name"].lower()))
-        return children
+        return list_archive_directory(info["repo"], archive, path, env)
     finally:
         guard.cleanup()
 
