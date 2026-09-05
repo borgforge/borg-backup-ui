@@ -22,6 +22,17 @@ package and, after explicit approval, to a stable release.
 
 Internal changes with `release-note::no` do not need a fragment.
 
+### Approved integration exception: immutable job IDs (#447)
+
+Phases #471-#478 use the shared `codex/issue-447-immutable-job-ids` branch
+and one long-lived draft PR. Run focused tests per phase; do not publish
+incomplete intermediate migrations or create separate phase release PRs.
+The final source preflight and first test-channel candidate are deferred to
+#479, after the migration and all dependent workflows are testable together.
+This does not relax the final preflight, explicit user test approval, or
+separate stable promotion requirements below. Main can receive unrelated
+hotfix PRs while this integration remains in draft.
+
 Do not run `plugin/build.sh` directly. It is an internal builder that accepts
 only an exported and prepared source tree created by the deployment workflow.
 

@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #471 (integration work for #447; not released)
+- Defined the immutable job identity, migration safety and legacy-data contract.
+- Added a source dependency inventory and synthetic migration fixtures with
+  reusable integrity assertions. No runtime migration is enabled in this phase.
+
 ### Issue #458
 - Clarified in the Job Wizard and both manuals that Borg retention values count time periods rather than archives per period.
 - Added the effective retention policy to the flow preview and made Repository Maintenance describe the maximum restore points per period.

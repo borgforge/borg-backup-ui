@@ -1,0 +1,409 @@
+{
+  "schema_version": 1,
+  "issue": 471,
+  "baseline": "fcd2117",
+  "scan": {
+    "roots": [
+      "borg_backup_ui.py",
+      "api",
+      "runtime/lib",
+      "runtime/scripts",
+      "ui/js",
+      "plugin"
+    ],
+    "extensions": [
+      ".py",
+      ".js",
+      ".sh",
+      ".php",
+      ".page"
+    ],
+    "pattern": "job_key|backup_type|type_id|jobKey|backupType|existingJobKey|source_job_keys"
+  },
+  "groups": [
+    {
+      "id": "migration",
+      "owner_issue": 472,
+      "also": [
+        479
+      ],
+      "target": "Direct read-only inventory, plan, snapshot, durable mapping/journal, resume and integrity verification; pending approval blocks writers.",
+      "files": [
+        {
+          "path": "api/migrations/registry.py",
+          "anchor": "run_startup_migrations",
+          "role": "read/write migration state; currently applies immediately"
+        },
+        {
+          "path": "api/migrations/audit.py",
+          "anchor": "migration",
+          "role": "audit writer; mask failures without secrets"
+        },
+        {
+          "path": "api/migrations/canonical_backup_conf_v1.py",
+          "anchor": "detect",
+          "role": "known configuration normalization; must not escape snapshot/approval boundary"
+        },
+        {
+          "path": "api/migration_api.py",
+          "anchor": "backup",
+          "role": "snapshot/status API and keep-five cleanup; protect identity recovery snapshots"
+        },
+        {
+          "path": "api/startup_state.py",
+          "anchor": "maintenance",
+          "role": "startup mode owner; pending is not success"
+        }
+      ]
+    },
+    {
+      "id": "jobs",
+      "owner_issue": 473,
+      "also": [
+        474,
+        475,
+        478
+      ],
+      "target": "UUID filename/payload, exact aliases, full prefix and preserved effective settings; remove mutable identity from discovery and editing.",
+      "files": [
+        {
+          "path": "api/jobs_api.py",
+          "anchor": "discover_jobs",
+          "role": "metadata discovery and JobManager identity/runtime access; lazy migrations are not read-only"
+        },
+        {
+          "path": "api/wizard_api.py",
+          "anchor": "save_job",
+          "role": "create/edit metadata writer"
+        },
+        {
+          "path": "api/job_source_paths.py",
+          "anchor": "JOB_SCHEMA_VERSION",
+          "role": "job schema and existing source-path normalization"
+        },
+        {
+          "path": "api/archive_prefix.py",
+          "anchor": "archive_prefix_from_backup_type",
+          "role": "prefix history reader; silent invalid filtering is unsuitable for migration"
+        },
+        {
+          "path": "ui/js/pages/wizard.js",
+          "anchor": "saveWizardJob",
+          "role": "wizard identity/edit state and separate schedule request"
+        },
+        {
+          "path": "ui/js/pages/jobs.js",
+          "anchor": "job_key",
+          "role": "actions, edit selection, last run and live state"
+        },
+        {
+          "path": "ui/js/core/app-core.js",
+          "anchor": "job_key",
+          "role": "shared job actions/state joins"
+        },
+        {
+          "path": "api/config_api.py",
+          "anchor": "backup_type",
+          "role": "legacy type-specific config defaults; preserve effective behavior"
+        }
+      ]
+    },
+    {
+      "id": "assignments",
+      "owner_issue": 474,
+      "also": [
+        473,
+        475,
+        477,
+        478
+      ],
+      "target": "Use UUID for job references, preserve repository/storage identity and service schedules; repository scope is not job identity.",
+      "files": [
+        {
+          "path": "api/repositories_api.py",
+          "anchor": "save_job_repository_transaction",
+          "role": "assignment/reverse-link writer, reconciliation, maintenance filters and deletion guard"
+        },
+        {
+          "path": "api/storage_profiles_api.py",
+          "anchor": "build_storage_repo_uri",
+          "role": "legacy Type-ID-derived repository URI construction"
+        },
+        {
+          "path": "api/storage_objects_api.py",
+          "anchor": "write_storage_store",
+          "role": "canonical storage reader/writer; preserve storage identity and paths"
+        },
+        {
+          "path": "api/repository_context.py",
+          "anchor": "job_key",
+          "role": "repository resolution for a selected job"
+        },
+        {
+          "path": "api/check_api.py",
+          "anchor": "_job_retention",
+          "role": "repository check/prune/compact execution, job selection and archive-prefix filtering"
+        },
+        {
+          "path": "api/inventory_store.py",
+          "anchor": "write",
+          "role": "shared atomic inventory writer; maintain gate/transaction boundary"
+        },
+        {
+          "path": "api/schedule_api.py",
+          "anchor": "write_schedules",
+          "role": "UUID schedule map, managed cron, service entries; disable preflight orphan cleanup"
+        },
+        {
+          "path": "ui/js/pages/storage.js",
+          "anchor": "job_key",
+          "role": "assignment/maintenance display and actions"
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "owner_issue": 475,
+      "also": [
+        474,
+        477,
+        479
+      ],
+      "target": "Full job ID plus independent run ID for ownership; preserve readable snapshots/logs, safe recovery and prefix-union retention.",
+      "files": [
+        {
+          "path": "api/wizard_runner.py",
+          "anchor": "job_key",
+          "role": "subprocess environment, paths, archive name, cache selection and maintenance"
+        },
+        {
+          "path": "api/job_control.py",
+          "anchor": "run_id",
+          "role": "cancellation state and owner verification"
+        },
+        {
+          "path": "runtime/lib/backup_job.py",
+          "anchor": "BORG_UI_JOB_KEY",
+          "role": "backup process, lock/log/status/recovery/notification writers"
+        },
+        {
+          "path": "runtime/lib/status.py",
+          "anchor": "backup_type",
+          "role": "status/test dataclasses, filename discovery and payload joins"
+        },
+        {
+          "path": "runtime/lib/runtime_recovery.py",
+          "anchor": "backup_type",
+          "role": "stopped target records and explicit recovery acknowledgement"
+        },
+        {
+          "path": "runtime/lib/borg_runner.py",
+          "anchor": "prune",
+          "role": "Borg archive creation and combined-prefix retention; no job identity inference"
+        },
+        {
+          "path": "runtime/lib/docker_manager.py",
+          "anchor": "logger",
+          "role": "descriptive Docker actions; ensure legacy type removal does not change restart behavior"
+        },
+        {
+          "path": "runtime/lib/notifications.py",
+          "anchor": "backup_type",
+          "role": "notification event/message builders"
+        },
+        {
+          "path": "runtime/lib/notification_events.py",
+          "anchor": "job_key",
+          "role": "queue, retry delivery history, dedup state and detached writer"
+        },
+        {
+          "path": "api/smb_mount.py",
+          "anchor": "job_key",
+          "role": "job-configured mount/runtime ownership"
+        },
+        {
+          "path": "ui/js/components/log-viewer.js",
+          "anchor": "log",
+          "role": "readable log UI; full-ID lookup supplied by callers"
+        }
+      ]
+    },
+    {
+      "id": "reporting",
+      "owner_issue": 476,
+      "also": [
+        475,
+        477,
+        479
+      ],
+      "target": "Configured IDs drive active counts; historical unassigned/deleted records remain distinct; preserve weekly conflicts and reminder dedup.",
+      "files": [
+        {
+          "path": "api/status_api.py",
+          "anchor": "_auto_write_weekly_snapshot",
+          "role": "dashboard aggregation and both live weekly stores; GET path currently writes"
+        },
+        {
+          "path": "api/history_api.py",
+          "anchor": "backup_type",
+          "role": "status filename parser and history selection"
+        },
+        {
+          "path": "api/reports_api.py",
+          "anchor": "job_key",
+          "role": "report discovery and time series joins"
+        },
+        {
+          "path": "api/report_mail_api.py",
+          "anchor": "job_key",
+          "role": "scheduled reports/labels and snapshot joins"
+        },
+        {
+          "path": "api/notification_reminder_api.py",
+          "anchor": "job_key",
+          "role": "overdue schedule/status/test joins and reminder keys"
+        },
+        {
+          "path": "api/homepage_widget_api.py",
+          "anchor": "job_key",
+          "role": "external widget aggregation"
+        },
+        {
+          "path": "api/unraid_dashboard_widget.py",
+          "anchor": "backup_type",
+          "role": "Unraid cache writer and active job counters"
+        },
+        {
+          "path": "plugin/widget-status.php",
+          "anchor": "cache",
+          "role": "read-only external widget cache endpoint; gate cache refresh elsewhere"
+        },
+        {
+          "path": "plugin/borg-backup-ui-dashboard.page",
+          "anchor": "widget",
+          "role": "Unraid widget integration consumes canonical aggregate"
+        },
+        {
+          "path": "ui/js/pages/dashboard.js",
+          "anchor": "backup_type",
+          "role": "active cards, actions and overlay state"
+        },
+        {
+          "path": "ui/js/pages/history.js",
+          "anchor": "job_key",
+          "role": "history labels/filtering without filename-derived identity"
+        },
+        {
+          "path": "ui/js/pages/reports.js",
+          "anchor": "jobKey",
+          "role": "report selectors and continuity"
+        }
+      ]
+    },
+    {
+      "id": "restore",
+      "owner_issue": 477,
+      "also": [
+        474,
+        475,
+        476
+      ],
+      "target": "Select full ID, current repository plus prefix history; preserve restore IDs, historical scope and UUID test results.",
+      "files": [
+        {
+          "path": "api/restore_api.py",
+          "anchor": "_persist_restore_runs",
+          "role": "browse/context, async run map, history index/detail and locks"
+        },
+        {
+          "path": "api/restore_tests_api.py",
+          "anchor": "job_key",
+          "role": "plan/policy/result filenames and proof scope"
+        },
+        {
+          "path": "runtime/scripts/borg_restore_test.py",
+          "anchor": "backup_type",
+          "role": "standalone result/log writer, invocation and notification identity"
+        },
+        {
+          "path": "api/archive_browser.py",
+          "anchor": "archive",
+          "role": "repository-owned read-only browse; do not restrict to configured jobs"
+        },
+        {
+          "path": "ui/js/pages/restore.js",
+          "anchor": "job_key",
+          "role": "restore selection, execution and history"
+        },
+        {
+          "path": "ui/js/pages/restore-tests.js",
+          "anchor": "job_key",
+          "role": "plan/manual test selection and result display"
+        }
+      ]
+    },
+    {
+      "id": "transfer",
+      "owner_issue": 478,
+      "also": [
+        473,
+        474,
+        476,
+        479
+      ],
+      "target": "Versioned partial bundle remap, safe ID deletion, diagnostics without secrets; existing settings restore is not full configuration recovery.",
+      "files": [
+        {
+          "path": "api/settings_transfer_api.py",
+          "anchor": "bbui-job-bundle-v2",
+          "role": "export/import collision rewrite and backup.conf restore"
+        },
+        {
+          "path": "api/factory_reset_api.py",
+          "anchor": "job_key",
+          "role": "explicit destructive scope and store enumeration"
+        },
+        {
+          "path": "api/system_health_api.py",
+          "anchor": "job_key",
+          "role": "integrity and ownership diagnostics"
+        },
+        {
+          "path": "api/support_bundle_api.py",
+          "anchor": "status",
+          "role": "sanitized bundle inclusion and referential diagnostics"
+        },
+        {
+          "path": "api/borg_key_store.py",
+          "anchor": "remove_repository_key",
+          "role": "repository-owned secrets; references persist even with old key-like names"
+        },
+        {
+          "path": "ui/js/pages/settings.js",
+          "anchor": "job_key",
+          "role": "partial transfer, selected jobs, settings restore and diagnostics"
+        }
+      ]
+    },
+    {
+      "id": "activation",
+      "owner_issue": 479,
+      "also": [
+        472,
+        474,
+        475,
+        476,
+        477,
+        478
+      ],
+      "target": "Last phase only: register cutover, gated HTTP/startup/worker lifecycle and end-to-end tests before candidate build.",
+      "files": [
+        {
+          "path": "borg_backup_ui.py",
+          "anchor": "_evaluate_startup_migrations",
+          "role": "HTTP job parameters/routes, schedule cleanup, migration gate, all background writers"
+        }
+      ]
+    }
+  ]
+}
