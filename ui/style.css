@@ -5745,6 +5745,10 @@ body.wizard-modal-open {
   align-items: flex-start;
 }
 
+.wizard-file-activity-status-codes {
+  white-space: nowrap;
+}
+
 .wizard-file-activity-warning {
   margin: 0;
   padding: 5px 8px;

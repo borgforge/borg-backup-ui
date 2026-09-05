@@ -815,7 +815,7 @@
     "compressionLz4": "lz4 (schnell, Standard)",
     "compressionNone": "none (keine Kompression)",
     "fileActivity": "Dateiaktivität im Live-Log",
-    "fileActivityDescription": "Neue, geänderte oder fehlerhafte Dateien anzeigen (A/M/E).",
+    "fileActivityDescription": "Neue, geänderte oder fehlerhafte Dateien anzeigen",
     "fileActivityPrivacy": "Datei- und Verzeichnisnamen erscheinen in Live- und gespeicherten Logs und können in Support-Paketen enthalten sein. A/M/E basiert auf dem Borg-Datei-Cache, nicht auf übertragenen Daten.",
     "fastDefault": "schnell, Standard",
     "noCompression": "keine Kompression",

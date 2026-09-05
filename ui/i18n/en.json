@@ -815,7 +815,7 @@
     "compressionLz4": "lz4 (fast, default)",
     "compressionNone": "none (no compression)",
     "fileActivity": "File activity in the live log",
-    "fileActivityDescription": "Show added, modified, or errored files (A/M/E).",
+    "fileActivityDescription": "Show added, modified, or errored files",
     "fileActivityPrivacy": "File and directory names appear in live and stored logs and can be included in support bundles. A/M/E comes from Borg's files cache, not from transferred data.",
     "fastDefault": "fast, default",
     "noCompression": "no compression",

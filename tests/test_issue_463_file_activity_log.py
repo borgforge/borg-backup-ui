@@ -189,6 +189,10 @@ def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
     assert 'id="wiz-file-activity"' in basics
     assert 'id="wiz-file-activity"' not in sources_target
     assert 'wizard-feature-box wizard-file-activity' in basics
+    assert 'wizard-file-activity-status-codes' in basics
+    assert 'anzeigen</span><br><span class="wizard-file-activity-status-codes">(A/M/E)</span>' in basics
+    assert ".wizard-file-activity-status-codes" in styles
+    assert "white-space: nowrap" in styles
     assert "#wizard-modal .modal-wizard" in styles
     assert "max-height: calc(100vh - 32px)" in styles
     assert "flex: 1 1 448px" in styles
