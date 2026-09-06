@@ -1,4 +1,5 @@
 import json
+import logging
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -363,6 +364,77 @@ def test_repository_maintenance_persists_structured_prune_and_compact_results(tm
     assert compact_result["freed_space"] == "12.6 GB"
     assert compact_result["duration_seconds"] >= 2
     assert stored["compact"]["freed_space"] == "12.6 GB"
+
+
+@pytest.mark.parametrize('date_label', ['Mon, 2026-09-07 10:11:12', '2026-09-07 10:11:12', 'Mo, 2026-09-07 10:11:12 +0200'])
+@pytest.mark.parametrize('log_format', [
+    '%(message)s', '%(levelname)s %(message)s', '%(asctime)s %(levelname)s %(message)s',
+    '[%(asctime)s] %(levelname)s %(message)s', '[%(asctime)s] %(message)s',
+])
+def test_repository_maintenance_reads_borg_delete_names_without_metadata(date_label, log_format):
+    class Process:
+        returncode = 0
+
+    state = check_api._CheckState(Process(), 'repo_test', 'quick', datetime.now(), action='prune')
+    formatter = logging.Formatter(log_format, datefmt='%Y-%m-%d %H:%M:%S')
+
+    def append_output(message):
+        record = logging.makeLogRecord({'msg': message, 'levelname': 'INFO'})
+        state.append_line(formatter.format(record))
+
+    names = ['old prefix with spaces-2026-06-01', 'name  with  double spaces (2/8)',
+             'name Mon, 2026-08-31 00:00:00']
+    for index, name in enumerate(names, 1):
+        line = f'Deleting archive: {name:<60} {date_label} [{index:064x}] ({index}/{len(names)})'
+        append_output(line)
+        append_output(line)  # Repeated output frames count only once.
+    append_output(f'Pruning archive (1/1): {names[0]:<60} {date_label} [{1:064x}]')
+    result = CheckManager._maintenance_result(state)
+    assert result['status'] == 'success'
+    assert result['deleted_archives_count'] == len(names)
+    assert result['deleted_archives'] == names
+
+
+@pytest.mark.parametrize('prefix', ['', 'INFO ', '2026-09-07 12:34:56 INFO '])
+def test_repository_maintenance_ignores_retention_plans_dry_runs_and_keep_lines(prefix):
+    class Process:
+        returncode = 0
+
+    state = check_api._CheckState(Process(), 'repo_test', 'quick', datetime.now(), action='prune')
+    formatted = f'archive with spaces Mon, 2026-09-07 10:11:12 [{1:064x}]'
+    for line in [
+        f'Selected for pruning (1/1): {formatted}',
+        f'Would delete archive: {formatted} (1/1)',
+        f'Would prune: {formatted}',
+        f'Keeping archive (rule: daily #1): {formatted}',
+        f'Keeping checkpoint archive: {formatted}',
+        f'[Info] Selected for pruning: Deleting archive: {formatted} (1/1)',
+        'Deleting archive: archive with spaces',
+        'Deleting archive: archive with spaces Mon, 2026-09-07 10:11:12 [invalid-id] (1/1)',
+    ]:
+        state.append_line(prefix + line)
+    result = CheckManager._maintenance_result(state)
+    assert result['deleted_archives_count'] == 0 and result['deleted_archives'] == []
+
+
+@pytest.mark.parametrize('exit_code', [1, 2, 130, -15])
+@pytest.mark.parametrize('prefix', ['', 'INFO ', '2026-09-07 12:34:56 INFO '])
+@pytest.mark.parametrize('output', [
+    'Pruning archive (1/1): old archive with spaces',
+    f'Pruning archive (1/1): old archive with spaces Mon, 2026-09-07 10:11:12 [{1:064x}]',
+    f'Deleting archive: old archive with spaces Mon, 2026-09-07 10:11:12 [{1:064x}] (1/1)',
+])
+def test_repository_maintenance_does_not_confirm_deletions_after_failure(exit_code, output, prefix):
+    class Process:
+        returncode = exit_code
+
+    state = check_api._CheckState(Process(), 'repo_test', 'quick', datetime.now(), action='prune')
+    state.append_line(prefix + output)
+    state.append_line('Repository commit failed')
+    result = CheckManager._maintenance_result(state)
+    assert result['exit_code'] == exit_code and result['status'] != 'success'
+    assert result['deleted_archives_count'] == 0 and result['deleted_archives'] == []
+    assert 'Repository commit failed' in result['details']
 
 
 def test_repository_maintenance_masks_error_details(tmp_path: Path):

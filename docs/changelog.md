@@ -55,6 +55,15 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   restore-test, report and repository views. Sort job selectors by location and
   localized natural name order; show readable prefixes instead of UUID subtitles.
   Restore-test plans now include current prefix and description (#447).
+- Restore detailed combined-retention logs: prefix scope and policy, repository
+  and matching archive/checkpoint counts, each winning keep rule, explicitly
+  planned removal candidates and success/warning/failure completion. Keep archive
+  names, local timestamps and full IDs available for diagnosis (#447).
+- Read Borg's naive JSON inventory timestamps in UTC and select calendar buckets
+  in the local timezone. Match Borg's ascending-sort-then-reverse tie ordering;
+  qualify local midnight and DST transitions against the shipped Borg binary.
+- Recognize successful Borg-delete output in manual prune results without
+  treating planned or unsuccessful deletions as completed removals (#447).
 
 ### Issue #478 (integration work for #447; not released)
 - Added versioned ID-based job transfer with explicit new/merge/skip choices,

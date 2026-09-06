@@ -310,13 +310,37 @@ class CheckManager:
         action_key = "verify_data" if state.action == "check" and state.mode == "verify_data" else state.action
         deleted_archives = []
         freed_space = ""
+        archive_metadata = (
+            r"\s+(?:\S+,\s+)?\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}"
+            r"(?:\s*[+-]\d{2}:?\d{2})?\s+\[[0-9a-f]{64}\]"
+        )
+        log_timestamp = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
+        logger_prefix = re.compile(
+            r"^(?:(?:\[" + log_timestamp + r"\]|" + log_timestamp + r")\s+(?:INFO\s+)?|INFO\s+)"
+        )
         for raw in lines:
             line = str(raw or "").strip()
-            match = re.search(r"\bPruning archive(?:\s*\([^)]*\))?\s*:\s*(.+)$", line, re.IGNORECASE)
-            if match:
-                archive = match.group(1).strip()
-                if archive and archive not in deleted_archives:
-                    deleted_archives.append(archive)
+            # The manual runner adds INFO; backup runners also add a timestamp.
+            # Remove only these known prefixes so plan/dry-run text cannot match.
+            line = logger_prefix.sub("", line, count=1)
+            # Borg logs deletion before it finishes/commits. A failed process
+            # cannot confirm which of its announced deletions were persisted.
+            archive = ""
+            if exit_code == 0:
+                legacy = re.match(r"Pruning archive(?:\s*\([^)]*\))?\s*:\s*(.+)$", line, re.IGNORECASE)
+                if legacy:
+                    payload = legacy.group(1).strip()
+                    formatted = re.fullmatch(r"(.+?)" + archive_metadata, payload, re.IGNORECASE)
+                    archive = formatted.group(1).strip() if formatted else payload
+                else:
+                    deleted = re.fullmatch(
+                        r"Deleting archive:\s*(.+?)" + archive_metadata + r"\s+\(\d+/\d+\)",
+                        line, re.IGNORECASE,
+                    )
+                    if deleted:
+                        archive = deleted.group(1).strip()
+            if archive and archive not in deleted_archives:
+                deleted_archives.append(archive)
             freed = re.search(
                 r"\bfreed(?:\s+about)?\s+([0-9]+(?:[.,][0-9]+)?\s*(?:[KMGTPE]i?B|bytes?))",
                 line,

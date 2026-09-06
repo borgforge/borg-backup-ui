@@ -123,3 +123,103 @@ def test_shipped_borg_union_policy_and_deletion(tmp_path, monkeypatch):
     remaining = json.loads(borg('list','--json',str(repo)).stdout)['archives']
     assert {r['name'] for r in remaining} == {a.name for a in keep} | {'foreign-newest'}
     borg('check',str(repo))
+
+
+def test_equal_timestamps_preserve_borg_reverse_inventory_order():
+    rows = [archive('managed-a', '2026-10-25T01:30:00', 1),
+            archive('managed-z', '2026-10-25T01:30:00', 2),
+            archive('managed-z.checkpoint', '2026-10-25T01:30:00', 3)]
+    keep, discard = plan_retention(rows, ['managed'], {'daily': 1, 'weekly': 0, 'monthly': 0, 'yearly': 0})
+    assert [a.name for a in keep] == ['managed-z.checkpoint', 'managed-z']
+    assert [a.name for a in discard] == ['managed-a']
+
+
+def test_shipped_borg_ties_local_midnight_and_dst_fold(tmp_path, monkeypatch):
+    """Use native prune as the oracle for local calendar buckets and tied times."""
+    import re
+    import time
+
+    binary = ROOT / 'runtime/bin/borg/borg-linux-glibc231-x86_64-1.4.5'
+    if not binary.is_file():
+        pytest.skip('Shipped Borg binary unavailable')
+    if not hasattr(time, 'tzset'):
+        pytest.skip('Local timezone switching unavailable')
+    previous_tz = os.environ.get('TZ')
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    (bin_dir / 'borg').symlink_to(binary)
+    monkeypatch.setenv('PATH', str(bin_dir) + os.pathsep + os.environ['PATH'])
+    for key in tuple(os.environ):
+        if key.startswith('BORG_'):
+            monkeypatch.delenv(key)
+    for key in ('BORG_BASE_DIR', 'BORG_CACHE_DIR', 'BORG_SECURITY_DIR', 'BORG_KEYS_DIR'):
+        monkeypatch.setenv(key, str(tmp_path / key.lower()))
+    monkeypatch.setenv('TZ', 'Europe/Berlin')
+    time.tzset()
+    source = tmp_path / 'source'
+    source.mkdir()
+    (source / 'file').write_text('synthetic calendar retention test')
+    repo = tmp_path / 'repo'
+
+    def borg(*args, utc_inventory=False):
+        env = dict(os.environ)
+        if utc_inventory:
+            env['TZ'] = 'UTC'
+        result = subprocess.run(['borg', *args], capture_output=True, text=True,
+                                timeout=45, cwd=source, env=env)
+        assert result.returncode == 0, result.stderr
+        return result
+
+    try:
+        borg('init', '--encryption=none', str(repo))
+        dates = {
+            'managed-old': '2026-10-23T21:30:00+00:00',
+            'managed-before': '2026-10-24T21:30:00+00:00',
+            'managed-fold-early': '2026-10-25T00:30:00+00:00',
+            'managed-tie-a': '2026-10-25T01:30:00+00:00',
+            'managed-tie-z': '2026-10-25T01:30:00+00:00',
+            'managed-z.checkpoint': '2026-10-25T01:30:00+00:00',
+        }
+        for name, timestamp in dates.items():
+            borg('create', '--timestamp', timestamp, str(repo) + '::' + name, 'file')
+        local_inventory = json.loads(borg('list', '--json', '--consider-checkpoints', str(repo)).stdout)
+        local_times = {a['name']: a['time'] for a in local_inventory['archives']}
+        # Borg JSON has local naive times: both sides of the DST fold look equal.
+        assert local_times['managed-before'] == '2026-10-24T23:30:00.000000'
+        assert local_times['managed-fold-early'] == local_times['managed-tie-z'] == '2026-10-25T02:30:00.000000'
+        utc_inventory = json.loads(borg('list', '--json', '--consider-checkpoints', str(repo),
+                                        utc_inventory=True).stdout)
+        rows = parse_archives(utc_inventory)
+        commands = []
+        monkeypatch.setattr('lib.borg_runner._run_borg', lambda cmd, *args: commands.append(cmd) or 0)
+
+        for daily, expected_names in (
+                (1, {'managed-tie-z', 'managed-z.checkpoint'}),
+                (2, {'managed-tie-z', 'managed-before', 'managed-z.checkpoint'})):
+            policy = {'daily': daily, 'weekly': 0, 'monthly': 0, 'yearly': 0}
+            dry = borg('prune', '--dry-run', '--list', '--glob-archives', 'managed-*',
+                       '--keep-daily', str(daily), str(repo))
+            pruned_ids = {re.search(r'\[([0-9a-f]{64})\]', line).group(1)
+                          for line in dry.stderr.splitlines() if line.startswith('Would prune:')}
+            oracle_keep = {a.name for a in rows if a.id not in pruned_ids}
+            oracle_discard = {a.name for a in rows if a.id in pruned_ids}
+            assert oracle_keep == expected_names, dry.stderr
+            keep, discard = plan_retention(rows, ['managed'], policy)
+            assert {a.name for a in keep} == oracle_keep, dry.stderr
+            assert {a.name for a in discard} == oracle_discard, dry.stderr
+            commands.clear()
+            assert prune_union(str(repo), ['managed'], policy) == 0
+            assert len(commands) == 1
+            archive_args = commands[0][commands[0].index('--') + 2:]
+            assert set(archive_args) == oracle_discard, dry.stderr
+            assert os.environ['TZ'] == 'Europe/Berlin'
+        # Both inventory reads are real; only the final deletion was intercepted.
+        unchanged = json.loads(borg('list', '--json', '--consider-checkpoints', str(repo),
+                                    utc_inventory=True).stdout)
+        assert unchanged['archives'] == utc_inventory['archives']
+    finally:
+        if previous_tz is None:
+            monkeypatch.delenv('TZ', raising=False)
+        else:
+            monkeypatch.setenv('TZ', previous_tz)
+        time.tzset()

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import logging
+import os
 import re
 import subprocess
 
@@ -36,6 +37,7 @@ def validate_scope(prefixes, policy):
 
 
 def parse_archives(payload):
+    """Read explicit timestamps or naive timestamps from a UTC Borg inventory."""
     rows = payload.get("archives") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
         raise ValueError("Borg did not return an archive inventory")
@@ -62,13 +64,22 @@ def parse_archives(payload):
 
 def plan_retention(archives, prefixes, policy):
     """Match Borg 1.4 calendar buckets, oldest fallback and checkpoint handling."""
+    keep, discard, _ = _plan_retention(archives, prefixes, policy)
+    return keep, discard
+
+
+def _plan_retention(archives, prefixes, policy):
+    """Select archives and retain the first rule that keeps each archive."""
     validate_scope(prefixes, policy)
     selected = sorted((a for a in archives if any(a.name.startswith(p + "-") for p in prefixes)),
-                      key=lambda a: a.timestamp, reverse=True)
+                      key=lambda a: a.timestamp)
+    # Borg sorts ascending and then reverses, including equal-time entries.
+    selected.reverse()
     complete = [a for a in selected if not _CHECKPOINT.search(a.name)]
-    kept = set()
+    kept, reasons = set(), {}
     if selected and _CHECKPOINT.search(selected[0].name):
         kept.add(selected[0].id)
+        reasons[selected[0].id] = "latest checkpoint"
     for period, pattern in PERIODS.items():
         count = policy[period]
         if not count:
@@ -83,11 +94,37 @@ def plan_retention(archives, prefixes, policy):
                 continue
             kept.add(archive.id)
             added += 1
+            reasons[archive.id] = f"{period} #{added}"
             if added == count:
                 break
         if complete and added < count:
+            if complete[-1].id not in kept:
+                reasons[complete[-1].id] = f"{period}[oldest] #{added + 1}"
             kept.add(complete[-1].id)
-    return ([a for a in selected if a.id in kept], [a for a in selected if a.id not in kept])
+    return ([a for a in selected if a.id in kept], [a for a in selected if a.id not in kept], reasons)
+
+
+def _archive_counts(archives):
+    checkpoints = sum(bool(_CHECKPOINT.search(a.name)) for a in archives)
+    return len(archives) - checkpoints, checkpoints
+
+
+def _log_retention_plan(archives, keep, discard, reasons):
+    """Log planned decisions without claiming an archive was already deleted."""
+    logger.info("Repository contains %d normal archives and %d checkpoint archives.", *_archive_counts(archives))
+    logger.info("Applying rules to the matching %d archives and %d checkpoints...", *_archive_counts(keep + discard))
+    logger.info("Keeping %d archives and %d checkpoints, pruning %d archives and %d checkpoints.",
+                *_archive_counts(keep), *_archive_counts(discard))
+    removed = 0
+    for archive in sorted(keep + discard, key=lambda a: a.timestamp, reverse=True):
+        timestamp = archive.timestamp.astimezone().strftime("%a, %Y-%m-%d %H:%M:%S %z")
+        if archive.id in reasons:
+            logger.info("Keeping archive (rule: %s): %s %s [%s]",
+                        reasons[archive.id], archive.name, timestamp, archive.id)
+        else:
+            removed += 1
+            logger.info("Selected for pruning (%d/%d): %s %s [%s]",
+                        removed, len(discard), archive.name, timestamp, archive.id)
 
 
 def prune_union(repo, prefixes, policy, *, process_controller=None, before_delete=None):
@@ -96,10 +133,15 @@ def prune_union(repo, prefixes, policy, *, process_controller=None, before_delet
     validate_scope(prefixes, policy)
     if not repo or "::" in repo:
         raise ValueError("An explicit repository location is required")
+    logger.info("Borg prune: applying combined retention only to archives matching %s (keep: %dd/%dw/%dm/%dy)",
+                ", ".join(p + "-*" for p in prefixes), *(policy[period] for period in PERIODS))
 
     def inventory():
         command = ["borg", "list", "--lock-wait", "30", "--json", "--consider-checkpoints", "--", repo]
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=None, text=True)
+        # Borg 1.4 JSON timestamps are naive local times. Request UTC so parsing
+        # is unambiguous, then apply calendar rules in the caller's local zone.
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=None, text=True,
+                                   env={**os.environ, "TZ": "UTC"})
         if process_controller:
             process_controller.attach_process(process)
         try:
@@ -112,9 +154,13 @@ def prune_union(repo, prefixes, policy, *, process_controller=None, before_delet
         return parse_archives(json.loads(output))
 
     first = inventory()
-    keep, discard = plan_retention(first, prefixes, policy)
-    logger.info("Combined retention: keeping %d archives, removing %d across %d prefixes", len(keep), len(discard), len(prefixes))
+    keep, discard, reasons = _plan_retention(first, prefixes, policy)
+    _log_retention_plan(first, keep, discard, reasons)
+    if process_controller and process_controller.is_cancel_requested():
+        logger.warning("Borg prune cancelled before deletion (exit 130)")
+        return 130
     if not discard:
+        logger.info("Borg prune succeeded (exit 0): no archives selected for removal")
         return 0
     command = ["borg", "delete", "--lock-wait", "30", "--list", "--show-rc", "--", repo, *[a.name for a in discard]]
     # One Borg invocation owns its repository lock for the entire deletion.
@@ -124,7 +170,15 @@ def prune_union(repo, prefixes, policy, *, process_controller=None, before_delet
     if inventory() != first:
         raise ValueError("Repository archives changed while planning retention; retry later")
     if process_controller and process_controller.is_cancel_requested():
+        logger.warning("Borg prune cancelled before deletion (exit 130)")
         return 130
     if before_delete and not before_delete():
         raise ValueError("Job repository ownership changed; retention was not applied")
-    return _run_borg(command, process_controller)
+    exit_code = _run_borg(command, process_controller)
+    if exit_code == 0:
+        logger.info("Borg prune succeeded (exit 0)")
+    elif exit_code == 1:
+        logger.warning("Borg prune completed with warnings (exit 1)")
+    else:
+        logger.error("Borg prune failed (exit %d)", exit_code)
+    return exit_code
