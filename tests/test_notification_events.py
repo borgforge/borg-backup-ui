@@ -1079,7 +1079,10 @@ def test_restore_runner_uses_restore_status_dir_and_test_date(tmp_path):
         assert tester.status_dir == restore_status
         assert tester._should_test({
             "job_id": "00000003-1111-4111-8111-111111111111",
-            "path": "/synthetic/repository", "job": {"archive_prefixes": ["example"]},
+            "path": "/synthetic/repository", "job": {
+                "job_id": "00000003-1111-4111-8111-111111111111",
+                "archive_prefixes": ["example"],
+            },
         }) is False
     finally:
         tester.close()
