@@ -681,9 +681,17 @@
     "logTitle": "Log: {name}",
     "logError": "[Error] {message}",
     "logDone": "Done (exit {code})",
+    "logWarning": "Completed with warnings (exit {code})",
     "logFailed": "Error (exit {code})",
     "logSkipped": "Skipped (exit {code})",
-    "logCancelled": "Cancelled (exit {code})"
+    "logCancelled": "Cancelled (exit {code})",
+    "activityLogStart": "Go to beginning",
+    "activityLogOlder": "↑ Previous section",
+    "activityLogNewer": "↓ Next section",
+    "activityLogDownload": "Download complete log",
+    "activityLogComplete": "All entries are retained. Scrolling loads additional sections. Browser search only searches the loaded section.",
+    "activityLogSaveFailed": "The log could not be saved to the log directory and remains in RAM. Download the complete log before restarting the server.",
+    "activityLogEnded": "Run ended; exit code unavailable"
   },
   "schedule": {
     "title": "Schedule",

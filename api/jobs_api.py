@@ -6,6 +6,7 @@ Subprozesse gestartet; deren stdout wird live gepuffert und per SSE ausgeliefert
 """
 
 import json
+import io
 import copy
 import os
 import re
@@ -183,6 +184,7 @@ def active_resource_locks(config: dict) -> List[dict]:
             "updated_at": str(raw.get("updated_at") or "").strip(),
             "log_file": str(raw.get("log_file") or "").strip(),
             "run_id": str(raw.get("run_id") or "").strip(),
+            "file_activity": raw.get("file_activity") is True,
         })
     return rows
 
@@ -244,6 +246,7 @@ def durable_running_states(config: dict) -> Dict[str, dict]:
             "log_file": str(lock.get("log_file") or ""),
             "source": "resource_lock",
             "run_id": str(lock.get("run_id") or ""),
+            "file_activity": lock.get("file_activity") is True,
         })
         started_at = str(lock.get("started_at") or "")
         if started_at and (not current["start_time"] or started_at < current["start_time"]):
@@ -252,6 +255,9 @@ def durable_running_states(config: dict) -> Dict[str, dict]:
             current["log_file"] = str(lock.get("log_file"))
         if not current.get("run_id") and lock.get("run_id"):
             current["run_id"] = str(lock.get("run_id"))
+    from activity_log_capture import running_captures
+    for capture in running_captures():
+        grouped.setdefault(capture['job_key'], capture)
     for job_key, state in grouped.items():
         if not state.get("log_file"):
             state["log_file"] = _fallback_runtime_log(config, job_key, str(state.get("start_time") or ""))
@@ -357,6 +363,7 @@ class JobInfo:
     restore_test_validity_days: int = 30
     restore_test_level: int = 2
     restore_test_max_runtime_minutes: int = 0
+    file_activity: bool = False
 
     @property
     def display_name(self) -> str:
@@ -367,14 +374,23 @@ class JobInfo:
 
 
 class _JobState:
-    def __init__(self, proc: subprocess.Popen, start_time: datetime, run_id: str):
+    def __init__(self, proc: subprocess.Popen, start_time: datetime, run_id: str, log_file: Path | None = None, capture_record_file: Path | None = None):
         self.proc = proc
         self.start_time = start_time
         self.run_id = run_id
+        self.log_file = log_file
+        self.capture_record_file = capture_record_file
+        self.line_count = 0
         self.lines: List[str] = []
         self.finished = False
         self.exit_code: Optional[int] = None
         self._lock = threading.Lock()
+
+    def open_log(self):
+        if self.capture_record_file:
+            from activity_log_capture import open_capture_file
+            return open_capture_file(self.capture_record_file)
+        return self.log_file.open("rb")
 
     def append_line(self, line: str) -> None:
         with self._lock:
@@ -428,10 +444,24 @@ class JobManager:
         if extra_env:
             env.update(extra_env)
 
+        log_file = None
+        capture_record_file = None
+        log_handle = None
         try:
+            if env.get("BORG_UI_FILE_ACTIVITY_RUN") == "1":
+                from activity_log import activity_log_path
+                from activity_log_capture import prepare_capture
+
+                log_file, capture_record_file = prepare_capture(job_key, run_id, Path(env["BORG_UI_ACTIVITY_LOG_DIR"]))
+                log_handle = os.fdopen(os.open(log_file, os.O_WRONLY | os.O_NOFOLLOW), "wb")
+                env["BORG_UI_CAPTURE_LOG"] = str(log_file)
+                env["BORG_UI_RETAINED_LOG"] = str(activity_log_path(Path(env["BORG_UI_ACTIVITY_LOG_DIR"]), job_key, run_id))
+                command = [sys.executable, str(Path(__file__).with_name("activity_log_capture.py")), str(capture_record_file), *command]
+                env["PYTHONUNBUFFERED"] = "1"
+                env["PYTHONIOENCODING"] = "utf-8"
             proc = subprocess.Popen(
                 command,
-                stdout=subprocess.PIPE,
+                stdout=log_handle if log_handle is not None else subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=env,
                 text=True,
@@ -440,8 +470,11 @@ class JobManager:
             )
         except OSError as exc:
             return False, f"Start failed: {exc}"
+        finally:
+            if log_handle is not None:
+                log_handle.close()
 
-        new_state = _JobState(proc, datetime.now(), run_id)
+        new_state = _JobState(proc, datetime.now(), run_id, log_file, capture_record_file)
         with self._lock:
             self._states[job_key] = new_state
 
@@ -457,12 +490,37 @@ class JobManager:
     def _reader(self, job_key: str, state: _JobState) -> None:
         """Liest stdout des Subprozesses Zeile für Zeile in den Puffer."""
         try:
-            for line in state.proc.stdout:
-                state.append_line(line.rstrip("\n"))
+            if state.log_file is None:
+                for line in state.proc.stdout:
+                    state.append_line(line.rstrip("\n"))
+            else:
+                # Preserve the existing running-state line_count contract.
+                # Count once in blocks, independently of all browser readers.
+                pending_line = False
+                with state.open_log() as handle:
+                    while True:
+                        finished = state.proc.poll() is not None
+                        chunk = handle.read(65536)
+                        if chunk:
+                            with state._lock:
+                                state.line_count += chunk.count(b"\n")
+                            pending_line = not chunk.endswith(b"\n")
+                        elif finished:
+                            if pending_line:
+                                with state._lock:
+                                    state.line_count += 1
+                            break
+                        else:
+                            time.sleep(0.1)
         except Exception:
             pass
         finally:
             state.proc.wait()
+            if state.capture_record_file:
+                from activity_log_capture import capture_path, read_record
+                record = read_record(state.capture_record_file)
+                if record:
+                    state.log_file = capture_path(record)
             with state._lock:
                 state.exit_code = state.proc.returncode
                 state.finished = True
@@ -475,6 +533,19 @@ class JobManager:
             state = self._states.get(job_key)
         if state is None:
             return {"running": False}
+        if state.log_file is not None:
+            with state._lock:
+                return {
+                    "running": not state.finished,
+                    "exit_code": state.exit_code,
+                    "line_count": state.line_count,
+                    "start_time": state.start_time.isoformat(),
+                    "run_id": state.run_id,
+                    "file_activity": True,
+                    "log_file": str(state.log_file),
+                    "log_available": state.log_file.is_file(),
+                    **_control_state_for_run(state.run_id),
+                }
         lines, finished, exit_code = state.snapshot()
         return {
             "running": not finished,
@@ -509,6 +580,21 @@ class JobManager:
             state = self._states.get(job_key)
         if state is None:
             yield "event: error\ndata: Job not found\n\n"
+            return
+        if state.log_file is not None:
+            # Keep the existing SSE contract for API clients. The activity UI
+            # uses bounded file windows and does not open this per-line stream.
+            with io.TextIOWrapper(state.open_log(), encoding="utf-8", errors="replace") as handle:
+                while True:
+                    line = handle.readline()
+                    if line:
+                        yield f"data: {line.rstrip(chr(10))}\n\n"
+                    elif state.finished:
+                        yield f"event: done\ndata: {state.exit_code}\n\n"
+                        return
+                    else:
+                        yield ": heartbeat\n\n"
+                        time.sleep(0.5)
             return
 
         # Heartbeat damit der Browser nicht timeoutet
@@ -573,7 +659,16 @@ def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
     while True:
         emitted = False
         try:
-            with log_file.open("r", encoding="utf-8", errors="replace") as handle:
+            if durable.get("file_activity"):
+                from activity_log_capture import capture_record, open_capture_file
+                capture = capture_record(key, str(durable.get("run_id") or ""))
+            else:
+                capture = {}
+            if capture:
+                binary = open_capture_file(Path(capture["active_file"]).parent / "capture.json")
+            else:
+                binary = log_file.open("rb")
+            with io.TextIOWrapper(binary, encoding="utf-8", errors="replace") as handle:
                 handle.seek(position)
                 for line in handle:
                     emitted = True
@@ -635,6 +730,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
         restore_test_max_runtime_minutes: int = 0,
         docker_control: Optional[dict] = None,
         vm_control: Optional[dict] = None,
+        file_activity: bool = False,
     ) -> JobInfo:
         desc_file = py_file.with_suffix(".description") if py_file is not None else None
         desc_text = (
@@ -673,6 +769,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             is_utility=bt_lc in utility_types,
             standard=standard,
             enabled=bool(enabled),
+            file_activity=file_activity,
             compression=str(compression or "").strip(),
             retention_daily=str(retention_daily or "").strip(),
             retention_weekly=str(retention_weekly or "").strip(),
@@ -749,6 +846,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 icon_color=str(raw.get("icon_color") or "").strip().lower(),
                 standard="wizard",
                 enabled=bool(raw.get("enabled", True)),
+                file_activity=str(raw.get("file_activity", False)).strip().lower() in {"1", "true", "yes", "on"},
                 compression=str(raw.get("compression") or "").strip(),
                 retention_daily=str(retention.get("daily") or "").strip(),
                 retention_weekly=str(retention.get("weekly") or "").strip(),
@@ -902,6 +1000,8 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "running": run_state.get("running", False),
                 "run_start_time": run_state.get("start_time"),
                 "run_log_available": run_state.get("log_available", True),
+                "run_file_activity": run_state.get("file_activity", False),
+                "run_id": run_state.get("run_id", ""),
             }
         )
     try:

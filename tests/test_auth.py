@@ -516,6 +516,7 @@ def test_security_audit_can_log_fresh_login_actor_without_existing_session(monke
     ("path", "handler_name"),
     [
         ("/api/jobs/log/stream?job=flash_local", "_handle_sse"),
+        ("/api/jobs/log/download?job=flash_local&run=20260905T120000Z-abcdef", "_download_activity_log"),
         ("/api/restore-tests/log/stream", "_handle_sse"),
         ("/api/restore/download?job=x&archive=y&path=z", "_handle_restore_download"),
         ("/api/storage/check/stream", "_handle_check_sse"),

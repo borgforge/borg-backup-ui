@@ -148,6 +148,8 @@ class BackupJobConfig:
     borg_keep_monthly: int = 6
     borg_keep_yearly: int = 3
 
+    retained_log_file: Optional[Path] = None
+
     @classmethod
     def from_config(cls, env: dict) -> "BackupJobConfig":
         """Liest Konfiguration aus Umgebungsvariablen."""
@@ -212,6 +214,7 @@ class BackupJobConfig:
             lock_file=Path(env.get("LOCK_FILE", "/tmp/borg-backup.lock")),
             log_dir=Path(env.get("LOG_DIR", "/tmp")),
             log_file=Path(env.get("LOG_FILE", "/tmp/borg-backup.log")),
+            retained_log_file=Path(env["BORG_UI_RETAINED_LOG"]) if env.get("BORG_UI_RETAINED_LOG") else None,
             backup_paths=backup_paths,
             exclude_paths=exclude_paths,
             borg_cache_dir=Path(env.get("BORG_CACHE_DIR", "/tmp/borg-cache")),
@@ -995,7 +998,7 @@ class BackupJob:
             error_message=f"Skipped: {reason}",
             skip_reason_code=reason_code,
             skip_reason_text=reason,
-            log_file=str(self.config.log_file),
+            log_file=str(self.config.retained_log_file or self.config.log_file),
             archive_name="",
             original_size=0,
             compressed_size=0,
@@ -1124,7 +1127,7 @@ class BackupJob:
             failure_code=self._failure_code,
             missing_source_paths=self._missing_source_paths,
             error_message=error_msg,
-            log_file=str(self.config.log_file),
+            log_file=str(self.config.retained_log_file or self.config.log_file),
             archive_name=stats.archive_name if stats else "",
             original_size=stats.original_size if stats else 0,
             compressed_size=stats.compressed_size if stats else 0,
@@ -1167,7 +1170,7 @@ class BackupJob:
                 status=status,
                 exit_code=exit_code,
                 duration_seconds=duration,
-                log_file=str(self.config.log_file),
+                log_file=str(self.config.retained_log_file or self.config.log_file),
                 status_file=str(status_file or ""),
                 failure_code=failure_code or self._failure_code,
                 reason=reason,
