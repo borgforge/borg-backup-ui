@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from . import canonical_backup_conf_v1, immutable_job_id_activation
+from . import canonical_backup_conf_v1, immutable_job_id_activation, job_presentation_v1
 from .audit import (
     append_event,
     config_dir as audit_config_dir,
@@ -21,6 +21,7 @@ except ImportError:  # Runtime/tests may import migrations directly from API_ROO
 
 MIGRATIONS = [
     immutable_job_id_activation,
+    job_presentation_v1,
     canonical_backup_conf_v1,
 ]
 

@@ -28,6 +28,10 @@ Nach **Migration vorbereiten** zeigt der Assistent die laufende Anfrage und ansc
 
 ## Anzeigen nach der Migration
 
+Automatisch gewählte Icons werden bei der Migration als Job-Einstellung gespeichert. Bei einem individuell gewählten Icon mit automatischer Farbe wird die bisherige Listenfarbe als passende Farbe der bestehenden Palette gespeichert. Individuell gewählte Icons und Farben bleiben erhalten. Die Jobauswahl in Browse & Restore, Restore Tests und Berichten sortiert innerhalb der Standorte nach dem sichtbaren Namen. Der Archivpräfix dient als lesbarer Untertitel.
+
+Bei bereits migrierten Jobs prüft die einmalige Korrektur `job_presentation_v1` den ursprünglichen Migrationsplan und die geprüfte Sicherung. Sie stellt die ursprüngliche automatische Darstellung nur wieder her, wenn die Job-Datei seit der Migration unverändert ist. Vorher legt sie eine private Sicherung neben dem ursprünglichen Migrationsverzeichnis an; der ursprüngliche Wiederherstellungsstand bleibt unverändert. Später bearbeitete Jobs oder Jobs ohne verfügbare ursprüngliche Sicherung werden mit einem Grund übersprungen. In diesen Fällen kannst du Icon und Farbe im Job-Editor festlegen. Aktionen und übersprungene Korrekturen stehen im Migrationslog.
+
 Die Dashboard-Zähler beziehen sich auf die konfigurierten Jobs. **Läuft** zählt aktive Jobs, **Nie ausgeführt** Jobs ohne zugeordneten abgeschlossenen Lauf. Diese Zustände bedeuten nicht, dass die Migration zusätzliche Backups angelegt hat.
 
 **Vor der Migration aufgezeichnet** erscheint nur in aufgeklappten Laufdetails. Der Hinweis beschreibt die Herkunft eines vorhandenen Ergebnisses und bleibt für diesen alten Lauf erhalten. Neue Läufe erhalten ihre eigenen Laufdaten.

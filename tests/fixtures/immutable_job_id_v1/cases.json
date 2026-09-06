@@ -1003,6 +1003,7 @@
           "22222222-2222-4222-8222-222222222222": {
             "schema_version": 4,
             "name": "Synthetic photos",
+            "icon": "photos",
             "repository_key": "repo_remote",
             "source_paths": [
               "/fixture/sources/photos"
@@ -1218,6 +1219,7 @@
           "22222222-2222-4222-8222-222222222222": {
             "schema_version": 4,
             "name": "Synthetic photos",
+            "icon": "photos",
             "repository_key": "repo_docs",
             "source_paths": [
               "/fixture/sources/photos"

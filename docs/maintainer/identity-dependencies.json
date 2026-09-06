@@ -506,6 +506,16 @@
           "role": "durable explicit Prepare/acknowledge/Run assistant; protected exact snapshot export and read-only reconnect/startup detection"
         },
         {
+          "path": "api/job_presentation.py",
+          "anchor": "legacy_presentation_defaults",
+          "role": "pure migration-only materialization of historical automatic icon/color defaults before mutable type removal; explicit presentation remains unchanged"
+        },
+        {
+          "path": "api/migrations/job_presentation_v1.py",
+          "anchor": "MIGRATION_ID",
+          "role": "one-time cosmetic repair using verified original plan/snapshot and unchanged target fingerprints; private before-copy, writer exclusion, rollback and central audit; unavailable evidence skips safely"
+        },
+        {
           "path": "api/migrations/immutable_job_id_activation.py",
           "anchor": "USER_INITIATED",
           "role": "registered startup gate only; detect/pending result cannot authorize preparation or application"

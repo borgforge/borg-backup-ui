@@ -109,9 +109,10 @@ def test_policy_plan_proof_and_runner_keep_id_across_prefix_edit(setup, monkeypa
              'test_result':'success','test_date':datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'test_level':1}
     (directory/f'{job_id}.test').write_text(json.dumps(proof))
     tests_api.update_restore_test_policy(cfg, job_id, {'mode':'scheduled','level':1,'interval_days':30})
-    edit(setup, job_id, job_name='Renamed', archive_prefix='new')
+    edit(setup, job_id, job_name='Renamed', archive_prefix='new', description='Readable restore job context')
     row = tests_api.list_restore_test_plan(cfg)['jobs'][0]
     assert row['job_id'] == job_id and row['display_name'] == 'Renamed'
+    assert row['archive_prefix'] == 'new' and row['description'] == 'Readable restore job context'
     assert row['verification_status'] == 'verified' and not row['is_overdue']
     report = tests_api.list_restore_tests(cfg)[0]
     assert report['job_name_snapshot'] == 'Original' and report['current_job_name'] == 'Renamed'

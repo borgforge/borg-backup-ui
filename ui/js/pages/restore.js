@@ -138,7 +138,20 @@ function restoreJobIcon(job) {
   const icon = resolveJobIcon(job);
   const color = resolveJobIconColor(job);
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} restore-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon type-icon-${escHtml(icon)} restore-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+}
+
+function restoreCompareJobs(a, b) {
+  const order = { local: 0, usb: 1, smb: 2, storagebox: 3 };
+  const locationOrder = (order[String(a.location || '').toLowerCase()] ?? 99)
+    - (order[String(b.location || '').toLowerCase()] ?? 99);
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() || 'de';
+  return locationOrder || String(a.display_name || a.name || '').localeCompare(
+    String(b.display_name || b.name || ''), language, { numeric: true, sensitivity: 'base' });
+}
+
+function restoreJobSubtitle(job) {
+  return job.archive_prefix || job.archive_prefixes?.[0] || job.description || '';
 }
 
 function renderRestoreJobSidebar() {
@@ -147,7 +160,7 @@ function renderRestoreJobSidebar() {
   const query = String(document.getElementById('restore-sidebar-search')?.value || '').trim().toLowerCase();
   const jobs = (restoreState.jobs || []).filter((job) =>
     `${job.display_name || ''} ${job.name || ''} ${job.job_id || ''} ${job.location || ''}`.toLowerCase().includes(query)
-  );
+  ).sort(restoreCompareJobs);
   if (!jobs.length) {
     list.innerHTML = `<div class="restore-sidebar-empty">${escHtml(restoreT('noMatchingJobs'))}</div>`;
     return;
@@ -158,7 +171,8 @@ function renderRestoreJobSidebar() {
     if (!locationJobs.length) return '';
     return `<section class="restore-sidebar-group"><header>${escHtml(restoreLocationLabel(location))}<span>${locationJobs.length}</span></header>${locationJobs.map((job) => {
       const active = String(job.job_id) === String(restoreState.job);
-      return `<button type="button" class="restore-sidebar-job ${active ? 'is-active' : ''}" data-restore-sidebar-job="${escHtml(job.job_id)}" ${active ? 'aria-current="page"' : ''}>${restoreJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.job_id)}</strong><small>${escHtml(job.job_id)}</small></span></button>`;
+      const subtitle = restoreJobSubtitle(job);
+      return `<button type="button" class="restore-sidebar-job ${active ? 'is-active' : ''}" data-restore-sidebar-job="${escHtml(job.job_id)}" ${active ? 'aria-current="page"' : ''}>${restoreJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.job_id)}</strong>${subtitle ? `<small>${escHtml(subtitle)}</small>` : ''}</span></button>`;
     }).join('')}</section>`;
   }).join('');
 }
@@ -183,7 +197,8 @@ function renderRestoreSelectedJob() {
     if (badge) badge.textContent = '';
     return;
   }
-  card.innerHTML = `${restoreJobIcon(job)}<div><small>${escHtml(restoreT('selectedJob'))}</small><h3>${escHtml(job.display_name || job.name || job.job_id)}</h3><small>${escHtml(job.job_id)} · ${escHtml(restoreLocationLabel(job.location))}</small></div><span class="ready">${escHtml(restoreT('ready'))}</span>`;
+  const subtitle = [restoreJobSubtitle(job), restoreLocationLabel(job.location)].filter(Boolean).join(' · ');
+  card.innerHTML = `${restoreJobIcon(job)}<div><small>${escHtml(restoreT('selectedJob'))}</small><h3>${escHtml(job.display_name || job.name || job.job_id)}</h3><small>${escHtml(subtitle)}</small></div><span class="ready">${escHtml(restoreT('ready'))}</span>`;
   if (badge) badge.textContent = restoreT('jobSelected');
 }
 
@@ -789,7 +804,7 @@ async function restoreInit() {
   try {
     const jobsRes = await fetch('/api/jobs', { credentials: 'include' });
     const jobsData = await jobsRes.json();
-    const jobs = (jobsData.jobs || []).filter(j => !j.is_utility);
+    const jobs = (jobsData.jobs || []).filter(j => !j.is_utility).sort(restoreCompareJobs);
     restoreState.jobs = jobs;
 
     for (const job of jobs) {

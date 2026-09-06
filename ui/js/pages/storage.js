@@ -321,10 +321,10 @@ function storageRepositoryStatus(repo) {
 }
 
 function storageRepositoryIcon(repo, job, large = false) {
-  const icon = typeof resolveJobIcon === 'function' ? resolveJobIcon(job || repo) : repo?.backup_type;
+  const icon = typeof resolveJobIcon === 'function' ? resolveJobIcon(job || repo) : (job?.icon || repo?.icon || 'sonstiges');
   const color = typeof resolveJobIconColor === 'function' ? resolveJobIconColor(job || repo) : '';
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(repo?.backup_type || 'sonstiges').toLowerCase())}${colorClass}${large ? ' storage-repository-icon-large' : ''}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon type-icon-${escHtml(icon)}${colorClass}${large ? ' storage-repository-icon-large' : ''}">${typeIcon(icon)}</span>`;
 }
 
 function storageGroupRows(data, repos) {

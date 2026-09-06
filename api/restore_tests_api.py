@@ -131,6 +131,8 @@ def list_restore_test_plan(config: dict) -> dict:
             "job_id": key,
             "display_name": job.get("display_name") or job.get("name") or key,
             "name": job.get("name") or job.get("display_name") or key,
+            "archive_prefix": job.get("archive_prefix") or (job.get("archive_prefixes") or [""])[0],
+            "description": job.get("description") or "",
             "location": job.get("location") or "",
             "enabled": bool(job.get("enabled", True)),
             "backup_type": job.get("backup_type") or "",

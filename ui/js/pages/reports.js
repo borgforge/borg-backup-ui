@@ -21,7 +21,7 @@ async function berichtInit() {
     const reportResponse = await fetch('/api/reports/jobs');
     const data = await reportResponse.json();
     if (!reportResponse.ok || data.error) throw new Error(apiErrorMessage(data, reportResponse.status));
-    reportState.jobs = data.jobs || [];
+    reportState.jobs = [...(data.jobs || [])].sort(_berichtCompareJobs);
     for (const job of reportState.jobs) {
       const opt = document.createElement('option');
       opt.value = _berichtSelectionId(job);
@@ -88,6 +88,15 @@ function _berichtJobLabel(job) {
   return job.identity_scope === 'deleted' ? `${name} (${reportsT('deleted')})` : name;
 }
 
+function _berichtCompareJobs(a, b) {
+  const order = { local: 0, usb: 1, smb: 2, storagebox: 3 };
+  const locationOrder = (order[String(a.location || '').toLowerCase()] ?? 99)
+    - (order[String(b.location || '').toLowerCase()] ?? 99);
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() || 'de';
+  return locationOrder || _berichtJobLabel(a).localeCompare(_berichtJobLabel(b), language,
+    { numeric: true, sensitivity: 'base' });
+}
+
 function _berichtSameRepository(a, b) {
   return Boolean(a?.repository_snapshot && a.repository_snapshot === b?.repository_snapshot);
 }
@@ -102,7 +111,7 @@ function _berichtJobIcon(job) {
   const icon = resolveJobIcon(job);
   const color = resolveJobIconColor(job);
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} report-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon type-icon-${escHtml(icon)} report-job-icon${colorClass}">${typeIcon(icon)}</span>`;
 }
 
 function _berichtRenderJobSidebar() {
@@ -110,7 +119,7 @@ function _berichtRenderJobSidebar() {
   if (!list) return;
   const query = String(document.getElementById('report-job-search')?.value || '').trim().toLowerCase();
   const selected = document.getElementById('bericht-job-sel')?.value || '';
-  const jobs = (reportState.jobs || []).filter((job) => `${job.display_name || ''} ${job.job_id || ''} ${job.location || ''}`.toLowerCase().includes(query));
+  const jobs = (reportState.jobs || []).filter((job) => `${job.display_name || ''} ${job.job_id || ''} ${job.location || ''}`.toLowerCase().includes(query)).sort(_berichtCompareJobs);
   if (!jobs.length) {
     list.innerHTML = `<div class="ui-empty report-job-empty">${escHtml(reportsT('noMatchingJobs'))}</div>`;
     return;

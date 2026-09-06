@@ -46,6 +46,16 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   structured run/restore JSON instead of unreadable text tails; document oversized
   or unreadable files explicitly and keep credentials/recovery data excluded.
 
+- Preserve automatically selected job icons before removing legacy type fields.
+  Materialize the previous list color using the existing palette when a different
+  explicit icon otherwise loses its automatic color.
+  Repair unchanged migrated jobs only from verified original migration evidence,
+  retaining explicit appearance choices and later edits with an auditable result.
+- Derive icon styling from the configured icon throughout dashboard, restore,
+  restore-test, report and repository views. Sort job selectors by location and
+  localized natural name order; show readable prefixes instead of UUID subtitles.
+  Restore-test plans now include current prefix and description (#447).
+
 ### Issue #478 (integration work for #447; not released)
 - Added versioned ID-based job transfer with explicit new/merge/skip choices,
   complete selected reference maps, bounded v2 conversion and protected-file

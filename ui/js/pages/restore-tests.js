@@ -72,14 +72,22 @@ function restoreTestsJobIcon(job) {
   const icon = resolveJobIcon(job);
   const color = resolveJobIconColor(job);
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon type-icon-${escHtml(icon)} rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+}
+
+function restoreTestsCompareJobs(a, b) {
+  const order = { local: 0, usb: 1, smb: 2, storagebox: 3 };
+  const locationOrder = (order[String(a.location || '').toLowerCase()] ?? 99)
+    - (order[String(b.location || '').toLowerCase()] ?? 99);
+  return locationOrder || String(a.display_name || a.name || '').localeCompare(
+    String(b.display_name || b.name || ''), restoreTestsLocale(), { numeric: true, sensitivity: 'base' });
 }
 
 function renderRestoreTestsSidebar() {
   const list = document.getElementById('rt-sidebar-job-list');
   if (!list) return;
   const query = String(document.getElementById('rt-sidebar-search')?.value || '').trim().toLowerCase();
-  const jobs = (restoreTestsState.jobs || []).filter((job) => `${job.display_name || ''} ${job.name || ''} ${job.job_id || ''} ${job.location || ''}`.toLowerCase().includes(query));
+  const jobs = (restoreTestsState.jobs || []).filter((job) => `${job.display_name || ''} ${job.name || ''} ${job.job_id || ''} ${job.location || ''}`.toLowerCase().includes(query)).sort(restoreTestsCompareJobs);
   if (!jobs.length) {
     list.innerHTML = `<div class="ui-empty rt-sidebar-empty">${escHtml(restoreTestsT('noMatchingJobs'))}</div>`;
     return;
@@ -96,7 +104,8 @@ function renderRestoreTestsSidebar() {
       const configured = !!planJob && planJob.enabled !== false && String(planJob.policy?.mode || 'off') !== 'off';
       const stateClass = planJob?.is_overdue ? 'warning' : configured ? 'success' : 'disabled';
       const active = restoreTestsState.selectedJob === String(job.job_id);
-      return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.job_id)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.job_id)}</strong><small>${escHtml(job.job_id)}</small></span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
+      const subtitle = job.archive_prefix || job.archive_prefixes?.[0] || job.description || '';
+      return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.job_id)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.job_id)}</strong>${subtitle ? `<small>${escHtml(subtitle)}</small>` : ''}</span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
     }).join('')}</section>`;
   }).join('');
   list.innerHTML = allEntry + groups;
@@ -665,7 +674,7 @@ function refreshRestoreTestJobsForSelection() {
 
   const rows = (restoreTestsState.jobs || [])
     .filter(j => location === 'all' || String(j.location || '').toLowerCase() === location)
-    .sort((a, b) => String(a.display_name || a.name || a.job_id).localeCompare(String(b.display_name || b.name || b.job_id)));
+    .sort(restoreTestsCompareJobs);
 
   if (!rows.length) {
     list.innerHTML = `<span class="muted">${escHtml(restoreTestsT('noJobsForSelection'))}</span>`;

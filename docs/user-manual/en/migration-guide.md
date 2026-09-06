@@ -28,6 +28,10 @@ After **Prepare migration**, the assistant shows the pending request followed by
 
 ## Displays after migration
 
+Automatically selected icons are saved as job settings during migration. For an individually selected icon with automatic color, the former list color is saved as the matching color from the existing palette. Individually selected icons and colors are preserved. Job selection in Browse & Restore, Restore Tests and Reports sorts by the displayed name within each location. The archive prefix provides a readable subtitle.
+
+For jobs that were already migrated, the one-time `job_presentation_v1` correction checks the original migration plan and verified backup. It restores the original automatic appearance only when the job file is unchanged since migration. It first creates a private backup alongside the original migration directory; the original recovery data remains unchanged. Jobs edited later or without available original recovery evidence are skipped with a reason. In these cases, you can select the icon and color in the job editor. Actions and skipped corrections are recorded in the migration log.
+
 Dashboard counters describe configured jobs. **Running** counts active jobs; **Never run** counts jobs without an assigned completed run. These states do not mean that migration created additional backups.
 
 **Recorded before migration** appears only in expanded run details. It describes the origin of an existing result and remains with that historical run. New runs capture their own run data.

@@ -484,7 +484,7 @@ function renderDashboardInventoryRow(backup) {
 
   return `<tr class="dashboard-inventory-row ${run.cls}">
     <td><div class="dashboard-backup-identity">
-      <span class="type-icon type-icon-${escHtml(String(backup.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</span>
+      <span class="type-icon type-icon-${escHtml(iconKey)}${iconColorClass}">${typeIcon(iconKey)}</span>
       <span><strong class="dashboard-cell-primary">${escHtml(type)}</strong><span class="dashboard-cell-detail mono" title="${escHtml(identityDetail)}">${escHtml(identityDetail)}</span></span>
     </div></td>
     <td><div class="dashboard-table-badges">

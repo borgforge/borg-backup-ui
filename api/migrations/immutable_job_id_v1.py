@@ -283,6 +283,8 @@ def _operational_defaults(meta, conf, source):
         _fail("invalid_source_paths", source)
     if meta["schema_version"] == 4:
         return result
+    from job_presentation import legacy_presentation_defaults
+    result.update(legacy_presentation_defaults(meta))
     tu = meta["backup_type"].upper()
     # Preserve the runner's existing cache namespace and check marker. These
     # paths are references, not identities, and are never renamed or deleted.

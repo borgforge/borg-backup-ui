@@ -99,6 +99,15 @@ async function run(lang) {
   await context.refreshHistory();
   assert.ok(calls.at(-1).includes(`job_id=${id}`) && calls.at(-1).includes('scope=configured'));
   assert.ok(!calls.at(-1).includes('type='));
+  const choices = [
+    { ...job, job_id: id, display_name: 'Photos', location: 'local' },
+    { ...job, job_id: secondId, display_name: 'AAA USB', location: 'usb' },
+    { ...job, job_id: '33333333-3333-4333-8333-333333333333', display_name: 'Appdata 10', location: 'local' },
+    { ...job, job_id: '44444444-4444-4444-8444-444444444444', display_name: 'appdata 2', location: 'local' }];
+  vm.runInContext(`reportState.jobs=${JSON.stringify(choices)}`, context);
+  context._berichtRenderJobSidebar();
+  assert.deepEqual([...element('report-job-list').innerHTML.matchAll(/data-report-job="([^"]+)"/g)].map(match => match[1]),
+    [choices[3].job_id, choices[2].job_id, id, secondId]);
   vm.runInContext(`reportState.jobs = ${JSON.stringify([job, { job_id: secondId, name: 'Deleted', identity_scope: 'deleted' }, { identity_scope: 'unassigned' }])}`, context);
   element('bericht-job-sel').value = id;
   response = { ...job, runs: [], monthly_status: [], run_count: 0, success_count: 0 };
