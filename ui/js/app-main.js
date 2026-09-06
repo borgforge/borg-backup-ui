@@ -56,6 +56,7 @@
     '/ui/js/components/schedule-modal.js',
     '/ui/js/components/toast.js',
     '/ui/js/components/app-bindings.js',
+    '/ui/js/components/identity-migration.js',
     '/ui/js/pages/storage.js',
     '/ui/js/pages/settings.js',
     '/ui/js/pages/setup-wizard.js',

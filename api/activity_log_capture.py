@@ -154,6 +154,17 @@ def running_captures() -> list[dict]:
 
 
 def supervise(record_path: Path, command: list[str]) -> int:
+    from migration_barrier import MigrationBlocked, writer_lease
+    config = {"BACKUP_SCRIPTS_DIR": os.environ.get("BORG_SCRIPT_DIR") or "/boot/config/borg-backup"}
+    try:
+        with writer_lease(config):
+            return _supervise_admitted(record_path, command)
+    except MigrationBlocked as exc:
+        print(f"Backup capture start blocked: {exc.reason}", flush=True)
+        return 2
+
+
+def _supervise_admitted(record_path: Path, command: list[str]) -> int:
     # This small process owns persistence independently of the WebUI process.
     # The runner and Borg inherit stdout/stderr pointing directly at the RAM
     # file, so browser speed cannot block them and no Python log list grows.

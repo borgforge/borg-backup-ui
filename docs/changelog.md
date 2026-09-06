@@ -6,6 +6,21 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #479 (final integration for #447; awaiting test-channel qualification)
+- Added read-only startup detection, cross-process writer admission and a German/
+  English administrator assistant with separate preparation and conversion actions.
+- Included configuration normalization in the same immutable UUID plan, verified
+  exact-file snapshot and protected download; acknowledgement never starts apply.
+- Added crash-consistent per-file publication, original-plan continuation,
+  authenticated state gates and final reference/cron verification before startup.
+- Covered detached backups, capture, restore/check/key deployment, notifications,
+  maintenance workers, background refresh and safe maintenance diagnostics.
+- Added complete synthetic migration qualification, actual Borg backup/restore,
+  interrupted-run/restart tests and protected HTTP export/approval tests.
+- Removed active HTTP job-key adapters. Historical aliases remain preserved in
+  migration and bounded legacy import; normal operations require immutable IDs.
+- Stable promotion remains a separate decision after volunteer/maintainer testing.
+
 ### Issue #478 (integration work for #447; not released)
 - Added versioned ID-based job transfer with explicit new/merge/skip choices,
   complete selected reference maps, bounded v2 conversion and protected-file

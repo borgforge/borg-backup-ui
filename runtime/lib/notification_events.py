@@ -254,6 +254,16 @@ def drain_notification_queue(config: dict, *, max_items: int = 20) -> dict[str, 
 
     Returns a compact status dictionary for background worker logs and tests.
     """
+    from migration_barrier import MigrationBlocked, writer_lease
+    try:
+        with writer_lease(config):
+            return _drain_notification_queue_admitted(config, max_items=max_items)
+    except MigrationBlocked as exc:
+        return {"checked": 0, "delivered": 0, "failed": 0, "retrying": 0,
+                "blocked": True, "reason": exc.reason}
+
+
+def _drain_notification_queue_admitted(config: dict, *, max_items: int) -> dict[str, Any]:
     now_ts = time.time()
     due: list[dict[str, Any]] = []
     with _notification_lock(config):
@@ -715,17 +725,21 @@ def _kick_notification_delivery(config: dict) -> None:
     data_root = str(config.get("BACKUP_SCRIPTS_DIR", "") or _data_root(config))
     runtime_dir = Path(__file__).resolve().parents[1]
     runtime_lib = runtime_dir / "lib"
+    api_dir = runtime_dir.parent / "api"
     env = {
         "PATH": os.environ.get("PATH", ""),
         "LANG": os.environ.get("LANG", "C.UTF-8"),
         "LC_ALL": os.environ.get("LC_ALL", os.environ.get("LANG", "C.UTF-8")),
     }
     env["BBUI_BACKUP_SCRIPTS_DIR"] = data_root
+    if os.environ.get("BORG_UI_MIGRATION_GATE_ROOT"):
+        env["BORG_UI_MIGRATION_GATE_ROOT"] = os.environ["BORG_UI_MIGRATION_GATE_ROOT"]
     for key in ("NOTIFY_APPRISE_STATUS_HISTORY",):
         if key in config:
             env[f"BBUI_{key}"] = str(config.get(key) or "")
     code = (
         "import os, sys\n"
+        f"sys.path.insert(0, {str(api_dir)!r})\n"
         f"sys.path.insert(0, {str(runtime_lib)!r})\n"
         f"sys.path.insert(0, {str(runtime_dir)!r})\n"
         "from lib.notification_events import drain_notification_queue\n"

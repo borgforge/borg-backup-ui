@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from . import canonical_backup_conf_v1
+from . import canonical_backup_conf_v1, immutable_job_id_activation
 from .audit import (
     append_event,
     config_dir as audit_config_dir,
@@ -20,11 +20,12 @@ except ImportError:  # Runtime/tests may import migrations directly from API_ROO
     from security_utils import mask_secrets
 
 MIGRATIONS = [
+    immutable_job_id_activation,
     canonical_backup_conf_v1,
 ]
 
 FINAL_STATES = {"applied", "not_required", "not_applicable", "skipped"}
-APPLY_STATES = FINAL_STATES | {"failed"}
+APPLY_STATES = FINAL_STATES | {"failed", "pending", "blocked"}
 PROVEN_APPLIED_EVENTS = {"migration_applied", "migration_completed"}
 
 
@@ -296,6 +297,7 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
     skipped = []
     failed = []
     blocked = []
+    pending = []
     messages = []
     blocked_by = ""
 
@@ -342,12 +344,14 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
             messages.append(f"{migration_id}=failed")
             continue
         if not bool(detected.get("required")):
-            skipped.append(migration_id)
+            proven_applied = bool(getattr(migration, "USER_INITIATED", False) and detected.get("status") == "applied"
+                                  and (previous_state != "applied" or not _is_central_registry_result(previous)))
+            (applied if proven_applied else skipped).append(migration_id)
             results[migration_id] = {
                 "migration_id": migration_id,
                 "introduced_in": str(migration.INTRODUCED_IN),
                 "runner": "central_migration_registry",
-                "status": "not_required",
+                "status": "applied" if proven_applied else "not_required",
                 "details": detected,
             }
             messages.append(f"{migration_id}=not_required")
@@ -362,6 +366,9 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
         if status == "failed":
             failed.append(migration_id)
             blocked_by = migration_id
+        elif status in {"pending", "blocked"}:
+            (pending if status == "pending" else blocked).append(migration_id)
+            blocked_by = migration_id
         elif status == "applied":
             applied.append(migration_id)
         else:
@@ -369,13 +376,16 @@ def run_startup_migrations(config: dict) -> dict[str, Any]:
         messages.append(f"{migration_id}={status}")
 
     summary = {
-        "status": "failed" if failed else "ok",
+        "status": "failed" if failed else "pending" if pending else "blocked" if blocked else "ok",
         "applied": applied,
         "skipped": skipped,
         "failed": failed,
         "blocked": blocked,
+        "pending": pending,
         "messages": messages,
         "results": results,
     }
-    _write_state_and_log(config, summary)
+    # Pending detection is read-only: no state file or previous migration rewrites.
+    if not pending and not blocked or failed:
+        _write_state_and_log(config, summary)
     return summary

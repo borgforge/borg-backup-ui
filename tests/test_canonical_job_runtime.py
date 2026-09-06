@@ -227,8 +227,10 @@ def test_recovery_and_notification_use_run_snapshots(setup, monkeypatch):
 @pytest.mark.parametrize('activity', [False, True])
 def test_real_runner_creates_exact_archive_and_retains_run_status(setup, monkeypatch, activity):
     import subprocess
+    from migration_gate_support import ready_gate
     config, snapshot = context(setup, monkeypatch, file_activity=activity)
     root = setup[3]
+    ready_gate(config, monkeypatch, root / "writer-gate")
     (root / 'source/file.txt').write_text('synthetic backup source')
     bin_dir = root / 'bin'; bin_dir.mkdir()
     (bin_dir / 'borg').symlink_to(ROOT / 'runtime/bin/borg/borg-linux-glibc231-x86_64-1.4.5')

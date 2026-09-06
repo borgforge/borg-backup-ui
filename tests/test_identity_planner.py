@@ -174,8 +174,8 @@ def test_fixture_gate_booleans_are_not_misrepresented_as_initial_detection(case_
 
 def test_planner_not_registered_and_has_no_user_data_apply_entry_point():
     assert migration not in registry.MIGRATIONS
-    assert all(getattr(item, "MIGRATION_ID", "") != "immutable_job_id_v1"
-               for item in registry.MIGRATIONS)
+    guarded = [item for item in registry.MIGRATIONS if getattr(item, "MIGRATION_ID", "") == "immutable_job_id_v1"]
+    assert len(guarded) == 1 and guarded[0].USER_INITIATED is True
     assert not hasattr(migration, "apply")
 
 
@@ -600,6 +600,54 @@ def test_existing_widget_cache_requires_explicit_deferred_rebuild_action(identit
     assert len(actions) == 1, "warning-only omission does not plan cache invalidation"
     assert actions[0]["target"] == str(path)
     assert result["inputs"][str(path)]["exists"] is True
+    assert result["activation_allowed"] is False
+    assert tree_bytes(installed) == before
+
+
+def _recreated_canonical_widget(installed, config):
+    from unraid_dashboard_widget import build_unraid_dashboard_widget_startup_cache
+    payload = build_unraid_dashboard_widget_startup_cache(config)
+    assert payload["identity_schema_version"] == 1
+    assert payload["jobs"]["items"] and payload["jobs"]["items"][0]["job_id"]
+    path = installed / "plugin/widget-status.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(migration.encode_target_json(payload))
+    return path
+
+
+def test_active_target_allows_recreated_widget_without_weakening_strict_cutover(identity_root):
+    installed, relocated = installation(BY_ID["already_migrated"], identity_root)
+    _recreated_canonical_widget(installed, relocated["config"])
+    before = tree_bytes(installed)
+    strict = migration.verify_target(relocated["config"], control_root=installed / "run")
+    active = migration.verify_active_target(relocated["config"], control_root=installed / "run")
+    assert strict["valid"] is False
+    assert "widget_rebuild_required" in reason_codes(strict)
+    assert active["valid"] is True
+    assert active["reasons"] == strict["reasons"], "keep rebuild guidance visible"
+    assert active["writable_services_allowed"] is False and active["activation_allowed"] is False
+    assert tree_bytes(installed) == before
+
+
+@pytest.mark.parametrize("corruption", ["unknown_active_job", "unknown_widget_schema"])
+def test_active_target_does_not_hide_invalid_references_or_widget_errors(identity_root, corruption):
+    installed, relocated = installation(BY_ID["already_migrated"], identity_root)
+    widget = _recreated_canonical_widget(installed, relocated["config"])
+    if corruption == "unknown_active_job":
+        schedule = installed / "data/config/schedules.json"
+        payload = json.loads(schedule.read_text())
+        payload[relocated["allocation_order"][1]] = {"enabled": True, "cron": "0 8 * * *"}
+        schedule.write_text(json.dumps(payload))
+        expected = "orphan_active_schedule"
+    else:
+        payload = json.loads(widget.read_text())
+        payload["schema_version"] = 99
+        widget.write_text(json.dumps(payload))
+        expected = "unsupported_record_schema"
+    before = tree_bytes(installed)
+    result = migration.verify_active_target(relocated["config"], control_root=installed / "run")
+    assert result["valid"] is False
+    assert expected in reason_codes(result)
     assert result["activation_allowed"] is False
     assert tree_bytes(installed) == before
 

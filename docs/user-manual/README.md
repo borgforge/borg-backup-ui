@@ -4,6 +4,8 @@ This directory contains the full bilingual user manual for Borg-Backup-UI.
 
 - [German manual](./de/user-manual.md)
 - [English manual](./en/user-manual.md)
+- [German migration guide](./de/migration-guide.md)
+- [English migration guide](./en/migration-guide.md)
 - [Help and UI improvement review](./help-improvements.md)
 
 Screenshots are stored by language under:

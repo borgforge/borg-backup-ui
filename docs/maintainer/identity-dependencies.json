@@ -32,7 +32,7 @@
         {
           "path": "api/migrations/immutable_job_id_v1.py",
           "anchor": "build_plan",
-          "role": "inactive direct inventory, UUID proposal, exact resume and target verification; never registered for startup"
+          "role": "direct read-only inventory, strict legacy projection, persisted UUID-map resume and actual-target verification; startup registration lives in immutable_job_id_activation"
         },
         {
           "path": "api/migrations/identity_records.py",
@@ -42,12 +42,12 @@
         {
           "path": "api/migrations/identity_storage.py",
           "anchor": "persist_plan",
-          "role": "private immutable plan, verified byte snapshot and audit journal; no installation-data applier"
+          "role": "private sealed plan, exact verified snapshot, explicit approval preconditions and hash-linked audit journal; only dedicated recovery-state writes"
         },
         {
           "path": "api/migrations/registry.py",
           "anchor": "run_startup_migrations",
-          "role": "read/write migration state; currently applies immediately"
+          "role": "records validated pending/blocked results; identity activation gate precedes canonical backup.conf changes; later migrations stop after the first unresolved or failed migration"
         },
         {
           "path": "api/migrations/audit.py",
@@ -57,19 +57,20 @@
         {
           "path": "api/migrations/canonical_backup_conf_v1.py",
           "anchor": "detect",
-          "role": "known configuration normalization; must not escape snapshot/approval boundary"
+          "role": "existing configuration normalization; identity preparation includes its changed bytes in the approved snapshot before conversion"
         },
         {
           "path": "api/migration_api.py",
           "anchor": "backup",
-          "role": "snapshot/status API and keep-five cleanup; protect identity recovery snapshots"
+          "role": "legacy migration status and bounded backup cleanup; immutable identity recovery is explicitly protected from retention cleanup"
         },
         {
           "path": "api/startup_state.py",
           "anchor": "maintenance",
-          "role": "startup mode owner; pending is not success"
+          "role": "process-local normal/maintenance projection; pending, blocked and failed startup never authorize normal services"
         }
-      ]
+      ],
+      "completion_classification": "integrated_pending_final_qualification"
     },
     {
       "id": "jobs",
@@ -94,7 +95,7 @@
         {
           "path": "api/jobs_api.py",
           "anchor": "discover_jobs",
-          "role": "strict UUID discovery without lazy migration; runtime state cutover remains #475"
+          "role": "strict UUID discovery and run-ID state aggregation; no lazy migration or mutable-key discovery; subprocess lifecycle delegates to admitted runners"
         },
         {
           "path": "api/wizard_api.py",
@@ -109,7 +110,7 @@
         {
           "path": "api/archive_prefix.py",
           "anchor": "archive_prefix_from_backup_type",
-          "role": "prefix history reader; silent invalid filtering is unsuitable for migration"
+          "role": "dormant legacy prefix helpers with no production call sites; not used for canonical job identity, migration eligibility or archive ownership"
         },
         {
           "path": "ui/js/pages/wizard.js",
@@ -134,9 +135,10 @@
         {
           "path": "api/job_actions.py",
           "anchor": "resolve_request_job_id",
-          "role": "bounded deprecated HTTP alias adapter, UUID run/delete preparation and configuration transactions (#474)"
+          "role": "UUID-only HTTP identity validation, exact deletion/history confirmation and configuration transactions; deprecated request-alias adapter removed at #479"
         }
-      ]
+      ],
+      "completion_classification": "integrated_pending_final_qualification"
     },
     {
       "id": "assignments",
@@ -152,12 +154,12 @@
         {
           "path": "api/repositories_api.py",
           "anchor": "repository_assignment_report",
-          "role": "canonical UUID reverse references and read-only reconciliation; active persistence rejects mutable-key links (#474)"
+          "role": "strict UUID reverse references and read-only reconciliation; refresh scheduler leases scheduling and full refresh/result writes separately from waits"
         },
         {
           "path": "api/storage_profiles_api.py",
           "anchor": "build_storage_repo_uri",
-          "role": "legacy Type-ID-derived repository URI construction"
+          "role": "storage-profile validation and canonical usage references; unused type-derived URI helper does not resolve active jobs"
         },
         {
           "path": "api/storage_objects_api.py",
@@ -172,7 +174,7 @@
         {
           "path": "api/check_api.py",
           "anchor": "_repository_command",
-          "role": "UUID retention selection; combined prefix retention engine remains #475 (blocked until implemented)"
+          "role": "UUID retention-source selection and frozen prefix union; transferable writer lease spans subprocess preparation, output reader and final repository-result persistence"
         },
         {
           "path": "api/inventory_store.py",
@@ -189,7 +191,8 @@
           "anchor": "job_id",
           "role": "assignment/maintenance display and actions"
         }
-      ]
+      ],
+      "completion_classification": "integrated_pending_final_qualification"
     },
     {
       "id": "runtime",
@@ -204,12 +207,12 @@
         {
           "path": "api/wizard_runner.py",
           "anchor": "job_id",
-          "role": "subprocess environment, paths, archive name, cache selection and maintenance"
+          "role": "full admitted backup lifecycle with immutable context, frozen settings, full-ID ownership and complete heartbeat drainage before lease release"
         },
         {
           "path": "api/job_control.py",
           "anchor": "run_id",
-          "role": "cancellation state and owner verification"
+          "role": "independent run-ID control state and cancellation; writes occur inside admitted request/backup ownership"
         },
         {
           "path": "runtime/lib/backup_job.py",
@@ -219,7 +222,7 @@
         {
           "path": "runtime/lib/status.py",
           "anchor": "backup_type",
-          "role": "status/test dataclasses, filename discovery and payload joins"
+          "role": "canonical job-ID/run-ID status records; legacy descriptors remain historical and do not create configured jobs"
         },
         {
           "path": "runtime/lib/runtime_recovery.py",
@@ -244,7 +247,7 @@
         {
           "path": "runtime/lib/notification_events.py",
           "anchor": "job_id",
-          "role": "queue, retry delivery history, dedup state and detached writer"
+          "role": "job-ID queue/retry/delivery and reminder state; detached drain retains a writer lease through dequeue, external delivery and final persistence"
         },
         {
           "path": "api/smb_mount.py",
@@ -264,7 +267,7 @@
         {
           "path": "api/activity_log_capture.py",
           "anchor": "job_id",
-          "role": "RAM capture registration and finalization identity from merged #463"
+          "role": "full-ID RAM capture plus retained-log finalization; supervisor writer lease covers detached process and final file copy"
         },
         {
           "path": "api/job_runs.py",
@@ -274,7 +277,7 @@
         {
           "path": "api/retention_runner.py",
           "anchor": "prune_union",
-          "role": "manual maintenance uses the shared frozen prefix-union policy"
+          "role": "admitted manual maintenance CLI with frozen union retention policy and exact repository/ownership revalidation"
         },
         {
           "path": "runtime/lib/run_identity.py",
@@ -286,7 +289,8 @@
           "anchor": "plan_retention",
           "role": "shared calendar retention over explicit archive-prefix ownership"
         }
-      ]
+      ],
+      "completion_classification": "integrated_pending_final_qualification"
     },
     {
       "id": "reporting",
@@ -316,7 +320,7 @@
         {
           "path": "api/report_mail_api.py",
           "anchor": "job_key",
-          "role": "scheduled reports/labels and snapshot joins"
+          "role": "weekly report scheduling and UUID joins; service cron targets guarded HTTP, historical descriptors only affect display"
         },
         {
           "path": "api/notification_reminder_api.py",
@@ -331,7 +335,7 @@
         {
           "path": "api/unraid_dashboard_widget.py",
           "anchor": "backup_type",
-          "role": "Unraid cache writer and active job counters"
+          "role": "derived canonical cache and active counters; caller-held writer admission covers updates and startup must skip all writes in maintenance"
         },
         {
           "path": "plugin/widget-status.php",
@@ -368,7 +372,8 @@
           "anchor": "merge_observations",
           "role": "canonical weekly provenance merge, retained conflicts and repository-scoped growth"
         }
-      ]
+      ],
+      "completion_classification": "integrated_pending_final_qualification"
     },
     {
       "id": "restore",
@@ -383,7 +388,7 @@
         {
           "path": "api/restore_api.py",
           "anchor": "_persist_restore_runs",
-          "role": "browse/context, async run map, history index/detail and locks"
+          "role": "current-repository archive scope plus captured restore identity; transferred writer lease spans async run state, extraction and final history/index persistence"
         },
         {
           "path": "api/restore_identity.py",
@@ -398,7 +403,7 @@
         {
           "path": "runtime/scripts/borg_restore_test.py",
           "anchor": "discover_repos",
-          "role": "standalone result/log writer, invocation and notification identity"
+          "role": "admitted standalone test lifecycle, UUID proof filenames, captured archive/repository scope and notification identity"
         },
         {
           "path": "api/archive_browser.py",
@@ -415,7 +420,8 @@
           "anchor": "job_id",
           "role": "plan/manual test selection and result display"
         }
-      ]
+      ],
+      "completion_classification": "integrated_pending_final_qualification"
     },
     {
       "id": "transfer",
@@ -441,12 +447,12 @@
         {
           "path": "api/system_health_api.py",
           "anchor": "job_id",
-          "role": "integrity and ownership diagnostics"
+          "role": "normal-runtime health may acquire inventory/notification locks; maintenance must use bounded read-only startup and assistant diagnostics"
         },
         {
           "path": "api/support_bundle_api.py",
           "anchor": "status",
-          "role": "sanitized bundle inclusion and referential diagnostics"
+          "role": "selected sanitized support data; private plans/snapshots/secrets are excluded and maintenance diagnostics must not invoke normal writer helpers"
         },
         {
           "path": "api/borg_key_store.py",
@@ -456,7 +462,7 @@
         {
           "path": "ui/js/pages/settings.js",
           "anchor": "job_id",
-          "role": "partial transfer, selected jobs, settings restore and diagnostics"
+          "role": "explicit partial transfer selections, settings-only recovery, identity assistant and bounded health diagnostics"
         },
         {
           "path": "api/job_transfer.py",
@@ -473,7 +479,8 @@
           "anchor": "job_key",
           "role": "Bounded legacy v2 import conversion using temporary source selectors and pure migration metadata projection; no live alias matching"
         }
-      ]
+      ],
+      "completion_classification": "integrated_pending_final_qualification"
     },
     {
       "id": "activation",
@@ -486,14 +493,68 @@
         477,
         478
       ],
-      "target": "Last phase only: register cutover, gated HTTP/startup/worker lifecycle and end-to-end tests before candidate build.",
+      "target": "Integrated final cutover: explicit authenticated preparation/backup pause/application, restart-safe writer exclusion and qualification before the test-channel candidate.",
       "files": [
         {
           "path": "borg_backup_ui.py",
           "anchor": "_evaluate_startup_migrations",
-          "role": "HTTP job parameters/routes, schedule cleanup, migration gate, all background writers"
+          "role": "authenticated assistant routes, normal HTTP writer leases, startup/mount readiness gates and deferred activation; maintenance diagnostics and widget handling remain isolated"
+        },
+        {
+          "path": "api/identity_migration_api.py",
+          "anchor": "IdentityMigrationAssistant",
+          "role": "durable explicit Prepare/acknowledge/Run assistant; protected exact snapshot export and read-only reconnect/startup detection"
+        },
+        {
+          "path": "api/migrations/immutable_job_id_activation.py",
+          "anchor": "USER_INITIATED",
+          "role": "registered startup gate only; detect/pending result cannot authorize preparation or application"
+        },
+        {
+          "path": "api/migrations/identity_apply.py",
+          "anchor": "apply_plan",
+          "role": "journaled per-file cross-filesystem cutover with exact old/new fingerprints, durable directory receipts, preserved unrelated cron and independent final checks"
+        },
+        {
+          "path": "api/migration_barrier.py",
+          "anchor": "exclusive_migration",
+          "role": "default-deny protocol-ready proof, persistent inhibit and cross-process shared/exclusive writer leases; bounded prior-worker inspection"
+        },
+        {
+          "path": "api/identity_startup_watch.py",
+          "anchor": "retry_startup_once",
+          "role": "read-only retry after storage/worker readiness; only no-conversion detection may retry ordinary startup, never prepare, acknowledge or apply a migration"
+        },
+        {
+          "path": "api/storagebox_api.py",
+          "anchor": "migration_lease",
+          "role": "SSH key-deployment asynchronous owner; transferred writer lease persists until its child reader finishes"
+        },
+        {
+          "path": "api/factory_reset_worker.py",
+          "anchor": "writer_lease",
+          "role": "explicitly authorized detached reset retains writer ownership through filesystem/cron changes and releases before service restart"
+        },
+        {
+          "path": "ui/js/components/identity-migration.js",
+          "anchor": "canApply",
+          "role": "German/English migration assistant with separate preparation, protected download, independent-copy acknowledgement and explicit application/continuation"
+        },
+        {
+          "path": "plugin/rc.borg_backup_ui",
+          "anchor": "start()",
+          "role": "installed process entrypoint; Python startup performs detection/admission before normal runtime service activation"
+        },
+        {
+          "path": "plugin/build.sh",
+          "anchor": "api",
+          "role": "test-package inclusion of canonical API/migrations, runtime and assistant assets; no stable artifacts in the implementation branch"
         }
-      ]
+      ],
+      "completion_classification": "integrated_pending_final_qualification"
     }
-  ]
+  ],
+  "integration_issue": 479,
+  "completion_classification": "integrated_pending_final_qualification",
+  "qualification_document": "docs/maintainer/identity-migration-qualification.md"
 }

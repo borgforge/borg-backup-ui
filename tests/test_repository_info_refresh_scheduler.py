@@ -61,6 +61,7 @@ def test_repository_info_refresh_is_disabled_by_default(tmp_path: Path):
 def test_repository_info_refresh_status_does_not_run_borg(tmp_path: Path, monkeypatch):
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_appdata",
         "display_name": "Appdata",
         "repository_name": "appdata",
@@ -87,6 +88,7 @@ def test_repository_info_refresh_status_does_not_run_borg(tmp_path: Path, monkey
 def test_next_global_repository_info_refresh_uses_latest_cached_info(tmp_path: Path):
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_flash",
         "display_name": "Flash",
         "storage_key": "storage_local",
@@ -110,6 +112,7 @@ def test_next_global_repository_info_refresh_uses_latest_cached_info(tmp_path: P
 def test_next_global_repository_info_refresh_is_due_when_stats_are_missing(tmp_path: Path):
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_new",
         "display_name": "New",
         "storage_key": "storage_local",
@@ -150,6 +153,7 @@ def test_next_global_repository_info_refresh_uses_retry_after_failed_run(tmp_pat
 def test_next_global_repository_info_refresh_does_not_retry_warnings_hourly(tmp_path: Path):
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_usb",
         "display_name": "USB Repo",
         "storage_key": "storage_usb",
@@ -177,6 +181,7 @@ def test_next_global_repository_info_refresh_does_not_retry_warnings_hourly(tmp_
 def test_unmounted_smb_repository_refresh_is_recorded_as_warning(tmp_path: Path, monkeypatch):
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_smb",
         "display_name": "SMB Repo",
         "storage_key": "storage_smb",
@@ -206,6 +211,7 @@ def test_unmounted_smb_repository_refresh_is_recorded_as_warning(tmp_path: Path,
 def test_existing_unmounted_smb_error_is_displayed_as_warning(tmp_path: Path):
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_smb",
         "display_name": "SMB Repo",
         "storage_key": "storage_smb",
@@ -228,6 +234,7 @@ def test_existing_unmounted_smb_error_is_displayed_as_warning(tmp_path: Path):
 def test_failed_unmounted_smb_refresh_result_keeps_normal_interval(tmp_path: Path):
     config = _config(tmp_path)
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_smb",
         "display_name": "SMB Repo",
         "storage_key": "storage_smb",

@@ -317,7 +317,9 @@ class ResourceLockSet:
     def release(self) -> None:
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(timeout=2)
+            # A slow final heartbeat is still an owned-state writer. Do not
+            # release the run lease or remove locks while its write is pending.
+            self._thread.join()
         for path in list(self._owned):
             try:
                 data = self._read_lock(path)
@@ -545,6 +547,19 @@ def _resolve_usb_mount_path(meta: dict, backup_scripts_dir: Path) -> str:
 
 
 def main() -> int:
+    """Admission precedes run-state, logs, locks, runtime control and Borg."""
+    from migration_barrier import MigrationBlocked, writer_lease
+    config = {"BACKUP_SCRIPTS_DIR": os.environ.get("BORG_SCRIPT_DIR") or "/boot/config/borg-backup"}
+    try:
+        with writer_lease(config):
+            return _run_admitted()
+    except MigrationBlocked as exc:
+        _setup_stdout_logging()
+        logging.error("Backup start blocked: %s", exc.reason)
+        return 2
+
+
+def _run_admitted() -> int:
     _setup_stdout_logging()
 
     job_id = os.environ.get("BORG_UI_JOB_ID", "")

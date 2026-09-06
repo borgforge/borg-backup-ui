@@ -1056,6 +1056,17 @@ class RestoreTest:
 # ── Hauptprogramm ─────────────────────────────────────────────────────────────
 
 def main() -> None:
+    from migration_barrier import MigrationBlocked, writer_lease
+    config = {"BACKUP_SCRIPTS_DIR": str(_repository_data_root())}
+    try:
+        with writer_lease(config):
+            _run_admitted()
+    except MigrationBlocked as exc:
+        print(f"Restore test start blocked: {exc.reason}", file=sys.stderr)
+        raise SystemExit(2) from None
+
+
+def _run_admitted() -> None:
     parser = argparse.ArgumentParser(description=f"Borg Restore Test v{VERSION}")
     parser.add_argument("--force",    action="store_true",
                         help="Force tests even when they are not due")

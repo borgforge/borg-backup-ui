@@ -79,7 +79,8 @@ def _absolute(path) -> Path:
 
 
 def _os_error(exc: OSError):
-    _fail("unsafe_path" if exc.errno in {errno.ELOOP, errno.ENOTDIR} else "storage_unavailable")
+    _fail("insufficient_space" if exc.errno == errno.ENOSPC else
+          "unsafe_path" if exc.errno in {errno.ELOOP, errno.ENOTDIR} else "storage_unavailable")
 
 
 @contextmanager
@@ -526,6 +527,15 @@ def _snapshot_requirements(plan):
         _fail("snapshot_incomplete")
 
 
+def _snapshot_contents(snapshot, *, complete):
+    """Unknown interrupted staging files are evidence, never ignored inputs."""
+    with _directory(snapshot) as directory:
+        names = set(os.listdir(directory))
+    expected = {"metadata.json", "manifest.json", "files"}
+    if names - expected or complete and names != expected:
+        _fail("snapshot_incomplete")
+
+
 def create_snapshot(plan: dict, state_dir) -> dict:
     """Copy exact original inputs, including existing destination originals.
 
@@ -540,6 +550,7 @@ def create_snapshot(plan: dict, state_dir) -> dict:
     state_dir = _private_directory(state_dir)
     snapshot = _private_directory(state_dir / "snapshot", create=True)
     blobs = _private_directory(snapshot / "files", create=True)
+    _snapshot_contents(snapshot, complete=False)
     with _directory(blobs) as directory:
         free = os.fstatvfs(directory)
         required = sum(item["size"] for item in plan["inputs"].values() if item["exists"])
@@ -573,6 +584,7 @@ def verify_snapshot(plan: dict, snapshot: dict) -> dict:
     if path.name != "snapshot" or snapshot["plan_id"] != plan["plan_id"]:
         _fail("invalid_snapshot")
     _private_directory(path)
+    _snapshot_contents(path, complete=True)
     if load_plan(path.parent) != plan:
         _fail("invalid_snapshot")
     metadata = _snapshot_metadata(plan, path)
@@ -695,8 +707,35 @@ def _journal_records(raw, plan):
 def read_journal(state_dir) -> list:
     state_dir = _private_directory(state_dir)
     plan = load_plan(state_dir)
-    _, raw = _read_file(state_dir / "journal.jsonl", private=True)
-    return _journal_records(raw or b"", plan)
+    # append_journal may need multiple writes for one JSONL record. Status
+    # readers share its flock so a live append is never mistaken for corrupt
+    # recovery evidence. A genuinely torn record after process exit still
+    # fails validation; this does not repair or discard journal bytes.
+    with _directory(state_dir) as directory:
+        fd = None
+        try:
+            try:
+                fd = os.open("journal.jsonl", os.O_RDONLY | _NOFOLLOW | os.O_NONBLOCK,
+                             dir_fd=directory)
+            except FileNotFoundError:
+                return []
+            fcntl.flock(fd, fcntl.LOCK_SH)
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600
+                    or info.st_uid != os.getuid() or info.st_nlink != 1):
+                _fail("unsafe_path")
+            chunks = []
+            while True:
+                chunk = os.read(fd, 1024 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            return _journal_records(b"".join(chunks), plan)
+        except OSError as exc:
+            _os_error(exc)
+        finally:
+            if fd is not None:
+                os.close(fd)
 
 
 def append_journal(state_dir, plan: dict, status: str, phase: str, *,

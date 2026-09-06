@@ -1098,6 +1098,22 @@ def start_restore_async(
     conflict_mode: str,
     preserve_owner: bool = False,
 ) -> dict:
+    from migration_barrier import acquire_writer_lease
+    lease = acquire_writer_lease(config)
+    try:
+        return _start_restore_async_admitted(
+            config, job_id, archive, source_path, target_dir, conflict_mode,
+            preserve_owner, lease=lease,
+        )
+    except BaseException:
+        lease.close()
+        raise
+
+
+def _start_restore_async_admitted(
+    config, job_id, archive, source_path, target_dir, conflict_mode,
+    preserve_owner=False, *, lease,
+):
     job_id = _validate_job_id(job_id)
     archive = _validate_archive_name(archive)
     _ensure_restore_runs_loaded(config)
@@ -1200,7 +1216,7 @@ def start_restore_async(
             except Exception:
                 pass
 
-    def _worker() -> None:
+    def _worker_admitted() -> None:
         try:
             _set_phase("extract")
             _append("Starting restore extract ...")
@@ -1225,6 +1241,13 @@ def start_restore_async(
             _append(f"ERROR: {exc}")
             _append(traceback.format_exc(limit=2).strip())
             _finish_error(str(exc))
+
+    def _worker() -> None:
+        try:
+            with lease.activate():
+                _worker_admitted()
+        finally:
+            lease.close()
 
     t = threading.Thread(target=_worker, name=f"restore-{restore_id}", daemon=True)
     t.start()

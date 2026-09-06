@@ -236,7 +236,7 @@ def test_maintenance_keeps_diagnostics_and_support_bundle_available():
         ("GET", "/api/version"),
         ("GET", "/api/system-health"),
         ("GET", "/api/setup-status"),
-        ("GET", "/api/settings"),
+        ("GET", "/api/migration/identity/status"),
         ("POST", "/api/settings/support-bundle"),
     ):
         handler, errors = _handler(config, method)

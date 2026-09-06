@@ -1,4 +1,5 @@
 from runtime_fixture_support import job_config_identity
+from migration_gate_support import ready_gate
 from pathlib import Path
 from datetime import datetime
 import importlib.util
@@ -230,6 +231,7 @@ def test_send_event_queues_apprise_profiles_by_default(monkeypatch, tmp_path):
     assert queue["queue"][0]["max_attempts"] == 2
     assert "json://token" not in json.dumps(queue)
 
+    ready_gate({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, monkeypatch, tmp_path / "writer-gate")
     drained = drain_notification_queue({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
 
     assert drained == {"checked": 1, "delivered": 1, "failed": 0, "retrying": 0, "remaining": 0}
@@ -332,6 +334,7 @@ def test_queued_apprise_delivery_retries_without_sleeping(monkeypatch, tmp_path)
         NotificationEvent(event_type="backup_success", title="Backup OK", message="done"),
     )
 
+    ready_gate({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, monkeypatch, tmp_path / "writer-gate")
     drained = drain_notification_queue({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
 
     assert drained["retrying"] == 1
@@ -1057,6 +1060,9 @@ def test_restore_runner_uses_restore_status_dir_and_test_date(tmp_path):
     restore_status.mkdir(parents=True)
     test_file = restore_status / "00000003-1111-4111-8111-111111111111.test"
     test_file.write_text(json.dumps({
+        "job_id": "00000003-1111-4111-8111-111111111111",
+        "repository_snapshot": "/synthetic/repository",
+        "archive_prefix_snapshot": "example",
         "test_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "test_result": "success",
     }), encoding="utf-8")
@@ -1071,6 +1077,9 @@ def test_restore_runner_uses_restore_status_dir_and_test_date(tmp_path):
     }, args)
     try:
         assert tester.status_dir == restore_status
-        assert tester._should_test("00000003-1111-4111-8111-111111111111") is False
+        assert tester._should_test({
+            "job_id": "00000003-1111-4111-8111-111111111111",
+            "path": "/synthetic/repository", "job": {"archive_prefixes": ["example"]},
+        }) is False
     finally:
         tester.close()

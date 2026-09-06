@@ -1,18 +1,10 @@
 """UUID control-plane boundaries and transactions (#447, #474)."""
 
 from copy import deepcopy
-import logging
 
 from inventory_store import inventory_lock
 from job_model import JobValidationError, validate_job_id
 from job_store import read_jobs, read_repositories, validate_assignments, write_transaction
-
-
-# Temporary HTTP compatibility only. Remove at the final #479 API cutover.
-LEGACY_REQUEST_ENDPOINTS = frozenset({
-    "jobs/run", "jobs/cancel", "jobs/enabled", "jobs/delete",
-    "schedules/save", "schedules/delete",
-})
 
 
 def resolve_request_schedule_id(config, body, *, endpoint):
@@ -33,18 +25,7 @@ def resolve_request_job_id(config, body, *, endpoint):
             if job_id not in jobs:
                 raise JobValidationError("unknown_job_id", "Unknown job_id")
         if "job_key" in body:
-            if endpoint not in LEGACY_REQUEST_ENDPOINTS:
-                raise JobValidationError("deprecated_job_key", "This endpoint requires job_id")
-            alias = body["job_key"]
-            if not isinstance(alias, str) or not alias:
-                raise JobValidationError("invalid_job_alias", "An exact legacy alias is required")
-            owners = [key for key, job in jobs.items() if alias in job["legacy_job_keys"]]
-            if len(owners) != 1:
-                raise JobValidationError("unresolved_job_alias", "The legacy alias has no unique owner")
-            if job_id is not None and job_id != owners[0]:
-                raise JobValidationError("conflicting_job_identity", "job_id and legacy alias address different jobs")
-            job_id = owners[0]
-            logging.getLogger(__name__).warning("Deprecated job_key request resolved at %s to job_id=%s", endpoint, job_id)
+            raise JobValidationError("deprecated_job_key", "This endpoint requires job_id")
         if job_id is None:
             raise JobValidationError("invalid_job_id", "job_id is required")
         return job_id

@@ -129,10 +129,21 @@ async function refreshSettings() {
   hideEl('settings-message');
   _renderSettingsLoading();
   try {
+    const startupHealth = await window.BBUI.core.fetchSystemHealth(true);
+    if (String(startupHealth?.startup_state?.mode || '') === 'maintenance') {
+      const authResponse = await fetch('/api/auth/status', { credentials: 'include', cache: 'no-store' });
+      settingsState.authStatus = authResponse.ok ? await authResponse.json() : null;
+      settingsState.data = {};
+      settingsState.systemHealth = startupHealth;
+      settingsState.loaded = true;
+      settingsState.dirty = false;
+      renderSettings({}, startupHealth);
+      return;
+    }
     const [res, verRes, healthRes, authRes, reminderRes, appriseProfilesRes] = await Promise.all([
       fetch('/api/settings'),
       fetch('/api/version'),
-      window.BBUI.core.fetchSystemHealth(true).catch(() => null),
+      Promise.resolve(startupHealth),
       fetch('/api/auth/status'),
       fetch('/api/notification-reminders/diagnostics').catch(() => null),
       fetch('/api/notification-profiles').catch(() => null),
@@ -246,6 +257,22 @@ function _applyVersionInfo(version, author, borgVersion, contactEmail, repositor
 function renderSettings(data, systemHealth) {
   const el = document.getElementById('settings-content');
   if (!el) return;
+  if (String(systemHealth?.startup_state?.mode || '') === 'maintenance') {
+    document.getElementById('settings-save-btn')?.classList.add('hidden');
+    const failures = Array.isArray(systemHealth?.startup_state?.failures) ? systemHealth.startup_state.failures : [];
+    el.innerHTML = `<div class="settings-maintenance-view">
+      <header class="settings-workspace-header"><div><h2>${escHtml(settingsT('identityMigration.maintenanceTitle'))}</h2><p>${escHtml(settingsT('identityMigration.maintenanceDescription'))}</p></div></header>
+      <div id="identity-migration-assistant"></div>
+      <section class="settings-section"><div class="settings-section-header">${escHtml(settingsT('identityMigration.diagnostics'))}</div><div class="settings-body">
+        ${failures.length ? `<ul>${failures.slice(0, 20).map(row => `<li>${escHtml(row.migration_id || '')}: ${escHtml(row.phase || '')} ${escHtml(row.error || '')}</li>`).join('')}</ul>` : ''}
+        <p>${escHtml(settingsT('identityMigration.migrationLog', { path: systemHealth?.paths?.migration_log_file || '—' }))}</p>
+        <button type="button" class="btn btn-secondary" data-settings-action="export-support-bundle">${escHtml(settingsT('identityMigration.supportBundle'))}</button>
+        <div id="settings-transfer-msg" class="status-message hidden" role="status"></div>
+      </div></section>
+    </div>`;
+    window.BBUI?.components?.identityMigration?.mount(document.getElementById('identity-migration-assistant'));
+    return;
+  }
 
   const tabs = getSettingsTabs();
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
@@ -266,6 +293,7 @@ function renderSettings(data, systemHealth) {
           <span class="badge ${settingsState.dirty ? 'warning' : 'success'}" id="settings-workspace-save-state">${settingsT(settingsState.dirty ? 'menu.unsaved' : 'menu.saved')}</span>
         </header>
     <div class="settings-tab-panel ${settingsState.activeTab === 'general' ? '' : 'hidden'}" data-settings-panel="general">
+      <div id="identity-migration-assistant"></div>
       ${renderSettingsSystemHealth(systemHealth)}
       ${renderSettingsGeneral(data.general || {})}
       ${renderSettingsHomepageWidget(data.homepage_widget || {})}
@@ -334,6 +362,7 @@ function renderSettings(data, systemHealth) {
   if (settingsState.activeTab === 'notifications') maybeLoadAppriseProviders();
   if (settingsState.activeTab === 'about') maybeLoadAboutLicenses();
   _updateUnsavedChangesUi();
+  window.BBUI?.components?.identityMigration?.mount(document.getElementById('identity-migration-assistant'));
 }
 
 function renderSettingsMenu(tabs) {

@@ -175,7 +175,28 @@ def _arc_safe_path(prefix: str, path: Path) -> str:
     return f"{prefix}/{safe}"
 
 
+def _maintenance_support_bundle(config, app_version):
+    # No runtime readers, locks, cache refresh, or recovery blobs in diagnostics.
+    from startup_state import get_startup_state
+    from identity_migration_api import get_assistant
+    assistant = get_assistant(config).status()
+    migration = {key: assistant[key] for key in ("migration_id", "status", "stage", "reason_codes", "busy", "restart_required") if key in assistant}
+    files = ["system/startup-state.json", "system/identity-migration.json", "manifest.json"]
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        _add_json(archive, files[0], get_startup_state(config))
+        _add_json(archive, files[1], migration)
+        _add_json(archive, files[2], {"plugin_version": app_version, "maintenance": True,
+                  "note": "Read-only startup diagnostics. Protected migration data and credentials are excluded."})
+    payload = buf.getvalue()
+    return {"filename": "borg-backup-ui-migration-support.zip", "payload_b64": base64.b64encode(payload).decode("ascii"),
+            "size": len(payload), "file_count": len(files), "files": files}
+
+
 def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
+    from startup_state import is_maintenance_mode
+    if is_maintenance_mode(config):
+        return _maintenance_support_bundle(config, app_version)
     from config_api import get_conf_file, read_expanded_conf
     from system_health_api import get_system_health_data
 

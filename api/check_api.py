@@ -85,10 +85,20 @@ class CheckManager:
         job_id: str = "",
     ) -> tuple:
         """Start a maintenance action for one managed repository object."""
-        with self._lock:
-            return self._start_repository_locked(config, repository_key, action, mode, job_id=job_id)
+        from migration_barrier import acquire_writer_lease
+        lease = acquire_writer_lease(config)
+        try:
+            with self._lock, lease.activate():
+                result = self._start_repository_locked(config, repository_key, action, mode,
+                                                       job_id=job_id, lease=lease)
+            if not result[0]:
+                lease.close()
+            return result
+        except BaseException:
+            lease.close()
+            raise
 
-    def _start_repository_locked(self, config, repository_key, action, mode, *, job_id):
+    def _start_repository_locked(self, config, repository_key, action, mode, *, job_id, lease):
         if self._state is not None and not self._state.finished:
             return False, "A repository maintenance action is already running"
 
@@ -166,6 +176,7 @@ class CheckManager:
             repository=repository,
         )
         state.cleanup = cleanup
+        state.migration_lease = lease
         state.append_line(f"[Info] Starting repository {action}: {' '.join(cmd[:-1])} {repo_path}")
         self._state = state
         threading.Thread(
@@ -222,6 +233,16 @@ class CheckManager:
                 job_id, snapshot["run_id"], str(resolve_data_root(config))]
 
     def _reader(self, state: _CheckState) -> None:
+        lease = getattr(state, "migration_lease", None)
+        if lease is None:
+            return self._reader_admitted(state)
+        try:
+            with lease.activate():
+                self._reader_admitted(state)
+        finally:
+            lease.close()
+
+    def _reader_admitted(self, state: _CheckState) -> None:
         last_emitted: Optional[str] = None
 
         def _emit(buf: List[str]) -> None:

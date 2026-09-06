@@ -54,7 +54,8 @@ def test_config_to_pfsense_preserves_one_job_schedule_and_alias(setup, cron):
     assert context['job_id'] == job_id and context['name'] == 'pfsense_local'
     assert context['archive_prefixes'] == ['pfsense-backup', 'config-backup']
     assert context['location'] == 'storagebox'
-    assert resolve_request_job_id(config, {'job_key': 'config_local'}, endpoint='jobs/run') == job_id
+    with pytest.raises(JobValidationError, match='requires job_id'):
+        resolve_request_job_id(config, {'job_key': 'config_local'}, endpoint='jobs/run')
     assert resolve_request_job_id(config, {'job_id': job_id}, endpoint='jobs/run') == job_id
     with pytest.raises(JobValidationError):
         resolve_request_job_id(config, {'job_key': 'pfsense_local'}, endpoint='jobs/run')
@@ -219,7 +220,7 @@ def test_repository_reconciliation_reports_and_never_repairs(setup, cron, mutati
     assert snapshot(root) == before and cron == []
 
 
-def test_alias_resolution_is_exact_bounded_logged_and_conflicts_rejected(setup, caplog):
+def test_legacy_aliases_are_preserved_for_history_but_rejected_by_active_api(setup, caplog):
     config = setup[0]
     first, meta = create(setup)
     meta['legacy_job_keys'] = ['Config_local']
@@ -231,8 +232,10 @@ def test_alias_resolution_is_exact_bounded_logged_and_conflicts_rejected(setup, 
             resolve_request_job_id(config, payload, endpoint='jobs/run')
     with pytest.raises(JobValidationError):
         resolve_request_job_id(config, {'job_key': 'Config_local'}, endpoint='wizard/save')
-    assert resolve_request_job_id(config, {'job_id': first['job_id'], 'job_key': 'Config_local'}, endpoint='jobs/enabled') == first['job_id']
-    assert 'Deprecated job_key request' in caplog.text
+    with pytest.raises(JobValidationError, match='requires job_id'):
+        resolve_request_job_id(config, {'job_id': first['job_id'], 'job_key': 'Config_local'}, endpoint='jobs/enabled')
+    assert resolve_request_job_id(config, {'job_id': first['job_id']}, endpoint='jobs/enabled') == first['job_id']
+    assert 'Deprecated job_key request' not in caplog.text
     other['legacy_job_keys'] = ['Config_local']
     atomic_write_json(Path(second['metadata_path']), other)
     with pytest.raises(JobValidationError, match='conflicting owners'):
@@ -350,6 +353,8 @@ def test_manual_and_scheduled_api_launch_the_uuid_runner(setup, monkeypatch, sch
 
 
 def test_prune_scope_is_validated_before_mounting_storage(setup, monkeypatch):
+    from migration_gate_support import ready_gate
+    ready_gate(setup[0], monkeypatch, setup[3] / "writer-gate")
     from check_api import CheckManager
     from repositories_api import read_repository_store
     import smb_profiles_api, storage_objects_api

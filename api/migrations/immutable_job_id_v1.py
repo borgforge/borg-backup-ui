@@ -518,8 +518,11 @@ def _resume_check(scan, journal):
         # A vanished source is only a valid retirement when its exact canonical
         # replacement is present. JSON-equivalent edits/chmod are not accepted.
         replacements = {a["target"]: a.get("after") for a in saved.get("actions", [])
-                        if a.get("kind") == "write_json"}
-        retired = {a["source"]: a["target"] for a in saved.get("actions", []) if a.get("kind") == "retire_source"}
+                        if a.get("kind") in {"write_json", "write_bytes"}}
+        retired = {a["source"]: a["target"] for a in saved.get("actions", [])
+                   if a.get("kind") in {"retire_source", "retire_auxiliary"}}
+        derived = {a["source"] for a in saved.get("actions", [])
+                   if a.get("kind") == "rebuild_derived" and a.get("source") == a.get("target")}
         actual_inputs = {path: storage.fingerprint_file(path) for path in saved["inputs"]}
         if set(scan.inputs) - set(saved["inputs"]):
             _fail("source_fingerprint_changed")
@@ -532,6 +535,8 @@ def _resume_check(scan, journal):
                 continue
             if path in replacements and actual == replacements[path]:
                 continue
+            if path in derived and not actual["exists"]:
+                continue
             _fail("source_fingerprint_changed", path)
         current_groups = {g["path"]: g for g in scan.groups}
         if set(current_groups) != {g["path"] for g in saved["inventory_groups"]}:
@@ -542,7 +547,16 @@ def _resume_check(scan, journal):
                 if current != group:
                     _fail("source_fingerprint_changed", group["path"])
                 continue
-            if {k: v for k, v in current.items() if k != "entries"} != {k: v for k, v in group.items() if k != "entries"}:
+            # The explicit apply engine may publish a previously absent jobs
+            # directory from a legacy-only metadata location. Its private
+            # directory receipts verify the original/new filesystem identity;
+            # this read-only check additionally requires exact planned members.
+            created_target_group = (not group["exists"] and current["exists"]
+                                    and any(str(Path(path).parent) == group["path"]
+                                            for path in replacements))
+            if (not created_target_group
+                    and {k: v for k, v in current.items() if k != "entries"}
+                    != {k: v for k, v in group.items() if k != "entries"}):
                 _fail("source_fingerprint_changed", group["path"])
             expected_names = {Path(path).name for path, fp in actual_inputs.items()
                               if str(Path(path).parent) == group["path"] and fp["exists"]
@@ -683,6 +697,20 @@ def detect(config, *, control_root=None):
 
 def verify_target(config, *, control_root=None):
     """Read actual target files, never authorize services from a proposed plan."""
+    return _verify_target(config, control_root=control_root, allow_derived_rebuild=False)
+
+
+def verify_active_target(config, *, control_root=None):
+    """Verify actual startup identity references, permitting widget recreation.
+
+    Only the derived ``widget_rebuild_required`` warning is allowed beyond the
+    strict cutover check. The startup coordinator still owns writer admission
+    and the gated widget refresh; this read-only result never enables either.
+    """
+    return _verify_target(config, control_root=control_root, allow_derived_rebuild=True)
+
+
+def _verify_target(config, *, control_root, allow_derived_rebuild):
     plan = build_plan(config, control_root=control_root)
     reasons = list(plan.get("reasons", []))
     if plan["classification"] != "not_applicable":
@@ -706,6 +734,7 @@ def verify_target(config, *, control_root=None):
             reasons.append({"code": exc.code, "source": "", "locator": ""})
         except (OSError, ValueError, TypeError, KeyError, OverflowError, RecursionError):
             reasons.append({"code": "invalid_owned_state", "source": "", "locator": ""})
-    fatal = [r for r in reasons if r.get("severity") != "warning" or r["code"] == "widget_rebuild_required"]
+    fatal = [r for r in reasons if r.get("severity") != "warning"
+             or r["code"] == "widget_rebuild_required" and not allow_derived_rebuild]
     return {"valid": not fatal, "reasons": reasons, "writable_services_allowed": False,
             "activation_allowed": False, "migration_id": MIGRATION_ID}

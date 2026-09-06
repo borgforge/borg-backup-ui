@@ -1814,99 +1814,117 @@ def run_repository_info_refresh_scheduler(
         })
     if _REFRESH_WAKE_EVENT.wait(max(0, int(startup_delay_seconds))):
         _REFRESH_WAKE_EVENT.clear()
+    from migration_barrier import MigrationBlocked, writer_lease
     while True:
-        settings = repository_info_refresh_settings(config)
-        now = datetime.now(timezone.utc).replace(microsecond=0)
-        state = _read_repository_info_refresh_state(config)
-        if not settings["enabled"]:
-            disabled_payload = {
-                **state,
-                "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
-                "updated_at": _now(),
-                "next_run_at": "",
-            }
-            _write_repository_info_refresh_state(config, disabled_payload)
+        try:
+            with writer_lease(config):
+                timeout, enabled = _schedule_repository_info_refresh(config)
+            # Never retain a writer lease while waiting for the next schedule.
+            changed = _REFRESH_WAKE_EVENT.wait(timeout) if timeout > 0 else False
+            _REFRESH_WAKE_EVENT.clear()
+            if changed or not enabled:
+                continue
+            with writer_lease(config):
+                _run_repository_info_refresh(config, log_fn)
+        except MigrationBlocked:
             with _REFRESH_LOCK:
                 _REFRESH_RUNTIME_STATE.update({
-                    "worker_state": "disabled",
-                    "current_run_started_at": "",
-                    "last_schedule_reason": "disabled",
+                    "worker_state": "maintenance", "current_run_started_at": "",
+                    "last_schedule_reason": "migration_maintenance",
                 })
-            _REFRESH_WAKE_EVENT.wait(24 * 60 * 60)
-            _REFRESH_WAKE_EVENT.clear()
-            continue
+            return
 
-        next_run = _compute_repository_info_next_run(config, settings, state, now)
-        if next_run is None:
-            timeout = 24 * 60 * 60
-        else:
-            timeout = max(0.0, (next_run - now).total_seconds())
-        scheduled_payload = {
+
+def _schedule_repository_info_refresh(config):
+    settings = repository_info_refresh_settings(config)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    state = _read_repository_info_refresh_state(config)
+    if not settings["enabled"]:
+        disabled_payload = {
             **state,
             "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
             "updated_at": _now(),
-            "next_run_at": _format_repository_timestamp(next_run),
+            "next_run_at": "",
         }
-        _write_repository_info_refresh_state(config, scheduled_payload)
+        _write_repository_info_refresh_state(config, disabled_payload)
         with _REFRESH_LOCK:
             _REFRESH_RUNTIME_STATE.update({
-                "worker_state": "sleeping" if timeout > 0 else "due",
+                "worker_state": "disabled",
                 "current_run_started_at": "",
-                "last_schedule_reason": "scheduled",
+                "last_schedule_reason": "disabled",
             })
-        if timeout > 0 and _REFRESH_WAKE_EVENT.wait(timeout):
-            _REFRESH_WAKE_EVENT.clear()
-            continue
+        return 24 * 60 * 60, False
 
-        _REFRESH_WAKE_EVENT.clear()
-        started_at = _now()
-        with _REFRESH_LOCK:
-            _REFRESH_RUNTIME_STATE.update({
-                "worker_state": "running",
-                "current_run_started_at": started_at,
-                "last_schedule_reason": "running",
-            })
-        try:
-            result = refresh_all_repository_info(config)
-        except Exception as exc:
-            result = {
-                "checked": 0,
-                "refreshed": 0,
-                "warning": 0,
-                "failed": 1,
-                "deferred": 0,
-                "errors": [{"repository_key": "", "error": _mask_repo_output(str(exc))[:500]}],
-            }
-        finished = datetime.now(timezone.utc).replace(microsecond=0)
-        next_after_run = _compute_repository_info_next_run(
-            config,
-            repository_info_refresh_settings(config),
-            {"last_run_at": _format_repository_timestamp(finished), "last_result": result},
-            finished,
-            after_run=True,
-        )
-        persisted = {
-            "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
-            "updated_at": _format_repository_timestamp(finished),
-            "last_run_at": _format_repository_timestamp(finished),
-            "next_run_at": _format_repository_timestamp(next_after_run),
-            "last_result": result,
+    next_run = _compute_repository_info_next_run(config, settings, state, now)
+    if next_run is None:
+        timeout = 24 * 60 * 60
+    else:
+        timeout = max(0.0, (next_run - now).total_seconds())
+    scheduled_payload = {
+        **state,
+        "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
+        "updated_at": _now(),
+        "next_run_at": _format_repository_timestamp(next_run),
+    }
+    _write_repository_info_refresh_state(config, scheduled_payload)
+    with _REFRESH_LOCK:
+        _REFRESH_RUNTIME_STATE.update({
+            "worker_state": "sleeping" if timeout > 0 else "due",
+            "current_run_started_at": "",
+            "last_schedule_reason": "scheduled",
+        })
+    return timeout, True
+
+
+def _run_repository_info_refresh(config, log_fn):
+    started_at = _now()
+    with _REFRESH_LOCK:
+        _REFRESH_RUNTIME_STATE.update({
+            "worker_state": "running",
+            "current_run_started_at": started_at,
+            "last_schedule_reason": "running",
+        })
+    try:
+        result = refresh_all_repository_info(config)
+    except Exception as exc:
+        result = {
+            "checked": 0,
+            "refreshed": 0,
+            "warning": 0,
+            "failed": 1,
+            "deferred": 0,
+            "errors": [{"repository_key": "", "error": _mask_repo_output(str(exc))[:500]}],
         }
-        _write_repository_info_refresh_state(config, persisted)
-        with _REFRESH_LOCK:
-            _REFRESH_RUNTIME_STATE.update({
-                "worker_state": "sleeping",
-                "current_run_started_at": "",
-                "last_schedule_reason": "completed",
-            })
-        if log_fn:
-            log_fn(
-                "Repository information refresh completed: "
-                f"checked={result.get('checked')} refreshed={result.get('refreshed')} "
-                f"warning={result.get('warning')} deferred={result.get('deferred')} "
-                f"failed={result.get('failed')} "
-                f"next_run_at={persisted.get('next_run_at') or 'disabled'}"
-            )
+    finished = datetime.now(timezone.utc).replace(microsecond=0)
+    next_after_run = _compute_repository_info_next_run(
+        config,
+        repository_info_refresh_settings(config),
+        {"last_run_at": _format_repository_timestamp(finished), "last_result": result},
+        finished,
+        after_run=True,
+    )
+    persisted = {
+        "schema_version": REPOSITORY_INFO_REFRESH_STATE_VERSION,
+        "updated_at": _format_repository_timestamp(finished),
+        "last_run_at": _format_repository_timestamp(finished),
+        "next_run_at": _format_repository_timestamp(next_after_run),
+        "last_result": result,
+    }
+    _write_repository_info_refresh_state(config, persisted)
+    with _REFRESH_LOCK:
+        _REFRESH_RUNTIME_STATE.update({
+            "worker_state": "sleeping",
+            "current_run_started_at": "",
+            "last_schedule_reason": "completed",
+        })
+    if log_fn:
+        log_fn(
+            "Repository information refresh completed: "
+            f"checked={result.get('checked')} refreshed={result.get('refreshed')} "
+            f"warning={result.get('warning')} deferred={result.get('deferred')} "
+            f"failed={result.get('failed')} "
+            f"next_run_at={persisted.get('next_run_at') or 'disabled'}"
+        )
 
 
 def get_repository_info_refresh_status(config: dict) -> dict[str, Any]:

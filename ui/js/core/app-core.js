@@ -191,7 +191,7 @@ function renderStartupMaintenanceBanner(startupState = {}) {
       phase: phase || _sidebarTranslation('maintenanceMode.unknownPhase'),
       message: cause || _sidebarTranslation('maintenanceMode.unknownCause'),
     });
-    target.textContent = `${migrationLine}\n${causeLine}`;
+    target.textContent = failures || cause || phase ? `${migrationLine}\n${causeLine}` : migrationLine;
   }
   if (!isMaintenancePageAllowed(state.currentPage)) {
     navigate(maintenanceFallbackPage());

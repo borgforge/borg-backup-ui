@@ -1,12 +1,18 @@
 # Borg-Backup-UI User Manual
 
-Date: 2026-09-03 (stable 2026.08.31.0907)
+Date: 2026-09-06 (integration candidate for issue #447; no new stable release approval)
 Language: English  
 Audience: Beginners, advanced users, and administrators of an Unraid system
 
 This manual describes Borg-Backup-UI in the same order as the application's menu. It explains the visible pages, typical workflows, important warnings, and the effects of user actions.
 
 > **Note:** This manual describes the application itself. It does not replace the general BorgBackup documentation or the Unraid system documentation. If a function is not visible in the interface, it may not be available for the currently signed-in role or current configuration.
+
+> **Before testing this update:** Create and check a separate backup of the Unraid flash configuration and plugin data. The integration candidate needs testing on different installations before stable release approval. The migration backup does not replace a complete system backup.
+
+Conversion to permanent job identities begins explicitly with **Prepare migration**. The automatically verified backup is followed by a mandatory pause: **Download protected backup**, save and check an independent copy, then **Confirm saved copy**. Only the separate **Run migration now** action authorizes conversion. Opening the page, downloading and acknowledging the backup do not start it. A snapshot is not an automatic plugin downgrade. See the [migration guide](migration-guide.md) for details.
+
+The illustrations show an earlier version and serve as orientation. Older type ID and job key labels in images have been replaced by job name, complete archive prefix and a permanent internal job ID.
 
 ## Table of Contents
 
@@ -105,7 +111,7 @@ The page consists of:
 
 ### 2.3 Important Columns
 
-- **Backup:** Job name, key, and icon.
+- **Backup:** Job display name and icon. Records are linked by the permanent internal job ID.
 - **Location:** Job storage target.
 - **Run status:** Last run, duration, result, and next scheduled run.
 - **Restore:** Last restore test and validity, if scheduled.
@@ -146,7 +152,7 @@ The **Jobs** page manages backup jobs. Jobs can be viewed, started, edited, sche
 
 Jobs define which data is backed up and where it is stored. A job contains:
 
-- Display name and type ID
+- Display name and complete archive prefix; the internal job ID remains permanent
 - Location and repository
 - Folders or files to back up
 - Docker and VM control
@@ -194,17 +200,19 @@ The job wizard guides creation or editing of a job through fixed steps.
 
 #### Step 1: Basics
 
-This step sets job name, type ID, icon, icon color, and initial runtime options.
+This step sets job name, complete archive prefix, icon, icon color, and initial runtime options.
 
 Important fields:
 
 - **Job name:** Visible name in the UI, reports, and notifications.
-- **Type ID:** Technical key component. It should be short, unique, and stable.
+- **Archive prefix:** Complete beginning of future archive names. Letters, digits, dots, underscores and hyphens are allowed. The preview shows the exact name with its timestamp.
 - **Icon / icon color:** Representation in Dashboard, Jobs, Restore, and Reports.
 - **Stop Docker before backup:** Enables Docker control.
 - **Shut down VMs before backup:** Enables VM control.
 
-Together with the location, the type ID forms the technical job key, for example `appdata_local`. It also produces the archive pattern `<type-id>-backup-*`. If the type ID of an existing job is changed, only future archives use the new prefix. Borg Backup UI stores the previous archive prefixes in the job and displays them in the editor's information popover; existing archives are neither renamed nor moved.
+Each job receives a permanent internal ID. Changes to job name, archive prefix or repository preserve that ID and its links to schedules, status and history. The display name can be changed freely. The complete archive prefix is used: for example, `photos` produces `photos-2026-09-06_03-00-00`; `-backup` is not added automatically.
+
+Changing the archive prefix affects only future archives. Borg Backup UI keeps an ordered prefix history with the current prefix first and displays previous prefixes in the editor's information popover. Existing archives are neither renamed nor moved. Archive discovery uses these prefixes in the currently assigned repository. Changing repositories does not move archives or make earlier restore evidence prove the new target.
 
 #### Step 2: Sources & Target
 
@@ -338,7 +346,7 @@ Best practices:
 
 ### 3.7 Typical Messages
 
-- **Preview error / invalid data:** A wizard field is not plausible. Check the folders or files to back up, type ID, storage target, and repository selection.
+- **Preview error / invalid data:** A wizard field is not plausible. Check the folders or files to back up, archive prefix, storage target, and repository selection.
 - **No storage target or repository available:** Configure the storage target under **Settings** first. Then create or import the repository under **Repositories**.
 - **Schedule disabled:** The job only runs manually.
 
@@ -425,7 +433,7 @@ Remove a repository from the application or delete it permanently:
 
 ### 4.5 Notes
 
-> **Note:** Prune uses a linked job's retention policy and limits the action to its archive pattern `<type-id>-backup-*`. If several jobs use the same repository, a manual prune requires an explicit job as the retention source. The confirmation shows the job, archive filter, and periodic restore points; archives belonging to other jobs remain untouched. Prune remains disabled without a matching job link.
+> **Note:** Prune applies a linked job's retention policy to the combined selection of its current and stored earlier archive prefixes, each as `<archive-prefix>-*`. If several jobs use the same repository, a manual prune requires an explicit job as the retention source. The confirmation shows the job, archive filter, and periodic restore points; archives belonging to other jobs remain untouched. Prune remains disabled without a matching job link.
 
 > **Note:** Prune lists deleted archives in its result. Compact only shows a numeric reclaimed-space value when Borg reports it.
 
@@ -446,9 +454,9 @@ History is the first detail page after a backup run. It shows when a run happene
 ### 5.2 Areas and Functions
 
 - **Location sidebar:** Groups runs by location.
-- **Type filter:** Filters by backup types.
+- **Job filter:** Filters jobs by their permanent IDs. Deleted jobs and unassigned historical entries remain separately accessible.
 - **Status filter:** Filters by success, warning, error, or skipped runs.
-- **Table:** Shows date/time, type, location, duration, original size, deduplicated size, and status.
+- **Table:** Shows date/time, job, location, duration, original size, deduplicated size, and status. Historical runs retain the descriptions captured at their start.
 - **Detail area:** Can be expanded per run and shows archive, repository data, check status, log file, and error messages.
 - **Open:** Opens the linked log file if available.
 
@@ -547,7 +555,7 @@ Select the job whose archive you want to browse. The sidebar groups jobs by loca
 
 #### Step 2: Select Archive
 
-Select an archive from the repository. The list is limited to archive prefixes belonging to the job. The current pattern, for example `testdata-backup-*`, is shown above the list. If the job's type ID was changed previously, a compact information popover also shows the stored historical patterns. This keeps older archives in the currently assigned repository available without offering archives from other jobs in a shared repository.
+Select an archive from the repository. The list is limited to archive prefixes belonging to the job. The current pattern, for example `testdata-backup-*`, is shown above the list. If the job's complete archive prefix was changed previously, a compact information popover also shows the ordered stored historical patterns. This keeps older archives in the currently assigned repository available without offering archives from other jobs in a shared repository.
 
 If no archives are visible, check repository access, passphrase, storage status, and the displayed archive pattern. After a job repository change, older archives remain in the previous repository and do not appear here; the change neither moves nor copies them.
 
@@ -1004,9 +1012,11 @@ when earlier versions did not store it separately and no successful audit
 event can prove it. The application reports that limitation instead of showing
 the current startup time as the application time.
 
-Required data migrations run during plugin startup before normal operation. They are idempotent, write a structured audit entry, and protect affected configuration data with a migration snapshot. If a required migration fails, later migrations and write operations are blocked; sign-in, System Health, migration details, and support-bundle creation remain available for diagnosis.
+Plugin startup first performs read-only detection of the required conversion to permanent job identities. A required or unclear migration keeps the plugin in maintenance. Explicitly select **Prepare migration** and wait for the successfully verified backup. Download the protected backup, save and check an independent copy, and acknowledge it separately. Only **Run migration now** starts conversion using the verified plan. The backup may contain credentials; do not share it publicly.
 
-> **Warning:** Before a plugin update, keep an independent backup of at least `/boot/config/borg-backup`. An automatically created migration snapshot protects affected data, but it is neither a complete system backup nor an automatic plugin downgrade. Unraid normally installs only the current plugin version. Repair or manual restoration must therefore be performed transparently with the installed or a corrected version.
+The migration is idempotent and records actions and progress in a structured audit log. Closing the browser or restarting the plugin retains the plan, IDs, migration snapshot and journal; it does not authorize automatic continuation. An interrupted operation may only be explicitly continued after validation. If a required migration fails, later migrations and write operations remain blocked until a failure-free restart. Sign-in, System Health, migration details, and support-bundle creation remain available for diagnosis.
+
+> **Warning:** Before a plugin update, keep an independent backup of at least `/boot/config/borg-backup`. A migration snapshot created and verified after explicit preparation protects affected data, but it is neither a complete system backup nor an automatic plugin downgrade. Unraid normally installs only the current plugin version. Repair or manual restoration must therefore be performed transparently with the installed or a corrected version.
 
 Runtime recovery indicates that Docker containers or VMs were stopped during a backup and must be checked after a crash, abort, or restart.
 
@@ -1041,7 +1051,7 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 
 1. Open **Jobs**.
 2. Click **New job**.
-3. Enter name, type ID, icon, and location.
+3. Enter the job name, complete archive prefix and icon, then choose the storage target and repository.
 4. Select the folders or files to back up.
 5. Select the storage target first and then an existing repository.
 6. Configure Docker or VM control if needed.

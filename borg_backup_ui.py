@@ -17,6 +17,9 @@ import shutil
 import subprocess
 import sys
 import threading
+import tarfile
+import io
+from contextlib import nullcontext
 import time
 import uuid
 from datetime import datetime
@@ -409,6 +412,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         "/api/setup-status",
         "/api/status",
         "/api/system-health",
+        "/api/migration/identity/status",
         "/api/version",
     }
     _ROUTINE_GET_PREFIXES = (
@@ -858,7 +862,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/system-health",
             "/api/setup-status",
         }
-        allowed = allowed or (method == "GET" and path in {"/api/settings", "/api/settings/basic"})
+        allowed = allowed or (method == "GET" and path in {
+            "/api/migration/identity/status", "/api/migration/identity/snapshot"})
+        allowed = allowed or (method == "POST" and path in {
+            "/api/migration/identity/prepare", "/api/migration/identity/acknowledge", "/api/migration/identity/apply"})
         allowed = allowed or (method == "POST" and path == "/api/settings/support-bundle")
         if allowed:
             return True
@@ -867,7 +874,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._send_api_error(
             503,
             "maintenance_mode",
-            f"Normal operation is blocked because startup migration failed: {failed}. Review System Health & Migration or create a support bundle.",
+            f"Normal operation is blocked by the startup migration gate: {failed}. Review System Health & Migration or create a support bundle.",
             request_id=request_id,
         )
         return False
@@ -879,7 +886,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         try:
             path = urlparse(self.path).path
             if self._authorize_api_request(path, request_id):
-                fn()
+                with self._request_writer_lease(path):
+                    fn()
         finally:
             self._current_request_id = ""
             self._refreshed_session_cookie = ""
@@ -932,6 +940,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             job_id = (qs.get("job_id") or [""])[0]
             run_id = (qs.get("run_id") or [""])[0]
             self._handle_direct_api(lambda: self._handle_sse(job_id, run_id))
+        elif path == "/api/migration/identity/snapshot":
+            self._handle_direct_api(lambda: self._download_identity_snapshot(parsed.query))
         elif path == "/api/jobs/log/download":
             self._handle_direct_api(lambda: self._download_activity_log(parsed.query))
         elif path == "/api/restore-tests/log/stream":
@@ -953,6 +963,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/licenses": lambda: self._get_license_file(parsed.query),
                 "/api/status": self._get_status,
                 "/api/system-health": self._get_system_health,
+                "/api/migration/identity/status": lambda: self._identity_assistant().status(),
                 "/api/notification-reminders/diagnostics": self._get_notification_reminder_diagnostics,
                 "/api/jobs": self._get_jobs,
                 "/api/jobs/running": self._get_running,
@@ -1006,6 +1017,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         routes = {
+            "/api/migration/identity/prepare": lambda: self._identity_assistant().prepare(self._read_json_body()),
+            "/api/migration/identity/acknowledge": lambda: self._identity_assistant().acknowledge(self._read_json_body()),
+            "/api/migration/identity/apply": lambda: self._identity_assistant().apply(self._read_json_body()),
             "/api/jobs/run": self._post_run_job,
             "/api/jobs/cancel": self._post_cancel_job,
             "/api/restore-tests/run": self._post_run_restore_test,
@@ -1657,7 +1671,64 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._persist_sessions()
         return {"ok": True, "deleted": username}
 
+    def _identity_assistant(self):
+        from identity_migration_api import get_assistant
+        assistant = get_assistant(self.config)
+        assistant.activate = lambda config: _start_configured_runtime_writers(config, True)
+        return assistant
+
+    def _download_identity_snapshot(self, query):
+        from migrations import identity_storage
+        params = parse_qs(query)
+        binding = {key: params.get(key, [""])[0] for key in ("plan_id", "snapshot_digest")}
+        headers_sent = False
+        try:
+            with self._identity_assistant().snapshot_files(binding) as export:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-tar")
+                self.send_header("Content-Length", str(export["size_bytes"]))
+                self.send_header("Content-Disposition", 'attachment; filename="borg-identity-migration-backup.tar"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self._send_refreshed_session_header()
+                self.end_headers()
+                headers_sent = True
+                archive = tarfile.open(fileobj=self.wfile, mode="w|", format=tarfile.USTAR_FORMAT)
+                try:
+                    for name, path, expected in export["members"]:
+                        actual, raw = identity_storage._read_file(path, private=True)
+                        if actual != expected:
+                            raise ValueError("snapshot_changed")
+                        info = tarfile.TarInfo(name)
+                        info.size, info.mode = len(raw), 0o600
+                        archive.addfile(info, io.BytesIO(raw))
+                except Exception:
+                    # Do not finish the tar or append JSON to an incomplete download.
+                    self.close_connection = True
+                    raise
+                else:
+                    archive.close()
+        except Exception as exc:
+            if headers_sent:
+                self.close_connection = True
+                return
+            from identity_migration_api import _safe_code
+            self._send_api_error(409, "identity_migration_blocked", _safe_code(exc), request_id=self._current_request_id)
+
+    def _request_writer_lease(self, path):
+        # Even GET routes may refresh caches. Only audited safe routes bypass leases.
+        if (path.startswith("/api/auth/") or path.startswith("/api/migration/identity/")
+                or path == "/api/version"
+                or path in {"/api/system-health", "/api/setup-status", "/api/settings/support-bundle"} and _is_maintenance_mode(self.config)):
+            return nullcontext()
+        from migration_barrier import writer_lease
+        return writer_lease(self.config)
+
     def _get_system_health(self) -> dict:
+        if _is_maintenance_mode(self.config):
+            return {"startup_state": _public_startup_state(self.config),
+                    "identity_migration": self._identity_assistant().status(),
+                    "paths": {}, "checks": {}}
         from system_health_api import get_system_health_data
         return get_system_health_data(self.config)
 
@@ -1948,6 +2019,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_settings_data(self.config, include_storagebox_setup=False)
 
     def _get_setup_status(self) -> dict:
+        if _is_maintenance_mode(self.config):
+            return {"startup_state": _public_startup_state(self.config), "maintenance_mode": True}
         from config_api import get_setup_status
         return get_setup_status(self.config)
 
@@ -3704,7 +3777,8 @@ btn.addEventListener('click',doRecovery);
                 return
             refreshed_session_cookie = self._refreshed_session_cookie
             self._extra_response_headers = []
-            data = fn()
+            with self._request_writer_lease(path):
+                data = fn()
             refreshed_session_cookie = self._refreshed_session_cookie or refreshed_session_cookie
             if refreshed_session_cookie:
                 self._extra_response_headers.append(("Set-Cookie", refreshed_session_cookie))
@@ -3714,7 +3788,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export"}
+                if path.startswith("/api/migration/identity/") or path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)
@@ -3750,7 +3824,9 @@ btn.addEventListener('click',doRecovery);
         except ApiConflictError as exc:
             self._send_api_error(409, exc.code, str(exc), request_id=request_id)
         except Exception as exc:
-            if exc.__class__.__module__.endswith("inventory_store"):
+            if exc.__class__.__module__.endswith("migration_barrier"):
+                self._send_api_error(503, "maintenance_mode", str(exc), request_id=request_id)
+            elif exc.__class__.__module__.endswith("inventory_store"):
                 self._send_api_error(503, "inventory_unavailable", str(exc), request_id=request_id)
             else:
                 self._send_api_error(500, "internal_error", str(exc), request_id=request_id)
@@ -4094,7 +4170,9 @@ def _start_notification_reminder_loop(config: dict) -> threading.Thread | None:
         while True:
             try:
                 from notification_reminder_api import run_due_notification_reminders
-                result = run_due_notification_reminders(config)
+                from migration_barrier import writer_lease
+                with writer_lease(config):
+                    result = run_due_notification_reminders(config)
                 if int(result.get("checked") or 0) or int(result.get("sent") or 0):
                     _log(
                         "Notification reminders checked: "
@@ -4179,7 +4257,9 @@ def _start_apprise_runtime_warmup(config: dict) -> threading.Thread | None:
         try:
             from apprise_profiles_api import get_supported_providers
 
-            info = get_supported_providers(config)
+            from migration_barrier import writer_lease
+            with writer_lease(config):
+                info = get_supported_providers(config)
             elapsed_ms = int((perf_counter() - started) * 1000)
             if info.get("success") is False:
                 _log(
@@ -4231,12 +4311,28 @@ def _apply_runtime_dirs_from_conf(config: dict) -> None:
 def _evaluate_startup_migrations(config: dict, migration_runner=None) -> tuple[bool, dict]:
     """Run required startup migrations and select normal or restricted mode."""
     _set_startup_state(config, _normal_startup_state())
+    production_runner = migration_runner is None
     try:
         if migration_runner is None:
             from migrations.registry import run_startup_migrations
-            migration_runner = run_startup_migrations
-        summary = migration_runner(config)
+            from migration_barrier import block_writers, exclusive_migration, clear_block
+            block_writers(config)
+            # Detection is read-only and can explain pending work while old workers drain.
+            from identity_migration_api import get_assistant
+            detected = get_assistant(config).startup_detection()
+            if detected["required"]:
+                summary = run_startup_migrations(config)
+            else:
+                with exclusive_migration(config):
+                    summary = run_startup_migrations(config)
+                    if summary.get("status") == "ok":
+                        clear_block(config)
+        else:
+            summary = migration_runner(config)
     except Exception as exc:
+        if production_runner and not exc.__class__.__module__.endswith("migration_barrier"):
+            from identity_migration_api import get_assistant
+            get_assistant(config)._failed_here = True
         state = _set_startup_state(config, _migration_maintenance_state(runner_error=exc))
         _log(
             "ERROR: Startup migration runner failed. Normal operation is blocked: "
@@ -4258,7 +4354,16 @@ def _evaluate_startup_migrations(config: dict, migration_runner=None) -> tuple[b
             migration_id_text = str(migration_id).strip()
             if migration_id_text and migration_id_text not in failed:
                 failed.append(migration_id_text)
+    if status in {"pending", "blocked"} and not failed:
+        state = _migration_maintenance_state(summary)
+        state.update(reason_code="identity_migration_required", severity="warning",
+                     message="Migration preparation and explicit approval are required.")
+        _set_startup_state(config, state)
+        return False, summary
     if status != "ok" or failed:
+        if production_runner:
+            from identity_migration_api import get_assistant
+            get_assistant(config)._failed_here = True
         summary["status"] = "failed"
         summary["failed"] = failed
         state = _set_startup_state(config, _migration_maintenance_state(summary))
@@ -4356,7 +4461,7 @@ def _activate_runtime_services(config: dict, startup_ready: bool, starter=None) 
     return True
 
 
-def _start_configured_runtime_writers(
+def _start_configured_runtime_writers_impl(
     config: dict,
     startup_ready: bool,
     *,
@@ -4388,6 +4493,17 @@ def _start_configured_runtime_writers(
     return True
 
 
+def _start_configured_runtime_writers(config, startup_ready, **kwargs):
+    if not startup_ready:
+        _activate_runtime_services(config, False)
+        return False
+    if not _runtime_data_directory_configured(config):
+        return _start_configured_runtime_writers_impl(config, True, **kwargs)
+    from migration_barrier import writer_lease
+    with writer_lease(config):
+        return _start_configured_runtime_writers_impl(config, True, **kwargs)
+
+
 def _public_startup_state(config: dict) -> dict:
     state = _get_startup_state(config)
     return {
@@ -4416,6 +4532,32 @@ def _public_startup_state(config: dict) -> dict:
     }
 
 
+def _startup_storage_ready(config):
+    _apply_runtime_dirs_from_conf(config)
+    return _wait_for_configured_data_storage(config, wait_seconds=0)
+
+
+def _resume_normal_startup(config):
+    if not _startup_storage_ready(config):
+        return False
+    ready, _ = _evaluate_startup_migrations(config)
+    if not ready:
+        return False
+    from migration_barrier import writer_lease, block_writers
+    try:
+        with writer_lease(config):
+            bootstrap_data_layout(config)
+            _remove_obsolete_persistent_backup_conf_schema(config)
+        _start_configured_runtime_writers(config, True)
+        return True
+    except Exception:
+        block_writers(config)
+        from identity_migration_api import get_assistant
+        get_assistant(config)._failed_here = True
+        _set_startup_state(config, _migration_maintenance_state(runner_error=RuntimeError("Startup activation failed")))
+        return False
+
+
 def main():
     dev_mode = "--dev" in sys.argv
 
@@ -4426,6 +4568,12 @@ def main():
         sys.path.insert(0, str(api_dir))
 
     config = load_ui_config()
+    # Revoke same-boot worker admission even when persistent storage is missing.
+    from migration_barrier import block_writers
+    try:
+        block_writers(config)
+    except Exception:
+        pass  # block_writers removes runtime readiness before checking the mount.
     _log(f"Borg Backup UI version: {APP_VERSION}")
     if dev_mode:
         config["DEV_MODE"] = "true"
@@ -4434,22 +4582,24 @@ def main():
     if not lib_found:
         _log("WARNING: plugin runtime/lib was not found.")
 
-    try:
-        bootstrap_data_layout(config)
-    except Exception as exc:
-        _log(f"WARNING: Bootstrap skipped: {exc}")
-
     _apply_runtime_dirs_from_conf(config)
     if not _wait_for_configured_data_storage(config, include_runtime_paths=False):
-        return
-
-    startup_ready, _startup_mig = _evaluate_startup_migrations(config)
+        startup_ready, _startup_mig = False, {}
+        _set_startup_state(config, _migration_maintenance_state(runner_error=RuntimeError("Configured storage is unavailable")))
+    else:
+        startup_ready, _startup_mig = _evaluate_startup_migrations(config)
     if startup_ready:
+        bootstrap_data_layout(config)
         _remove_obsolete_persistent_backup_conf_schema(config)
 
     _apply_runtime_dirs_from_conf(config)
     if not _wait_for_configured_data_storage(config):
-        return
+        try:
+            block_writers(config)
+        except Exception:
+            pass
+        startup_ready = False
+        _set_startup_state(config, _migration_maintenance_state(runner_error=RuntimeError("Configured storage is unavailable")))
 
     if config.get("DEV_MODE", "false").lower() == "true":
         test_data = Path(config["BACKUP_SCRIPTS_DIR"]) / "test-data"
@@ -4462,6 +4612,9 @@ def main():
     BackupUIHandler.config = config
 
     _start_configured_runtime_writers(config, startup_ready)
+    if not startup_ready:
+        from identity_startup_watch import start_startup_readiness_watch
+        start_startup_readiness_watch(config, storage_ready=_startup_storage_ready, activate=_resume_normal_startup)
 
     port = int(config["PORT"])
     bind = config["BIND"]

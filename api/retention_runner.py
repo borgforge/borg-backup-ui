@@ -11,6 +11,16 @@ from wizard_runner import ResourceLockSet, _ensure_runtime_import_paths
 
 
 def main(job_id, run_id, data_root):
+    from migration_barrier import MigrationBlocked, writer_lease
+    try:
+        with writer_lease({"BACKUP_SCRIPTS_DIR": data_root}):
+            return _run_admitted(job_id, run_id, data_root)
+    except MigrationBlocked as exc:
+        logging.error("Retention start blocked: %s", exc.reason)
+        return 2
+
+
+def _run_admitted(job_id, run_id, data_root):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     snapshot = read_run_context(job_id, run_id)
     _ensure_runtime_import_paths(Path(data_root))

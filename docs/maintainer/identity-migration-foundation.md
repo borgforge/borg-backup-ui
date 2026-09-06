@@ -1,106 +1,106 @@
-# Inactive identity-migration foundation
+# Identity-migration foundation and activation
 
-Issue #472, phase 2/9 of #447. This documents the implemented planning and
-private recovery-state primitives, not an installable migration. The binding
-target model remains the [immutable job identity contract](immutable-job-identity.md).
+Issues #472 and #479, phases 2 and 9 of #447. This documents the planning,
+private recovery-state and activation implementation. The binding model is the
+[immutable job identity contract](immutable-job-identity.md). The
+[qualification record](identity-migration-qualification.md) separates automated
+source evidence from the packaged Unraid test and stable-release approval.
 
 ## Current boundary
 
-The implementation is deliberately absent from the migration registry,
-application startup and HTTP routes. It has no `apply()` function and performs
-no installation-data conversion, cron update, Borg operation or background
-service activation. Calling a planner or verifier never grants permission to
-start writers. Separate explicit storage calls may write only their dedicated
-private migration-state directory.
+The read-only planner remains independent of execution. Startup registers
+`immutable_job_id_activation` before other migrations. Required, blocked or
+interrupted conversion keeps the application in maintenance without automatically
+preparing a plan, snapshotting data or applying changes. An authenticated
+administrator prepares a verified snapshot, pauses to check an independent
+backup, acknowledges that exact snapshot and separately starts conversion.
 
-Phases #473-#478 still own the application consumers and writers. #479 must
-provide the complete maintenance, confirmation, execution and final-verification
-coordinator. There is no test-channel candidate for this intermediate phase;
-the first candidate remains gated on the complete, testable cutover in #479.
-The verifier is an identity/reference verifier, not a replacement for the full
-job-options validation still owned by #473. Settings are preserved; the later
-coordinator must combine both validators before allowing normal operation.
+The #479 coordinator owns writer exclusion, actual crontab capture, protected
+export, approval and resumable execution. Only validated normal startup or
+successful final verification enables normal services. Canonical job-options
+validators remain authoritative alongside identity/reference validation.
+Calling a planner or verifier alone never authorizes writers.
 
 ## APIs and responsibilities
 
 | Module / entry point | Responsibility and limitation |
 | --- | --- |
-| `api/migrations/immutable_job_id_v1.py`: `build_plan(config, *, uuid_factory, journal_plan, control_root, cron_text)` | Read owned installation stores, validate identities and dependencies, and return a proposed plan. Optional arguments have defaults; tests inject UUIDs and isolated roots. `journal_plan` is the original validated persisted plan, not an arbitrary repair map. |
-| `detect(config, *, control_root)` | Read-only, runner-shaped summary with boolean `required`, classification, execution status and reason codes. It is not registered with the runner. A blocked inventory never reports `required=False`. |
-| `verify_target(config, *, control_root)` | Re-read actual on-disk stores and check canonical cutover integrity. It does not verify merely the proposed replacement objects. Even a valid result keeps `activation_allowed` and `writable_services_allowed` false. |
-| `api/migrations/identity_records.py`: `project_records(records, jobs, aliases)` | Deterministic, no-I/O projection of dependent records. Preserve original historical evidence; block unresolved or conflicting active ownership. |
-| `verify_records(records, jobs, aliases)` | Validate actual target references without repairing active mutable keys through aliases. Filesystem ownership and snapshot-byte checks remain separate responsibilities. |
-| `api/migrations/identity_storage.py`: `seal_plan`, `persist_plan`, `load_plan` | Validate and content-hash a complete plan; durably publish and reload the same proposed allocation without overwriting a conflicting plan. |
-| `create_snapshot`, `verify_snapshot`, `verify_inputs` | Copy and independently verify the exact captured originals; recheck file fingerprints and immediate directory inventories. No restoration or production replacement is performed. |
-| `verify_preconditions` | Default-deny library gate requiring the bound confirmation, verified snapshot, unchanged inputs, explicit quiescence check and external-input recheck. It is not an authenticated UI or an execution transaction. |
-| `append_journal`, `read_journal` | Maintain a private, sequenced, hash-linked JSONL record with fixed statuses, phases, reason codes and known action IDs. No free-form exception or payload text is accepted as a journal reason. |
+| `api/migrations/immutable_job_id_v1.py`: `build_plan` | Read owned stores and propose a plan. `journal_plan` must be the original validated plan, not an arbitrary repair map. |
+| `detect` | Read-only summary with boolean `required`, classification, execution status and safe reasons. Blocked inventory never reports `required=False`. |
+| `verify_target` | Re-read actual target stores and verify canonical cutover integrity; never authorize services by itself. |
+| `api/migrations/identity_records.py`: `project_records`, `verify_records` | Pure projection and independent actual-reference validation; preserve history and block conflicting active ownership. |
+| `api/migrations/identity_storage.py`: `seal_plan`, `persist_plan`, `load_plan` | Validate, hash, durably publish and reload the same allocation without replacing conflicting state. |
+| `create_snapshot`, `verify_snapshot`, `verify_inputs` | Copy and verify exact originals, hashes and immediate directory inventories. No production replacement. |
+| `verify_preconditions` | Default-deny check for bound confirmation, verified snapshot, unchanged inputs, exact quiescence and external-input recheck. |
+| `append_journal`, `read_journal` | Private sequenced, hash-linked JSONL with fixed statuses, phases, safe reasons and known action IDs. |
+| `api/migration_barrier.py` | Persistent admission block, shared worker leases and exclusive conversion ownership. Readiness is published only under exclusive ownership. |
+| `api/identity_migration_api.py`: `IdentityMigrationAssistant` | Explicit preparation, protected export, snapshot-bound acknowledgement and separate apply; read-only startup/status detection. |
+| `api/migrations/identity_apply.py`: `apply_plan` | Original sealed plan, exact old/new fingerprints, per-action journal, directory receipts, managed cron replacement and actual-target verification. |
+| `api/migrations/immutable_job_id_activation.py` | First registry entry; required conversion returns pending/blocked instead of executing at startup. |
+| `api/identity_startup_watch.py` | Retry read-only readiness after mounts or old workers recover. Resume ordinary startup only if no conversion or explicit continuation is required. |
 
-These are internal Python APIs for the staged implementation and automated
-tests. They are not user-facing maintenance commands or instructions to run
-against a production installation now.
+These are internal APIs. Users operate the protected
+`/api/migration/identity/...` assistant through the UI. The request handler
+retains administrator/session and same-origin requirements.
 
-## Read-only inventory and proposed plan
+## Read-only inventory and plan
 
-The scanner derives configured roots and reads only the owned stores listed
-in contract C5, including both known weekly-snapshot locations and the exact
-known legacy job locations. It records immediate directory membership as well
-as individual files; a newly added file or disappeared input cannot be hidden
-by checking only objects that remain discoverable.
+The scanner derives configured roots and reads the owned stores in contract
+C5, including both weekly-snapshot locations and known legacy job locations.
+It captures immediate directory membership and individual fingerprints, so
+new or disappeared inputs cannot hide behind checking only surviving objects.
 
-Reads reject symlinks, unsafe paths, non-regular matching inputs, malformed
-JSON, duplicate JSON members, unsupported schemas and inconsistent ownership.
-Known Unraid mount paths are checked for availability. The scanner does not
-call application discovery, lazy migration, orphan-schedule cleanup, weekly
+Reads reject symlinks, unsafe paths, non-regular inputs, malformed JSON,
+duplicate members, unsupported schemas and inconsistent ownership. Known Unraid
+mounts must be available. Scanning does not invoke lazy migration, cleanup,
 auto-write or repair helpers. Logs, unrelated nested files, recycle bins,
 runtime/vendor contents and Borg repository/cache data are not recursively
 inventoried or converted.
 
-A supported plan contains the full UUIDv4 job map, canonical proposed jobs,
-exact aliases, record bindings, preserved unassigned history, input
-fingerprints, directory inventories and proposed actions. `write_json`
-actions include the exact expected destination bytes' fingerprint;
-`retire_source` identifies only an individual superseded source and its
-canonical replacement. These are descriptions, not executed writes.
+A supported plan contains the full UUIDv4 map, canonical jobs, exact aliases,
+bindings, preserved unassigned history, fingerprints, directory inventories and
+actions. Each replacement describes exact destination bytes and each retirement
+identifies an individual superseded source. The coordinator includes canonical
+`backup.conf` changes and obsolete configuration auxiliaries in the same sealed
+plan and snapshot before replacement.
 
-`build_plan` may propose fresh UUIDs in memory. The allocation becomes durable
-only after explicit `persist_plan`. The full plan receives a `plan_id`
-content digest; it is not a cryptographic signature or an administrator's
-approval. An applicable plan remains `pending`. An empty or completely valid
-canonical installation is `not_applicable`; uncertain or unsupported states
-are `blocked` with no proposed production actions.
+Proposed UUIDs exist only in memory until explicit preparation persists the
+plan. Its content digest identifies the complete proposal; it is neither a
+signature nor approval. Valid empty/canonical installations are not applicable.
+Unsupported or uncertain states block without proposed production changes.
 
-The foundation preserves stopped runtime-recovery targets, notification retry
-and reminder state, independent restore IDs and original history descriptors.
-Historical UUIDs belonging to deleted jobs remain in the records while their
-bindings to the active job graph remain unassigned. Weekly observations retain
-source provenance: equal observations are deduplicated and conflicting values
-remain explicit. Restore-history index/detail pairs must agree; the planner
-does not invent missing peers or silently select one contradictory record.
+Stopped recovery targets, notification retries/reminders, independent restore
+IDs and historical descriptors are preserved. Deleted-job UUIDs remain evidence
+without becoming active bindings. Weekly values retain provenance and explicit
+conflicts. Restore index/detail pairs must agree; missing peers and contradictory
+records are not silently repaired.
 
-## Explicit private state directory
+## Private recovery state and export
 
-The caller must supply `state_dir`. No production default is selected and no
-automatic fallback to another directory or weaker permissions is implemented.
-It must be outside the plan's owned input files and inventory roots, on an
-available **persistent filesystem supporting private POSIX permissions and
-hard links**. The process must own directories with mode `0700` and stored
-files with mode `0600`.
+Library callers supply `state_dir`. The assistant suggests
+`<data_root>/.identity-migration-v1`, validates the location and provides no
+automatic fallback. It must be outside owned inputs and inventory roots on an
+available persistent filesystem supporting private POSIX permissions and hard
+links. Directories belong to the process with mode `0700`; files use `0600`.
 
-The Unraid FAT `/boot` USB filesystem is unsuitable for this private state
-store. This does not prohibit reading job/configuration originals on `/boot`;
-it means the protected plan, snapshot and journal must live on a suitable
-separate filesystem. Lack of required permission or publication semantics
-blocks storage; the code does not silently relax them. The later coordinator
-must select and validate a persistent mounted location and keep it available
-through the entire migration. Library calls alone do not prove persistence or
-that every required mount will remain available.
+The FAT `/boot` filesystem is unsuitable for private state. Originals on `/boot`
+can still be read and snapshotted, but installations with a suggested `/boot`
+state path must select suitable persistent storage. Missing mounts, unsupported
+permissions or publication semantics block instead of weakening protection.
+The location must remain available throughout conversion and recovery.
 
-The private layout is:
+A nonsensitive selector at `<data_root>/.identity-migration-location.json` is
+persisted before the UUID map. Browser reconnection does not relocate a plan.
+Private state can contain:
 
 ```text
 state_dir/
+  assistant.json
   plan.json
   journal.jsonl
+  apply-roots.json
+  apply-cron.json
+  directory-<path-hash>.json
   snapshot/
     metadata.json
     manifest.json
@@ -109,108 +109,96 @@ state_dir/
       external-managed_cron.bin
 ```
 
-The journal exists only after an explicit append. The external cron blob exists
-only for a supplied capture. Publication uses private staging files, flushes
-and exclusive final-name publication without overwriting a conflicting file.
-`metadata.json` durably records the snapshot's UTC creation time before blob
-copying; retries retain that time rather than inventing a new snapshot age.
-The manifest binds it to the original plan, complete ID map and ordered action
-summaries, and distinguishes file artifacts from externally captured cron.
-Action summaries contain IDs, kinds and source/target paths, not replacement
-payloads; the overall snapshot still remains private and potentially sensitive.
-Snapshot verification checks the exact expected blob set, sizes, hashes and
-binding to the persisted plan; existence alone is not sufficient.
+Execution receipts appear only when their stages begin. Private staging, flushes
+and exclusive final-name publication prevent overwriting conflicts. Metadata
+records the original UTC creation time before copying. The manifest binds the
+snapshot to its plan, complete ID map and actions. Verification checks exact
+members, sizes, hashes and binding; existence alone is insufficient.
 
-Treat **the entire state directory as secret-bearing**. Snapshot originals can
-contain raw, secret-bearing configuration and notification content. Plan payloads
-can also contain sensitive settings, paths, messages or fields retained from
-existing records. Private file permissions are not encryption. Never attach
-these files to public issues, logs, normal support packages or an unprotected
-download. Only sanitized reason codes and deliberately selected metadata
-belong in public diagnostics. A secure export/download design remains future
-coordinator work; no such endpoint exists in this phase.
+Treat all private state as secret-bearing. Original configuration, notification
+content and proposed settings can contain credentials. Permissions are not
+encryption. State must not appear in ordinary support bundles, public issues,
+application logs or public staging directories.
 
-## Confirmation, quiescence and cron
+The authenticated administrator download streams a verified tar with the sealed
+plan and complete snapshot metadata, manifest and originals. Execution journals
+and mutable assistant state are excluded. Exact member hashes and declared
+archive length are checked; a changed source during export aborts the stream.
+Download grants no approval and never starts conversion. Public diagnostics
+contain selected metadata and fixed reasons, not private payloads.
 
-The approved user-facing sequence is specified in
-[contract C4.1](immutable-job-identity.md#c41-approved-user-initiated-migration-assistant-479):
-automatic read-only detection, explicit preparation, verified snapshot,
-mandatory user backup-check pause, then a separate explicit apply action.
-This remains #479 implementation work; the foundation does not expose an
-assistant or turn snapshot completion/acknowledgement into automatic execution.
+## Confirmation and writer exclusion
 
-`verify_preconditions` denies by default. It requires an applicable pending
-plan, a verified snapshot, an explicit approval tied to `plan_id` and the
-snapshot digest, and acknowledgement that an independent backup is required.
-Acknowledgement is not proof that an external copy was actually made.
+The assistant implements [contract C4.1](immutable-job-identity.md#c41-approved-user-initiated-migration-assistant-479):
+read-only detection, explicit preparation, verified snapshot, mandatory backup
+check pause, bound acknowledgement and separate apply. Closing the browser or
+restarting preserves the pause and original map. Acknowledgement records the
+user's independent-backup check; it cannot prove an external copy was made.
 
-The gate also requires a supplied quiescence callback returning exactly `True`.
-Missing callbacks, failures or negative results block. Existing owner checks
-in the scanner are useful evidence, but are not a complete exclusion barrier
-against detached workers or new concurrent activity. #479 must authenticate
-the administrator, enter maintenance, prevent all writers and retain the
-necessary exclusion across snapshot, apply and verification. It must cover
-backup/restore/test workers, notification delivery, scheduler, cleanup,
-widgets and other write-capable background activity without killing a live
-job to force progress.
+Execution requires the applicable plan, verified snapshot, approval bound to
+both plan ID and snapshot digest, unchanged originals and cron, and a quiescence
+callback returning exactly `True`. Missing or failed checks block. The
+coordinator holds exclusive ownership during preparation, apply and verification;
+scanner process evidence alone is not admission control.
 
-The planner never executes `crontab`. A future coordinator must capture actual
-cron text and supply `cron_text`; omitting it does not mean the crontab is
-empty. A plan without the capture may be inspected, but cannot pass snapshot
-and execution preconditions. A genuinely empty captured crontab is supplied
-explicitly as an empty string. The captured bytes are included in the private
-snapshot, and an external-input callback must return the same capture before
-the gate passes. Rebuilding only the managed cron section, preserving unrelated
-entries, remains the final execution boundary in #479.
+`<data_root>/.migration-gate/blocked.json` blocks new work across service
+restarts. An installation-specific runtime ready proof under
+`/run/borg-backup-ui/migration-gate/` is absent by default, revoked at startup
+and bound to the gate protocol. Tests can redirect the runtime root with
+`BORG_UI_MIGRATION_GATE_ROOT`; that does not bypass checks.
 
-## Interruption and resume boundaries
+Write-capable HTTP requests, backup/restore/test runners, cleanup, repository
+refresh, checks, SSH deployment, retained-log capture, notifications and factory
+reset use shared leases. Async owners retain admission through final result
+persistence. Maintenance waits for existing work without terminating it;
+scheduler sleeps hold no lease. Exclusive conversion checks known pre-upgrade
+processes and blocks on unreadable evidence. Maintenance starts no widgets,
+schedulers or warm-up writers, and health/setup/support use read-only diagnostics.
 
-A resume loads the original sealed plan and reuses its complete UUID map,
-plan ID, original snapshot footprint and expected actions. It must not allocate
-fresh identities or snapshot partially converted data as a new starting point.
-The scanner checks every saved input, including files that have disappeared.
+Missing data/runtime mounts keep startup blocked. A read-only observer can resume
+ordinary startup after storage or old workers recover only when no conversion
+is needed. Pending snapshots and interrupted plans still require explicit
+actions. Failed apply requires a restart before explicit continuation. An
+already normal state stops the observer without starting services twice.
 
-Each observed file must match its exact original fingerprint or its plan's
-exact expected post-replacement fingerprint. A superseded source may be
-absent only when the matching canonical destination exists with the expected
-replacement fingerprint. Equivalent parsed JSON is insufficient: unexplained
-byte changes or permission changes block. Directory membership and unrelated
-inputs are revalidated as well. Missing both a source and its replacement is
-not a completed retirement.
-Mixed legacy/UUID job files require the original plan even when their current
-references could be resolved. Referenced repository secret files are checked
-again for existence, regular-file type and symlinks, without reading their
-contents into the plan.
+## Cron, execution and recovery
 
-Snapshot creation can resume between completely published blobs when the
-persisted plan, originals and completed blobs are unchanged. A crash during
-publication may instead leave an incomplete staging/publication state,
-unexpected snapshot file, inconsistent link count or truncated journal.
-These conditions block verification and require explicit diagnosis; no
-automatic cleanup of questionable recovery evidence is provided. A malformed
-or truncated journal is not silently repaired or treated as an empty log.
+The coordinator captures actual crontab bytes. Empty capture is explicit;
+missing capture never means empty cron. Captured text is snapshotted and
+rechecked before preparation, approval and execution. Known managed entries
+must use guarded HTTP routes; unknown direct legacy commands block. Execution
+replaces only the managed backup section, preserving unrelated cron bytes.
+Repository, notification and restore-test service schedules retain their
+separate identity. The planner itself executes neither crontab nor Borg.
 
-There is no production apply engine, automatic rollback or snapshot-restore
-operation in #472. The eventual cross-filesystem migration must remain
-crash-consistent and resumable, not claim a single atomic filesystem
-transaction. Journal entries alone do not demonstrate that installation data
-was converted or verified. Data recovery is distinct from downgrading the
-installed Unraid plugin; the existing rollback limitations still apply.
+Apply requires exact original/target fingerprints and journaled write intent.
+An unexplained existing target, even with expected bytes, is not completion
+authority. Destination directories have durable ownership receipts. A retired
+source requires its authorized expected replacement and journal evidence.
+Membership, permissions, unrelated inputs and referenced secret-file type and
+existence are revalidated. The actual graph is verified before cron installation
+and before recording the commit. The engine is crash-consistent and resumable;
+it does not claim one atomic transaction across filesystems.
 
-## Verification and remaining work
+Explicit continuation reloads the original plan, UUID map, snapshot and actions.
+It never snapshots partially converted data as a new starting point. Completed
+actions are not replayed. Unknown staging contents, corrupted blobs, conflicting
+links, truncated journals and unexplained edits block without silent deletion
+or repair. Apply failures retain evidence and keep normal writers disabled.
 
-The tests now exercise the actual read-only planner with the phase-1 synthetic
-fixtures, pure record projection, default-deny gates and private snapshot and
-journal primitives. Negative cases cover malformed/ambiguous inputs, changed
-sources, partial states, denied permissions, snapshot corruption and preserved
-historical identity. They do not exercise a production apply path because none
-exists yet.
+There is no automatic rollback, snapshot restore or plugin downgrade. Manual
+repair uses the installed or a corrected plugin and must be documented. See
+[release limitations](release-workflow.md#7-rollback-limitation) and the
+[user migration guide](../user-manual/en/migration-guide.md).
 
-The final coordinator must integrate the existing migration runner's pending
-and maintenance behavior, authenticate confirmation, supply live cron and
-writer checks, perform and journal the replacements, handle protected snapshot
-retention/export, and verify complete startup and UI behavior before the first
-test candidate. Passing this phase does not assert coverage of every existing
-installation or guarantee migration success on unknown states. Unknown states
-must continue to block before modification and gain explicit supported
-fixtures when their semantics are understood.
+## Verification boundary
+
+Coverage includes supported legacy fixtures, actual snapshot/destination writes,
+publication-boundary resume, writer races, protected HTTP export and a migrated
+job's real Borg backup and restore. Unknown states still block and require an
+explicit supported fixture before becoming eligible.
+
+Source tests do not establish every filesystem or real installation. Final
+preflight, test-channel package verification and maintainer Unraid tests remain
+required by the [qualification record](identity-migration-qualification.md).
+Stable promotion requires separate explicit approval.

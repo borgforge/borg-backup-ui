@@ -1,5 +1,6 @@
 """#477: restore ownership, frozen execution and proof continuity."""
 from copy import deepcopy
+from migration_gate_support import ready_gate
 from datetime import datetime
 import json
 from pathlib import Path
@@ -51,6 +52,7 @@ def test_discovery_uses_current_repository_and_literal_ordered_prefixes(setup, m
 
 
 def test_async_restore_keeps_original_context_through_edits_and_history(setup, monkeypatch):
+    ready_gate(setup[0], monkeypatch, setup[3] / "writer-gate")
     result, _ = create(setup, archive_prefix='old', job_name='Original')
     job_id = result['job_id']; work = []
     monkeypatch.setattr(restore.threading, 'Thread', lambda **kw: SimpleNamespace(start=lambda: work.append(kw['target'])))
@@ -68,11 +70,13 @@ def test_async_restore_keeps_original_context_through_edits_and_history(setup, m
     assert restore.list_restore_history(setup[0])['runs'][0]['repository_snapshot'] == captured[0]['repo']
 
 
-def test_restore_will_not_launch_without_persisted_ownership(monkeypatch):
+def test_restore_will_not_launch_without_persisted_ownership(monkeypatch, tmp_path):
+    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    ready_gate(cfg, monkeypatch, tmp_path / "writer-gate")
     monkeypatch.setattr(restore, '_get_job_repo_info', lambda *a: info())
     monkeypatch.setattr(restore, '_persist_restore_runs', lambda *a: (_ for _ in ()).throw(OSError('full')))
     monkeypatch.setattr(restore.threading, 'Thread', lambda **kw: pytest.fail('must not start'))
-    with pytest.raises(OSError): restore.start_restore_async({}, JOB_ID, 'archive-1', 'file', '/target', 'skip')
+    with pytest.raises(OSError): restore.start_restore_async(cfg, JOB_ID, 'archive-1', 'file', '/target', 'skip')
     assert restore._RESTORE_RUNS == {}
 
 
@@ -170,6 +174,7 @@ def test_restore_precheck_passes_frozen_identity_and_rejects_foreign_archive(mon
 
 def test_finished_restore_history_failure_is_retried_after_restart(monkeypatch, tmp_path):
     cfg={'BACKUP_SCRIPTS_DIR':str(tmp_path)};work=[]
+    ready_gate(cfg, monkeypatch, tmp_path / "writer-gate")
     monkeypatch.setattr(restore, '_get_job_repo_info',lambda *a: info())
     monkeypatch.setattr(restore.threading,'Thread',lambda **kw:SimpleNamespace(start=lambda:work.append(kw['target'])))
     monkeypatch.setattr(restore,'start_restore',lambda *a,**kw:{'destination_path':'/finished'})

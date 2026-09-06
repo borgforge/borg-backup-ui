@@ -235,13 +235,19 @@ def test_user_manuals_cover_current_stable_safety_and_runtime_guidance():
             assert term in manual
 
     required_de = (
-        "<typ-id>-backup-*",
+        "<Archivpräfix>-*",
+        "Migration vorbereiten",
+        "Migration jetzt ausführen",
+        "Unraid-Flash-Konfiguration",
         "Migrationssnapshot",
         "Unraid-Dashboard-Widget",
         "Informations-Popover",
     )
     required_en = (
-        "<type-id>-backup-*",
+        "<archive-prefix>-*",
+        "Prepare migration",
+        "Run migration now",
+        "Unraid flash configuration",
         "migration snapshot",
         "Unraid Dashboard Widget",
         "information popover",
