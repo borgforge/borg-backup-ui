@@ -10,6 +10,8 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 import restore_api  # noqa: E402
+import pytest
+from restore_identity_support import JOB_ID
 import wizard_api  # noqa: E402
 from archive_prefix import archive_prefix_from_job_key  # noqa: E402
 
@@ -34,9 +36,7 @@ def test_browse_restore_filters_archives_by_job_prefix_history(tmp_path: Path, m
         "storage_key": "local",
         "storage": {},
         "job": {
-            "job_key": "testdaten_local",
-            "backup_type": "testdaten",
-            "archive_prefixes": ["oldtestdaten-backup"],
+            "job_id": JOB_ID, "archive_prefixes": ["testdaten-backup", "oldtestdaten-backup"],
         },
     }
     calls: list[list[str]] = []
@@ -58,13 +58,13 @@ def test_browse_restore_filters_archives_by_job_prefix_history(tmp_path: Path, m
             stderr="",
         )
 
-    monkeypatch.setattr("smb_mount.ensure_smb_mount_for_job", lambda _config, _job_key: _NoopGuard())
+    monkeypatch.setattr("smb_mount.ensure_smb_mount_for_context", lambda _info: _NoopGuard())
     monkeypatch.setattr(restore_api, "_get_job_repo_info", lambda _config, _job_key: info)
     monkeypatch.setattr(restore_api, "ensure_restore_repository_available", lambda _config, _info: None)
     monkeypatch.setattr(restore_api, "_repository_borg_env", lambda _config, _info: {})
     monkeypatch.setattr(restore_api.subprocess, "run", fake_run)
 
-    result = restore_api.list_archives_with_context(cfg, "testdaten_local")
+    result = restore_api.list_archives_with_context(cfg, JOB_ID)
 
     assert [cmd[cmd.index("--glob-archives") + 1] for cmd in calls] == [
         "testdaten-backup-*",
@@ -80,75 +80,40 @@ def test_browse_restore_filters_archives_by_job_prefix_history(tmp_path: Path, m
     ]
 
 
-def test_browse_restore_falls_back_to_unfiltered_archive_list_without_prefix(tmp_path: Path, monkeypatch) -> None:
-    cfg = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "BORG_RESOURCE_LOCK_DIR": str(tmp_path / "locks")}
-    calls: list[list[str]] = []
-
-    def fake_run(cmd, capture_output=False, text=False, env=None, timeout=None):
-        calls.append(list(cmd))
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps({"archives": [
-                {"name": "archive-1", "start": "2026-08-29T20:00:00"},
-            ]}),
-            stderr="",
-        )
-
-    monkeypatch.setattr("smb_mount.ensure_smb_mount_for_job", lambda _config, _job_key: _NoopGuard())
-    monkeypatch.setattr(restore_api, "_get_job_repo_info", lambda _config, _job_key: {
-        "repo": "/repo",
-        "passphrase_file": None,
-        "repository_key": "repo-shared",
-        "storage_key": "local",
-        "storage": {},
-        "job": {},
-    })
-    monkeypatch.setattr(restore_api, "ensure_restore_repository_available", lambda _config, _info: None)
-    monkeypatch.setattr(restore_api, "_repository_borg_env", lambda _config, _info: {})
-    monkeypatch.setattr(restore_api, "_archive_filter_rows_for_restore_job", lambda _job_key, _info: [])
-    monkeypatch.setattr(restore_api.subprocess, "run", fake_run)
-
-    assert restore_api.list_archives(cfg, "legacy_local")[0]["name"] == "archive-1"
-    assert calls == [["borg", "list", "--json", "/repo"]]
+def test_browse_restore_rejects_missing_prefix_instead_of_listing_other_jobs(monkeypatch):
+    monkeypatch.setattr(restore_api, '_get_job_repo_info', lambda *a: {'job': {'archive_prefixes': []}})
+    monkeypatch.setattr('smb_mount.ensure_smb_mount_for_context', lambda *a: _NoopGuard())
+    monkeypatch.setattr(restore_api, 'ensure_restore_repository_available', lambda *a: None)
+    monkeypatch.setattr(restore_api, '_repository_borg_env', lambda *a: {})
+    monkeypatch.setattr(restore_api.subprocess, 'run', lambda *a, **kw: pytest.fail('No unfiltered Borg call'))
+    with pytest.raises(ValueError, match='prefixes'):
+        restore_api.list_archives({}, JOB_ID)
 
 
 def test_save_job_preserves_previous_archive_prefixes(tmp_path: Path, monkeypatch) -> None:
+    from canonical_wizard_support import canonical_fixture
+    from repositories_api import write_repository_store
+    from storage_objects_api import write_storage_store
+
     scripts_dir = tmp_path / "scripts"
-    jobs_dir = tmp_path / "config" / "jobs"
-    jobs_dir.mkdir(parents=True)
-    (jobs_dir / "oldtype_local.json").write_text(json.dumps({
-        "schema_version": 2,
-        "job_key": "oldtype_local",
-        "name": "Old type",
-        "backup_type": "oldtype",
-        "archive_prefixes": ["oldertype-backup"],
-        "location": "local",
-        "repository_key": "repo-shared",
-    }), encoding="utf-8")
-    captured: dict = {}
-
-    def fake_transaction(config, metadata_path, metadata, repository_key, job_key, **kwargs):
-        captured["metadata"] = metadata
-        captured["metadata_path"] = metadata_path
-        captured["repository_key"] = repository_key
-        captured["job_key"] = job_key
-
-    monkeypatch.setattr(wizard_api, "_repository_from_params", lambda _params, _config: {
-        "repository_key": "repo-shared",
-    })
-    monkeypatch.setattr("repositories_api.save_job_repository_transaction", fake_transaction)
-
-    wizard_api.save_job({
-        "existing_job_key": "oldtype_local",
-        "type_id": "newtype",
-        "location": "local",
-        "repository_key": "repo-shared",
-        "source_paths": ["/mnt/user/appdata"],
-    }, scripts_dir, tmp_path, {"BACKUP_SCRIPTS_DIR": str(tmp_path)})
-
-    assert captured["job_key"] == "newtype_local"
-    assert captured["metadata"]["archive_prefixes"] == [
-        "newtype-backup",
-        "oldtype-backup",
-        "oldertype-backup",
-    ]
+    source = tmp_path / "source"
+    source.mkdir()
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    write_storage_store(config, {"storages": [{
+        "storage_key": "local", "storage_type": "local", "location": "local", "base_path": str(tmp_path / "repo-root"),
+    }]})
+    write_repository_store(config, {"repositories": [{
+        "repository_key": "repo_shared", "storage_key": "local", "relative_path": "repo", "encryption": "none", "job_ids": [], "source_job_ids": [],
+    }]})
+    canonical_fixture(config)
+    original = wizard_api.save_job({
+        "job_name": "Original", "archive_prefix": "oldertype-backup",
+        "repository_key": "repo_shared", "source_paths": [str(source)],
+    }, scripts_dir, tmp_path, config)
+    for prefix in ["oldtype-backup", "newtype"]:
+        result = wizard_api.save_job({
+            "_wizard_mode": "edit", "job_id": original["job_id"], "archive_prefix": prefix,
+        }, scripts_dir, tmp_path, config)
+    assert result["job_id"] == original["job_id"]
+    metadata = json.loads(Path(result["metadata_path"]).read_text())
+    assert metadata["archive_prefixes"] == ["newtype", "oldtype-backup", "oldertype-backup"]

@@ -153,6 +153,7 @@
     document.getElementById('repository-lifecycle-name-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
     document.getElementById('repository-lifecycle-phrase-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
     document.getElementById('history-filter-type')?.addEventListener('change', applyHistoryFilters);
+    document.getElementById('history-filter-scope')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-location')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-status')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('bericht-job-sel')?.addEventListener('change', berichtLoad);
@@ -288,9 +289,12 @@
     document.getElementById('wizard-cancel-btn')?.addEventListener('click', closeWizard);
     document.getElementById('wizard-next-btn')?.addEventListener('click', wizardNext);
     document.getElementById('wizard-save-btn')?.addEventListener('click', saveWizardJob);
-    document.getElementById('wiz-job-name')?.addEventListener('input', () => wizardClearError(1));
-    document.getElementById('wiz-type-id')?.addEventListener('input', () => {
-      wizardAutoFill();
+    document.getElementById('wiz-job-name')?.addEventListener('input', () => {
+      wizardSuggestArchivePrefix();
+      wizardClearError(1);
+    });
+    document.getElementById('wiz-archive-prefix')?.addEventListener('input', () => {
+      wizardState.prefixEdited = true;
       wizardRenderArchivePrefixSummary();
       wizardClearError(1);
     });
@@ -376,6 +380,10 @@
       .catch(() => ({}));
 
     Promise.all([core()?.updateDataDirWarning?.({ deferMissingWarning: true }), startupStatePromise]).then(([setupStatus]) => {
+      if (core()?.isStartupMaintenanceMode?.()) {
+        core()?.navigate?.(_isAdmin() ? 'settings' : 'hilfe');
+        return;
+      }
       if (core()?.isSetupRequired?.()) {
         core()?.navigate?.('settings');
         if (!setupStatus?.global_data_dir_set) {
@@ -390,10 +398,6 @@
         return;
       }
       core()?.updateSidebarSystemHealth?.(true);
-      if (core()?.isStartupMaintenanceMode?.()) {
-        core()?.navigate?.(_isAdmin() ? 'settings' : 'hilfe');
-        return;
-      }
       refreshStatus();
       window.BBUI?.setupWizard?.maybeOpen?.(false);
       scheduleAutoRefresh();

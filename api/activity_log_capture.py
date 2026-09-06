@@ -20,9 +20,13 @@ def file_identity(info) -> str:
 def read_record(path: Path) -> dict:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        required = ("job_key", "run_id", "active_file", "retained_file", "active_file_id", "started_at")
+        required = ("job_id", "run_id", "active_file", "retained_file", "active_file_id", "started_at")
         if not isinstance(data, dict) or any(not isinstance(data.get(key), str) or not data[key] for key in required):
             return {}
+        from job_model import validate_job_id
+        from job_runs import validate_run_id
+        validate_job_id(data["job_id"])
+        validate_run_id(data["run_id"])
         return data if data.get("status") in {"running", "saved", "failed"} else {}
     except (OSError, ValueError):
         return {}
@@ -38,12 +42,12 @@ def write_record(path: Path, data: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def capture_record(job_key: str, run_id: str) -> dict:
+def capture_record(job_id: str, run_id: str) -> dict:
     from activity_log import activity_log_path
 
-    activity_log_path(CAPTURE_ROOT, job_key, run_id)  # Validate both components.
+    activity_log_path(CAPTURE_ROOT, job_id, run_id)  # Validate both components.
     record = read_record(CAPTURE_ROOT / run_id / "capture.json")
-    if record.get("job_key") != job_key or record.get("run_id") != run_id:
+    if record.get("job_id") != job_id or record.get("run_id") != run_id:
         return {}
     return record
 
@@ -63,17 +67,17 @@ def open_capture_file(record_path: Path):
                 raise
 
 
-def prepare_capture(job_key: str, run_id: str, destination: Path) -> tuple[Path, Path]:
+def prepare_capture(job_id: str, run_id: str, destination: Path, *, name: str = "job") -> tuple[Path, Path]:
     from activity_log import activity_log_path
 
-    retained = activity_log_path(destination, job_key, run_id)
-    active = activity_log_path(CAPTURE_ROOT / run_id, job_key, run_id)
+    retained = activity_log_path(destination, job_id, run_id, name)
+    active = activity_log_path(CAPTURE_ROOT / run_id, job_id, run_id, name)
     active.parent.mkdir(parents=True, mode=0o700)
     with os.fdopen(os.open(active, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as handle:
         identity = file_identity(os.fstat(handle.fileno()))
     record_path = active.parent / "capture.json"
     write_record(record_path, {
-        "job_key": job_key, "run_id": run_id, "status": "running",
+        "job_id": job_id, "run_id": run_id, "job_name_snapshot": name, "status": "running",
         "active_file": str(active), "retained_file": str(retained),
         "active_file_id": identity, "started_at": datetime.now(timezone.utc).isoformat(),
     })
@@ -141,7 +145,7 @@ def running_captures() -> list[dict]:
         except (TypeError, ValueError):
             continue
         rows.append({
-            "job_key": record["job_key"], "run_id": record["run_id"],
+            "job_id": record["job_id"], "run_id": record["run_id"],
             "running": True, "exit_code": None, "file_activity": True,
             "log_file": record["active_file"], "pid": record["pid"],
             "start_time": record["started_at"], "source": "activity_capture",
@@ -150,6 +154,17 @@ def running_captures() -> list[dict]:
 
 
 def supervise(record_path: Path, command: list[str]) -> int:
+    from migration_barrier import MigrationBlocked, writer_lease
+    config = {"BACKUP_SCRIPTS_DIR": os.environ.get("BORG_SCRIPT_DIR") or "/boot/config/borg-backup"}
+    try:
+        with writer_lease(config):
+            return _supervise_admitted(record_path, command)
+    except MigrationBlocked as exc:
+        print(f"Backup capture start blocked: {exc.reason}", flush=True)
+        return 2
+
+
+def _supervise_admitted(record_path: Path, command: list[str]) -> int:
     # This small process owns persistence independently of the WebUI process.
     # The runner and Borg inherit stdout/stderr pointing directly at the RAM
     # file, so browser speed cannot block them and no Python log list grows.

@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import sys
 
 import pytest
@@ -19,16 +20,20 @@ from storage_profiles_api import (
     validate_storage_profile_usage_before_save,
 )
 from repositories_api import write_repository_store
+from job_model import new_job_defaults
 from storage_objects_api import read_storage_store, replace_profile_storages, write_storage_store
+
+JOB_ID = "11111111-1111-4111-8111-111111111111"
 
 
 def _write_storagebox_reference(data_root: Path) -> dict:
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     meta_dir = data_root / "config" / "jobs"
     meta_dir.mkdir(parents=True, exist_ok=True)
-    (meta_dir / "job1.json").write_text(
-        '{"schema_version":2,"job_key":"job1","name":"Job 1",'
-        '"location":"storagebox","repository_key":"repo_job1"}\n',
+    (meta_dir / (JOB_ID + ".json")).write_text(
+        json.dumps({**new_job_defaults(), "job_id": JOB_ID, "name": "Job 1",
+                    "repository_key": "repo_job1", "source_paths": [str(data_root)],
+                    "archive_prefixes": ["job1"], "legacy_job_keys": ["job1"]}) + "\n",
         encoding="utf-8",
     )
     write_storage_store(config, {"storages": [{
@@ -51,6 +56,8 @@ def _write_storagebox_reference(data_root: Path) -> dict:
         "relative_path": "borg-backup-job1",
         "path_raw": "ssh://u123@u123.your-storagebox.de:23/./backup/borg-backup-job1",
         "encryption": "none",
+        "job_ids": [JOB_ID],
+        "source_job_ids": [JOB_ID],
     }]})
     return config
 
@@ -184,8 +191,10 @@ def test_referenced_storage_profile_with_empty_host_is_blocked(tmp_path: Path, m
         "base_path": "/./backup",
     }])
 
+    before = {path: path.read_bytes() for path in (data_root / "config").rglob("*.json")}
     with pytest.raises(ValueError, match="cannot be saved incomplete"):
         config_api.validate_storage_profile_usage_before_save(cfg, next_rows)
+    assert {path: path.read_bytes() for path in (data_root / "config").rglob("*.json")} == before
 
 
 def test_settings_save_blocks_new_incomplete_storage_profile(tmp_path: Path, monkeypatch):
@@ -235,9 +244,12 @@ def test_storage_profile_delete_reports_repository_blocker(tmp_path: Path):
         "storage_key": "storage_smb_test",
         "relative_path": "borg-backup",
         "encryption": "none",
-        "used_by": [],
+        "job_ids": [],
+        "source_job_ids": [],
     }]})
 
+    config_root = Path(config["BACKUP_SCRIPTS_DIR"]) / "config"
+    before = {path: path.read_bytes() for path in config_root.rglob("*.json")}
     with pytest.raises(ValueError, match="Storage profiles are still used by repositories") as exc_info:
         replace_profile_storages(config, "smb", [])
 
@@ -247,6 +259,7 @@ def test_storage_profile_delete_reports_repository_blocker(tmp_path: Path):
         "profiles": "Borg-VM",
         "repositories": "Borg VM Repository",
     }
+    assert {path: path.read_bytes() for path in config_root.rglob("*.json")} == before
 
 
 def test_settings_smb_profile_delete_cleans_storage_secret_and_mountpoint(tmp_path: Path, monkeypatch):

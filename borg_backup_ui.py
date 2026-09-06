@@ -17,6 +17,9 @@ import shutil
 import subprocess
 import sys
 import threading
+import tarfile
+import io
+from contextlib import nullcontext
 import time
 import uuid
 from datetime import datetime
@@ -409,6 +412,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         "/api/setup-status",
         "/api/status",
         "/api/system-health",
+        "/api/migration/identity/status",
         "/api/version",
     }
     _ROUTINE_GET_PREFIXES = (
@@ -858,7 +862,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/system-health",
             "/api/setup-status",
         }
-        allowed = allowed or (method == "GET" and path in {"/api/settings", "/api/settings/basic"})
+        allowed = allowed or (method == "GET" and path in {
+            "/api/migration/identity/status", "/api/migration/identity/snapshot"})
+        allowed = allowed or (method == "POST" and path in {
+            "/api/migration/identity/prepare", "/api/migration/identity/acknowledge", "/api/migration/identity/apply"})
         allowed = allowed or (method == "POST" and path == "/api/settings/support-bundle")
         if allowed:
             return True
@@ -867,7 +874,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._send_api_error(
             503,
             "maintenance_mode",
-            f"Normal operation is blocked because startup migration failed: {failed}. Review System Health & Migration or create a support bundle.",
+            f"Normal operation is blocked by the startup migration gate: {failed}. Review System Health & Migration or create a support bundle.",
             request_id=request_id,
         )
         return False
@@ -879,7 +886,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         try:
             path = urlparse(self.path).path
             if self._authorize_api_request(path, request_id):
-                fn()
+                with self._request_writer_lease(path):
+                    fn()
         finally:
             self._current_request_id = ""
             self._refreshed_session_cookie = ""
@@ -929,8 +937,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self._serve_file(UI_DIR / path[4:], allowed_root=UI_DIR)
         elif path == "/api/jobs/log/stream":
             qs = parse_qs(parsed.query)
-            job_key = (qs.get("job") or [""])[0]
-            self._handle_direct_api(lambda: self._handle_sse(job_key))
+            job_id = (qs.get("job_id") or [""])[0]
+            run_id = (qs.get("run_id") or [""])[0]
+            self._handle_direct_api(lambda: self._handle_sse(job_id, run_id))
+        elif path == "/api/migration/identity/snapshot":
+            self._handle_direct_api(lambda: self._download_identity_snapshot(parsed.query))
         elif path == "/api/jobs/log/download":
             self._handle_direct_api(lambda: self._download_activity_log(parsed.query))
         elif path == "/api/restore-tests/log/stream":
@@ -952,6 +963,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/licenses": lambda: self._get_license_file(parsed.query),
                 "/api/status": self._get_status,
                 "/api/system-health": self._get_system_health,
+                "/api/migration/identity/status": lambda: self._identity_assistant().status(),
                 "/api/notification-reminders/diagnostics": self._get_notification_reminder_diagnostics,
                 "/api/jobs": self._get_jobs,
                 "/api/jobs/running": self._get_running,
@@ -1005,6 +1017,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         routes = {
+            "/api/migration/identity/prepare": lambda: self._identity_assistant().prepare(self._read_json_body()),
+            "/api/migration/identity/acknowledge": lambda: self._identity_assistant().acknowledge(self._read_json_body()),
+            "/api/migration/identity/apply": lambda: self._identity_assistant().apply(self._read_json_body()),
             "/api/jobs/run": self._post_run_job,
             "/api/jobs/cancel": self._post_cancel_job,
             "/api/restore-tests/run": self._post_run_restore_test,
@@ -1035,6 +1050,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/setup-wizard": self._post_setup_wizard,
             "/api/settings/migration-backups-cleanup": self._post_settings_migration_backups_cleanup,
             "/api/settings/jobs-import": self._post_settings_jobs_import,
+            "/api/jobs/delete-preview": self._post_job_delete_preview,
             "/api/settings/jobs-import-preview": self._post_settings_jobs_import_preview,
             "/api/settings/jobs-export-secure": self._post_settings_jobs_export_secure,
             "/api/settings/jobs-import-secure-preview": self._post_settings_jobs_import_secure_preview,
@@ -1655,7 +1671,64 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._persist_sessions()
         return {"ok": True, "deleted": username}
 
+    def _identity_assistant(self):
+        from identity_migration_api import get_assistant
+        assistant = get_assistant(self.config)
+        assistant.activate = lambda config: _start_configured_runtime_writers(config, True)
+        return assistant
+
+    def _download_identity_snapshot(self, query):
+        from migrations import identity_storage
+        params = parse_qs(query)
+        binding = {key: params.get(key, [""])[0] for key in ("plan_id", "snapshot_digest")}
+        headers_sent = False
+        try:
+            with self._identity_assistant().snapshot_files(binding) as export:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-tar")
+                self.send_header("Content-Length", str(export["size_bytes"]))
+                self.send_header("Content-Disposition", 'attachment; filename="borg-identity-migration-backup.tar"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self._send_refreshed_session_header()
+                self.end_headers()
+                headers_sent = True
+                archive = tarfile.open(fileobj=self.wfile, mode="w|", format=tarfile.USTAR_FORMAT)
+                try:
+                    for name, path, expected in export["members"]:
+                        actual, raw = identity_storage._read_file(path, private=True)
+                        if actual != expected:
+                            raise ValueError("snapshot_changed")
+                        info = tarfile.TarInfo(name)
+                        info.size, info.mode = len(raw), 0o600
+                        archive.addfile(info, io.BytesIO(raw))
+                except Exception:
+                    # Do not finish the tar or append JSON to an incomplete download.
+                    self.close_connection = True
+                    raise
+                else:
+                    archive.close()
+        except Exception as exc:
+            if headers_sent:
+                self.close_connection = True
+                return
+            from identity_migration_api import _safe_code
+            self._send_api_error(409, "identity_migration_blocked", _safe_code(exc), request_id=self._current_request_id)
+
+    def _request_writer_lease(self, path):
+        # Even GET routes may refresh caches. Only audited safe routes bypass leases.
+        if (path.startswith("/api/auth/") or path.startswith("/api/migration/identity/")
+                or path == "/api/version"
+                or path in {"/api/system-health", "/api/setup-status", "/api/settings/support-bundle"} and _is_maintenance_mode(self.config)):
+            return nullcontext()
+        from migration_barrier import writer_lease
+        return writer_lease(self.config)
+
     def _get_system_health(self) -> dict:
+        if _is_maintenance_mode(self.config):
+            return {"startup_state": _public_startup_state(self.config),
+                    "identity_migration": self._identity_assistant().status(),
+                    "paths": {}, "checks": {}}
         from system_health_api import get_system_health_data
         return get_system_health_data(self.config)
 
@@ -1675,17 +1748,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return {"ok": True, "removed": entry_id}
 
     def _get_jobs(self) -> dict:
-        from jobs_api import list_jobs
+        from jobs_api import list_jobs, latest_job_statuses
         latest = {}
         try:
-            from status_api import get_status_data
-            status = get_status_data(self.config)
-            for b in status.get("backups", []):
-                key = str(b.get("key", ""))
-                if not key:
-                    continue
-                latest[key] = b
-                latest.setdefault(key.lower(), b)
+            latest = latest_job_statuses(self.config)
         except Exception as exc:
             self.log_message("WARN /api/jobs status fallback active: %s", str(exc))
         return {"jobs": list_jobs(self.config, latest)}
@@ -1695,167 +1761,52 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_all_runtime_states(self.config)
 
     def _get_schedules(self) -> dict:
-        from schedule_api import get_schedules, prune_orphaned_schedules
-        prune_orphaned_schedules(self.config, log_fn=self.log_message)
+        from schedule_api import get_schedules
         return get_schedules(self.config)
 
     def _put_schedule(self) -> dict:
         from schedule_api import save_schedule
+        from job_actions import resolve_request_schedule_id
         body = self._read_json_body()
-        job_key = body.get("job_key", "")
-        cron    = body.get("cron", "")
-        enabled = bool(body.get("enabled", True))
-        if not job_key or not cron:
-            raise ValueError("job_key and cron are required")
-        result = save_schedule(self.config, job_key, cron, enabled)
-        return {"saved": True, **result}
+        job_id = resolve_request_schedule_id(self.config, body, endpoint="schedules/save")
+        return save_schedule(self.config, job_id, body.get("cron", ""), body.get("enabled", True))
 
     def _put_job_enabled(self) -> dict:
-        from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
+        from job_actions import resolve_request_job_id, set_job_enabled
         body = self._read_json_body()
-        job_key = str(body.get("job_key", "")).strip()
-        enabled = bool(body.get("enabled", True))
-        if not job_key:
-            raise ValueError("job_key is required")
-        scripts_dir = resolve_scripts_dir(self.config)
-        data_root = resolve_data_root(self.config)
-        meta_file = get_jobs_meta_dir(scripts_dir, data_root) / f"{job_key}.json"
-        if not meta_file.exists():
-            raise FileNotFoundError(f"Job metadata file not found: {job_key}")
-        raw = json.loads(meta_file.read_text(encoding="utf-8"))
-        raw["enabled"] = enabled
-        meta_file.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        return {"saved": True, "job_key": job_key, "enabled": enabled}
+        job_id = resolve_request_job_id(self.config, body, endpoint="jobs/enabled")
+        return set_job_enabled(self.config, job_id, body.get("enabled", True))
 
     def _delete_job(self) -> dict:
-        from jobs_api import discover_jobs, get_job_runtime_state, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-        from restore_tests_api import resolve_restore_test_dir
-        from config_api import read_expanded_conf
-        from schedule_api import delete_schedule
+        from job_actions import resolve_request_job_id, delete_job_configuration, prepare_job_action
+        from jobs_api import get_job_runtime_state
+        from job_model import JobValidationError
         body = self._read_json_body()
-        job_key = body.get("job_key", "")
-        if not job_key:
-            raise ValueError("job_key is required")
-
-        scripts_dir = resolve_scripts_dir(self.config)
-        data_root = resolve_data_root(self.config)
-        jobs = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
-        if job_key not in jobs:
-            raise ValueError(f"Unknown job: {job_key}")
-
-        if get_job_runtime_state(self.config, job_key).get("running"):
+        job_id = resolve_request_job_id(self.config, body, endpoint="jobs/delete")
+        prepare_job_action(self.config, job_id)
+        if get_job_runtime_state(self.config, job_id).get("running"):
             raise RuntimeError("The job is currently running; wait for it to finish")
+        if body.get("delete_passphrase") or body.get("delete_artifacts"):
+            raise JobValidationError("explicit_artifact_confirmation_required", "Select exact artifacts from the deletion preview. Repository secrets are retained.")
+        return delete_job_configuration(self.config, job_id, confirmed_artifacts=body.get("confirmed_artifacts"))
 
-        info = jobs[job_key]
-        conf = read_expanded_conf(self.config)
-        status_dir = Path(self.config.get("STATUS_DIR", "/mnt/user/backup-status"))
-        log_dir    = Path(conf.get("GLOBAL_LOG_DIR", "/mnt/user/Logs"))
-        jobs_meta_dirs = get_jobs_meta_dirs(scripts_dir, data_root)
-
-        # Skript (+ optionale .description) löschen
-        deleted_script = False
-        script_name = ""
-        if info.script_path is not None:
-            script_name = info.script_path.name
-            try:
-                if info.script_path.exists():
-                    info.script_path.unlink()
-                    deleted_script = True
-            except OSError:
-                pass
-            desc = info.script_path.with_suffix(".description")
-            if desc.exists():
-                try:
-                    desc.unlink()
-                except OSError:
-                    pass
-
-        # Metadatei des Jobs löschen (Wizard-First)
-        metadata_paths = [jobs_meta_dir / f"{job_key}.json" for jobs_meta_dir in jobs_meta_dirs]
-        from repositories_api import delete_job_metadata_transaction
-        deleted_metadata = bool(delete_job_metadata_transaction(self.config, metadata_paths, job_key))
-
-        delete_artifacts = bool(body.get("delete_artifacts", False))
-
-        # Status-Dateien: *_{backup_type}_{location}.status
-        deleted_status = 0
-        if delete_artifacts:
-            for f in status_dir.glob(f"*_{info.backup_type}_{info.location}.status"):
-                try:
-                    f.unlink()
-                    deleted_status += 1
-                except OSError:
-                    pass
-
-        deleted_restore_test = False
-        if delete_artifacts:
-            rt_file = resolve_restore_test_dir(self.config) / f"{job_key}.test"
-            try:
-                if rt_file.exists():
-                    rt_file.unlink()
-                    deleted_restore_test = True
-            except OSError:
-                pass
-
-        # Log-Dateien: Borg-Backup[_-]{backup_type}--*.log
-        deleted_logs = 0
-        if delete_artifacts:
-            for pattern in (
-                f"Borg-Backup_{info.backup_type}--*.log",
-                f"Borg-Backup-{info.backup_type}--*.log",
-            ):
-                for f in log_dir.glob(pattern):
-                    try:
-                        f.unlink()
-                        deleted_logs += 1
-                    except OSError:
-                        pass
-
-        # Passphrase-Datei (optional)
-        deleted_passphrase = False
-        if body.get("delete_passphrase"):
-            suffix = f"{info.backup_type}_{info.location}".lower()
-            candidates = [
-                Path(f"/boot/config/borg-backup/secrets/.borg-passphrase-{suffix}"),
-                Path(f"/boot/config/borg-backup/secrets/.borg-passphrase-{info.backup_type}".lower()),
-            ]
-            for p in candidates:
-                try:
-                    if p.is_symlink() or p.exists():
-                        p.unlink()
-                        deleted_passphrase = True
-                except OSError:
-                    pass
-
-        # Schedule-Eintrag immer mit aufräumen (idempotent),
-        # damit keine verwaisten Cron-Trigger für gelöschte Jobs bleiben.
-        delete_schedule(self.config, job_key)
-
-        return {
-            "deleted": True,
-            "filename": script_name,
-            "deleted_script": deleted_script,
-            "deleted_metadata": deleted_metadata,
-            "deleted_status_files": deleted_status,
-            "deleted_restore_test": deleted_restore_test,
-            "deleted_log_files": deleted_logs,
-            "deleted_passphrase": deleted_passphrase,
-            "deleted_artifacts": delete_artifacts,
-        }
+    def _post_job_delete_preview(self) -> dict:
+        from job_actions import delete_job_configuration
+        from restore_identity import request_job_id
+        return delete_job_configuration(self.config, request_job_id(self._read_json_body()), preview=True)
 
     def _delete_restore_test(self) -> dict:
         from restore_tests_api import delete_restore_test
+        from restore_identity import request_job_id
         body = self._read_json_body()
-        return delete_restore_test(self.config, body.get("job_key", ""))
+        return delete_restore_test(self.config, request_job_id(body))
 
     def _delete_schedule(self) -> dict:
         from schedule_api import delete_schedule
+        from job_actions import resolve_request_schedule_id
         body = self._read_json_body()
-        job_key = body.get("job_key", "")
-        if not job_key:
-            raise ValueError("job_key is required")
-        result = delete_schedule(self.config, job_key)
-        return {"deleted": True, **result}
+        job_id = resolve_request_schedule_id(self.config, body, endpoint="schedules/delete")
+        return delete_schedule(self.config, job_id)
 
     def _get_storage(self) -> dict:
         from config_api import get_repositories_data
@@ -2068,6 +2019,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_settings_data(self.config, include_storagebox_setup=False)
 
     def _get_setup_status(self) -> dict:
+        if _is_maintenance_mode(self.config):
+            return {"startup_state": _public_startup_state(self.config), "maintenance_mode": True}
         from config_api import get_setup_status
         return get_setup_status(self.config)
 
@@ -2086,7 +2039,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from urllib.parse import parse_qs
         from settings_transfer_api import export_jobs_bundle
         qs = parse_qs(qs_str)
-        keys = [str(x).strip() for x in (qs.get("job_key") or []) if str(x).strip()]
+        keys = [str(x).strip() for x in (qs.get("job_id") or []) if str(x).strip()]
         return export_jobs_bundle(self.config, keys if keys else None)
 
     def _get_log_file(self, query_string: str) -> dict:
@@ -2126,8 +2079,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from history_api import get_history_data
         from urllib.parse import parse_qs
         qs = parse_qs(query_string)
+        if 'type' in qs or any(len(qs.get(key, [])) > 1 for key in ('job_id', 'scope')):
+            raise ValueError('Use one canonical history job_id and scope')
         filters = {
-            "type": (qs.get("type") or [""])[0].lower() or None,
+            "job_id": (qs.get("job_id") or [""])[0],
+            "scope": (qs.get("scope") or ["all"])[0],
             "location": (qs.get("location") or [""])[0].lower() or None,
             "status": (qs.get("status") or [""])[0].lower() or None,
             "page": (qs.get("page") or ["1"])[0],
@@ -2152,11 +2108,13 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from wizard_api import load_job_for_wizard
         from jobs_api import resolve_scripts_dir
         params = _pqs(qs)
-        job_key = (params.get("job_key") or [""])[0].strip()
-        if not job_key:
-            raise ValueError("job_key is required")
+        if "job_key" in params:
+            raise ValueError("The wizard requires job_id, not job_key")
+        job_id = (params.get("job_id") or [""])[0]
+        if len(params.get("job_id", [])) != 1:
+            raise ValueError("Exactly one job_id is required")
         scripts_dir = resolve_scripts_dir(self.config)
-        return {"job": load_job_for_wizard(job_key, scripts_dir, self.config)}
+        return {"job": load_job_for_wizard(job_id, scripts_dir, self.config)}
 
     def _get_wizard_source_dirs(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs
@@ -2190,22 +2148,24 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from restore_api import list_archives_with_context
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
-        job_key = (qs.get("job") or [""])[0]
-        if not job_key:
+        from restore_identity import request_job_id
+        job_id = request_job_id(qs, query=True)
+        if not job_id:
             raise ValueError("job parameter is required")
-        return list_archives_with_context(self.config, job_key)
+        return list_archives_with_context(self.config, job_id)
 
     def _get_restore_files(self, qs_str: str) -> dict:
         self._require_data_dir_ready()
         from restore_api import list_files
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(qs_str)
-        job_key = (qs.get("job") or [""])[0]
+        from restore_identity import request_job_id
+        job_id = request_job_id(qs, query=True)
         archive = (qs.get("archive") or [""])[0]
         path = unquote((qs.get("path") or [""])[0])
-        if not job_key or not archive:
+        if not job_id or not archive:
             raise ValueError("job and archive parameters are required")
-        return {"files": list_files(self.config, job_key, archive, path)}
+        return {"files": list_files(self.config, job_id, archive, path)}
 
     def _get_report_jobs(self) -> dict:
         from reports_api import get_report_jobs
@@ -2215,20 +2175,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from reports_api import get_report_data
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
-        job_key = (qs.get("job") or [""])[0]
-        if not job_key:
-            raise ValueError("job parameter is required")
-        return get_report_data(self.config, job_key)
+        if any(len(qs.get(key, [])) > 1 for key in ('job_id', 'scope')):
+            raise ValueError('Only one report identity is allowed')
+        return get_report_data(self.config, (qs.get('job_id') or [''])[0], scope=(qs.get('scope') or [''])[0])
 
     def _get_repo_stats(self, qs_str: str) -> dict:
         self._require_data_dir_ready()
         from restore_api import get_repo_stats
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
-        job_key = (qs.get("job") or [""])[0]
-        if not job_key:
-            raise ValueError("job parameter is required")
-        return get_repo_stats(self.config, job_key)
+        from job_model import validate_job_id
+        if 'job' in qs or len(qs.get('job_id', [])) != 1:
+            raise ValueError('One canonical job_id is required')
+        job_id = validate_job_id(qs['job_id'][0])
+        return get_repo_stats(self.config, job_id)
 
     def _get_restore_target_dirs(self, qs_str: str) -> dict:
         self._require_data_dir_ready()
@@ -2275,13 +2235,15 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise ValueError("Invalid mode parameter")
         from check_api import CheckManager
         action = str(body.get("action") or "check").strip().lower()
-        job_key = str(body.get("job_key") or "").strip()
+        if "job_key" in body:
+            raise ValueError("Repository maintenance requires job_id")
+        job_id = body.get("job_id", "")
         ok, err = CheckManager.get().start_repository(
             self.config,
             repository_key,
             action,
             mode,
-            job_key=job_key,
+            job_id=job_id,
         )
         if not ok:
             raise RuntimeError(err)
@@ -2312,31 +2274,41 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         import subprocess
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(parsed.query)
-        job_key = (qs.get("job") or [""])[0]
+        from restore_identity import request_job_id
+        try:
+            job_id = request_job_id(qs, query=True)
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return
         archive = (qs.get("archive") or [""])[0]
         path = unquote((qs.get("path") or [""])[0])
         confirm_large = str((qs.get("confirm_large") or ["0"])[0]).strip().lower() in {"1", "true", "yes"}
 
-        if not all([job_key, archive, path]):
-            self.send_error(400, "job, archive, and path are required")
+        if not all([job_id, archive, path]):
+            self.send_error(400, "job_id, archive, and path are required")
             return
 
         lock_set = None
         try:
             from restore_api import RestoreRepositoryBusy, acquire_restore_repository_lock, get_repo_info, _repository_borg_env
-            info = get_repo_info(self.config, job_key)
+            info = get_repo_info(self.config, job_id)
+            from restore_api import _validate_archive_name
+            from restore_identity import archive_prefix
+            archive_prefix(info, _validate_archive_name(archive))
             lock_set = acquire_restore_repository_lock(
                 self.config,
                 info,
-                job_key,
-                f"restore-download-{datetime.now().strftime('%Y%m%dT%H%M%S')}",
+                job_id,
+                str(uuid.uuid4()),
             )
             env = _repository_borg_env(self.config, info)
         except RestoreRepositoryBusy as exc:
             self.send_error(409, str(exc))
             return
         except Exception as exc:
-            self.send_error(500, str(exc))
+            if lock_set is not None:
+                lock_set.release()
+            self.send_error(400 if isinstance(exc, ValueError) else 500, str(exc))
             return
 
         repo_archive = f"{info['repo']}::{archive}"
@@ -2520,12 +2492,16 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from urllib.parse import parse_qs, unquote
         from restore_api import ensure_restore_repository_available, get_repo_info, _repository_borg_env
         qs = parse_qs(query or "")
-        job_key = (qs.get("job") or [""])[0]
+        from restore_identity import request_job_id
+        job_id = request_job_id(qs, query=True)
         archive = (qs.get("archive") or [""])[0]
         path = unquote((qs.get("path") or [""])[0])
-        if not all([job_key, archive, path]):
-            raise ValueError("job, archive, and path are required")
-        info = get_repo_info(self.config, job_key)
+        if not all([job_id, archive, path]):
+            raise ValueError("job_id, archive, and path are required")
+        info = get_repo_info(self.config, job_id)
+        from restore_api import _validate_archive_name
+        from restore_identity import archive_prefix
+        archive_prefix(info, _validate_archive_name(archive))
         ensure_restore_repository_available(self.config, info)
         env = _repository_borg_env(self.config, info)
         repo_archive = f"{info['repo']}::{archive}"
@@ -2551,13 +2527,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return {"flow": generate_flow_preview(body, self.config, scripts_dir)}
 
     def _post_wizard_save(self) -> dict:
-        from wizard_api import validate_params, save_job
+        from wizard_api import save_job
         from jobs_api import resolve_scripts_dir, resolve_data_root
         body = self._read_json_body()
         scripts_dir = resolve_scripts_dir(self.config)
         data_root = resolve_data_root(self.config)
-        mode = str(body.get("_wizard_mode", "create")).strip().lower()
-        validate_params(body, scripts_dir, data_root, allow_existing=(mode == "edit"), ui_config=self.config)
         return save_job(body, scripts_dir, data_root, self.config)
 
     def _start_restore_test_from_body(self, body: dict) -> dict:
@@ -2573,28 +2547,31 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         level = str(body.get("level", conf.get("RESTORE_TEST_LEVEL", "2"))).strip()
         location = str(body.get("location", conf.get("RESTORE_TEST_LOCATION", "local"))).strip().lower()
         smb_auto_mount = bool(body.get("smb_auto_mount", True))
-        job_keys = body.get("job_keys", [])
+        job_ids = body.get("job_ids", [])
 
         if level not in {"1", "2", "3"}:
             raise ValueError("Invalid level (allowed: 1, 2, 3)")
         if location not in {"local", "usb", "smb", "storagebox", "all"}:
             raise ValueError("Invalid location")
-        if not isinstance(job_keys, list):
-            raise ValueError("job_keys must be a list")
-        clean_job_keys = [str(k).strip() for k in job_keys if str(k).strip()]
+        if not isinstance(job_ids, list):
+            raise ValueError("job_ids must be a list")
+        from job_model import validate_job_id
+        if "job_keys" in body or "job_key" in body:
+            raise ValueError("Restore tests require job_ids")
+        clean_job_ids = list(dict.fromkeys(validate_job_id(k) for k in job_ids))
         auto_selected = False
         skipped = []
-        if clean_job_keys:
+        if clean_job_ids:
             jobs = list_jobs(self.config, {})
-            known = {str(j.get("key") or "").strip(): j for j in jobs if isinstance(j, dict)}
-            for k in clean_job_keys:
+            known = {str(j.get("job_id") or "").strip(): j for j in jobs if isinstance(j, dict)}
+            for k in clean_job_ids:
                 row = known.get(k)
                 if not row:
                     raise ValueError(f"Unknown job: {k}")
                 if row.get("enabled") is False:
                     raise ValueError(f"Job is disabled: {k}")
         scheduled = bool(body.get("scheduled", False))
-        if scheduled and not clean_job_keys:
+        if scheduled and not clean_job_ids:
             plan = list_restore_test_plan(self.config)
             due_rows = []
             for row in (plan.get("jobs") or []):
@@ -2603,19 +2580,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 policy = row.get("policy") if isinstance(row.get("policy"), dict) else {}
                 mode = str(policy.get("mode") or "").strip().lower()
                 if mode != "scheduled":
-                    skipped.append({"job_key": str(row.get("job_key") or ""), "reason": f"mode={mode or 'unknown'}"})
+                    skipped.append({"job_id": str(row.get("job_id") or ""), "reason": f"mode={mode or 'unknown'}"})
                     continue
                 if row.get("enabled") is False:
-                    skipped.append({"job_key": str(row.get("job_key") or ""), "reason": "disabled"})
+                    skipped.append({"job_id": str(row.get("job_id") or ""), "reason": "disabled"})
                     continue
                 if not bool(row.get("is_overdue", False)):
-                    skipped.append({"job_key": str(row.get("job_key") or ""), "reason": "not_due"})
+                    skipped.append({"job_id": str(row.get("job_id") or ""), "reason": "not_due"})
                     continue
                 due_rows.append(row)
-            clean_job_keys = [str(r.get("job_key") or "").strip() for r in due_rows if str(r.get("job_key") or "").strip()]
+            clean_job_ids = [str(r.get("job_id") or "").strip() for r in due_rows if str(r.get("job_id") or "").strip()]
             auto_selected = True
             location = "all"
-            if not clean_job_keys:
+            if not clean_job_ids:
                 return {
                     "started": False,
                     "reason": "no_due_jobs",
@@ -2624,7 +2601,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     "skipped_jobs": skipped,
                 }
 
-        from jobs_api import resolve_scripts_dir
+        if not scheduled and not clean_job_ids:
+            jobs = list_jobs(self.config, {})
+            clean_job_ids = [j['job_id'] for j in jobs if j.get('enabled', True)
+                             and (location == 'all' or j.get('location') == location)]
+            if not clean_job_ids:
+                return {'started': False, 'reason': 'no_jobs', 'selected_jobs': []}
+
+        from jobs_api import resolve_scripts_dir, resolve_data_root
         scripts_dir = resolve_scripts_dir(self.config)
         script_path = scripts_dir / "borg_restore_test.py"
         if not script_path.exists():
@@ -2638,8 +2622,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cmd.append("--scheduled")
         if not scheduled:
             cmd.append("--force")
-        for job_key in clean_job_keys:
-            cmd.extend(["--job-key", job_key])
+        for job_id in clean_job_ids:
+            cmd.extend(["--job-id", job_id])
         request_id = str(getattr(self, "_current_request_id", "") or "")
         session = self._get_current_session_meta() or {}
         actor = _normalize_username(session.get("username", ""))
@@ -2653,7 +2637,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cmd,
             backup_scripts_dir,
             extra_env={
-                "BORG_UI_DATA_ROOT": str(backup_scripts_dir),
+                "BORG_UI_DATA_ROOT": str(resolve_data_root(self.config)),
                 "BORG_UI_APP_VERSION": APP_VERSION,
                 "BORG_UI_REQUEST_ID": request_id,
                 "BORG_UI_REQUEST_SOURCE": source,
@@ -2677,14 +2661,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             run_id=state.get("run_id", ""),
             level=level,
             location=location,
-            selected_jobs=clean_job_keys,
+            selected_jobs=clean_job_ids,
             auto_selected=auto_selected,
         )
         return {
             "started": True,
             "scheduled": scheduled,
             "auto_selected": auto_selected,
-            "selected_jobs": clean_job_keys,
+            "selected_jobs": clean_job_ids,
             "run_id": state.get("run_id", ""),
             "skipped_jobs": skipped,
         }
@@ -2695,20 +2679,21 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _post_run_restore_test_job(self) -> dict:
         from jobs_api import list_jobs
+        from restore_identity import request_job_id
         body = self._read_json_body()
-        job_key = str(body.get("job_key", "")).strip()
-        if not job_key:
-            raise ValueError("job_key is required")
+        job_id = request_job_id(body)
+        if not job_id:
+            raise ValueError("job_id is required")
         requested_level = str(body.get("level", "")).strip()
         effective_level = requested_level
         if not effective_level:
             jobs = list_jobs(self.config, {})
-            row = next((j for j in jobs if str(j.get("key") or "").strip() == job_key), None)
+            row = next((j for j in jobs if str(j.get("job_id") or "").strip() == job_id), None)
             policy = row.get("restore_test_policy") if isinstance(row, dict) and isinstance(row.get("restore_test_policy"), dict) else {}
             policy_level = str(policy.get("level", "")).strip()
             effective_level = policy_level or str(self.config.get("RESTORE_TEST_LEVEL", "2"))
         run_body = {
-            "job_keys": [job_key],
+            "job_ids": [job_id],
             "location": "all",
             "scheduled": False,
             "smb_auto_mount": bool(body.get("smb_auto_mount", True)),
@@ -2718,10 +2703,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _put_restore_test_policy(self) -> dict:
         from restore_tests_api import update_restore_test_policy
+        from restore_identity import request_job_id
         body = self._read_json_body()
-        job_key = str(body.get("job_key", "")).strip()
+        job_id = request_job_id(body)
         policy = body.get("policy")
-        return update_restore_test_policy(self.config, job_key, policy if isinstance(policy, dict) else {})
+        return update_restore_test_policy(self.config, job_id, policy if isinstance(policy, dict) else {})
 
     def _post_test_repo(self) -> dict:
         from config_api import test_repository
@@ -2741,10 +2727,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_restore_precheck(self) -> dict:
         self._require_data_dir_ready()
         from restore_api import restore_precheck
+        from restore_identity import request_job_id
         body = self._read_json_body()
         return restore_precheck(
             self.config,
-            str(body.get("job_key", "")).strip(),
+            request_job_id(body),
             str(body.get("archive", "")).strip(),
             str(body.get("source_path", "")).strip(),
             str(body.get("target_dir", "")).strip(),
@@ -2755,13 +2742,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_restore_start(self) -> dict:
         self._require_data_dir_ready()
         from restore_api import start_restore_async
+        from restore_identity import request_job_id
         body = self._read_json_body()
         confirm = bool(body.get("confirm", False))
         if not confirm:
             raise ValueError("Confirmation is required")
         return start_restore_async(
             self.config,
-            str(body.get("job_key", "")).strip(),
+            request_job_id(body),
             str(body.get("archive", "")).strip(),
             str(body.get("source_path", "")).strip(),
             str(body.get("target_dir", "")).strip(),
@@ -3083,10 +3071,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         bundle = body.get("bundle")
         bundle_text = str(body.get("bundle_text") or "").strip()
         if bundle is None and bundle_text:
-            bundle = json.loads(bundle_text)
+            from job_transfer import decode_json
+            bundle = decode_json(bundle_text)
         if bundle is None:
             raise ValueError("bundle or bundle_text is required")
-        mode = str(body.get("mode", "skip")).strip().lower()
+        mode = str(body.get("mode", "new")).strip().lower()
         dry_run = bool(body.get("dry_run", True))
         selected_jobs = body.get("selected_jobs") if isinstance(body.get("selected_jobs"), list) else None
         per_job_mode = body.get("per_job_mode") if isinstance(body.get("per_job_mode"), dict) else None
@@ -3099,6 +3088,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             dry_run=dry_run,
             selected_jobs=selected_jobs,
             per_job_mode=per_job_mode,
+            target_jobs=body.get("target_jobs"),
+            archive_prefixes=body.get("archive_prefixes"),
+            legacy_source_ids=body.get("legacy_source_ids"),
             settings_mode=settings_mode,
             per_profile_mode=per_profile_mode,
         )
@@ -3109,7 +3101,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         bundle = body.get("bundle")
         bundle_text = str(body.get("bundle_text") or "").strip()
         if bundle is None and bundle_text:
-            bundle = json.loads(bundle_text)
+            from job_transfer import decode_json
+            bundle = decode_json(bundle_text)
         if bundle is None:
             raise ValueError("bundle or bundle_text is required")
         return preview_jobs_bundle(self.config, bundle)
@@ -3142,7 +3135,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         payload_b64 = str(body.get("payload_b64") or "")
         if not payload_b64:
             raise ValueError("payload_b64 is required")
-        mode = str(body.get("mode", "skip")).strip().lower()
+        mode = str(body.get("mode", "new")).strip().lower()
         dry_run = bool(body.get("dry_run", True))
         selected_jobs = body.get("selected_jobs") if isinstance(body.get("selected_jobs"), list) else None
         per_job_mode = body.get("per_job_mode") if isinstance(body.get("per_job_mode"), dict) else None
@@ -3159,6 +3152,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             dry_run=dry_run,
             selected_jobs=selected_jobs,
             per_job_mode=per_job_mode,
+            target_jobs=body.get("target_jobs"),
+            archive_prefixes=body.get("archive_prefixes"),
+            legacy_source_ids=body.get("legacy_source_ids"),
             settings_mode=settings_mode,
             per_profile_mode=per_profile_mode,
             import_jobs=import_jobs,
@@ -3298,94 +3294,61 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _post_run_job(self) -> dict:
         self._require_data_dir_ready()
-        from jobs_api import JobManager, discover_jobs, get_job_runtime_state, resolve_data_root, resolve_scripts_dir
-        from lifecycle_log import emit_lifecycle
+        from inventory_store import inventory_lock
+        from job_actions import resolve_request_job_id
+        from job_runs import create_run_context, descriptors
+        from repository_context import jobs_dir
+        from jobs_api import JobManager, get_job_runtime_state, resolve_scripts_dir
         body = self._read_json_body()
-        job_key = body.get("job_key", "")
-        if not job_key:
-            raise ValueError("job_key is required")
-
-        borg_scripts_dir = resolve_scripts_dir(self.config)
-        backup_scripts_dir = Path(self.config["BACKUP_SCRIPTS_DIR"])
-        data_root = resolve_data_root(self.config)
-        jobs = {j.key: j for j in discover_jobs(borg_scripts_dir, data_root)}
-        if job_key not in jobs:
-            raise ValueError(f"Unknown job: {job_key}")
-        if not jobs[job_key].enabled:
-            raise RuntimeError(f"Job is disabled: {job_key}")
-        if get_job_runtime_state(self.config, job_key).get("running"):
-            raise RuntimeError("Job is already running")
-
-        info = jobs[job_key]
-        plugin_runtime = Path(__file__).resolve().parent / "runtime"
-        existing_pp = os.environ.get("PYTHONPATH", "")
-        runtime_pp = str(plugin_runtime)
-        merged_pp = f"{runtime_pp}:{existing_pp}" if existing_pp else runtime_pp
-        if info.standard != "wizard":
-            raise RuntimeError(f"Unsupported job standard: {info.standard}")
-        runner = Path(__file__).resolve().parent / "api" / "wizard_runner.py"
-        request_id = str(getattr(self, "_current_request_id", "") or "")
+        job_id = resolve_request_job_id(self.config, body, endpoint="jobs/run")
         session = self._get_current_session_meta() or {}
-        actor = _normalize_username(session.get("username", ""))
-        source = "schedule" if bool(body.get("scheduled")) else (
-            "api-token" if self._has_valid_api_token_header() else "manual"
-        )
-        if not actor and source == "schedule":
-            actor = "scheduler"
-        if not actor and source == "api-token":
-            actor = "api-token"
-        extra_env = {
-            "BORG_UI_BORG_SCRIPTS_DIR": str(borg_scripts_dir),
-            "BORG_UI_JOB_KEY": job_key,
-            "BORG_UI_APP_VERSION": APP_VERSION,
-            "BORG_UI_REQUEST_ID": request_id,
-            "BORG_UI_REQUEST_SOURCE": source,
-            "BORG_UI_REQUEST_ACTOR": actor,
-            "BORG_UI_FILE_ACTIVITY_RUN": "1" if getattr(info, "file_activity", False) else "0",
-            "PYTHONPATH": merged_pp,
-        }
-        if extra_env["BORG_UI_FILE_ACTIVITY_RUN"] == "1":
-            from jobs_api import _runtime_log_dir
-            extra_env["BORG_UI_ACTIVITY_LOG_DIR"] = str(_runtime_log_dir(self.config))
-        ok, err = JobManager.get().start(
-            job_key,
-            ["python3", str(runner)],
-            backup_scripts_dir,
-            extra_env=extra_env,
-        )
+        source = self._request_source(body)
+        actor = _normalize_username(session.get("username", "")) or ("scheduler" if source == "schedule" else source)
+        request_id = str(getattr(self, "_current_request_id", "") or "")
+        scripts_dir = resolve_scripts_dir(self.config)
+        backup_scripts_dir = Path(self.config["BACKUP_SCRIPTS_DIR"])
+        with inventory_lock(jobs_dir(self.config).parent):
+            if get_job_runtime_state(self.config, job_id).get("running"):
+                raise ApiConflictError("The job is already running", "job_already_running")
+            snapshot = create_run_context(self.config, job_id)
+            ok, error = JobManager.get().start(
+                job_id, [sys.executable, str(SCRIPT_DIR / "api" / "wizard_runner.py")],
+                backup_scripts_dir,
+                extra_env={"BORG_UI_BORG_SCRIPTS_DIR": str(scripts_dir),
+                           "BORG_UI_APP_VERSION": APP_VERSION,
+                           "BORG_UI_REQUEST_ID": request_id,
+                           "BORG_UI_REQUEST_SOURCE": source, "BORG_UI_REQUEST_ACTOR": actor},
+                run_context=snapshot,
+            )
         if not ok:
-            raise RuntimeError(err)
-        state = JobManager.get().get_state(job_key)
-        emit_lifecycle(
-            "JOB",
-            "requested",
-            request_id=request_id,
-            source=source,
-            actor=actor,
-            job_key=job_key,
-            backup_type=info.backup_type,
-            location=info.location,
-            run_id=state.get("run_id", ""),
-        )
-        return {"started": True, "job_key": job_key, "run_id": state.get("run_id", "")}
+            raise ApiConflictError(error or "Backup could not be started", "job_start_failed")
+        from lifecycle_log import emit_lifecycle
+        emit_lifecycle("JOB", "requested", job_id=job_id, run_id=snapshot["run_id"],
+                       source=source, actor=actor, request_id=request_id)
+        return {"started": True, **descriptors(snapshot)}
 
     def _post_cancel_job(self) -> dict:
         from jobs_api import cancel_job
 
         body = self._read_json_body()
-        job_key = str(body.get("job_key") or "").strip()
+        from job_actions import resolve_request_job_id
+        from job_model import validate_job_id
+        # Active run ownership is authoritative. In particular cancellation
+        # must not wait on the configuration lock held during retention.
+        job_id = (validate_job_id(body["job_id"]) if "job_id" in body and "job_key" not in body
+                  else resolve_request_job_id(self.config, body, endpoint="jobs/cancel"))
         run_id = str(body.get("run_id") or "").strip()
-        if not job_key or not run_id:
-            raise ValueError("job_key and run_id are required")
+        if not run_id:
+            raise ValueError("job_id and run_id are required")
         session = self._get_current_session_meta() or {}
         requested_by = _normalize_username(session.get("username", ""))
         try:
-            state = cancel_job(self.config, job_key, run_id, requested_by=requested_by)
+            state = cancel_job(self.config, job_id, run_id, requested_by=requested_by)
         except (FileNotFoundError, RuntimeError) as exc:
             raise ApiConflictError(str(exc), "job_cancel_unavailable") from exc
         return {
             "cancel_requested": True,
-            "job_key": job_key,
+            "job_id": job_id,
             "run_id": run_id,
             "phase": state.get("phase", ""),
             "cancellation_deferred": bool(state.get("cancellation_deferred")),
@@ -3404,7 +3367,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(query_string)
         stack = ExitStack()
         try:
-            path, _state, handle = stack.enter_context(open_activity_run(self.config, (qs.get("job") or [""])[0], (qs.get("run") or [""])[0]))
+            path, _state, handle = stack.enter_context(open_activity_run(self.config, (qs.get("job_id") or [""])[0], (qs.get("run_id") or [""])[0]))
         except (ValueError, OSError):
             stack.close()
             self._send_api_error(404, "not_found", "Activity log is not available", request_id=self._current_request_id)
@@ -3414,7 +3377,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             remaining = os.fstat(handle.fileno()).st_size
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
+            download_name = re.sub(r"[^A-Za-z0-9_.-]", "_", path.name)[:160]
+            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
             self.send_header("Content-Length", str(remaining))
             self.send_header("Cache-Control", "no-store")
             self._send_refreshed_session_header()
@@ -3429,7 +3393,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
-    def _handle_sse(self, job_key: str):
+    def _handle_sse(self, job_id: str, run_id: str = ""):
+        if job_id != "restore_test":
+            from job_model import validate_job_id
+            from job_runs import validate_run_id
+            validate_job_id(job_id)
+            validate_run_id(run_id)
         from jobs_api import stream_job_output
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -3439,7 +3408,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._send_refreshed_session_header()
         self.end_headers()
         try:
-            for chunk in stream_job_output(self.config, job_key):
+            for chunk in stream_job_output(self.config, job_id, run_id):
                 self.wfile.write(chunk.encode("utf-8"))
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
@@ -3808,7 +3777,8 @@ btn.addEventListener('click',doRecovery);
                 return
             refreshed_session_cookie = self._refreshed_session_cookie
             self._extra_response_headers = []
-            data = fn()
+            with self._request_writer_lease(path):
+                data = fn()
             refreshed_session_cookie = self._refreshed_session_cookie or refreshed_session_cookie
             if refreshed_session_cookie:
                 self._extra_response_headers.append(("Set-Cookie", refreshed_session_cookie))
@@ -3818,7 +3788,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export"}
+                if path.startswith("/api/migration/identity/") or path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)
@@ -3854,7 +3824,9 @@ btn.addEventListener('click',doRecovery);
         except ApiConflictError as exc:
             self._send_api_error(409, exc.code, str(exc), request_id=request_id)
         except Exception as exc:
-            if exc.__class__.__module__.endswith("inventory_store"):
+            if exc.__class__.__module__.endswith("migration_barrier"):
+                self._send_api_error(503, "maintenance_mode", str(exc), request_id=request_id)
+            elif exc.__class__.__module__.endswith("inventory_store"):
                 self._send_api_error(503, "inventory_unavailable", str(exc), request_id=request_id)
             else:
                 self._send_api_error(500, "internal_error", str(exc), request_id=request_id)
@@ -3919,6 +3891,7 @@ btn.addEventListener('click',doRecovery);
             return ""
 
         context: dict[str, object] = {}
+        self._add_context_value(context, "job_id", pick("job_id"))
         self._add_context_value(context, "job_key", pick("job_key", "job"))
         job_keys = body.get("job_keys")
         if not context.get("job_key") and isinstance(job_keys, list) and len(job_keys) == 1:
@@ -3952,13 +3925,13 @@ btn.addEventListener('click',doRecovery);
     @staticmethod
     def _augment_context_from_response(path: str, data: dict, ctx: dict) -> dict:
         out = dict(ctx or {})
-        if path == "/api/jobs/running" and not str(out.get("job_key") or "").strip() and isinstance(data, dict):
+        if path == "/api/jobs/running" and not str(out.get("job_id") or "").strip() and isinstance(data, dict):
             running_keys = [
                 str(k) for k, v in data.items()
                 if isinstance(v, dict) and bool(v.get("running"))
             ]
             if running_keys:
-                out["job_key"] = _mask_secrets(",".join(running_keys[:5]))
+                out["job_id"] = _mask_secrets(",".join(running_keys[:5]))
         if path == "/api/repositories" and isinstance(data, dict):
             for key in ("repository_key", "mode"):
                 if data.get(key):
@@ -4197,7 +4170,9 @@ def _start_notification_reminder_loop(config: dict) -> threading.Thread | None:
         while True:
             try:
                 from notification_reminder_api import run_due_notification_reminders
-                result = run_due_notification_reminders(config)
+                from migration_barrier import writer_lease
+                with writer_lease(config):
+                    result = run_due_notification_reminders(config)
                 if int(result.get("checked") or 0) or int(result.get("sent") or 0):
                     _log(
                         "Notification reminders checked: "
@@ -4282,7 +4257,9 @@ def _start_apprise_runtime_warmup(config: dict) -> threading.Thread | None:
         try:
             from apprise_profiles_api import get_supported_providers
 
-            info = get_supported_providers(config)
+            from migration_barrier import writer_lease
+            with writer_lease(config):
+                info = get_supported_providers(config)
             elapsed_ms = int((perf_counter() - started) * 1000)
             if info.get("success") is False:
                 _log(
@@ -4334,12 +4311,28 @@ def _apply_runtime_dirs_from_conf(config: dict) -> None:
 def _evaluate_startup_migrations(config: dict, migration_runner=None) -> tuple[bool, dict]:
     """Run required startup migrations and select normal or restricted mode."""
     _set_startup_state(config, _normal_startup_state())
+    production_runner = migration_runner is None
     try:
         if migration_runner is None:
             from migrations.registry import run_startup_migrations
-            migration_runner = run_startup_migrations
-        summary = migration_runner(config)
+            from migration_barrier import block_writers, exclusive_migration, clear_block
+            block_writers(config)
+            # Detection is read-only and can explain pending work while old workers drain.
+            from identity_migration_api import get_assistant
+            detected = get_assistant(config).startup_detection()
+            if detected["required"]:
+                summary = run_startup_migrations(config)
+            else:
+                with exclusive_migration(config):
+                    summary = run_startup_migrations(config)
+                    if summary.get("status") == "ok":
+                        clear_block(config)
+        else:
+            summary = migration_runner(config)
     except Exception as exc:
+        if production_runner and not exc.__class__.__module__.endswith("migration_barrier"):
+            from identity_migration_api import get_assistant
+            get_assistant(config)._failed_here = True
         state = _set_startup_state(config, _migration_maintenance_state(runner_error=exc))
         _log(
             "ERROR: Startup migration runner failed. Normal operation is blocked: "
@@ -4361,7 +4354,16 @@ def _evaluate_startup_migrations(config: dict, migration_runner=None) -> tuple[b
             migration_id_text = str(migration_id).strip()
             if migration_id_text and migration_id_text not in failed:
                 failed.append(migration_id_text)
+    if status in {"pending", "blocked"} and not failed:
+        state = _migration_maintenance_state(summary)
+        state.update(reason_code="identity_migration_required", severity="warning",
+                     message="Migration preparation and explicit approval are required.")
+        _set_startup_state(config, state)
+        return False, summary
     if status != "ok" or failed:
+        if production_runner:
+            from identity_migration_api import get_assistant
+            get_assistant(config)._failed_here = True
         summary["status"] = "failed"
         summary["failed"] = failed
         state = _set_startup_state(config, _migration_maintenance_state(summary))
@@ -4415,16 +4417,14 @@ def _start_normal_runtime_services(config: dict) -> None:
         _log(
             "Repository assignments: "
             f"status={'ok' if repository_usage.get('ok') else 'attention'}, reconciled={len(changed)}, "
-            f"errors={len(repository_usage.get('errors', []))}"
+            f"errors={len(repository_usage.get('errors', []))}, "
+            f"mismatches={len(repository_usage.get('usage_mismatches', []))}"
         )
     except Exception as exc:
         _log(f"WARNING: Repository assignments could not be reconciled: {_mask_secrets(str(exc))}")
 
     try:
-        from schedule_api import apply_all_schedules, prune_orphaned_schedules
-        pruned = prune_orphaned_schedules(config, log_fn=_log)
-        if pruned.get("changed"):
-            _log(f"AUTO-PRUNE schedules.json completed: removed={len(pruned.get('removed_keys', []))}")
+        from schedule_api import apply_all_schedules
         apply_all_schedules(config)
         _log("Cron schedules applied.")
     except Exception as exc:
@@ -4461,7 +4461,7 @@ def _activate_runtime_services(config: dict, startup_ready: bool, starter=None) 
     return True
 
 
-def _start_configured_runtime_writers(
+def _start_configured_runtime_writers_impl(
     config: dict,
     startup_ready: bool,
     *,
@@ -4493,6 +4493,17 @@ def _start_configured_runtime_writers(
     return True
 
 
+def _start_configured_runtime_writers(config, startup_ready, **kwargs):
+    if not startup_ready:
+        _activate_runtime_services(config, False)
+        return False
+    if not _runtime_data_directory_configured(config):
+        return _start_configured_runtime_writers_impl(config, True, **kwargs)
+    from migration_barrier import writer_lease
+    with writer_lease(config):
+        return _start_configured_runtime_writers_impl(config, True, **kwargs)
+
+
 def _public_startup_state(config: dict) -> dict:
     state = _get_startup_state(config)
     return {
@@ -4521,6 +4532,32 @@ def _public_startup_state(config: dict) -> dict:
     }
 
 
+def _startup_storage_ready(config):
+    _apply_runtime_dirs_from_conf(config)
+    return _wait_for_configured_data_storage(config, wait_seconds=0)
+
+
+def _resume_normal_startup(config):
+    if not _startup_storage_ready(config):
+        return False
+    ready, _ = _evaluate_startup_migrations(config)
+    if not ready:
+        return False
+    from migration_barrier import writer_lease, block_writers
+    try:
+        with writer_lease(config):
+            bootstrap_data_layout(config)
+            _remove_obsolete_persistent_backup_conf_schema(config)
+        _start_configured_runtime_writers(config, True)
+        return True
+    except Exception:
+        block_writers(config)
+        from identity_migration_api import get_assistant
+        get_assistant(config)._failed_here = True
+        _set_startup_state(config, _migration_maintenance_state(runner_error=RuntimeError("Startup activation failed")))
+        return False
+
+
 def main():
     dev_mode = "--dev" in sys.argv
 
@@ -4531,6 +4568,12 @@ def main():
         sys.path.insert(0, str(api_dir))
 
     config = load_ui_config()
+    # Revoke same-boot worker admission even when persistent storage is missing.
+    from migration_barrier import block_writers
+    try:
+        block_writers(config)
+    except Exception:
+        pass  # block_writers removes runtime readiness before checking the mount.
     _log(f"Borg Backup UI version: {APP_VERSION}")
     if dev_mode:
         config["DEV_MODE"] = "true"
@@ -4539,22 +4582,24 @@ def main():
     if not lib_found:
         _log("WARNING: plugin runtime/lib was not found.")
 
-    try:
-        bootstrap_data_layout(config)
-    except Exception as exc:
-        _log(f"WARNING: Bootstrap skipped: {exc}")
-
     _apply_runtime_dirs_from_conf(config)
     if not _wait_for_configured_data_storage(config, include_runtime_paths=False):
-        return
-
-    startup_ready, _startup_mig = _evaluate_startup_migrations(config)
+        startup_ready, _startup_mig = False, {}
+        _set_startup_state(config, _migration_maintenance_state(runner_error=RuntimeError("Configured storage is unavailable")))
+    else:
+        startup_ready, _startup_mig = _evaluate_startup_migrations(config)
     if startup_ready:
+        bootstrap_data_layout(config)
         _remove_obsolete_persistent_backup_conf_schema(config)
 
     _apply_runtime_dirs_from_conf(config)
     if not _wait_for_configured_data_storage(config):
-        return
+        try:
+            block_writers(config)
+        except Exception:
+            pass
+        startup_ready = False
+        _set_startup_state(config, _migration_maintenance_state(runner_error=RuntimeError("Configured storage is unavailable")))
 
     if config.get("DEV_MODE", "false").lower() == "true":
         test_data = Path(config["BACKUP_SCRIPTS_DIR"]) / "test-data"
@@ -4567,6 +4612,9 @@ def main():
     BackupUIHandler.config = config
 
     _start_configured_runtime_writers(config, startup_ready)
+    if not startup_ready:
+        from identity_startup_watch import start_startup_readiness_watch
+        start_startup_readiness_watch(config, storage_ready=_startup_storage_ready, activate=_resume_normal_startup)
 
     port = int(config["PORT"])
     bind = config["BIND"]

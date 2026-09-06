@@ -268,19 +268,19 @@ def test_secure_jobs_import_uses_guided_per_job_selection():
     en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
 
     assert "async function settingsTransferRunSecureJobsWizard" in source
-    assert "renderSettingsTransferJobSelectionStep" in source
-    assert "renderSettingsTransferActionStep" in source
+    assert "renderSettingsTransferSelectAndActionStep" in source
+    assert "data-jobs-secure-row-target" in source
     assert "renderSettingsTransferConfirmStep" in source
     assert "exportRepositoryKeysBackup" in source
     assert "repositoryKeysExportRunning" in source
     assert "repositoryKeysExportRunningButton" in source
     assert "button.disabled = true;" in source
     assert "button.disabled = false;" in source
-    assert "settingsTransferPlannedActionLines" in source
+    assert "target_jobs: decision.targetJobs" in source
     assert "data-jobs-secure-row-select" in source
     assert "data-jobs-secure-row-mode" in source
     assert "borg_keys_only" not in source
-    assert "jobImportCreateNew" in source
+    assert "transfer.newIdentity" in source
 
     for catalog in (de, en):
         transfer_labels = catalog["settings"]["transfer"]

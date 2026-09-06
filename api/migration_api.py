@@ -224,6 +224,9 @@ def plan_migration_backup_cleanup(ui_config: dict, *, keep_per_active_id: int = 
 
     for row in rows:
         migration_id = str(row.get("migration_id") or "")
+        if migration_id == "immutable_job_id_v1":
+            skipped.append({**row, "reason": "protected_identity_recovery"})
+            continue
         if not row.get("recognized"):
             skipped.append({**row, "reason": "unrecognized_name"})
             continue

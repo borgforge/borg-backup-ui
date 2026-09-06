@@ -17,6 +17,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+try:
+    from .run_identity import valid_uuid
+except ImportError:
+    from run_identity import valid_uuid
+
 import fcntl
 import subprocess
 import sys
@@ -39,7 +45,14 @@ class NotificationEvent:
     message: str
     severity: str = "info"
     job_name: str = "Borg Backup UI"
-    job_key: str = ""
+    job_id: str = ""
+    run_id: str = ""
+    job_name_snapshot: str = ""
+    archive_prefix_snapshot: str = ""
+    archive_prefixes_snapshot: list[str] = field(default_factory=list)
+    repository_key_snapshot: str = ""
+    repository_snapshot: str = ""
+    location_snapshot: str = ""
     status: str = ""
     timestamp: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     duration_seconds: int = 0
@@ -132,7 +145,8 @@ def _emit_lifecycle_notification(event: NotificationEvent, results: dict[str, bo
         emit_lifecycle(
             component,
             "notification",
-            job_key=event.job_key,
+            job_id=event.job_id,
+            run_id=event.run_id,
             event=event_type,
             source=source,
             status=event.status,
@@ -240,6 +254,16 @@ def drain_notification_queue(config: dict, *, max_items: int = 20) -> dict[str, 
 
     Returns a compact status dictionary for background worker logs and tests.
     """
+    from migration_barrier import MigrationBlocked, writer_lease
+    try:
+        with writer_lease(config):
+            return _drain_notification_queue_admitted(config, max_items=max_items)
+    except MigrationBlocked as exc:
+        return {"checked": 0, "delivered": 0, "failed": 0, "retrying": 0,
+                "blocked": True, "reason": exc.reason}
+
+
+def _drain_notification_queue_admitted(config: dict, *, max_items: int) -> dict[str, Any]:
     now_ts = time.time()
     due: list[dict[str, Any]] = []
     with _notification_lock(config):
@@ -354,6 +378,17 @@ def _deliver_queue_item(config: dict, item: dict[str, Any]) -> str:
     return "failed"
 
 
+def _event_identity(event):
+    if not event.job_id:
+        return {"service": "restore_test" if event.source == "restore_test" else "system"}
+    if not valid_uuid(event.job_id) or (event.run_id and not valid_uuid(event.run_id)):
+        raise ValueError("Invalid notification job/run identity")
+    return {key: getattr(event, key) for key in (
+        "job_id", "run_id", "job_name_snapshot", "archive_prefix_snapshot",
+        "archive_prefixes_snapshot", "repository_key_snapshot", "repository_snapshot", "location_snapshot",
+    ) if key != "run_id" or event.run_id}
+
+
 def _queue_item_from_event(profile: dict[str, Any], event: NotificationEvent) -> dict[str, Any]:
     profile_id = str(profile.get("id") or "").strip()
     name = str(profile.get("name") or profile_id or "Borg Backup UI").strip()
@@ -373,7 +408,7 @@ def _queue_item_from_event(profile: dict[str, Any], event: NotificationEvent) ->
         "provider": str(profile.get("provider") or "").strip(),
         "event_type": str(event.event_type or "").strip(),
         "source": str(event.source or "").strip(),
-        "job_key": str(event.job_key or "").strip(),
+        **_event_identity(event),
         "severity": str(event.severity or "").strip(),
         "title": _apprise_title(name, event.title),
         "body": str(event.message or ""),
@@ -426,7 +461,7 @@ def _record_delivery_status_unlocked(config: dict, item: dict[str, Any], *, stat
         "provider": str(item.get("provider") or ""),
         "event_type": str(item.get("event_type") or ""),
         "source": str(item.get("source") or ""),
-        "job_key": str(item.get("job_key") or ""),
+        **{key: item[key] for key in ("job_id", "run_id", "job_name_snapshot", "archive_prefix_snapshot", "archive_prefixes_snapshot", "repository_key_snapshot", "repository_snapshot", "location_snapshot", "service") if key in item},
         "attempts_made": _int(item.get("attempts_made"), default=0),
         "max_attempts": _int(item.get("max_attempts"), default=1),
         "created_at": str(item.get("created_at") or ""),
@@ -690,17 +725,21 @@ def _kick_notification_delivery(config: dict) -> None:
     data_root = str(config.get("BACKUP_SCRIPTS_DIR", "") or _data_root(config))
     runtime_dir = Path(__file__).resolve().parents[1]
     runtime_lib = runtime_dir / "lib"
+    api_dir = runtime_dir.parent / "api"
     env = {
         "PATH": os.environ.get("PATH", ""),
         "LANG": os.environ.get("LANG", "C.UTF-8"),
         "LC_ALL": os.environ.get("LC_ALL", os.environ.get("LANG", "C.UTF-8")),
     }
     env["BBUI_BACKUP_SCRIPTS_DIR"] = data_root
+    if os.environ.get("BORG_UI_MIGRATION_GATE_ROOT"):
+        env["BORG_UI_MIGRATION_GATE_ROOT"] = os.environ["BORG_UI_MIGRATION_GATE_ROOT"]
     for key in ("NOTIFY_APPRISE_STATUS_HISTORY",):
         if key in config:
             env[f"BBUI_{key}"] = str(config.get(key) or "")
     code = (
         "import os, sys\n"
+        f"sys.path.insert(0, {str(api_dir)!r})\n"
         f"sys.path.insert(0, {str(runtime_lib)!r})\n"
         f"sys.path.insert(0, {str(runtime_dir)!r})\n"
         "from lib.notification_events import drain_notification_queue\n"
@@ -777,9 +816,11 @@ def write_notification_state(config: dict, state: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def reminder_key(event_type: str, job_key: str, due_marker: str = "") -> str:
+def reminder_key(event_type: str, job_id: str, due_marker: str = "") -> str:
+    if not valid_uuid(job_id):
+        raise ValueError("Reminder correlation requires a canonical job_id")
     marker = str(due_marker or "").strip() or "current"
-    return f"{event_type}:{job_key}:{marker}"
+    return f"{event_type}:{job_id}:{marker}"
 
 
 def reminder_allowed(config: dict, key: str, *, now: float | None = None) -> bool:

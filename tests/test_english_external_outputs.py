@@ -68,7 +68,9 @@ def test_weekly_report_email_content_is_english(monkeypatch, tmp_path):
     status_dir = tmp_path / "status"
     status_dir.mkdir()
 
-    result = send_weekly_report({"STATUS_DIR": str(status_dir)})
+    result = send_weekly_report({
+        "STATUS_DIR": str(status_dir), "BACKUP_SCRIPTS_DIR": str(tmp_path),
+    })
 
     assert result["success"] is True
     message = _FakeSmtp.messages[0]

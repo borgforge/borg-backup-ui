@@ -6,6 +6,150 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #479 (final integration for #447; awaiting test-channel qualification)
+- Added read-only startup detection, cross-process writer admission and a German/
+  English administrator assistant with separate preparation and conversion actions.
+- Included configuration normalization in the same immutable UUID plan, verified
+  exact-file snapshot and protected download; acknowledgement never starts apply.
+- Added crash-consistent per-file publication, original-plan continuation,
+  authenticated state gates and final reference/cron verification before startup.
+- Covered detached backups, capture, restore/check/key deployment, notifications,
+  maintenance workers, background refresh and safe maintenance diagnostics.
+- Added complete synthetic migration qualification, actual Borg backup/restore,
+  interrupted-run/restart tests and protected HTTP export/approval tests.
+- Removed active HTTP job-key adapters. Historical aliases remain preserved in
+  migration and bounded legacy import; normal operations require immutable IDs.
+- Corrected settings profile usage to count distinct UUID jobs and show current
+  names, and qualified existing wizard, keyfile, logging and storage regressions
+  with canonical job inventories and explicit validated-startup fixtures.
+- Give migration maintenance priority over first-run setup, close an already-open
+  setup dialog and prevent delayed responses from reopening it. Fresh installs
+  retain the normal required setup flow (#479).
+- Stable promotion remains a separate decision after volunteer/maintainer testing.
+- Accept the shipped restore-test type/location descriptors during identity
+  migration and retain canonical report snapshots after subsequent tests/restarts.
+  Show immediate preparation feedback, retain safe failure details through
+  readiness polling, and group/explain diagnostics in German and English (#447).
+
+- Read migrated restore proof from its recorded repository and tested archive,
+  keeping native snapshots authoritative and rejecting mismatched ownership.
+  Share this evaluation with scheduled restore tests without rewriting reports.
+  Use only recorded test dates so migration file timestamps cannot renew proof.
+- Preserve recorded legacy check values with explicit historical target scope.
+  Distinguish missing or changed restore targets from expired proof in dashboard
+  summaries and show readable explanations alongside retained dates.
+- Keep migrated-run provenance only in expanded history details, and lay out
+  available identity fields without empty cells. Explain separate status/report
+  files in both migration guides (#447).
+- Restore complete sanitized job/configuration diagnostics in support bundles,
+  including source paths, exclusions, prefix history and policies. Export full
+  structured run/restore JSON instead of unreadable text tails; document oversized
+  or unreadable files explicitly and keep credentials/recovery data excluded.
+
+- Preserve automatically selected job icons before removing legacy type fields.
+  Materialize the previous list color using the existing palette when a different
+  explicit icon otherwise loses its automatic color.
+  Repair unchanged migrated jobs only from verified original migration evidence,
+  retaining explicit appearance choices and later edits with an auditable result.
+- Derive icon styling from the configured icon throughout dashboard, restore,
+  restore-test, report and repository views. Sort job selectors by location and
+  localized natural name order; show readable prefixes instead of UUID subtitles.
+  Restore-test plans now include current prefix and description (#447).
+- Restore detailed combined-retention logs: prefix scope and policy, repository
+  and matching archive/checkpoint counts, each winning keep rule, explicitly
+  planned removal candidates and success/warning/failure completion. Keep archive
+  names, local timestamps and full IDs available for diagnosis (#447).
+- Read Borg's naive JSON inventory timestamps in UTC and select calendar buckets
+  in the local timezone. Match Borg's ascending-sort-then-reverse tie ordering;
+  qualify local midnight and DST transitions against the shipped Borg binary.
+- Recognize successful Borg-delete output in manual prune results without
+  treating planned or unsuccessful deletions as completed removals (#447).
+
+### Issue #478 (integration work for #447; not released)
+- Added versioned ID-based job transfer with explicit new/merge/skip choices,
+  complete selected reference maps, bounded v2 conversion and protected-file
+  transactions with metadata/schedule/cron rollback.
+- Added content-bound history deletion previews, retained repository-owned
+  secrets and blocked deletion while pending work still references the job.
+- Centralized owned-store/reference diagnostics, reduced support configuration
+  exposure and covered ID stores/runtime controls in guarded factory reset.
+- Kept settings recovery scoped to backup.conf as required by the approved C6
+  contract. Complete installation recovery remains a future conditional feature.
+- Added canonical/legacy transfer, lifecycle, privacy, reset and DE/EN UI tests.
+  The migration and first installable test candidate remain gated on #479.
+
+### Issue #477 (integration work for #447; not released)
+- Converted Browse & Restore, prechecks/downloads and restore-test invocation to
+  full job IDs and literal current/historical prefixes in the current repository.
+- Captured restore start contexts and persisted readable run snapshots; retained
+  terminal state for history-write retry without losing active runs to trimming.
+- Converted restore-test plans, policies, results, proof and notification/reminder
+  ownership; scheduled tests honor each job's captured level and interval.
+- Limited the tested archive to the job's prefix union and retained proof across
+  name/current-prefix changes; other repositories require a new proof.
+- Added canonical API, DE/EN UI, real Borg restore/proof and migration regressions.
+  Transfer and guarded activation remain #478/#479; no test package yet.
+
+### Issue #476 (integration work for #447; not released)
+- Made configured UUIDs authoritative for dashboard, widget, history and report
+  navigation; disabled and deleted/unassigned history do not inflate active counts.
+- Preserved historical payload descriptors and legacy continuity until the first
+  native run. Runtime ownership takes precedence over completed-run outcomes.
+- Added canonical weekly observations with provenance, preserved conflicts and
+  repository-scoped growth; normal reads never perform a legacy conversion.
+- Scoped restore proof to UUID and the recorded target, retained reminder keys
+  across renames, and invalidated legacy widget aggregates.
+- Added DE/EN navigation/counter tests and canonical status, weekly, mail and
+  HTTP regressions. Restore, transfer and guarded activation remain #477-#479.
+
+### Issue #475 (integration work for #447; not released)
+- Added immutable UUID run contexts for manual/scheduled backup execution, exact
+  prefix creation, status/log lookup, cancellation, recovery and notifications.
+- Preserved start-time configuration, RAM activity-log capture and existing
+  cache directories; repository changes do not reuse another target's check flag.
+- Added one shared prefix-union retention engine, verified against the bundled
+  Borg 1.4.5, and replaced the manual multi-prefix guard from #474.
+- Serialized concurrent starts/stale resource recovery; payload IDs and process
+  start tokens identify owners, and cancellation stays independent of retention.
+- Added canonical runtime/real Borg regression coverage. Reporting, restore,
+  transfer and final startup/migration activation remain #476-#479 work.
+
+### Issue #474 (integration work for #447; not released)
+- Converted job discovery, configuration actions, repository assignments and
+  schedules to UUID job IDs; editable descriptors no longer rename identity.
+- Validate all active references before writes; preserve schedule bytes on
+  job edits and roll back ordinary metadata/repository/cron failures.
+- Reconciliation and schedule reads report invalid references without repair
+  or automatic deletion. Cron sends job_id and preserves disabled settings.
+- Added a bounded deprecated HTTP alias adapter, current UI labels and tests
+  for configuration rename, storage changes, rollback and concurrent updates.
+- Runtime execution, combined-prefix retention, historical artifact cleanup
+  and full startup activation remain guarded follow-up phases (#475-#479).
+
+### Issue #473 (integration work for #447; not released)
+- Added strict schema-v4 job validation, UUID-named metadata and canonical
+  create/edit/duplicate operations, retaining unexposed operational settings.
+- Replaced Type ID in the wizard with the complete archive prefix, an exact
+  timestamp-pattern preview and retained prefix history in German and English.
+- Wizard requests use job_id; schedule save retries reuse the returned ID.
+  Added stale-editor detection and strict repository ownership checks.
+- Legacy/corrupt inputs are rejected without implicit conversion. UUID runtime,
+  scheduling, general inventory APIs and the startup migration gate remain
+  subsequent phases; no independently installable package is produced.
+
+### Issue #472 (integration work for #447; not released)
+- Added an inactive, read-only migration inventory and UUID planner with exact
+  legacy-reference mapping, archive ownership checks and preserved history.
+- Added private persisted plans, checksummed snapshots, a chained audit journal
+  and fail-closed preconditions. Retries retain the original UUID allocation.
+- Added real-file fixture, failure and integrity tests. Startup registration,
+  installation-data conversion and test-channel publication remain deferred.
+
+### Issue #471 (integration work for #447; not released)
+- Defined the immutable job identity, migration safety and legacy-data contract.
+- Added a source dependency inventory and synthetic migration fixtures with
+  reusable integrity assertions. No runtime migration is enabled in this phase.
+
 ### Issue #463 - file activity log performance
 - Capture stdout and stderr directly in a RAM-backed runtime file only for jobs with file activity enabled, avoiding an unbounded API-process line buffer and writes into backed-up log directories during the run.
 - Retain the complete log only after the runner exits, using an independent supervisor that survives a WebUI restart. Preserve cursor identity across the copy, release RAM after successful persistence, and keep a downloadable RAM copy with a visible error if saving fails. History/status references point at the final path.

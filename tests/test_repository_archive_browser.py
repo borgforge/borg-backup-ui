@@ -39,6 +39,8 @@ def _repository_config(tmp_path: Path) -> tuple[dict, Path]:
         "base_path": str(base),
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_test",
         "display_name": "Test repository",
         "repository_name": "repository",

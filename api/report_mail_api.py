@@ -160,7 +160,7 @@ def send_weekly_report(config: dict, recipient: str = "") -> dict:
 # ── HTML-Report-Generator ──────────────────────────────────────────────────────
 
 def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
-    from status import StatusStore, format_bytes, format_duration
+    from status import StatusStore, BackupStatus, format_bytes, format_duration
 
     status_dir = Path(config["STATUS_DIR"])
     store = StatusStore(status_dir)
@@ -175,7 +175,8 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     rows = []
     grouped_rows: dict[str, list[str]] = {}
     group_stats: dict[str, dict[str, int]] = {}
-    job_meta = _job_metadata_by_key(config)
+    job_meta = {job_id: row for job_id, row in _job_metadata_by_key(config).items() if row.get('enabled') is not False}
+    latest = {job_id: latest.get(job_id) or BackupStatus(job_id=job_id, identity_state='assigned', status='unknown') for job_id in job_meta}
     schedules = _report_schedules(config)
     planned_job_keys = _planned_job_keys_for_period(
         set(latest.keys()) | set(job_meta.keys()),
@@ -192,11 +193,13 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     log_notes = []
 
     for key, st in sorted(latest.items(), key=lambda item: _status_sort_key(item[1], item[0])):
-        location_key = _location_key(st)
         meta = job_meta.get(key, {})
+        location_key = _report_location(key, st, meta)
         job_label = _job_label(key, st, meta)
         archive_fmt = st.archive_name or "—"
         secondary = _job_secondary_line(key, archive_fmt)
+        if st.job_name_snapshot and st.job_name_snapshot != meta.get('name'):
+            secondary += ' | Run name: ' + st.job_name_snapshot
         status_color = {
             "success": "#22c55e",
             "skipped": "#f59e0b",
@@ -279,7 +282,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
 
     total = len(latest)
     error_total = sum(1 for st in latest.values() if st.status == "error")
-    warn_total  = sum(1 for st in latest.values() if st.status in {"warning", "skipped"})
+    warn_total  = sum(1 for st in latest.values() if st.status in {"warning", "skipped", "unknown", "cancelled"})
     summary_color = "#22c55e" if error_total == 0 and warn_total == 0 else ("#f59e0b" if error_total == 0 else "#ef4444")
     summary_text  = "All backups OK" if error_total == 0 and warn_total == 0 else (
         f"{error_total} errors, {warn_total} warnings"
@@ -364,32 +367,9 @@ def _he(s: str) -> str:
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _job_metadata_by_key(config: dict) -> dict[str, dict[str, str]]:
-    if not config.get("BACKUP_SCRIPTS_DIR"):
-        return {}
-    try:
-        from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
-
-        data_root = resolve_data_root(config)
-        scripts_dir = resolve_scripts_dir(config)
-        jobs = discover_jobs(scripts_dir, data_root)
-    except Exception:
-        return {}
-
-    result: dict[str, dict[str, str]] = {}
-    for info in jobs:
-        key = str(getattr(info, "key", "") or "").strip()
-        if not key:
-            continue
-        result[key] = {
-            "name": str(getattr(info, "name", "") or "").strip(),
-            "display_name": str(getattr(info, "display_name", "") or "").strip(),
-            "description": str(getattr(info, "description", "") or "").strip(),
-            "backup_type": str(getattr(info, "backup_type", "") or "").strip(),
-            "location": str(getattr(info, "location", "") or "").strip().lower(),
-            "enabled": bool(getattr(info, "enabled", True)),
-        }
-    return result
+def _job_metadata_by_key(config: dict) -> dict:
+    from status_read_model import configured_jobs
+    return configured_jobs(config)
 
 
 def _report_schedules(config: dict) -> dict:
@@ -434,6 +414,8 @@ def _job_label(key: str, st: Any, meta: dict[str, str]) -> str:
 
 
 def _derived_job_label(st: Any) -> str:
+    if getattr(st, "job_name_snapshot", ""):
+        return st.job_name_snapshot
     backup_type = str(getattr(st, "backup_type", "") or "").strip()
     location = str(getattr(st, "location", "") or "").strip()
     if backup_type and backup_type != "unknown":
@@ -735,13 +717,13 @@ def _repo_growth_7d(statuses: list, key: str, period_start: datetime, period_end
         if size <= 0:
             continue
         if st.timestamp_dt < period_start:
-            baseline = size
+            baseline = (size, getattr(st, "repository_snapshot", ""))
             continue
         if st.timestamp_dt <= period_end:
-            current = size
+            current = (size, getattr(st, "repository_snapshot", ""))
     if baseline is None or current is None:
         return None
-    return current - baseline
+    return current[0] - baseline[0] if baseline[1] and baseline[1] == current[1] else None
 
 
 def _cron_expected_dates(cron: str, start: datetime, end: datetime) -> set | None:
@@ -836,11 +818,9 @@ def _report_key_sort(key: str, latest: dict[str, Any], job_meta: dict[str, dict[
 
 
 def _report_location(key: str, st: Any, meta: dict[str, Any]) -> str:
-    value = str(meta.get("location") or getattr(st, "location", "") or "").strip().lower()
+    value = str(meta.get("location") or getattr(st, "location_snapshot", "") or "").strip().lower()
     if value:
         return value
-    if "_" in key:
-        return key.rsplit("_", 1)[1].lower()
     return "unknown"
 
 
@@ -849,7 +829,7 @@ def _report_job_label(key: str, st: Any, meta: dict[str, Any]) -> str:
         meta.get("name"),
         meta.get("display_name"),
         _derived_job_label(st) if st is not None else "",
-        key.replace("_", " ").title(),
+        key,
     ):
         text = str(value or "").strip()
         if text:

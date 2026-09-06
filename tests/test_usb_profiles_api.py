@@ -10,20 +10,25 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 import usb_profiles_api
+from job_model import new_job_defaults
 from repositories_api import write_repository_store
 from storage_objects_api import write_storage_store
+
+JOB_ID = "11111111-1111-4111-8111-111111111111"
 
 
 def _write_usb_reference(tmp_path: Path) -> dict:
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "photos-usb.json").write_text(json.dumps({
-        "schema_version": 2,
-        "job_key": "photos-usb",
+    (jobs_dir / (JOB_ID + ".json")).write_text(json.dumps({
+        **new_job_defaults(),
+        "job_id": JOB_ID,
         "name": "Photos USB",
-        "location": "usb",
         "repository_key": "repo_photos_usb",
+        "source_paths": [str(tmp_path)],
+        "archive_prefixes": ["photos"],
+        "legacy_job_keys": ["photos-usb"],
     }), encoding="utf-8")
     write_storage_store(config, {"storages": [{
         "storage_key": "storage_usb_a",
@@ -42,6 +47,8 @@ def _write_usb_reference(tmp_path: Path) -> dict:
         "relative_path": "borg-backup-photos",
         "path_raw": "/mnt/disks/a/borg-backup-photos",
         "encryption": "none",
+        "job_ids": [JOB_ID],
+        "source_job_ids": [JOB_ID],
     }]})
     return config
 
@@ -83,12 +90,13 @@ def test_get_usb_profile_job_refs_uses_canonical_storage_reference(tmp_path: Pat
     config = _write_usb_reference(tmp_path)
 
     assert usb_profiles_api.get_usb_profile_job_refs(config) == {
-        "usb-a": ["photos-usb (Photos USB)"]
+        "usb-a": [f"Photos USB ({JOB_ID})"]
     }
 
 
 def test_validate_usb_profile_usage_blocks_removal(tmp_path: Path):
     config = _write_usb_reference(tmp_path)
+    before = {path: path.read_bytes() for path in (tmp_path / "config").rglob("*.json")}
 
     try:
         usb_profiles_api.validate_usb_profile_usage_before_save(config, [])
@@ -97,3 +105,4 @@ def test_validate_usb_profile_usage_blocks_removal(tmp_path: Path):
         assert "still used" in str(exc)
     else:
         raise AssertionError("Expected in-use USB profile removal to be blocked")
+    assert {path: path.read_bytes() for path in (tmp_path / "config").rglob("*.json")} == before

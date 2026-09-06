@@ -1146,3 +1146,25 @@
   .startup-migration-facts > div { border-right: 0; border-bottom: 1px solid var(--border); }
   .startup-migration-facts > div:last-child { border-bottom: 0; }
 }
+.settings-maintenance-view { display: grid; gap: 16px; }
+.identity-migration-assistant .settings-body { display: grid; gap: 16px; }
+.identity-migration-assistant p { margin: 0; line-height: 1.55; }
+.identity-migration-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0; margin: 0; list-style: none; }
+.identity-migration-steps li { display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); }
+.identity-migration-steps li > span { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid currentColor; border-radius: 50%; font-size: 12px; }
+.identity-migration-steps li.current { color: var(--text-primary); border-color: var(--accent); font-weight: 600; }
+.identity-migration-steps li.complete { color: var(--ui-state-success-fg); }
+.identity-migration-status, .identity-migration-prepare, .identity-migration-backup, .identity-migration-apply { display: grid; gap: 10px; justify-items: start; }
+.identity-migration-prepare .form-input { width: 100%; }
+.identity-migration-prepare { justify-items: stretch; }
+.identity-migration-prepare > button { justify-self: start; }
+.identity-migration-status progress { width: min(100%, 480px); }
+.identity-migration-status li { overflow-wrap: anywhere; }
+.identity-migration-snapshot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 6px; }
+.identity-migration-snapshot dt { color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; }
+.identity-migration-snapshot dd { margin: 0; overflow-wrap: anywhere; }
+.identity-migration-backup .form-checkbox-row { align-items: flex-start; line-height: 1.5; }
+.identity-migration-backup .form-checkbox-row input { flex-shrink: 0; margin-top: 4px; }
+.identity-migration-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 800px) { .identity-migration-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .identity-migration-steps, .identity-migration-snapshot { grid-template-columns: minmax(0, 1fr); } }

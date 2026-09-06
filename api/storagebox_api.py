@@ -471,6 +471,16 @@ class _StorageKeyDeployManager:
         sess["updated_at"] = time.time()
 
     def start(self, ui_config: dict, target_override: str = "", profile_key: str = "") -> Dict[str, Any]:
+        from migration_barrier import acquire_writer_lease
+        lease = acquire_writer_lease(ui_config)
+        try:
+            with lease.activate():
+                return self._start_admitted(ui_config, target_override, profile_key, lease=lease)
+        except BaseException:
+            lease.close()
+            raise
+
+    def _start_admitted(self, ui_config, target_override, profile_key, *, lease):
         p = _storage_context(ui_config, profile_key)
         if not _storagebox_is_profile_complete(p):
             raise ValueError("Storage profile is incomplete")
@@ -513,6 +523,7 @@ class _StorageKeyDeployManager:
             "pid": pid,
             "fd": master_fd,
             "timed_out": False,
+            "migration_lease": lease,
         }
         with self._lock:
             self._sessions[sid] = sess
@@ -523,6 +534,17 @@ class _StorageKeyDeployManager:
         return {"session_id": sid, "target_type": target, "profile_key": p.get("profile_key", ""), "profile_name": p.get("profile_name", "")}
 
     def _reader_loop(self, sid: str) -> None:
+        with self._lock:
+            lease = self._sessions.get(sid, {}).get("migration_lease")
+        if lease is None:
+            return self._reader_loop_admitted(sid)
+        try:
+            with lease.activate():
+                self._reader_loop_admitted(sid)
+        finally:
+            lease.close()
+
+    def _reader_loop_admitted(self, sid: str) -> None:
         while True:
             with self._lock:
                 sess = self._sessions.get(sid)

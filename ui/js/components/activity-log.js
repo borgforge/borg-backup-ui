@@ -50,7 +50,7 @@
     }
 
     async request(params, sequence) {
-      const query = new URLSearchParams({ job: this.job, run: this.run || '', ...params });
+      const query = new URLSearchParams({ job_id: this.job, run_id: this.run || '', ...params });
       if (this.fileId) query.set('file_id', this.fileId);
       const response = await fetch(`/api/jobs/log/window?${query}`, { signal: this.controller.signal, cache: 'no-store' });
       const data = await response.json();
@@ -62,7 +62,7 @@
       this.running = data.running;
       this.persistenceFailed = data.log_persistence_failed === true;
       this.failed = false;
-      const downloadUrl = `/api/jobs/log/download?${new URLSearchParams({ job: this.job, run: this.run })}`;
+      const downloadUrl = `/api/jobs/log/download?${new URLSearchParams({ job_id: this.job, run_id: this.run })}`;
       if (this.downloadUrl !== downloadUrl) {
         this.download.href = downloadUrl;
         this.downloadUrl = downloadUrl;

@@ -11,6 +11,8 @@ if str(API_ROOT) not in sys.path:
 
 import jobs_api  # noqa: E402
 from jobs_api import durable_running_states, is_resource_active, stream_job_output  # noqa: E402
+from runtime_fixture_support import JOB_ID, RUN_ID
+from test_canonical_job_wizard import setup, create
 from wizard_runner import ResourceLockSet  # noqa: E402
 
 
@@ -22,8 +24,8 @@ def test_active_resource_lock_restores_running_job_and_log(tmp_path: Path):
     lock_dir.mkdir()
     (lock_dir / "repo.lock.json").write_text(json.dumps({
         "resource": "repo:/mnt/disks/usb/appdata",
-        "job_key": "appdata_usb",
-        "pid": os.getpid(),
+        "job_id": JOB_ID,
+        "run_id": RUN_ID, "pid": os.getpid(),
         "started_at": "2026-07-10T09:00:00+00:00",
         "updated_at": "2026-07-10T09:01:00+00:00",
         "log_file": str(log_file),
@@ -33,7 +35,7 @@ def test_active_resource_lock_restores_running_job_and_log(tmp_path: Path):
         "BORG_RESOURCE_LOCK_DIR": str(lock_dir),
     }
 
-    state = durable_running_states(config)["appdata_usb"]
+    state = durable_running_states(config)[JOB_ID]
 
     assert state["running"] is True
     assert state["source"] == "resource_lock"
@@ -47,10 +49,10 @@ def test_restore_resource_lock_does_not_mark_backup_job_running(tmp_path: Path):
     lock_dir.mkdir()
     (lock_dir / "repo.lock.json").write_text(json.dumps({
         "resource": "repo:/mnt/user/vms",
-        "job_key": "vms_local",
+        "job_id": JOB_ID,
         "operation": "restore",
-        "run_id": "20260801-090213-8f96711d",
-        "pid": os.getpid(),
+
+        "run_id": RUN_ID, "pid": os.getpid(),
         "started_at": "2026-08-01T09:02:13+00:00",
         "updated_at": "2026-08-01T09:02:14+00:00",
     }), encoding="utf-8")
@@ -68,7 +70,7 @@ def test_dead_resource_lock_is_not_reported_as_running(tmp_path: Path):
     lock_dir.mkdir()
     (lock_dir / "repo.lock.json").write_text(json.dumps({
         "resource": "repo:/mnt/backup/appdata",
-        "job_key": "appdata_local",
+        "job_id": JOB_ID,
         "pid": 99999999,
         "started_at": "2026-07-10T09:00:00+00:00",
     }), encoding="utf-8")
@@ -81,47 +83,31 @@ def test_dead_resource_lock_is_not_reported_as_running(tmp_path: Path):
     assert is_resource_active(config, "repo:/mnt/backup/appdata") is False
 
 
-def test_job_discovery_cache_reuses_metadata_and_detects_atomic_update(tmp_path: Path, monkeypatch):
-    jobs_dir = tmp_path / "config" / "jobs"
-    jobs_dir.mkdir(parents=True)
-    metadata = jobs_dir / "flash_local.json"
-    payload = {
-        "job_key": "flash_local",
-        "name": "Flash",
-        "backup_type": "flash",
-        "location": "local",
-    }
-    metadata.write_text(json.dumps(payload), encoding="utf-8")
-    jobs_api.invalidate_job_discovery_cache()
+def test_job_discovery_rereads_validated_metadata_after_atomic_update(setup, monkeypatch):
+    result, payload = create(setup)
+    metadata = Path(result['metadata_path'])
     original = jobs_api._discover_jobs_uncached
-    calls = []
-
-    def counted(*args, **kwargs):
+    calls=[]
+    def counted(*args,**kwargs):
         calls.append(True)
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(jobs_api, "_discover_jobs_uncached", counted)
-    clock = iter((0.0, 0.0, jobs_api._JOB_DISCOVERY_CACHE_TTL_SECONDS + 1.0))
-    monkeypatch.setattr(jobs_api.time, "monotonic", lambda: next(clock))
-
-    assert jobs_api.discover_jobs(tmp_path)[0].name == "Flash"
-    assert jobs_api.discover_jobs(tmp_path)[0].name == "Flash"
-    assert calls == [True]
-
-    payload["name"] = "Updated Flash"
-    replacement = jobs_dir / ".flash_local.json.new"
-    replacement.write_text(json.dumps(payload), encoding="utf-8")
+        return original(*args,**kwargs)
+    monkeypatch.setattr(jobs_api,'_discover_jobs_uncached',counted)
+    assert jobs_api.discover_jobs(setup[2], setup[3])[0].name == 'Synthetic job'
+    assert jobs_api.discover_jobs(setup[2], setup[3])[0].name == 'Synthetic job'
+    assert len(calls)==2
+    payload['name']='Updated name'
+    replacement=metadata.with_suffix('.replacement')
+    replacement.write_text(json.dumps(payload))
     replacement.replace(metadata)
-
-    assert jobs_api.discover_jobs(tmp_path)[0].name == "Updated Flash"
-    assert calls == [True, True]
+    assert jobs_api.discover_jobs(setup[2], setup[3])[0].name == 'Updated name'
+    assert len(calls)==3
 
 
 def test_runner_resource_lock_records_live_log_path(tmp_path: Path):
     log_file = tmp_path / "backup.log"
     lock_set = ResourceLockSet(
         tmp_path / "locks",
-        "appdata_usb",
+        JOB_ID, run_id=RUN_ID,
         heartbeat_seconds=3600,
         log_file=str(log_file),
     )
@@ -143,8 +129,8 @@ def test_recovered_job_stream_follows_persistent_log(tmp_path: Path, monkeypatch
     lock_file = lock_dir / "repo.lock.json"
     lock_file.write_text(json.dumps({
         "resource": "repo:/mnt/backup/recovered",
-        "job_key": "recovered_usb",
-        "pid": os.getpid(),
+        "job_id": JOB_ID,
+        "run_id": RUN_ID, "pid": os.getpid(),
         "started_at": "2026-07-10T09:00:00+00:00",
         "log_file": str(log_file),
     }), encoding="utf-8")
@@ -153,9 +139,9 @@ def test_recovered_job_stream_follows_persistent_log(tmp_path: Path, monkeypatch
         "BORG_RESOURCE_LOCK_DIR": str(lock_dir),
     }
     monkeypatch.setattr(jobs_api.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(jobs_api, "_latest_job_exit_code", lambda *_args: 0)
+    monkeypatch.setattr("job_control.read_control_state", lambda *_args: {"job_id": JOB_ID, "run_id": RUN_ID, "exit_code":0})
 
-    stream = stream_job_output(config, "recovered_usb")
+    stream = stream_job_output(config, JOB_ID, RUN_ID)
     assert next(stream) == ": heartbeat\n\n"
     assert next(stream) == "data: line one\n\n"
     assert next(stream) == "data: line two\n\n"

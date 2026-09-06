@@ -4,6 +4,8 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from restore_identity_support import JOB_ID
+
 from api.restore_tests_api import build_restore_verification_map
 
 
@@ -19,6 +21,7 @@ class RestoreVerificationTests(unittest.TestCase):
         d = base / "restore-status"
         d.mkdir(parents=True, exist_ok=True)
         payload = {
+            "job_id": JOB_ID, "repository_snapshot": "/repo", "archive_prefix_snapshot": "prefix",
             "test_result": result,
             "test_level": 2,
             "test_duration_seconds": 12,
@@ -31,65 +34,65 @@ class RestoreVerificationTests(unittest.TestCase):
     def test_policy_off_returns_not_required(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            jobs = [{"key": "a_local", "location": "local", "restore_test_policy": {"mode": "off"}}]
+            jobs = [{"job_id": JOB_ID, "repo_path": "/repo", "archive_prefixes": ["prefix"], "location": "local", "restore_test_policy": {"mode": "off"}}]
             out = build_restore_verification_map(self._cfg(base), jobs)
-            self.assertEqual("not_required", out["a_local"]["status"])
+            self.assertEqual("not_required", out[JOB_ID]["status"])
 
     def test_missing_report_returns_never(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            jobs = [{"key": "b_local", "location": "local", "restore_test_policy": {"mode": "scheduled", "validity_days": 30}}]
+            jobs = [{"job_id": JOB_ID, "repo_path": "/repo", "archive_prefixes": ["prefix"], "location": "local", "restore_test_policy": {"mode": "scheduled", "validity_days": 30}}]
             out = build_restore_verification_map(self._cfg(base), jobs)
-            self.assertEqual("never", out["b_local"]["status"])
+            self.assertEqual("never", out[JOB_ID]["status"])
 
     def test_success_within_validity_is_verified(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            self._write_test(base, "c_local", "success", datetime.now() - timedelta(days=2))
-            jobs = [{"key": "c_local", "location": "local", "restore_test_policy": {"mode": "scheduled", "validity_days": 10}}]
+            self._write_test(base, JOB_ID, "success", datetime.now() - timedelta(days=2))
+            jobs = [{"job_id": JOB_ID, "repo_path": "/repo", "archive_prefixes": ["prefix"], "location": "local", "restore_test_policy": {"mode": "scheduled", "validity_days": 10}}]
             out = build_restore_verification_map(self._cfg(base), jobs)
-            self.assertEqual("verified", out["c_local"]["status"])
+            self.assertEqual("verified", out[JOB_ID]["status"])
 
     def test_success_expired_is_stale(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            self._write_test(base, "d_local", "success", datetime.now() - timedelta(days=15))
-            jobs = [{"key": "d_local", "location": "local", "restore_test_policy": {"mode": "scheduled", "validity_days": 10}}]
+            self._write_test(base, JOB_ID, "success", datetime.now() - timedelta(days=15))
+            jobs = [{"job_id": JOB_ID, "repo_path": "/repo", "archive_prefixes": ["prefix"], "location": "local", "restore_test_policy": {"mode": "scheduled", "validity_days": 10}}]
             out = build_restore_verification_map(self._cfg(base), jobs)
-            self.assertEqual("stale", out["d_local"]["status"])
-            self.assertTrue(out["d_local"]["is_overdue"])
+            self.assertEqual("stale", out[JOB_ID]["status"])
+            self.assertTrue(out[JOB_ID]["is_overdue"])
 
     def test_failed_report_is_failed(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            self._write_test(base, "e_local", "failed", datetime.now())
-            jobs = [{"key": "e_local", "location": "local", "restore_test_policy": {"mode": "scheduled", "validity_days": 30}}]
+            self._write_test(base, JOB_ID, "failed", datetime.now())
+            jobs = [{"job_id": JOB_ID, "repo_path": "/repo", "archive_prefixes": ["prefix"], "location": "local", "restore_test_policy": {"mode": "scheduled", "validity_days": 30}}]
             out = build_restore_verification_map(self._cfg(base), jobs)
-            self.assertEqual("failed", out["e_local"]["status"])
+            self.assertEqual("failed", out[JOB_ID]["status"])
 
     def test_failed_report_exposes_failure_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            self._write_test(base, "g_storagebox", "failed", datetime.now(), {
+            self._write_test(base, JOB_ID, "failed", datetime.now(), {
                 "failure_code": "RT_NETWORK_ERROR",
                 "failure_hint": "Network error or SSH connection failed",
                 "error_analysis": {"error_category": "network"},
             })
-            jobs = [{"key": "g_storagebox", "location": "storagebox", "restore_test_policy": {"mode": "scheduled", "validity_days": 30}}]
+            jobs = [{"job_id": JOB_ID, "repo_path": "/repo", "archive_prefixes": ["prefix"], "location": "storagebox", "restore_test_policy": {"mode": "scheduled", "validity_days": 30}}]
             out = build_restore_verification_map(self._cfg(base), jobs)
-            self.assertEqual("failed", out["g_storagebox"]["status"])
-            self.assertEqual("RT_NETWORK_ERROR", out["g_storagebox"]["failure_code"])
-            self.assertEqual("Network error or SSH connection failed", out["g_storagebox"]["failure_hint"])
-            self.assertEqual("network", out["g_storagebox"]["failure_category"])
+            self.assertEqual("failed", out[JOB_ID]["status"])
+            self.assertEqual("RT_NETWORK_ERROR", out[JOB_ID]["failure_code"])
+            self.assertEqual("Network error or SSH connection failed", out[JOB_ID]["failure_hint"])
+            self.assertEqual("network", out[JOB_ID]["failure_category"])
 
     def test_manual_only_success_stays_verified(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            self._write_test(base, "f_local", "success", datetime.now() - timedelta(days=120))
-            jobs = [{"key": "f_local", "location": "local", "restore_test_policy": {"mode": "manual_only", "validity_days": 10}}]
+            self._write_test(base, JOB_ID, "success", datetime.now() - timedelta(days=120))
+            jobs = [{"job_id": JOB_ID, "repo_path": "/repo", "archive_prefixes": ["prefix"], "location": "local", "restore_test_policy": {"mode": "manual_only", "validity_days": 10}}]
             out = build_restore_verification_map(self._cfg(base), jobs)
-            self.assertEqual("verified", out["f_local"]["status"])
-            self.assertFalse(out["f_local"]["is_overdue"])
+            self.assertEqual("verified", out[JOB_ID]["status"])
+            self.assertFalse(out[JOB_ID]["is_overdue"])
 
 
 if __name__ == "__main__":

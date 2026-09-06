@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "provenance": "Entirely synthetic; structural cases transcribed from #447 discussion, not copied production files.",
+  "config": {
+    "BACKUP_SCRIPTS_DIR": "/fixture/data",
+    "STATUS_DIR": "/fixture/status",
+    "SNAPSHOT_FILE": "/fixture/weekly-snapshots.json",
+    "BORG_RESOURCE_LOCK_DIR": "/fixture/locks",
+    "RESTORE_TEST_STATUS_DIR": "/fixture/restore_tests"
+  },
+  "directories": [
+    "sources/config",
+    "sources/config/temporary",
+    "repositories/repo_docs",
+    "sources/photos"
+  ],
+  "files": {
+    "data/config/jobs/config_local.json": {
+      "json": {
+        "schema_version": 3,
+        "job_key": "config_local",
+        "backup_type": "config",
+        "location": "local",
+        "name": "Synthetic configuration",
+        "repository_key": "repo_docs",
+        "source_paths": [
+          "/fixture/sources/config"
+        ],
+        "exclude_paths": [
+          "/fixture/sources/config/temporary"
+        ],
+        "compression": "lz4",
+        "retention": {
+          "daily": "7",
+          "weekly": "4",
+          "monthly": "6",
+          "yearly": "3"
+        },
+        "enabled": true,
+        "features": {
+          "docker": false,
+          "vm": false
+        },
+        "description": "Synthetic fixture only",
+        "file_activity": true,
+        "docker_control": {
+          "mode": "none",
+          "selected": [],
+          "ack_appdata_risk": false
+        },
+        "vm_control": {
+          "mode": "none",
+          "selected": [],
+          "ack_domains_risk": false
+        },
+        "restore_test_policy": {
+          "mode": "scheduled",
+          "interval_days": 30,
+          "validity_days": 30,
+          "level": 1,
+          "max_runtime_minutes": 0
+        }
+      }
+    },
+    "data/config/repositories.json": {
+      "json": {
+        "schema_version": 1,
+        "repositories": [
+          {
+            "repository_key": "repo_docs",
+            "display_name": "Synthetic repository",
+            "storage_key": "storage_local",
+            "relative_path": "repo_docs",
+            "encryption": "none",
+            "initialized": true,
+            "used_by": [
+              "config_local"
+            ],
+            "source_job_keys": [
+              "config_local"
+            ]
+          }
+        ]
+      }
+    },
+    "data/config/storages.json": {
+      "json": {
+        "schema_version": 1,
+        "storages": [
+          {
+            "storage_key": "storage_local",
+            "display_name": "Synthetic local",
+            "storage_type": "local",
+            "location": "local",
+            "identity": "local:/fixture/repositories",
+            "base_path": "/fixture/repositories"
+          }
+        ]
+      }
+    },
+    "data/config/schedules.json": {
+      "json": {
+        "config_local": {
+          "cron": "0 8 * * *",
+          "enabled": true
+        }
+      }
+    },
+    "status/2026-08-31_08-00-00_config_local.status": {
+      "json": {
+        "backup_type": "config",
+        "location": "local",
+        "timestamp": "2026-08-31 08:00:00",
+        "duration_seconds": 60,
+        "exit_code": 0,
+        "status": "success",
+        "archive_name": "config-backup-2026-08-31_08-00-00",
+        "log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+        "repository_size": 100,
+        "archive_original_size": 30
+      }
+    },
+    "logs/Borg-Backup_config--2026-08-31_08-00-00.log": {
+      "text": "Synthetic backup log; config_local; keep these bytes.\n"
+    },
+    "data/config/backup.conf": {
+      "text": "GLOBAL_BORG_CACHE_BASE=/fixture/cache\n"
+    }
+  }
+}

@@ -46,7 +46,7 @@ def test_job_wizard_create_and_edit_have_dirty_close_protection() -> None:
     assert "if (!wizardState.closeSnapshotTouched) _wizardCaptureCloseSnapshot();" in wizard
 
     edit_flow = wizard.split("async function openWizardForJob", 1)[1].split(
-        "function wizardNeedsScriptRegeneration", 1
+        "function closeWizard", 1
     )[0]
     assert "_wizardFillFromJob(job);" in edit_flow
     assert "_wizardCaptureCloseSnapshot();" in edit_flow

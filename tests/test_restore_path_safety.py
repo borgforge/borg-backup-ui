@@ -11,6 +11,7 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 import restore_api  # noqa: E402
+from restore_identity_support import JOB_ID, OTHER_ID, RUN_ID, info
 
 
 def _allow_root(monkeypatch, allowed: Path) -> dict:
@@ -58,7 +59,7 @@ def test_restore_overwrite_blocks_symlink_destination_outside_target(tmp_path: P
     (target / "foo").symlink_to(outside_file)
     cfg = _allow_root(monkeypatch, allowed)
 
-    monkeypatch.setattr(restore_api, "_get_job_repo_info", lambda _config, _job_key: {"repo": "/repo", "passphrase_file": None})
+    monkeypatch.setattr(restore_api, "_get_job_repo_info", lambda _config, _job_key: info())
     monkeypatch.setattr(restore_api, "_borg_env", lambda _config, _passphrase_file: {})
     monkeypatch.setattr(
         restore_api,
@@ -88,7 +89,7 @@ def test_restore_overwrite_blocks_symlink_destination_outside_target(tmp_path: P
     with pytest.raises(ValueError, match="outside"):
         restore_api.start_restore(
             cfg,
-            "appdata_local",
+            JOB_ID,
             "archive-1",
             "foo",
             str(target),

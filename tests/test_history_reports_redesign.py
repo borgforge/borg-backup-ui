@@ -18,7 +18,7 @@ def test_history_preserves_filter_pagination_and_detail_contracts() -> None:
     script = _read("ui/js/pages/history.js")
     for element_id in (
         "history-location-list", "history-filter-type", "history-filter-location",
-        "history-filter-status", "history-content", "history-selection-count",
+        "history-filter-status", "history-filter-scope", "history-content", "history-selection-count",
     ):
         assert f'id="{element_id}"' in html
     for contract in (
@@ -51,11 +51,11 @@ def test_reports_preserves_selection_search_and_analysis_contracts() -> None:
     ):
         assert f'id="{element_id}"' in html
     for contract in (
-        "data-report-job", "/api/reports/data?job=", "/api/restore/repo-stats?job=",
+        "data-report-job", "/api/reports/data?${query}", "job_id=${encodeURIComponent(jobKey)}", "/api/restore/repo-stats?job_id=",
         "_berichtRenderGrowthCards", "_berichtRestoreVerification",
         "_berichtTrendTable", "_berichtSparkline", "_berichtStatusTable",
         "resolveJobIcon(job)", "resolveJobIconColor(job)", "typeIcon(icon)",
-        "configured?.icon", "configured?.icon_color", "_berichtRestoreFailureReason",
+        "_berichtRestoreFailureReason",
         "restore_verification_failure_code", "restoreFailureReason",
     ):
         assert contract in script

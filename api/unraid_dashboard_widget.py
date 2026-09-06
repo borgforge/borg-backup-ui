@@ -16,7 +16,7 @@ from inventory_store import atomic_write_json
 
 SCHEMA_VERSION = 1
 DEFAULT_CACHE_PATH = "/boot/config/plugins/borg-backup-ui/widget-status.json"
-STARTUP_IMPORT_KEY = "startup_status_import_v1"
+STARTUP_IMPORT_KEY = "startup_status_import_v2"
 
 
 def widget_cache_path(config: dict) -> Path:
@@ -113,21 +113,9 @@ def write_unraid_dashboard_widget_status_file_cache(
         app_version=app_version,
         now=now,
     )
-    if _has_enabled_jobs_without_backup_status_evidence(payload):
-        payload = build_unraid_dashboard_widget_startup_cache(
-            config,
-            app_version=app_version,
-            now=now,
-        )
-        if startup_import:
-            _mark_startup_import(payload, "skipped", "no_backup_status_rows")
-    elif startup_import:
-        _mark_startup_import(payload, "applied", "status_files")
-
+    if startup_import:
+        _mark_startup_import(payload, 'applied', 'canonical_status')
     cache_path = widget_cache_path(config)
-    existing = _read_existing_cache(cache_path)
-    if _has_enabled_jobs_without_backup_status_evidence(payload) and _is_usable_fresh_cache(existing):
-        return existing
     atomic_write_json(cache_path, payload, mode=0o600)
     return payload
 
@@ -141,13 +129,22 @@ def build_unraid_dashboard_widget_cache(
 ) -> dict[str, Any]:
     generated = now or datetime.now(timezone.utc)
     backups = [row for row in status_data.get("backups", []) if isinstance(row, dict)]
-    summary = status_data.get("summary") if isinstance(status_data.get("summary"), dict) else {}
+
     jobs = _read_jobs(config, backups)
     backup_rows_by_key = _backup_rows_by_key(backups)
-    jobs = _clear_finished_running_states(jobs, backup_rows_by_key)
+    # Runtime ownership takes precedence until the process actually finishes.
+    by_id = {job['job_id']: job for job in jobs}
+    backups = [{**job, **backup_rows_by_key.get(job_id, {}),
+                'job_id': job_id, 'name': job.get('name'), 'display_name': job.get('display_name'),
+                'enabled': job.get('enabled', True), 'running': bool(job.get('running')),
+                'status': backup_rows_by_key.get(job_id, {}).get('status', 'unknown'),
+                'never_run': backup_rows_by_key.get(job_id, {}).get('never_run', job_id not in backup_rows_by_key)}
+               for job_id, job in by_id.items()]
+    from status_read_model import summarize
+    summary = summarize(backups)
     enabled_jobs = [job for job in jobs if job.get("enabled", True) and not job.get("is_utility")]
     running_jobs = [job for job in enabled_jobs if job.get("running")]
-    restore = _restore_proof_summary(backups)
+    restore = _restore_proof_summary([row for row in backups if row.get("enabled") is not False])
     repositories = _repository_summary(config)
     job_items = _job_cache_items(enabled_jobs, backup_rows_by_key)
 
@@ -159,13 +156,14 @@ def build_unraid_dashboard_widget_cache(
         state = "warning"
     elif running_jobs:
         state = "running"
-    elif not enabled_jobs:
+    elif not enabled_jobs or summary["never"] or summary["unknown"]:
         state = "unknown"
     else:
         state = "ok"
 
     return {
         "schema_version": SCHEMA_VERSION,
+        "identity_schema_version": 1,
         "cache_state": "fresh",
         "generated_at": _format_iso(generated),
         "app_version": str(app_version or ""),
@@ -177,6 +175,8 @@ def build_unraid_dashboard_widget_cache(
             "warnings": warnings,
             "failed": failed,
             "running": len(running_jobs),
+            "never": summary["never"],
+            "disabled": summary["disabled"],
             "items": job_items,
         },
         "repositories": repositories,
@@ -198,6 +198,7 @@ def build_unraid_dashboard_widget_startup_cache(
 
     return {
         "schema_version": SCHEMA_VERSION,
+        "identity_schema_version": 1,
         "cache_state": "initial",
         "generated_at": _format_iso(generated),
         "app_version": str(app_version or ""),
@@ -229,123 +230,17 @@ def build_unraid_dashboard_widget_startup_cache(
 
 
 def _read_status_file_data(config: dict) -> dict[str, Any]:
-    try:
-        try:
-            from status import StatusStore, format_duration, time_ago
-        except ImportError:
-            from lib.status import StatusStore, format_duration, time_ago
-
-        status_dir = Path(str(config.get("STATUS_DIR") or ""))
-        store = StatusStore(status_dir)
-        latest = store.get_latest_per_key(store.load())
-    except Exception:
-        latest = {}
-
-    backups: list[dict[str, Any]] = []
-    for key, st in sorted(latest.items()):
-        backups.append({
-            "key": str(key),
-            "backup_type": st.backup_type,
-            "location": st.location,
-            "status": st.status,
-            "timestamp": st.timestamp,
-            "time_ago": time_ago(st.timestamp) if st.timestamp else "",
-            "duration_seconds": st.duration_seconds,
-            "duration_formatted": format_duration(st.duration_seconds),
-            "exit_code": st.exit_code,
-            "failure_code": getattr(st, "failure_code", "") or "",
-            "missing_source_paths": list(getattr(st, "missing_source_paths", []) or []),
-            "error_message": st.error_message or "",
-            "skip_reason_code": getattr(st, "skip_reason_code", "") or "",
-            "skip_reason_text": getattr(st, "skip_reason_text", "") or "",
-            "archive_name": st.archive_name or "",
-            "repository_check_status": st.repository_check_status,
-            "repository_check_date": st.repository_check_date or "",
-            "repository_next_check": st.repository_next_check or "",
-        })
-
-    _apply_status_file_restore_verification_metadata(config, backups)
-
-    return {
-        "backups": backups,
-        "summary": {
-            "total": len(backups),
-            "success": sum(1 for row in backups if row["status"] == "success"),
-            "warning": sum(1 for row in backups if row["status"] in {"warning", "cancelled"}),
-            "skipped": sum(1 for row in backups if row["status"] == "skipped"),
-            "error": sum(1 for row in backups if row["status"] == "error"),
-        },
-        "snapshots": {},
-    }
+    from status_api import get_status_data
+    return get_status_data(config, write_snapshots=False)
 
 
 def _backup_rows_by_key(backups: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     rows = {}
     for row in backups:
-        key = str(row.get("key") or "").strip()
+        key = str(row.get("job_id") or "").strip()
         if key:
             rows[key] = row
     return rows
-
-
-def _parse_status_timestamp(value: Any) -> datetime | None:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    try:
-        return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        pass
-    try:
-        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is not None:
-        return parsed.astimezone().replace(tzinfo=None)
-    return parsed
-
-
-def _parse_run_start_time(value: Any) -> datetime | None:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    try:
-        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return _parse_status_timestamp(raw)
-    if parsed.tzinfo is not None:
-        return parsed.astimezone().replace(tzinfo=None)
-    return parsed
-
-
-def _latest_status_closes_running_state(job: dict[str, Any], latest: dict[str, Any]) -> bool:
-    if not job.get("running"):
-        return False
-    status = str(latest.get("status") or "").strip().lower()
-    if status not in {"success", "warning", "error", "skipped", "cancelled"}:
-        return False
-    status_time = _parse_status_timestamp(latest.get("timestamp"))
-    run_start = _parse_run_start_time(job.get("run_start_time"))
-    if status_time is None or run_start is None:
-        return False
-    return status_time >= run_start
-
-
-def _clear_finished_running_states(
-    jobs: list[dict[str, Any]],
-    backups_by_key: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    cleared: list[dict[str, Any]] = []
-    for job in jobs:
-        if not isinstance(job, dict):
-            continue
-        key = str(job.get("key") or "").strip()
-        latest = backups_by_key.get(key) or {}
-        if _latest_status_closes_running_state(job, latest):
-            cleared.append({**job, "running": False, "run_start_time": None})
-        else:
-            cleared.append(job)
-    return cleared
 
 
 def _read_existing_cache(path: Path) -> dict[str, Any] | None:
@@ -363,16 +258,22 @@ def _read_existing_cache(path: Path) -> dict[str, Any] | None:
 def _is_usable_fresh_cache(cache: dict[str, Any] | None) -> bool:
     if not isinstance(cache, dict):
         return False
+    if cache.get("identity_schema_version") != 1:
+        return False
     if str(cache.get("cache_state") or "").strip().lower() != "fresh":
         return False
     jobs = cache.get("jobs") if isinstance(cache.get("jobs"), dict) else {}
     if not isinstance(jobs.get("items"), list):
         return False
-    return not _has_enabled_jobs_without_backup_status_evidence(cache)
+    from status_read_model import valid_job_id
+    return (all(isinstance(item, dict) and valid_job_id(item.get('job_id')) for item in jobs['items'])
+            and not _has_enabled_jobs_without_backup_status_evidence(cache))
 
 
 def _startup_import_attempted(cache: dict[str, Any] | None) -> bool:
     if not isinstance(cache, dict):
+        return False
+    if cache.get("identity_schema_version") != 1:
         return False
     marker = cache.get(STARTUP_IMPORT_KEY)
     return isinstance(marker, dict) and str(marker.get("state") or "").strip() != ""
@@ -420,16 +321,18 @@ def _startup_status_scan_configured(config: dict) -> bool:
 def _job_cache_items(jobs: list[dict[str, Any]], backups_by_key: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     items = []
     for job in jobs:
-        key = str(job.get("key") or "").strip()
+        key = str(job.get("job_id") or "").strip()
         if not key:
             continue
         latest = backups_by_key.get(key) or {}
         name = str(job.get("display_name") or job.get("name") or key).strip()
         items.append({
-            "key": key,
+            "job_id": key,
             "name": name or key,
             "enabled": bool(job.get("enabled", True)),
             "running": bool(job.get("running", False)),
+            "run_id": str(job.get("run_id") or ""),
+            "legacy_status": bool(latest.get("legacy_status")),
             "last_status": str(job.get("last_status") or latest.get("status") or "").strip().lower(),
             "last_timestamp": str(job.get("last_timestamp") or latest.get("timestamp") or "").strip(),
             "backup_overdue": bool(latest.get("backup_overdue", False)),
@@ -442,6 +345,11 @@ def _job_cache_items(jobs: list[dict[str, Any]], backups_by_key: dict[str, dict[
                 or job.get("restore_verification_status")
                 or "never"
             ).strip().lower(),
+            "restore_verification_reason": str(
+                latest.get("restore_verification_reason")
+                or job.get("restore_verification_reason")
+                or ""
+            ).strip(),
             "restore_verification_valid_until": str(
                 latest.get("restore_verification_valid_until")
                 or job.get("restore_verification_valid_until")
@@ -452,49 +360,6 @@ def _job_cache_items(jobs: list[dict[str, Any]], backups_by_key: dict[str, dict[
             ),
         })
     return items
-
-
-def _apply_status_file_restore_verification_metadata(config: dict, backups: list[dict[str, Any]]) -> None:
-    try:
-        from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
-        from restore_tests_api import build_restore_verification_map
-
-        scripts_dir = resolve_scripts_dir(config)
-        data_root = resolve_data_root(config)
-        jobs = [
-            {
-                "key": info.key,
-                "location": info.location,
-                "restore_test_policy": {
-                    "mode": info.restore_test_policy_mode,
-                    "interval_days": info.restore_test_interval_days,
-                    "validity_days": info.restore_test_validity_days,
-                    "level": info.restore_test_level,
-                    "max_runtime_minutes": info.restore_test_max_runtime_minutes,
-                },
-            }
-            for info in discover_jobs(scripts_dir, data_root)
-        ]
-        verification = build_restore_verification_map(config, jobs)
-    except Exception:
-        verification = {}
-
-    for row in backups:
-        key = str(row.get("key") or "").strip()
-        meta = verification.get(key, {})
-        row["restore_verification_status"] = meta.get("status", row.get("restore_verification_status") or "never")
-        row["restore_verification_reason"] = meta.get("reason", row.get("restore_verification_reason") or "")
-        row["restore_verification_last_test_date"] = meta.get(
-            "last_test_date",
-            row.get("restore_verification_last_test_date") or "",
-        )
-        row["restore_verification_valid_until"] = meta.get(
-            "valid_until",
-            row.get("restore_verification_valid_until") or "",
-        )
-        row["restore_verification_is_overdue"] = bool(
-            meta.get("is_overdue", row.get("restore_verification_is_overdue", False))
-        )
 
 
 def _apply_status_file_overdue_metadata(
@@ -517,40 +382,13 @@ def _apply_status_file_overdue_metadata(
     except Exception:
         return
 
-    status_data["summary"] = {
-        "total": len(rows),
-        "success": sum(1 for row in rows if row.get("status") == "success" and not bool(row.get("backup_overdue"))),
-        "warning": sum(1 for row in rows if row.get("status") in {"warning", "cancelled"} or bool(row.get("backup_overdue"))),
-        "skipped": sum(1 for row in rows if row.get("status") == "skipped"),
-        "error": sum(1 for row in rows if row.get("status") == "error"),
-    }
+    from status_read_model import summarize
+    status_data['summary'] = summarize(rows)
 
 
 def _read_jobs(config: dict, backups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    latest = {}
-    for row in backups:
-        key = str(row.get("key") or "").strip()
-        if key:
-            latest[key] = row
-            latest.setdefault(key.lower(), row)
-    try:
-        from jobs_api import list_jobs
-
-        return [row for row in list_jobs(config, latest) if isinstance(row, dict)]
-    except Exception:
-        return [
-            {
-                "key": str(row.get("key") or "").strip(),
-                "display_name": _display_job_name(row),
-                "name": _display_job_name(row),
-                "enabled": True,
-                "running": False,
-                "restore_verification_status": row.get("restore_verification_status") or "never",
-                "restore_verification_is_overdue": bool(row.get("restore_verification_is_overdue", False)),
-            }
-            for row in backups
-            if str(row.get("key") or "").strip()
-        ]
+    from jobs_api import list_jobs
+    return list_jobs(config, _backup_rows_by_key(backups))
 
 
 def _read_static_jobs(config: dict) -> list[dict[str, Any]]:
@@ -566,7 +404,7 @@ def _read_static_jobs(config: dict) -> list[dict[str, Any]]:
         jobs = []
         for info in discover_jobs(scripts_dir, data_root):
             jobs.append({
-                "key": info.key,
+                "job_id": info.job_id,
                 "display_name": info.name or info.display_name,
                 "name": info.name or info.display_name,
                 "enabled": info.enabled,
@@ -616,6 +454,9 @@ def _restore_proof_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if status == "not_required":
             continue
         configured += 1
+        if status == 'stale' and row.get('restore_verification_reason') in {'target_unknown', 'target_changed', 'test_date_unknown'}:
+            open_count += 1
+            continue
         if status == "verified":
             verified += 1
         elif status == "failed":
@@ -646,8 +487,8 @@ def _latest_backup(backups: list[dict[str, Any]], jobs: list[dict[str, Any]]) ->
     if latest is None:
         return {"name": "No backup", "detail": "No run found", "status": "unknown"}
 
-    by_key = {str(job.get("key") or ""): job for job in jobs}
-    job = by_key.get(str(latest.get("key") or ""))
+    by_key = {str(job.get("job_id") or ""): job for job in jobs}
+    job = by_key.get(str(latest.get("job_id") or ""))
     name = str((job or {}).get("display_name") or (job or {}).get("name") or _display_job_name(latest)).strip()
     status = str(latest.get("status") or "unknown").strip().lower()
     return {
@@ -679,7 +520,7 @@ def _next_backups(config: dict, jobs: list[dict[str, Any]], now: datetime) -> li
     rows: list[tuple[datetime, dict[str, str]]] = []
     local_now = now.astimezone().replace(tzinfo=None) if now.tzinfo else now
     for job in jobs:
-        key = str(job.get("key") or "").strip()
+        key = str(job.get("job_id") or "").strip()
         schedule = schedules.get(key) if isinstance(schedules, dict) else None
         if not key or not isinstance(schedule, dict) or not bool(schedule.get("enabled", True)):
             continue
@@ -695,7 +536,7 @@ def _next_backups(config: dict, jobs: list[dict[str, Any]], now: datetime) -> li
 
 
 def _display_job_name(row: dict[str, Any]) -> str:
-    name = str(row.get("name") or row.get("backup_type") or row.get("key") or "Backup").strip()
+    name = str(row.get("name") or row.get("backup_type") or row.get("job_id") or "Backup").strip()
     location = str(row.get("location") or "").strip()
     return f"{name} - {location.upper()}" if location else name
 

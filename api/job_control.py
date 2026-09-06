@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import signal
 import threading
 import time
@@ -13,9 +12,10 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
-CONTROL_ROOT = Path("/run/borg-backup-ui/jobs")
-_RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]{8,96}$")
-_JOB_KEY_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+from job_model import validate_job_id
+from job_runs import control_root, validate_run_id
+
+CONTROL_ROOT = control_root()
 
 
 def _utc_now() -> str:
@@ -41,20 +41,14 @@ def _atomic_json(path: Path, data: Dict[str, Any]) -> None:
             pass
 
 
-def _safe_component(value: str, pattern: re.Pattern[str], label: str) -> str:
-    clean = str(value or "").strip()
-    if not pattern.fullmatch(clean):
-        raise ValueError(f"Invalid {label}")
-    return clean
-
-
 class JobControl:
     """Runner-owned state plus an API-owned cancellation marker."""
 
-    def __init__(self, job_key: str, run_id: str, root: Path = CONTROL_ROOT) -> None:
-        self.job_key = _safe_component(job_key, _JOB_KEY_RE, "job key")
-        self.run_id = _safe_component(run_id, _RUN_ID_RE, "run id")
-        self.run_dir = Path(root) / self.run_id
+    def __init__(self, job_id: str, run_id: str, root: Path | None = None, *, snapshot: dict | None = None) -> None:
+        self.job_id = validate_job_id(job_id)
+        self.run_id = validate_run_id(run_id)
+        self.run_dir = Path(root or control_root()) / self.run_id
+        self.snapshot = dict(snapshot or {})
         self.state_file = self.run_dir / "state.json"
         self.cancel_file = self.run_dir / "cancel.request.json"
         self._process_lock = threading.Lock()
@@ -79,8 +73,9 @@ class JobControl:
     ) -> Dict[str, Any]:
         previous = read_control_state(self.run_id, self.run_dir.parent)
         data: Dict[str, Any] = {
+            **self.snapshot,
             "schema_version": 1,
-            "job_key": self.job_key,
+            "job_id": self.job_id,
             "run_id": self.run_id,
             "pid": os.getpid(),
             "phase": str(phase),
@@ -122,7 +117,7 @@ class JobControl:
         self._monitor_thread = threading.Thread(
             target=_monitor,
             daemon=True,
-            name=f"cancel-monitor-{self.job_key}",
+            name=f"cancel-monitor-{self.job_id}",
         )
         self._monitor_thread.start()
 
@@ -135,14 +130,18 @@ class JobControl:
             self._active_process = None
 
 
-def read_control_state(run_id: str, root: Path = CONTROL_ROOT) -> Dict[str, Any]:
-    safe_run_id = _safe_component(run_id, _RUN_ID_RE, "run id")
-    path = Path(root) / safe_run_id / "state.json"
+def read_control_state(run_id: str, root: Path | None = None) -> Dict[str, Any]:
+    safe_run_id = validate_run_id(run_id)
+    path = Path(root or control_root()) / safe_run_id / "state.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return {}
-    if not isinstance(data, dict):
+    if not isinstance(data, dict) or data.get("run_id") != safe_run_id:
+        return {}
+    try:
+        validate_job_id(data.get("job_id"))
+    except ValueError:
         return {}
     if (path.parent / "cancel.request.json").is_file():
         data["cancel_requested"] = True
@@ -150,27 +149,27 @@ def read_control_state(run_id: str, root: Path = CONTROL_ROOT) -> Dict[str, Any]
 
 
 def request_cancel(
-    job_key: str,
+    job_id: str,
     run_id: str,
     *,
     requested_by: str = "",
-    root: Path = CONTROL_ROOT,
+    root: Path | None = None,
 ) -> Dict[str, Any]:
-    safe_job_key = _safe_component(job_key, _JOB_KEY_RE, "job key")
-    safe_run_id = _safe_component(run_id, _RUN_ID_RE, "run id")
+    safe_job_id = validate_job_id(job_id)
+    safe_run_id = validate_run_id(run_id)
     state = read_control_state(safe_run_id, root)
     if not state or state.get("finished"):
         raise FileNotFoundError("The backup run is no longer active")
-    if str(state.get("job_key") or "") != safe_job_key:
+    if str(state.get("job_id") or "") != safe_job_id:
         raise ValueError("The run does not belong to this job")
     if not bool(state.get("cancel_allowed")):
         raise RuntimeError("Cancellation is no longer possible during runtime recovery")
 
-    run_dir = Path(root) / safe_run_id
+    run_dir = Path(root or control_root()) / safe_run_id
     marker = run_dir / "cancel.request.json"
     payload = {
         "schema_version": 1,
-        "job_key": safe_job_key,
+        "job_id": safe_job_id,
         "run_id": safe_run_id,
         "requested_at": _utc_now(),
         "requested_by": str(requested_by or ""),

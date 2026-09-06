@@ -1,4 +1,5 @@
 import json
+import logging
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -15,8 +16,11 @@ if str(API_ROOT) not in sys.path:
 import storage_objects_api  # noqa: E402
 import check_api  # noqa: E402
 import repositories_api  # noqa: E402
-from check_api import CheckManager, _archive_prefix_from_job_key  # noqa: E402
-from repositories_api import RepositoryLifecycleConflict, apply_repository_lifecycle, prepare_repository_lifecycle, read_repository_store, unlink_job_from_repositories, write_repository_store  # noqa: E402
+from check_api import CheckManager  # noqa: E402
+from job_actions import delete_job_configuration
+from job_model import new_job_defaults
+from job_runs import read_run_context
+from repositories_api import RepositoryLifecycleConflict, apply_repository_lifecycle, prepare_repository_lifecycle, read_repository_store, write_repository_store  # noqa: E402
 from storage_objects_api import create_storage_target, read_storage_store, test_storage_target as run_storage_target_test, write_storage_store  # noqa: E402
 
 
@@ -99,116 +103,108 @@ def test_create_usb_storage_target_updates_canonical_inventory_only(tmp_path: Pa
     assert not (tmp_path / "config" / "settings.json").exists()
 
 
-def test_repository_maintenance_commands_use_repository_and_job_retention(tmp_path: Path):
+JOB_ID = "11111111-1111-4111-8111-111111111111"
+OTHER_ID = "22222222-2222-4222-8222-222222222222"
+
+
+@pytest.fixture(autouse=True)
+def isolate_control_and_cron(tmp_path, monkeypatch):
+    monkeypatch.setenv("BORG_UI_CONTROL_ROOT", str(tmp_path / "controls"))
+    monkeypatch.setattr("schedule_api._update_crontab", lambda lines: None)
+    monkeypatch.setattr("config_api.read_expanded_conf", lambda config: {
+        "GLOBAL_DATA_DIR": str(tmp_path / "data"), "GLOBAL_LOG_DIR": str(tmp_path / "logs")})
+
+
+def _canonical_job(tmp_path, job_id, repository_key, name="Photos", prefixes=None, retention=None):
+    job = {**new_job_defaults(), "job_id": job_id, "name": name,
+           "repository_key": repository_key, "source_paths": [str(tmp_path / "source")],
+           "archive_prefixes": prefixes or [name.lower() + "-backup"]}
+    if retention is not None:
+        job["retention"] = retention
+    path = tmp_path / "config/jobs" / (job_id + ".json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(job), encoding="utf-8")
+    return job
+
+
+def _maintenance_inventory(tmp_path, jobs):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    jobs = tmp_path / "config" / "jobs"
-    jobs.mkdir(parents=True)
-    (jobs / "photos_local.json").write_text(json.dumps({
-        "job_key": "photos_local",
-        "repository_key": "repo_photos",
-        "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
-    }), encoding="utf-8")
-    repository = {"repository_key": "repo_photos", "used_by": ["photos_local"]}
+    write_storage_store(config, {"storages": [{"storage_key": "local", "storage_type": "local",
+                         "location": "local", "base_path": str(tmp_path / "backup")}]})
+    repositories = {}
+    for job in jobs:
+        key = job["repository_key"]
+        row = repositories.setdefault(key, {"repository_key": key, "storage_key": "local",
+                        "relative_path": key, "encryption": "none", "job_ids": [], "source_job_ids": []})
+        row["job_ids"].append(job["job_id"])
+        row["source_job_ids"].append(job["job_id"])
+    write_repository_store(config, {"repositories": list(repositories.values())})
+    return config, repositories
+
+
+def _prune_snapshot(tmp_path, config, repository, *, job_id=""):
+    target = str(tmp_path / "backup" / repository["relative_path"])
+    command = CheckManager()._repository_command(config, repository, target, "prune", "quick", job_id=job_id)
+    assert command[:2] == [sys.executable, str(API_ROOT / "retention_runner.py")]
+    assert command[4] == str(tmp_path)
+    snapshot = read_run_context(command[2], command[3])
+    assert snapshot["repository_snapshot"] == target
+    assert snapshot["repository_key_snapshot"] == repository["repository_key"]
+    return snapshot
+
+
+def test_repository_maintenance_commands_use_repository_and_job_retention(tmp_path: Path):
+    job = _canonical_job(tmp_path, JOB_ID, "repo_photos")
+    config, repositories = _maintenance_inventory(tmp_path, [job])
+    repository = repositories["repo_photos"]
     manager = CheckManager()
-
     assert manager._repository_command(config, repository, "/mnt/backup/photos", "check", "quick") == [
-        "borg", "check", "--lock-wait", "30", "--progress", "/mnt/backup/photos",
-    ]
+        "borg", "check", "--lock-wait", "30", "--progress", "/mnt/backup/photos"]
     assert manager._repository_command(config, repository, "/mnt/backup/photos", "check", "verify_data") == [
-        "borg", "check", "--lock-wait", "30", "--progress", "--verbose", "--verify-data",
-        "/mnt/backup/photos",
-    ]
+        "borg", "check", "--lock-wait", "30", "--progress", "--verbose", "--verify-data", "/mnt/backup/photos"]
     assert manager._repository_command(config, repository, "/mnt/backup/photos", "compact", "quick") == [
-        "borg", "compact", "--lock-wait", "30", "--progress", "/mnt/backup/photos",
-    ]
-    assert manager._repository_command(config, repository, "/mnt/backup/photos", "prune", "quick") == [
-        "borg", "prune", "--lock-wait", "30", "--list", "--progress",
-        "--glob-archives", "photos-backup-*",
-        "--keep-daily", "7", "--keep-weekly", "4", "--keep-monthly", "6", "--keep-yearly", "3",
-        "/mnt/backup/photos",
-    ]
+        "borg", "compact", "--lock-wait", "30", "--progress", "/mnt/backup/photos"]
+    snapshot = _prune_snapshot(tmp_path, config, repository)
+    assert snapshot["job_id"] == JOB_ID
+    assert snapshot["archive_prefixes_snapshot"] == ["photos-backup"]
+    assert snapshot["context"]["job"]["retention"] == {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"}
 
 
-def test_repository_prune_archive_prefix_preserves_type_ids_with_underscores() -> None:
-    assert _archive_prefix_from_job_key("borg_backup_taeglich_local") == "borg_backup_taeglich-backup"
-    assert _archive_prefix_from_job_key("photos_smb") == "photos-backup"
-    assert _archive_prefix_from_job_key("appdata_storagebox") == "appdata-backup"
+def test_repository_prune_preserves_literal_prefixes_with_underscores(tmp_path: Path):
+    prefixes = ["borg_backup_taeglich", "photos_smb", "appdata_storagebox"]
+    job = _canonical_job(tmp_path, JOB_ID, "repo_photos", name="An unrelated display name", prefixes=prefixes)
+    config, repositories = _maintenance_inventory(tmp_path, [job])
+    snapshot = _prune_snapshot(tmp_path, config, repositories["repo_photos"])
+    assert snapshot["archive_prefixes_snapshot"] == prefixes
+    assert snapshot["archive_prefix_snapshot"] == "borg_backup_taeglich"
+    assert snapshot["job_name_snapshot"] == "An unrelated display name"
 
 
 def test_repository_prune_requires_explicit_retention_source_for_shared_repository(tmp_path: Path):
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    jobs = tmp_path / "config" / "jobs"
-    jobs.mkdir(parents=True)
-    for job_key in ("photos_local", "appdata_local"):
-        (jobs / f"{job_key}.json").write_text(json.dumps({
-            "job_key": job_key,
-            "repository_key": "repo_shared",
-            "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
-        }), encoding="utf-8")
-
-    manager = CheckManager()
-    repository = {"repository_key": "repo_shared", "used_by": ["photos_local", "appdata_local"]}
-
-    with pytest.raises(ValueError, match="select a retention source job"):
-        manager._repository_command(config, repository, "/mnt/backup/shared", "prune", "quick")
+    jobs = [_canonical_job(tmp_path, JOB_ID, "repo_shared"),
+            _canonical_job(tmp_path, OTHER_ID, "repo_shared", name="Appdata")]
+    config, repositories = _maintenance_inventory(tmp_path, jobs)
+    with pytest.raises(ValueError, match="Select one backup job as the retention source"):
+        _prune_snapshot(tmp_path, config, repositories["repo_shared"])
 
 
 def test_repository_prune_uses_selected_job_retention_source(tmp_path: Path):
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    jobs = tmp_path / "config" / "jobs"
-    jobs.mkdir(parents=True)
-    (jobs / "photos_local.json").write_text(json.dumps({
-        "job_key": "photos_local",
-        "repository_key": "repo_shared",
-        "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
-    }), encoding="utf-8")
-    (jobs / "appdata_local.json").write_text(json.dumps({
-        "job_key": "appdata_local",
-        "repository_key": "repo_shared",
-        "retention": {"daily": "14", "weekly": "8", "monthly": "3", "yearly": "1"},
-    }), encoding="utf-8")
-
-    command = CheckManager()._repository_command(
-        config,
-        {"repository_key": "repo_shared", "used_by": ["photos_local", "appdata_local"]},
-        "/mnt/backup/shared",
-        "prune",
-        "quick",
-        job_key="appdata_local",
-    )
-
-    assert command == [
-        "borg", "prune", "--lock-wait", "30", "--list", "--progress",
-        "--glob-archives", "appdata-backup-*",
-        "--keep-daily", "14", "--keep-weekly", "8", "--keep-monthly", "3", "--keep-yearly", "1",
-        "/mnt/backup/shared",
-    ]
+    retention = {"daily": "14", "weekly": "8", "monthly": "3", "yearly": "1"}
+    jobs = [_canonical_job(tmp_path, JOB_ID, "repo_shared"),
+            _canonical_job(tmp_path, OTHER_ID, "repo_shared", name="Appdata", retention=retention)]
+    config, repositories = _maintenance_inventory(tmp_path, jobs)
+    snapshot = _prune_snapshot(tmp_path, config, repositories["repo_shared"], job_id=OTHER_ID)
+    assert snapshot["job_id"] == OTHER_ID
+    assert snapshot["context"]["job"]["retention"] == retention
+    assert snapshot["archive_prefixes_snapshot"] == ["appdata-backup"]
 
 
 def test_repository_prune_rejects_retention_source_from_other_repository(tmp_path: Path):
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    jobs = tmp_path / "config" / "jobs"
-    jobs.mkdir(parents=True)
-    (jobs / "photos_local.json").write_text(json.dumps({
-        "job_key": "photos_local",
-        "repository_key": "repo_photos",
-        "retention": {"daily": "7"},
-    }), encoding="utf-8")
-    (jobs / "appdata_local.json").write_text(json.dumps({
-        "job_key": "appdata_local",
-        "repository_key": "repo_appdata",
-        "retention": {"daily": "14"},
-    }), encoding="utf-8")
-
+    jobs = [_canonical_job(tmp_path, JOB_ID, "repo_photos"),
+            _canonical_job(tmp_path, OTHER_ID, "repo_appdata", name="Appdata")]
+    config, repositories = _maintenance_inventory(tmp_path, jobs)
     with pytest.raises(ValueError, match="does not use this repository"):
-        CheckManager()._repository_command(
-            config,
-            {"repository_key": "repo_photos", "used_by": ["photos_local"]},
-            "/mnt/backup/photos",
-            "prune",
-            "quick",
-            job_key="appdata_local",
-        )
+        _prune_snapshot(tmp_path, config, repositories["repo_photos"], job_id=OTHER_ID)
 
 
 def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: Path, monkeypatch):
@@ -226,6 +222,7 @@ def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: P
     }]})
     write_repository_store(config, {"repositories": [{
         "repository_key": "repo_test",
+        "job_ids": [], "source_job_ids": [],
         "display_name": "Test",
         "repository_name": "test",
         "storage_key": "storage_local_test",
@@ -252,7 +249,10 @@ def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: P
     monkeypatch.setattr(subprocess, "Popen", fake_popen)
     monkeypatch.setattr("threading.Thread.start", lambda _self: None)
 
-    ok, error = CheckManager().start_repository(config, "repo_test", "check", "quick")
+    from migration_gate_support import ready_gate
+    ready_gate(config, monkeypatch, tmp_path / "writer-gate")
+    manager = CheckManager()
+    ok, error = manager.start_repository(config, "repo_test", "check", "quick")
 
     assert ok is True and error is None
     assert captured["cmd"] == [
@@ -260,6 +260,7 @@ def test_repository_maintenance_uses_repository_secret_without_shell(tmp_path: P
     ]
     assert "shell" not in captured["kwargs"]
     assert captured["kwargs"]["env"]["BORG_PASSCOMMAND"].endswith(str(secret))
+    manager._reader(manager._state)
 
 
 def test_repository_environment_combines_ssh_key_and_keepalives(tmp_path: Path):
@@ -320,6 +321,7 @@ def test_repository_maintenance_persists_structured_prune_and_compact_results(tm
     }]})
     repository = {
         "repository_key": "repo_test",
+        "job_ids": [], "source_job_ids": [],
         "display_name": "Test",
         "storage_key": "storage_local_test",
         "relative_path": "test",
@@ -364,6 +366,77 @@ def test_repository_maintenance_persists_structured_prune_and_compact_results(tm
     assert stored["compact"]["freed_space"] == "12.6 GB"
 
 
+@pytest.mark.parametrize('date_label', ['Mon, 2026-09-07 10:11:12', '2026-09-07 10:11:12', 'Mo, 2026-09-07 10:11:12 +0200'])
+@pytest.mark.parametrize('log_format', [
+    '%(message)s', '%(levelname)s %(message)s', '%(asctime)s %(levelname)s %(message)s',
+    '[%(asctime)s] %(levelname)s %(message)s', '[%(asctime)s] %(message)s',
+])
+def test_repository_maintenance_reads_borg_delete_names_without_metadata(date_label, log_format):
+    class Process:
+        returncode = 0
+
+    state = check_api._CheckState(Process(), 'repo_test', 'quick', datetime.now(), action='prune')
+    formatter = logging.Formatter(log_format, datefmt='%Y-%m-%d %H:%M:%S')
+
+    def append_output(message):
+        record = logging.makeLogRecord({'msg': message, 'levelname': 'INFO'})
+        state.append_line(formatter.format(record))
+
+    names = ['old prefix with spaces-2026-06-01', 'name  with  double spaces (2/8)',
+             'name Mon, 2026-08-31 00:00:00']
+    for index, name in enumerate(names, 1):
+        line = f'Deleting archive: {name:<60} {date_label} [{index:064x}] ({index}/{len(names)})'
+        append_output(line)
+        append_output(line)  # Repeated output frames count only once.
+    append_output(f'Pruning archive (1/1): {names[0]:<60} {date_label} [{1:064x}]')
+    result = CheckManager._maintenance_result(state)
+    assert result['status'] == 'success'
+    assert result['deleted_archives_count'] == len(names)
+    assert result['deleted_archives'] == names
+
+
+@pytest.mark.parametrize('prefix', ['', 'INFO ', '2026-09-07 12:34:56 INFO '])
+def test_repository_maintenance_ignores_retention_plans_dry_runs_and_keep_lines(prefix):
+    class Process:
+        returncode = 0
+
+    state = check_api._CheckState(Process(), 'repo_test', 'quick', datetime.now(), action='prune')
+    formatted = f'archive with spaces Mon, 2026-09-07 10:11:12 [{1:064x}]'
+    for line in [
+        f'Selected for pruning (1/1): {formatted}',
+        f'Would delete archive: {formatted} (1/1)',
+        f'Would prune: {formatted}',
+        f'Keeping archive (rule: daily #1): {formatted}',
+        f'Keeping checkpoint archive: {formatted}',
+        f'[Info] Selected for pruning: Deleting archive: {formatted} (1/1)',
+        'Deleting archive: archive with spaces',
+        'Deleting archive: archive with spaces Mon, 2026-09-07 10:11:12 [invalid-id] (1/1)',
+    ]:
+        state.append_line(prefix + line)
+    result = CheckManager._maintenance_result(state)
+    assert result['deleted_archives_count'] == 0 and result['deleted_archives'] == []
+
+
+@pytest.mark.parametrize('exit_code', [1, 2, 130, -15])
+@pytest.mark.parametrize('prefix', ['', 'INFO ', '2026-09-07 12:34:56 INFO '])
+@pytest.mark.parametrize('output', [
+    'Pruning archive (1/1): old archive with spaces',
+    f'Pruning archive (1/1): old archive with spaces Mon, 2026-09-07 10:11:12 [{1:064x}]',
+    f'Deleting archive: old archive with spaces Mon, 2026-09-07 10:11:12 [{1:064x}] (1/1)',
+])
+def test_repository_maintenance_does_not_confirm_deletions_after_failure(exit_code, output, prefix):
+    class Process:
+        returncode = exit_code
+
+    state = check_api._CheckState(Process(), 'repo_test', 'quick', datetime.now(), action='prune')
+    state.append_line(prefix + output)
+    state.append_line('Repository commit failed')
+    result = CheckManager._maintenance_result(state)
+    assert result['exit_code'] == exit_code and result['status'] != 'success'
+    assert result['deleted_archives_count'] == 0 and result['deleted_archives'] == []
+    assert 'Repository commit failed' in result['details']
+
+
 def test_repository_maintenance_masks_error_details(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     write_storage_store(config, {"storages": [{
@@ -376,6 +449,7 @@ def test_repository_maintenance_masks_error_details(tmp_path: Path):
     }]})
     repository = {
         "repository_key": "repo_test",
+        "job_ids": [], "source_job_ids": [],
         "display_name": "Test",
         "storage_key": "storage_local_test",
         "relative_path": "test",
@@ -417,6 +491,7 @@ def test_repository_maintenance_classifies_interrupted_ssh_connection(tmp_path: 
     }]})
     repository = {
         "repository_key": "repo_test",
+        "job_ids": [], "source_job_ids": [],
         "display_name": "Test",
         "storage_key": "storage_ssh_test",
         "relative_path": "test",
@@ -467,7 +542,7 @@ def test_repository_maintenance_stream_exposes_completion_not_raw_output():
     assert "hunter2" not in stream
 
 
-def _write_lifecycle_repository(tmp_path: Path, *, used_by=None) -> tuple[dict, Path, Path]:
+def _write_lifecycle_repository(tmp_path: Path, *, job_ids=None) -> tuple[dict, Path, Path]:
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     base = tmp_path / "backup"
     repository_path = base / "photos"
@@ -483,6 +558,8 @@ def _write_lifecycle_repository(tmp_path: Path, *, used_by=None) -> tuple[dict, 
         "identity": f"local:{base}",
         "base_path": str(base),
     }]})
+    for job_id in job_ids or []:
+        _canonical_job(tmp_path, job_id, "repo_photos")
     write_repository_store(config, {"repositories": [{
         "repository_key": "repo_photos",
         "display_name": "Photos",
@@ -497,8 +574,8 @@ def _write_lifecycle_repository(tmp_path: Path, *, used_by=None) -> tuple[dict, 
         "encryption": "repokey-blake2",
         "borg_repository_id": "repo-id-123",
         "repository_stats": {"archives_count": 3, "unique_csize": 1024},
-        "used_by": list(used_by or []),
-        "source_job_keys": list(used_by or []),
+        "job_ids": list(job_ids or []),
+        "source_job_ids": list(job_ids or []),
     }]})
     return config, repository_path, secret
 
@@ -538,19 +615,12 @@ def test_repository_remove_from_inventory_keeps_data_and_secret(tmp_path: Path):
 
 
 def test_repository_lifecycle_blocks_live_job_reference(tmp_path: Path):
-    config, repository_path, _secret = _write_lifecycle_repository(tmp_path)
-    jobs = tmp_path / "config" / "jobs"
-    jobs.mkdir(parents=True)
-    (jobs / "photos_local.json").write_text(json.dumps({
-        "schema_version": 2,
-        "job_key": "photos_local",
-        "repository_key": "repo_photos",
-    }), encoding="utf-8")
+    config, repository_path, _secret = _write_lifecycle_repository(tmp_path, job_ids=[JOB_ID])
 
     preview = prepare_repository_lifecycle(config, "repo_photos", "remove")
 
     assert preview["allowed"] is False
-    assert preview["job_keys"] == ["photos_local"]
+    assert preview["job_ids"] == [JOB_ID]
     assert "jobs_linked" in preview["blockers"]
     with pytest.raises(RepositoryLifecycleConflict, match="jobs or operations"):
         apply_repository_lifecycle(config, {
@@ -562,13 +632,14 @@ def test_repository_lifecycle_blocks_live_job_reference(tmp_path: Path):
 
 
 def test_deleted_job_is_unlinked_from_repository_inventory(tmp_path: Path):
-    config, _repository_path, _secret = _write_lifecycle_repository(tmp_path, used_by=["photos_local"])
+    config, _repository_path, _secret = _write_lifecycle_repository(tmp_path, job_ids=[JOB_ID])
 
-    unlink_job_from_repositories(config, "photos_local")
+    delete_job_configuration(config, JOB_ID)
 
     repository = read_repository_store(config)["repositories"][0]
-    assert repository["used_by"] == []
-    assert repository["source_job_keys"] == []
+    assert repository["job_ids"] == []
+    assert repository["source_job_ids"] == []
+    assert not (tmp_path / "config/jobs" / (JOB_ID + ".json")).exists()
 
 
 def test_permanent_repository_delete_revalidates_identity_and_uses_borg(tmp_path: Path, monkeypatch):

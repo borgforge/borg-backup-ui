@@ -14,6 +14,7 @@ if str(RUNTIME_LIB) not in sys.path:
     sys.path.insert(0, str(RUNTIME_LIB))
 
 from report_mail_api import _build_html_report
+from status_view_fixture_support import job_id_for, write_job, status_identity
 
 
 REPORT_NOW = datetime(2026, 6, 12, 12, 0, 0)
@@ -21,29 +22,21 @@ REPORT_NOW = datetime(2026, 6, 12, 12, 0, 0)
 
 def _write_status(status_dir: Path, name: str, data: dict) -> None:
     path = status_dir / name
-    path.write_text(json.dumps(data), encoding="utf-8")
+    label = data.get('backup_type', 'unknown') + '_' + data.get('location', 'local')
+    if not (status_dir.parent / 'config/jobs' / (job_id_for(label) + '.json')).exists():
+        write_job(status_dir.parent, label, name=data.get('backup_type', ''), location=data.get('location', 'local'))
+    path.write_text(json.dumps({**status_identity(status_dir.parent,label,name=data.get('backup_type', ''),location=data.get('location','local')), **data}), encoding='utf-8')
 
 
 def _write_job_meta(root: Path, key: str, *, name: str, backup_type: str, location: str) -> None:
-    scripts_dir = root / "scripts"
-    jobs_dir = root / "config" / "jobs"
-    scripts_dir.mkdir(parents=True, exist_ok=True)
-    jobs_dir.mkdir(parents=True, exist_ok=True)
-    (jobs_dir / f"{key}.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": key,
-        "name": name,
-        "backup_type": backup_type,
-        "location": location,
-        "repository_key": f"repo_{key}",
-        "source_paths": ["/mnt/user/appdata"],
-    }), encoding="utf-8")
+    write_job(root, key, name=name, location=location)
 
 
 def _write_schedules(root: Path, schedules: dict) -> None:
+    root = root.parent if root.name == "scripts" else root
     config_dir = root / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / "schedules.json").write_text(json.dumps(schedules), encoding="utf-8")
+    (config_dir / "schedules.json").write_text(json.dumps({job_id_for(key):value for key,value in schedules.items()}), encoding="utf-8")
 
 
 def test_weekly_report_contains_summary_and_extended_job_table(tmp_path: Path):
@@ -175,7 +168,7 @@ def test_weekly_report_job_details_show_repository_growth(tmp_path: Path):
         "repository_size": 2 * 1024 ** 3,
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
+    html = _build_html_report({"STATUS_DIR": str(status_dir), "BACKUP_SCRIPTS_DIR": str(tmp_path)}, now=REPORT_NOW)
 
     assert "Growth 7d" in html
     assert "+1.0 GB" in html
@@ -292,7 +285,10 @@ def test_weekly_report_sorts_jobs_by_location(tmp_path: Path):
         "status": "success",
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
+    _write_job_meta(tmp_path, "photos_local", name="Photos - Local", backup_type="photos", location="local")
+    _write_job_meta(tmp_path, "flash_usb", name="Flash - USB", backup_type="flash", location="usb")
+    _write_job_meta(tmp_path, "appdata_storagebox", name="Appdata - Storagebox", backup_type="appdata", location="storagebox")
+    html = _build_html_report({"STATUS_DIR": str(status_dir), "BACKUP_SCRIPTS_DIR": str(tmp_path)}, now=REPORT_NOW)
 
     assert html.index(">Local<") < html.index(">USB<")
     assert html.index(">USB<") < html.index(">Storagebox<")
@@ -318,7 +314,7 @@ def test_weekly_report_ignores_non_error_log_hints(tmp_path: Path):
         "log_file": str(log_file),
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
+    html = _build_html_report({"STATUS_DIR": str(status_dir), "BACKUP_SCRIPTS_DIR": str(tmp_path)}, now=REPORT_NOW)
 
     assert "Log Details" not in html
     assert "Kein Mail-Versand" not in html

@@ -66,9 +66,9 @@ def get_notification_reminder_diagnostics(config: dict) -> dict[str, Any]:
     if backup_channels:
         schedules = get_schedules(effective)
         jobs = {
-            str(job.get("key") or "").strip(): job
+            str(job.get("job_id") or "").strip(): job
             for job in list_jobs(effective, {})
-            if isinstance(job, dict) and str(job.get("key") or "").strip()
+            if isinstance(job, dict) and str(job.get("job_id") or "").strip()
         }
         status = get_status_data(effective)
         latest = _latest_backup_status_by_key(status.get("backups") or [])
@@ -137,21 +137,21 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
             continue
 
         checked += 1
-        job_key = str(row.get("job_key") or "").strip()
-        if not job_key:
+        job_id = str(row.get("job_id") or "").strip()
+        if not job_id:
             continue
         due_marker = str(row.get("next_due_at") or "").strip()
         if not due_marker:
             skipped += 1
-            rows.append({"job_key": job_key, "sent": False, "reason": "missing_due_marker"})
+            rows.append({"job_id": job_id, "sent": False, "reason": "missing_due_marker"})
             continue
-        key = reminder_key("restore_test_overdue", job_key, due_marker)
+        key = reminder_key("restore_test_overdue", job_id, due_marker)
         if not reminder_allowed(effective, key):
             skipped += 1
-            rows.append({"job_key": job_key, "sent": False, "reason": "interval_not_elapsed"})
+            rows.append({"job_id": job_id, "sent": False, "reason": "interval_not_elapsed"})
             continue
 
-        display_name = str(row.get("display_name") or job_key)
+        display_name = str(row.get("display_name") or job_id)
         message = build_restore_test_notification_message(
             job_name=display_name,
             status="Overdue",
@@ -166,7 +166,7 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
             message=message,
             severity="warning",
             job_name=f"Borg Backup UI ({display_name})",
-            job_key=job_key,
+            job_id=job_id,
             status="overdue",
             source="scheduled_reminder",
             extra={"due_marker": due_marker},
@@ -175,10 +175,10 @@ def run_due_notification_reminders(config: dict) -> dict[str, Any]:
         if any(results.values()):
             mark_reminder_sent(effective, key)
             sent += 1
-            rows.append({"job_key": job_key, "sent": True, "channels": results})
+            rows.append({"job_id": job_id, "sent": True, "channels": results})
         else:
             skipped += 1
-            rows.append({"job_key": job_key, "sent": False, "reason": "no_channel_sent", "channels": results})
+            rows.append({"job_id": job_id, "sent": False, "reason": "no_channel_sent", "channels": results})
 
     return {
         "checked": checked,
@@ -209,9 +209,9 @@ def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, An
         return {"checked": 0, "sent": 0, "skipped": 0, "rows": []}
 
     jobs = {
-        str(job.get("key") or "").strip(): job
+        str(job.get("job_id") or "").strip(): job
         for job in list_jobs(effective, {})
-        if isinstance(job, dict) and str(job.get("key") or "").strip()
+        if isinstance(job, dict) and str(job.get("job_id") or "").strip()
     }
     status = get_status_data(effective)
     latest = _latest_backup_status_by_key(status.get("backups") or [])
@@ -225,17 +225,17 @@ def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, An
     sent_state = state.get("last_sent") if isinstance(state.get("last_sent"), dict) else {}
     interval_hours = reminder_interval_hours(effective)
     tolerance_hours = _backup_overdue_tolerance_hours(effective)
-    for job_key, sched in schedules.items():
-        if job_key == "restore_test" or not isinstance(sched, dict) or not bool(sched.get("enabled", True)):
+    for job_id, sched in schedules.items():
+        if job_id == "restore_test" or not isinstance(sched, dict) or not bool(sched.get("enabled", True)):
             continue
-        job = jobs.get(str(job_key))
+        job = jobs.get(str(job_id))
         if not job or job.get("enabled") is False:
             continue
         item = _backup_overdue_item(
-            str(job_key),
+            str(job_id),
             sched,
             job,
-            latest.get(str(job_key)) or {},
+            latest.get(str(job_id)) or {},
             sent_state,
             now,
             interval_hours,
@@ -243,23 +243,23 @@ def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, An
         )
         if item["state"] == "unsupported":
             skipped += 1
-            rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "unsupported_cron"})
+            rows.append({"job_id": job_id, "event": "backup_overdue", "sent": False, "reason": "unsupported_cron"})
             continue
 
         checked += 1
         if item["state"] == "current":
-            clear_reminder_prefix(effective, f"backup_overdue:{job_key}:")
+            clear_reminder_prefix(effective, f"backup_overdue:{job_id}:")
             continue
         if item["state"] == "overdue_waiting":
             skipped += 1
-            rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "interval_not_elapsed"})
+            rows.append({"job_id": job_id, "event": "backup_overdue", "sent": False, "reason": "interval_not_elapsed"})
             continue
         if item["state"] != "overdue_ready":
             skipped += 1
-            rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": item.get("reason") or "not_overdue"})
+            rows.append({"job_id": job_id, "event": "backup_overdue", "sent": False, "reason": item.get("reason") or "not_overdue"})
             continue
 
-        display_name = str(job.get("display_name") or job.get("name") or job_key)
+        display_name = str(job.get("display_name") or job.get("name") or job_id)
         due_marker = str(item.get("expected_run_marker") or "")
         message = build_backup_notification_message(
             job_name=display_name,
@@ -275,7 +275,7 @@ def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, An
             message=message,
             severity="warning",
             job_name=f"Borg Backup ({display_name})",
-            job_key=str(job_key),
+            job_id=str(job_id),
             status="overdue",
             repository=str(job.get("repo_path") or ""),
             source="scheduled_reminder",
@@ -283,18 +283,18 @@ def _send_backup_overdue_reminders(effective: dict, mail_config) -> dict[str, An
         )
         results = send_event(effective, event, mail_config=mail_config)
         if any(results.values()):
-            mark_reminder_sent(effective, str(item.get("reminder_key") or reminder_key("backup_overdue", str(job_key), due_marker)))
+            mark_reminder_sent(effective, str(item.get("reminder_key") or reminder_key("backup_overdue", str(job_id), due_marker)))
             sent += 1
-            rows.append({"job_key": job_key, "event": "backup_overdue", "sent": True, "channels": results})
+            rows.append({"job_id": job_id, "event": "backup_overdue", "sent": True, "channels": results})
         else:
             skipped += 1
-            rows.append({"job_key": job_key, "event": "backup_overdue", "sent": False, "reason": "no_channel_sent", "channels": results})
+            rows.append({"job_id": job_id, "event": "backup_overdue", "sent": False, "reason": "no_channel_sent", "channels": results})
 
     return {"checked": checked, "sent": sent, "skipped": skipped, "rows": rows}
 
 
 def _backup_overdue_item(
-    job_key: str,
+    job_id: str,
     sched: dict,
     job: dict,
     last: dict,
@@ -308,11 +308,11 @@ def _backup_overdue_item(
     cron = str(sched.get("cron") or "").strip()
     latest_expected_run = _latest_expected_run(cron, now)
     next_scheduled_run = _next_expected_run(cron, now)
-    display_name = str(job.get("display_name") or job.get("name") or job_key)
+    display_name = str(job.get("display_name") or job.get("name") or job_id)
     if latest_expected_run is None:
         return {
             "type": "backup_overdue",
-            "job_key": str(job_key),
+            "job_id": str(job_id),
             "display_name": display_name,
             "cron": cron,
             "state": "unsupported",
@@ -323,7 +323,7 @@ def _backup_overdue_item(
     if last_ts is None:
         return {
             "type": "backup_overdue",
-            "job_key": str(job_key),
+            "job_id": str(job_id),
             "display_name": display_name,
             "cron": cron,
             "state": "missing_status",
@@ -347,7 +347,7 @@ def _backup_overdue_item(
     overdue_after = expected_run + timedelta(hours=backup_tolerance_hours)
     overdue = now > overdue_after and (last_ts is None or last_ts < expected_run)
     expected_marker = expected_run.strftime("%Y-%m-%d %H:%M:%S")
-    key = reminder_key("backup_overdue", str(job_key), expected_marker)
+    key = reminder_key("backup_overdue", str(job_id), expected_marker)
     reminder = (
         {"sent": False, "sent_at": "", "next_allowed_at": "", "allowed": True}
         if last_ts is not None and last_ts >= expected_run
@@ -357,7 +357,7 @@ def _backup_overdue_item(
     reason = "ready_to_send" if state == "overdue_ready" else ("interval_not_elapsed" if state == "overdue_waiting" else "not_overdue")
     return {
         "type": "backup_overdue",
-        "job_key": str(job_key),
+        "job_id": str(job_id),
         "display_name": display_name,
         "cron": cron,
         "state": state,
@@ -387,17 +387,17 @@ def _backup_overdue_diagnostics(
     if not isinstance(schedules, dict):
         return []
     items: list[dict[str, Any]] = []
-    for job_key, sched in sorted(schedules.items()):
-        if job_key == "restore_test" or not isinstance(sched, dict) or not bool(sched.get("enabled", True)):
+    for job_id, sched in sorted(schedules.items()):
+        if job_id == "restore_test" or not isinstance(sched, dict) or not bool(sched.get("enabled", True)):
             continue
-        job = jobs.get(str(job_key))
+        job = jobs.get(str(job_id))
         if not job or job.get("enabled") is False:
             continue
         item = _backup_overdue_item(
-            str(job_key),
+            str(job_id),
             sched,
             job,
-            latest.get(str(job_key)) or {},
+            latest.get(str(job_id)) or {},
             sent,
             now,
             interval_hours,
@@ -421,11 +421,11 @@ def _restore_test_overdue_diagnostics(plan: dict, sent: dict, now: datetime, int
             continue
         if row.get("enabled") is False:
             continue
-        job_key = str(row.get("job_key") or "").strip()
-        if not job_key:
+        job_id = str(row.get("job_id") or "").strip()
+        if not job_id:
             continue
         due_marker = str(row.get("next_due_at") or "").strip()
-        key = reminder_key("restore_test_overdue", job_key, due_marker) if due_marker else ""
+        key = reminder_key("restore_test_overdue", job_id, due_marker) if due_marker else ""
         reminder = _reminder_state_for_key(sent, key, now, interval_hours) if key else {
             "sent": False,
             "sent_at": "",
@@ -442,8 +442,8 @@ def _restore_test_overdue_diagnostics(plan: dict, sent: dict, now: datetime, int
         }.get(state, "unknown")
         items.append({
             "type": "restore_test_overdue",
-            "job_key": job_key,
-            "display_name": str(row.get("display_name") or job_key),
+            "job_id": job_id,
+            "display_name": str(row.get("display_name") or job_id),
             "state": state,
             "reason": reason,
             "next_due_at": due_marker,
@@ -487,18 +487,17 @@ def _latest_backup_status_by_key(rows: list) -> dict[str, dict]:
     for row in rows or []:
         if not isinstance(row, dict):
             continue
-        keys = []
-        explicit_key = str(row.get("key") or "").strip()
-        if explicit_key:
-            keys.append(explicit_key)
-        backup_type = str(row.get("backup_type") or row.get("type") or "").strip().lower()
-        location = str(row.get("location") or "").strip().lower()
-        if backup_type and location:
-            keys.append(f"{backup_type}_{location}")
-        for key in keys:
-            current = latest.get(key)
-            if current is None or _status_is_newer(row, current):
-                latest[key] = row
+        from job_model import validate_job_id
+        key = row.get("job_id")
+        try:
+            validate_job_id(key)
+        except ValueError:
+            continue
+        if row.get("identity_state") == "unassigned":
+            continue
+        current = latest.get(key)
+        if current is None or _status_is_newer(row, current):
+            latest[key] = row
     return latest
 
 

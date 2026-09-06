@@ -26,21 +26,18 @@ def _write_status(path: Path, **overrides) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def test_reports_parse_status_files_for_multi_underscore_job_keys(tmp_path: Path) -> None:
+def test_reports_keep_filename_only_multi_underscore_history_unassigned(tmp_path: Path) -> None:
     status_dir = tmp_path / "status"
     status_dir.mkdir()
     _write_status(
         status_dir / "2026-08-28_09-00-00_borg_backup_taeglich_backuppf1_local.status"
     )
 
-    config = {"STATUS_DIR": str(status_dir)}
+    config = {"STATUS_DIR": str(status_dir), "BACKUP_SCRIPTS_DIR": str(tmp_path)}
 
     jobs = get_report_jobs(config)
-    assert [job["key"] for job in jobs] == ["borg_backup_taeglich_backuppf1_local"]
-    assert jobs[0]["backup_type"] == "borg_backup_taeglich_backuppf1"
-    assert jobs[0]["location"] == "local"
-
-    data = get_report_data(config, "borg_backup_taeglich_backuppf1_local")
+    assert len(jobs) == 1 and jobs[0]['identity_scope'] == 'unassigned'
+    data = get_report_data(config, scope='unassigned')
     assert data["run_count"] == 1
     assert data["success_count"] == 1
     assert data["monthly_status"] == [
@@ -48,20 +45,17 @@ def test_reports_parse_status_files_for_multi_underscore_job_keys(tmp_path: Path
     ]
 
 
-def test_reports_parse_smb_status_files(tmp_path: Path) -> None:
+def test_reports_do_not_infer_smb_job_from_filename(tmp_path: Path) -> None:
     status_dir = tmp_path / "status"
     status_dir.mkdir()
     _write_status(
         status_dir / "2026-08-28_09-00-00_methusalix_backup_taeglich_smb.status"
     )
 
-    config = {"STATUS_DIR": str(status_dir)}
+    config = {"STATUS_DIR": str(status_dir), "BACKUP_SCRIPTS_DIR": str(tmp_path)}
 
     jobs = get_report_jobs(config)
-    assert [job["key"] for job in jobs] == ["methusalix_backup_taeglich_smb"]
-    assert jobs[0]["backup_type"] == "methusalix_backup_taeglich"
-    assert jobs[0]["location"] == "smb"
-
-    data = get_report_data(config, "methusalix_backup_taeglich_smb")
+    assert len(jobs) == 1 and jobs[0]['identity_scope'] == 'unassigned'
+    data = get_report_data(config, scope='unassigned')
     assert data["run_count"] == 1
     assert data["success_count"] == 1

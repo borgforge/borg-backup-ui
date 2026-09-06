@@ -1,3 +1,4 @@
+from runtime_fixture_support import job_config_identity
 from pathlib import Path
 import logging
 import sys
@@ -22,7 +23,7 @@ from runtime.lib.backup_job import (  # noqa: E402
 def _config(tmp_path: Path) -> BackupJobConfig:
     return BackupJobConfig(
         job_name="cleanup-test",
-        backup_type="appdata",
+        **job_config_identity("appdata"),
         backup_location="local",
         lock_file=tmp_path / "backup.lock",
         log_dir=tmp_path,

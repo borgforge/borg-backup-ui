@@ -80,7 +80,7 @@ def test_wizard_shows_stored_archive_prefix_history() -> None:
     assert "wizardState.archivePrefixes" in script
     assert "function wizardRenderArchivePrefixSummary()" in script
     assert "function wizardArchivePrefixPopover(rows)" in script
-    assert "wizard.archivePatternCurrentLabel" in script
+    assert "wizard.archiveFilterCurrentBadge" in script
     assert "wizard.archivePatternHistoryTitle" in script
     assert "wizardRenderArchivePrefixSummary();" in bindings
     assert ".wizard-archive-prefix-summary" in css

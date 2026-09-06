@@ -46,7 +46,7 @@ def test_restore_job_and_repository_wizards_mark_required_fields() -> None:
         "storage.repositoryPassphrase",
         "storage.repositoryKeyExport",
         "wizard.jobName",
-        "wizard.typeId",
+        "wizard.archivePrefix",
         "wizard.sourcePaths",
         "wizard.storageTarget",
         "wizard.repositorySelect",

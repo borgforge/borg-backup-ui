@@ -79,7 +79,7 @@ def test_factory_reset_reports_running_restore_test_once(monkeypatch):
     class Jobs:
         def get_all_states(self):
             return {
-                "appdata_local": {"running": True},
+                "11111111-1111-4111-8111-111111111111": {"running": True},
                 "restore_test": {"running": True},
             }
 
@@ -93,13 +93,13 @@ def test_factory_reset_reports_running_restore_test_once(monkeypatch):
 
     monkeypatch.setattr(jobs_api.JobManager, "get", classmethod(lambda cls: Jobs()))
     monkeypatch.setattr(jobs_api, "active_resource_locks", lambda config: [
-        {"job_key": "appdata_local"}
+        {"job_id": "11111111-1111-4111-8111-111111111111", "run_id": "22222222-2222-4222-8222-222222222222"}
     ])
     monkeypatch.setattr(check_api.CheckManager, "get", classmethod(lambda cls: Checks()))
     monkeypatch.setattr(restore_api, "list_restore_runs", lambda config, limit: {"active": []})
 
     assert factory_reset_api._active_operation_blockers({}) == [
-        {"type": "backup", "name": "appdata_local"},
+        {"type": "backup", "name": "11111111-1111-4111-8111-111111111111", "job_id": "11111111-1111-4111-8111-111111111111", "run_id": "22222222-2222-4222-8222-222222222222"},
         {"type": "restore_test", "name": "restore_test"}
     ]
 
@@ -126,15 +126,22 @@ def test_worker_removes_state_but_recreates_first_install_layout(tmp_path: Path)
     data_root.mkdir()
     (data_root / "old.log").write_text("old", encoding="utf-8")
 
+    for name in ('repositories.json', 'schedules.json', 'installation-id.json', 'notification-state.json', 'restore-runs.json', 'runtime-recovery.json'):
+        (config_root / 'config' / name).write_text('{}')
+    controls = tmp_path / 'controls'; controls.mkdir(); (controls / 'state.json').write_text('{}')
     result = perform_reset({
         "configuration_root": str(config_root),
         "operational_data_root": str(data_root),
         "plugin_dir": str(plugin_dir),
+        "controls_root": str(controls),
     }, production=False)
 
     assert not (config_root / "config" / "jobs" / "old.json").exists()
     assert (config_root / "config" / "backup.conf").is_file()
     assert not (data_root / "old.log").exists()
+    assert not controls.exists()
+    assert not (config_root / "config/installation-id.json").exists()
+    assert not (config_root / "config/restore-runs.json").exists()
     assert (default_data / "logs").is_dir()
     assert (default_data / "restore-status").is_dir()
     assert result["initialized_operational_data_root"] == str(default_data)

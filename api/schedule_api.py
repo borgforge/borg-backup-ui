@@ -1,14 +1,10 @@
-"""
-api/schedule_api.py – Cron-Schedule-Verwaltung für Borg Backup Jobs
+"""Verified UUID schedules and managed cron installation (#447, #474).
 
-schedules.json wird gespeichert unter:
-  {BACKUP_SCRIPTS_DIR}/config/schedules.json
-
-Crontab-Einträge werden via `crontab -` installiert (zuverlässiger als
-direktes Schreiben der Datei). Abschnitt zwischen BORG-BACKUP-UI Markern.
-Option B: curl POST an /api/jobs/run, damit JobManager den Lauf trackt.
+The singleton restore_test service remains separate from backup job identities.
+Legacy schedule conversion belongs exclusively to the explicit migration.
 """
 
+from copy import deepcopy
 import json
 import re
 import shlex
@@ -16,133 +12,111 @@ import subprocess
 from pathlib import Path
 from typing import List
 
+from inventory_store import inventory_lock
+from job_model import JobValidationError, validate_job_id
+from job_store import read_jobs, read_json, write_transaction
 
 _CRON_BEGIN = "# --- BORG-BACKUP-UI BEGIN ---"
-_CRON_END   = "# --- BORG-BACKUP-UI END ---"
-_JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
+_CRON_END = "# --- BORG-BACKUP-UI END ---"
 
 
 def _schedules_path(config: dict) -> Path:
-    base = Path(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup"))
-    return base / "config" / "schedules.json"
+    from jobs_api import resolve_data_root
+    return resolve_data_root(config) / "config" / "schedules.json"
+
+
+def validate_schedules(schedules, jobs):
+    if not isinstance(schedules, dict):
+        raise JobValidationError("invalid_job_schedule", "Schedules must be an object")
+    for job_id, entry in schedules.items():
+        if job_id != "restore_test":
+            validate_job_id(job_id)
+            if job_id not in jobs:
+                raise JobValidationError("dangling_job_schedule", f"Schedule references an unknown job_id: {job_id}")
+        if not isinstance(entry, dict) or type(entry.get("enabled")) is not bool or not isinstance(entry.get("cron"), str):
+            raise JobValidationError("invalid_job_schedule", "A schedule requires a cron string and boolean enabled state")
+        if entry["cron"] or entry["enabled"]:
+            _validate_cron(entry["cron"])
+    return schedules
 
 
 def get_schedules(config: dict) -> dict:
     path = _schedules_path(config)
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError):
-        return {}
+    with inventory_lock(path.parent):
+        return validate_schedules(read_json(path, missing={}), read_jobs(path.parent / "jobs"))
 
 
-def save_schedule(config: dict, job_key: str, cron: str, enabled: bool) -> dict:
-    job_key = validate_schedule_job_key(config, job_key)
-    _validate_cron(cron)
-    schedules = get_schedules(config)
-    schedules[job_key] = {"cron": cron, "enabled": enabled}
-    write_schedules(config, schedules)
-    try:
-        apply_result = apply_all_schedules(config)
-    except Exception as exc:
-        raise RuntimeError(f"Schedule saved but could not be applied to crontab: {exc}") from exc
-    return {"saved": True, "applied": True, "apply_result": apply_result}
+def validate_schedule_job_id(config: dict, job_id: str) -> str:
+    if job_id == "restore_test":
+        return job_id
+    validate_job_id(job_id)
+    if job_id not in read_jobs(_schedules_path(config).parent / "jobs"):
+        raise JobValidationError("unknown_job_id", "Unknown schedule job_id")
+    return job_id
 
 
-def delete_schedule(config: dict, job_key: str) -> dict:
-    job_key = _validate_job_key_text(job_key)
-    schedules = get_schedules(config)
-    schedules.pop(job_key, None)
-    write_schedules(config, schedules)
-    try:
-        apply_result = apply_all_schedules(config)
-    except Exception as exc:
-        raise RuntimeError(f"Schedule deleted but crontab could not be updated: {exc}") from exc
-    return {"deleted": True, "applied": True, "apply_result": apply_result}
-
-
-def prune_orphaned_schedules(config: dict, log_fn=None) -> dict:
-    """
-    Entfernt verwaiste Schedule-Keys, für die kein Job mehr existiert.
-    `restore_test` bleibt als Sonderfall erlaubt.
-    """
-    from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
-
-    schedules = get_schedules(config)
-    if not isinstance(schedules, dict) or not schedules:
-        return {"changed": False, "removed_keys": []}
-
-    scripts_dir = resolve_scripts_dir(config)
-    data_root = resolve_data_root(config)
-    known_keys = {j.key for j in discover_jobs(scripts_dir, data_root)}
-    known_keys.add("restore_test")
-
-    removed_keys = [k for k in list(schedules.keys()) if k not in known_keys]
-    if not removed_keys:
-        return {"changed": False, "removed_keys": []}
-
-    for key in removed_keys:
-        schedules.pop(key, None)
-    write_schedules(config, schedules, validate_known_jobs=False)
-    apply_all_schedules(config)
-
-    removed_sorted = sorted(removed_keys)
-    if callable(log_fn):
-        try:
-            log_fn(
-                "AUTO-PRUNE schedules.json: entfernt=%d keys=%s",
-                len(removed_sorted),
-                ",".join(removed_sorted),
-            )
-        except TypeError:
-            log_fn(
-                f"AUTO-PRUNE schedules.json: entfernt={len(removed_sorted)} "
-                f"keys={','.join(removed_sorted)}"
-            )
-    return {"changed": True, "removed_keys": removed_sorted}
-
-
-def write_schedules(config: dict, schedules: dict, *, validate_known_jobs: bool = True) -> None:
-    normalized: dict = {}
-    for raw_key, raw_sched in (schedules or {}).items():
-        key = validate_schedule_job_key(config, raw_key) if validate_known_jobs else _validate_job_key_text(raw_key)
-        if not isinstance(raw_sched, dict):
+def schedule_lines(config, schedules, jobs):
+    # Verify the entire map (including disabled entries) before invoking cron.
+    validate_schedules(schedules, jobs)
+    port = _validate_port(config.get("PORT", "8765"))
+    token_file = str(_schedules_path(config).parent / ".api-token")
+    lines = []
+    for job_id, entry in schedules.items():
+        if not entry["enabled"] or (job_id != "restore_test" and not jobs[job_id].get("enabled", True)):
             continue
-        cron = str(raw_sched.get("cron") or "").strip()
-        if cron:
-            _validate_cron(cron)
-        normalized[key] = {"cron": cron, "enabled": bool(raw_sched.get("enabled", True))}
+        if job_id == "restore_test":
+            url = f"http://127.0.0.1:{port}/api/restore-tests/run"
+            body = {"scheduled": True}
+        else:
+            url = f"http://127.0.0.1:{port}/api/jobs/run"
+            body = {"job_id": job_id, "scheduled": True}
+        command = _build_schedule_command(url, json.dumps(body, separators=(",", ":")), token_file)
+        if any(char in command for char in ("\n", "\r", "\x00")):
+            raise ValueError("Schedule paths must not contain control characters")
+        # Cron interprets percent signs before handing the command to the shell.
+        command = command.replace("%", "\\%")
+        lines.append(f"{entry['cron']} {command} >/dev/null 2>&1")
+    return lines
+
+
+def _change_schedule(config, job_id, update):
     path = _schedules_path(config)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(normalized, indent=2, ensure_ascii=False), encoding="utf-8")
+    with inventory_lock(path.parent):
+        validate_schedule_job_id(config, job_id)
+        jobs = read_jobs(path.parent / "jobs")
+        before = get_schedules(config)
+        after = deepcopy(before)
+        update(after)
+        old_lines = schedule_lines(config, before, jobs)
+        new_lines = schedule_lines(config, after, jobs)
+        result = write_transaction({path: after},
+            after_write=lambda: _update_crontab(new_lines),
+            rollback_after=lambda: _update_crontab(old_lines))
+        return {"applied": True, "apply_result": result}
+
+
+def save_schedule(config: dict, job_id: str, cron: str, enabled: bool) -> dict:
+    def update(schedules):
+        schedules[job_id] = {**schedules.get(job_id, {}), "cron": cron, "enabled": enabled}
+    return {"saved": True, **_change_schedule(config, job_id, update)}
+
+
+def delete_schedule(config: dict, job_id: str) -> dict:
+    return {"deleted": True, **_change_schedule(config, job_id, lambda schedules: schedules.pop(job_id, None))}
+
+
+def write_schedules(config: dict, schedules: dict) -> None:
+    path = _schedules_path(config)
+    with inventory_lock(path.parent):
+        validate_schedules(schedules, read_jobs(path.parent / "jobs"))
+        write_transaction({path: schedules})
 
 
 def apply_all_schedules(config: dict) -> dict:
-    """Schreibt alle aktiven Schedules in den Crontab (idempotent, sicher bei Fehler)."""
-    schedules = get_schedules(config)
-    port = _validate_port(config.get("PORT", "8765"))
-    token_file = str(Path(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")) / "config" / ".api-token")
-
-    lines: List[str] = []
-    for job_key, sched in schedules.items():
-        job_key = validate_schedule_job_key(config, job_key)
-        if not isinstance(sched, dict):
-            continue
-        if not sched.get("enabled", True):
-            continue
-        cron = str(sched.get("cron") or "").strip()
-        _validate_cron(cron)
-        if job_key == "restore_test":
-            url  = f"http://127.0.0.1:{port}/api/restore-tests/run"
-            body = json.dumps({"scheduled": True}, separators=(",", ":"))
-        else:
-            url  = f"http://127.0.0.1:{port}/api/jobs/run"
-            body = json.dumps({"job_key": job_key, "scheduled": True}, separators=(",", ":"))
-        line = f"{cron} {_build_schedule_command(url, body, token_file)} >/dev/null 2>&1"
-        lines.append(line)
-
-    return _update_crontab(lines)
+    path = _schedules_path(config)
+    with inventory_lock(path.parent):
+        jobs = read_jobs(path.parent / "jobs")
+        return _update_crontab(schedule_lines(config, get_schedules(config), jobs))
 
 
 def _update_crontab(lines: List[str]) -> dict:
@@ -193,44 +167,22 @@ def _update_crontab(lines: List[str]) -> dict:
 def _split_crontab(text: str):
     b = text.find(_CRON_BEGIN)
     e = text.find(_CRON_END)
-    if b == -1 or e == -1:
+    if b == -1 and e == -1:
         return text, ""
+    if b == -1 or e < b or text.count(_CRON_BEGIN) != 1 or text.count(_CRON_END) != 1:
+        raise RuntimeError("Managed crontab markers are malformed; crontab was not changed")
     return text[:b], text[e + len(_CRON_END):]
 
 
 def _validate_cron(expr: str) -> None:
+    if not isinstance(expr, str) or any(char in expr for char in ("\n", "\r", "\x00")):
+        raise ValueError("Cron must be a single line")
     parts = expr.strip().split()
     if len(parts) != 5:
         raise ValueError(f"Cron requires exactly 5 fields (found: {len(parts)})")
     for p in parts:
         if not re.fullmatch(r'[\d\*/,\-]+', p):
             raise ValueError(f"Invalid cron field: {p!r}")
-
-
-def _validate_job_key_text(job_key: str) -> str:
-    key = str(job_key or "").strip()
-    if not key or not _JOB_KEY_RX.fullmatch(key):
-        raise ValueError("Invalid job key")
-    return key
-
-
-def validate_schedule_job_key(config: dict, job_key: str) -> str:
-    key = _validate_job_key_text(job_key)
-    if key == "restore_test":
-        return key
-    if key not in _known_job_keys(config):
-        raise ValueError(f"Unknown job key: {key}")
-    return key
-
-
-def _known_job_keys(config: dict) -> set[str]:
-    try:
-        from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
-        scripts_dir = resolve_scripts_dir(config)
-        data_root = resolve_data_root(config)
-        return {str(j.key).strip() for j in discover_jobs(scripts_dir, data_root) if str(j.key).strip()}
-    except Exception:
-        return set()
 
 
 def _validate_port(raw: str) -> int:

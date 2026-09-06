@@ -27,33 +27,19 @@ def test_restore_step_labels_archive_path_and_shows_origin_context() -> None:
     assert "archive.textContent = restoreState.archive" in script
 
 
-def test_job_api_exposes_repository_display_name_for_restore_context(monkeypatch) -> None:
-    job = jobs_api.JobInfo(
-        key="photos_local",
-        backup_type="photos",
-        location="local",
-        script_path=None,
-        name="Photos",
-    )
-    monkeypatch.setattr(jobs_api, "resolve_scripts_dir", lambda _config: Path("/unused/scripts"))
-    monkeypatch.setattr(jobs_api, "resolve_data_root", lambda _config: Path("/unused"))
-    monkeypatch.setattr(jobs_api, "get_all_runtime_states", lambda _config: {})
-    monkeypatch.setattr(jobs_api, "discover_jobs", lambda _scripts, _root: [job])
-    monkeypatch.setattr(repository_context, "load_repository_inventory", lambda _config: {
-        "repositories": {},
-        "storages": {},
-    })
-    monkeypatch.setattr(repository_context, "resolve_job_repository_context", lambda *_args, **_kwargs: {
-        "repository_path": "/mnt/backup/borg-photos",
-        "repository_key": "repo_photos",
-        "repository": {
-            "repository_key": "repo_photos",
-            "display_name": "Photos Repository",
-        },
-    })
-    monkeypatch.setattr(restore_tests_api, "build_restore_verification_map", lambda *_args: {})
+from test_canonical_job_wizard import setup, create
 
-    result = jobs_api.list_jobs({}, {})
 
-    assert result[0]["repository_key"] == "repo_photos"
-    assert result[0]["repository_name"] == "Photos Repository"
+def test_job_api_exposes_repository_display_name_for_restore_context(setup, monkeypatch) -> None:
+    from job_store import read_json
+    from inventory_store import atomic_write_json
+    result, _ = create(setup)
+    store_path = setup[3] / 'config/repositories.json'
+    store = read_json(store_path)
+    store['repositories'][0]['display_name'] = 'Photos Repository'
+    atomic_write_json(store_path, store)
+    monkeypatch.setattr(jobs_api, 'get_all_runtime_states', lambda _config: {})
+    data = jobs_api.list_jobs(setup[0], {})
+    assert data[0]['job_id'] == result['job_id']
+    assert data[0]['repository_key'] == 'repo_a'
+    assert data[0]['repository_name'] == 'Photos Repository'

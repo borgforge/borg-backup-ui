@@ -13,6 +13,7 @@ import config_api  # noqa: E402
 import schedule_api  # noqa: E402
 import runtime_recovery  # noqa: E402
 from inventory_store import InventoryCorruptError  # noqa: E402
+from job_model import JobValidationError  # noqa: E402
 from storage_objects_api import read_storage_store  # noqa: E402
 from status import BackupStatus  # noqa: E402
 
@@ -26,12 +27,17 @@ def test_corrupt_storage_inventory_is_not_silently_treated_as_empty(tmp_path: Pa
         read_storage_store({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
 
 
-def test_corrupt_schedules_json_returns_empty_schedule_set(tmp_path: Path):
+def test_corrupt_schedules_json_is_rejected_without_changing_bytes(tmp_path: Path):
     schedules = tmp_path / "config" / "schedules.json"
     schedules.parent.mkdir(parents=True)
     schedules.write_text("{broken-json", encoding="utf-8")
 
-    assert schedule_api.get_schedules({"BACKUP_SCRIPTS_DIR": str(tmp_path)}) == {}
+    before = schedules.read_bytes()
+    with pytest.raises(JobValidationError) as exc_info:
+        schedule_api.get_schedules({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+
+    assert exc_info.value.api_code == "invalid_job_inventory"
+    assert schedules.read_bytes() == before
 
 
 def test_corrupt_runtime_recovery_state_is_reported_without_crashing(tmp_path: Path):

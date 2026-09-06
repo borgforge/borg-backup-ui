@@ -284,14 +284,14 @@ test('normal runs keep SSE and scheduled runs select their effective mode', () =
   vm.runInContext(fs.readFileSync('ui/js/pages/jobs.js', 'utf8'), f.context);
   assert.equal(vm.runInContext("jobRuntimeState({run_id: 'new'}, {run_file_activity: true}).run_file_activity", f.context), false);
   assert.equal(vm.runInContext("jobRuntimeState({run_id: 'scheduled', file_activity: true}).run_file_activity", f.context), true);
-  f.context.window.BBUI.jobsState.jobs = [{ key: 'normal', run_file_activity: false }];
+  f.context.window.BBUI.jobsState.jobs = [{ job_id: 'normal', run_id: 'synthetic-run', run_file_activity: false }];
   f.context.jobsLocationKey = () => 'local';
   f.context.EventSource = class {
     constructor(url) { this.url = url; }
     addEventListener() {}
   };
   vm.runInContext("openLogPanel('normal')", f.context);
-  assert.equal(f.context.window.BBUI.jobsState.activeEventSource.url, '/api/jobs/log/stream?job=normal');
+  assert.equal(f.context.window.BBUI.jobsState.activeEventSource.url, '/api/jobs/log/stream?job_id=normal&run_id=synthetic-run');
   assert.equal(f.context.window.BBUI.jobsState.activityLog, null);
   const oldStream = f.context.window.BBUI.jobsState.activeEventSource;
   f.context.window.BBUI.jobsState.activeEventSource = null;
@@ -306,7 +306,7 @@ test('completed activity runs distinguish Borg warnings from failures', () => {
   vm.runInContext(fs.readFileSync('ui/js/pages/jobs.js', 'utf8'), f.context);
   let onStatus;
   f.context.window.BBUI.components.activityLog.create = options => { onStatus = options.onStatus; return { close() {} }; };
-  f.context.window.BBUI.jobsState.jobs = [{ key: 'files', run_file_activity: true }];
+  f.context.window.BBUI.jobsState.jobs = [{ job_id: 'files', run_id: 'synthetic-run', run_file_activity: true }];
   f.context.jobsLocationKey = () => 'local';
   vm.runInContext("openLogPanel('files')", f.context);
   const badge = f.elements.get('log-status-badge');

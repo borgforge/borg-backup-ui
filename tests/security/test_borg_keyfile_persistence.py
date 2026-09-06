@@ -27,10 +27,23 @@ import repositories_api  # noqa: E402
 from repositories_api import create_or_import_repository, refresh_repository_info, write_repository_store  # noqa: E402
 import settings_transfer_api as transfer  # noqa: E402
 from settings_transfer_api import export_jobs_bundle, export_jobs_bundle_encrypted, import_jobs_bundle_encrypted  # noqa: E402
+from job_model import new_job_defaults
+from job_store import read_jobs
 from storage_objects_api import write_storage_store  # noqa: E402
 
 
 REPOSITORY_ID = "a" * 64
+FLASH_ID = "11111111-1111-4111-8111-111111111111"
+APPDATA_ID = "22222222-2222-4222-8222-222222222222"
+
+
+def _write_job(root, job_id, name, repository_key, source_paths):
+    path = root / "config/jobs" / (job_id + ".json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    metadata = {**new_job_defaults(), "job_id": job_id, "name": name,
+                "repository_key": repository_key, "source_paths": source_paths,
+                "archive_prefixes": [name.lower() + "-backup"]}
+    path.write_text(json.dumps(metadata), encoding="utf-8")
 
 
 def _key_content(repository_id: str = REPOSITORY_ID) -> bytes:
@@ -89,13 +102,7 @@ def test_plain_job_export_contains_only_keyfile_metadata(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(root)}
     jobs = root / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "flash_local.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "flash_local",
-        "name": "Flash",
-        "repository_key": "repo_flash",
-        "source_paths": ["/boot"],
-    }), encoding="utf-8")
+    _write_job(jobs.parent.parent, FLASH_ID, "Flash", "repo_flash", ["/boot"])
     write_storage_store(config, {"storages": [{
         "storage_key": "storage_local",
         "display_name": "Local",
@@ -106,6 +113,7 @@ def test_plain_job_export_contains_only_keyfile_metadata(tmp_path: Path):
     }]})
     write_repository_store(config, {"repositories": [{
         "repository_key": "repo_flash",
+        "job_ids": [FLASH_ID], "source_job_ids": [FLASH_ID],
         "display_name": "Flash",
         "storage_key": "storage_local",
         "relative_path": "borg-backup-flash",
@@ -126,18 +134,16 @@ def test_plain_job_export_contains_only_keyfile_metadata(tmp_path: Path):
     assert "ZmFrZS1lbmNyeXB0ZWQta2V5" not in result["bundle_text"]
 
 
-def test_encrypted_job_transfer_restores_keyfile_to_target_store(tmp_path: Path):
+def test_encrypted_job_transfer_restores_keyfile_to_target_store(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     source_config = {"BACKUP_SCRIPTS_DIR": str(source)}
     jobs = source / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "flash_local.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "flash_local",
-        "name": "Flash",
-        "repository_key": "repo_flash",
-        "source_paths": ["/boot"],
-    }), encoding="utf-8")
+    _write_job(jobs.parent.parent, FLASH_ID, "Flash", "repo_flash", ["/boot"])
+    passphrase = source / "secrets/.borg-passphrase-repo_flash"
+    passphrase.parent.mkdir(parents=True)
+    passphrase.write_bytes(b"synthetic-keyfile-passphrase\n")
+    passphrase.chmod(0o600)
     write_storage_store(source_config, {"storages": [{
         "storage_key": "storage_local",
         "display_name": "Local",
@@ -148,12 +154,14 @@ def test_encrypted_job_transfer_restores_keyfile_to_target_store(tmp_path: Path)
     }]})
     write_repository_store(source_config, {"repositories": [{
         "repository_key": "repo_flash",
+        "job_ids": [FLASH_ID], "source_job_ids": [FLASH_ID],
         "display_name": "Flash",
         "storage_key": "storage_local",
         "relative_path": "borg-backup-flash",
         "path_raw": "/mnt/backup/borg-backup-flash",
         "encryption": "keyfile-blake2",
         "borg_repository_id": REPOSITORY_ID,
+        "passphrase_ref": str(passphrase),
     }]})
     source_key_dir = borg_keys_dir(source_config)
     source_key_dir.mkdir(parents=True)
@@ -161,12 +169,13 @@ def test_encrypted_job_transfer_restores_keyfile_to_target_store(tmp_path: Path)
     exported = export_jobs_bundle_encrypted(source_config, "transfer-password-190")
     target_config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "target")}
 
+    monkeypatch.setattr("schedule_api._update_crontab", lambda lines: None)
     result = import_jobs_bundle_encrypted(
         target_config,
         "transfer-password-190",
         exported["payload_b64"],
         dry_run=False,
-        settings_mode="ignore",
+        selected_jobs=[FLASH_ID],
     )
 
     assert exported["keyfile_count"] == 1
@@ -174,6 +183,13 @@ def test_encrypted_job_transfer_restores_keyfile_to_target_store(tmp_path: Path)
     restored = list(borg_keys_dir(target_config).glob("*"))
     assert len(restored) == 1
     assert restored[0].read_bytes() == _key_content()
+    assert restored[0].stat().st_mode & 0o777 == 0o600
+    target_id = result["id_map"][FLASH_ID]
+    assert target_id != FLASH_ID
+    assert read_jobs(tmp_path / "target/config/jobs")[target_id]["repository_key"] == "repo_flash"
+    restored_passphrase = tmp_path / "target/secrets/.borg-passphrase-repo_flash"
+    assert restored_passphrase.read_bytes() == passphrase.read_bytes()
+    assert restored_passphrase.stat().st_mode & 0o777 == 0o600
 
 
 def test_encrypted_job_transfer_excludes_repository_key_exports(tmp_path: Path, monkeypatch):
@@ -181,20 +197,8 @@ def test_encrypted_job_transfer_excludes_repository_key_exports(tmp_path: Path, 
     config = {"BACKUP_SCRIPTS_DIR": str(source)}
     jobs = source / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "flash_local.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "flash_local",
-        "name": "Flash",
-        "repository_key": "repo_flash",
-        "source_paths": ["/boot"],
-    }), encoding="utf-8")
-    (jobs / "appdata_local.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "appdata_local",
-        "name": "Appdata",
-        "repository_key": "repo_appdata",
-        "source_paths": ["/mnt/user/appdata"],
-    }), encoding="utf-8")
+    _write_job(jobs.parent.parent, FLASH_ID, "Flash", "repo_flash", ["/boot"])
+    _write_job(jobs.parent.parent, APPDATA_ID, "Appdata", "repo_appdata", ["/mnt/user/appdata"])
     write_storage_store(config, {"storages": [{
         "storage_key": "storage_local",
         "display_name": "Local",
@@ -206,6 +210,7 @@ def test_encrypted_job_transfer_excludes_repository_key_exports(tmp_path: Path, 
     write_repository_store(config, {"repositories": [
         {
             "repository_key": "repo_flash",
+            "job_ids": [FLASH_ID], "source_job_ids": [FLASH_ID],
             "display_name": "Flash",
             "storage_key": "storage_local",
             "relative_path": "borg-backup-flash",
@@ -215,6 +220,7 @@ def test_encrypted_job_transfer_excludes_repository_key_exports(tmp_path: Path, 
         },
         {
             "repository_key": "repo_appdata",
+            "job_ids": [APPDATA_ID], "source_job_ids": [APPDATA_ID],
             "display_name": "Appdata",
             "storage_key": "storage_local",
             "relative_path": "borg-backup-appdata",
@@ -260,6 +266,7 @@ def test_repository_key_backup_exports_and_imports_matching_repository_key(tmp_p
     }]})
     write_repository_store(source_config, {"repositories": [{
         "repository_key": "repo_appdata",
+        "job_ids": [], "source_job_ids": [],
         "display_name": "Appdata",
         "storage_key": "storage_local",
         "relative_path": "borg-backup-appdata",
@@ -294,6 +301,7 @@ def test_repository_key_backup_exports_and_imports_matching_repository_key(tmp_p
     }]})
     write_repository_store(target_config, {"repositories": [{
         "repository_key": "repo_appdata",
+        "job_ids": [], "source_job_ids": [],
         "display_name": "Appdata",
         "storage_key": "storage_local",
         "relative_path": "borg-backup-appdata",

@@ -138,7 +138,20 @@ function restoreJobIcon(job) {
   const icon = resolveJobIcon(job);
   const color = resolveJobIconColor(job);
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} restore-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon type-icon-${escHtml(icon)} restore-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+}
+
+function restoreCompareJobs(a, b) {
+  const order = { local: 0, usb: 1, smb: 2, storagebox: 3 };
+  const locationOrder = (order[String(a.location || '').toLowerCase()] ?? 99)
+    - (order[String(b.location || '').toLowerCase()] ?? 99);
+  const language = window.BBUI?.components?.i18n?.getLanguage?.() || 'de';
+  return locationOrder || String(a.display_name || a.name || '').localeCompare(
+    String(b.display_name || b.name || ''), language, { numeric: true, sensitivity: 'base' });
+}
+
+function restoreJobSubtitle(job) {
+  return job.archive_prefix || job.archive_prefixes?.[0] || job.description || '';
 }
 
 function renderRestoreJobSidebar() {
@@ -146,8 +159,8 @@ function renderRestoreJobSidebar() {
   if (!list) return;
   const query = String(document.getElementById('restore-sidebar-search')?.value || '').trim().toLowerCase();
   const jobs = (restoreState.jobs || []).filter((job) =>
-    `${job.display_name || ''} ${job.name || ''} ${job.key || ''} ${job.location || ''}`.toLowerCase().includes(query)
-  );
+    `${job.display_name || ''} ${job.name || ''} ${job.job_id || ''} ${job.location || ''}`.toLowerCase().includes(query)
+  ).sort(restoreCompareJobs);
   if (!jobs.length) {
     list.innerHTML = `<div class="restore-sidebar-empty">${escHtml(restoreT('noMatchingJobs'))}</div>`;
     return;
@@ -157,8 +170,9 @@ function renderRestoreJobSidebar() {
     const locationJobs = jobs.filter((job) => String(job.location || '').toLowerCase() === location);
     if (!locationJobs.length) return '';
     return `<section class="restore-sidebar-group"><header>${escHtml(restoreLocationLabel(location))}<span>${locationJobs.length}</span></header>${locationJobs.map((job) => {
-      const active = String(job.key) === String(restoreState.job);
-      return `<button type="button" class="restore-sidebar-job ${active ? 'is-active' : ''}" data-restore-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.key)}</strong><small>${escHtml(job.key)}</small></span></button>`;
+      const active = String(job.job_id) === String(restoreState.job);
+      const subtitle = restoreJobSubtitle(job);
+      return `<button type="button" class="restore-sidebar-job ${active ? 'is-active' : ''}" data-restore-sidebar-job="${escHtml(job.job_id)}" ${active ? 'aria-current="page"' : ''}>${restoreJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.job_id)}</strong>${subtitle ? `<small>${escHtml(subtitle)}</small>` : ''}</span></button>`;
     }).join('')}</section>`;
   }).join('');
 }
@@ -177,13 +191,14 @@ function renderRestoreSelectedJob() {
   const card = document.getElementById('restore-selected-job-card');
   const badge = document.getElementById('restore-job-ready-badge');
   if (!card) return;
-  const job = (restoreState.jobs || []).find((item) => String(item.key) === String(restoreState.job));
+  const job = (restoreState.jobs || []).find((item) => String(item.job_id) === String(restoreState.job));
   if (!job) {
     card.innerHTML = `<span class="muted">${escHtml(restoreT('chooseJob'))}</span>`;
     if (badge) badge.textContent = '';
     return;
   }
-  card.innerHTML = `${restoreJobIcon(job)}<div><small>${escHtml(restoreT('selectedJob'))}</small><h3>${escHtml(job.display_name || job.name || job.key)}</h3><small>${escHtml(job.key)} · ${escHtml(restoreLocationLabel(job.location))}</small></div><span class="ready">${escHtml(restoreT('ready'))}</span>`;
+  const subtitle = [restoreJobSubtitle(job), restoreLocationLabel(job.location)].filter(Boolean).join(' · ');
+  card.innerHTML = `${restoreJobIcon(job)}<div><small>${escHtml(restoreT('selectedJob'))}</small><h3>${escHtml(job.display_name || job.name || job.job_id)}</h3><small>${escHtml(subtitle)}</small></div><span class="ready">${escHtml(restoreT('ready'))}</span>`;
   if (badge) badge.textContent = restoreT('jobSelected');
 }
 
@@ -193,7 +208,7 @@ function renderRestoreArchiveList() {
   const context = document.getElementById('restore-archive-context');
   const filtersEl = document.getElementById('restore-archive-filter-summary');
   if (!list) return;
-  const job = (restoreState.jobs || []).find((item) => String(item.key) === String(restoreState.job));
+  const job = (restoreState.jobs || []).find((item) => String(item.job_id) === String(restoreState.job));
   if (context) context.textContent = job?.display_name || job?.name || restoreState.job || '';
   if (count) count.textContent = restoreT('archiveCount', { count: restoreState.archives.length });
   if (filtersEl) {
@@ -232,7 +247,7 @@ function restoreArchiveFilterPopover(filters) {
 function renderRestoreSourceContext() {
   const repository = document.getElementById('restore-source-repository');
   const archive = document.getElementById('restore-source-archive');
-  const job = (restoreState.jobs || []).find((item) => String(item.key) === String(restoreState.job));
+  const job = (restoreState.jobs || []).find((item) => String(item.job_id) === String(restoreState.job));
   if (repository) {
     repository.textContent = job?.repository_name || job?.repository_key || '—';
   }
@@ -427,8 +442,9 @@ function renderRestoreRuns(runs) {
     return `<article class="restore-run-card is-active">
       <div class="restore-run-main">
         <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
-        <strong>${escHtml(run.job_key || '—')}</strong>
+        <strong>${escHtml(run.current_job_name || run.job_name_snapshot || restoreT('identityUnassigned'))}</strong>
         <small>${escHtml(run.archive || '—')}</small>
+        ${run.identity_scope && run.identity_scope !== 'configured' ? `<span class="ui-badge">${escHtml(restoreT(run.identity_scope === 'deleted' ? 'identityDeleted' : 'identityUnassigned'))}</span>` : ''}
       </div>
       <div class="restore-run-meta">
         <span>${escHtml(restoreT('targetDirectory'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
@@ -478,11 +494,14 @@ function renderRestoreHistory(payload) {
     const state = String(run.state || '');
     return `<article class="restore-history-card ${selected ? 'is-selected' : ''}" data-restore-history-id="${escHtml(id)}">
       <div class="restore-run-main">
-        <strong>${escHtml(run.job_key || '—')}</strong>
+        <strong>${escHtml(run.current_job_name || run.job_name_snapshot || restoreT('identityUnassigned'))}</strong>
         <small>${escHtml(run.archive || '—')}</small>
+        ${run.identity_scope && run.identity_scope !== 'configured' ? `<span class="ui-badge">${escHtml(restoreT(run.identity_scope === 'deleted' ? 'identityDeleted' : 'identityUnassigned'))}</span>` : ''}
       </div>
       <div class="restore-run-meta">
         <dl>
+          <dt>${escHtml(restoreT('jobAtRun'))}</dt><dd>${escHtml(run.job_name_snapshot || '—')}</dd>
+          <dt>${escHtml(restoreT('repositoryAtRun'))}</dt><dd>${escHtml(run.repository_snapshot || '—')}</dd>
           <dt>${escHtml(restoreT('historyRestoreId'))}</dt><dd>${escHtml(id || '—')}</dd>
           <dt>${escHtml(restoreT('targetDirectory'))}</dt><dd>${escHtml(run.destination_path || run.target_dir || '—')}</dd>
           <dt>${escHtml(restoreT('runStarted'))}</dt><dd>${escHtml(run.started_at || '—')}</dd>
@@ -518,7 +537,7 @@ async function restoreDeleteHistoryEntry(restoreId) {
   const id = String(restoreId || '').trim();
   if (!id) return;
   const run = (restoreState.history || []).find((item) => String(item.restore_id || '') === id) || {};
-  const label = run.job_key || id;
+  const label = run.job_name_snapshot || restoreT('identityUnassigned');
   const ok = await openRestoreHistoryDeleteConfirmModal(label, id);
   if (!ok) return;
   try {
@@ -572,6 +591,9 @@ function renderRestoreHistoryDetail(detail) {
   const error = restoreFailureMessage(detail);
   target.innerHTML = `<div class="restore-history-detail-grid">
     <div><small>${escHtml(restoreT('historyRestoreId'))}</small><strong>${escHtml(id)}</strong></div>
+    <div><small>${escHtml(restoreT('jobAtRun'))}</small><strong>${escHtml(detail.job_name_snapshot || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('repositoryAtRun'))}</small><strong>${escHtml(detail.repository_snapshot || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('prefixAtRun'))}</small><strong>${escHtml(detail.archive_prefix_snapshot || '—')}</strong></div>
     <div><small>${escHtml(restoreT('runStatus'))}</small><strong><span class="ui-badge ${restoreRunStateClass(detail.state)}">${escHtml(restoreRunStateLabel(detail.state))}</span></strong></div>
     <div><small>${escHtml(restoreT('sourcePath'))}</small><strong>${escHtml(detail.source_path || '—')}</strong></div>
     <div><small>${escHtml(restoreT('targetDirectory'))}</small><strong>${escHtml(detail.target_dir || '—')}</strong></div>
@@ -782,30 +804,17 @@ async function restoreInit() {
   try {
     const jobsRes = await fetch('/api/jobs', { credentials: 'include' });
     const jobsData = await jobsRes.json();
-    const jobs = (jobsData.jobs || []).filter(j => !j.is_utility);
+    const jobs = (jobsData.jobs || []).filter(j => !j.is_utility).sort(restoreCompareJobs);
     restoreState.jobs = jobs;
 
     for (const job of jobs) {
       if (job.is_utility) continue;
       const opt = document.createElement('option');
-      opt.value = job.key;
-      opt.textContent = job.display_name || job.name || job.key;
+      opt.value = job.job_id;
+      opt.textContent = job.display_name || job.name || job.job_id;
       sel.appendChild(opt);
     }
 
-    if (!jobs.length) {
-      const checkRes = await fetch('/api/storage/check/jobs', { credentials: 'include' });
-      if (checkRes.ok) {
-        const checkData = await checkRes.json();
-        for (const job of (checkData.jobs || [])) {
-          const opt = document.createElement('option');
-          opt.value = job.key;
-          opt.textContent = job.name || job.key;
-          sel.appendChild(opt);
-        }
-        restoreState.jobs = (checkData.jobs || []).map((job) => ({ ...job, location: job.location || 'local' }));
-      }
-    }
     renderRestoreJobSidebar();
     renderRestoreSelectedJob();
     renderRestoreSourceContext();
@@ -815,8 +824,8 @@ async function restoreInit() {
 }
 
 async function restoreLoadArchives() {
-  const jobKey = document.getElementById('restore-job-sel').value;
-  restoreState.job = jobKey;
+  const jobId = document.getElementById('restore-job-sel').value;
+  restoreState.job = jobId;
   restoreState.archive = '';
   restoreState.path = '';
   restoreState.selectedPath = '';
@@ -830,7 +839,7 @@ async function restoreLoadArchives() {
   if (sel) sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
   _restoreMsg('');
 
-  if (!jobKey) {
+  if (!jobId) {
     _restoreRenderSelectionSummary();
     _restoreRenderSelectedBox();
     return;
@@ -840,7 +849,7 @@ async function restoreLoadArchives() {
   _restoreMsg(restoreT('loadingArchives'));
 
   try {
-    const res = await fetch(`/api/restore/archives?job=${encodeURIComponent(jobKey)}`, { credentials: 'include' });
+    const res = await fetch(`/api/restore/archives?job_id=${encodeURIComponent(jobId)}`, { credentials: 'include' });
     const data = await res.json();
     if (!res.ok || data.error) { _restoreMsg(restoreT('error', { message: apiErrorMessage(data, res.status) }), true); return; }
 
@@ -864,7 +873,7 @@ async function restoreLoadArchives() {
 }
 
 async function restoreBrowse(path) {
-  const jobKey = restoreState.job;
+  const jobId = restoreState.job;
   const archive = document.getElementById('restore-archive-sel').value;
   if (!archive) return;
 
@@ -886,7 +895,7 @@ async function restoreBrowse(path) {
   }
 
   try {
-    const url = `/api/restore/files?job=${encodeURIComponent(jobKey)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
+    const url = `/api/restore/files?job_id=${encodeURIComponent(jobId)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
     const res = await fetch(url, { credentials: 'include' });
     const data = await res.json();
     if (!res.ok || data.error) { _restoreMsg(restoreT('error', { message: apiErrorMessage(data, res.status) }), true); return; }
@@ -981,7 +990,7 @@ async function restoreDownload(path) {
       </div>`;
   }
   try {
-    const baseParams = `job=${encodeURIComponent(restoreState.job)}&archive=${encodeURIComponent(restoreState.archive)}&path=${encodeURIComponent(path)}`;
+    const baseParams = `job_id=${encodeURIComponent(restoreState.job)}&archive=${encodeURIComponent(restoreState.archive)}&path=${encodeURIComponent(path)}`;
     const checkRes = await fetch(`/api/restore/download-check?${baseParams}`, { credentials: 'include' });
     const checkData = await checkRes.json();
     if (!checkRes.ok || checkData?.error) {
@@ -1181,7 +1190,7 @@ async function restoreRunPrecheck() {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        job_key: restoreState.job,
+        job_id: restoreState.job,
         archive: restoreState.archive,
         source_path: source,
         target_dir: target,
@@ -1343,7 +1352,7 @@ async function restoreStart() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         confirm: true,
-        job_key: restoreState.job,
+        job_id: restoreState.job,
         archive: restoreState.archive,
         source_path: source,
         target_dir: target,

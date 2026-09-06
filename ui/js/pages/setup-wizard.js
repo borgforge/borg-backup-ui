@@ -15,6 +15,22 @@
     return window.BBUI?.core;
   }
 
+  function isMaintenance(status = currentStatus) {
+    return !!core()?.isStartupMaintenanceMode?.()
+      || status?.maintenance_mode === true
+      || status?.startup_state?.mode === 'maintenance';
+  }
+
+  function suspendForMaintenance() {
+    close({ force: true });
+    clearReturn();
+    const panel = document.getElementById('dashboard-setup-actions');
+    if (panel) {
+      panel.className = 'setup-action-panel hidden';
+      panel.innerHTML = '';
+    }
+  }
+
   function modalHelpers() {
     return window.BBUI?.components?.modal || {};
   }
@@ -130,6 +146,10 @@
   }
 
   function open(status = null) {
+    if (isMaintenance(status || currentStatus)) {
+      suspendForMaintenance();
+      return false;
+    }
     const modal = document.getElementById('setup-wizard-modal');
     if (!modal) return;
     currentStatus = status || currentStatus || {};
@@ -137,6 +157,7 @@
     renderModal(currentStatus);
     modal.classList.remove('hidden');
     captureCloseSnapshot();
+    return true;
   }
 
   function close(options = {}) {
@@ -153,6 +174,10 @@
   async function maybeOpen(forceRequired = false) {
     try {
       const status = await fetchStatus(true);
+      if (isMaintenance(status)) {
+        suspendForMaintenance();
+        return status;
+      }
       if (!status?.global_data_dir_set) {
         if (forceRequired) open(status);
         return status;
@@ -165,6 +190,7 @@
   }
 
   async function saveDataDir() {
+    if (isMaintenance()) return suspendForMaintenance();
     const input = document.getElementById('setup-wizard-data-dir-input');
     const btn = document.getElementById('setup-wizard-save-dir-btn');
     const value = String(input?.value || '').trim();
@@ -185,6 +211,7 @@
       core()?.invalidateSetupStatusCache?.();
       currentStatus = await fetchStatus(true);
       core()?.updateDataDirWarning?.();
+      if (isMaintenance()) return suspendForMaintenance();
       renderModal(currentStatus);
       captureCloseSnapshot();
       renderDashboardPanel(currentStatus);
@@ -196,6 +223,7 @@
   }
 
   async function dismissOptional() {
+    if (isMaintenance()) return suspendForMaintenance();
     try {
       await fetch('/api/setup-wizard', {
         method: 'POST',
@@ -231,14 +259,17 @@
   }
 
   async function resumeAfterExternalSave(step = '') {
+    if (isMaintenance()) {
+      suspendForMaintenance();
+      return false;
+    }
     if (!shouldReturn(String(step || ''))) return false;
     clearReturn();
     try {
       core()?.invalidateSetupStatusCache?.();
       const status = await fetchStatus(true);
       renderDashboardPanel(status);
-      open(status);
-      return true;
+      return open(status);
     } catch (_) {
       return false;
     }
@@ -249,6 +280,7 @@
     close({ force: true });
     core()?.navigate?.('settings');
     window.setTimeout(() => {
+      if (isMaintenance()) return suspendForMaintenance();
       if (typeof activateSettingsTab === 'function') activateSettingsTab(tab);
     }, 80);
   }
@@ -258,6 +290,7 @@
     close({ force: true });
     core()?.navigate?.('storage');
     window.setTimeout(() => {
+      if (isMaintenance()) return suspendForMaintenance();
       if (typeof openRepositoryManager === 'function') openRepositoryManager({ forceRefresh: true });
     }, 120);
   }
@@ -267,6 +300,7 @@
     close({ force: true });
     core()?.navigate?.('jobs');
     window.setTimeout(() => {
+      if (isMaintenance()) return suspendForMaintenance();
       if (typeof openWizard === 'function') openWizard();
     }, 120);
   }
@@ -280,6 +314,7 @@
   }
 
   function renderDashboardPanel(status = currentStatus) {
+    if (isMaintenance(status)) return suspendForMaintenance();
     const el = document.getElementById('dashboard-setup-actions');
     if (!el) return;
     const data = status || {};
@@ -316,6 +351,7 @@
     const el = event.target.closest('[data-setup-wizard-action]');
     if (!el) return;
     event.preventDefault();
+    if (isMaintenance()) return suspendForMaintenance();
     const action = el.dataset.setupWizardAction || '';
     if (!requireAdmin(action)) return;
     if (action === 'open') {
@@ -338,6 +374,7 @@
 
   namespace.open = open;
   namespace.close = close;
+  namespace.suspendForMaintenance = suspendForMaintenance;
   namespace.maybeOpen = maybeOpen;
   namespace.resumeAfterExternalSave = resumeAfterExternalSave;
   namespace.renderDashboardPanel = renderDashboardPanel;

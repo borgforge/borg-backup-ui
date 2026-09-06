@@ -1,7 +1,5 @@
 """api/reports_api.py – Berichte: historische Auswertung aus .status-Dateien"""
 
-import json
-from pathlib import Path
 from typing import List
 
 
@@ -28,71 +26,32 @@ def _fmt_duration(secs):
     return f"{s}s"
 
 
-def _parse_job_key(job_key: str):
-    """Split 'appdata_local' → ('appdata', 'local'). Handles multi-underscore locations."""
-    known_locations = ("local", "usb", "smb", "storagebox")
-    for loc in known_locations:
-        if job_key.endswith("_" + loc):
-            btype = job_key[: -(len(loc) + 1)]
-            return btype, loc
-    parts = job_key.rsplit("_", 1)
-    return (parts[0], parts[1]) if len(parts) == 2 else (job_key, "")
-
-
-def _parse_status_file_stem(stem: str):
-    """Split '<date>_<time>_<job_key>' into backup type and location."""
-    parts = str(stem or "").split("_", 2)
-    if len(parts) < 3:
-        return "", ""
-    return _parse_job_key(parts[2])
-
-
 def get_report_jobs(config: dict) -> List[dict]:
-    """Returns all unique jobs found in status files."""
-    status_dir = Path(config["STATUS_DIR"])
-    seen = {}
-    for f in sorted(status_dir.glob("*.status")):
-        backup_type, location = _parse_status_file_stem(f.stem)
-        if not backup_type or not location:
-            continue
-        key = f"{backup_type}_{location}"
-        if key not in seen:
-            seen[key] = {
-                "key": key,
-                "backup_type": backup_type,
-                "location": location,
-                "display_name": f"{backup_type.capitalize()} ({location})",
-            }
-    return list(seen.values())
+    from status_read_model import configured_jobs, history_rows, navigation_jobs, apply_restore_verification
+    jobs = configured_jobs(config)
+    apply_restore_verification(config, list(jobs.values()))
+    rows = history_rows(config, jobs)
+    result = navigation_jobs(jobs, rows)
+    if any(row['identity_scope'] == 'unassigned' for row in rows):
+        result.append({'job_id': '', 'identity_scope': 'unassigned', 'display_name': '', 'name': '', 'location': ''})
+    return result
 
 
-def get_report_data(config: dict, job_key: str) -> dict:
-    """Returns full time-series report for a job from its .status files."""
-    backup_type, location = _parse_job_key(job_key)
-    status_dir = Path(config["STATUS_DIR"])
-
-    runs = []
-    for f in sorted(status_dir.glob("*.status")):
-        ftype, floc = _parse_status_file_stem(f.stem)
-        if ftype != backup_type or floc != location:
-            continue
-        try:
-            raw = json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-
-        ts = raw.get("timestamp", "")
-        runs.append({
-            "timestamp": ts,
-            "date": ts[:10] if ts else "",
-            "status": raw.get("status", "unknown"),
-            "duration_seconds": raw.get("duration_seconds"),
-            "original_size": raw.get("original_size") or 0,
-            "compressed_size": raw.get("compressed_size") or 0,
-            "deduplicated_size": raw.get("deduplicated_size") or 0,
-            "repository_size": raw.get("repository_size") or 0,
-            "files_count": raw.get("files_count") or 0,
-        })
+def get_report_data(config: dict, job_id: str = '', *, scope: str = '') -> dict:
+    from status_read_model import configured_jobs, history_rows, navigation_jobs, apply_restore_verification, valid_job_id
+    jobs = configured_jobs(config)
+    apply_restore_verification(config, list(jobs.values()))
+    rows = history_rows(config, jobs)
+    if scope == 'unassigned' and not job_id:
+        runs = [row for row in rows if row['identity_scope'] == 'unassigned']
+        descriptor = {'identity_scope': 'unassigned', 'display_name': ''}
+    else:
+        if scope or not valid_job_id(job_id):
+            raise ValueError('A canonical job_id or unassigned scope is required')
+        runs = [row for row in rows if row['job_id'] == job_id and row['identity_scope'] != 'unassigned']
+        descriptor = next((row for row in navigation_jobs(jobs, rows) if row['job_id'] == job_id), None)
+        if descriptor is None:
+            raise FileNotFoundError('Job history is not available')
 
     runs.sort(key=lambda r: r["timestamp"])
 
@@ -120,9 +79,8 @@ def get_report_data(config: dict, job_key: str) -> dict:
     monthly_status = [{"month": k, **v} for k, v in sorted(months.items())]
 
     return {
-        "job_key": job_key,
-        "backup_type": backup_type,
-        "location": location,
+        "job_id": job_id,
+        **descriptor,
         "run_count": len(runs),
         "success_count": len(success_runs),
         "avg_duration_seconds": avg_duration,

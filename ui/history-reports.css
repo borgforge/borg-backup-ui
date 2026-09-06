@@ -48,6 +48,19 @@
   background: var(--ui-color-surface-subtle);
 }
 .history-detail-group--log { grid-column: 1 / -1; }
+.history-detail-identity {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+}
+.history-detail-identity > .history-detail-group { flex: 1 1 16rem; }
+.history-migration-note {
+  display: grid;
+  gap: var(--ui-space-1);
+  padding: var(--ui-space-3);
+  color: var(--ui-color-text-subtle);
+  font-size: var(--ui-font-size-sm);
+}
 .history-detail-group--archive { grid-column: span 2; }
 .history-detail-group--wide { grid-column: 1 / -1; }
 .history-detail-value {

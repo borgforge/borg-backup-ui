@@ -42,13 +42,17 @@ def _is_smb_mounted(mount_path: str) -> bool:
         return False
 
 
-def _job_smb_meta(config: dict, job_key: str) -> Optional[dict]:
+def _job_smb_meta(config: dict, job_id: str) -> Optional[dict]:
     from repository_context import RepositoryContextError, resolve_job_repository_context
 
     try:
-        context = resolve_job_repository_context(config, job_key, require_passphrase_file=False)
+        context = resolve_job_repository_context(config, job_id, require_passphrase_file=False)
     except RepositoryContextError:
         return None
+    return _context_smb_meta(context)
+
+
+def _context_smb_meta(context: dict) -> Optional[dict]:
     if str(context.get("location") or "").strip().lower() != "smb":
         return None
     raw = context.get("job") if isinstance(context.get("job"), dict) else {}
@@ -63,9 +67,16 @@ def _job_smb_meta(config: dict, job_key: str) -> Optional[dict]:
     }
 
 
-def ensure_smb_mount_for_job(config: dict, job_key: str) -> SmbMountGuard:
+def ensure_smb_mount_for_job(config: dict, job_id: str) -> SmbMountGuard:
+    return _ensure_smb_mount(_job_smb_meta(config, job_id))
+
+
+def ensure_smb_mount_for_context(context: dict) -> SmbMountGuard:
+    return _ensure_smb_mount(_context_smb_meta(context))
+
+
+def _ensure_smb_mount(meta: Optional[dict]) -> SmbMountGuard:
     guard = SmbMountGuard()
-    meta = _job_smb_meta(config, job_key)
     if not meta:
         return guard
 

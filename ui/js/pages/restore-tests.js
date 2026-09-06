@@ -72,19 +72,27 @@ function restoreTestsJobIcon(job) {
   const icon = resolveJobIcon(job);
   const color = resolveJobIconColor(job);
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon type-icon-${escHtml(icon)} rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+}
+
+function restoreTestsCompareJobs(a, b) {
+  const order = { local: 0, usb: 1, smb: 2, storagebox: 3 };
+  const locationOrder = (order[String(a.location || '').toLowerCase()] ?? 99)
+    - (order[String(b.location || '').toLowerCase()] ?? 99);
+  return locationOrder || String(a.display_name || a.name || '').localeCompare(
+    String(b.display_name || b.name || ''), restoreTestsLocale(), { numeric: true, sensitivity: 'base' });
 }
 
 function renderRestoreTestsSidebar() {
   const list = document.getElementById('rt-sidebar-job-list');
   if (!list) return;
   const query = String(document.getElementById('rt-sidebar-search')?.value || '').trim().toLowerCase();
-  const jobs = (restoreTestsState.jobs || []).filter((job) => `${job.display_name || ''} ${job.name || ''} ${job.key || ''} ${job.location || ''}`.toLowerCase().includes(query));
+  const jobs = (restoreTestsState.jobs || []).filter((job) => `${job.display_name || ''} ${job.name || ''} ${job.job_id || ''} ${job.location || ''}`.toLowerCase().includes(query)).sort(restoreTestsCompareJobs);
   if (!jobs.length) {
     list.innerHTML = `<div class="ui-empty rt-sidebar-empty">${escHtml(restoreTestsT('noMatchingJobs'))}</div>`;
     return;
   }
-  const planByKey = new Map((restoreTestsState.plan?.jobs || []).map((job) => [String(job.job_key), job]));
+  const planByKey = new Map((restoreTestsState.plan?.jobs || []).map((job) => [String(job.job_id), job]));
   const allActive = restoreTestsState.selectedJob === 'all';
   const allEntry = `<button class="rt-sidebar-job is-all ${allActive ? 'is-active' : ''}" data-rt-sidebar-job="all" ${allActive ? 'aria-current="page"' : ''}><span class="location-nav-glyph all">${locationIcon('all')}</span><span><strong>${escHtml(restoreTestsT('allJobs'))}</strong><small>${escHtml(restoreTestsT('overview'))}</small></span><span class="ui-badge">${jobs.length}</span></button>`;
   const order = ['local', 'usb', 'smb', 'storagebox'];
@@ -92,11 +100,12 @@ function renderRestoreTestsSidebar() {
     const locationJobs = jobs.filter((job) => String(job.location || '').toLowerCase() === location);
     if (!locationJobs.length) return '';
     return `<section class="rt-sidebar-group"><header>${escHtml(restoreTestsLocationLabel(location))}<span>${locationJobs.length}</span></header>${locationJobs.map((job) => {
-      const planJob = planByKey.get(String(job.key));
+      const planJob = planByKey.get(String(job.job_id));
       const configured = !!planJob && planJob.enabled !== false && String(planJob.policy?.mode || 'off') !== 'off';
       const stateClass = planJob?.is_overdue ? 'warning' : configured ? 'success' : 'disabled';
-      const active = restoreTestsState.selectedJob === String(job.key);
-      return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.key)}</strong><small>${escHtml(job.key)}</small></span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
+      const active = restoreTestsState.selectedJob === String(job.job_id);
+      const subtitle = job.archive_prefix || job.archive_prefixes?.[0] || job.description || '';
+      return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.job_id)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.job_id)}</strong>${subtitle ? `<small>${escHtml(subtitle)}</small>` : ''}</span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
     }).join('')}</section>`;
   }).join('');
   list.innerHTML = allEntry + groups;
@@ -111,7 +120,7 @@ function renderRestoreTestsSidebar() {
 
 function updateRestoreTestsWorkspace() {
   const selected = restoreTestsState.selectedJob;
-  const selectedJob = (restoreTestsState.jobs || []).find((job) => String(job.key) === selected);
+  const selectedJob = (restoreTestsState.jobs || []).find((job) => String(job.job_id) === selected);
   const visibleCount = selected === 'all' ? (restoreTestsState.jobs || []).length : (selectedJob ? 1 : 0);
   const title = document.getElementById('rt-workspace-title');
   const count = document.getElementById('rt-workspace-count');
@@ -426,7 +435,7 @@ async function refreshRestoreTests() {
       .filter((j) => !j.is_utility)
       .map((job) => ({
         ...job,
-        key: job.job_key,
+        job_id: job.job_id,
       }));
     if (runningRes.ok) {
       const runningState = await runningRes.json().catch(() => ({}));
@@ -480,14 +489,14 @@ function renderRestorePlan(plan) {
     return;
   }
   const locOrder = { local: 1, usb: 2, smb: 3, storagebox: 4, custom: 5 };
-  const sortedJobs = [...plan.jobs].filter((job) => restoreTestsState.selectedJob === 'all' || String(job.job_key) === restoreTestsState.selectedJob).sort((a, b) => {
+  const sortedJobs = [...plan.jobs].filter((job) => restoreTestsState.selectedJob === 'all' || String(job.job_id) === restoreTestsState.selectedJob).sort((a, b) => {
     const la = String(a?.location || '').toLowerCase();
     const lb = String(b?.location || '').toLowerCase();
     const oa = locOrder[la] || 99;
     const ob = locOrder[lb] || 99;
     if (oa !== ob) return oa - ob;
-    const na = String(a?.display_name || a?.job_key || '').toLowerCase();
-    const nb = String(b?.display_name || b?.job_key || '').toLowerCase();
+    const na = String(a?.display_name || a?.job_id || '').toLowerCase();
+    const nb = String(b?.display_name || b?.job_id || '').toLowerCase();
     return na.localeCompare(nb, restoreTestsLocale());
   });
   const planSummary = {
@@ -508,21 +517,21 @@ function renderRestorePlan(plan) {
     const schedState = mode !== 'scheduled'
       ? restoreTestsT('no')
       : (j.is_overdue ? restoreTestsT('yesDue') : restoreTestsT('yesWaiting'));
-    const busy = !!restoreTestsState.rowBusy[j.job_key];
-    const note = restoreTestsState.rowNote[j.job_key] || '';
+    const busy = !!restoreTestsState.rowBusy[j.job_id];
+    const note = restoreTestsState.rowNote[j.job_id] || '';
     return `<tr>
-      <td>${escHtml(j.display_name || j.job_key || '-')}</td>
+      <td>${escHtml(j.display_name || j.job_id || '-')}</td>
       <td><span class="history-loc-chip ${(j.location || '').toLowerCase()}">${escHtml(restoreTestsLocationLabel(j.location || ''))}</span></td>
       <td>
-        <select class="form-select" data-rt-plan-input="mode" data-job-key="${escHtml(j.job_key)}" style="min-width:130px" ${disabled}>
+        <select class="form-select" data-rt-plan-input="mode" data-job-id="${escHtml(j.job_id)}" style="min-width:130px" ${disabled}>
           <option value="scheduled" ${mode === 'scheduled' ? 'selected' : ''}>${escHtml(restoreTestsT('scheduled'))}</option>
           <option value="manual_only" ${mode === 'manual_only' ? 'selected' : ''}>${escHtml(restoreTestsT('manualOnly'))}</option>
           <option value="off" ${mode === 'off' ? 'selected' : ''}>${escHtml(restoreTestsT('off'))}</option>
         </select>
       </td>
-      <td><input type="number" min="1" class="form-input" data-rt-plan-input="interval_days" data-job-key="${escHtml(j.job_key)}" value="${interval}" style="width:88px" ${disabled}></td>
+      <td><input type="number" min="1" class="form-input" data-rt-plan-input="interval_days" data-job-id="${escHtml(j.job_id)}" value="${interval}" style="width:88px" ${disabled}></td>
       <td>
-        <select class="form-select" data-rt-plan-input="level" data-job-key="${escHtml(j.job_key)}" style="min-width:78px" ${disabled}>
+        <select class="form-select" data-rt-plan-input="level" data-job-id="${escHtml(j.job_id)}" style="min-width:78px" ${disabled}>
           <option value="1" ${level === 1 ? 'selected' : ''}>L1</option>
           <option value="2" ${level === 2 ? 'selected' : ''}>L2</option>
           <option value="3" ${level === 3 ? 'selected' : ''}>L3</option>
@@ -533,8 +542,8 @@ function renderRestorePlan(plan) {
       <td>${escHtml(schedState)}</td>
       <td>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button type="button" class="btn btn-secondary btn-sm ${busy ? 'loading' : ''}" data-rt-plan-action="save" data-job-key="${escHtml(j.job_key)}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT('save'))}</button>
-          <button type="button" class="btn btn-primary btn-sm ${busy ? 'loading' : ''}" data-rt-plan-action="run" data-job-key="${escHtml(j.job_key)}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT('testNow'))}</button>
+          <button type="button" class="btn btn-secondary btn-sm ${busy ? 'loading' : ''}" data-rt-plan-action="save" data-job-id="${escHtml(j.job_id)}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT('save'))}</button>
+          <button type="button" class="btn btn-primary btn-sm ${busy ? 'loading' : ''}" data-rt-plan-action="run" data-job-id="${escHtml(j.job_id)}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT('testNow'))}</button>
           ${note ? `<span class="muted" style="font-size:11px">${escHtml(note)}</span>` : ''}
         </div>
       </td>
@@ -547,27 +556,27 @@ function renderRestorePlan(plan) {
     </table>`;
 }
 
-function _getPlanInput(jobKey, field) {
-  return document.querySelector(`[data-rt-plan-input="${field}"][data-job-key="${CSS.escape(jobKey)}"]`);
+function _getPlanInput(jobId, field) {
+  return document.querySelector(`[data-rt-plan-input="${field}"][data-job-id="${CSS.escape(jobId)}"]`);
 }
 
-async function saveRestorePlanPolicy(jobKey) {
-  const modeEl = _getPlanInput(jobKey, 'mode');
-  const intervalEl = _getPlanInput(jobKey, 'interval_days');
-  const levelEl = _getPlanInput(jobKey, 'level');
+async function saveRestorePlanPolicy(jobId) {
+  const modeEl = _getPlanInput(jobId, 'mode');
+  const intervalEl = _getPlanInput(jobId, 'interval_days');
+  const levelEl = _getPlanInput(jobId, 'level');
   if (!modeEl || !intervalEl || !levelEl) return;
   const interval = Number(intervalEl.value || 30);
   const level = Number(levelEl.value || 2);
   if (!Number.isFinite(interval) || interval < 1) {
-    showMsg('restore-tests-message', 'error', restoreTestsT('invalidInterval', { job: jobKey }));
+    showMsg('restore-tests-message', 'error', restoreTestsT('invalidInterval', { job: jobId }));
     return;
   }
   if (![1, 2, 3].includes(level)) {
-    showMsg('restore-tests-message', 'error', restoreTestsT('invalidLevel', { job: jobKey }));
+    showMsg('restore-tests-message', 'error', restoreTestsT('invalidLevel', { job: jobId }));
     return;
   }
-  restoreTestsState.rowBusy[jobKey] = true;
-  restoreTestsState.rowNote[jobKey] = restoreTestsT('saving');
+  restoreTestsState.rowBusy[jobId] = true;
+  restoreTestsState.rowNote[jobId] = restoreTestsT('saving');
   renderRestorePlan(restoreTestsState.plan);
   try {
     const res = await fetch('/api/restore-tests/policy', {
@@ -575,7 +584,7 @@ async function saveRestorePlanPolicy(jobKey) {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        job_key: jobKey,
+        job_id: jobId,
         policy: { mode: modeEl.value, interval_days: Math.trunc(interval), validity_days: Math.trunc(interval), level, max_runtime_minutes: 0 },
       }),
     });
@@ -585,42 +594,42 @@ async function saveRestorePlanPolicy(jobKey) {
       throw new Error(apiErrorMessage(data, res.status));
     }
     const stamp = new Date().toLocaleTimeString(restoreTestsLocale());
-    restoreTestsState.rowNote[jobKey] = restoreTestsT('savedAt', { time: stamp });
-    showMsg('restore-tests-message', 'success', restoreTestsT('policySaved', { job: jobKey }));
+    restoreTestsState.rowNote[jobId] = restoreTestsT('savedAt', { time: stamp });
+    showMsg('restore-tests-message', 'success', restoreTestsT('policySaved', { job: jobId }));
     await refreshRestorePlanOnly();
   } catch (err) {
-    restoreTestsState.rowNote[jobKey] = restoreTestsT('errorValue', { message: err.message });
+    restoreTestsState.rowNote[jobId] = restoreTestsT('errorValue', { message: err.message });
     showMsg('restore-tests-message', 'error', restoreTestsT('policySaveFailed', { message: err.message }));
   } finally {
-    restoreTestsState.rowBusy[jobKey] = false;
+    restoreTestsState.rowBusy[jobId] = false;
     renderRestorePlan(restoreTestsState.plan);
   }
 }
 
-async function runRestorePlanJob(jobKey) {
-  restoreTestsState.rowBusy[jobKey] = true;
-  restoreTestsState.rowNote[jobKey] = restoreTestsT('startingTest');
+async function runRestorePlanJob(jobId) {
+  restoreTestsState.rowBusy[jobId] = true;
+  restoreTestsState.rowNote[jobId] = restoreTestsT('startingTest');
   renderRestorePlan(restoreTestsState.plan);
   try {
     const res = await fetch('/api/restore-tests/run-job', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_key: jobKey }),
+      body: JSON.stringify({ job_id: jobId }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     const stamp = new Date().toLocaleTimeString(restoreTestsLocale());
-    restoreTestsState.rowNote[jobKey] = restoreTestsT('startedAt', { time: stamp });
-    showMsg('restore-tests-message', 'success', restoreTestsT('testStarted', { job: jobKey }));
+    restoreTestsState.rowNote[jobId] = restoreTestsT('startedAt', { time: stamp });
+    showMsg('restore-tests-message', 'success', restoreTestsT('testStarted', { job: jobId }));
     _openRTLogPanel();
     startRTPolling();
     await refreshRestorePlanOnly();
   } catch (err) {
-    restoreTestsState.rowNote[jobKey] = restoreTestsT('errorValue', { message: err.message });
+    restoreTestsState.rowNote[jobId] = restoreTestsT('errorValue', { message: err.message });
     showMsg('restore-tests-message', 'error', restoreTestsT('startFailed', { message: err.message }));
   } finally {
-    restoreTestsState.rowBusy[jobKey] = false;
+    restoreTestsState.rowBusy[jobId] = false;
     renderRestorePlan(restoreTestsState.plan);
   }
 }
@@ -631,10 +640,10 @@ function onRestoreTestsPlanClick(event) {
   event.preventDefault();
   event.stopPropagation();
   const action = btn.dataset.rtPlanAction || '';
-  const jobKey = btn.dataset.jobKey || '';
-  if (!jobKey) return;
-  if (action === 'save') return saveRestorePlanPolicy(jobKey);
-  if (action === 'run') return runRestorePlanJob(jobKey);
+  const jobId = btn.dataset.jobId || '';
+  if (!jobId) return;
+  if (action === 'save') return saveRestorePlanPolicy(jobId);
+  if (action === 'run') return runRestorePlanJob(jobId);
 }
 
 async function refreshRestorePlanOnly() {
@@ -665,7 +674,7 @@ function refreshRestoreTestJobsForSelection() {
 
   const rows = (restoreTestsState.jobs || [])
     .filter(j => location === 'all' || String(j.location || '').toLowerCase() === location)
-    .sort((a, b) => String(a.display_name || a.name || a.key).localeCompare(String(b.display_name || b.name || b.key)));
+    .sort(restoreTestsCompareJobs);
 
   if (!rows.length) {
     list.innerHTML = `<span class="muted">${escHtml(restoreTestsT('noJobsForSelection'))}</span>`;
@@ -674,8 +683,8 @@ function refreshRestoreTestJobsForSelection() {
 
   list.innerHTML = rows.map((j) => `
     <label class="form-checkbox-row" style="display:inline-flex;margin-right:12px">
-      <input type="checkbox" class="rt-job-checkbox" value="${escHtml(j.key || '')}">
-      ${(escHtml(j.display_name || j.name || j.key || '') || '-')}
+      <input type="checkbox" class="rt-job-checkbox" value="${escHtml(j.job_id || '')}">
+      ${(escHtml(j.display_name || j.name || j.job_id || '') || '-')}
     </label>
   `).join('');
 }
@@ -740,9 +749,9 @@ function _getFilteredRTReports(tests) {
   const now = Date.now();
   const rangeDays = Number(range || 0);
   const filtered = [...tests].filter((t) => {
-    const key = String(t.job_key || t.type || '').toLowerCase();
+    const key = String(t.job_id || t.type || '').toLowerCase();
     if (restoreTestsState.selectedJob !== 'all' && key !== String(restoreTestsState.selectedJob).toLowerCase()) return false;
-    if (jobNeedle && !key.includes(jobNeedle)) return false;
+    if (jobNeedle && !`${key} ${t.current_job_name || ''} ${t.job_name_snapshot || ''} ${t.type || ''}`.toLowerCase().includes(jobNeedle)) return false;
     if (location !== 'all' && String(t.location || '').toLowerCase() !== location) return false;
     const stale = t.test_result === 'success' && isStaleDate(t.test_date);
     if (status === 'success' && !(t.test_result === 'success' && !stale)) return false;
@@ -870,7 +879,7 @@ function renderRTReportRow(t, idx) {
       <td><svg class="history-chevron" id="rtchev-${idx}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></td>
       <td style="white-space:nowrap;color:var(--text-primary)">${escHtml(dt)}</td>
       <td><span class="history-type-badge">RESTORE TEST</span></td>
-      <td style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px">${escHtml(t.job_key || t.type || '-')}</td>
+      <td style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px">${escHtml(t.current_job_name || t.job_name_snapshot || t.type || restoreTestsT('identityUnassigned'))}${t.identity_scope && t.identity_scope !== 'configured' ? `<small> · ${escHtml(restoreTestsT(t.identity_scope === 'deleted' ? 'identityDeleted' : 'identityUnassigned'))}</small>` : ''}</td>
       <td><span class="history-loc-chip ${(t.location || '').toLowerCase()}">${escHtml(restoreTestsLocationLabel(t.location || ''))}</span></td>
       <td>${escHtml(t.duration_formatted || '—')}</td>
       <td>${escHtml(stats.original || '—')}</td>
@@ -883,7 +892,7 @@ function renderRTReportRow(t, idx) {
           <div class="rt-report-card-head rt-report-hero">
             <div>
               <div class="rt-report-kicker">${escHtml(restoreTestsT('report'))}</div>
-              <div class="rt-report-title">${escHtml(t.job_key || t.type || 'Restore Test')}</div>
+              <div class="rt-report-title">${escHtml(t.job_name_snapshot || t.type || restoreTestsT('identityUnassigned'))}</div>
               <div class="rt-report-subtitle">${escHtml(archive || restoreTestsT('noArchive'))}</div>
             </div>
             <div class="rt-report-result ${successful ? 'success' : 'error'}">
@@ -899,6 +908,9 @@ function renderRTReportRow(t, idx) {
           <div class="rt-report-sections">
             ${rtReportSection(restoreTestsT('execution'), [
               [restoreTestsT('reportId'), reportId, true],
+              [restoreTestsT('jobAtRun'), t.job_name_snapshot],
+              [restoreTestsT('repositoryAtRun'), t.repository_snapshot, true],
+              [restoreTestsT('prefixAtRun'), t.archive_prefix_snapshot, true],
               [restoreTestsT('site'), location],
               [restoreTestsT('level'), t.test_level != null ? `L${t.test_level}` : null],
               [restoreTestsT('start'), t.start_ts || t.started_at],

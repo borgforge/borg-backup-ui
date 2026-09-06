@@ -12,6 +12,8 @@ for path in (ROOT, API_ROOT):
         sys.path.insert(0, str(path))
 
 from check_api import CheckManager  # noqa: E402
+from test_canonical_job_wizard import setup, create
+from inventory_store import atomic_write_json
 from runtime.lib.borg_runner import BORG_EXIT_ERROR, BorgConfig, BorgRunner  # noqa: E402
 from wizard_api import (  # noqa: E402
     RetentionValidationError,
@@ -75,32 +77,23 @@ def test_automatic_prune_blocks_legacy_all_zero_policy(monkeypatch, caplog) -> N
 
     assert runner.prune("appdata-backup") == BORG_EXIT_ERROR
     assert called is False
-    assert "at least one retention value must be greater than zero" in caplog.text
+    assert "at least one positive count" in caplog.text
 
 
-def test_manual_repository_prune_blocks_all_zero_policy(tmp_path: Path) -> None:
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    jobs = tmp_path / "config" / "jobs"
-    jobs.mkdir(parents=True)
-    (jobs / "appdata_local.json").write_text(json.dumps({
-        "job_key": "appdata_local",
-        "repository_key": "repo_appdata",
-        "retention": {"daily": "0", "weekly": "0", "monthly": "0", "yearly": "0"},
-    }), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="At least one retention value"):
+def test_manual_repository_prune_blocks_all_zero_policy(setup) -> None:
+    result, metadata = create(setup)
+    metadata['retention'] = dict.fromkeys(('daily', 'weekly', 'monthly', 'yearly'), '0')
+    atomic_write_json(Path(result['metadata_path']), metadata)
+    with pytest.raises(ValueError, match='At least one retention value'):
         CheckManager()._repository_command(
-            config,
-            {"repository_key": "repo_appdata", "used_by": ["appdata_local"]},
-            "/mnt/backup/appdata",
-            "prune",
-            "quick",
+            setup[0], {'repository_key': 'repo_a', 'job_ids': [result['job_id']]},
+            str(setup[3] / 'repos/repo_a'), 'prune', 'quick', job_id=result['job_id'],
         )
 
 
 def test_flow_preview_exposes_the_effective_retention_policy() -> None:
     flow = generate_flow_preview({
-        "type_id": "appdata",
+        "archive_prefix": "appdata-backup",
         "location": "local",
         "source_paths": ["/mnt/user/appdata"],
         "keep_daily": "20",

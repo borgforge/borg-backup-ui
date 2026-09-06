@@ -23,6 +23,8 @@ Voraussetzungen:
 import argparse
 import hashlib
 import json
+import uuid
+from copy import deepcopy
 import os
 import random
 import re
@@ -103,6 +105,7 @@ except ImportError:
 
 def load_conf() -> dict:
     search = [
+        _repository_data_root() / "config" / "backup.conf",
         SCRIPT_DIR.parent / "config" / "backup.conf",
         Path("/boot/config/borg-backup/config/backup.conf"),
         Path("/boot/config/plugins/user.scripts/scripts/borg-backup/config/backup.conf"),
@@ -129,16 +132,8 @@ def _resolve_restore_test_dir(conf: dict) -> Path:
 
 
 def _extract_test_datetime(test_data: dict, test_file: Path) -> datetime | None:
-    date_str = str(test_data.get("test_date") or "").strip()
-    if date_str:
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            pass
-    try:
-        return datetime.fromtimestamp(test_file.stat().st_mtime)
-    except OSError:
-        return None
+    from restore_identity import restore_test_datetime
+    return restore_test_datetime(test_data)
 
 
 def _repository_data_root() -> Path:
@@ -171,54 +166,25 @@ def _refresh_unraid_dashboard_widget_cache(conf: dict, reason: str, log_fn=None)
 
 def discover_repos(conf: dict) -> list:
     """Build the restore-test list from canonical job/repository links."""
-    data_root = _repository_data_root()
-    jobs_dir = data_root / "config" / "jobs"
+    from inventory_store import inventory_lock
+    from job_store import read_jobs
+    from repository_context import jobs_dir
+    from restore_identity import capture_repository
+    from restore_tests_api import _normalize_restore_policy
+    config = {**conf, 'BACKUP_SCRIPTS_DIR': str(_repository_data_root())}
     repos = []
-    seen = set()
-
-    if not jobs_dir.is_dir():
-        return repos
-    from repository_context import RepositoryContextError, load_repository_inventory, resolve_job_repository_context
-
-    config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
-    inventory = load_repository_inventory(config)
-    for jf in sorted(jobs_dir.glob("*.json")):
-        try:
-            raw = json.loads(jf.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if not bool(raw.get("enabled", True)):
-            continue
-        if str(raw.get("runner", "")).strip() != "scriptless-wizard-runner":
-            continue
-        btype = str(raw.get("backup_type", "")).strip()
-        job_key = str(raw.get("job_key") or jf.stem).strip()
-        if not btype or not job_key:
-            continue
-        try:
-            context = resolve_job_repository_context(config, job_key, job=raw, inventory=inventory)
-        except RepositoryContextError:
-            continue
-        location = str(context.get("location") or "").strip().lower()
-        repo_path = str(context.get("repository_path") or "").strip()
-        profile_key = str(context.get("profile_key") or "").strip().lower()
-        key = (context["repository_key"], job_key)
-        if key in seen:
-            continue
-        seen.add(key)
-        repos.append({
-            "job_key": job_key,
-            "type": btype,
-            "location": location,
-            "path": repo_path,
-            "encryption": str(context.get("encryption") or "").strip().lower(),
-            "passphrase_file": str(context.get("passphrase_ref") or ""),
-            "profile_key": profile_key,
-            "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
-            "mount_before_run": bool(raw.get("mount_before_run", True)),
-            "unmount_after_run": bool(raw.get("unmount_after_run", True)),
-        })
-
+    with inventory_lock(jobs_dir(config).parent):
+        for job_id, job in read_jobs(jobs_dir(config)).items():
+            if not job.get('enabled', True):
+                continue
+            info = capture_repository(config, job_id)
+            repos.append({
+                **info, 'type': job['archive_prefixes'][0], 'path': info['repo'],
+                'policy': _normalize_restore_policy(job.get('restore_test_policy'), info['location'],
+                                                    int(conf.get('RESTORE_TEST_INTERVAL_DAYS', 30))),
+                'mount_before_run': bool(job.get('mount_before_run', True)),
+                'unmount_after_run': bool(job.get('unmount_after_run', True)),
+            })
     return repos
 
 
@@ -285,7 +251,7 @@ class RestoreTest:
         try:
             from lib.notification_events import NotificationEvent, clear_reminder_prefix, send_event
             from lib.notifications import build_restore_test_notification_message
-            job_name = str(repo.get("job_key") or repo.get("type") or "restore_test")
+            job_name = repo["job"]["name"]
             title = f"Borg Backup UI: Restore test {result}"
             message = build_restore_test_notification_message(
                 job_name=job_name,
@@ -305,7 +271,14 @@ class RestoreTest:
                     message=message,
                     severity="warning" if event_type == "restore_test_failed" else "info",
                     job_name=f"Borg Backup UI ({job_name})",
-                    job_key=job_name,
+                    job_id=repo['job_id'],
+                    run_id=repo['run_id'],
+                    job_name_snapshot=job_name,
+                    repository_snapshot=repo['path'],
+                    repository_key_snapshot=repo['repository_key'],
+                    archive_prefixes_snapshot=list(repo['job']['archive_prefixes']),
+                    location_snapshot=repo['location'],
+                    archive_prefix_snapshot=repo.get('tested_prefix') or repo['job']['archive_prefixes'][0],
                     status=result,
                     duration_seconds=duration,
                     repository=str(repo.get("path") or ""),
@@ -314,7 +287,7 @@ class RestoreTest:
                 mail_config=self.mail_config,
             )
             if event_type == "restore_test_success":
-                clear_reminder_prefix(self.conf, f"restore_test_overdue:{job_name}:")
+                clear_reminder_prefix(self.conf, f"restore_test_overdue:{repo['job_id']}:")
         except Exception as exc:
             self.log(f"  notification event failed: {exc}")
 
@@ -461,14 +434,20 @@ class RestoreTest:
 
     # ── Intervall-Prüfung ──────────────────────────────────────────────────────
 
-    def _should_test(self, key: str) -> bool:
+    def _should_test(self, repo: dict) -> bool:
+        key = repo["job_id"]
         if self.args.force:
             return True
         tf = self.status_dir / f"{key}.test"
         if not tf.exists():
             return True
         try:
-            raw = json.loads(tf.read_text(encoding="utf-8"))
+            from job_store import read_json
+            from restore_identity import restore_test_target_scope
+            raw = read_json(tf)
+            if (raw.get('job_id') != key
+                    or restore_test_target_scope(raw, repo['job'], repo['path']) != 'current'):
+                return True
             last_result = str(raw.get("test_result", "")).strip().lower()
             if last_result != "success":
                 self.log(f"  Latest test status: {last_result or 'unknown'} - a new test is required")
@@ -558,26 +537,62 @@ class RestoreTest:
 
     # ── Haupttest ──────────────────────────────────────────────────────────────
 
+    def _force_chunk_for_repo(self, repo: dict) -> bool:
+        # Preserve existing type-based performance rules against owned prefix
+        # history. These labels never resolve or assign a job's identity.
+        prefixes = {str(p).lower() for p in repo['job']['archive_prefixes']}
+        configured = self.force_chunk_types
+        return bool(prefixes & (configured | {value + '-backup' for value in configured}))
+
+    def _latest_owned_archive(self, repo: dict, env: dict):
+        from restore_identity import archive_prefix
+        archives = {}
+        for prefix in repo['job']['archive_prefixes']:
+            result = self._borg(['list', '--json', '--glob-archives', prefix + '-*', repo['path']], env)
+            if result.returncode:
+                return result, ''
+            payload = json.loads(result.stdout)
+            for row in payload.get('archives', []):
+                name = row.get('name', '')
+                archive_prefix(repo, name)
+                archives[name] = row
+        latest = max(archives.values(), key=lambda r: (r.get('start', ''), r['name']), default={})
+        return subprocess.CompletedProcess([], 0, '', ''), latest.get('name', '')
+
     def test_repo(self, repo: dict) -> int:
         """0=OK, 1=Fehler, 2=übersprungen, 3=unavailable"""
-        btype    = repo["type"]
+        from job_model import validate_job_id
+        from restore_api import acquire_restore_repository_lock, RestoreRepositoryBusy
+        repo = deepcopy(repo)
+        key = validate_job_id(repo['job_id'])
+        repo['run_id'] = str(uuid.uuid4())
+        if getattr(self.args, 'scheduled', False):
+            if repo['policy']['mode'] != 'scheduled':
+                return 2
+            self.test_level = repo['policy']['level']
+            self.test_interval = repo['policy']['interval_days']
         location = repo["location"]
         path     = repo["path"]
         encryption = str(repo.get("encryption") or "").strip().lower()
         pp_file  = repo["passphrase_file"]
-        key      = str(repo.get("job_key") or f"{btype}_{location}")
 
         self.log(f"{'─'*60}")
-        self.log(f"TEST: {btype} ({location})")
+        self.log(f"TEST: {repo['job']['name']} ({location})")
         self.log(f"  Repository: {path}")
 
         if self.args.dry_run:
             self.log("  [dry-run] Skipped")
             return 2
 
-        if not self._should_test(key):
+        if not self._should_test(repo):
             return 2
 
+        config = {**self.conf, 'BACKUP_SCRIPTS_DIR': str(_repository_data_root())}
+        try:
+            lock_set = acquire_restore_repository_lock(config, repo, key, repo['run_id'], operation='restore_test')
+        except RestoreRepositoryBusy as exc:
+            self.log(str(exc))
+            return 2
         smb_mounted_by_me = False
         steps: list = []
         try:
@@ -630,7 +645,7 @@ class RestoreTest:
 
             self.log("Level 1: Repository integrity")
             s0 = time.time()
-            r = self._borg(["list", "--short", "--last", "1", path], env)
+            r, last_archive = self._latest_owned_archive(repo, env)
             if r.returncode != 0:
                 self.log(f"  ERROR: borg list failed (exit {r.returncode})")
                 self.log(f"  {r.stderr[:300]}")
@@ -641,7 +656,7 @@ class RestoreTest:
                     "status": "failed",
                     "duration_ms": int((time.time() - s0) * 1000),
                     "message": "Repository check failed",
-                    "command": f"borg list --short --last 1 {path}",
+                    "command": f"borg list --json --glob-archives <stored-prefix>-* {path}",
                     "error_code": code,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
@@ -656,12 +671,11 @@ class RestoreTest:
                 "status": "passed",
                 "duration_ms": int((time.time() - s0) * 1000),
                 "message": "Repository reachable",
-                "command": f"borg list --short --last 1 {path}",
+                "command": f"borg list --json --glob-archives <stored-prefix>-* {path}",
                 "error_code": "",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
 
-            last_archive = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
             if not last_archive:
                 self.log("  ERROR: No archive found")
                 steps.append({
@@ -669,7 +683,7 @@ class RestoreTest:
                     "status": "failed",
                     "duration_ms": 0,
                     "message": "No archive found",
-                    "command": f"borg list --short --last 1 {path}",
+                    "command": f"borg list --json --glob-archives <stored-prefix>-* {path}",
                     "error_code": "RT_ARCHIVE_MISSING",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
@@ -685,10 +699,12 @@ class RestoreTest:
                 "status": "passed",
                 "duration_ms": 0,
                 "message": f"Archive found: {last_archive}",
-                "command": f"borg list --short --last 1 {path}",
+                "command": f"borg list --json --glob-archives <stored-prefix>-* {path}",
                 "error_code": "",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
+            from restore_identity import archive_prefix
+            repo['tested_prefix'] = archive_prefix(repo, last_archive)
             self.log(f"  OK Level 1 - latest archive: {last_archive}")
 
             archive_stats: dict = {"original_size": 0, "compressed_size": 0, "deduplicated_size": 0, "files_count": 0}
@@ -784,12 +800,12 @@ class RestoreTest:
             tested_total = len(tested_entries)
 
             archive_size_gb = int(archive_stats.get("original_size", 0)) / (1024**3) if archive_stats else 0
-            force_chunk = btype.strip().lower() in self.force_chunk_types
+            force_chunk = self._force_chunk_for_repo(repo)
             if self.full_dryrun_max_archive_gb > 0 and archive_size_gb >= self.full_dryrun_max_archive_gb:
                 force_chunk = True
 
             if force_chunk and tested_entries:
-                reason = f"type rule ({btype})" if btype.strip().lower() in self.force_chunk_types else f"archive size {archive_size_gb:.1f} GB"
+                reason = "configured prefix rule" if self._force_chunk_for_repo(repo) else f"archive size {archive_size_gb:.1f} GB"
                 self.log(f"  Chunk mode enabled ({reason})")
                 failed_chunk = None
                 tested_files_only = [e[2:] for e in tested_entries if e.startswith("- ")]
@@ -934,7 +950,10 @@ class RestoreTest:
                 self.log(f"ERROR Restore test failed ({duration}s)")
             return exit_code
         finally:
-            self._cleanup_smb_mount(repo, smb_mounted_by_me)
+            try:
+                self._cleanup_smb_mount(repo, smb_mounted_by_me)
+            finally:
+                lock_set.release()
 
     # ── .test Datei schreiben ─────────────────────────────────────────────────
 
@@ -945,6 +964,14 @@ class RestoreTest:
                l3_details: dict = None, error_category: str = "none",
                error_details: str = "", error_output: str = "", reason: str = "",
                steps: list | None = None, failure_code: str = "", failure_hint: str = "") -> None:
+        from job_model import validate_job_id
+        from restore_identity import snapshots
+        from inventory_store import inventory_lock, atomic_write_json
+        from repository_context import jobs_dir
+        from job_store import read_json
+        key = validate_job_id(key)
+        if key != repo['job_id']:
+            raise ValueError('Conflicting restore test identity')
         _ensure_status_storage_directory(self.status_dir)
         test_file = self.status_dir / f"{key}.test"
         now = datetime.now()
@@ -955,8 +982,10 @@ class RestoreTest:
         )
 
         data = {
+            **snapshots(repo, archive, repo["run_id"]),
+            "policy_snapshot": deepcopy(repo["policy"]),
             "report_schema_version":    1,
-            "report_id":                f"RT-{now.strftime('%Y%m%d-%H%M%S')}-{key}",
+            "report_id":                repo["run_id"],
             "repository":              repo["path"],
             "type":                    repo["type"],
             "location":                repo["location"],
@@ -1001,7 +1030,12 @@ class RestoreTest:
         if reason:
             data["reason"] = reason
 
-        test_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        config = {**self.conf, 'BACKUP_SCRIPTS_DIR': str(_repository_data_root())}
+        with inventory_lock(jobs_dir(config).parent):
+            previous = read_json(test_file, missing={})
+            if previous and (previous.get('job_id') != key or previous.get('identity_state') == 'unassigned'):
+                raise ValueError('Existing restore test ownership is unresolved; result was not overwritten')
+            atomic_write_json(test_file, data)
         self.log(f"  → Ergebnis: {test_file}")
         _refresh_unraid_dashboard_widget_cache(self.conf, "restore test result written", self.log)
         if result_str == "success":
@@ -1014,6 +1048,17 @@ class RestoreTest:
 # ── Hauptprogramm ─────────────────────────────────────────────────────────────
 
 def main() -> None:
+    from migration_barrier import MigrationBlocked, writer_lease
+    config = {"BACKUP_SCRIPTS_DIR": str(_repository_data_root())}
+    try:
+        with writer_lease(config):
+            _run_admitted()
+    except MigrationBlocked as exc:
+        print(f"Restore test start blocked: {exc.reason}", file=sys.stderr)
+        raise SystemExit(2) from None
+
+
+def _run_admitted() -> None:
     parser = argparse.ArgumentParser(description=f"Borg Restore Test v{VERSION}")
     parser.add_argument("--force",    action="store_true",
                         help="Force tests even when they are not due")
@@ -1028,8 +1073,8 @@ def main() -> None:
                         help="Mount SMB repositories before testing and unmount them afterward")
     parser.add_argument("--scheduled", action="store_true",
                         help="Run was started by the scheduler; enables background notifications")
-    parser.add_argument("--job-key",  dest="job_keys", action="append", default=[],
-                        help="Optionally test only selected jobs (for example flash_local); may be repeated")
+    parser.add_argument("--job-id",  dest="job_ids", action="append", default=[],
+                        help="Optionally test only selected jobs (full UUID); may be repeated")
     args = parser.parse_args()
 
     conf  = load_conf()
@@ -1054,7 +1099,7 @@ def main() -> None:
             run_id=run_id,
             level=args.level,
             location=args.location,
-            selected_jobs=args.job_keys,
+            selected_jobs=args.job_ids,
         )
     emit_lifecycle(
         "RESTORE_TEST",
@@ -1067,13 +1112,16 @@ def main() -> None:
         level=args.level,
         location=args.location,
         log_file=str(tester.log_path),
-        selected_jobs=args.job_keys,
+        selected_jobs=args.job_ids,
     )
 
     repos = discover_repos(conf)
-    if args.job_keys:
-        wanted = {str(k).strip() for k in args.job_keys if str(k).strip()}
-        repos = [r for r in repos if str(r.get("job_key", "")).strip() in wanted]
+    if args.job_ids:
+        from job_model import validate_job_id
+        wanted = {validate_job_id(k) for k in args.job_ids}
+        if wanted - {r['job_id'] for r in repos}:
+            raise ValueError('Requested restore-test job is missing or disabled')
+        repos = [r for r in repos if str(r.get("job_id", "")).strip() in wanted]
     elif args.location != "all":
         repos = [r for r in repos if r["location"] == args.location]
 

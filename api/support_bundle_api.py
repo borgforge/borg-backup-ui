@@ -7,6 +7,7 @@ import base64
 import json
 import re
 import socket
+import stat
 import zipfile
 from datetime import datetime
 from io import BytesIO
@@ -14,9 +15,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
-SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
-SECRET_WORD_RE = re.compile(r"(?i)\b(password|passphrase|token|secret)\s+([^\s\"'<>]+)")
+SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|api[_-]?key|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
+SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|api[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
+SECRET_WORD_RE = re.compile(r"(?i)\b(password|passphrase|token|secret|api[_-]?key)\s+([^\s\"'<>]+)")
 # Keep legacy native ntfy keys in the sanitizer so old support snippets remain safe.
 PRIVACY_KEY_RE = re.compile(
     r"(?i)(mail|email|recipient|sender|smtp_(host|user)|ntfy_(server_url|username|click_url)|storagebox_(host|user)|"
@@ -33,6 +34,8 @@ SSH_PRIVATE_KEY_RE = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
     re.DOTALL,
 )
+MAX_STRUCTURED_STATUS_BYTES = 64 * 1024 * 1024
+MAX_STRUCTURED_STATUS_TOTAL_BYTES = 128 * 1024 * 1024
 
 
 def _root_from_config(config: dict) -> Path:
@@ -75,12 +78,11 @@ def sanitize_text(text: str) -> str:
 
 
 def _read_text_tail(path: Path, max_bytes: int = 65536) -> str:
-    data = path.read_bytes()
-    if len(data) > max_bytes:
-        data = data[-max_bytes:]
-        prefix = f"[truncated to last {max_bytes} bytes]\n"
-    else:
-        prefix = ""
+    with path.open('rb') as handle:
+        size = handle.seek(0, 2)
+        handle.seek(max(0, size - max_bytes))
+        data = handle.read(max_bytes)
+    prefix = f"[truncated to last {max_bytes} bytes]\n" if size > max_bytes else ""
     return prefix + data.decode("utf-8", errors="replace")
 
 
@@ -116,9 +118,38 @@ def _add_jsonl_file(zf: zipfile.ZipFile, arcname: str, path: Path, *, max_bytes:
         return False
 def _safe_json_file(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        if path.is_symlink() or path.stat().st_size > 1024 * 1024:
+            return {"_omitted": "not_regular_or_too_large"}
+        from job_store import read_json
+        return read_json(path)
     except Exception:
         return {"_unreadable": True, "path": str(path)}
+
+
+def _structured_status_payload(path: Path, remaining_bytes: int) -> tuple[bytes | None, dict]:
+    """Return complete sanitized JSON, or an explicit omission with its size."""
+    details: Dict[str, Any] = {}
+    try:
+        source = path.lstat()
+        details["size_bytes"] = source.st_size
+        if not stat.S_ISREG(source.st_mode):
+            return None, {**details, "reason": "not_regular_file"}
+        if source.st_size > MAX_STRUCTURED_STATUS_BYTES:
+            return None, {**details, "reason": "structured_file_too_large"}
+        if source.st_size > remaining_bytes:
+            return None, {**details, "reason": "structured_budget_exceeded"}
+        from job_store import read_json
+        payload = read_json(path)
+        if not isinstance(payload, dict):
+            return None, {**details, "reason": "invalid_json"}
+        encoded = (json.dumps(sanitize_data(payload), ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        if len(encoded) > remaining_bytes:
+            return None, {**details, "sanitized_size_bytes": len(encoded), "reason": "structured_budget_exceeded"}
+        return encoded, details
+    except (ValueError, UnicodeError, RecursionError):
+        return None, {**details, "reason": "invalid_json"}
+    except Exception:
+        return None, {**details, "reason": "status_file_unreadable"}
 
 
 def _candidate_jobs_dirs(root: Path, scripts_dir: Path) -> List[Path]:
@@ -173,8 +204,29 @@ def _arc_safe_path(prefix: str, path: Path) -> str:
     return f"{prefix}/{safe}"
 
 
+def _maintenance_support_bundle(config, app_version):
+    # No runtime readers, locks, cache refresh, or recovery blobs in diagnostics.
+    from startup_state import get_startup_state
+    from identity_migration_api import get_assistant
+    assistant = get_assistant(config).status()
+    migration = {key: assistant[key] for key in ("migration_id", "status", "stage", "reason_codes", "busy", "restart_required") if key in assistant}
+    files = ["system/startup-state.json", "system/identity-migration.json", "manifest.json"]
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        _add_json(archive, files[0], get_startup_state(config))
+        _add_json(archive, files[1], migration)
+        _add_json(archive, files[2], {"plugin_version": app_version, "maintenance": True,
+                  "note": "Read-only startup diagnostics. Protected migration data and credentials are excluded."})
+    payload = buf.getvalue()
+    return {"filename": "borg-backup-ui-migration-support.zip", "payload_b64": base64.b64encode(payload).decode("ascii"),
+            "size": len(payload), "file_count": len(files), "files": files}
+
+
 def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
-    from config_api import get_conf_file, read_expanded_conf
+    from startup_state import is_maintenance_mode
+    if is_maintenance_mode(config):
+        return _maintenance_support_bundle(config, app_version)
+    from config_api import read_expanded_conf
     from system_health_api import get_system_health_data
 
     created_at = datetime.now().isoformat(timespec="seconds")
@@ -184,13 +236,13 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     health = get_system_health_data(config)
 
     files: List[str] = []
-    skipped: List[Dict[str, str]] = []
+    skipped: List[Dict[str, Any]] = []
 
     def _record_added(name: str) -> None:
         files.append(name)
 
-    def _record_skipped(path: Path, reason: str) -> None:
-        skipped.append({"path": str(path), "reason": reason})
+    def _record_skipped(path: Path, reason: str, **details: Any) -> None:
+        skipped.append({"path": str(path), "reason": reason, **details})
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -229,11 +281,11 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
         _add_json(zf, "system/health.json", health)
         _record_added("system/health.json")
 
-        conf_file = get_conf_file(config)
-        if _add_text_file(zf, "config/backup.conf.sanitized.txt", conf_file, max_bytes=196608):
-            _record_added("config/backup.conf.sanitized.txt")
-        else:
-            _record_skipped(conf_file, "not_found_or_unreadable")
+        _add_json(zf, "config/backup.conf.sanitized.json", expanded)
+        _record_added("config/backup.conf.sanitized.json")
+        from identity_lifecycle import identity_health
+        _add_json(zf, "system/identity-integrity.json", identity_health(config))
+        _record_added("system/identity-integrity.json")
 
         for jobs_dir in _candidate_jobs_dirs(root, scripts_dir):
             if not jobs_dir.is_dir():
@@ -249,15 +301,22 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
             raw = str(expanded.get(key, "")).strip()
             if raw:
                 status_dirs.append(Path(raw))
+        structured_status_bytes = 0
         for status_dir in status_dirs:
             if not status_dir.is_dir():
                 _record_skipped(status_dir, "status_dir_not_found")
                 continue
             for p in _status_files(status_dir):
                 rel = f"status/{status_dir.name}/{p.name}"
-                if p.suffix.lower() == ".json":
-                    _add_json(zf, rel, _safe_json_file(p))
-                    _record_added(rel)
+                if p.suffix.lower() in {".json", ".status", ".test"}:
+                    encoded, details = _structured_status_payload(
+                        p, MAX_STRUCTURED_STATUS_TOTAL_BYTES - structured_status_bytes)
+                    if encoded is None:
+                        _record_skipped(p, **details)
+                    else:
+                        zf.writestr(rel, encoded)
+                        structured_status_bytes += len(encoded)
+                        _record_added(rel)
                 elif _add_text_file(zf, rel, p, max_bytes=65536):
                     _record_added(rel)
                 else:

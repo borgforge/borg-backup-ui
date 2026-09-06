@@ -827,10 +827,10 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
         data["storagebox_setup"] = get_storagebox_setup_status(ui_config, probe_auth=False)
     from storage_objects_api import settings_profiles_from_storages
     canonical_profiles = settings_profiles_from_storages(ui_config)
-    from repositories_api import read_repository_store
+    from repositories_api import read_repository_store_for_api
     from repositories_api import get_repository_info_refresh_status
     data["repository_info_refresh"] = get_repository_info_refresh_status(ui_config)
-    repository_rows = read_repository_store(ui_config).get("repositories", [])
+    repository_rows = read_repository_store_for_api(ui_config).get("repositories", [])
     refs_by_storage: Dict[str, List[str]] = {}
     repositories_by_storage: Dict[str, List[str]] = {}
     for repository in repository_rows:
@@ -838,7 +838,7 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
         if storage_key:
             label = str(repository.get("display_name") or repository.get("repository_key") or storage_key).strip()
             repositories_by_storage.setdefault(storage_key, []).append(label)
-        refs = [str(value) for value in repository.get("used_by", []) if str(value)]
+        refs = [f"{job['name']} ({job['job_id']})" for job in repository["jobs"]]
         refs_by_storage.setdefault(storage_key, []).extend(refs)
     data["local_profiles"] = [
         {

@@ -62,6 +62,14 @@
   background: var(--ui-state-neutral-bg);
 }
 
+.dashboard-summary-grid .stat-tile.running {
+  --dashboard-summary-fg: var(--ui-state-running-fg);
+  border-color: var(--ui-state-running-border);
+  background: var(--ui-state-running-bg);
+}
+
+.badge.running .badge-dot { background: var(--ui-state-running-fg); }
+
 .dashboard-summary-grid .stat-tile.unknown {
   --dashboard-summary-fg: var(--ui-state-info-fg);
   border-color: var(--ui-state-info-border);
@@ -125,7 +133,8 @@
 
 .location-nav-count::before { display: none; }
 
-.badge.info {
+.badge.info,
+.badge.running {
   border-color: var(--ui-state-running-border);
   background: var(--ui-state-running-bg);
   color: var(--ui-state-running-fg);
@@ -350,6 +359,10 @@
   color: var(--ui-color-text-subtle);
   font-size: var(--ui-font-size-xs);
   line-height: 1.35;
+}
+
+.dashboard-restore-facts .dashboard-fact-row > b {
+  white-space: normal;
 }
 
 .dashboard-inventory-table .loc-badge {

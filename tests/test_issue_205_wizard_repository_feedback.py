@@ -18,7 +18,10 @@ from repositories_api import (  # noqa: E402
     validate_repository_target,
 )
 from storage_objects_api import write_storage_store  # noqa: E402
-from wizard_api import load_job_for_wizard  # noqa: E402
+from job_model import new_job_defaults
+from wizard_api import load_job_for_wizard
+
+JOB_ID = "11111111-1111-4111-8111-111111111111"  # noqa: E402
 
 
 def _config_with_local_storage(tmp_path: Path) -> tuple[dict, Path]:
@@ -119,11 +122,10 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
     jobs_dir = data_root / "config" / "jobs"
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "flash_local.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "flash_local",
-        "backup_type": "flash",
-        "location": "local",
+    (jobs_dir / (JOB_ID + ".json")).write_text(json.dumps({
+        **new_job_defaults(),
+        "job_id": JOB_ID,
+        "archive_prefixes": ["flash-backup"],
         "name": "Flash",
         "enabled": True,
         "runner": "scriptless-wizard-runner",
@@ -131,7 +133,7 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
         "source_paths": ["/boot"],
     }), encoding="utf-8")
     (data_root / "config" / "schedules.json").write_text(json.dumps({
-        "flash_local": {"cron": "10 6 * * 2", "enabled": True},
+        JOB_ID: {"cron": "10 6 * * 2", "enabled": True},
     }), encoding="utf-8")
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     write_storage_store(config, {"storages": [{
@@ -148,11 +150,14 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
         "display_name": "Flash",
         "storage_key": "storage_local_test",
         "relative_path": "borg-backup-flash",
+        "job_ids": [JOB_ID], "source_job_ids": [JOB_ID],
         "encryption": "repokey-blake2",
     }]})
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
 
-    loaded = load_job_for_wizard("flash_local", scripts_dir, config)
+    before = (data_root / "config/schedules.json").read_bytes()
+    loaded = load_job_for_wizard(JOB_ID, scripts_dir, config)
+    assert (data_root / "config/schedules.json").read_bytes() == before
 
     assert loaded["schedule"] == {"cron": "10 6 * * 2", "enabled": True}
 
@@ -178,18 +183,17 @@ def test_edit_wizard_preserves_schedule_inventory_values(
     jobs_dir = data_root / "config" / "jobs"
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "flash_local.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "flash_local",
-        "backup_type": "flash",
-        "location": "local",
+    (jobs_dir / (JOB_ID + ".json")).write_text(json.dumps({
+        **new_job_defaults(),
+        "job_id": JOB_ID,
+        "archive_prefixes": ["flash-backup"],
         "name": "Flash",
         "runner": "scriptless-wizard-runner",
         "repository_key": "repo_flash_local_test",
         "source_paths": ["/boot"],
     }), encoding="utf-8")
     (data_root / "config" / "schedules.json").write_text(json.dumps({
-        "flash_local": {"cron": cron, "enabled": enabled},
+        JOB_ID: {"cron": cron, "enabled": enabled},
     }), encoding="utf-8")
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     write_storage_store(config, {"storages": [{
@@ -206,11 +210,14 @@ def test_edit_wizard_preserves_schedule_inventory_values(
         "display_name": "Flash",
         "storage_key": "storage_local_test",
         "relative_path": "borg-backup-flash",
+        "job_ids": [JOB_ID], "source_job_ids": [JOB_ID],
         "encryption": "repokey-blake2",
     }]})
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
 
-    loaded = load_job_for_wizard("flash_local", scripts_dir, config)
+    before = (data_root / "config/schedules.json").read_bytes()
+    loaded = load_job_for_wizard(JOB_ID, scripts_dir, config)
+    assert (data_root / "config/schedules.json").read_bytes() == before
 
     assert loaded["schedule"] == {"cron": cron, "enabled": enabled}
 
@@ -224,7 +231,7 @@ def test_job_wizard_ui_preloads_schedules_and_surfaces_save_failures() -> None:
     assert "frequency = 'monthly'" in script
     assert "scheduleSaveError" in script
     assert "schedule save failure is non-fatal" not in script
-    assert "body: JSON.stringify({ job_key: jobKey, cron, enabled: schedEnabled })" in script
+    assert "body: JSON.stringify({ job_id: jobId, cron, enabled: schedEnabled })" in script
 
 
 def test_job_wizard_does_not_mount_smb_profiles_during_job_creation() -> None:

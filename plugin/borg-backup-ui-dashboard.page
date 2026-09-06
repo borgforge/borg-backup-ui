@@ -80,10 +80,10 @@ $cache_error = '';
 if (is_file($cache_file)) {
   $raw = file_get_contents($cache_file);
   $decoded = json_decode($raw, true);
-  if (is_array($decoded)) {
+  if (is_array($decoded) && ($decoded['identity_schema_version'] ?? null) === 1) {
     $data = $decoded;
   } else {
-    $cache_error = 'Status cache could not be read.';
+    $cache_error = 'Status cache requires a refresh from Borg Backup UI.';
   }
 } else {
   $cache_error = 'Status cache will be created after the next Borg Backup UI start.';
@@ -318,18 +318,20 @@ $mytiles[$pluginname]['column1'] =
     const date = parseDateValue(value);
     return !!date && date.getTime() <= now.getTime();
   }
+  function canonicalWidgetItems(data) {
+    const items = get(data, 'jobs.items', []);
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    if (data?.identity_schema_version !== 1 || !Array.isArray(items)) return [];
+    const seen = new Set();
+    return items.filter((item) => {
+      if (!item || !uuid.test(item.job_id) || seen.has(item.job_id)) return false;
+      seen.add(item.job_id);
+      return true;
+    });
+  }
   function adjustedJobCounts(data, now) {
-    const items = Array.isArray(get(data, 'jobs.items', [])) ? get(data, 'jobs.items', []) : [];
-    if (!items.length) {
-      return {
-        total: intValue(data, 'jobs.enabled'),
-        successful: intValue(data, 'jobs.successful'),
-        warnings: intValue(data, 'jobs.warnings'),
-        failed: intValue(data, 'jobs.failed'),
-        running: intValue(data, 'jobs.running')
-      };
-    }
-    const counts = {total: 0, successful: 0, warnings: 0, failed: 0, running: 0};
+    const items = canonicalWidgetItems(data);
+    const counts = {total: 0, successful: 0, warnings: 0, failed: 0, running: 0, never: 0};
     items.forEach((item) => {
       if (!item || item.enabled === false) return;
       counts.total += 1;
@@ -345,27 +347,24 @@ $mytiles[$pluginname]['column1'] =
         counts.warnings += 1;
       } else if (status === 'success') {
         counts.successful += 1;
+      } else {
+        counts.never += 1;
       }
     });
     return counts;
   }
   function adjustedRestoreProof(data, now) {
-    const items = Array.isArray(get(data, 'jobs.items', [])) ? get(data, 'jobs.items', []) : [];
-    if (!items.length) {
-      return {
-        configured: intValue(data, 'restore_proof.configured'),
-        verified: intValue(data, 'restore_proof.verified'),
-        failed: intValue(data, 'restore_proof.failed'),
-        overdue: intValue(data, 'restore_proof.overdue'),
-        open: intValue(data, 'restore_proof.open')
-      };
-    }
+    const items = canonicalWidgetItems(data);
     const proof = {configured: 0, verified: 0, failed: 0, overdue: 0, open: 0};
     items.forEach((item) => {
       if (!item || item.enabled === false) return;
       const status = String(item.restore_verification_status || 'never').toLowerCase();
       if (status === 'not_required') return;
       proof.configured += 1;
+      if (status === 'stale' && ['target_changed', 'target_unknown', 'test_date_unknown'].includes(item.restore_verification_reason)) {
+        proof.open += 1;
+        return;
+      }
       if (status === 'verified') proof.verified += 1;
       else if (status === 'failed') proof.failed += 1;
       else if (status === 'never' || status === '') proof.open += 1;
@@ -376,14 +375,14 @@ $mytiles[$pluginname]['column1'] =
     return proof;
   }
   function jobStatusEvidence(data) {
-    const items = Array.isArray(get(data, 'jobs.items', [])) ? get(data, 'jobs.items', []) : [];
-    return items.some((item) => item && item.enabled !== false && (String(item.last_status || '').trim() || String(item.last_timestamp || '').trim()));
+    const items = canonicalWidgetItems(data);
+    return items.some((item) => item && item.enabled !== false && (['success','warning','error','skipped','cancelled'].includes(String(item.last_status || '')) || String(item.last_timestamp || '').trim()));
   }
   function overallStateFromCounts(counts, restore, cacheState, hasEvidence) {
     if (counts.failed || restore.failed) return 'error';
     if (counts.warnings || restore.overdue) return 'warning';
     if (counts.running) return 'running';
-    if (cacheState !== 'fresh' || (counts.total && !hasEvidence)) return 'unknown';
+    if (cacheState !== 'fresh' || counts.never || (counts.total && !hasEvidence)) return 'unknown';
     if (!counts.total) return 'unknown';
     return 'ok';
   }
@@ -406,6 +405,7 @@ $mytiles[$pluginname]['column1'] =
     overallDot && overallDot.classList.add(cls);
   }
   function render(data) {
+    if (data?.identity_schema_version !== 1) data = {};
     const now = new Date();
     const counts = adjustedJobCounts(data, now);
     const restore = adjustedRestoreProof(data, now);

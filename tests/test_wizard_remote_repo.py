@@ -13,14 +13,18 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+from job_model import new_job_defaults
 from repositories_api import write_repository_store
 from storage_objects_api import write_storage_store
 from wizard_api import generate_flow_preview, load_job_for_wizard, save_job, validate_params
 
 
+JOB_ID = "11111111-1111-4111-8111-111111111111"
+
+
 def _storagebox_params() -> dict:
     return {
-        "type_id": "flash",
+        "archive_prefix": "flash-backup",
         "job_name": "Flash",
         "location": "storagebox",
         "storage_profile_key": "storage-1",
@@ -59,6 +63,7 @@ def test_wizard_preview_resolves_only_the_selected_repository_object(tmp_path: P
         "base_path": "./backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_flash_storagebox_test",
         "display_name": "Flash Storagebox",
         "storage_key": "storage_storagebox_test",
@@ -149,6 +154,7 @@ def test_wizard_preview_validation_defers_appdata_risk_ack_until_save(tmp_path: 
         "path_raw": str(tmp_path / "repo-root"),
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_appdata_local_test",
         "display_name": "Appdata Local",
         "storage_key": "storage_local_test",
@@ -183,6 +189,7 @@ def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
         "base_path": "./backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [], "source_job_ids": [],
         "repository_key": "repo_flash_storagebox_test",
         "display_name": "Flash Storagebox",
         "repository_name": "borg-backup-flash",
@@ -194,6 +201,9 @@ def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
     }]})
     params = _storagebox_params()
     params["repository_key"] = "repo_flash_storagebox_test"
+    source = tmp_path / "source"
+    source.mkdir()
+    params["source_paths"] = [str(source)]
     result = save_job(params, tmp_path / "scripts", tmp_path / "data", config)
     metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
 
@@ -205,7 +215,7 @@ def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
 
 
 def test_save_storagebox_job_without_repository_object_is_rejected(tmp_path: Path):
-    with pytest.raises(ValueError, match="Selected repository object was not found"):
+    with pytest.raises(ValueError, match="Repository selection is required"):
         save_job(_storagebox_params(), tmp_path / "scripts", tmp_path / "data", {})
 
 
@@ -215,18 +225,16 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
     jobs_dir = data_root / "config" / "jobs"
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "vms_local.json").write_text(
+    (jobs_dir / (JOB_ID + ".json")).write_text(
         json.dumps({
-            "schema_version": 3,
-            "job_key": "vms_local",
-            "backup_type": "vms",
-            "location": "local",
+            **new_job_defaults(),
+            "job_id": JOB_ID,
             "name": "VMs",
             "enabled": True,
             "runner": "scriptless-wizard-runner",
             "repository_key": "repo_vms_local_test",
             "source_paths": ["/mnt/user/domains"],
-            "archive_prefixes": ["oldvms-backup"],
+            "archive_prefixes": ["vms-backup", "oldvms-backup"],
         }),
         encoding="utf-8",
     )
@@ -240,6 +248,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
         "base_path": "/mnt/remotes/192.168.1.5_raid_backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [JOB_ID], "source_job_ids": [JOB_ID],
         "repository_key": "repo_vms_local_test",
         "display_name": "VMs",
         "storage_key": "storage_local_test",
@@ -255,7 +264,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
     )
 
     loaded = load_job_for_wizard(
-        "vms_local",
+        JOB_ID,
         scripts_dir,
         config,
     )
@@ -265,17 +274,16 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
     assert loaded["archive_prefixes"] == ["vms-backup", "oldvms-backup"]
 
 
-def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypatch):
+def test_edit_wizard_blocks_broken_assignment_without_silent_repair(tmp_path: Path, monkeypatch):
     data_root = tmp_path / "borg-backup"
     scripts_dir = data_root / "scripts"
     jobs_dir = data_root / "config" / "jobs"
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "photos_smb.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "photos_smb",
-        "backup_type": "photos",
-        "location": "smb",
+    (jobs_dir / (JOB_ID + ".json")).write_text(json.dumps({
+        **new_job_defaults(),
+        "job_id": JOB_ID,
+        "archive_prefixes": ["photos-backup"],
         "name": "Photos",
         "enabled": True,
         "runner": "scriptless-wizard-runner",
@@ -284,12 +292,11 @@ def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypa
     }), encoding="utf-8")
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     write_storage_store(config, {"storages": []})
-    write_repository_store(config, {"repositories": []})
+    # Deliberately corrupt installed assignment: active writers reject this shape.
+    (data_root / "config/repositories.json").write_text(json.dumps({"schema_version": 1, "repositories": []}))
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _cfg: {})
 
-    loaded = load_job_for_wizard("photos_smb", scripts_dir, config)
-
-    assert loaded["repository_key"] == "repo_missing"
-    assert loaded["repo_path"] == ""
-    assert "Assigned repository was not found" in loaded["repository_assignment_error"]
-    assert loaded["source_paths"] == ["/mnt/user/photos"]
+    before = (jobs_dir / (JOB_ID + ".json")).read_bytes()
+    with pytest.raises(ValueError, match="assigned repository is missing"):
+        load_job_for_wizard(JOB_ID, scripts_dir, config)
+    assert (jobs_dir / (JOB_ID + ".json")).read_bytes() == before

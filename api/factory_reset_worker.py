@@ -110,9 +110,19 @@ def perform_reset(marker: dict, *, production: bool = True) -> dict:
     if not example.is_file():
         raise FileNotFoundError("backup.conf.example is missing")
 
+    controls = Path(str(marker.get("controls_root") or "/run/borg-backup-ui/jobs"))
+    if production and controls != Path('/run/borg-backup-ui/jobs'):
+        raise ValueError('Unexpected runtime control root')
+    if controls in {Path('/'), Path('/run'), Path('/run/borg-backup-ui')}:
+        raise ValueError('Unsafe runtime control root')
     _safe_remove(root, expected_config_root=True, production=production)
     if old_data is not None and old_data.resolve(strict=False) != root.resolve(strict=False):
         _safe_remove(old_data, production=production)
+
+    if controls.is_symlink():
+        controls.unlink()
+    elif controls.exists():
+        shutil.rmtree(controls)
 
     for directory in (root / "config" / "jobs", root / "secrets", root / "locks", root / "scripts"):
         directory.mkdir(parents=True, exist_ok=True)
@@ -136,13 +146,18 @@ def main() -> int:
     marker = json.loads(marker_path.read_text(encoding="utf-8"))
     audit = Path(str(marker.get("audit_file") or ""))
     rc = str(marker.get("rc_script") or "/etc/rc.d/rc.borg_backup_ui")
-    time.sleep(2)
-    _audit(audit, "factory_reset_started", "started", marker)
+    from migration_barrier import MigrationBlocked, writer_lease
     try:
-        subprocess.run([rc, "stop"], timeout=30, check=False)
-        remove_plugin_cron_blocks()
-        result = perform_reset(marker)
-        _audit(audit, "factory_reset_completed", "success", marker, json.dumps(result, ensure_ascii=False))
+        with writer_lease({"BACKUP_SCRIPTS_DIR": str(marker.get("configuration_root") or "")}):
+            time.sleep(2)
+            _audit(audit, "factory_reset_started", "started", marker)
+            subprocess.run([rc, "stop"], timeout=30, check=False)
+            remove_plugin_cron_blocks()
+            result = perform_reset(marker)
+            _audit(audit, "factory_reset_completed", "success", marker, json.dumps(result, ensure_ascii=False))
+    except MigrationBlocked as exc:
+        _audit(audit, "factory_reset_blocked", "blocked", marker, exc.reason)
+        return 1
     except Exception as exc:
         _audit(audit, "factory_reset_failed", "failed", marker, str(exc))
         subprocess.run([rc, "start"], timeout=30, check=False)

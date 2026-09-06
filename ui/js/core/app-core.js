@@ -12,7 +12,7 @@ const state = {
 };
 
 let appCheckIntervalDays = 30;
-let schedulesData = {}; // job_key → { cron, enabled }
+let schedulesData = {}; // job_id -> { cron, enabled }
 let globalDataDirReady = true;
 let setupRequired = false;
 let setupStatusCache = { ts: 0, data: null };
@@ -79,6 +79,7 @@ async function fetchSetupStatus(force = false) {
   const res = await fetch('/api/setup-status', { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   data = await res.json();
+  if (data?.startup_state) renderStartupMaintenanceBanner(data.startup_state);
   setupStatusCache = { ts: now, data };
   return data;
 }
@@ -167,12 +168,18 @@ function _systemHealthAttentionCount(data) {
 
 function renderStartupMaintenanceBanner(startupState = {}) {
   const banner = document.getElementById('startup-maintenance-banner');
-  if (!banner) return;
   startupStateCache = startupState && typeof startupState === 'object'
     ? startupState
     : { mode: 'normal', severity: 'ok', blocking: false, failed_migrations: [], failures: [] };
   const active = String(startupStateCache.mode || '') === 'maintenance';
-  banner.classList.toggle('hidden', !active);
+  banner?.classList.toggle('hidden', !active);
+  if (active) {
+    setupRequired = false;
+    globalDataDirReady = false;
+    window.BBUI?.setupWizard?.suspendForMaintenance?.();
+    applySetupNavLock();
+    applyDataDirActionGates();
+  }
   applyStartupMaintenanceNavigation();
   if (!active) return;
   const failures = Array.isArray(startupStateCache.failed_migrations)
@@ -191,7 +198,7 @@ function renderStartupMaintenanceBanner(startupState = {}) {
       phase: phase || _sidebarTranslation('maintenanceMode.unknownPhase'),
       message: cause || _sidebarTranslation('maintenanceMode.unknownCause'),
     });
-    target.textContent = `${migrationLine}\n${causeLine}`;
+    target.textContent = failures || cause || phase ? `${migrationLine}\n${causeLine}` : migrationLine;
   }
   if (!isMaintenancePageAllowed(state.currentPage)) {
     navigate(maintenanceFallbackPage());
@@ -284,6 +291,19 @@ async function updateDataDirWarning(options = {}) {
   if (!dashEl && !jobsEl && !dashSetupEl && !settingsEl) return null;
   try {
     const data = await fetchSetupStatus();
+    // Maintenance responses intentionally omit normal setup data. Missing
+    // fields here must never turn the required setup modal on over recovery.
+    if (isStartupMaintenanceMode() || data?.maintenance_mode === true) {
+      setupRequired = false;
+      globalDataDirReady = false;
+      for (const el of [dashEl, jobsEl, dashSetupEl, settingsEl]) {
+        if (el) el.className = 'status-message hidden';
+      }
+      window.BBUI?.setupWizard?.suspendForMaintenance?.();
+      applySetupNavLock();
+      applyDataDirActionGates();
+      return data;
+    }
     const missing = !Boolean(data?.global_data_dir_set);
     const ready = Boolean(data?.ready);
     const hideMissingDataDirWarnings = Boolean(options?.deferMissingWarning && missing);

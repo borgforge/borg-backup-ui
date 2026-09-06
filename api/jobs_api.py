@@ -7,10 +7,7 @@ Subprozesse gestartet; deren stdout wird live gepuffert und per SSE ausgeliefert
 
 import json
 import io
-import copy
 import os
-import re
-import shutil
 import subprocess
 import sys
 import threading
@@ -23,20 +20,16 @@ from typing import Dict, Generator, List, Optional
 
 DEFAULT_DATA_ROOT = Path("/boot/config/borg-backup")
 SSE_HEARTBEAT_INTERVAL_SECONDS = 15.0
-_JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _RUNTIME_MODES = {"all", "selected", "none"}
 _DOCKER_RUNTIME_MODES = _RUNTIME_MODES | {"except_selected"}
-_JOB_DISCOVERY_CACHE_TTL_SECONDS = 5.0
-_job_discovery_cache: dict[str, dict] = {}
-_job_discovery_cache_lock = threading.Lock()
-_job_metadata_migrations: set[str] = set()
 
 
-def _validate_job_key(job_key: str) -> str:
-    key = str(job_key or "").strip()
-    if not _JOB_KEY_RX.fullmatch(key):
-        raise ValueError("Invalid job key")
-    return key
+def _validate_runtime_id(job_id: str) -> str:
+    # Restore verification remains a separate service during its #477 cutover.
+    if job_id == "restore_test":
+        return job_id
+    from job_model import validate_job_id
+    return validate_job_id(job_id)
 
 
 def _control_state_for_run(run_id: str) -> dict:
@@ -61,9 +54,9 @@ def _control_state_for_run(run_id: str) -> dict:
     }
 
 
-def cancel_job(config: dict, job_key: str, run_id: str, requested_by: str = "") -> dict:
+def cancel_job(config: dict, job_id: str, run_id: str, requested_by: str = "") -> dict:
     """Request cooperative cancellation for the currently active run."""
-    key = _validate_job_key(job_key)
+    key = _validate_runtime_id(job_id)
     runtime = get_job_runtime_state(config, key)
     active_run_id = str(runtime.get("run_id") or "").strip()
     if not runtime.get("running") or not active_run_id:
@@ -167,16 +160,23 @@ def active_resource_locks(config: dict) -> List[dict]:
             continue
         if not isinstance(raw, dict):
             continue
-        job_key = str(raw.get("job_key") or "").strip()
+        job_id = str(raw.get("job_id") or "").strip()
         try:
-            job_key = _validate_job_key(job_key)
+            if not job_id and raw.get("service") in {"restore", "restore_test"} and raw.get("operation") == raw["service"]:
+                pass
+            else:
+                job_id = _validate_runtime_id(job_id)
         except ValueError:
             continue
         pid = _safe_int(raw.get("pid"), 0)
         if not _pid_alive(pid):
             continue
+        from activity_log_capture import process_token
+        if raw.get("process_start") and process_token(pid) != raw["process_start"]:
+            continue
         rows.append({
-            "job_key": job_key,
+            **{key: raw[key] for key in ("job_name_snapshot", "archive_prefix_snapshot", "repository_key_snapshot", "repository_snapshot", "location_snapshot") if key in raw},
+            "job_id": job_id,
             "pid": pid,
             "resource": str(raw.get("resource") or "").strip(),
             "operation": str(raw.get("operation") or "backup").strip().lower() or "backup",
@@ -205,40 +205,16 @@ def _runtime_log_dir(config: dict) -> Path:
     return Path(configured or "/mnt/user/Logs")
 
 
-def _fallback_runtime_log(config: dict, job_key: str, started_at: str) -> str:
-    log_dir = _runtime_log_dir(config)
-    if not log_dir.is_dir():
-        return ""
-    try:
-        candidates = sorted(
-            log_dir.glob(f"Borg-Backup_{job_key}--*.log"),
-            key=lambda path: path.stat().st_mtime,
-            reverse=True,
-        )
-    except OSError:
-        return ""
-    if not candidates:
-        return ""
-    if started_at:
-        try:
-            started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-            if started.tzinfo is None:
-                started = started.replace(tzinfo=timezone.utc)
-            if candidates[0].stat().st_mtime < started.timestamp() - 120:
-                return ""
-        except (OSError, ValueError):
-            pass
-    return str(candidates[0])
-
-
 def durable_running_states(config: dict) -> Dict[str, dict]:
     """Aggregate live runner locks into one durable state per job."""
     grouped: Dict[str, dict] = {}
     for lock in active_resource_locks(config):
         if str(lock.get("operation") or "backup").strip().lower() != "backup":
             continue
-        job_key = str(lock.get("job_key") or "")
-        current = grouped.setdefault(job_key, {
+        job_id = str(lock.get("job_id") or "")
+        current = grouped.setdefault(job_id, {
+            **{key: value for key, value in lock.items() if key.endswith("_snapshot")},
+            "job_id": job_id,
             "running": True,
             "exit_code": None,
             "start_time": str(lock.get("started_at") or ""),
@@ -257,17 +233,15 @@ def durable_running_states(config: dict) -> Dict[str, dict]:
             current["run_id"] = str(lock.get("run_id"))
     from activity_log_capture import running_captures
     for capture in running_captures():
-        grouped.setdefault(capture['job_key'], capture)
-    for job_key, state in grouped.items():
-        if not state.get("log_file"):
-            state["log_file"] = _fallback_runtime_log(config, job_key, str(state.get("start_time") or ""))
+        grouped.setdefault(capture['job_id'], capture)
+    for job_id, state in grouped.items():
         state["log_available"] = bool(state.get("log_file") and Path(str(state["log_file"])).is_file())
         state.update(_control_state_for_run(str(state.get("run_id") or "")))
     return grouped
 
 
-def get_job_runtime_state(config: dict, job_key: str) -> dict:
-    key = _validate_job_key(job_key)
+def get_job_runtime_state(config: dict, job_id: str) -> dict:
+    key = _validate_runtime_id(job_id)
     memory = JobManager.get().get_state(key)
     if memory.get("running"):
         return memory
@@ -276,9 +250,9 @@ def get_job_runtime_state(config: dict, job_key: str) -> dict:
 
 def get_all_runtime_states(config: dict) -> Dict[str, dict]:
     states = JobManager.get().get_all_states()
-    for job_key, durable in durable_running_states(config).items():
-        if not states.get(job_key, {}).get("running"):
-            states[job_key] = durable
+    for job_id, durable in durable_running_states(config).items():
+        if not states.get(job_id, {}).get("running"):
+            states[job_id] = durable
     return states
 
 
@@ -311,37 +285,13 @@ def get_jobs_meta_dirs(scripts_dir: Path, data_root: Path | None = None) -> List
     return [get_jobs_meta_dir(scripts_dir, data_root)]
 
 
-def migrate_jobs_metadata_dir(scripts_dir: Path, data_root: Path | None = None) -> None:
-    """One-time migration: move legacy jobs/*.json into canonical config/jobs/."""
-    preferred = get_jobs_meta_dir(scripts_dir, data_root)
-    preferred.mkdir(parents=True, exist_ok=True)
-    sources = [
-        scripts_dir / "config" / "jobs",
-        Path("/boot/config/plugins/borg-backup-ui/runtime/config/jobs"),
-    ]
-    for legacy in sources:
-        if legacy == preferred or not legacy.is_dir():
-            continue
-        for src in legacy.glob("*.json"):
-            dst = preferred / src.name
-            if dst.exists():
-                continue
-            try:
-                src.rename(dst)
-            except OSError:
-                try:
-                    shutil.copy2(src, dst)
-                    src.unlink()
-                except OSError:
-                    continue
-
-
 @dataclass
 class JobInfo:
-    key: str
-    backup_type: str
+    job_id: str
+    repository_key: str
+    archive_prefixes: list[str]
     location: str
-    script_path: Optional[Path]
+    script_path: Optional[Path] = None
     name: str = ""
     has_docker: bool = False
     has_vm: bool = False
@@ -367,10 +317,7 @@ class JobInfo:
 
     @property
     def display_name(self) -> str:
-        loc_label = {"local": "Lokal", "usb": "USB", "smb": "SMB", "storagebox": "Storagebox"}.get(
-            self.location, self.location
-        )
-        return f"{self.backup_type.capitalize()} – {loc_label}"
+        return self.name
 
 
 class _JobState:
@@ -380,6 +327,7 @@ class _JobState:
         self.run_id = run_id
         self.log_file = log_file
         self.capture_record_file = capture_record_file
+        self.run_snapshot = {}
         self.line_count = 0
         self.lines: List[str] = []
         self.finished = False
@@ -421,28 +369,42 @@ class JobManager:
 
     def start(
         self,
-        job_key: str,
+        job_id: str,
         command: List[str],
         cwd: Path,
         extra_env: Optional[Dict[str, str]] = None,
+        *, run_context: dict | None = None,
     ) -> tuple:
+        with self._lock:
+            return self._start_locked(job_id, command, cwd, extra_env, run_context=run_context)
+
+    def _start_locked(self, job_id, command, cwd, extra_env, *, run_context):
         """
         Startet einen Backup-Job als Subprozess.
         Gibt (True, None) bei Erfolg zurück, (False, Fehlermeldung) sonst.
         """
-        job_key = _validate_job_key(job_key)
-        with self._lock:
-            state = self._states.get(job_key)
-            if state is not None and not state.finished:
-                return False, "Job is already running"
+        job_id = _validate_runtime_id(job_id)
+        state = self._states.get(job_id)
+        if state is not None and not state.finished:
+            return False, "Job is already running"
+        if job_id != "restore_test":
+            from job_runs import read_run_context
+            if not run_context:
+                raise ValueError("An immutable run context is required")
+            run_context = read_run_context(job_id, run_context["run_id"])
 
         env = dict(os.environ)
         # Damit das Script seine lib/ findet
         env["BORG_SCRIPT_DIR"] = str(cwd)
-        run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:12]}"
-        env["BORG_UI_RUN_ID"] = run_id
         if extra_env:
             env.update(extra_env)
+        run_id = run_context["run_id"] if run_context else str(uuid.uuid4())
+        env["BORG_UI_RUN_ID"] = run_id
+        if run_context:
+            env["BORG_UI_JOB_ID"] = job_id
+            env.pop("BORG_UI_JOB_KEY", None)
+            env["BORG_UI_FILE_ACTIVITY_RUN"] = "1" if run_context["context"]["job"].get("file_activity") else "0"
+            env["BORG_UI_ACTIVITY_LOG_DIR"] = str(Path(run_context["log_file"]).parent)
 
         log_file = None
         capture_record_file = None
@@ -452,10 +414,10 @@ class JobManager:
                 from activity_log import activity_log_path
                 from activity_log_capture import prepare_capture
 
-                log_file, capture_record_file = prepare_capture(job_key, run_id, Path(env["BORG_UI_ACTIVITY_LOG_DIR"]))
+                log_file, capture_record_file = prepare_capture(job_id, run_id, Path(env["BORG_UI_ACTIVITY_LOG_DIR"]), name=run_context["job_name_snapshot"])
                 log_handle = os.fdopen(os.open(log_file, os.O_WRONLY | os.O_NOFOLLOW), "wb")
                 env["BORG_UI_CAPTURE_LOG"] = str(log_file)
-                env["BORG_UI_RETAINED_LOG"] = str(activity_log_path(Path(env["BORG_UI_ACTIVITY_LOG_DIR"]), job_key, run_id))
+                env["BORG_UI_RETAINED_LOG"] = run_context["log_file"]
                 command = [sys.executable, str(Path(__file__).with_name("activity_log_capture.py")), str(capture_record_file), *command]
                 env["PYTHONUNBUFFERED"] = "1"
                 env["PYTHONIOENCODING"] = "utf-8"
@@ -475,19 +437,21 @@ class JobManager:
                 log_handle.close()
 
         new_state = _JobState(proc, datetime.now(), run_id, log_file, capture_record_file)
-        with self._lock:
-            self._states[job_key] = new_state
+        if run_context:
+            from job_runs import descriptors
+            new_state.run_snapshot = {**descriptors(run_context), "log_file": run_context["log_file"], "file_activity": False}
+        self._states[job_id] = new_state
 
         t = threading.Thread(
             target=self._reader,
-            args=(job_key, new_state),
+            args=(job_id, new_state),
             daemon=True,
-            name=f"job-reader-{job_key}",
+            name=f"job-reader-{job_id}",
         )
         t.start()
         return True, None
 
-    def _reader(self, job_key: str, state: _JobState) -> None:
+    def _reader(self, job_id: str, state: _JobState) -> None:
         """Liest stdout des Subprozesses Zeile für Zeile in den Puffer."""
         try:
             if state.log_file is None:
@@ -527,15 +491,16 @@ class JobManager:
 
     # ── State-Abfrage ─────────────────────────────────────────────────────────
 
-    def get_state(self, job_key: str) -> dict:
-        job_key = _validate_job_key(job_key)
+    def get_state(self, job_id: str) -> dict:
+        job_id = _validate_runtime_id(job_id)
         with self._lock:
-            state = self._states.get(job_key)
+            state = self._states.get(job_id)
         if state is None:
             return {"running": False}
         if state.log_file is not None:
             with state._lock:
                 return {
+                    **state.run_snapshot,
                     "running": not state.finished,
                     "exit_code": state.exit_code,
                     "line_count": state.line_count,
@@ -548,6 +513,7 @@ class JobManager:
                 }
         lines, finished, exit_code = state.snapshot()
         return {
+            **state.run_snapshot,
             "running": not finished,
             "exit_code": exit_code,
             "start_time": state.start_time.isoformat(),
@@ -561,24 +527,24 @@ class JobManager:
             keys = list(self._states.keys())
         return {k: self.get_state(k) for k in keys}
 
-    def is_running(self, job_key: str) -> bool:
-        job_key = _validate_job_key(job_key)
+    def is_running(self, job_id: str) -> bool:
+        job_id = _validate_runtime_id(job_id)
         with self._lock:
-            state = self._states.get(job_key)
+            state = self._states.get(job_id)
         return state is not None and not state.finished
 
     # ── SSE-Stream ────────────────────────────────────────────────────────────
 
-    def stream_output(self, job_key: str) -> Generator[str, None, None]:
+    def stream_output(self, job_id: str, run_id: str = "") -> Generator[str, None, None]:
         """
         SSE-Generator: liefert neue Log-Zeilen als 'data:' Events.
         Schließt mit einem 'done'-Event (Daten = Exit-Code).
         Bricht sofort ab wenn Job unbekannt ist.
         """
-        job_key = _validate_job_key(job_key)
+        job_id = _validate_runtime_id(job_id)
         with self._lock:
-            state = self._states.get(job_key)
-        if state is None:
+            state = self._states.get(job_id)
+        if state is None or (run_id and state.run_id != run_id):
             yield "event: error\ndata: Job not found\n\n"
             return
         if state.log_file is not None:
@@ -623,304 +589,114 @@ class JobManager:
             time.sleep(0.1)
 
 
-def _latest_job_exit_code(config: dict, job_key: str) -> Optional[int]:
-    try:
-        from status_api import get_status_data
-        for row in get_status_data(config).get("backups", []):
-            if str(row.get("key") or "") == job_key:
-                value = row.get("exit_code")
-                return int(value) if value is not None else None
-    except Exception:
-        pass
-    return None
-
-
-def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
-    """Stream in-memory output or resume a live runner log discovered via locks."""
-    key = _validate_job_key(job_key)
+def stream_job_output(config: dict, job_id: str, run_id: str = "") -> Generator[str, None, None]:
+    """Stream one immutable run; a newer run never changes this stream's owner."""
+    key = _validate_runtime_id(job_id)
     manager = JobManager.get()
-    if manager.is_running(key):
+    if key == "restore_test":
         yield from manager.stream_output(key)
         return
-
-    durable = durable_running_states(config).get(key)
-    if not durable:
-        yield from manager.stream_output(key)
+    from job_runs import validate_run_id, find_run_status
+    from job_control import read_control_state
+    from activity_log import open_activity_file
+    validate_run_id(run_id)
+    memory = manager.get_state(key)
+    if memory.get("run_id") == run_id:
+        yield from manager.stream_output(key, run_id)
         return
-    log_file = Path(str(durable.get("log_file") or ""))
-    if not log_file.is_file():
-        yield "event: error\ndata: Live log is not available for the recovered job run.\n\n"
+    durable = durable_running_states(config).get(key, {})
+    state = durable if durable.get("run_id") == run_id else find_run_status(config, key, run_id)
+    if not state.get("log_file"):
+        yield "event: error\ndata: Log is not available for this run.\n\n"
         return
-
+    from activity_log_capture import capture_record, open_capture_file
+    capture = capture_record(key, run_id) if state.get("file_activity") else {}
+    try:
+        binary = (open_capture_file(Path(capture["active_file"]).parent / "capture.json")
+                  if capture else open_activity_file(Path(state["log_file"])))
+    except OSError:
+        yield "event: error\ndata: Log could not be read.\n\n"
+        return
     yield ": heartbeat\n\n"
-    position = 0
-    idle_after_finish = 0
     last_heartbeat = time.monotonic()
-    while True:
-        emitted = False
-        try:
-            if durable.get("file_activity"):
-                from activity_log_capture import capture_record, open_capture_file
-                capture = capture_record(key, str(durable.get("run_id") or ""))
-            else:
-                capture = {}
-            if capture:
-                binary = open_capture_file(Path(capture["active_file"]).parent / "capture.json")
-            else:
-                binary = log_file.open("rb")
-            with io.TextIOWrapper(binary, encoding="utf-8", errors="replace") as handle:
-                handle.seek(position)
-                for line in handle:
-                    emitted = True
-                    clean_line = line.rstrip("\r\n")
-                    yield f"data: {clean_line}\n\n"
-                position = handle.tell()
-                if emitted:
-                    last_heartbeat = time.monotonic()
-        except OSError:
-            yield "event: error\ndata: Live log could not be read.\n\n"
-            return
-
-        if key not in durable_running_states(config):
-            idle_after_finish = 0 if emitted else idle_after_finish + 1
-            if idle_after_finish >= 2:
-                exit_code = _latest_job_exit_code(config, key)
-                value = str(exit_code) if exit_code is not None else "?"
-                yield f"event: done\ndata: {value}\n\n"
-                return
-        else:
-            idle_after_finish = 0
-        if not emitted and time.monotonic() - last_heartbeat >= SSE_HEARTBEAT_INTERVAL_SECONDS:
-            yield ": heartbeat\n\n"
-            last_heartbeat = time.monotonic()
-        time.sleep(0.5)
+    idle_after_finish = 0
+    with io.TextIOWrapper(binary, encoding="utf-8", errors="replace") as handle:
+        while True:
+            line = handle.readline()
+            if line:
+                yield f"data: {line.rstrip(chr(10))}\n\n"
+                idle_after_finish = 0
+                continue
+            current = durable_running_states(config).get(key, {})
+            running = current.get("running") and current.get("run_id") == run_id
+            if not running:
+                idle_after_finish += 1
+                if idle_after_finish >= 2:
+                    control = read_control_state(run_id)
+                    terminal = control if control.get("job_id") == key else find_run_status(config, key, run_id)
+                    code = terminal.get("exit_code")
+                    yield f"event: done\ndata: {code if code is not None else '?'}\n\n"
+                    return
+            if time.monotonic() - last_heartbeat >= SSE_HEARTBEAT_INTERVAL_SECONDS:
+                yield ": heartbeat\n\n"
+                last_heartbeat = time.monotonic()
+            time.sleep(0.5)
 
 
 # ── Job-Erkennung ─────────────────────────────────────────────────────────────
 
 def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
-    """
-    Finds backup jobs from canonical JSON metadata.
-    """
-    utility_types = {"restore_test"}
-
-    def _make_job(
-        py_file: Optional[Path],
-        backup_type: str,
-        location: str,
-        *,
-        key: Optional[str] = None,
-        name: Optional[str] = None,
-        has_docker: Optional[bool] = None,
-        has_vm: Optional[bool] = None,
-        description: Optional[str] = None,
-        icon: Optional[str] = None,
-        icon_color: Optional[str] = None,
-        standard: str = "wizard",
-        enabled: bool = True,
-        compression: str = "",
-        retention_daily: str = "",
-        retention_weekly: str = "",
-        retention_monthly: str = "",
-        retention_yearly: str = "",
-        restore_test_policy_mode: str = "",
-        restore_test_interval_days: int = 30,
-        restore_test_validity_days: int = 30,
-        restore_test_level: int = 2,
-        restore_test_max_runtime_minutes: int = 0,
-        docker_control: Optional[dict] = None,
-        vm_control: Optional[dict] = None,
-        file_activity: bool = False,
-    ) -> JobInfo:
-        desc_file = py_file.with_suffix(".description") if py_file is not None else None
-        desc_text = (
-            description
-            if description is not None
-            else (
-                desc_file.read_text(encoding="utf-8").strip()
-                if desc_file is not None and desc_file.exists()
-                else ""
-            )
-        )
-        bt_lc = backup_type.lower()
-        default_docker_control = {
-            "mode": "all" if ((bt_lc == "appdata") if has_docker is None else bool(has_docker)) else "none",
-            "selected": [],
-            "ack_appdata_risk": False,
-        }
-        default_vm_control = {
-            "mode": "all" if ((bt_lc == "vms") if has_vm is None else bool(has_vm)) else "none",
-            "selected": [],
-            "ack_domains_risk": False,
-        }
-        return JobInfo(
-            key=key or f"{bt_lc}_{location}",
-            backup_type=backup_type,
-            location=location,
-            script_path=py_file,
-            name=(name or "").strip(),
-            has_docker=(bt_lc == "appdata") if has_docker is None else bool(has_docker),
-            has_vm=(bt_lc == "vms") if has_vm is None else bool(has_vm),
-            description=desc_text,
-            icon=(icon or "").strip().lower(),
-            icon_color=(icon_color or "").strip().lower(),
-            # Only explicit utility jobs should be filtered from normal
-            # backup selectors. Custom/unknown backup types are still jobs.
-            is_utility=bt_lc in utility_types,
-            standard=standard,
-            enabled=bool(enabled),
-            file_activity=file_activity,
-            compression=str(compression or "").strip(),
-            retention_daily=str(retention_daily or "").strip(),
-            retention_weekly=str(retention_weekly or "").strip(),
-            retention_monthly=str(retention_monthly or "").strip(),
-            retention_yearly=str(retention_yearly or "").strip(),
-            docker_control=docker_control or default_docker_control,
-            vm_control=vm_control or default_vm_control,
-            restore_test_policy_mode=str(restore_test_policy_mode or "").strip().lower(),
-            restore_test_interval_days=_safe_int(restore_test_interval_days, 30),
-            restore_test_validity_days=_safe_int(restore_test_validity_days, 30),
-            restore_test_level=_safe_int(restore_test_level, 2),
-            restore_test_max_runtime_minutes=_safe_int(restore_test_max_runtime_minutes, 0),
-        )
-
-    jobs_by_key: Dict[str, JobInfo] = {}
+    from job_store import read_jobs
+    from repository_context import load_repository_inventory, resolve_job_repository_context
     root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
-    # ── Wizard-Metadaten (prioritär) ──────────────────────────────────────────
-    meta_dirs = get_jobs_meta_dirs(scripts_dir, root)
-    for meta_dir in meta_dirs:
-        if not meta_dir.is_dir():
-            continue
-        for meta_file in sorted(meta_dir.glob("*.json")):
-            try:
-                raw = json.loads(meta_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                continue
-
-            # Pflichtfelder V1
-            try:
-                key = str(raw["job_key"]).strip()
-                backup_type = str(raw["backup_type"]).strip()
-                location = str(raw["location"]).strip().lower()
-                script_name = str(raw.get("script") or "").strip()
-            except (KeyError, TypeError, ValueError):
-                continue
-
-            if not key or not backup_type or not location:
-                continue
-            if location not in {"local", "usb", "smb", "storagebox", "custom"}:
-                continue
-
-            script_path = (scripts_dir / script_name).resolve()
-            if script_name:
-                try:
-                    script_path.relative_to(scripts_dir.resolve())
-                except ValueError:
-                    # Pfad außerhalb scripts_dir ignorieren
-                    continue
-            else:
-                script_path = None
-
-            features = raw.get("features") if isinstance(raw.get("features"), dict) else {}
-            retention = raw.get("retention") if isinstance(raw.get("retention"), dict) else {}
-            rt_policy = raw.get("restore_test_policy") if isinstance(raw.get("restore_test_policy"), dict) else {}
-            docker_control = _runtime_control_from_meta(raw, "docker")
-            vm_control = _runtime_control_from_meta(raw, "vm")
-            has_docker = bool(features.get("docker", False))
-            has_vm = bool(features.get("vm", False))
-            description = raw.get("description")
-            if description is not None:
-                description = str(description)
-
-            # Preferred dir wins: only set if job key not seen yet.
-            jobs_by_key.setdefault(key, _make_job(
-                script_path,
-                backup_type,
-                location,
-                key=key,
-                name=str(raw.get("name") or "").strip(),
-                has_docker=has_docker,
-                has_vm=has_vm,
-                description=description,
-                icon=str(raw.get("icon") or "").strip().lower(),
-                icon_color=str(raw.get("icon_color") or "").strip().lower(),
-                standard="wizard",
-                enabled=bool(raw.get("enabled", True)),
-                file_activity=str(raw.get("file_activity", False)).strip().lower() in {"1", "true", "yes", "on"},
-                compression=str(raw.get("compression") or "").strip(),
-                retention_daily=str(retention.get("daily") or "").strip(),
-                retention_weekly=str(retention.get("weekly") or "").strip(),
-                retention_monthly=str(retention.get("monthly") or "").strip(),
-                retention_yearly=str(retention.get("yearly") or "").strip(),
-                docker_control=docker_control,
-                vm_control=vm_control,
-                restore_test_policy_mode=str(rt_policy.get("mode") or "").strip().lower(),
-                restore_test_interval_days=_safe_int(rt_policy.get("interval_days"), 30),
-                restore_test_validity_days=_safe_int(rt_policy.get("validity_days") or rt_policy.get("interval_days"), 30),
-                restore_test_level=_safe_int(rt_policy.get("level"), 2),
-                restore_test_max_runtime_minutes=_safe_int(rt_policy.get("max_runtime_minutes"), 0),
-            ))
-
-    return list(jobs_by_key.values())
-
-
-def _job_metadata_signature(meta_dir: Path, scripts_dir: Path, *, include_files: bool) -> tuple:
-    def _stat_signature(path: Path) -> tuple[int, int, int]:
-        try:
-            stat = path.stat()
-            return (int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ino))
-        except OSError:
-            return (0, 0, 0)
-
-    signature: list = [_stat_signature(meta_dir), _stat_signature(scripts_dir)]
-    if include_files and meta_dir.is_dir():
-        signature.append(tuple(
-            (path.name, *_stat_signature(path))
-            for path in sorted(meta_dir.glob("*.json"))
+    config = {"BACKUP_SCRIPTS_DIR": str(root)}
+    inventory = load_repository_inventory(config)
+    jobs = []
+    for job_id, raw in read_jobs(get_jobs_meta_dir(scripts_dir, root)).items():
+        context = resolve_job_repository_context(config, job_id, job=raw,
+            require_passphrase_file=False, inventory=inventory)
+        retention = raw.get("retention", {})
+        policy = raw.get("restore_test_policy", {})
+        docker = _runtime_control_from_meta(raw, "docker")
+        vm = _runtime_control_from_meta(raw, "vm")
+        jobs.append(JobInfo(
+            job_id=job_id, repository_key=raw["repository_key"], archive_prefixes=list(raw["archive_prefixes"]),
+            location=context["location"], name=raw["name"], description=raw.get("description", ""),
+            icon=raw.get("icon", ""), icon_color=raw.get("icon_color", ""),
+            enabled=raw.get("enabled", True), standard=raw.get("standard", "wizard"),
+            file_activity=raw.get("file_activity", False), compression=raw.get("compression", ""),
+            has_docker=docker["mode"] != "none", has_vm=vm["mode"] != "none",
+            docker_control=docker, vm_control=vm,
+            **{"retention_" + key: retention.get(key, "") for key in ("daily", "weekly", "monthly", "yearly")},
+            restore_test_policy_mode=policy.get("mode", ""),
+            restore_test_interval_days=_safe_int(policy.get("interval_days"), 30),
+            restore_test_validity_days=_safe_int(policy.get("validity_days"), 30),
+            restore_test_level=_safe_int(policy.get("level"), 2),
+            restore_test_max_runtime_minutes=_safe_int(policy.get("max_runtime_minutes"), 0),
         ))
-    return tuple(signature)
-
-
-def invalidate_job_discovery_cache() -> None:
-    """Invalidate cached static job metadata after an explicit metadata change."""
-    with _job_discovery_cache_lock:
-        _job_discovery_cache.clear()
+    return jobs
 
 
 def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
-    """Read static job metadata once while keeping external changes observable."""
+    """Read the validated canonical inventory; never migrate on discovery."""
+    from inventory_store import inventory_lock
     root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
-    meta_dir = get_jobs_meta_dir(scripts_dir, root)
-    cache_key = f"{scripts_dir.resolve()}::{root.resolve()}"
-    with _job_discovery_cache_lock:
-        if cache_key not in _job_metadata_migrations:
-            migrate_jobs_metadata_dir(scripts_dir, root)
-            _job_metadata_migrations.add(cache_key)
+    with inventory_lock(root / "config"):
+        return _discover_jobs_uncached(scripts_dir, root)
 
-    now = time.monotonic()
-    quick_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=False)
-    with _job_discovery_cache_lock:
-        cached = _job_discovery_cache.get(cache_key)
-        if cached and cached["quick_signature"] == quick_signature and now < cached["expires_at"]:
-            return copy.deepcopy(cached["jobs"])
 
-    full_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=True)
-    with _job_discovery_cache_lock:
-        cached = _job_discovery_cache.get(cache_key)
-        if cached and cached["full_signature"] == full_signature:
-            cached["quick_signature"] = quick_signature
-            cached["expires_at"] = now + _JOB_DISCOVERY_CACHE_TTL_SECONDS
-            return copy.deepcopy(cached["jobs"])
-
-    jobs = _discover_jobs_uncached(scripts_dir, root)
-    with _job_discovery_cache_lock:
-        _job_discovery_cache[cache_key] = {
-            "quick_signature": quick_signature,
-            "full_signature": full_signature,
-            "expires_at": now + _JOB_DISCOVERY_CACHE_TTL_SECONDS,
-            "jobs": copy.deepcopy(jobs),
-        }
-    return jobs
+def latest_job_statuses(config: dict) -> dict:
+    """Job controls read status directly, without reporting/snapshot side effects."""
+    from wizard_runner import _ensure_runtime_import_paths
+    _ensure_runtime_import_paths(resolve_data_root(config))
+    from lib.status import StatusStore, time_ago
+    store = StatusStore(Path(config.get("STATUS_DIR") or "/mnt/user/backup-status"))
+    return {job_id: {
+        "job_id": job_id, "run_id": row.run_id, "status": row.status,
+        "timestamp": row.timestamp, "time_ago": time_ago(row.timestamp),
+        "exit_code": row.exit_code, "file_activity": row.file_activity,
+        "job_name_snapshot": row.job_name_snapshot, "log_file": row.log_file,
+    } for job_id, row in store.get_latest_per_key(store.load()).items()}
 
 
 def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
@@ -931,38 +707,29 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
     scripts_dir = resolve_scripts_dir(config)
     data_root = resolve_data_root(config)
     runtime_states = get_all_runtime_states(config)
-    try:
-        from repository_context import load_repository_inventory
-        repository_inventory = load_repository_inventory(config)
-    except Exception:
-        repository_inventory = {"repositories": {}, "storages": {}}
+    from repository_context import load_repository_inventory, resolve_job_repository_context
+    repository_inventory = load_repository_inventory(config)
     result = []
     for info in discover_jobs(scripts_dir, data_root):
-        last = latest_statuses.get(info.key)
-        run_state = runtime_states.get(info.key, {"running": False})
-        try:
-            from repository_context import resolve_job_repository_context
-            repository_context = resolve_job_repository_context(
-                config,
-                info.key,
-                require_passphrase_file=False,
-                inventory=repository_inventory,
-            )
-            repo_path = str(repository_context.get("repository_path") or "")
-            repository_key = str(repository_context.get("repository_key") or "")
-            repository = repository_context.get("repository")
-            repository_name = str(
-                repository.get("display_name") or repository.get("repository_name") or repository_key
-            ) if isinstance(repository, dict) else repository_key
-        except Exception:
-            repo_path = ""
-            repository_key = ""
-            repository_name = ""
+        last = latest_statuses.get(info.job_id)
+        run_state = runtime_states.get(info.job_id, {"running": False})
+        if not run_state.get("run_id") and last and last.get("run_id"):
+            run_state = {"running": False, "run_id": last["run_id"],
+                         "file_activity": last.get("file_activity", False),
+                         "job_name_snapshot": last.get("job_name_snapshot", ""),
+                         "log_available": bool(last.get("log_file"))}
+        repository_context = resolve_job_repository_context(config, info.job_id,
+            require_passphrase_file=False, inventory=repository_inventory)
+        repo_path = repository_context["repository_path"]
+        repository_key = repository_context["repository_key"]
+        repository = repository_context["repository"]
+        repository_name = repository.get("display_name") or repository.get("repository_name") or repository_key
 
         result.append(
             {
-                "key": info.key,
-                "backup_type": info.backup_type,
+                "job_id": info.job_id,
+                "archive_prefix": info.archive_prefixes[0],
+                "archive_prefixes": list(info.archive_prefixes),
                 "location": info.location,
                 "display_name": info.display_name,
                 "name": info.name or info.display_name,
@@ -1002,6 +769,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "run_log_available": run_state.get("log_available", True),
                 "run_file_activity": run_state.get("file_activity", False),
                 "run_id": run_state.get("run_id", ""),
+                "run_name_snapshot": run_state.get("job_name_snapshot", ""),
             }
         )
     try:
@@ -1011,7 +779,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
         verification = {}
 
     for job in result:
-        meta = verification.get(job["key"], {})
+        meta = verification.get(job["job_id"], {})
         job["restore_verification_status"] = meta.get("status", "never")
         job["restore_verification_reason"] = meta.get("reason", "")
         job["restore_verification_last_test_date"] = meta.get("last_test_date", "")

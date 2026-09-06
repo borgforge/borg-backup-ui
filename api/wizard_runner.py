@@ -6,6 +6,7 @@ api/wizard_runner.py - Scriptless Runner fuer Wizard-Jobs (Phase 4)
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import shlex
@@ -38,10 +39,6 @@ def _ensure_runtime_import_paths(backup_scripts_dir: Path) -> None:
         while raw in sys.path:
             sys.path.remove(raw)
         sys.path.insert(0, raw)
-
-
-def _type_upper(type_id: str) -> str:
-    return "".join(c if c.isalnum() else "_" for c in type_id.upper())
 
 
 def _env_flag(value: object, default: bool = False) -> bool:
@@ -156,7 +153,7 @@ class ResourceLockSet:
     def __init__(
         self,
         lock_dir: Path,
-        job_key: str,
+        job_id: str,
         ttl_seconds: int = 7200,
         grace_seconds: int = 60,
         heartbeat_seconds: int = 20,
@@ -164,9 +161,18 @@ class ResourceLockSet:
         run_id: str = "",
         operation: str = "backup",
         file_activity: bool = False,
+        snapshot: dict | None = None,
     ) -> None:
         self.lock_dir = lock_dir
-        self.job_key = job_key
+        from job_model import validate_job_id
+        from job_runs import validate_run_id
+        if operation == "backup":
+            validate_job_id(job_id)
+            validate_run_id(run_id)
+        elif job_id:
+            validate_job_id(job_id)
+        self.snapshot = dict(snapshot or {})
+        self.job_id = job_id
         self.ttl_seconds = ttl_seconds
         self.grace_seconds = grace_seconds
         self.heartbeat_seconds = heartbeat_seconds
@@ -178,17 +184,22 @@ class ResourceLockSet:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._host = socket.gethostname()
+        from activity_log_capture import process_token
+        self._process_start = process_token(os.getpid())
 
     def _lock_path(self, resource: str) -> Path:
-        safe = resource.replace("/", "_").replace(":", "_").replace(" ", "_")
+        safe = hashlib.sha256(resource.encode()).hexdigest()
         return self.lock_dir / f"{safe}.lock.json"
 
     def _payload(self, resource: str) -> dict:
         now = datetime.now(timezone.utc).isoformat()
         payload = {
+            **self.snapshot,
+            "schema_version": 1,
             "resource": resource,
-            "job_key": self.job_key,
+            **({"job_id": self.job_id} if self.job_id else {"service": self.operation}),
             "pid": os.getpid(),
+            "process_start": self._process_start,
             "host": self._host,
             "operation": self.operation,
             "started_at": now,
@@ -228,8 +239,9 @@ class ResourceLockSet:
             return {}
 
     def _is_stale(self, lock_data: dict) -> bool:
+        from activity_log_capture import process_token
         pid = int(lock_data.get("pid") or 0)
-        if _pid_alive(pid):
+        if _pid_alive(pid) and (not lock_data.get("process_start") or process_token(pid) == lock_data["process_start"]):
             return False
         updated = str(lock_data.get("updated_at") or "")
         if not updated:
@@ -242,6 +254,13 @@ class ResourceLockSet:
             return True
 
     def acquire(self, resources: list[str]) -> tuple[bool, str]:
+        from inventory_store import inventory_lock
+        # Serialize the stale-read/unlink/recreate sequence across processes.
+        # Without this gate two starters can unlink each other's fresh lock.
+        with inventory_lock(self.lock_dir):
+            return self._acquire(resources)
+
+    def _acquire(self, resources: list[str]) -> tuple[bool, str]:
         self.lock_dir.mkdir(parents=True, exist_ok=True)
         for resource in resources:
             path = self._lock_path(resource)
@@ -252,7 +271,7 @@ class ResourceLockSet:
 
             lock_data = self._read_lock(path)
             if self._is_stale(lock_data):
-                old_job = lock_data.get("job_key", "?")
+                old_job = lock_data.get("job_id", "?")
                 old_pid = lock_data.get("pid", "?")
                 logging.warning(
                     "stale lock recovered: %s (job=%s pid=%s)",
@@ -268,7 +287,7 @@ class ResourceLockSet:
 
             operation = str(lock_data.get("operation") or "backup").strip().lower()
             run_id = str(lock_data.get("run_id") or "").strip()
-            holder = lock_data.get("job_key", "unknown")
+            holder = lock_data.get("job_name_snapshot") or lock_data.get("job_id", "unknown")
             if operation and operation != "backup" and run_id:
                 holder = f"{operation} {run_id}"
             self.release()
@@ -284,24 +303,27 @@ class ResourceLockSet:
                 for path in list(self._owned):
                     try:
                         data = self._read_lock(path)
-                        if int(data.get("pid") or 0) != os.getpid():
+                        if int(data.get("pid") or 0) != os.getpid() or data.get("run_id") != self.run_id:
                             continue
                         data["updated_at"] = now
-                        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                        from job_control import _atomic_json
+                        _atomic_json(path, data)
                     except OSError:
                         continue
 
-        self._thread = threading.Thread(target=_loop, daemon=True, name=f"lock-heartbeat-{self.job_key}")
+        self._thread = threading.Thread(target=_loop, daemon=True, name=f"lock-heartbeat-{self.job_id}")
         self._thread.start()
 
     def release(self) -> None:
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(timeout=2)
+            # A slow final heartbeat is still an owned-state writer. Do not
+            # release the run lease or remove locks while its write is pending.
+            self._thread.join()
         for path in list(self._owned):
             try:
                 data = self._read_lock(path)
-                if int(data.get("pid") or 0) == os.getpid():
+                if int(data.get("pid") or 0) == os.getpid() and data.get("run_id") == self.run_id:
                     path.unlink(missing_ok=True)
             except OSError:
                 pass
@@ -326,115 +348,58 @@ class SmbMountSession:
             logging.warning("SMB unmount failed (%s): %s", self.mount_path, exc)
 
 
-def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir: Path) -> tuple[dict, dict]:
+def _load_env_from_job(job_id: str, borg_scripts_dir: Path, backup_scripts_dir: Path) -> tuple[dict, dict]:
     _ensure_runtime_import_paths(backup_scripts_dir)
-    from lib.status import load_config  # type: ignore
-
-    from jobs_api import get_jobs_meta_dirs, resolve_data_root
-    data_root = resolve_data_root({"BACKUP_SCRIPTS_DIR": str(backup_scripts_dir), "BORG_SCRIPTS_DIR": str(borg_scripts_dir)})
-    meta_path = None
-    for meta_dir in get_jobs_meta_dirs(borg_scripts_dir, data_root):
-        candidate = meta_dir / f"{job_key}.json"
-        if candidate.exists():
-            meta_path = candidate
-            break
-    if meta_path is None:
-        raise FileNotFoundError(f"Job metadata file not found: {job_key}")
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-
-    from repository_context import resolve_job_repository_context
-    repository_context = resolve_job_repository_context(
-        {"BACKUP_SCRIPTS_DIR": str(backup_scripts_dir)},
-        job_key,
-        job=meta,
-    )
+    from job_runs import read_run_context
+    from jobs_api import resolve_data_root
+    snapshot = read_run_context(job_id, os.environ.get("BORG_UI_RUN_ID", ""))
+    repository_context = snapshot["context"]
     storage = repository_context["storage"]
     meta = {
-        **meta,
+        **repository_context["job"],
         "_resolved_repository": repository_context["repository"],
         "_resolved_storage": storage,
+        "_resolved_location": snapshot["location_snapshot"],
+        "_run_snapshot": snapshot,
     }
-
-    env = dict(os.environ)
-    env["LC_ALL"] = "C"
-    env["LANG"] = "C"
-    conf_file = backup_scripts_dir / "config" / "backup.conf"
-    if conf_file.is_file():
-        env.update(load_config(conf_file))
-
-    type_id = str(meta.get("backup_type") or "").strip().lower()
-    location = str(repository_context.get("location") or meta.get("location") or "local").strip().lower()
-    if not type_id:
-        raise ValueError("backup_type is missing from job metadata")
-    if location not in {"local", "usb", "smb", "storagebox", "custom"}:
-        raise ValueError(f"invalid location in job metadata: {location}")
-    if location == "storagebox":
-        env["STORAGEBOX_HOST"] = str(storage.get("host", "")).strip()
-        env["STORAGEBOX_PORT"] = str(storage.get("port", "23")).strip() or "23"
-        env["STORAGEBOX_USER"] = str(storage.get("user", "")).strip()
-        env["STORAGEBOX_BASE_PATH"] = str(storage.get("base_path", "/./backup")).strip() or "/./backup"
-
-    tu = _type_upper(type_id)
-    cache_base = env.get("GLOBAL_BORG_CACHE_BASE", "/mnt/cache/borg-cache")
-    cache_dir = f"{cache_base}/{location}_{type_id}"
-    date_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_dir = env.get("GLOBAL_LOG_DIR", "/mnt/user/Logs")
-
-    from job_source_paths import normalize_source_paths
-    source_paths = normalize_source_paths(meta.get("source_paths"), field=f"Job '{job_key}' source_paths")
-    exclude_paths = meta.get("exclude_paths") if isinstance(meta.get("exclude_paths"), list) else []
-
-    meta_compression = str(meta.get("compression") or "").strip()
-    meta_file_activity = _env_flag(meta.get("file_activity"), default=False)
-    # A managed run keeps its start-time option even if the job is edited.
-    if os.environ.get("BORG_UI_FILE_ACTIVITY_RUN") in {"0", "1"}:
-        meta_file_activity = os.environ["BORG_UI_FILE_ACTIVITY_RUN"] == "1"
-    meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
-    meta_keep_daily = str(meta_ret.get("daily") or "").strip()
-    meta_keep_weekly = str(meta_ret.get("weekly") or "").strip()
-    meta_keep_monthly = str(meta_ret.get("monthly") or "").strip()
-    meta_keep_yearly = str(meta_ret.get("yearly") or "").strip()
-
-    env.setdefault("JOB_NAME", str(meta.get("name") or job_key))
-    env.setdefault("BACKUP_SCRIPTS_DIR", str(backup_scripts_dir))
-    env.setdefault("BACKUP_TYPE", type_id)
-    env.setdefault("BACKUP_LOCATION", location)
-    env.setdefault("DATE_TAG", date_tag)
-    env.setdefault("LOG_DIR", log_dir)
-    # Use job_key for log filename so variants like flash_local/flash_usb are separated.
-    env.setdefault("LOG_FILE", f"{log_dir}/Borg-Backup_{job_key}--{date_tag}.log")
-    if meta_file_activity and os.environ.get("BORG_UI_CAPTURE_LOG"):
-        env["LOG_FILE"] = os.environ["BORG_UI_CAPTURE_LOG"]
-        # Retention still applies to saved logs; only this run's writes use RAM.
-        env["BORG_UI_RETAINED_LOG"] = os.environ.get("BORG_UI_RETAINED_LOG", "")
-    env.setdefault("LOG_RETENTION_DAYS", env.get("GLOBAL_LOG_RETENTION_DAYS", "30"))
-    env["BORG_REPO"] = str(repository_context["repository_path"])
-    # Storagebox compatibility: if ssh repo URI misses user component, inject STORAGEBOX_USER.
-    repo_uri = str(env.get("BORG_REPO", "") or "").strip()
-    storagebox_user = str(env.get("STORAGEBOX_USER", "") or "").strip()
-    if location == "storagebox" and repo_uri.startswith("ssh://") and storagebox_user:
-        parts = urlsplit(repo_uri)
-        netloc = parts.netloc or ""
-        if "@" not in netloc and netloc:
-            env["BORG_REPO"] = urlunsplit((parts.scheme, f"{storagebox_user}@{netloc}", parts.path, parts.query, parts.fragment))
-            logging.info("Storage Box repository URI has no user; using STORAGEBOX_USER=%s", storagebox_user)
-    env.setdefault("BORG_COMPRESSION", meta_compression or env.get(f"COMPRESSION_{tu}", "lz4"))
-    env["BORG_FILE_ACTIVITY"] = "1" if meta_file_activity else "0"
+    data_root = resolve_data_root({"BACKUP_SCRIPTS_DIR": str(backup_scripts_dir)})
+    env = {**os.environ, **snapshot["settings"], "LC_ALL": "C", "LANG": "C"}
+    # Explicit canonical settings always win over legacy type/global defaults.
+    location = snapshot["location_snapshot"]
+    cache = meta.get("cache_reference") or {}
+    cache_dir = cache.get("directory") or str(Path(env.get("GLOBAL_BORG_CACHE_BASE") or "/mnt/cache/borg-cache") / job_id)
+    retained_log = snapshot["log_file"]
+    file_activity = snapshot["file_activity"]
+    active_log = os.environ.get("BORG_UI_CAPTURE_LOG") if file_activity else None
+    env.update({
+        "JOB_ID": job_id, "RUN_ID": snapshot["run_id"],
+        "JOB_NAME": snapshot["job_name_snapshot"],
+        "ARCHIVE_PREFIX": snapshot["archive_prefix_snapshot"],
+        "ARCHIVE_PREFIXES_JSON": json.dumps(snapshot["archive_prefixes_snapshot"]),
+        "REPOSITORY_KEY": snapshot["repository_key_snapshot"],
+        "BACKUP_SCRIPTS_DIR": str(data_root),
+        "BACKUP_LOCATION": location,
+        "DATE_TAG": datetime.fromisoformat(snapshot["started_at"]).astimezone().strftime("%Y-%m-%d_%H-%M-%S"),
+        "LOG_DIR": str(Path(retained_log).parent),
+        "LOG_FILE": active_log or retained_log,
+        "BORG_UI_RETAINED_LOG": retained_log if active_log else "",
+        "LOG_RETENTION_DAYS": env.get("GLOBAL_LOG_RETENTION_DAYS", "30"),
+        "BORG_REPO": snapshot["repository_snapshot"],
+        "BORG_COMPRESSION": meta.get("compression", "lz4"),
+        "BORG_FILE_ACTIVITY": "1" if file_activity else "0",
+        "BORG_CACHE_DIR": cache_dir,
+        "BORG_CHECK_FLAG_FILE": (cache["check_flag_file"] if cache.get("repository_key") == snapshot["repository_key_snapshot"]
+                                 else str(Path(cache_dir) / (".last_check-" + hashlib.sha256(snapshot["repository_snapshot"].encode()).hexdigest()))),
+        "LOCK_FILE": str(Path(env.get("LOCK_FILE_DIR") or "/var/run") / ("borg-backup-" + job_id + ".lock")),
+        "BACKUP_PATHS_JSON": json.dumps(meta["source_paths"], ensure_ascii=False),
+        "BACKUP_EXCLUDE_PATHS_JSON": json.dumps(meta.get("exclude_paths", []), ensure_ascii=False),
+        "STATUS_DIR_OVERRIDE": env.get("STATUS_DIR", "/mnt/user/backup-status"),
+    })
+    env.pop("BACKUP_TYPE", None)
+    for period in ("daily", "weekly", "monthly", "yearly"):
+        env["BORG_KEEP_" + period.upper()] = str(meta["retention"][period])
     env.setdefault("BORG_CHECKPOINT_INTERVAL", env.get("GLOBAL_BORG_CHECKPOINT_INTERVAL", "1800"))
-    env.setdefault("BORG_CACHE_DIR", cache_dir)
     env.setdefault("BORG_CHECK_INTERVAL_DAYS", env.get("GLOBAL_BORG_CHECK_INTERVAL_DAYS", "30"))
-    env.setdefault("BORG_CHECK_FLAG_FILE", f"{cache_dir}/.last_check_{type_id}")
-    env.setdefault("BORG_KEEP_DAILY", meta_keep_daily or env.get(f"RETENTION_{tu}_DAILY", "7"))
-    env.setdefault("BORG_KEEP_WEEKLY", meta_keep_weekly or env.get(f"RETENTION_{tu}_WEEKLY", "4"))
-    env.setdefault("BORG_KEEP_MONTHLY", meta_keep_monthly or env.get(f"RETENTION_{tu}_MONTHLY", "6"))
-    env.setdefault("BORG_KEEP_YEARLY", meta_keep_yearly or env.get(f"RETENTION_{tu}_YEARLY", "3"))
-    env.setdefault("LOCK_FILE", f"{env.get('LOCK_FILE_DIR', '/var/run')}/borg-backup-{type_id}.lock")
-    env["BACKUP_PATHS_JSON"] = json.dumps(source_paths, ensure_ascii=False)
-    env["BACKUP_EXCLUDE_PATHS_JSON"] = json.dumps(
-        [str(path).strip() for path in exclude_paths if str(path).strip()],
-        ensure_ascii=False,
-    )
-    env.setdefault("STATUS_DIR_OVERRIDE", env.get("STATUS_DIR", "/mnt/user/backup-status"))
     from borg_key_store import apply_borg_key_environment
 
     env = apply_borg_key_environment(
@@ -483,7 +448,7 @@ def _is_smb_mounted(mount_path: str) -> bool:
 
 def _ensure_smb_mount(env: dict, meta: dict) -> SmbMountSession:
     sess = SmbMountSession()
-    location = str(meta.get("location") or "").strip().lower()
+    location = str(meta.get("_resolved_location") or "").strip().lower()
     if location != "smb":
         return sess
     if not bool(meta.get("mount_before_run", True)):
@@ -538,8 +503,8 @@ def _runtime_control_enabled_for_lock(meta: dict, kind: str) -> bool:
 
 
 def _build_resources(env: dict, meta: dict) -> list[str]:
-    resources = [f"repo:{env.get('BORG_REPO', '')}"]
-    location = str(meta.get("location") or "").strip().lower()
+    resources = [f"job:{meta['job_id']}", f"repo:{env.get('BORG_REPO', '')}"]
+    location = str(meta.get("_resolved_location") or "").strip().lower()
     if location == "smb":
         storage = meta.get("_resolved_storage") if isinstance(meta.get("_resolved_storage"), dict) else {}
         smb_key = str(storage.get("profile_key") or "").strip()
@@ -574,7 +539,7 @@ def _runtime_control(meta: dict, kind: str) -> dict:
 
 
 def _resolve_usb_mount_path(meta: dict, backup_scripts_dir: Path) -> str:
-    location = str(meta.get("location") or "").strip().lower()
+    location = str(meta.get("_resolved_location") or "").strip().lower()
     if location != "usb":
         return ""
     storage = meta.get("_resolved_storage") if isinstance(meta.get("_resolved_storage"), dict) else {}
@@ -582,16 +547,27 @@ def _resolve_usb_mount_path(meta: dict, backup_scripts_dir: Path) -> str:
 
 
 def main() -> int:
+    """Admission precedes run-state, logs, locks, runtime control and Borg."""
+    from migration_barrier import MigrationBlocked, writer_lease
+    config = {"BACKUP_SCRIPTS_DIR": os.environ.get("BORG_SCRIPT_DIR") or "/boot/config/borg-backup"}
+    try:
+        with writer_lease(config):
+            return _run_admitted()
+    except MigrationBlocked as exc:
+        _setup_stdout_logging()
+        logging.error("Backup start blocked: %s", exc.reason)
+        return 2
+
+
+def _run_admitted() -> int:
     _setup_stdout_logging()
 
-    job_key = os.environ.get("BORG_UI_JOB_KEY", "").strip()
-    run_id = os.environ.get("BORG_UI_RUN_ID", "").strip() or (
-        f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.getpid()}"
-    )
+    job_id = os.environ.get("BORG_UI_JOB_ID", "")
+    run_id = os.environ.get("BORG_UI_RUN_ID", "")
     borg_scripts_dir_raw = os.environ.get("BORG_UI_BORG_SCRIPTS_DIR", "").strip()
     backup_scripts_dir_raw = os.environ.get("BORG_SCRIPT_DIR", "").strip()
-    if not job_key:
-        logging.error("BORG_UI_JOB_KEY is missing")
+    if not job_id:
+        logging.error("BORG_UI_JOB_ID is missing")
         return 2
     if not borg_scripts_dir_raw or not backup_scripts_dir_raw:
         logging.error("Runner context is missing (BORG_UI_BORG_SCRIPTS_DIR / BORG_SCRIPT_DIR)")
@@ -599,7 +575,13 @@ def main() -> int:
 
     from job_control import JobControl
 
-    control = JobControl(job_key, run_id)
+    from job_runs import descriptors, read_run_context
+    try:
+        snapshot = read_run_context(job_id, run_id)
+    except (ValueError, OSError):
+        logging.error("A valid immutable run context is required")
+        return 2
+    control = JobControl(job_id, run_id, snapshot=descriptors(snapshot))
 
     def set_phase(phase: str) -> None:
         recovery_phase = phase in {"recovering_docker", "recovering_vms", "unmounting"}
@@ -625,7 +607,7 @@ def main() -> int:
     try:
         borg_bin = _ensure_borg_available()
         logging.info("Active Borg binary: %s", borg_bin)
-        env, meta = _load_env_from_job(job_key, borg_scripts_dir, backup_scripts_dir)
+        env, meta = _load_env_from_job(job_id, borg_scripts_dir, backup_scripts_dir)
     except Exception as exc:
         logging.error("Loading job failed: %s", exc)
         control.update_phase("failed", cancel_allowed=False, finished=True, exit_code=2)
@@ -661,13 +643,14 @@ def main() -> int:
 
     lock_set = ResourceLockSet(
         lock_dir=lock_dir,
-        job_key=job_key,
+        job_id=job_id,
         ttl_seconds=ttl_seconds,
         grace_seconds=grace_seconds,
         heartbeat_seconds=heartbeat_seconds,
         log_file=str(env.get("LOG_FILE") or ""),
         run_id=run_id,
         file_activity=borg_config.file_activity,
+        snapshot=descriptors(snapshot),
     )
     resources = _build_resources(env, meta)
     ok, reason = lock_set.acquire(resources)
@@ -678,7 +661,7 @@ def main() -> int:
             request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
             source=os.environ.get("BORG_UI_REQUEST_SOURCE", "manual"),
             actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
-            job_key=job_key,
+            job_id=job_id,
             run_id=run_id,
             status="skipped",
             exit_code=2,
@@ -696,7 +679,7 @@ def main() -> int:
         request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
         source=os.environ.get("BORG_UI_REQUEST_SOURCE", "manual"),
         actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
-        job_key=job_key,
+        job_id=job_id,
         run_id=run_id,
         pid=os.getpid(),
         log_file=str(job_config.log_file),
@@ -717,7 +700,7 @@ def main() -> int:
         if vm_control["mode"] != "none":
             vm_mgr = VmManager(VmConfig.from_config(env))
 
-        archive_prefix = f"{env.get('BACKUP_TYPE', 'job')}-backup"
+        archive_prefix = snapshot["archive_prefix_snapshot"]
         abort_on_parity = _env_flag(env.get("ABORT_ON_PARITY_CHECK"), default=True)
         with BackupJob(
             job_config,
@@ -771,10 +754,12 @@ def main() -> int:
                     result_code = 130
                     return result_code
 
+            from inventory_store import inventory_lock
             runner = BorgRunner(
                 borg_config,
                 process_controller=control,
                 phase_callback=set_phase,
+                prune_guard=lambda: inventory_lock(data_root / "config"),
             )
             create_exit = runner.create(
                 job_config.backup_paths,
@@ -790,7 +775,15 @@ def main() -> int:
                 result_code = create_exit
                 return result_code
 
-            maint_exit = runner.maintenance(archive_prefix=archive_prefix)
+            from job_runs import maintenance_context_unchanged
+            if maintenance_context_unchanged({"BACKUP_SCRIPTS_DIR": str(data_root)}, snapshot):
+                maint_exit = runner.maintenance(
+                    archive_prefixes=snapshot["archive_prefixes_snapshot"],
+                    before_delete=lambda: maintenance_context_unchanged({"BACKUP_SCRIPTS_DIR": str(data_root)}, snapshot),
+                )
+            else:
+                logging.warning("Repository assignment changed during this run; maintenance skipped")
+                maint_exit = 1
             if control.is_cancel_requested():
                 job.set_cancelled()
                 result_code = 130

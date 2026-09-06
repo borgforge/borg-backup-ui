@@ -1,12 +1,18 @@
 # Borg-Backup-UI Benutzerhandbuch
 
-Stand: 03.09.2026 (Stable 2026.08.31.0907)
+Stand: 06.09.2026 (Integrationskandidat für Issue #447; keine neue Stable-Freigabe)
 Sprache: Deutsch  
 Zielgruppe: Einsteiger, fortgeschrittene Anwender und Administratoren eines Unraid-Systems
 
 Dieses Handbuch beschreibt Borg-Backup-UI in der Reihenfolge des Menüs der Anwendung. Es erklärt die sichtbaren Seiten, typische Arbeitsabläufe, wichtige Warnungen und die Auswirkungen der jeweiligen Aktionen.
 
 > **Hinweis:** Dieses Handbuch beschreibt die Anwendung selbst. Es ersetzt keine allgemeine BorgBackup-Dokumentation und keine Unraid-Systemdokumentation. Wenn eine Funktion in der Oberfläche nicht sichtbar ist, ist sie für die aktuell angemeldete Rolle oder die aktuelle Konfiguration möglicherweise nicht verfügbar.
+
+> **Vor dem Test dieses Updates:** Erstellen und prüfen Sie eine separate Sicherung der Unraid-Flash-Konfiguration sowie der Plugin-Daten. Der Integrationskandidat benötigt Tests auf unterschiedlichen Installationen vor einer Stable-Freigabe. Die Migrationssicherung ersetzt kein vollständiges Systembackup.
+
+Die Umstellung auf dauerhafte Job-Identitäten beginnt ausdrücklich mit **Migration vorbereiten**. Nach der automatisch geprüften Sicherung folgt eine verpflichtende Pause: **Geschützte Sicherung herunterladen**, eine unabhängige Kopie speichern und prüfen, dann **Gespeicherte Kopie bestätigen**. Erst die separate Aktion **Migration jetzt ausführen** erlaubt die Umstellung. Öffnen der Seite, Download und Bestätigung starten sie nicht. Ein Snapshot ist kein automatisches Plugin-Downgrade. Details stehen in der [Migrationsanleitung](migration-guide.md).
+
+Die Abbildungen zeigen eine frühere Version und dienen der Orientierung. Ältere Beschriftungen wie Typ-ID und Job-Schlüssel in Bildern sind durch Jobname, vollständiges Archivpräfix und eine dauerhafte interne Job-ID ersetzt.
 
 ## Inhaltsverzeichnis
 
@@ -105,7 +111,7 @@ Die Seite besteht aus:
 
 ### 2.3 Wichtige Spalten
 
-- **Backup:** Name, Schlüssel und Icon des Jobs.
+- **Backup:** Anzeigename und Icon des Jobs. Die Zuordnung erfolgt über seine dauerhafte interne Job-ID.
 - **Standort:** Speicherziel des Jobs.
 - **Laufstatus:** Letzter Lauf, Dauer, Ergebnis und nächster geplanter Lauf.
 - **Restore:** Letzter Restore-Test und Gültigkeit, sofern geplant.
@@ -146,7 +152,7 @@ Die Seite **Jobs** verwaltet Backup-Jobs. Hier werden Jobs angezeigt, gestartet,
 
 Jobs definieren, welche Daten wohin gesichert werden. Ein Job enthält:
 
-- Anzeigename und Typ-ID
+- Anzeigename und vollständiges Archivpräfix; die interne Job-ID bleibt dauerhaft erhalten
 - Standort und Repository
 - Zu sichernde Ordner oder Dateien
 - Docker- und VM-Steuerung
@@ -194,17 +200,19 @@ Der Job-Wizard führt in festen Schritten durch die Erstellung oder Bearbeitung 
 
 #### Schritt 1: Grunddaten
 
-Hier werden Jobname, Typ-ID, Icon, Icon-Farbe und erste Laufzeitoptionen gesetzt.
+Hier werden Jobname, vollständiges Archivpräfix, Icon, Icon-Farbe und erste Laufzeitoptionen gesetzt.
 
 Wichtige Felder:
 
 - **Job-Name:** Sichtbarer Name in UI, Berichten und Benachrichtigungen.
-- **Typ-ID:** Technischer Schlüsselbestandteil. Er sollte kurz, eindeutig und stabil sein.
+- **Archivpräfix:** Vollständiger Anfang zukünftiger Archivnamen. Erlaubt sind Buchstaben, Ziffern, Punkte, Unterstriche und Bindestriche. Die Vorschau zeigt den exakten Namen mit Zeitstempel.
 - **Icon / Icon-Farbe:** Darstellung in Dashboard, Jobs, Restore und Reports.
 - **Docker vor dem Backup stoppen:** Aktiviert Docker-Steuerung.
 - **VMs vor dem Backup herunterfahren:** Aktiviert VM-Steuerung.
 
-Die Typ-ID bildet zusammen mit dem Standort den technischen Job-Schlüssel, beispielsweise `appdata_local`. Außerdem entsteht daraus das Archivmuster `<typ-id>-backup-*`. Wenn Sie die Typ-ID eines vorhandenen Jobs ändern, erhalten nur zukünftige Archive das neue Präfix. Borg Backup UI speichert die bisherigen Archivpräfixe im Job und zeigt sie im Informations-Popover des Editors; vorhandene Archive werden weder umbenannt noch verschoben.
+Jeder Job erhält eine dauerhafte interne ID. Änderungen an Jobname, Archivpräfix oder Repository erhalten diese ID und die Verknüpfungen zu Zeitplan, Status und Historie. Der Jobname darf frei geändert werden. Das Archivpräfix wird vollständig verwendet: `photos` ergibt beispielsweise `photos-2026-09-06_03-00-00`; `-backup` wird nicht automatisch ergänzt.
+
+Wenn Sie das Archivpräfix ändern, verwenden nur zukünftige Archive das neue Präfix. Borg Backup UI speichert eine geordnete Präfixhistorie mit dem aktuellen Präfix zuerst und zeigt die bisherigen Präfixe im Informations-Popover des Editors. Vorhandene Archive werden weder umbenannt noch verschoben. Die Archivsuche berücksichtigt diese Präfixe im aktuell zugeordneten Repository. Ein Repository-Wechsel verschiebt keine Archive und macht einen früheren Restore-Nachweis nicht zum Nachweis für das neue Ziel.
 
 #### Schritt 2: Quellen & Ziel
 
@@ -338,7 +346,7 @@ Best Practices:
 
 ### 3.7 Typische Meldungen
 
-- **Vorschau Fehler / ungültige Angaben:** Ein Feld im Wizard ist nicht plausibel. Prüfen Sie die zu sichernden Ordner oder Dateien, Typ-ID, Speicherziel und Repository-Auswahl.
+- **Vorschau Fehler / ungültige Angaben:** Ein Feld im Wizard ist nicht plausibel. Prüfen Sie die zu sichernden Ordner oder Dateien, das Archivpräfix, Speicherziel und Repository-Auswahl.
 - **Kein Speicherziel oder Repository vorhanden:** Richten Sie das Speicherziel zuerst unter **Einstellungen** ein. Erstellen oder importieren Sie danach das Repository unter **Repositories**.
 - **Schedule disabled / Zeitplan deaktiviert:** Der Job läuft nur manuell.
 
@@ -425,7 +433,7 @@ Repository aus der Anwendung entfernen oder endgültig löschen:
 
 ### 4.5 Hinweise
 
-> **Hinweis:** Prune nutzt die Retention eines verknüpften Jobs und beschränkt die Aktion auf dessen Archivmuster `<typ-id>-backup-*`. Verwenden mehrere Jobs dasselbe Repository, muss bei einem manuellen Prune der Job als Retention-Quelle ausdrücklich gewählt werden. Der Bestätigungsdialog zeigt Job, Archivfilter und die periodischen Wiederherstellungspunkte; Archive der anderen Jobs bleiben unberührt. Ohne passende Job-Zuordnung bleibt Prune deaktiviert.
+> **Hinweis:** Prune nutzt die Retention eines verknüpften Jobs für die gemeinsame Auswahl seines aktuellen und seiner gespeicherten früheren Archivpräfixe, jeweils als `<Archivpräfix>-*`. Verwenden mehrere Jobs dasselbe Repository, muss bei einem manuellen Prune der Job als Retention-Quelle ausdrücklich gewählt werden. Der Bestätigungsdialog zeigt Job, Archivfilter und die periodischen Wiederherstellungspunkte; Archive der anderen Jobs bleiben unberührt. Ohne passende Job-Zuordnung bleibt Prune deaktiviert.
 
 > **Hinweis:** Prune listet entfernte Archive im Ergebnis. Compact zeigt den freigegebenen Speicherplatz nur dann numerisch an, wenn Borg diesen Wert ausgibt.
 
@@ -446,9 +454,9 @@ History ist die erste Detailseite nach einem Backup-Lauf. Sie zeigt, wann ein La
 ### 5.2 Bereiche und Funktionen
 
 - **Standort-Sidebar:** Gruppiert Läufe nach Standort.
-- **Typ-Filter:** Filtert nach Backup-Typen.
+- **Job-Filter:** Filtert nach Jobs über ihre dauerhaften IDs. Gelöschte Jobs und nicht zuordenbare historische Einträge bleiben gesondert zugänglich.
 - **Status-Filter:** Filtert nach Erfolg, Warnung, Fehler oder übersprungenen Läufen.
-- **Tabelle:** Zeigt Datum/Zeit, Typ, Ort, Dauer, Originalgröße, deduplizierte Größe und Status.
+- **Tabelle:** Zeigt Datum/Zeit, Job, Ort, Dauer, Originalgröße, deduplizierte Größe und Status. Historische Läufe behalten die beim Start erfassten Beschreibungen.
 - **Detailbereich:** Kann pro Lauf aufgeklappt werden und zeigt Archiv, Repository-Daten, Check-Status, Logdatei und Fehlermeldungen.
 - **Öffnen:** Öffnet die verknüpfte Logdatei, sofern verfügbar.
 
@@ -547,7 +555,7 @@ Wählen Sie den Job, dessen Archiv Sie durchsuchen möchten. Die Sidebar gruppie
 
 #### Schritt 2: Archiv auswählen
 
-Wählen Sie ein Archiv aus dem Repository. Die Liste wird auf die zum Job gehörenden Archivpräfixe begrenzt. Das aktuelle Muster, beispielsweise `testdaten-backup-*`, steht oberhalb der Liste. Wurde die Typ-ID des Jobs früher geändert, zeigt ein kompaktes Informations-Popover zusätzlich die gespeicherten historischen Muster. So bleiben ältere Archive innerhalb des aktuell zugeordneten Repositorys erreichbar, ohne Archive anderer Jobs in einem gemeinsam genutzten Repository anzubieten.
+Wählen Sie ein Archiv aus dem Repository. Die Liste wird auf die zum Job gehörenden Archivpräfixe begrenzt. Das aktuelle Muster, beispielsweise `testdaten-backup-*`, steht oberhalb der Liste. Wurde das vollständige Archivpräfix des Jobs früher geändert, zeigt ein kompaktes Informations-Popover zusätzlich die geordneten gespeicherten historischen Muster. So bleiben ältere Archive innerhalb des aktuell zugeordneten Repositorys erreichbar, ohne Archive anderer Jobs in einem gemeinsam genutzten Repository anzubieten.
 
 Wenn keine Archive sichtbar sind, prüfen Sie Repository-Zugriff, Passphrase, Storage-Status und das angezeigte Archivmuster. Nach einem Wechsel des Job-Repositorys bleiben frühere Archive im alten Repository und erscheinen hier nicht; sie werden durch die Änderung weder verschoben noch kopiert.
 
@@ -1006,9 +1014,11 @@ wenn frühere Versionen ihn nicht getrennt protokolliert haben und kein
 erfolgreicher Audit-Eintrag vorhanden ist. Die Anwendung weist dann darauf hin,
 statt das aktuelle Startdatum als Ausführungszeitpunkt auszugeben.
 
-Beim Pluginstart laufen erforderliche Datenmigrationen vor dem Normalbetrieb. Sie sind idempotent, schreiben einen strukturierten Audit-Eintrag und sichern betroffene Konfigurationsdaten in einem Migrationssnapshot. Schlägt eine Pflichtmigration fehl, werden nachfolgende Migrationen und schreibende Funktionen blockiert; Anmeldung, Systemstatus, Migrationsdetails und Supportpaket bleiben für die Diagnose erreichbar.
+Beim Pluginstart wird zunächst lesend geprüft, ob die Umstellung auf dauerhafte Job-Identitäten erforderlich ist. Das Plugin bleibt bei erforderlicher oder unklarer Migration im Wartungsmodus. Wählen Sie ausdrücklich **Migration vorbereiten** und warten Sie auf die erfolgreich geprüfte Sicherung. Laden Sie die geschützte Sicherung herunter, speichern und prüfen Sie eine unabhängige Kopie und bestätigen Sie diese separat. Erst **Migration jetzt ausführen** startet die Umstellung mit dem geprüften Plan. Die Sicherung kann Zugangsdaten enthalten; geben Sie sie nicht öffentlich weiter.
 
-> **Warnung:** Sichern Sie vor einem Plugin-Update mindestens `/boot/config/borg-backup` unabhängig vom Server. Ein automatisch erzeugter Migrationssnapshot schützt die betroffenen Daten, ist aber weder ein vollständiges Systembackup noch ein automatisches Plugin-Downgrade. Unraid installiert regulär nur die aktuelle Plugin-Version. Eine Reparatur oder manuelle Wiederherstellung muss deshalb mit der installierten beziehungsweise einer korrigierten Version nachvollziehbar durchgeführt werden.
+Die Migration ist idempotent und protokolliert Aktionen und Fortschritt in einem strukturierten Audit-Log. Browser-Schließen oder Plugin-Neustart behalten Plan, IDs, Migrationssnapshot und Journal; sie geben keine automatische Fortsetzung frei. Eine unterbrochene Aktion darf nur nach Prüfung ausdrücklich fortgesetzt werden. Schlägt eine Pflichtmigration fehl, bleiben nachfolgende Migrationen und schreibende Funktionen bis zu einem fehlerfreien Neustart blockiert. Anmeldung, Systemstatus, Migrationsdetails und Supportpaket bleiben für die Diagnose erreichbar.
+
+> **Warnung:** Sichern Sie vor einem Plugin-Update mindestens `/boot/config/borg-backup` unabhängig vom Server. Ein nach ausdrücklicher Vorbereitung erzeugter und geprüfter Migrationssnapshot schützt die betroffenen Daten, ist aber weder ein vollständiges Systembackup noch ein automatisches Plugin-Downgrade. Unraid installiert regulär nur die aktuelle Plugin-Version. Eine Reparatur oder manuelle Wiederherstellung muss deshalb mit der installierten beziehungsweise einer korrigierten Version nachvollziehbar durchgeführt werden.
 
 Runtime-Recovery weist darauf hin, wenn Docker-Container oder VMs während eines Backups gestoppt wurden und nach einem Crash, Abbruch oder Neustart geprüft werden müssen.
 
@@ -1043,7 +1053,7 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 
 1. Öffnen Sie **Jobs**.
 2. Klicken Sie auf **Neuer Job**.
-3. Tragen Sie Name, Typ-ID, Icon und Standort ein.
+3. Tragen Sie Jobname, vollständiges Archivpräfix und Icon ein und wählen Sie Speicherziel und Repository.
 4. Wählen Sie die Ordner oder Dateien, die gesichert werden sollen.
 5. Wählen Sie zuerst das Speicherziel und danach ein vorhandenes Repository.
 6. Konfigurieren Sie Docker- oder VM-Steuerung, wenn nötig.

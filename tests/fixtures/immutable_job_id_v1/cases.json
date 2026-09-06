@@ -1,0 +1,3793 @@
+{
+  "schema_version": 1,
+  "allocation_order": [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222"
+  ],
+  "cases": [
+    {
+      "id": "fresh",
+      "description": "No jobs, schedules or historical job data; no allocation or conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/repositories.json": null,
+        "data/config/storages.json": null,
+        "data/config/schedules.json": null,
+        "status/2026-08-31_08-00-00_config_local.status": null,
+        "logs/Borg-Backup_config--2026-08-31_08-00-00.log": null
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "not_applicable",
+        "execution": "no_user_data_writes",
+        "reason_codes": [],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "legacy_without_prefixes",
+      "description": "Untouched legacy job derives the runner's current complete prefix.",
+      "files": {},
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "empty_prefix_list",
+      "description": "Empty list is supported; derive one current prefix.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "config_local",
+            "backup_type": "config",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "archive_prefixes": [],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "current_prefix_precedes_stored_history",
+      "description": "Stored first prefix is not necessarily the one the old runner creates.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "config_local",
+            "backup_type": "config",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "archive_prefixes": [
+              "old-backup",
+              "config-backup",
+              "old-backup"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup",
+              "old-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "renamed_display_name",
+      "description": "Only label changed; legacy identity and run descriptors still resolve.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "config_local",
+            "backup_type": "config",
+            "location": "local",
+            "name": "Synthetic renamed job",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic renamed job",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "reported_config_to_pfsense_orphan_schedule",
+      "description": "Reported support failure: stale config_local schedule is not proven to belong to pfsense.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/jobs/pfsense_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "pfsense_local",
+            "backup_type": "pfsense",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "archive_prefixes": [
+              "pfsense-backup",
+              "config-backup"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/repositories.json": {
+          "json": {
+            "schema_version": 1,
+            "repositories": [
+              {
+                "repository_key": "repo_docs",
+                "display_name": "Synthetic repository",
+                "storage_key": "storage_local",
+                "relative_path": "repo_docs",
+                "encryption": "none",
+                "initialized": true,
+                "used_by": [
+                  "pfsense_local"
+                ],
+                "source_job_keys": [
+                  "pfsense_local"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "orphan_active_schedule"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "renamed_prefix_unassigned_old_history",
+      "description": "No stale active schedule; prefix history alone cannot assign config_local status to pfsense.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/jobs/pfsense_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "pfsense_local",
+            "backup_type": "pfsense",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "archive_prefixes": [
+              "pfsense-backup",
+              "config-backup"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/schedules.json": {
+          "json": {
+            "pfsense_local": {
+              "cron": "0 8 * * *",
+              "enabled": true
+            }
+          }
+        },
+        "data/config/repositories.json": {
+          "json": {
+            "schema_version": 1,
+            "repositories": [
+              {
+                "repository_key": "repo_docs",
+                "display_name": "Synthetic repository",
+                "storage_key": "storage_local",
+                "relative_path": "repo_docs",
+                "encryption": "none",
+                "initialized": true,
+                "used_by": [
+                  "pfsense_local"
+                ],
+                "source_job_keys": [
+                  "pfsense_local"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "archive_prefixes": [
+              "pfsense-backup",
+              "config-backup"
+            ],
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "legacy_job_keys": [
+              "pfsense_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_pfsense",
+              "check_flag_file": "/fixture/cache/local_pfsense/.last_check_pfsense",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "status/2026-08-31_08-00-00_config_local.status#": null,
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/schedules.json#/pfsense_local": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {
+          "status/2026-08-31_08-00-00_config_local.status#": "no_authoritative_alias"
+        },
+        "preserved": {
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "different_storage_types",
+      "description": "Two independent jobs across local and synthetic remote storage.",
+      "files": {
+        "data/config/jobs/photos_storagebox.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "photos_storagebox",
+            "backup_type": "photos",
+            "location": "storagebox",
+            "name": "Synthetic photos",
+            "repository_key": "repo_remote",
+            "source_paths": [
+              "/fixture/sources/photos"
+            ],
+            "exclude_paths": [],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/repositories.json": {
+          "json": {
+            "schema_version": 1,
+            "repositories": [
+              {
+                "repository_key": "repo_docs",
+                "display_name": "Synthetic repository",
+                "storage_key": "storage_local",
+                "relative_path": "repo_docs",
+                "encryption": "none",
+                "initialized": true,
+                "used_by": [
+                  "config_local"
+                ],
+                "source_job_keys": [
+                  "config_local"
+                ]
+              },
+              {
+                "repository_key": "repo_remote",
+                "display_name": "Synthetic repository",
+                "storage_key": "storage_remote",
+                "relative_path": "repo_remote",
+                "encryption": "none",
+                "initialized": true,
+                "used_by": [
+                  "photos_storagebox"
+                ],
+                "source_job_keys": [
+                  "photos_storagebox"
+                ]
+              }
+            ]
+          }
+        },
+        "data/config/storages.json": {
+          "json": {
+            "schema_version": 1,
+            "storages": [
+              {
+                "storage_key": "storage_local",
+                "display_name": "Synthetic local",
+                "storage_type": "local",
+                "location": "local",
+                "identity": "local:/fixture/repositories",
+                "base_path": "/fixture/repositories"
+              },
+              {
+                "storage_key": "storage_remote",
+                "display_name": "Synthetic remote",
+                "storage_type": "storagebox",
+                "location": "storagebox",
+                "host": "backup.example.invalid",
+                "user": "fixture-user",
+                "port": 23,
+                "base_path": "./borg"
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          },
+          "22222222-2222-4222-8222-222222222222": {
+            "schema_version": 4,
+            "name": "Synthetic photos",
+            "icon": "photos",
+            "repository_key": "repo_remote",
+            "source_paths": [
+              "/fixture/sources/photos"
+            ],
+            "exclude_paths": [],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "22222222-2222-4222-8222-222222222222",
+            "archive_prefixes": [
+              "photos-backup"
+            ],
+            "legacy_job_keys": [
+              "photos_storagebox"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/storagebox_photos",
+              "check_flag_file": "/fixture/cache/storagebox_photos/.last_check_photos",
+              "repository_key": "repo_remote"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/1/used_by/0": "22222222-2222-4222-8222-222222222222",
+          "data/config/repositories.json#/repositories/1/source_job_keys/0": "22222222-2222-4222-8222-222222222222"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "shared_repository_distinct_prefixes",
+      "description": "Sharing a repository is valid when archive ownership is distinct.",
+      "files": {
+        "data/config/jobs/photos_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "photos_local",
+            "backup_type": "photos",
+            "location": "local",
+            "name": "Synthetic photos",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/photos"
+            ],
+            "exclude_paths": [],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/repositories.json": {
+          "json": {
+            "schema_version": 1,
+            "repositories": [
+              {
+                "repository_key": "repo_docs",
+                "display_name": "Synthetic repository",
+                "storage_key": "storage_local",
+                "relative_path": "repo_docs",
+                "encryption": "none",
+                "initialized": true,
+                "used_by": [
+                  "config_local",
+                  "photos_local"
+                ],
+                "source_job_keys": [
+                  "config_local",
+                  "photos_local"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          },
+          "22222222-2222-4222-8222-222222222222": {
+            "schema_version": 4,
+            "name": "Synthetic photos",
+            "icon": "photos",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/photos"
+            ],
+            "exclude_paths": [],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "22222222-2222-4222-8222-222222222222",
+            "archive_prefixes": [
+              "photos-backup"
+            ],
+            "legacy_job_keys": [
+              "photos_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_photos",
+              "check_flag_file": "/fixture/cache/local_photos/.last_check_photos",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/1": "22222222-2222-4222-8222-222222222222",
+          "data/config/repositories.json#/repositories/0/source_job_keys/1": "22222222-2222-4222-8222-222222222222"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "overlapping_shared_repository_prefixes",
+      "description": "Another job claims config-backup through its historical prefix list.",
+      "files": {
+        "data/config/jobs/photos_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "photos_local",
+            "backup_type": "photos",
+            "location": "local",
+            "name": "Synthetic photos",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/photos"
+            ],
+            "exclude_paths": [],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "archive_prefixes": [
+              "photos-backup",
+              "config-backup"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/repositories.json": {
+          "json": {
+            "schema_version": 1,
+            "repositories": [
+              {
+                "repository_key": "repo_docs",
+                "display_name": "Synthetic repository",
+                "storage_key": "storage_local",
+                "relative_path": "repo_docs",
+                "encryption": "none",
+                "initialized": true,
+                "used_by": [
+                  "config_local",
+                  "photos_local"
+                ],
+                "source_job_keys": [
+                  "config_local",
+                  "photos_local"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "ambiguous_archive_ownership"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "underscores_in_type",
+      "description": "Exact payload/key evidence avoids the first-underscore filename parser bug.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/jobs/config_home_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "config_home_local",
+            "backup_type": "config_home",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/schedules.json": {
+          "json": {
+            "config_home_local": {
+              "cron": "0 8 * * *",
+              "enabled": true
+            }
+          }
+        },
+        "status/2026-08-31_08-00-00_config_local.status": null,
+        "status/2026-08-31_08-00-00_config_home_local.status": {
+          "json": {
+            "backup_type": "config_home",
+            "location": "local",
+            "timestamp": "2026-08-31 08:00:00",
+            "duration_seconds": 60,
+            "exit_code": 0,
+            "status": "success",
+            "archive_name": "config_home-backup-2026-08-31_08-00-00",
+            "log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+            "repository_size": 100,
+            "archive_original_size": 30
+          }
+        },
+        "data/config/repositories.json": {
+          "json": {
+            "schema_version": 1,
+            "repositories": [
+              {
+                "repository_key": "repo_docs",
+                "display_name": "Synthetic repository",
+                "storage_key": "storage_local",
+                "relative_path": "repo_docs",
+                "encryption": "none",
+                "initialized": true,
+                "used_by": [
+                  "config_home_local"
+                ],
+                "source_job_keys": [
+                  "config_home_local"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config_home-backup"
+            ],
+            "legacy_job_keys": [
+              "config_home_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config_home",
+              "check_flag_file": "/fixture/cache/local_config_home/.last_check_config_home",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_home_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_home_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "disabled_schedule_and_reminder",
+      "description": "Disabled cron and due-marker deduplication must survive unchanged.",
+      "files": {
+        "data/config/schedules.json": {
+          "json": {
+            "config_local": {
+              "cron": "0 8 * * *",
+              "enabled": false
+            },
+            "restore_test": {
+              "cron": "0 9 * * 0",
+              "enabled": true
+            }
+          }
+        },
+        "data/config/notification-state.json": {
+          "json": {
+            "schema_version": 1,
+            "last_sent": {
+              "backup_overdue:config_local:2026-08-31T08:00:00": 1788163200
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/notification-state.json#/last_sent/backup_overdue:config_local:2026-08-31T08:00:00": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": false
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00",
+          "data/config/schedules.json#/restore_test": {
+            "cron": "0 9 * * 0",
+            "enabled": true
+          },
+          "data/config/notification-state.json#/last_sent/backup_overdue:config_local:2026-08-31T08:00:00": 1788163200
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "restore_result_and_history",
+      "description": "Preserve test evidence and restore_id; canonical test filename uses full UUID.",
+      "files": {
+        "restore_tests/config_local.test": {
+          "json": {
+            "test_date": "2026-08-31 08:10:00",
+            "test_result": "PASS",
+            "test_level": 1,
+            "tested_archive": "config-backup-2026-08-31_08-00-00",
+            "tested_entries": 1
+          }
+        },
+        "data/config/restore-history/index.json": {
+          "json": {
+            "schema_version": 1,
+            "runs": [
+              {
+                "restore_id": "20260831-081500-aaaaaaaa",
+                "state": "done",
+                "phase": "done",
+                "job_key": "config_local",
+                "archive": "config-backup-2026-08-31_08-00-00",
+                "started_at": "2026-08-31T08:15:00",
+                "finished_at": "2026-08-31T08:15:30",
+                "source_path": "source.txt",
+                "target_dir": "/fixture/restore-output",
+                "destination_path": "/fixture/restore-output/source.txt",
+                "error": ""
+              }
+            ]
+          }
+        },
+        "data/config/restore-history/runs/20260831-081500-aaaaaaaa.json": {
+          "json": {
+            "schema_version": 1,
+            "source": "worker",
+            "restore_id": "20260831-081500-aaaaaaaa",
+            "state": "done",
+            "phase": "done",
+            "job_key": "config_local",
+            "archive": "config-backup-2026-08-31_08-00-00",
+            "started_at": "2026-08-31T08:15:00",
+            "finished_at": "2026-08-31T08:15:30",
+            "source_path": "source.txt",
+            "target_dir": "/fixture/restore-output",
+            "destination_path": "/fixture/restore-output/source.txt",
+            "error": "",
+            "lines": [
+              "Synthetic restore completed."
+            ]
+          }
+        },
+        "data/config/restore-runs.json": {
+          "json": {
+            "schema_version": 1,
+            "runs": {}
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "restore_tests/config_local.test#": "11111111-1111-4111-8111-111111111111",
+          "data/config/restore-history/index.json#/runs/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/restore-history/runs/20260831-081500-aaaaaaaa.json#": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00",
+          "restore_tests/config_local.test#": {
+            "test_date": "2026-08-31 08:10:00",
+            "test_result": "PASS",
+            "test_level": 1,
+            "tested_archive": "config-backup-2026-08-31_08-00-00",
+            "tested_entries": 1
+          },
+          "data/config/restore-history/index.json#/runs/0/restore_id": "20260831-081500-aaaaaaaa"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "orphan_history_and_excluded_archives",
+      "description": "Deleted-job history is retained unassigned; nested/recycled copies are not live stores.",
+      "files": {
+        "status/2026-08-30_08-00-00_deleted_local.status": {
+          "json": {
+            "backup_type": "deleted",
+            "location": "local",
+            "timestamp": "2026-08-31 08:00:00",
+            "duration_seconds": 60,
+            "exit_code": 0,
+            "status": "success",
+            "archive_name": "deleted-backup-2026-08-30_08-00-00",
+            "log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+            "repository_size": 100,
+            "archive_original_size": 30
+          }
+        },
+        "status/archive/old.status": {
+          "text": "Historical opaque bytes.\n"
+        },
+        "data/.Recycle.Bin/config/jobs/old.json": {
+          "text": "{invalid but not an input\n"
+        },
+        "cache/config_local/files": {
+          "text": "Synthetic opaque cache bytes.\n"
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-30_08-00-00_deleted_local.status#": null
+        },
+        "unassigned": {
+          "status/2026-08-30_08-00-00_deleted_local.status#": "no_configured_job"
+        },
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/archive/old.status",
+          "data/.Recycle.Bin/config/jobs/old.json",
+          "cache/config_local/files"
+        ]
+      }
+    },
+    {
+      "id": "corrupt_job_json",
+      "description": "Invalid owned job input must block before data conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "text": "{\"schema_version\":3,"
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "invalid_json"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "non_object_job",
+      "description": "Invalid owned job input must block before data conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": []
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "invalid_job_shape"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "future_schema",
+      "description": "Invalid owned job input must block before data conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": {
+            "schema_version": 99,
+            "job_key": "config_local",
+            "backup_type": "config",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "unsupported_schema"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "invalid_prefix_element",
+      "description": "Invalid owned job input must block before data conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "config_local",
+            "backup_type": "config",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "archive_prefixes": [
+              "config-backup",
+              "../other-backup"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "invalid_archive_prefix"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "prefix_list_wrong_type",
+      "description": "Invalid owned job input must block before data conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "config_local",
+            "backup_type": "config",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "archive_prefixes": "config-backup",
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "invalid_archive_prefix"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "mismatched_legacy_key",
+      "description": "Invalid owned job input must block before data conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "other_local",
+            "backup_type": "config",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "conflicting_legacy_identity"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "missing_repository",
+      "description": "Invalid owned job input must block before data conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": {
+          "json": {
+            "schema_version": 3,
+            "job_key": "config_local",
+            "backup_type": "config",
+            "location": "local",
+            "name": "Synthetic configuration",
+            "repository_key": "repo_missing",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "dangling_repository"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "ambiguous_aliases",
+      "description": "Two canonical jobs claim the same exact legacy alias.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/jobs/11111111-1111-4111-8111-111111111111.json": {
+          "json": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/jobs/22222222-2222-4222-8222-222222222222.json": {
+          "json": {
+            "schema_version": 4,
+            "name": "Synthetic photos",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/photos"
+            ],
+            "exclude_paths": [],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "22222222-2222-4222-8222-222222222222",
+            "archive_prefixes": [
+              "photos-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "duplicate_legacy_alias"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "duplicate_uuid",
+      "description": "Two files contain the same UUID; do not silently choose one.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/jobs/11111111-1111-4111-8111-111111111111.json": {
+          "json": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/jobs/22222222-2222-4222-8222-222222222222.json": {
+          "json": {
+            "schema_version": 4,
+            "name": "Synthetic duplicate",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "duplicate_job_id"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "already_migrated",
+      "description": "Validated canonical installation keeps IDs without reapplying conversion.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/jobs/11111111-1111-4111-8111-111111111111.json": {
+          "json": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "data/config/schedules.json": {
+          "json": {
+            "11111111-1111-4111-8111-111111111111": {
+              "cron": "0 8 * * *",
+              "enabled": true
+            }
+          }
+        },
+        "data/config/repositories.json": {
+          "json": {
+            "schema_version": 1,
+            "repositories": [
+              {
+                "repository_key": "repo_docs",
+                "display_name": "Synthetic repository",
+                "storage_key": "storage_local",
+                "relative_path": "repo_docs",
+                "encryption": "none",
+                "initialized": true,
+                "job_ids": [
+                  "11111111-1111-4111-8111-111111111111"
+                ],
+                "source_job_ids": [
+                  "11111111-1111-4111-8111-111111111111"
+                ]
+              }
+            ]
+          }
+        },
+        "status/2026-08-31_08-00-00_config_local.status": {
+          "json": {
+            "backup_type": "config",
+            "location": "local",
+            "timestamp": "2026-08-31 08:00:00",
+            "duration_seconds": 60,
+            "exit_code": 0,
+            "status": "success",
+            "archive_name": "config-backup-2026-08-31_08-00-00",
+            "log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+            "repository_size": 100,
+            "archive_original_size": 30,
+            "schema_version": 1,
+            "job_id": "11111111-1111-4111-8111-111111111111"
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "not_applicable",
+        "execution": "no_user_data_writes",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/11111111-1111-4111-8111-111111111111": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/job_ids/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_ids/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "queued_notifications",
+      "description": "Convert job correlation without resetting attempts, retries or event IDs.",
+      "files": {
+        "data/config/notification-queue.json": {
+          "json": {
+            "schema_version": 1,
+            "queue": [
+              {
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "created_at": "2026-08-31T08:01:00Z",
+                "updated_at": "2026-08-31T08:02:00Z",
+                "next_attempt_at": 1788163380,
+                "attempts_made": 1,
+                "max_attempts": 3,
+                "backoff_seconds": 60,
+                "timeout_seconds": 10,
+                "profile_id": "fixture-profile",
+                "profile_name": "Synthetic notifications",
+                "provider": "fixture",
+                "event_type": "backup_success",
+                "source": "backup",
+                "job_key": "config_local",
+                "severity": "normal",
+                "title": "Synthetic success",
+                "body": "Synthetic backup completed."
+              }
+            ]
+          }
+        },
+        "data/config/notification-deliveries.json": {
+          "json": {
+            "schema_version": 1,
+            "deliveries": [
+              {
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "job_key": "config_local",
+                "status": "retrying",
+                "attempts_made": 1
+              },
+              {
+                "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "job_key": "deleted_local",
+                "status": "sent",
+                "attempts_made": 1
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/notification-queue.json#/queue/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/notification-deliveries.json#/deliveries/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/notification-deliveries.json#/deliveries/1": null
+        },
+        "unassigned": {
+          "data/config/notification-deliveries.json#/deliveries/1": "no_configured_job"
+        },
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00",
+          "data/config/notification-queue.json#/queue/0/id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "data/config/notification-queue.json#/queue/0/attempts_made": 1,
+          "data/config/notification-queue.json#/queue/0/next_attempt_at": 1788163380,
+          "data/config/notification-queue.json#/queue/0/body": "Synthetic backup completed."
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "orphan_pending_notification",
+      "description": "Pending job events cannot be silently dropped, reassigned or sent.",
+      "files": {
+        "data/config/notification-queue.json": {
+          "json": {
+            "schema_version": 1,
+            "queue": [
+              {
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "created_at": "2026-08-31T08:01:00Z",
+                "updated_at": "2026-08-31T08:02:00Z",
+                "next_attempt_at": 1788163380,
+                "attempts_made": 1,
+                "max_attempts": 3,
+                "backoff_seconds": 60,
+                "timeout_seconds": 10,
+                "profile_id": "fixture-profile",
+                "profile_name": "Synthetic notifications",
+                "provider": "fixture",
+                "event_type": "backup_success",
+                "source": "backup",
+                "job_key": "deleted_local",
+                "severity": "normal",
+                "title": "Synthetic success",
+                "body": "Synthetic backup completed."
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "orphan_active_notification"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "pending_runtime_recovery",
+      "description": "Dead owner with known job retains exact stopped targets and unresolved recovery.",
+      "files": {
+        "data/config/runtime-recovery.json": {
+          "json": {
+            "schema_version": 1,
+            "entries": [
+              {
+                "id": "fixture-recovery",
+                "state": "pending_restart",
+                "kind": "docker",
+                "job_name": "Synthetic configuration",
+                "backup_type": "config",
+                "backup_location": "local",
+                "log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+                "pid": 99999999,
+                "stopped_at": "2026-08-31T08:00:00Z",
+                "restarted_at": "",
+                "message": "Synthetic interrupted run",
+                "targets": [
+                  {
+                    "id": "fixture-container",
+                    "name": "Synthetic container"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/runtime-recovery.json#/entries/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00",
+          "data/config/runtime-recovery.json#/entries/0/id": "fixture-recovery",
+          "data/config/runtime-recovery.json#/entries/0/state": "pending_restart",
+          "data/config/runtime-recovery.json#/entries/0/targets": [
+            {
+              "id": "fixture-container",
+              "name": "Synthetic container"
+            }
+          ],
+          "data/config/runtime-recovery.json#/entries/0/stopped_at": "2026-08-31T08:00:00Z"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "live_writer",
+      "description": "Application shutdown alone is insufficient while a detached writer is active.",
+      "files": {},
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": false,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "writers_not_quiescent"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "equal_weekly_observations",
+      "description": "Both live snapshot locations are inputs; equal observations may deduplicate with provenance.",
+      "files": {
+        "weekly-snapshots.json": {
+          "json": {
+            "config_local": [
+              {
+                "week": "2026-08-31",
+                "size": 100
+              }
+            ]
+          }
+        },
+        "status/weekly-snapshots.json": {
+          "json": {
+            "config_local": [
+              {
+                "week": "2026-08-31",
+                "size": 100
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "weekly-snapshots.json#/config_local/0": "11111111-1111-4111-8111-111111111111",
+          "status/weekly-snapshots.json#/config_local/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00",
+          "weekly-snapshots.json#/config_local/0": {
+            "week": "2026-08-31",
+            "size": 100
+          },
+          "status/weekly-snapshots.json#/config_local/0": {
+            "week": "2026-08-31",
+            "size": 100
+          }
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "conflicting_weekly_observations",
+      "description": "Do not select a winning value for the same job/week; preserve both with a conflict classification.",
+      "files": {
+        "weekly-snapshots.json": {
+          "json": {
+            "config_local": [
+              {
+                "week": "2026-08-31",
+                "size": 100
+              }
+            ]
+          }
+        },
+        "status/weekly-snapshots.json": {
+          "json": {
+            "config_local": [
+              {
+                "week": "2026-08-31",
+                "size": 120
+              }
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "applied_after_confirmation",
+        "reason_codes": [
+          "weekly_value_conflict_preserved"
+        ],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111",
+          "weekly-snapshots.json#/config_local/0": "11111111-1111-4111-8111-111111111111",
+          "status/weekly-snapshots.json#/config_local/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00",
+          "weekly-snapshots.json#/config_local/0": {
+            "week": "2026-08-31",
+            "size": 100
+          },
+          "status/weekly-snapshots.json#/config_local/0": {
+            "week": "2026-08-31",
+            "size": 120
+          }
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "interrupted_with_journal",
+      "description": "Reuse journaled UUID after canonical metadata replacement; old dependent references remain.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/jobs/11111111-1111-4111-8111-111111111111.json": {
+          "json": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": {
+          "migration_id": "immutable_job_id_v1",
+          "state": "pending",
+          "id_map": {
+            "config_local": "11111111-1111-4111-8111-111111111111"
+          },
+          "completed_actions": [
+            "write_canonical_job"
+          ],
+          "old_or_new_fingerprints_verified": true
+        }
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "resumed_after_confirmation",
+        "reason_codes": [
+          "resume_existing_mapping"
+        ],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "partial_without_journal",
+      "description": "Canonical job with old active references and no matching journal cannot be accepted as complete.",
+      "files": {
+        "data/config/jobs/config_local.json": null,
+        "data/config/jobs/11111111-1111-4111-8111-111111111111.json": {
+          "json": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            }
+          }
+        }
+      },
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "partial_migration_without_journal"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "source_changed_after_plan",
+      "description": "Invalidate snapshot/approval when an input changes after planning.",
+      "files": {},
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": false,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "source_fingerprint_changed"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    },
+    {
+      "id": "awaiting_confirmation",
+      "description": "Supported input remains pending; user data and all active writers stay unchanged.",
+      "files": {},
+      "preconditions": {
+        "administrator_confirmed": false,
+        "snapshot_verified": true,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "applicable",
+        "execution": "pending_no_user_data_writes",
+        "reason_codes": [],
+        "jobs": {
+          "11111111-1111-4111-8111-111111111111": {
+            "schema_version": 4,
+            "name": "Synthetic configuration",
+            "repository_key": "repo_docs",
+            "source_paths": [
+              "/fixture/sources/config"
+            ],
+            "exclude_paths": [
+              "/fixture/sources/config/temporary"
+            ],
+            "compression": "lz4",
+            "retention": {
+              "daily": "7",
+              "weekly": "4",
+              "monthly": "6",
+              "yearly": "3"
+            },
+            "enabled": true,
+            "features": {
+              "docker": false,
+              "vm": false
+            },
+            "description": "Synthetic fixture only",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "archive_prefixes": [
+              "config-backup"
+            ],
+            "legacy_job_keys": [
+              "config_local"
+            ],
+            "file_activity": true,
+            "docker_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_appdata_risk": false
+            },
+            "vm_control": {
+              "mode": "none",
+              "selected": [],
+              "ack_domains_risk": false
+            },
+            "restore_test_policy": {
+              "mode": "scheduled",
+              "interval_days": 30,
+              "validity_days": 30,
+              "level": 1,
+              "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
+            }
+          }
+        },
+        "bindings": {
+          "data/config/schedules.json#/config_local": "11111111-1111-4111-8111-111111111111",
+          "status/2026-08-31_08-00-00_config_local.status#": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/used_by/0": "11111111-1111-4111-8111-111111111111",
+          "data/config/repositories.json#/repositories/0/source_job_keys/0": "11111111-1111-4111-8111-111111111111"
+        },
+        "unassigned": {},
+        "preserved": {
+          "data/config/schedules.json#/config_local": {
+            "cron": "0 8 * * *",
+            "enabled": true
+          },
+          "status/2026-08-31_08-00-00_config_local.status#/archive_name": "config-backup-2026-08-31_08-00-00",
+          "status/2026-08-31_08-00-00_config_local.status#/log_file": "/fixture/logs/Borg-Backup_config--2026-08-31_08-00-00.log",
+          "status/2026-08-31_08-00-00_config_local.status#/timestamp": "2026-08-31 08:00:00"
+        },
+        "unchanged_files": [
+          "logs/Borg-Backup_config--2026-08-31_08-00-00.log"
+        ]
+      }
+    },
+    {
+      "id": "snapshot_unverified",
+      "description": "Administrator acknowledgement cannot bypass snapshot verification.",
+      "files": {},
+      "preconditions": {
+        "administrator_confirmed": true,
+        "snapshot_verified": false,
+        "writers_quiescent": true,
+        "source_fingerprints_match": true,
+        "journal": null
+      },
+      "expected": {
+        "classification": "blocked",
+        "execution": "no_user_data_writes",
+        "reason_codes": [
+          "snapshot_not_verified"
+        ],
+        "jobs": {},
+        "bindings": {},
+        "unassigned": {},
+        "preserved": {},
+        "unchanged_files": []
+      }
+    }
+  ]
+}

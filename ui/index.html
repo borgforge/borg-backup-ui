@@ -188,7 +188,7 @@
       </div>
       <div class="startup-maintenance-copy">
         <strong data-i18n="maintenanceMode.title">Eingeschränkter Wartungsmodus</strong>
-        <span data-i18n="maintenanceMode.message">Eine erforderliche Startmigration ist fehlgeschlagen. Backups und Änderungen sind blockiert.</span>
+        <span data-i18n="maintenanceMode.message">Eine erforderliche Startmigration ist noch nicht abgeschlossen. Backups und Änderungen sind blockiert.</span>
         <span id="startup-maintenance-failures" class="startup-maintenance-failures"></span>
       </div>
       <button class="btn btn-secondary" data-core-action="goto-settings" data-i18n="maintenanceMode.openSettings">Systemzustand öffnen</button>
@@ -412,14 +412,14 @@
         <section class="history-workspace ui-workspace">
           <header class="ui-workspace-header"><div class="ui-workspace-header__title"><small data-i18n="history.selection">Auswahl</small><h2 id="history-selection-title" data-i18n="history.allLocations">Alle Standorte</h2><span class="ui-workspace-header__subtitle" data-i18n="history.workspaceSubtitle">Backup-Läufe und Restore-Testberichte</span></div><span id="history-selection-count" class="ui-badge"></span></header>
       <div class="history-filters ui-filter-bar">
-        <select class="history-filter-select" id="history-filter-type">
-          <option value="" data-i18n="history.allTypes">Alle Typen</option>
-          <option value="flash">Flash</option>
-          <option value="appdata">Appdata</option>
-          <option value="photos">Photos</option>
-          <option value="vms">VMs</option>
-          <option value="sonstiges" data-i18n="history.other">Sonstiges</option>
-          <option value="custom">Custom</option>
+        <select class="history-filter-select" id="history-filter-type" aria-label="Job" data-i18n-aria-label="history.job">
+          <option value="" data-i18n="history.allJobs">Alle Jobs</option>
+        </select>
+        <select class="history-filter-select" id="history-filter-scope" data-i18n-aria-label="history.scope">
+          <option value="all" data-i18n="history.allHistory">Gesamter Verlauf</option>
+          <option value="configured" data-i18n="history.configured">Konfigurierte Jobs</option>
+          <option value="deleted" data-i18n="history.deleted">Gelöschte Jobs</option>
+          <option value="unassigned" data-i18n="history.unassigned">Nicht zugeordneter Verlauf</option>
         </select>
         <select class="history-filter-select history-location-contract" id="history-filter-location" aria-hidden="true" tabindex="-1">
           <option value="" data-i18n="history.allLocations">Alle Standorte</option>
@@ -427,6 +427,7 @@
           <option value="usb">USB</option>
           <option value="smb">SMB</option>
           <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox</option>
+          <option value="unknown" data-i18n="history.unknownLocation">Unbekannter Speicherort</option>
         </select>
         <select class="history-filter-select" id="history-filter-status">
           <option value="" data-i18n="history.allStatuses">Alle Status</option>
@@ -497,6 +498,7 @@
       </div>
 
       <div id="bericht-body" style="display:none">
+        <p id="report-run-snapshot" class="ui-muted" style="overflow-wrap:anywhere"></p>
         <section class="report-metric-ledger">
           <header><div><strong data-i18n="reports.metricsTitle">Berichtskennzahlen</strong><small data-i18n="reports.metricsSubtitle">Kompakte Zusammenfassung des ausgewählten Jobs</small></div><span id="br-run-badge" class="ui-badge"></span></header>
           <div class="report-ledger-columns">
@@ -1423,15 +1425,16 @@
               placeholder="z.B. Borg Backup (Meine Daten)" data-i18n-placeholder="wizard.jobNamePlaceholder">
           </div>
           <div class="form-group">
-            <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.typeId">Typ-ID</span> <span class="form-hint" data-i18n="wizard.typeIdHint">(nur a–z, 0–9, _)</span></label>
-            <input class="form-input mono" type="text" id="wiz-type-id"
-              placeholder="z.B. meinedaten" data-i18n-placeholder="wizard.typeIdPlaceholder">
+            <label for="wiz-archive-prefix" class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="wizard.archivePrefix">Archivpräfix</span></label>
+            <input class="form-input mono" type="text" id="wiz-archive-prefix" aria-describedby="wiz-archive-prefix-hint"
+              placeholder="z.B. meinedaten-backup" data-i18n-placeholder="wizard.archivePrefixPlaceholder">
+            <div id="wiz-archive-prefix-hint" class="form-hint" data-i18n="wizard.archivePrefixHint">Vollständiger Präfix; nur der Zeitstempel wird angehängt. A–Z, a–z, 0–9, Punkt, _ und - sind erlaubt.</div>
             <div id="wiz-archive-prefix-summary" class="wizard-archive-prefix-summary" hidden></div>
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="wizard.icon">Icon</label>
             <select class="form-select" id="wiz-icon">
-              <option value="" data-i18n="wizard.automaticType">Automatisch (Typ)</option>
+              <option value="" data-i18n="wizard.defaultIcon">Standard</option>
               <option value="flash">Flash</option>
               <option value="appdata">Appdata</option>
               <option value="photos" data-i18n="wizard.photos">Fotos</option>

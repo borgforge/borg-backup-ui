@@ -1,3 +1,4 @@
+from canonical_wizard_support import canonical_fixture
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import inspect
@@ -20,6 +21,8 @@ from repositories_api import browse_repository_directories, create_or_import_rep
 from restore_tests_api import list_restore_test_plan  # noqa: E402
 from storage_objects_api import read_storage_store, storage_key_for, write_storage_store  # noqa: E402
 from wizard_api import save_job  # noqa: E402
+from job_model import new_job_defaults
+from runtime_fixture_support import JOB_ID, RUN_ID
 
 
 def _write_job(
@@ -41,6 +44,17 @@ def _write_job(
     base_path = str(Path(repo_path).parent)
     storage_key = storage_key_for(location, f"{location}:{base_path}")
     repo_key = repository_key_for(f"repo_{job_key}", repo_path)
+    job = {
+        **new_job_defaults(),
+        "job_id": JOB_ID,
+        "legacy_job_keys": [job_key],
+        "archive_prefixes": ["appdata-backup"],
+        "name": "Appdata",
+        "repository_key": repo_key,
+        "source_paths": ["/mnt/user/appdata"],
+    }
+    path = jobs_dir / f"{JOB_ID}.json"
+    path.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     write_storage_store(config, {"storages": [{
         "storage_key": storage_key,
         "display_name": "Local" if location == "local" else location,
@@ -63,19 +77,9 @@ def _write_job(
         "relative_path": repo_name,
         "encryption": encryption,
         "passphrase_ref": str(secret),
-        "used_by": [job_key],
+        "job_ids": [JOB_ID],
+        "source_job_ids": [JOB_ID],
     }]})
-    job = {
-        "schema_version": 3,
-        "job_key": job_key,
-        "name": "Appdata",
-        "backup_type": "appdata",
-        "location": location,
-        "repository_key": repo_key,
-        "source_paths": ["/mnt/user/appdata"],
-    }
-    path = jobs_dir / f"{job_key}.json"
-    path.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
 
@@ -92,7 +96,8 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
     assert rows[0]["repository_name"] == "borg-backup-appdata"
     assert rows[0]["job_name"] == "Appdata"
     assert rows[0]["storage_key"].startswith("storage_local_")
-    assert rows[0]["used_by"] == ["appdata_local"]
+    assert rows[0]["job_ids"] == [JOB_ID]
+    assert rows[0]["source_job_ids"] == [JOB_ID]
     assert rows[0]["path_raw"] == "/mnt/backup/borg-backup-appdata"
     assert rows[0]["path_display"] == "/mnt/backup/borg-backup-appdata"
     assert data["storages"][0]["storage_key"] == rows[0]["storage_key"]
@@ -124,7 +129,8 @@ def test_storage_data_derives_remote_repository_path_from_storage(tmp_path: Path
         "repository_name": "borg-backup-appdata",
         "job_name": "Appdata",
         "encryption": "repokey-blake2",
-        "used_by": ["appdata_storagebox"],
+        "job_ids": [],
+        "source_job_ids": [],
     }]})
 
     data = get_repositories_data(config)
@@ -167,18 +173,20 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     })
     repo_key = created["repository"]["repository_key"]
     params = {
-        "type_id": "photos",
+        "archive_prefix": "photos-backup",
         "job_name": "Photos",
         "source_paths": [str(source)],
         "repository_key": repo_key,
         "location": "local",
     }
 
+    canonical_fixture(config)
     result = save_job(params, scripts, tmp_path, config)
     job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
-    store = read_repository_store(config)
+    from job_store import read_repositories
+    store = read_repositories(tmp_path / "config" / "repositories.json")
     assert job["repository_key"] == repo_key
-    assert job["schema_version"] == 3
+    assert job["schema_version"] == 4
     assert job["source_paths"] == [str(source)]
     assert "repo" not in job
     assert "passphrase" not in job
@@ -186,10 +194,10 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     assert "create_repo_if_missing" not in job
     assert store["repositories"][0]["repository_key"] == repo_key
     assert store["repositories"][0]["repository_name"] == "borg-backup-photos"
-    assert store["repositories"][0]["job_name"] == "Photos"
     assert store["repositories"][0]["storage_key"].startswith("storage_local_")
     assert store["repositories"][0]["relative_path"] == "borg-backup-photos"
-    assert store["repositories"][0]["used_by"] == ["photos_local"]
+    assert store["repositories"][0]["job_ids"] == [result["job_id"]]
+    assert store["repositories"][0]["source_job_ids"] == [result["job_id"]]
     assert read_storage_store(config)["storages"][0]["base_path"] == "/mnt/backup"
 
     job["restore_test_policy"] = {
@@ -199,7 +207,7 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
         "level": 3,
     }
     Path(result["metadata_path"]).write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
-    save_job({**params, "existing_job_key": "photos_local"}, scripts, tmp_path, config)
+    save_job({**params, "_wizard_mode": "edit", "job_id": result["job_id"]}, scripts, tmp_path, config)
     updated_job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     assert updated_job["restore_test_policy"] == job["restore_test_policy"]
 
@@ -290,6 +298,8 @@ def test_repository_info_counts_archives_from_borg_list(tmp_path: Path, monkeypa
         "base_path": "/mnt/backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_flash",
         "display_name": "Flash",
         "repository_name": "borg-backup-flash",
@@ -335,6 +345,8 @@ def test_due_repository_info_uses_24_hour_cache(tmp_path: Path, monkeypatch):
         "base_path": "/mnt/backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_flash",
         "display_name": "Flash",
         "storage_key": "storage_local_test",
@@ -367,6 +379,8 @@ def test_failed_repository_info_refresh_is_masked_and_retried_hourly(tmp_path: P
         "base_path": "/mnt/backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_flash",
         "display_name": "Flash",
         "storage_key": "storage_local_test",
@@ -405,6 +419,8 @@ def test_repository_info_refresh_is_deferred_while_backup_uses_repository(tmp_pa
         "base_path": "/mnt/backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_appdata",
         "display_name": "Appdata",
         "storage_key": "storage_local_test",
@@ -418,7 +434,8 @@ def test_repository_info_refresh_is_deferred_while_backup_uses_repository(tmp_pa
     lock_dir.mkdir()
     (lock_dir / "repo.lock.json").write_text(json.dumps({
         "resource": "repo:/mnt/backup/borg-backup-appdata",
-        "job_key": "appdata_local",
+        "job_id": JOB_ID,
+        "run_id": RUN_ID,
         "pid": os.getpid(),
         "started_at": "2026-07-10T09:00:00+00:00",
     }), encoding="utf-8")
@@ -447,6 +464,8 @@ def test_repository_archives_are_loaded_by_repository_key(tmp_path: Path, monkey
         "base_path": "/mnt/backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_flash",
         "display_name": "Flash",
         "storage_key": "storage_local_test",
@@ -488,6 +507,8 @@ def test_repository_archives_unmounts_smb_only_when_api_mounted_it(tmp_path: Pat
         "mount_path": "/mnt/borg-backup-ui/smb/smb-1",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_smb_test",
         "display_name": "SMB Test",
         "storage_key": "storage_smb_test",
@@ -525,6 +546,8 @@ def test_repository_info_keeps_smb_mounted_when_profile_requests_keep(tmp_path: 
         "keep_mounted": True,
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_smb_test",
         "display_name": "SMB Test",
         "storage_key": "storage_smb_test",
@@ -570,6 +593,8 @@ def _write_key_recovery_repository(tmp_path: Path, repository_id: str) -> tuple[
         "base_path": str(base),
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_appdata",
         "display_name": "Appdata",
         "storage_key": "storage_local_test",
@@ -678,6 +703,8 @@ def test_repository_archives_keep_smb_mounted_when_profile_requests_keep(tmp_pat
         "keep_mounted": True,
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_smb_test",
         "display_name": "SMB Test",
         "storage_key": "storage_smb_test",
@@ -716,6 +743,8 @@ def test_repository_browser_lists_safe_local_directories_and_managed_state(tmp_p
         "base_path": str(base),
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_appdata_local_test",
         "display_name": "Appdata",
         "storage_key": "storage_local_test",
@@ -923,6 +952,8 @@ def test_repository_test_uses_repository_object_passphrase(tmp_path: Path, monke
         "base_path": "/mnt/backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_test",
         "display_name": "Test",
         "repository_name": "borg-backup-test",
@@ -1099,11 +1130,14 @@ def test_repository_import_failure_restores_existing_secret(tmp_path: Path, monk
         "base_path": "/mnt/backup",
     }]})
     write_repository_store(config, {"repositories": [{
+        "job_ids": [],
+        "source_job_ids": [],
         "repository_key": "repo_test",
         "display_name": "Test",
         "repository_name": "test",
         "storage_key": "storage_local_test",
         "location": "local",
+        "relative_path": "test",
         "path_raw": "/mnt/backup/test",
         "passphrase_ref": str(secret),
         "encryption": "repokey-blake2",

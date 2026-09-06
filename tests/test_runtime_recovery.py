@@ -10,6 +10,7 @@ for path in (RUNTIME_LIB, API_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from runtime_fixture_support import identity_snapshot
 import runtime_recovery  # noqa: E402
 from system_health_api import get_system_health_data  # noqa: E402
 
@@ -20,9 +21,7 @@ def _record_runtime_recovery_worker(path: str, index: int, queue) -> None:
             Path(path),
             kind="docker",
             targets=[{"id": f"container-{index}", "name": f"container-{index}"}],
-            job_name=f"Job {index}",
-            backup_type="appdata",
-            backup_location="local",
+            snapshot=identity_snapshot(f"Job {index}"),
             log_file=f"/mnt/user/Logs/Borg-Backup-{index}.log",
         )
         queue.put(("ok", entry_id))
@@ -37,9 +36,7 @@ def test_runtime_recovery_records_pending_and_restart_state(tmp_path: Path):
         state_file,
         kind="docker",
         targets=[{"id": "abc123", "name": "paperless-ngx"}],
-        job_name="Appdata",
-        backup_type="appdata",
-        backup_location="local",
+        snapshot=identity_snapshot("Appdata"),
         log_file="/mnt/user/Logs/Borg-Backup.log",
     )
 
@@ -64,9 +61,7 @@ def test_system_health_exposes_stale_runtime_recovery_warning(tmp_path: Path):
         state_file,
         kind="vm",
         targets=[{"id": "LinuxMint", "name": "LinuxMint"}],
-        job_name="VMs",
-        backup_type="vms",
-        backup_location="local",
+        snapshot=identity_snapshot("VMs"),
         log_file="/mnt/user/Logs/Borg-Backup.log",
     )
     state = runtime_recovery.read_runtime_recovery_state(state_file)
@@ -79,7 +74,7 @@ def test_system_health_exposes_stale_runtime_recovery_warning(tmp_path: Path):
     assert recovery["pending_count"] == 1
     assert recovery["attention_count"] == 1
     assert recovery["vm_pending_count"] == 1
-    assert recovery["entries"][0]["job_name"] == "VMs"
+    assert recovery["entries"][0]["job_name_snapshot"] == "VMs"
 
 
 def test_runtime_recovery_acknowledges_failed_entry(tmp_path: Path):
@@ -88,9 +83,7 @@ def test_runtime_recovery_acknowledges_failed_entry(tmp_path: Path):
         state_file,
         kind="docker",
         targets=[{"id": "abc123", "name": "paperless-ngx"}],
-        job_name="Appdata",
-        backup_type="appdata",
-        backup_location="local",
+        snapshot=identity_snapshot("Appdata"),
         log_file="/mnt/user/Logs/Borg-Backup.log",
     )
     runtime_recovery.mark_runtime_restarted(state_file, entry_id, success=False, message="restart failed")

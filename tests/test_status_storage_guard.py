@@ -7,6 +7,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 RUNTIME_LIB = ROOT / "runtime" / "lib"
 if str(RUNTIME_LIB) not in sys.path:
     sys.path.insert(0, str(RUNTIME_LIB))
@@ -154,15 +155,15 @@ def test_initial_setup_does_not_start_runtime_writers(monkeypatch):
     ]
 
 
-def test_configured_setup_starts_runtime_writers(monkeypatch):
+def test_configured_setup_starts_runtime_writers(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(borg_backup_ui, "_log", lambda _message: None)
 
+    from migration_gate_support import ready_gate
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "data"), "GLOBAL_DATA_DIR": str(tmp_path / "data"), "STATUS_DIR": str(tmp_path / "status")}
+    ready_gate(config, monkeypatch, tmp_path / "gate")
     started = borg_backup_ui._start_configured_runtime_writers(
-        {
-            "GLOBAL_DATA_DIR": "/mnt/user/borg_backup_ui",
-            "STATUS_DIR": "/mnt/user/borg_backup_ui/status",
-        },
+        config,
         True,
         app_version="test",
         widget_startup_writer=lambda *_args, **_kwargs: calls.append("widget-startup"),

@@ -16,6 +16,8 @@ if str(API) not in sys.path:
 
 import inventory_store  # noqa: E402
 import repositories_api  # noqa: E402
+from job_model import JobValidationError
+from test_canonical_job_wizard import setup, create
 from inventory_store import InventoryCorruptError  # noqa: E402
 from repositories_api import (  # noqa: E402
     read_repository_store,
@@ -40,6 +42,7 @@ def _repository(key: str) -> dict:
         "storage_type": "local",
         "storage_key": "storage_local",
         "relative_path": key,
+        "job_ids": [], "source_job_ids": [],
         "path_raw": f"/mnt/backup/{key}",
     }
 
@@ -65,7 +68,7 @@ def test_existing_malformed_inventory_is_not_treated_as_empty(tmp_path: Path, fi
     path = tmp_path / "config" / filename
     path.parent.mkdir(parents=True)
     path.write_text('{"broken":', encoding="utf-8")
-    with pytest.raises(InventoryCorruptError, match="malformed JSON"):
+    with pytest.raises((InventoryCorruptError, JobValidationError)):
         reader(config)
 
 
@@ -93,39 +96,15 @@ def test_inventory_files_keep_restrictive_permissions(tmp_path: Path) -> None:
     assert storages_file(config).stat().st_mode & 0o777 == 0o600
 
 
-def test_repository_inventory_cache_avoids_reparse_and_detects_external_change(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_repository_inventory_reads_detect_external_corruption(tmp_path):
     config = _config(tmp_path)
     path = repositories_file(config)
-    path.parent.mkdir(parents=True)
-    path.write_text(
-        '{"schema_version":1,"updated_at":"first","repositories":[]}',
-        encoding="utf-8",
-    )
-    original_reader = repositories_api.read_inventory
-    reads: list[Path] = []
-
-    def counted_reader(source, **kwargs):
-        reads.append(Path(source))
-        return original_reader(source, **kwargs)
-
-    monkeypatch.setattr(repositories_api, "read_inventory", counted_reader)
-
+    inventory_store.atomic_write_json(path, {"schema_version": 1, "updated_at": "first", "repositories": []})
     assert read_repository_store(config)["updated_at"] == "first"
-    assert read_repository_store(config)["updated_at"] == "first"
-    assert reads == [path]
-
-    path.write_text(
-        '{"schema_version":1,"updated_at":"externally-updated","repositories":[]}',
-        encoding="utf-8",
-    )
-    assert read_repository_store(config)["updated_at"] == "externally-updated"
-    assert reads == [path, path]
-
-    path.write_text('{"broken":', encoding="utf-8")
-    with pytest.raises(InventoryCorruptError, match="malformed JSON"):
+    inventory_store.atomic_write_json(path, {"schema_version": 1, "updated_at": "changed", "repositories": []})
+    assert read_repository_store(config)["updated_at"] == "changed"
+    path.write_text('{"broken":')
+    with pytest.raises(JobValidationError):
         read_repository_store(config)
 
 
@@ -180,31 +159,16 @@ def test_separate_process_repository_updates_do_not_corrupt_or_lose_rows(tmp_pat
     }
 
 
-def test_job_link_transaction_rolls_back_when_job_write_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config = _config(tmp_path)
-    repository = _repository("repo_target")
-    write_repository_store(config, {"repositories": [repository]})
-    metadata_path = tmp_path / "config" / "jobs" / "appdata_local.json"
-
-    def fail_job_write(_path, _payload, **_kwargs):
+def test_job_link_transaction_rolls_back_when_job_write_fails(setup, monkeypatch):
+    import job_store
+    before = (setup[3] / "config/repositories.json").read_bytes()
+    def fail_write(_path, _payload, **_kwargs):
         raise inventory_store.InventoryAccessError("injected job write failure")
-
-    monkeypatch.setattr(repositories_api, "atomic_write_json", fail_job_write)
+    monkeypatch.setattr(job_store, "atomic_write_json", fail_write)
     with pytest.raises(inventory_store.InventoryAccessError):
-        repositories_api.save_job_repository_transaction(
-            config,
-            metadata_path,
-            {"job_key": "appdata_local", "repository_key": "repo_target"},
-            "repo_target",
-            "appdata_local",
-        )
-    assert not metadata_path.exists()
-    restored = read_repository_store(config)["repositories"][0]
-    assert restored["used_by"] == []
-    assert restored["source_job_keys"] == []
+        create(setup)
+    assert list((setup[3] / "config/jobs").glob("*.json")) == []
+    assert (setup[3] / "config/repositories.json").read_bytes() == before
 
 
 def test_repository_path_is_derived_from_current_storage_target(tmp_path: Path) -> None:
@@ -318,81 +282,43 @@ def test_multi_profile_update_rolls_back_on_later_validation_error(tmp_path: Pat
     assert storages_file(config).read_bytes() == original
 
 
-def test_job_delete_transaction_rolls_back_when_metadata_delete_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config = _config(tmp_path)
-    repository = {**_repository("repo_target"), "used_by": ["appdata_local"], "source_job_keys": ["appdata_local"]}
-    write_repository_store(config, {"repositories": [repository]})
-    metadata_path = tmp_path / "config" / "jobs" / "appdata_local.json"
-    metadata_path.parent.mkdir(parents=True)
-    metadata_path.write_text('{"job_key":"appdata_local","repository_key":"repo_target"}\n', encoding="utf-8")
+def test_job_delete_transaction_rolls_back_when_metadata_delete_fails(setup, monkeypatch):
+    from job_actions import delete_job_configuration
+    import schedule_api
+    result, _ = create(setup)
+    path = Path(result["metadata_path"])
+    before = path.read_bytes()
     original_unlink = Path.unlink
-
-    def fail_metadata_unlink(path: Path, *args, **kwargs):
-        if path == metadata_path:
+    monkeypatch.setattr(schedule_api, "_update_crontab", lambda _: pytest.fail("cron must not be invoked"))
+    def fail_metadata_unlink(target, *args, **kwargs):
+        if target == path:
             raise OSError("injected metadata delete failure")
-        return original_unlink(path, *args, **kwargs)
-
+        return original_unlink(target, *args, **kwargs)
     monkeypatch.setattr(Path, "unlink", fail_metadata_unlink)
     with pytest.raises(OSError, match="injected"):
-        repositories_api.delete_job_metadata_transaction(config, [metadata_path], "appdata_local")
-    assert metadata_path.exists()
-    restored = read_repository_store(config)["repositories"][0]
-    assert restored["used_by"] == ["appdata_local"]
-    assert restored["source_job_keys"] == ["appdata_local"]
+        delete_job_configuration(setup[0], result["job_id"])
+    assert path.read_bytes() == before
+    assert repositories_api.repository_assignment_report(setup[0])["ok"]
 
 
-def test_repository_usage_is_rebuilt_from_authoritative_job_assignments(tmp_path: Path) -> None:
-    config = _config(tmp_path)
-    write_storage_store(config, {"storages": [{
-        "storage_key": "storage_local",
-        "display_name": "Local",
-        "storage_type": "local",
-        "location": "local",
-        "identity": "local:/mnt/backup",
-        "base_path": "/mnt/backup",
-    }]})
-    write_repository_store(config, {"repositories": [{
-        **_repository("repo_target"),
-        "used_by": ["stale_job"],
-        "source_job_keys": ["stale_job"],
-    }]})
-    metadata_path = tmp_path / "config" / "jobs" / "appdata_local.json"
-    metadata_path.parent.mkdir(parents=True)
-    metadata_path.write_text(
-        '{"schema_version":2,"job_key":"appdata_local","repository_key":"repo_target"}\n',
-        encoding="utf-8",
-    )
-
-    before = repositories_api.repository_assignment_report(config)
-    assert before["ok"] is False
-    assert before["usage_mismatches"][0]["expected_job_keys"] == ["appdata_local"]
-
-    after = repositories_api.reconcile_repository_usage(config)
-    assert after["ok"] is True
-    assert after["reconciled_repository_keys"] == ["repo_target"]
-    repository = read_repository_store(config)["repositories"][0]
-    assert repository["used_by"] == ["appdata_local"]
-    assert repository["source_job_keys"] == ["appdata_local"]
+def test_repository_usage_conflicts_are_reported_without_repair(setup):
+    from job_store import read_json
+    result, _ = create(setup)
+    path = setup[3] / "config/repositories.json"
+    store = read_json(path)
+    store["repositories"][0]["job_ids"] = []
+    inventory_store.atomic_write_json(path, store)
+    before = path.read_bytes()
+    report = repositories_api.reconcile_repository_usage(setup[0])
+    assert not report["ok"]
+    assert report["usage_mismatches"][0]["expected_job_ids"] == [result["job_id"]]
+    assert report["reconciled_repository_keys"] == [] and path.read_bytes() == before
 
 
-def test_repository_assignment_report_guides_job_wizard_repair(tmp_path: Path) -> None:
-    config = _config(tmp_path)
-    write_storage_store(config, {"storages": []})
-    write_repository_store(config, {"repositories": []})
-    metadata_path = tmp_path / "config" / "jobs" / "photos_smb.json"
-    metadata_path.parent.mkdir(parents=True)
-    metadata_path.write_text(
-        '{"schema_version":2,"job_key":"photos_smb","repository_key":"repo_missing"}\n',
-        encoding="utf-8",
-    )
-
-    report = repositories_api.repository_assignment_report(config)
-
-    assert report["ok"] is False
-    error = report["errors"][0]
-    assert error["code"] == "job_repository_not_found"
-    assert error["job_key"] == "photos_smb"
-    assert "Job Wizard" in error["message"]
+def test_repository_assignment_report_identifies_missing_repository(setup):
+    result, meta = create(setup)
+    meta["repository_key"] = "missing"
+    inventory_store.atomic_write_json(Path(result["metadata_path"]), meta)
+    report = repositories_api.repository_assignment_report(setup[0])
+    assert not report["ok"]
+    assert report["errors"][0] == {"code": "job_repository_not_found", "job_id": result["job_id"], "repository_key": "missing"}

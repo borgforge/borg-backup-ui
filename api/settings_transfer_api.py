@@ -19,9 +19,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from config_api import get_smb_profile_job_refs
-from job_source_paths import SourcePathValidationError, upgrade_job_source_paths
-from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
-from schedule_api import get_schedules, write_schedules
 
 
 _AUTHENTICATED_EXPORT_MAGIC = b"BBUI-AUTH-ENC-V2\n"
@@ -61,84 +58,17 @@ def _write_canonical_profile_payload(config: dict, payload: dict) -> None:
     replace_all_profile_storages(config, payload)
 
 
-def _jobs_dir(config: dict) -> Path:
-    scripts_dir = resolve_scripts_dir(config)
-    data_root = resolve_data_root(config)
-    d = get_jobs_meta_dir(scripts_dir, data_root)
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _schedules_path(config: dict) -> Path:
-    base = Path(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup"))
-    return base / "config" / "schedules.json"
-
-
-def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> dict:
-    selected = set((selected_keys or []))
-    jobs_dir = _jobs_dir(config)
-    schedules = get_schedules(config)
-    jobs: List[dict] = []
-    repository_keys: set[str] = set()
-    for p in sorted(jobs_dir.glob("*.json")):
-        try:
-            raw = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        key = str(raw.get("job_key") or p.stem).strip()
-        if selected and key not in selected:
-            continue
-        jobs.append(raw)
-        repository_key = str(raw.get("repository_key") or "").strip()
-        if repository_key:
-            repository_keys.add(repository_key)
-
-    from repositories_api import read_repository_store
-    from storage_objects_api import read_storage_store
-    repositories = [
-        row for row in read_repository_store(config).get("repositories", [])
-        if str(row.get("repository_key") or "").strip() in repository_keys
-    ]
-    storage_keys = {str(row.get("storage_key") or "").strip() for row in repositories}
-    storages = [
-        row for row in read_storage_store(config).get("storages", [])
-        if str(row.get("storage_key") or "").strip() in storage_keys
-    ]
-    passphrase_meta: Dict[str, dict] = {}
-    for repository in repositories:
-        repository_key = str(repository.get("repository_key") or "").strip()
-        pp_path = str(repository.get("passphrase_ref") or "").strip()
-        if pp_path:
-            f = Path(pp_path)
-            if f.exists() and f.is_file():
-                b = f.read_bytes()
-                passphrase_meta[repository_key] = {
-                    "path": str(f),
-                    "exists": True,
-                    "sha256": hashlib.sha256(b).hexdigest(),
-                    "size": len(b),
-                }
-            else:
-                passphrase_meta[repository_key] = {"path": pp_path, "exists": False}
-    bundle = {
-        "format": "bbui-job-bundle-v2",
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "jobs": jobs,
-        "repositories": repositories,
-        "storages": storages,
-        "schedules": {k: v for k, v in schedules.items() if not selected or k in selected},
-        "passphrase_meta": passphrase_meta,
-        "keyfile_meta": {},
-        "settings_payload": _canonical_profile_payload(config),
-    }
+def export_jobs_bundle(config: dict, selected_keys: list[str] | None = None) -> dict:
+    from job_transfer import export_bundle
+    bundle = export_bundle(config, selected_keys)
+    bundle["exported_at"] = datetime.now(timezone.utc).isoformat()
+    # Metadata contains no passphrase hashes or imported host paths.
+    bundle["passphrase_meta"] = {row["repository_key"]: {"exists": bool(row.get("passphrase_ref") and Path(row["passphrase_ref"]).is_file())}
+                                 for row in bundle["repositories"]}
     bundle["keyfile_meta"] = _collect_job_key_files(config, bundle, include_content=False)
-    text = json.dumps(bundle, indent=2, ensure_ascii=False) + "\n"
-    return {
-        "bundle": bundle,
-        "bundle_text": text,
-        "filename": f"bbui-jobs-export-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json",
-        "job_count": len(jobs),
-    }
+    return {"bundle": bundle, "bundle_text": json.dumps(bundle, indent=2, ensure_ascii=False) + "\n",
+            "filename": f"bbui-jobs-export-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json",
+            "job_count": len(bundle["jobs"])}
 
 
 def _collect_job_passphrase_files(bundle: dict) -> dict[str, dict]:
@@ -231,151 +161,11 @@ def _collect_repository_key_exports(config: dict, bundle: dict) -> dict[str, dic
     return out
 
 
-def _normalize_job_key(base: str) -> str:
-    out = "".join(ch.lower() if ch.isalnum() else "_" for ch in str(base or "").strip())
-    while "__" in out:
-        out = out.replace("__", "_")
-    return out.strip("_")
-
-
-def _resolve_import_key(existing: set[str], desired: str, mode: str) -> Tuple[str | None, str]:
-    key = _normalize_job_key(desired)
-    if not key:
-        return None, "invalid"
-    if key not in existing:
-        return key, "new"
-    if mode == "skip":
-        return None, "skipped_exists"
-    if mode == "overwrite":
-        return key, "overwrite"
-    if mode == "rename":
-        idx = 2
-        while f"{key}_{idx}" in existing:
-            idx += 1
-        return f"{key}_{idx}", "renamed"
-    return None, "skipped_exists"
-
-
-def _canonical_import_jobs(jobs: list, selected: set[str] | None = None) -> list:
-    """Upgrade old bundle jobs at the import boundary, never during runtime."""
-    normalized: list = []
-    for raw in jobs:
-        if not isinstance(raw, dict):
-            normalized.append(raw)
-            continue
-        source_key = str(raw.get("job_key") or "").strip()
-        if selected and source_key not in selected:
-            normalized.append(dict(raw))
-            continue
-        label = source_key or "<unknown>"
-        try:
-            normalized.append(upgrade_job_source_paths(raw, job_key=label))
-        except SourcePathValidationError as exc:
-            raise ValueError(
-                f"Imported job '{label}' cannot be converted to structured source paths: {exc}"
-            ) from exc
-    return normalized
-
-
-def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
-    jobs = bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []
-    schedules = bundle.get("schedules") if isinstance(bundle.get("schedules"), dict) else {}
-    pp_meta = bundle.get("passphrase_meta") if isinstance(bundle.get("passphrase_meta"), dict) else {}
-    repositories = bundle.get("repositories") if isinstance(bundle.get("repositories"), list) else []
-    storages = bundle.get("storages") if isinstance(bundle.get("storages"), list) else []
-    repo_by_key = {
-        str(row.get("repository_key") or "").strip(): row
-        for row in repositories
-        if isinstance(row, dict)
-    }
-    storage_by_key = {
-        str(row.get("storage_key") or "").strip(): row
-        for row in storages
-        if isinstance(row, dict)
-    }
-    jobs_dir = _jobs_dir(config)
-    existing = {p.stem for p in jobs_dir.glob("*.json")}
-    rows: list[dict] = []
-    for raw in jobs:
-        if not isinstance(raw, dict):
-            continue
-        src_key = str(raw.get("job_key") or "").strip()
-        key_norm = _normalize_job_key(src_key)
-        conflict = "new"
-        if not key_norm:
-            conflict = "invalid"
-        elif key_norm in existing:
-            conflict = "exists"
-        schedule = schedules.get(src_key, {})
-        feats = raw.get("features") if isinstance(raw.get("features"), dict) else {}
-        repository_key = str(raw.get("repository_key") or "").strip()
-        repository = repo_by_key.get(repository_key) or {}
-        repo_path = str(repository.get("path_display") or repository.get("path_raw") or repository.get("repo_path") or "").strip()
-        if not repo_path:
-            relative_path = str(repository.get("relative_path") or "").strip()
-            storage_key = str(repository.get("storage_key") or "").strip()
-            storage = storage_by_key.get(storage_key) or {}
-            base_path = str(storage.get("base_path") or storage.get("path") or "").strip()
-            if base_path and relative_path:
-                repo_path = f"{base_path.rstrip('/')}/{relative_path.lstrip('/')}"
-            else:
-                repo_path = relative_path
-        pp = pp_meta.get(repository_key) if isinstance(pp_meta.get(repository_key), dict) else {}
-        pp_status = "unknown"
-        pp_local = None
-        if pp:
-            pth = str(pp.get("path") or "").strip()
-            if pth:
-                lf = Path(pth)
-                if lf.exists() and lf.is_file():
-                    lb = lf.read_bytes()
-                    lhash = hashlib.sha256(lb).hexdigest()
-                    pp_local = {"path": str(lf), "sha256": lhash, "size": len(lb)}
-                    if pp.get("sha256"):
-                        pp_status = "present_match" if pp.get("sha256") == lhash else "present_mismatch"
-                    else:
-                        pp_status = "present"
-                else:
-                    pp_status = "missing"
-        rows.append({
-            "job_key": src_key,
-            "name": str(raw.get("name") or src_key),
-            "backup_type": str(raw.get("backup_type") or ""),
-            "location": str(raw.get("location") or ""),
-            "repository_key": repository_key,
-            "repository": {
-                "repository_key": repository_key,
-                "display_name": str(repository.get("display_name") or repository.get("repository_name") or repository_key),
-                "repository_name": str(repository.get("repository_name") or ""),
-                "path": repo_path,
-                "repository_id": str(repository.get("borg_repository_id") or repository.get("borg_key_repository_id") or "").strip().lower(),
-            },
-            "features": {"docker": bool(feats.get("docker")), "vm": bool(feats.get("vm"))},
-            "schedule": schedule if isinstance(schedule, dict) else {},
-            "conflict": conflict,
-            "suggested_mode": "overwrite" if conflict == "exists" else "skip",
-            "passphrase": {"status": pp_status, "bundle": pp, "local": pp_local},
-        })
-    return rows
-
-
 def preview_jobs_bundle(config: dict, bundle: dict) -> dict:
-    if not isinstance(bundle, dict):
-        raise ValueError("Invalid bundle")
-    if bundle.get("format") != "bbui-job-bundle-v2":
-        raise ValueError("Unknown bundle format")
-    normalized_bundle = dict(bundle)
-    normalized_bundle["jobs"] = _canonical_import_jobs(
-        bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []
-    )
-    rows = _job_preview_rows(config, normalized_bundle)
-    settings_preview = _preview_settings_payload(config, bundle.get("settings_payload"))
-    return {
-        "format": bundle.get("format"),
-        "job_count": len(rows),
-        "jobs": rows,
-        "settings_preview": settings_preview,
-    }
+    from job_transfer import preview_bundle
+    from legacy_job_transfer import convert_legacy_bundle
+    converted, source_ids = convert_legacy_bundle(config, bundle)
+    return {**preview_bundle(config, converted), "legacy_source_ids": source_ids, "legacy_conversion": bool(source_ids)}
 
 
 def _backup_settings_snapshot(config: dict, reason: str = "Settings-Import") -> str | None:
@@ -541,179 +331,14 @@ def _apply_settings_payload(
     return False, {"mode": "merge", "applied": applied, "conflicts": conflicts}, None
 
 
-def _apply_repository_inventory(config: dict, bundle: dict, jobs: list[dict], dry_run: bool) -> dict:
-    from repositories_api import read_repository_store, write_repository_store
-    from storage_objects_api import read_storage_store, write_storage_store
-
-    incoming_repositories = [row for row in (bundle.get("repositories") or []) if isinstance(row, dict)]
-    incoming_storages = [row for row in (bundle.get("storages") or []) if isinstance(row, dict)]
-    referenced_repository_keys = {
-        str(job.get("repository_key") or "").strip() for job in jobs if isinstance(job, dict)
-    }
-    referenced_repository_keys.discard("")
-    incoming_repositories = [
-        row for row in incoming_repositories
-        if str(row.get("repository_key") or "").strip() in referenced_repository_keys
-    ]
-    referenced_storage_keys = {
-        str(row.get("storage_key") or "").strip() for row in incoming_repositories
-    }
-    incoming_storages = [
-        row for row in incoming_storages
-        if str(row.get("storage_key") or "").strip() in referenced_storage_keys
-    ]
-
-    current_repositories = read_repository_store(config).get("repositories", [])
-    current_storages = read_storage_store(config).get("storages", [])
-    repositories_by_key = {str(row.get("repository_key") or "").strip(): row for row in current_repositories}
-    storages_by_key = {str(row.get("storage_key") or "").strip(): row for row in current_storages}
-
-    for storage in incoming_storages:
-        key = str(storage.get("storage_key") or "").strip()
-        if not key:
-            raise ValueError("Imported storage target has no key")
-        existing = storages_by_key.get(key)
-        if existing and str(existing.get("identity") or "") != str(storage.get("identity") or ""):
-            raise ValueError(f"Storage key conflict: {key}")
-        storages_by_key.setdefault(key, storage)
-
-    for repository in incoming_repositories:
-        repository = dict(repository)
-        # A keyfile path belongs to the source host. Secure imports restore the
-        # key into this host's canonical BORG_KEYS_DIR after inventory import.
-        repository.pop("keyfile_ref", None)
-        key = str(repository.get("repository_key") or "").strip()
-        if not key:
-            raise ValueError("Imported repository has no key")
-        storage_key = str(repository.get("storage_key") or "").strip()
-        if storage_key not in storages_by_key:
-            raise ValueError(f"Imported repository references an unknown storage target: {storage_key}")
-        existing = repositories_by_key.get(key)
-        incoming_identity = (
-            storage_key,
-            str(repository.get("relative_path") or "").rstrip("/"),
-        )
-        existing_identity = (
-            str((existing or {}).get("storage_key") or ""),
-            str((existing or {}).get("relative_path") or "").rstrip("/"),
-        )
-        if existing and existing_identity != incoming_identity:
-            raise ValueError(f"Repository key conflict: {key}")
-        repositories_by_key.setdefault(key, repository)
-
-    missing = sorted(key for key in referenced_repository_keys if key not in repositories_by_key)
-    if missing:
-        raise ValueError(f"Imported jobs reference missing repositories: {', '.join(missing)}")
-
-    if not dry_run:
-        write_storage_store(config, {"storages": list(storages_by_key.values())})
-        write_repository_store(config, {"repositories": list(repositories_by_key.values())})
-    return {
-        "repositories": len(incoming_repositories),
-        "storages": len(incoming_storages),
-    }
-
-
-def import_jobs_bundle(
-    config: dict,
-    bundle: dict,
-    mode: str = "skip",
-    dry_run: bool = True,
-    selected_jobs: list[str] | None = None,
-    per_job_mode: dict | None = None,
-    settings_mode: str = "merge",
-    per_profile_mode: dict | None = None,
-) -> dict:
-    if mode not in {"skip", "overwrite", "rename"}:
-        raise ValueError("Invalid import mode")
-    if not isinstance(bundle, dict):
-        raise ValueError("Invalid bundle")
-    if bundle.get("format") != "bbui-job-bundle-v2":
-        raise ValueError("Unknown bundle format")
-    if settings_mode not in {"ignore", "merge", "replace"}:
-        raise ValueError("Invalid settings import mode")
-
-    jobs = bundle.get("jobs")
-    schedules = bundle.get("schedules") if isinstance(bundle.get("schedules"), dict) else {}
-    if not isinstance(jobs, list):
-        raise ValueError("Bundle does not contain a job list")
-
-    selected_set = set(str(x).strip() for x in (selected_jobs or []) if str(x).strip())
-    jobs = _canonical_import_jobs(jobs, selected_set or None)
-    inventory_jobs = [
-        row for row in jobs
-        if isinstance(row, dict) and (not selected_set or str(row.get("job_key") or "").strip() in selected_set)
-    ]
-    inventory_report = _apply_repository_inventory(config, bundle, inventory_jobs, bool(dry_run))
-
-    jobs_dir = _jobs_dir(config)
-    existing_files = {p.stem for p in jobs_dir.glob("*.json")}
-    existing = set(existing_files)
-    report: List[dict] = []
-    applied_jobs: List[Tuple[str, dict]] = []
-    schedule_updates: Dict[str, dict] = {}
-
-    selected = selected_set
-    per_mode = per_job_mode if isinstance(per_job_mode, dict) else {}
-
-    for raw in jobs:
-        if not isinstance(raw, dict):
-            continue
-        src_key = str(raw.get("job_key") or "").strip()
-        if selected and src_key not in selected:
-            report.append({"job_key": src_key, "status": "skipped_unselected"})
-            continue
-        mode_job = str(per_mode.get(src_key, mode)).strip().lower()
-        if mode_job not in {"skip", "overwrite", "rename"}:
-            mode_job = mode
-        final_key, action = _resolve_import_key(existing, src_key, mode_job)
-        if not final_key:
-            report.append({"job_key": src_key, "status": action})
-            continue
-        patched = dict(raw)
-        patched["job_key"] = final_key
-        if final_key != src_key:
-            name = str(patched.get("name") or final_key)
-            if f"({src_key})" not in name and src_key:
-                patched["name"] = f"{name} ({final_key})"
-        applied_jobs.append((final_key, patched))
-        existing.add(final_key)
-        if src_key in schedules:
-            schedule_updates[final_key] = schedules[src_key]
-        report.append({"job_key": src_key, "new_job_key": final_key, "status": action, "mode": mode_job})
-
-    settings_applied = False
-    settings_report = {"mode": settings_mode, "applied": 0, "conflicts": 0}
-    settings_backup = None
-    settings_payload = bundle.get("settings_payload")
-    if not dry_run:
-        settings_applied, settings_report, settings_backup = _apply_settings_payload(
-            config,
-            settings_payload,
-            settings_mode=settings_mode,
-            per_profile_mode=per_profile_mode,
-        )
-
-    if not dry_run:
-        for key, raw in applied_jobs:
-            target = jobs_dir / f"{key}.json"
-            target.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        # merge schedules
-        merged = get_schedules(config)
-        merged.update(schedule_updates)
-        write_schedules(config, merged)
-
-    return {
-        "dry_run": bool(dry_run),
-        "mode": mode,
-        "report": report,
-        "imported_count": len(applied_jobs),
-        "scheduled_count": len(schedule_updates),
-        "settings_applied": settings_applied,
-        "settings_report": settings_report,
-        "settings_backup": settings_backup,
-        "repository_inventory": inventory_report,
-    }
+def import_jobs_bundle(config: dict, bundle: dict, mode: str = "new", dry_run: bool = True,
+                       selected_jobs=None, per_job_mode=None, settings_mode="ignore", per_profile_mode=None,
+                       target_jobs=None, archive_prefixes=None, legacy_source_ids=None) -> dict:
+    from job_transfer import apply_import
+    from legacy_job_transfer import convert_legacy_bundle
+    bundle, _ = convert_legacy_bundle(config, bundle, legacy_source_ids)
+    return apply_import(config, bundle, mode=mode, dry_run=dry_run, selected_jobs=selected_jobs,
+                        per_job_mode=per_job_mode, target_jobs=target_jobs, archive_prefixes=archive_prefixes)
 
 
 def _secrets_dir() -> Path:
@@ -1046,8 +671,9 @@ def _decode_encrypted_export_payload(payload_b64: str) -> bytes:
 
 def _decode_encrypted_json_payload(plaintext: bytes) -> dict:
     try:
-        payload = json.loads(plaintext.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        from job_transfer import decode_json
+        payload = decode_json(plaintext.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
         raise EncryptedExportError("encrypted_export_invalid", "Encrypted export payload is invalid") from exc
     if not isinstance(payload, dict):
         raise EncryptedExportError("encrypted_export_invalid", "Encrypted export payload is invalid")
@@ -1205,7 +831,7 @@ def export_jobs_bundle_encrypted(config: dict, password: str, selected_keys: lis
     passphrase_files = _collect_job_passphrase_files(bundle)
     key_files = _collect_job_key_files(config, bundle, include_content=True)
     payload = {
-        "format": "bbui-job-bundle-secure-v2",
+        "format": "bbui-job-bundle-secure-v3",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "bundle": bundle,
         "passphrase_files": passphrase_files,
@@ -1227,7 +853,7 @@ def preview_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str)
     enc = _decode_encrypted_export_payload(payload_b64)
     plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
     payload = _decode_encrypted_json_payload(plaintext)
-    if payload.get("format") != "bbui-job-bundle-secure-v2":
+    if payload.get("format") not in {"bbui-job-bundle-secure-v3", "bbui-job-bundle-secure-v2"}:
         raise ValueError("Unknown encrypted jobs format")
     bundle = payload.get("bundle")
     bundle = dict(bundle) if isinstance(bundle, dict) else {}
@@ -1378,173 +1004,22 @@ def import_repository_keys_backup_for_repository(
     }
 
 
-def import_jobs_bundle_encrypted(
-    config: dict,
-    password: str,
-    payload_b64: str,
-    mode: str = "skip",
-    dry_run: bool = True,
-    selected_jobs: list[str] | None = None,
-    per_job_mode: dict | None = None,
-    settings_mode: str = "merge",
-    per_profile_mode: dict | None = None,
-    import_jobs: bool = True,
-    import_passphrases: bool = True,
-    import_borg_keys: bool = False,
-) -> dict:
-    enc = _decode_encrypted_export_payload(payload_b64)
-    plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
+def import_jobs_bundle_encrypted(config: dict, password: str, payload_b64: str, mode="new", dry_run=True,
+                                 selected_jobs=None, per_job_mode=None, settings_mode="ignore", per_profile_mode=None,
+                                 import_jobs=True, import_passphrases=True, import_borg_keys=False,
+                                 target_jobs=None, archive_prefixes=None, legacy_source_ids=None) -> dict:
+    from job_transfer import apply_import
+    plaintext, encryption_format = _decrypt_encrypted_export(_decode_encrypted_export_payload(payload_b64), str(password or ""))
     payload = _decode_encrypted_json_payload(plaintext)
-    if payload.get("format") != "bbui-job-bundle-secure-v2":
-        raise ValueError("Unknown encrypted jobs format")
-    bundle = payload.get("bundle")
-    if not isinstance(bundle, dict):
-        raise ValueError("Invalid bundle")
-    passphrase_files = payload.get("passphrase_files") if isinstance(payload.get("passphrase_files"), dict) else {}
-    key_files = payload.get("key_files") if isinstance(payload.get("key_files"), dict) else {}
-    borg_key_exports = payload.get("borg_key_exports") if isinstance(payload.get("borg_key_exports"), dict) else {}
-    selected_repository_keys: set[str] = set()
-    selected_set = set(str(x).strip() for x in (selected_jobs or []) if str(x).strip())
-    if selected_set:
-        for job in bundle.get("jobs") if isinstance(bundle.get("jobs"), list) else []:
-            if not isinstance(job, dict):
-                continue
-            if str(job.get("job_key") or "").strip() not in selected_set:
-                continue
-            repository_key = str(job.get("repository_key") or "").strip()
-            if repository_key:
-                selected_repository_keys.add(repository_key)
-
-    # Secure jobs import intentionally ignores settings payload.
-    bundle = dict(bundle)
-    bundle.pop("settings_payload", None)
-    if import_jobs:
-        result = import_jobs_bundle(
-            config,
-            bundle,
-            mode=mode,
-            dry_run=dry_run,
-            selected_jobs=selected_jobs,
-            per_job_mode=per_job_mode,
-            settings_mode="ignore",
-            per_profile_mode=per_profile_mode,
-        )
-    else:
-        result = {
-            "dry_run": bool(dry_run),
-            "mode": mode,
-            "report": [],
-            "imported_count": 0,
-            "scheduled_count": 0,
-            "settings_applied": False,
-            "settings_report": {"mode": "ignore", "applied": 0, "conflicts": 0},
-            "settings_backup": None,
-        }
-
-    restored = 0
-    if not dry_run and import_passphrases and passphrase_files:
-        from repositories_api import read_repository_store
-        repositories = {
-            str(row.get("repository_key") or "").strip(): row
-            for row in read_repository_store(config).get("repositories", [])
-        }
-        for repository_key, raw_file in passphrase_files.items():
-            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
-                continue
-            pf = raw_file if isinstance(raw_file, dict) else None
-            if not pf:
-                continue
-            repository = repositories.get(str(repository_key or "").strip())
-            if not repository:
-                continue
-            pp_path = str(repository.get("passphrase_ref") or "").strip()
-            if not pp_path:
-                continue
-            try:
-                content = base64.b64decode(str(pf.get("content_b64") or "").encode("ascii"), validate=False)
-            except Exception:
-                continue
-            target = Path(pp_path)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
-            os.chmod(target, 0o600)
-            restored += 1
-    result["restored_passphrases"] = restored
-    restored_keys = 0
-    if not dry_run and import_passphrases and key_files:
-        from borg_key_store import ensure_borg_keys_dir, find_key_file, repository_id_from_key_file
-        from repositories_api import read_repository_store, write_repository_store
-
-        store = read_repository_store(config)
-        repositories = {
-            str(row.get("repository_key") or "").strip(): row
-            for row in store.get("repositories", [])
-        }
-        changed = False
-        for repository_key, raw_file in key_files.items():
-            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
-                continue
-            key_row = raw_file if isinstance(raw_file, dict) else {}
-            repository = repositories.get(str(repository_key or "").strip())
-            if not repository or not key_row.get("exists"):
-                continue
-            expected_id = str(repository.get("borg_repository_id") or key_row.get("repository_id") or "").strip().lower()
-            if not expected_id or expected_id != str(key_row.get("repository_id") or "").strip().lower():
-                continue
-            try:
-                content = base64.b64decode(str(key_row.get("content_b64") or "").encode("ascii"), validate=False)
-            except Exception:
-                continue
-            if len(content) > 1024 * 1024:
-                continue
-            key_dir = ensure_borg_keys_dir(config)
-            current = find_key_file(key_dir, expected_id)
-            if current is None:
-                target = key_dir / f"bbui-{expected_id}"
-                if target.exists():
-                    continue
-                target.write_bytes(content)
-                os.chmod(target, 0o600)
-                if repository_id_from_key_file(target) != expected_id:
-                    target.unlink(missing_ok=True)
-                    continue
-                current = target
-                restored_keys += 1
-            elif current.read_bytes() != content:
-                continue
-            repository["keyfile_ref"] = str(current)
-            changed = True
-        if changed:
-            write_repository_store(config, {"repositories": list(repositories.values())})
-    result["restored_keyfiles"] = restored_keys
-    restored_borg_key_exports = 0
-    skipped_borg_key_exports = 0
-    if not dry_run and import_borg_keys and borg_key_exports:
-        from repositories_api import import_repository_key
-
-        for repository_key, raw_file in borg_key_exports.items():
-            if selected_repository_keys and str(repository_key or "").strip() not in selected_repository_keys:
-                continue
-            key_row = raw_file if isinstance(raw_file, dict) else {}
-            if not key_row.get("exists"):
-                skipped_borg_key_exports += 1
-                continue
-            try:
-                content = base64.b64decode(str(key_row.get("content_b64") or "").encode("ascii"), validate=False)
-            except Exception:
-                skipped_borg_key_exports += 1
-                continue
-            if not content or len(content) > 1024 * 1024:
-                skipped_borg_key_exports += 1
-                continue
-            try:
-                import_repository_key(config, str(repository_key or ""), content.decode("utf-8", "replace"))
-            except Exception:
-                skipped_borg_key_exports += 1
-                continue
-            restored_borg_key_exports += 1
-    result["restored_borg_key_exports"] = restored_borg_key_exports
-    result["skipped_borg_key_exports"] = skipped_borg_key_exports
+    if payload.get("format") not in {"bbui-job-bundle-secure-v3", "bbui-job-bundle-secure-v2"}:
+        raise ValueError("A v3 job export from a migrated installation is required")
+    if import_borg_keys or payload.get("borg_key_exports"):
+        raise ValueError("Use the separate repository-key recovery workflow for Borg repository changes")
+    from legacy_job_transfer import convert_legacy_bundle
+    bundle, _ = convert_legacy_bundle(config, payload.get("bundle"), legacy_source_ids)
+    result = apply_import(config, bundle, mode=mode, dry_run=dry_run, selected_jobs=selected_jobs,
+                          per_job_mode=per_job_mode, target_jobs=target_jobs, archive_prefixes=archive_prefixes,
+                          import_jobs=import_jobs, secret_payload=payload if import_passphrases else None)
     result.update(_encryption_preview_metadata(encryption_format))
     return result
 

@@ -216,14 +216,15 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
         from repository_context import load_repository_inventory
         repository_inventory = load_repository_inventory(config)
     except Exception as exc:
-        repository_inventory_error = str(exc)
+        repository_inventory_error = "Repository inventory is invalid; inspect identity integrity findings"
 
     for meta_file in job_files:
         try:
-            raw = json.loads(meta_file.read_text(encoding="utf-8"))
+            from job_store import read_json
+            raw = read_json(meta_file)
         except Exception as exc:
             items.append({
-                "job_key": meta_file.stem,
+                "job_id": meta_file.stem,
                 "name": meta_file.stem,
                 "state": "bad",
                 "errors": [f"Job metadata is not readable: {exc}"],
@@ -233,8 +234,8 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             continue
         if not isinstance(raw, dict):
             continue
-        job_key = str(raw.get("job_key") or meta_file.stem).strip()
-        name = str(raw.get("name") or job_key).strip()
+        job_id = str(raw.get("job_id") or "").strip()
+        name = str(raw.get("name") or job_id).strip()[:160]
         location = str(raw.get("location") or "").strip().lower()
         errors: list[str] = []
         error_details: list[dict] = []
@@ -252,17 +253,17 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
                 from repository_context import resolve_job_repository_context
                 repository_context = resolve_job_repository_context(
                     config,
-                    job_key,
+                    job_id,
                     job=raw,
                     inventory=repository_inventory,
                 )
                 location = str(repository_context.get("location") or location)
             except Exception as exc:
-                add_error("repository_context_invalid", str(exc))
+                add_error("repository_context_invalid", "Repository context could not be validated")
 
         try:
             from job_source_paths import normalize_source_paths
-            source_paths = normalize_source_paths(raw.get("source_paths"), field=f"Job '{job_key}' source_paths")
+            source_paths = normalize_source_paths(raw.get("source_paths"), field=f"Job '{job_id}' source_paths")
             missing = [p for p in source_paths if not Path(p).exists()]
             if missing:
                 add_error("source_paths_not_found", f"{len(missing)} source path(s) do not exist", count=len(missing))
@@ -279,7 +280,7 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
 
         state = "bad" if errors else ("warn" if warnings else "ok")
         items.append({
-            "job_key": job_key,
+            "job_id": job_id,
             "name": name,
             "location": location,
             "state": state,
@@ -479,6 +480,8 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         perm_msg = "No secret files were found for permission checks."
     elif bad_perm:
         perm_msg = f"{len(bad_perm)} file(s) have unexpected permissions."
+    from identity_lifecycle import identity_health
+    identity_integrity = identity_health(config)
     job_health = _collect_job_health(config, jobs_dir)
     try:
         runtime_lib = Path(__file__).resolve().parents[1] / "runtime" / "lib"
@@ -510,6 +513,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
             "secrets_permissions_ok": secrets_permissions_ok,
             "canonical_inventories_ok": inventories_ok,
             "repository_assignments_ok": bool(repository_assignments.get("ok", False)),
+            "identity_integrity_ok": identity_integrity["ok"],
         },
         "paths": {
             "data_root": str(root),
@@ -529,6 +533,7 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "migration_backup_cleanup": migration_backup_cleanup,
         "startup_state": startup_state,
         "job_health": job_health,
+        "identity_integrity": identity_integrity,
         "runtime_recovery": runtime_recovery,
         "notification_delivery": notification_delivery,
         "secrets_permissions": {
