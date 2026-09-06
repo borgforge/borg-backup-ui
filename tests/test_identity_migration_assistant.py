@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import sys
+import threading
 import pytest
 from identity_contract_support import ROOT, load_cases, materialize, tree_bytes
 sys.path.insert(0, str(ROOT / "api"))
@@ -143,6 +144,90 @@ def test_unavailable_snapshot_mount_does_not_persist_location_or_ids(installatio
     status = assistant.prepare({'state_dir':'/mnt/disks/identity-test-unavailable/backup'}, background=False)
     assert status['status'] == 'blocked'
     assert not assistant.selector.exists()
+
+
+def test_preparing_is_visible_while_read_only_planning_is_running(installation, monkeypatch):
+    from migrations import immutable_job_id_v1 as identity
+    root, _, assistant, _, _ = installation
+    planning = threading.Event()
+    finish = threading.Event()
+    build = identity.build_plan
+
+    def slow_plan(*args, **kwargs):
+        planning.set()
+        assert finish.wait(5)
+        return build(*args, **kwargs)
+
+    monkeypatch.setattr(identity, "build_plan", slow_plan)
+    try:
+        result = assistant.prepare({"state_dir": str(root / "migration")})
+        assert planning.wait(5)
+        assert result["busy"] is True
+        assert result["stage"] == "preparing"
+        assert assistant.status()["stage"] == "preparing"
+        assert not (root / "migration").exists()
+        assert not assistant.selector.exists()
+    finally:
+        finish.set()
+        assert assistant._operation.acquire(timeout=5)
+        assistant._operation.release()
+    assert assistant.status()["stage"] == "backup_ready"
+
+
+def test_invalid_destination_is_reported_before_plan_or_cron_read(installation):
+    root, config, assistant, _, _ = installation
+    block_writers(config)
+    before = tree_bytes(root)
+    assistant.read_cron = lambda: pytest.fail("invalid destination reached planning")
+    result = assistant.prepare({"state_dir": "/boot/config/identity-backup"}, background=False)
+    assert result["reason_codes"] == ["persistent_private_storage_required"]
+    assert result["last_preparation"]["reason_codes"] == result["reason_codes"]
+    assert tree_bytes(root) == before
+
+
+def test_failed_preparation_remains_visible_after_readiness_retry_until_explicit_retry(installation):
+    from identity_startup_watch import retry_startup_once
+    root, config, assistant, _, _ = installation
+    result = assistant.prepare({"state_dir": "/boot/config/identity-backup"}, background=False)
+    failure = result["last_preparation"]
+    assert failure["status"] == "blocked"
+    assert failure["updated_at"]
+    assert not assistant.selector.exists()
+    before = tree_bytes(root)
+    assert retry_startup_once(config, assistant=assistant, storage_ready=lambda _: True,
+        activate=lambda _: pytest.fail("preparation failure bypassed migration consent")) == "waiting"
+    assert assistant.status()["last_preparation"] == failure
+    assert tree_bytes(root) == before
+    result = prepare(installation)
+    assert result["stage"] == "backup_ready"
+    assert "last_preparation" not in result
+
+
+def test_blocked_plan_retains_safe_failure_without_creating_destination(installation):
+    root, config, assistant, _, _ = installation
+    block_writers(config)
+    source = root / "data/config/jobs/config_local.json"
+    record = json.loads(source.read_text())
+    record["schema_version"] = 99
+    source.write_text(json.dumps(record))
+    before = tree_bytes(root)
+    result = prepare(installation)
+    assert result["last_preparation"]["reason_codes"] == ["unsupported_schema"]
+    assert not assistant.selector.exists()
+    assert not (root / "migration").exists()
+    assert tree_bytes(root) == before
+
+
+def test_preparation_failure_never_returns_raw_exception_details(installation):
+    _, _, assistant, _, _ = installation
+
+    def unavailable_cron():
+        raise OSError("synthetic password=must-not-be-returned")
+
+    assistant.read_cron = unavailable_cron
+    result = prepare(installation)
+    assert result["last_preparation"]["reason_codes"] == ["migration_operation_failed"]
+    assert "must-not-be-returned" not in json.dumps(result)
 
 
 def test_failed_apply_requires_restart_before_original_plan_retry(installation, monkeypatch):

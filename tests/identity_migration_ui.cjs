@@ -18,6 +18,7 @@ async function run(language) {
     return value.replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''));
   };
   let server = { ...base }, fail = false, postFailure = false, resolvePost = null, reloads = 0;
+  let prepareBlocked = false, httpFailure = null;
   let updates = 0, html = '', fieldValue = null;
   const timers = new Map(), calls = [], listeners = {};
   const host = {
@@ -37,6 +38,12 @@ async function run(language) {
       if (options.method === 'POST') {
         if (postFailure) throw new Error('connection interrupted');
         if (resolvePost) await new Promise(resolve => resolvePost.resolve=resolve);
+        if (httpFailure) return { ok: false, status: 400, json: async () => httpFailure };
+        if (prepareBlocked) {
+          server = {...base, status:'blocked', reason_codes:['invalid_identity_descriptor'],
+            last_preparation:{status:'blocked',reason_codes:['invalid_identity_descriptor']}};
+          return {ok:true,json:async()=>server};
+        }
         if (url.endsWith('/prepare')) server={...backup};
         if (url.endsWith('/acknowledge')) server={...server,stage:'acknowledged'};
         if (url.endsWith('/apply')) server={...server,stage:'applying',busy:true};
@@ -56,6 +63,37 @@ async function run(language) {
   const unchanged=updates;
   await assistant.refresh();
   assert.equal(updates,unchanged,'unchanged polling does not replace the form');
+  for (const invalid of ['', 'relative/path']) {
+    fieldValue=invalid; await click('prepare');
+    assert.equal(posts().length,0,'missing/relative paths never silently choose a server default');
+    assert.ok(html.includes(t('settings.identityMigration.pathRequired')));
+    assert.equal(fieldValue,invalid,'validation preserves an intentionally empty path');
+    await click('prepare');
+    assert.equal(posts().length,0,'repeated validation never restores a default path');
+  }
+  fieldValue='/mnt/cache/private/selected';
+  prepareBlocked=true; resolvePost={};
+  const blockedRequest=click('prepare');
+  assert.ok(html.includes(t('settings.identityMigration.requestPending')),'click gives immediate feedback');
+  resolvePost.resolve(); await blockedRequest; resolvePost=null; prepareBlocked=false;
+  assert.ok(html.includes(t('settings.identityMigration.preparationFailed')));
+  assert.ok(html.includes(t('settings.identityMigration.reasons.invalid_identity_descriptor')));
+  server={...server,status:'pending',reason_codes:Array(6).fill('invalid_identity_descriptor')};
+  await assistant.refresh();
+  assert.ok(html.includes(t('settings.identityMigration.preparationFailed')),'readiness polling retains last failed preparation');
+  assert.ok(html.includes(t('settings.identityMigration.reasonCount',{count:6})));
+  assert.equal(html.split('Diagnosecode: invalid_identity_descriptor').length-1,language==='de'?2:0,
+    'duplicate current reasons become one row, alongside the last preparation result');
+  httpFailure={code:'invalid_request',message:'original_migration_location_required'};
+  await click('prepare'); httpFailure=null;
+  assert.ok(html.includes(t('settings.identityMigration.reasons.original_migration_location_required')));
+  await assistant.refresh();
+  assert.ok(html.includes(t('settings.identityMigration.reasons.original_migration_location_required')),'polling retains action errors');
+  httpFailure={code:'invalid_request',message:'password=do-not-display'};
+  await click('prepare'); httpFailure=null;
+  assert.ok(!html.includes('do-not-display'),'arbitrary server error text is not shown');
+  assert.ok(html.includes(t('settings.identityMigration.requestFailed',{status:400})));
+  server={...base}; await assistant.refresh(); calls.length=0;
   fieldValue='/mnt/cache/private/selected';
   await click('prepare');
   assert.deepEqual(posts().at(-1).body,{state_dir:'/mnt/cache/private/selected'});

@@ -18,6 +18,14 @@ Lass laufende Backups, Wiederherstellungen, Tests und Benachrichtigungen sicher 
 
 Geänderte Quelldaten oder eine geänderte Sicherung machen die bisherige Freigabe ungültig. Der Assistent kann den Plan nicht stillschweigend unter einer früheren Bestätigung ersetzen. Bewahre die vorhandenen Wiederherstellungsdaten auf und beachte die angezeigten Diagnosehinweise.
 
+### Sicherungsort und Diagnosehinweise
+
+Das Pfadfeld ist eine freie Eingabe. Verwende für die erste Vorbereitung ein eigenes neues Unterverzeichnis unter einem bereits vorhandenen Verzeichnis auf dauerhaftem Speicher. Die Anwendung legt das neue Unterverzeichnis mit privaten Dateirechten an. Die Eingabe allein bestätigt weder einen eingehängten Speicher noch passende Dateirechte; die Vorbereitung prüft beides serverseitig. Bereits vorhandene Daten werden nicht durch eine andere Ordnerwahl repariert.
+
+Nach **Migration vorbereiten** zeigt der Assistent die laufende Anfrage und anschließend den Vorbereitungsstand oder einen verständlichen Fehler. Der letzte fehlgeschlagene Versuch bleibt auch bei automatischen Statusprüfungen sichtbar, bis du die Vorbereitung erneut startest; ohne gespeicherten Migrationsort gilt dies bis zum Plugin-Neustart. Gleiche Diagnosecodes werden mit der Anzahl ihrer Meldungen zusammengefasst. Diese Anzahl entspricht nicht zwingend der Zahl betroffener Jobs.
+
+`invalid_identity_descriptor` bedeutet, dass gespeicherte Job- oder Laufdaten unvollständige oder ungültig formatierte Angaben zur bisherigen Zuordnung enthalten. Der Code betrifft nicht den Sicherungsordner. Gültige ältere Restore-Test-Berichte mit `type` und `location` werden bei der Migration berücksichtigt. Bleibt der Code sichtbar, bewahre die Daten auf und melde ihn zusammen mit dem angezeigten Schritt; ändere die Zuordnungsfelder nicht von Hand.
+
 ## Browser schließen oder Plugin neu starten
 
 Du kannst den Browser schließen und später den gespeicherten Schritt ansehen. Eine bereits freigegebene Aktion kann auf dem Server weiterlaufen; beim erneuten Öffnen wird sie nicht erneut gestartet. Ein Neustart erhält die ursprünglich vergebenen Identitäten, den Plan, die Sicherung und das Journal und gibt die Umstellung nicht automatisch frei.

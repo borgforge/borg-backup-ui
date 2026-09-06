@@ -173,6 +173,7 @@ class IdentityMigrationAssistant:
         self._busy = False
         self._failed_here = False
         self._view = {"status": "pending", "stage": "required", "reason_codes": []}
+        self._last_preparation = None
         self._snapshot_view = None
         self._snapshot_signature = None
 
@@ -325,6 +326,9 @@ class IdentityMigrationAssistant:
     def status(self):
         with self._view_lock:
             result = dict(self._view)
+            if self._last_preparation is not None:
+                result["last_preparation"] = {**self._last_preparation,
+                    "reason_codes": list(self._last_preparation["reason_codes"])}
         result.update(migration_id=MIGRATION_ID, busy=self._busy, restart_required=self._failed_here,
                       can_resume=False, can_prepare=not self._busy and not self._failed_here, suggested_state_dir=str(_root(self.config) / ".identity-migration-v1"))
         try:
@@ -356,10 +360,15 @@ class IdentityMigrationAssistant:
             result.update(status="blocked", reason_codes=[_safe_code(exc)], can_resume=False, can_prepare=False)
         return result
 
-    def _launch(self, fn, *, background=True):
+    def _launch(self, fn, *, background=True, stage=None):
         if not self._operation.acquire(blocking=False):
             return self.status()
         self._busy = True
+        if stage is not None:
+            with self._view_lock:
+                self._view.update(status="pending", stage=stage, reason_codes=[])
+                if stage == "preparing":
+                    self._last_preparation = None
         def run():
             try:
                 fn()
@@ -383,7 +392,7 @@ class IdentityMigrationAssistant:
             meta = self._meta(state)
             if meta and (meta.get("acknowledged") or meta["stage"] in {"backup_ready", "complete"}):
                 _fail("existing_preparation_must_be_preserved")
-        return self._launch(lambda: self._prepare(requested), background=background)
+        return self._launch(lambda: self._prepare(requested), background=background, stage="preparing")
 
     def _prepare(self, requested):
         from migration_barrier import block_writers, exclusive_migration
@@ -391,6 +400,9 @@ class IdentityMigrationAssistant:
         try:
             block_writers(self.config)
             with exclusive_migration(self.config):
+                # Validate the requested location without creating it, so an
+                # unrelated planning blocker cannot hide invalid path input.
+                validated_state = self._validate_location(requested)
                 existing = self._state_dir()
                 initial_plan = None
                 if existing is None:
@@ -399,7 +411,7 @@ class IdentityMigrationAssistant:
                     initial_plan = identity.build_plan(self.config, control_root=_control_root(self.config), cron_text=cron_text)
                     if initial_plan["classification"] != "applicable":
                         _fail("migration_not_applicable" if not initial_plan["required"] else next((row["code"] for row in initial_plan.get("reasons", []) if row.get("code") in REASONS), "invalid_plan"))
-                state = self._validate_location(requested)
+                state = validated_state
                 storage._private_directory(state, create=True)
                 self._validate_state_layout(state)
                 # Verify private durable publication semantics before allocating UUIDs.
@@ -449,7 +461,13 @@ class IdentityMigrationAssistant:
                 self._save(state, stage="backup_ready", plan_id=plan["plan_id"], snapshot_digest=snapshot["digest"], reason_codes=[])
         except Exception as exc:
             code = _safe_code(exc)
-            self._view = {"status": "blocked", "stage": "waiting" if code in {"writers_active", "writers_running", "legacy_workers_running"} else "required", "reason_codes": [code]}
+            with self._view_lock:
+                self._view = {"status": "blocked", "stage": "waiting" if code in {"writers_active", "writers_running", "legacy_workers_running"} else "required", "reason_codes": [code]}
+                # Readiness keeps rescanning the installation. Retain the
+                # explicit action's safe result separately for browser polls,
+                # including failures before a persistent location exists.
+                self._last_preparation = {"status": "blocked", "reason_codes": [code],
+                    "updated_at": datetime.now(timezone.utc).isoformat()}
             if state and (state / "assistant.json").is_file():
                 self._save(state, **self._view)
 

@@ -18,6 +18,14 @@ Allow running backup, restore, test and notification work to finish safely. Ensu
 
 Changed source data or a changed backup invalidates previous approval. The assistant cannot silently replace the plan under an earlier confirmation. Preserve existing recovery data and follow the displayed diagnostic information.
 
+### Backup location and diagnostic messages
+
+The path field accepts free text. For the first preparation, use a dedicated new subdirectory under an existing directory on persistent storage. The application creates the new subdirectory with private permissions. Entering a path does not confirm that storage is mounted or permissions are suitable; preparation checks both on the server. Choosing another directory cannot repair existing installation data.
+
+After **Prepare migration**, the assistant shows the pending request followed by preparation progress or a readable error. The last failed attempt remains visible through automatic status checks until you start preparation again; without a saved migration location, this lasts until the plugin restarts. Repeated diagnostic codes are grouped with their report count. This count is not necessarily the number of affected jobs.
+
+`invalid_identity_descriptor` means that stored job or run data has missing or malformed legacy job descriptors. It does not refer to the backup directory. Valid older restore-test reports using `type` and `location` are supported by the migration. If the code persists, preserve the data and report it with the displayed stage; do not edit identity fields manually.
+
 ## Closing the browser or restarting
 
 You may close the browser and return to observe the saved stage. A previously authorized operation can continue on the server; reopening the page does not submit it again. A restart retains the original allocated identities, plan, backup and journal and does not automatically approve application.

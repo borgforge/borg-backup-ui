@@ -26,6 +26,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   setup dialog and prevent delayed responses from reopening it. Fresh installs
   retain the normal required setup flow (#479).
 - Stable promotion remains a separate decision after volunteer/maintainer testing.
+- Accept the shipped restore-test type/location descriptors during identity
+  migration and retain canonical report snapshots after subsequent tests/restarts.
+  Show immediate preparation feedback, retain safe failure details through
+  readiness polling, and group/explain diagnostics in German and English (#447).
 
 ### Issue #478 (integration work for #447; not released)
 - Added versioned ID-based job transfer with explicit new/merge/skip choices,

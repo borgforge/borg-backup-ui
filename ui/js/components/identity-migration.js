@@ -12,7 +12,8 @@
   let request = null;
   let acting = false;
   let error = '';
-  let path = '';
+  let statusError = '';
+  let path = null;
   let checkedBinding = '';
   let rendered = '';
 
@@ -69,7 +70,7 @@
     if (!host?.isConnected) return;
     rememberInputs();
     const data = current;
-    const signature = JSON.stringify([data, acting, error, checkedBinding]);
+    const signature = JSON.stringify([data, acting, error, statusError, checkedBinding]);
     if (rendered === signature) return;
     rendered = signature;
     if (data?.status === 'not_applicable') {
@@ -88,7 +89,8 @@
     const activeElement = window.document?.activeElement;
     const focusSelector = host.contains(activeElement) && activeElement?.matches?.('[data-identity-path], [data-identity-ack]')
       ? (activeElement.matches('[data-identity-path]') ? '[data-identity-path]' : '[data-identity-ack]') : '';
-    const codes = Array.isArray(data?.reason_codes) ? data.reason_codes.filter(value => typeof value === 'string').slice(0, 20) : [];
+    const codes = reasonItems(data?.reason_codes);
+    const preparationCodes = data?.last_preparation?.status === 'blocked' ? reasonItems(data.last_preparation.reason_codes) : '';
     const steps = ['stepRequired', 'stepPrepare', 'stepBackup', 'stepApply'];
     const index = stepIndex(data);
     const downloadUrl = `${endpoint}/snapshot?plan_id=${encodeURIComponent(String(data?.plan_id || ''))}&snapshot_digest=${encodeURIComponent(String(data?.snapshot_digest || ''))}`;
@@ -101,12 +103,15 @@
           <strong>${escape(t(data ? `stage.${selectedStage}` : 'loading'))}</strong>
           ${data ? `<p>${escape(t(`hint.${selectedStage}`))}</p>` : ''}
           ${progress && ['applying', 'verifying', 'interrupted', 'complete'].includes(selectedStage) ? `<progress value="${count}" max="${total}"></progress><span>${escape(t('progress', { completed: count, total }))}</span>` : ''}
-          ${codes.length ? `<details open><summary>${escape(t('details'))}</summary><ul>${codes.map(code => `<li>${escape(reason(code))}</li>`).join('')}</ul></details>` : ''}
+          ${codes ? `<details open><summary>${escape(t('details'))}</summary><ul>${codes}</ul></details>` : ''}
         </div>
+        ${acting ? `<p role="status" aria-live="polite">${escape(t('requestPending'))}</p>` : ''}
+        ${preparationCodes ? `<div class="status-message error" role="alert"><strong>${escape(t('preparationFailed'))}</strong><ul>${preparationCodes}</ul></div>` : ''}
         ${error ? `<p class="status-message error" role="alert">${escape(error)}</p>` : ''}
+        ${statusError ? `<p class="status-message error" role="alert">${escape(statusError)}</p>` : ''}
         ${canPrepare(data) ? `<div class="identity-migration-prepare">
           <label class="form-label" for="identity-migration-path">${escape(t('pathLabel'))}</label>
-          <input class="form-input" id="identity-migration-path" data-identity-path type="text" value="${escape(data.state_dir || path || data.suggested_state_dir || '')}" autocomplete="off" spellcheck="false" aria-describedby="identity-migration-path-hint"${busy ? ' disabled' : ''}${data.state_dir ? ' readonly' : ''}>
+          <input class="form-input" id="identity-migration-path" data-identity-path type="text" value="${escape(data.state_dir || (path ?? data.suggested_state_dir ?? ''))}" autocomplete="off" spellcheck="false" aria-describedby="identity-migration-path-hint"${busy ? ' disabled' : ''}${data.state_dir ? ' readonly' : ''}>
           <p id="identity-migration-path-hint" class="text-muted">${escape(t('pathHint'))}</p>
           <button type="button" class="btn btn-primary" data-identity-action="prepare"${busy ? ' disabled' : ''}>${escape(t(data.state_dir ? 'resumePreparation' : 'prepare'))}</button>
         </div>` : ''}
@@ -137,6 +142,15 @@
     const translated = window.BBUI.components.i18n.t(key);
     return translated === key ? t('reasonCode', { code }) : translated;
   }
+  function reasonItems(values) {
+    const counts = new Map();
+    if (Array.isArray(values)) values.filter(value => typeof value === 'string').forEach(code => counts.set(code, (counts.get(code) || 0) + 1));
+    return [...counts].slice(0, 20).map(([code, count]) => {
+      const description = reason(code);
+      const diagnostic = t('reasonCode', { code });
+      return `<li>${escape(description)}${count > 1 ? ` (${escape(t('reasonCount', { count }))})` : ''}${description !== diagnostic ? `<br><small>${escape(diagnostic)}</small>` : ''}</li>`;
+    }).join('');
+  }
   function formatBytes(value) {
     const bytes = Number(value);
     if (!Number.isFinite(bytes) || bytes < 0) return t('unavailable');
@@ -150,7 +164,7 @@
     }
     if (binding(data) !== binding(current)) checkedBinding = '';
     current = data;
-    error = '';
+    statusError = '';
     render();
   }
   async function readStatus() {
@@ -161,7 +175,7 @@
   async function refresh() {
     if (request || acting) return request;
     request = readStatus().catch(() => {
-      error = t('statusUnavailable');
+      statusError = t('statusUnavailable');
       // Retain the last known progress, but disable mutations until revalidated.
       if (current) current = { ...current, busy: true };
       render();
@@ -181,6 +195,12 @@
     if (action === 'acknowledge' && (!canAcknowledge(current) || checkedBinding !== displayedBinding)) return;
     if (action === 'apply' && !canApply(current)) return;
     if (!['prepare', 'acknowledge', 'apply'].includes(action)) return;
+    error = '';
+    if (action === 'prepare' && !current.state_dir && !path.trim().startsWith('/')) {
+      error = t('pathRequired');
+      render();
+      return;
+    }
     acting = true;
     clearTimeout(timer);
     render();
@@ -197,8 +217,12 @@
       const response = await fetch(`${endpoint}/${action}`, { method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) {
+        const failure = await response.json().catch(() => ({}));
+        // Only translate known reason codes; arbitrary response text may contain secrets.
+        const failureCode = [failure.code, failure.message].find(code => typeof code === 'string'
+          && window.BBUI.components.i18n.t(`settings.identityMigration.reasons.${code}`) !== `settings.identityMigration.reasons.${code}`);
         await readStatus();
-        throw new Error(t('requestFailed', { status: response.status }));
+        throw new Error(failureCode ? reason(failureCode) : t('requestFailed', { status: response.status }));
       }
       accept(await response.json());
     } catch (failure) {

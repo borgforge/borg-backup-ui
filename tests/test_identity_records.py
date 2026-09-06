@@ -141,6 +141,51 @@ def test_restore_test_filename_move_keeps_tested_scope():
     assert all(output(result)[key] == value for key, value in data.items())
 
 
+def test_shipped_restore_test_descriptors_migrate_without_changing_evidence():
+    data = {"report_schema_version": 1, "type": "config", "location": "local",
+            "test_date": "2026-08-31 08:10:00", "test_result": "success",
+            "tested_archive": "config-backup-archive", "repository": "/fixture/repository"}
+    before = deepcopy(data)
+    result = project("restore_test", data, legacy_key="config_local", target_path=f"/fixture/tests/{JOB}.test")
+    assert not codes(result)
+    assert output(result) == {**data, "schema_version": 1, "job_id": JOB}
+    assert data == before
+    assert verify_records(result["records"], JOBS, ALIASES) == []
+    again = project_records(result["records"], JOBS, ALIASES)
+    assert output(again) == output(result)
+
+
+def test_conflicting_legacy_restore_test_descriptors_remain_unassigned():
+    data = {"type": "different", "location": "local", "test_result": "success"}
+    result = project("restore_test", data, legacy_key="config_local", target_path=f"/fixture/tests/{JOB}.test")
+    assert not codes(result)
+    assert "job_id" not in output(result)
+    assert output(result)["identity_reason"] == "conflicting_identity_evidence"
+    assert all(output(result)[key] == value for key, value in data.items())
+    assert verify_records(result["records"], JOBS, ALIASES) == []
+
+
+@pytest.mark.parametrize("descriptor", [
+    {"type": "config"}, {"location": "local"}, {"type": "", "location": "local"},
+    {"type": "config", "location": None}, {"type": [], "location": "local"},
+])
+def test_incomplete_restore_test_descriptors_still_block(descriptor):
+    result = project("restore_test", descriptor, legacy_key="config_local")
+    assert codes(result) == {"invalid_identity_descriptor"}
+    assert output(result) == descriptor
+
+
+@pytest.mark.parametrize("backup_type", ["config-backup", "renamed-prefix"])
+def test_canonical_restore_test_type_is_evidence_not_a_legacy_alias(backup_type):
+    data = {"job_id": JOB, "type": backup_type, "location": "local", "test_result": "success",
+            "archive_prefix_snapshot": backup_type, "location_snapshot": "local"}
+    records = {f"/fixture/tests/{JOB}.test": rec("restore_test", data, legacy_key=JOB)}
+    result = project_records(records, JOBS, ALIASES)
+    assert not codes(result)
+    assert output(result) == data
+    assert verify_records(records, JOBS, ALIASES) == []
+
+
 def test_restore_history_and_active_runs_keep_independent_restore_ids():
     row = {"restore_id": "restore-example", "state": "done", "job_key": "config_local", "archive": "old-archive"}
     records = {"/fixture/index": rec("restore_index", {"schema_version": 1, "runs": [row]}),

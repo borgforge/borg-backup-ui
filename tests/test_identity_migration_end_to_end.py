@@ -5,9 +5,64 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 
 from test_identity_migration_assistant import installation, prepare, binding
 from identity_contract_support import ROOT
+
+
+def test_restore_proof_migrates_and_native_report_remains_valid_on_restart(installation, monkeypatch):
+    root, config, assistant, _, _ = installation
+    from job_store import read_json, read_jobs
+    from test_restore_test_runner_profiles import _load_restore_runner
+
+    proof_dir = Path(config['RESTORE_TEST_STATUS_DIR'])
+    proof_dir.mkdir()
+    legacy_path = proof_dir / 'config_local.test'
+    legacy = {'report_schema_version': 1, 'type': 'config', 'location': 'local',
+              'repository': str(root / 'repositories/repo_docs'),
+              'test_date': '2026-08-31 08:10:00', 'test_result': 'success',
+              'tested_archive': 'config-backup-2026-08-31_08-00-00', 'tested_entries': ['original.txt']}
+    legacy_path.write_text(json.dumps(legacy))
+    original_bytes = legacy_path.read_bytes()
+    detected = assistant.startup_detection()
+    assert detected['classification'] == 'applicable', detected
+    status = prepare(installation)
+    assert status['stage'] == 'backup_ready', status
+    assert legacy_path.read_bytes() == original_bytes
+    assistant.acknowledge({**binding(status), 'independent_backup_ack': True})
+    migrated = assistant.apply(binding(status), background=False)
+    assert migrated['status'] == 'applied', migrated
+    job_id = next(iter(read_jobs(root / 'data/config/jobs')))
+    proof_path = proof_dir / f'{job_id}.test'
+    assert read_json(proof_path) == {**legacy, 'schema_version': 1, 'job_id': job_id}
+    assert not legacy_path.exists()
+    assert assistant.startup_detection()['required'] is False
+
+    # Exercise the actual current result writer: its type contains an archive
+    # prefix, not the backup_type that identified pre-migration jobs.
+    runner = _load_restore_runner()
+    monkeypatch.setenv('BORG_UI_DATA_ROOT', str(root / 'data'))
+    monkeypatch.setattr(runner, '_refresh_unraid_dashboard_widget_cache', lambda *args: None)
+    tester = object.__new__(runner.RestoreTest)
+    tester.conf = config
+    tester.status_dir = proof_dir
+    tester.test_level = 1
+    tester.sample_size = 1
+    tester.log = lambda *args: None
+    tester.args = SimpleNamespace(scheduled=False)
+    repo = runner.discover_repos(config)[0]
+    repo['run_id'] = '33333333-3333-4333-8333-333333333333'
+    archive = repo['type'] + '-2026-09-06_10-00-00'
+    tester._write(job_id, repo, 'success', 1, 1, 0, 1, '1/1', archive, {'files_count': 1}, ['new.txt'])
+    native = read_json(proof_path)
+    assert native['type'] == 'config-backup'
+    assert native['job_id'] == job_id
+    assert native['tested_entries'] == ['new.txt']
+    from identity_migration_api import IdentityMigrationAssistant
+    restarted = IdentityMigrationAssistant(config)
+    assert restarted.startup_detection()['required'] is False
+    assert read_json(proof_path) == native
 
 
 def test_migrated_job_runs_borg_and_restores_original_bytes(installation, monkeypatch):

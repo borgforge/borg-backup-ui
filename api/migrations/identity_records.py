@@ -173,14 +173,18 @@ class _Projection:
             self.reason("invalid_identity_reference", source, locator)
             return row
         payload_key = ""
-        type_field = "backup_type"
+        type_field = "type" if kind == "restore_test" else "backup_type"
         location_field = "backup_location" if kind == "runtime_recovery" else "location"
         if type_field in row or location_field in row:
             backup_type, location = row.get(type_field), row.get(location_field)
             if not isinstance(backup_type, str) or not backup_type or not isinstance(location, str) or not location:
                 self.reason("invalid_identity_descriptor", source, locator)
                 return row
-            payload_key = backup_type + "_" + location
+            # Shipped restore proofs use type/location. Canonical writers keep
+            # these as report evidence (type is now an archive prefix), so only
+            # a legacy proof may use them to establish its former job alias.
+            if kind != "restore_test" or not row.get("job_id"):
+                payload_key = backup_type + "_" + location
         candidates = [value for value in (raw_key, payload_key, legacy) if value]
         is_system = (kind in {"notification_queue", "notification_deliveries"}
                      and not row.get("job_id")
@@ -242,7 +246,7 @@ class _Projection:
         elif not active and job_id is None and not conflict and payload_key:
             # A former prefix can explain the diagnostic, never establish an
             # alias. Keep the historical record unassigned even with one hint.
-            former_prefix = str(row.get("backup_type")) + "-backup"
+            former_prefix = str(row.get(type_field)) + "-backup"
             if any(former_prefix in job.get("archive_prefixes", []) for job in self.jobs.values()):
                 historical_reason = "no_authoritative_alias"
         self.bind(source, locator, job_id, key, "active" if active else "history", original, historical_reason)
