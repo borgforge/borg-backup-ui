@@ -1828,6 +1828,29 @@ body.wizard-modal-open {
 .log-output .log-error   { color: #f85149; }
 .log-output .log-success { color: #3fb950; }
 
+.activity-log-tools {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.activity-log-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-log-output {
+  height: 400px;
+  overflow-anchor: none;
+}
+
 .log-scroll-hint {
   display: none;
   padding: 6px 16px;

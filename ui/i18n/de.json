@@ -681,9 +681,17 @@
     "logTitle": "Log: {name}",
     "logError": "[Fehler] {message}",
     "logDone": "Fertig (Exit {code})",
+    "logWarning": "Mit Warnungen beendet (Exit {code})",
     "logFailed": "Fehler (Exit {code})",
     "logSkipped": "Übersprungen (Exit {code})",
-    "logCancelled": "Abgebrochen (Exit {code})"
+    "logCancelled": "Abgebrochen (Exit {code})",
+    "activityLogStart": "Zum Anfang",
+    "activityLogOlder": "↑ Vorheriger Abschnitt",
+    "activityLogNewer": "↓ Nächster Abschnitt",
+    "activityLogDownload": "Vollständiges Log herunterladen",
+    "activityLogComplete": "Alle Einträge bleiben erhalten. Beim Scrollen werden weitere Abschnitte geladen. Die Browsersuche durchsucht nur den geladenen Abschnitt.",
+    "activityLogSaveFailed": "Das Log konnte nicht ins Logverzeichnis gespeichert werden. Es liegt weiterhin im RAM. Bitte vor einem Serverneustart das vollständige Log herunterladen.",
+    "activityLogEnded": "Lauf beendet; Exit-Code nicht verfügbar"
   },
   "schedule": {
     "title": "Zeitplan",

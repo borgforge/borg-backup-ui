@@ -6,6 +6,18 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #463 - file activity log performance
+- Capture stdout and stderr directly in a RAM-backed runtime file only for jobs with file activity enabled, avoiding an unbounded API-process line buffer and writes into backed-up log directories during the run.
+- Retain the complete log only after the runner exits, using an independent supervisor that survives a WebUI restart. Preserve cursor identity across the copy, release RAM after successful persistence, and keep a downloadable RAM copy with a visible error if saving fails. History/status references point at the final path.
+- Preserve the existing API line counter with one independent blockwise reader, including a final line without a newline.
+- Preserve the effective option for manual and scheduled runs and in resource locks used after an API restart.
+- Load bounded UTF-8 file windows on demand, retaining at most three windows in the live view. Serialized requests provide backpressure; earlier output stays accessible in the complete file.
+- Add bounded streaming downloads and stale-response cancellation. Existing compact logs continue to use the original SSE viewer.
+- Coalesce small live updates into bounded blocks before evicting older output, keeping the viewport filled after burst output slows down. Remove the in-panel search and use theme colors for the navigation toolbar.
+- Preserve live following across delayed programmatic scroll events, cursor catch-up, background tabs, and job-grid refreshes. Track the actual restored scroll position instead of suppressing all scroll events for one animation frame, and label previous/next section navigation explicitly.
+- Show a warning badge for activity runs that the runner completed with Borg exit code 1; preserve failure, skip, and cancellation states.
+- Cover a million-line round trip, Unicode boundaries, search boundaries, run recovery, direct process capture, access control, and UI navigation races.
+
 ### Issue #458
 - Clarified in the Job Wizard and both manuals that Borg retention values count time periods rather than archives per period.
 - Added the effective retention policy to the flow preview and made Repository Maintenance describe the maximum restore points per period.

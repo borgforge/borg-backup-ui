@@ -51,6 +51,7 @@
     '/ui/js/core/app-core.js',
     '/ui/js/components/theme.js',
     '/ui/js/components/log-viewer.js',
+    '/ui/js/components/activity-log.js',
     '/ui/js/components/modal.js',
     '/ui/js/components/schedule-modal.js',
     '/ui/js/components/toast.js',

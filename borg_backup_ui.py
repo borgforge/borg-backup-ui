@@ -405,6 +405,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         "/api/auth/status",
         "/api/jobs",
         "/api/jobs/running",
+        "/api/jobs/log/window",
         "/api/setup-status",
         "/api/status",
         "/api/system-health",
@@ -930,6 +931,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             job_key = (qs.get("job") or [""])[0]
             self._handle_direct_api(lambda: self._handle_sse(job_key))
+        elif path == "/api/jobs/log/download":
+            self._handle_direct_api(lambda: self._download_activity_log(parsed.query))
         elif path == "/api/restore-tests/log/stream":
             self._handle_direct_api(lambda: self._handle_sse("restore_test"))
         elif path == "/api/restore/download":
@@ -982,6 +985,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/reports/jobs": self._get_report_jobs,
                 "/api/reports/data": lambda: self._get_report_data(parsed.query),
                 "/api/history/log": lambda: self._get_log_file(parsed.query),
+                "/api/jobs/log/window": lambda: self._get_activity_log(parsed.query),
                 "/api/wizard/job": lambda: self._get_wizard_job(parsed.query),
                 "/api/wizard/source-dirs": lambda: self._get_wizard_source_dirs(parsed.query),
                 "/api/wizard/runtime-inventory": self._get_wizard_runtime_inventory,
@@ -3337,8 +3341,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "BORG_UI_REQUEST_ID": request_id,
             "BORG_UI_REQUEST_SOURCE": source,
             "BORG_UI_REQUEST_ACTOR": actor,
+            "BORG_UI_FILE_ACTIVITY_RUN": "1" if getattr(info, "file_activity", False) else "0",
             "PYTHONPATH": merged_pp,
         }
+        if extra_env["BORG_UI_FILE_ACTIVITY_RUN"] == "1":
+            from jobs_api import _runtime_log_dir
+            extra_env["BORG_UI_ACTIVITY_LOG_DIR"] = str(_runtime_log_dir(self.config))
         ok, err = JobManager.get().start(
             job_key,
             ["python3", str(runner)],
@@ -3385,6 +3393,41 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         }
 
     # ── SSE-Handler ───────────────────────────────────────────────────────────
+
+    def _get_activity_log(self, query_string: str) -> dict:
+        from activity_log import get_activity_window
+        return get_activity_window(self.config, parse_qs(query_string, keep_blank_values=True))
+
+    def _download_activity_log(self, query_string: str) -> None:
+        from contextlib import ExitStack
+        from activity_log import open_activity_run
+        qs = parse_qs(query_string)
+        stack = ExitStack()
+        try:
+            path, _state, handle = stack.enter_context(open_activity_run(self.config, (qs.get("job") or [""])[0], (qs.get("run") or [""])[0]))
+        except (ValueError, OSError):
+            stack.close()
+            self._send_api_error(404, "not_found", "Activity log is not available", request_id=self._current_request_id)
+            return
+        with stack:
+            # A finite snapshot, including every byte present when opened.
+            remaining = os.fstat(handle.fileno()).st_size
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
+            self.send_header("Content-Length", str(remaining))
+            self.send_header("Cache-Control", "no-store")
+            self._send_refreshed_session_header()
+            self.end_headers()
+            try:
+                while remaining:
+                    chunk = handle.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
     def _handle_sse(self, job_key: str):
         from jobs_api import stream_job_output
