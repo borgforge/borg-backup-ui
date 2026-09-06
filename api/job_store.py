@@ -1,7 +1,7 @@
-"""Strict schema-v4 metadata persistence for the #447 cutover (#473).
+"""Strict schema-v4 inventory and configuration transactions (#447, #473, #474).
 
-No legacy discovery, conversion, reconciliation, or scheduler side effects.
-Repository-wide readers/writers are converted in #474 before installation.
+No implicit discovery, conversion or reconciliation of legacy user data.
+The explicit job action/schedule callers own managed cron updates.
 """
 
 from copy import deepcopy
@@ -91,6 +91,44 @@ def validate_assignments(jobs, store):
                 raise JobValidationError("conflicting_job_assignments", "Repository assignments do not match job metadata")
 
 
+def write_transaction(changes, *, after_write=None, rollback_after=None):
+    """Durable replacements with byte rollback on ordinary failures.
+
+    Caller holds inventory_lock. A crash between files remains detectable;
+    the guarded activation/recovery workflow in #479 owns crash recovery.
+    None removes one explicitly selected metadata file, never artifacts.
+    """
+    snapshots = {Path(path): read_fingerprinted_file(Path(path))[1] for path in changes}
+    callback_started = False
+    try:
+        for path, payload in changes.items():
+            if payload is None:
+                Path(path).unlink(missing_ok=True)
+            else:
+                atomic_write_json(Path(path), payload)
+        if after_write:
+            callback_started = True
+            return after_write()
+    except Exception as original:
+        failures = []
+        for path, raw in snapshots.items():
+            try:
+                if raw is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    atomic_write_bytes(path, raw)
+            except Exception as exc:
+                failures.append(exc)
+        if callback_started and rollback_after:
+            try:
+                rollback_after()
+            except Exception as exc:
+                failures.append(exc)
+        if failures:
+            raise JobValidationError("job_transaction_recovery_required", "Inventory or cron rollback failed; recovery is required before further writes") from original
+        raise
+
+
 def save_job_transaction(jobs_dir, repository_path, build, *, source_id=None, expected_revision=None, duplicate=False):
     """Serialize read/validate/patch/write; roll back ordinary I/O failures.
 
@@ -103,6 +141,9 @@ def save_job_transaction(jobs_dir, repository_path, build, *, source_id=None, ex
         jobs = read_jobs(jobs_dir)
         store = read_repositories(repository_path)
         validate_assignments(jobs, store)
+        from schedule_api import validate_schedules
+        schedules = read_json(repository_path.parent / "schedules.json", missing={})
+        validate_schedules(schedules, jobs)
         existing = None
         if source_id is not None:
             validate_job_id(source_id)
@@ -134,21 +175,10 @@ def save_job_transaction(jobs_dir, repository_path, build, *, source_id=None, ex
                 elif job_id in values:
                     values.remove(job_id)
         validate_assignments(jobs, next_store)
+        validate_schedules(schedules, jobs)
         target = jobs_dir / (job_id + ".json")
-        _, before_job = read_fingerprinted_file(target)
-        _, before_repos = read_fingerprinted_file(repository_path)
-        try:
-            atomic_write_json(target, metadata)
-            if next_store != store:
-                atomic_write_json(repository_path, next_store)
-        except Exception:
-            # Never turn a failed transaction into success. If rollback itself
-            # fails, inconsistent inputs remain detectable by strict readers.
-            if before_job is None:
-                target.unlink(missing_ok=True)
-            else:
-                atomic_write_bytes(target, before_job)
-            if before_repos is not None:
-                atomic_write_bytes(repository_path, before_repos)
-            raise
+        changes = {target: metadata}
+        if next_store != store:
+            changes[repository_path] = next_store
+        write_transaction(changes)
         return metadata, target

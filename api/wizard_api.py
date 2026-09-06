@@ -381,9 +381,8 @@ def load_job_for_wizard(job_id: str, scripts_dir: Path, ui_config: dict) -> dict
     location = str(storage.get("location") or storage.get("storage_type") or "")
     if location == "ssh":
         location = "storagebox"
-    # Read the UUID schedule map directly; get_schedules still owns a legacy
-    # discovery/cleanup path until #474. Reading an editor must never clean it.
-    schedules = read_json(resolve_data_root(ui_config) / "config" / "schedules.json", missing={})
+    from schedule_api import get_schedules
+    schedules = get_schedules(ui_config)
     schedule = schedules.get(job_id)
     if schedule is not None and not isinstance(schedule, dict):
         raise JobValidationError("invalid_job_schedule", "The job schedule is malformed")

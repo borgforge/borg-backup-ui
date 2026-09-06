@@ -12,7 +12,7 @@ const state = {
 };
 
 let appCheckIntervalDays = 30;
-let schedulesData = {}; // job_key → { cron, enabled }
+let schedulesData = {}; // job_id -> { cron, enabled }
 let globalDataDirReady = true;
 let setupRequired = false;
 let setupStatusCache = { ts: 0, data: null };

@@ -15,8 +15,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator, List, Optional
 
-from archive_prefix import archive_prefix_from_job_key as _archive_prefix_from_job_key
-
 
 class _CheckState:
     def __init__(
@@ -83,7 +81,7 @@ class CheckManager:
         action: str = "check",
         mode: str = "quick",
         *,
-        job_key: str = "",
+        job_id: str = "",
     ) -> tuple:
         """Start a maintenance action for one managed repository object."""
         with self._lock:
@@ -116,6 +114,9 @@ class CheckManager:
             repo_path = effective_repository_path(storage, str(repository.get("relative_path") or ""))
             if not repo_path:
                 return False, "Repository path is missing"
+            # Validate the selected UUID and complete archive scope before a
+            # mount or any other operation with external side effects.
+            cmd = self._repository_command(config, repository, repo_path, action, mode, job_id=job_id)
             passphrase_ref = str(repository.get("passphrase_ref") or "").strip()
             passphrase_file = Path(passphrase_ref) if passphrase_ref else None
             if passphrase_file is not None and not passphrase_file.is_file():
@@ -134,7 +135,6 @@ class CheckManager:
                 config,
                 encryption=str(repository.get("encryption") or ""),
             )
-            cmd = self._repository_command(config, repository, repo_path, action, mode, job_key=job_key)
         except Exception as exc:
             return False, f"Repository information is not readable: {exc}"
 
@@ -181,7 +181,7 @@ class CheckManager:
         action: str,
         mode: str,
         *,
-        job_key: str = "",
+        job_id: str = "",
     ) -> list[str]:
         if action == "check":
             return [
@@ -194,27 +194,26 @@ class CheckManager:
                 "--progress", repo_path,
             ]
 
-        from repository_context import jobs_using_repository
-        used_by = jobs_using_repository(config, str(repository.get("repository_key") or ""))
-        job_keys = [str(item or "").strip() for item in used_by if str(item or "").strip()]
-        selected_job_key = str(job_key or "").strip()
-        if selected_job_key:
-            if selected_job_key not in job_keys:
+        from job_model import JobValidationError, validate_job_id
+        from repository_context import jobs_using_repository, load_job_metadata
+        ids = jobs_using_repository(config, repository["repository_key"])
+        if job_id:
+            validate_job_id(job_id)
+            if job_id not in ids:
                 raise ValueError("The selected retention source job does not use this repository")
-        elif len(job_keys) > 1:
-            raise ValueError("Multiple backup jobs use this repository; select a retention source job")
+        elif len(ids) == 1:
+            job_id = ids[0]
         else:
-            selected_job_key = next(iter(job_keys), "")
-        if not selected_job_key:
-            raise ValueError("Prune requires a backup job with a retention policy")
-        retention = self._job_retention(config, selected_job_key)
-        archive_prefix = _archive_prefix_from_job_key(selected_job_key)
-        cmd = [
-            "borg", "prune", "--lock-wait", self._LOCK_WAIT_SECONDS,
-            "--list", "--progress",
-        ]
-        if archive_prefix:
-            cmd.extend(["--glob-archives", f"{archive_prefix}-*"])
+            raise ValueError("Select one backup job as the retention source")
+        metadata = load_job_metadata(config, job_id)
+        prefixes = metadata["archive_prefixes"]
+        if len(prefixes) != 1:
+            # Borg 1.4 accepts one shell glob, without alternation. #475 owns
+            # the shared retention engine over the union; never prune per prefix.
+            raise JobValidationError("job_retention_cutover_pending", "Combined prefix retention is pending in this integration phase")
+        retention = metadata.get("retention", {})
+        cmd = ["borg", "prune", "--lock-wait", self._LOCK_WAIT_SECONDS,
+               "--list", "--progress", "--glob-archives", f"{prefixes[0]}-*"]
         retention_counts = []
         for key, option in (("daily", "--keep-daily"), ("weekly", "--keep-weekly"), ("monthly", "--keep-monthly"), ("yearly", "--keep-yearly")):
             value = str(retention.get(key) or "").strip()
@@ -230,19 +229,6 @@ class CheckManager:
             raise ValueError("At least one retention value must be greater than zero")
         cmd.append(repo_path)
         return cmd
-
-    @staticmethod
-    def _job_retention(config: dict, job_key: str) -> dict:
-        from jobs_api import get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-        scripts_dir = resolve_scripts_dir(config)
-        data_root = resolve_data_root(config)
-        for directory in get_jobs_meta_dirs(scripts_dir, data_root):
-            path = directory / f"{job_key}.json"
-            if not path.is_file():
-                continue
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            return payload.get("retention") if isinstance(payload.get("retention"), dict) else {}
-        raise ValueError(f"Job metadata not found: {job_key}")
 
     def _reader(self, state: _CheckState) -> None:
         last_emitted: Optional[str] = None
@@ -417,39 +403,6 @@ class CheckManager:
 
 
 def get_check_jobs(config: dict) -> List[dict]:
-    """Gibt alle bekannten Jobs zurück (key + display_name) für den Selektor."""
-    from jobs_api import discover_jobs, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-    loc_label = {"local": "local", "usb": "usb", "smb": "smb", "storagebox": "storagebox", "custom": "custom"}
-
-    def _label(name: str, location: str) -> str:
-        return f"{name} ({loc_label.get(location, location)})"
-
-    scripts_dir = resolve_scripts_dir(config)
-    data_root = resolve_data_root(config)
-    jobs = discover_jobs(scripts_dir, data_root)
-    result = [
-        {"key": j.key, "name": _label((j.name or j.display_name), j.location)}
-        for j in jobs
-        if not j.is_utility
-    ]
-    if result:
-        return result
-
-    # Fallback: lies Wizard-Metadaten direkt, falls discover_jobs nichts liefert.
-    seen = set()
-    for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
-        if not meta_dir.is_dir():
-            continue
-        for meta_file in sorted(meta_dir.glob("*.json")):
-            try:
-                raw = json.loads(meta_file.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            key = str(raw.get("job_key") or "").strip()
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            name = str(raw.get("name") or key).strip()
-            location = str(raw.get("location") or "").strip().lower() or "local"
-            result.append({"key": key, "name": _label(name, location)})
-    return result
+    from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
+    return [{"job_id": job.job_id, "name": f"{job.name} ({job.location})"}
+            for job in discover_jobs(resolve_scripts_dir(config), resolve_data_root(config))]

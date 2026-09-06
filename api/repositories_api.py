@@ -7,6 +7,7 @@ only reference these objects.
 
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
 import json
 import os
@@ -340,46 +341,58 @@ def enrich_repository_display_fields(repo: dict[str, Any]) -> dict[str, Any]:
 
 
 def read_repository_store(config: dict, *, preserve_legacy: bool = False) -> dict[str, Any]:
+    from job_store import read_repositories
     path = repositories_file(config)
-    from inventory_store import read_cached_inventory
-    payload = read_cached_inventory(path)
-    if payload is None:
-        with inventory_lock(path.parent):
-            payload = read_inventory(path, collection_key="repositories", schema_version=SCHEMA_VERSION)
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "updated_at": str(payload.get("updated_at") or ""),
-        "repositories": normalize_repositories(payload["repositories"], preserve_legacy=preserve_legacy),
-    }
+    with inventory_lock(path.parent):
+        payload = read_repositories(path)
+        return {**payload, "repositories": normalize_repositories(payload["repositories"], preserve_legacy=preserve_legacy)}
 
 
 def read_repository_store_for_api(config: dict) -> dict[str, Any]:
     """Return repository metadata with all path fields derived from current storages."""
-    store = read_repository_store(config)
-    from storage_objects_api import read_storage_store
-    storages = {
-        str(row.get("storage_key") or ""): row
-        for row in read_storage_store(config).get("storages", [])
-    }
-    derived = []
-    for row in store["repositories"]:
-        storage = storages.get(str(row.get("storage_key") or ""))
-        relative = str(row.get("relative_path") or "").strip()
-        if storage and relative:
-            effective = effective_repository_path(storage, relative)
-            row = {
-                **row,
-                "path_raw": effective,
-                "path_display": effective,
-                "storage_name": str(storage.get("display_name") or row.get("storage_name") or ""),
-            }
-        derived.append(row)
-    return {**store, "repositories": derived}
+    from inventory_store import inventory_lock
+    with inventory_lock(repositories_file(config).parent):
+        store = read_repository_store(config)
+        from job_store import read_jobs, validate_assignments
+        from repository_context import jobs_dir
+        jobs = read_jobs(jobs_dir(config))
+        validate_assignments(jobs, store)
+        from storage_objects_api import read_storage_store
+        storages = {
+            str(row.get("storage_key") or ""): row
+            for row in read_storage_store(config).get("storages", [])
+        }
+        derived = []
+        for row in store["repositories"]:
+            storage = storages.get(str(row.get("storage_key") or ""))
+            relative = str(row.get("relative_path") or "").strip()
+            if not storage:
+                from job_model import JobValidationError
+                raise JobValidationError("invalid_job_storage", "A repository references a missing storage target")
+            if storage and relative:
+                effective = effective_repository_path(storage, relative)
+                location = storage.get("location") or storage.get("storage_type") or ""
+                if location == "ssh":
+                    location = "storagebox"
+                row = {
+                    **row,
+                    "location": location,
+                    "storage_type": storage.get("storage_type") or location,
+                    "path_raw": effective,
+                    "path_display": effective,
+                    "storage_name": str(storage.get("display_name") or row.get("storage_name") or ""),
+                }
+            row = {**row, "jobs": [{"job_id": job_id, "name": jobs[job_id]["name"],
+                                    "archive_prefix": jobs[job_id]["archive_prefixes"][0]}
+                                   for job_id in row["job_ids"]]}
+            derived.append(row)
+        return {**store, "repositories": derived}
 
 
 def write_repository_store(config: dict, store: dict[str, Any], *, preserve_legacy: bool = False) -> None:
     path = repositories_file(config)
     payload = {
+        **store,
         "schema_version": SCHEMA_VERSION,
         "updated_at": _now(),
         "repositories": normalize_repositories(
@@ -388,7 +401,14 @@ def write_repository_store(config: dict, store: dict[str, Any], *, preserve_lega
         ),
     }
     with inventory_lock(path.parent):
-        atomic_write_inventory(path, payload)
+        if not preserve_legacy:
+            from job_store import read_jobs, validate_assignments
+            from repository_context import jobs_dir
+            validate_assignments(read_jobs(jobs_dir(config)), payload)
+        # Retain root extensions when callers replace only the collection.
+        from job_store import read_repositories
+        previous = read_repositories(path)
+        atomic_write_inventory(path, {**previous, **payload})
 
 
 def update_repository_store(
@@ -406,6 +426,37 @@ def update_repository_store(
 
 
 def normalize_repositories(rows: Any, *, preserve_legacy: bool = False) -> list[dict[str, Any]]:
+    if not preserve_legacy:
+        from job_model import JobValidationError, validate_job_id
+        if not isinstance(rows, list):
+            raise JobValidationError("invalid_job_repository", "Repository inventory must be a list")
+        seen = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                raise JobValidationError("invalid_job_repository", "Malformed repository entry")
+            key = row.get("repository_key")
+            if not isinstance(key, str) or not key or key in seen or not row.get("storage_key") or not row.get("relative_path"):
+                raise JobValidationError("invalid_job_repository", "Missing or duplicate repository identity or target")
+            seen.add(key)
+            if {"used_by", "source_job_keys"}.intersection(row):
+                raise JobValidationError("job_migration_required", "Repository assignments require the explicit identity migration")
+            for field in ("job_ids", "source_job_ids"):
+                values = row.get(field)
+                if not isinstance(values, list):
+                    raise JobValidationError("invalid_job_repository", "Repository job ID references must be lists")
+                for value in values:
+                    validate_job_id(value)
+                if len(values) != len(set(values)):
+                    raise JobValidationError("duplicate_job_reference", "Duplicate repository job ID reference")
+        result = deepcopy(rows)
+        for row in result:
+            # Runtime paths are always derived from the current storage. Keep
+            # extensions, but never revive the obsolete duplicated path fields.
+            for field in ("repo_path", "repo_uri", "path_raw", "path_display",
+                          "storage_profile_key", "usb_profile_key", "smb_profile_key", "repo_conf_key"):
+                row.pop(field, None)
+        return result
+    # Historical migration readers only; never called by active writers.
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in rows if isinstance(rows, list) else []:
@@ -499,99 +550,49 @@ def build_repository_groups(config: dict) -> dict[str, list[dict[str, Any]]]:
 
 
 def repository_assignment_report(config: dict) -> dict[str, Any]:
-    """Compare authoritative job assignments with canonical inventories."""
+    """Report every missing/dangling assignment without repairing user data."""
+    from job_model import JobValidationError
+    from job_store import read_jobs
     from repository_context import jobs_dir
     from storage_objects_api import read_storage_store
 
-    repositories = read_repository_store(config).get("repositories", [])
-    repo_by_key = {str(row.get("repository_key") or "").strip(): row for row in repositories}
-    storage_keys = {
-        str(row.get("storage_key") or "").strip()
-        for row in read_storage_store(config).get("storages", [])
-        if str(row.get("storage_key") or "").strip()
-    }
-    actual: dict[str, list[str]] = {key: [] for key in repo_by_key}
-    errors: list[dict[str, Any]] = []
-    directory = jobs_dir(config)
-    for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+    with inventory_lock(repositories_file(config).parent):
         try:
-            job = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-            errors.append({"code": "job_metadata_unreadable", "job_key": path.stem, "message": str(exc)})
-            continue
-        if not isinstance(job, dict):
-            continue
-        job_key = str(job.get("job_key") or path.stem).strip()
-        repository_key = str(job.get("repository_key") or "").strip()
-        if not repository_key:
-            errors.append({
-                "code": "job_repository_missing",
-                "job_key": job_key,
-                "message": "The job has no repository assignment. Open it in the Job Wizard and save a repository.",
-            })
-            continue
-        repository = repo_by_key.get(repository_key)
-        if not isinstance(repository, dict):
-            errors.append({
-                "code": "job_repository_not_found",
-                "job_key": job_key,
-                "repository_key": repository_key,
-                "message": "The assigned repository does not exist. Open the job in the Job Wizard and select a valid repository.",
-            })
-            continue
-        actual.setdefault(repository_key, []).append(job_key)
-
-    mismatches: list[dict[str, Any]] = []
-    for repository_key, repository in repo_by_key.items():
-        storage_key = str(repository.get("storage_key") or "").strip()
-        if not storage_key or storage_key not in storage_keys:
-            errors.append({
-                "code": "repository_storage_not_found",
-                "repository_key": repository_key,
-                "storage_key": storage_key,
-                "message": "The repository references a missing storage target.",
-            })
-        expected = sorted(set(actual.get(repository_key, [])))
-        stored_used_by = sorted({str(value).strip() for value in repository.get("used_by", []) if str(value).strip()})
-        stored_source = sorted({str(value).strip() for value in repository.get("source_job_keys", []) if str(value).strip()})
-        if stored_used_by != expected or stored_source != expected:
-            mismatches.append({
-                "repository_key": repository_key,
-                "message": "Repository usage metadata differs from the authoritative job assignments.",
-                "expected_job_keys": expected,
-                "stored_used_by": stored_used_by,
-                "stored_source_job_keys": stored_source,
-            })
-    return {
-        "ok": not errors and not mismatches,
-        "errors": errors,
-        "usage_mismatches": mismatches,
-        "assignments": actual,
-    }
+            repositories = read_repository_store(config)["repositories"]
+            jobs = read_jobs(jobs_dir(config))
+        except JobValidationError as exc:
+            return {"ok": False, "errors": [{"code": exc.api_code, "message": str(exc)}],
+                    "usage_mismatches": [], "assignments": {}}
+        repo_by_key = {row["repository_key"]: row for row in repositories}
+        storage_keys = {row["storage_key"] for row in read_storage_store(config)["storages"]}
+        actual = {key: [] for key in repo_by_key}
+        errors, mismatches = [], []
+        for job_id, job in jobs.items():
+            key = job["repository_key"]
+            if key not in repo_by_key:
+                errors.append({"code": "job_repository_not_found", "job_id": job_id, "repository_key": key})
+            else:
+                actual[key].append(job_id)
+        for key, repository in repo_by_key.items():
+            if repository["storage_key"] not in storage_keys:
+                errors.append({"code": "repository_storage_not_found", "repository_key": key,
+                               "storage_key": repository["storage_key"]})
+            expected = sorted(actual[key])
+            for field in ("job_ids", "source_job_ids"):
+                stored = sorted(repository[field])
+                if stored != expected:
+                    mismatches.append({"repository_key": key, "field": field,
+                                       "expected_job_ids": expected, "stored_job_ids": stored})
+                for job_id in stored:
+                    if job_id not in jobs:
+                        errors.append({"code": "dangling_repository_job_id", "repository_key": key, "job_id": job_id})
+        return {"ok": not errors and not mismatches, "errors": errors,
+                "usage_mismatches": mismatches, "assignments": actual}
 
 
 def reconcile_repository_usage(config: dict) -> dict[str, Any]:
-    """Safely rebuild redundant repository usage lists from job metadata."""
-    path = repositories_file(config)
-    with inventory_lock(path.parent):
-        report = repository_assignment_report(config)
-        assignments = report.get("assignments") if isinstance(report.get("assignments"), dict) else {}
-        current = read_repository_store(config)
-        changed: list[str] = []
-        rows = []
-        for repository in current.get("repositories", []):
-            key = str(repository.get("repository_key") or "").strip()
-            expected = sorted({str(value).strip() for value in assignments.get(key, []) if str(value).strip()})
-            used_by = sorted({str(value).strip() for value in repository.get("used_by", []) if str(value).strip()})
-            source_jobs = sorted({str(value).strip() for value in repository.get("source_job_keys", []) if str(value).strip()})
-            if used_by != expected or source_jobs != expected:
-                repository = {**repository, "used_by": expected, "source_job_keys": expected, "updated_at": _now()}
-                changed.append(key)
-            rows.append(repository)
-        if changed:
-            write_repository_store(config, {"repositories": rows})
-        final_report = repository_assignment_report(config)
-        return {**final_report, "reconciled_repository_keys": changed}
+    """Read-only compatibility name; repair requires an explicit migration plan."""
+    return {**repository_assignment_report(config), "reconciled_repository_keys": []}
 
 
 def _secret_path_for_repository(config: dict, repository_key: str) -> Path:
@@ -2143,7 +2144,7 @@ def _repository_lifecycle_context(config: dict, repository_key: str) -> tuple[di
         "repository_id": str(repository.get("borg_repository_id") or ""),
         "archive_count": _nonnegative_int(stats.get("archives_count")),
         "deduplicated_size": _nonnegative_int(stats.get("unique_csize")),
-        "job_keys": jobs,
+        "job_ids": jobs,
         "blockers": blockers,
         "allowed": not blockers,
     }
@@ -2537,8 +2538,8 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         "last_info_refresh_at": now,
         "last_info_refresh_status": "success",
         "last_info_refresh_error": "",
-        "source_job_keys": existing.get("source_job_keys", []),
-        "used_by": existing.get("used_by", []),
+        "source_job_ids": existing.get("source_job_ids", []),
+        "job_ids": existing.get("job_ids", []),
     }
     for legacy_field in ("storage_profile_key", "usb_profile_key", "smb_profile_key", "repo_conf_key", "conf_key"):
         row.pop(legacy_field, None)
@@ -2556,167 +2557,3 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
         "exit_code": exit_code,
         "output": output,
     }
-
-
-def _link_repository_to_job_locked(
-    config: dict,
-    repository_key: str,
-    job_key: str,
-    *,
-    previous_repository_key: str = "",
-    previous_job_key: str = "",
-) -> None:
-    selected = str(repository_key or "").strip()
-    current_job = str(job_key or "").strip()
-    if not selected or not current_job:
-        raise ValueError("Repository and job keys are required")
-    store = read_repository_store(config)
-    rows = store["repositories"]
-    if not any(str(row.get("repository_key") or "") == selected for row in rows):
-        raise ValueError("Repository not found")
-    old_repo = str(previous_repository_key or "").strip()
-    old_job = str(previous_job_key or current_job).strip()
-    next_rows = []
-    for row in rows:
-        key = str(row.get("repository_key") or "")
-        used_by = [str(item).strip() for item in row.get("used_by", []) if str(item).strip()]
-        source_jobs = [str(item).strip() for item in row.get("source_job_keys", []) if str(item).strip()]
-        if key == old_repo or old_job != current_job:
-            used_by = [item for item in used_by if item not in {old_job, current_job}]
-            source_jobs = [item for item in source_jobs if item not in {old_job, current_job}]
-        if key == selected:
-            if current_job not in used_by:
-                used_by.append(current_job)
-            if current_job not in source_jobs:
-                source_jobs.append(current_job)
-        next_rows.append({**row, "used_by": used_by, "source_job_keys": source_jobs, "updated_at": _now()})
-    write_repository_store(config, {"repositories": next_rows})
-
-
-def link_repository_to_job(
-    config: dict,
-    repository_key: str,
-    job_key: str,
-    *,
-    previous_repository_key: str = "",
-    previous_job_key: str = "",
-) -> None:
-    path = repositories_file(config)
-    with inventory_lock(path.parent):
-        _link_repository_to_job_locked(
-            config,
-            repository_key,
-            job_key,
-            previous_repository_key=previous_repository_key,
-            previous_job_key=previous_job_key,
-        )
-
-
-def _unlink_job_from_repositories_locked(config: dict, job_key: str) -> None:
-    current_job = str(job_key or "").strip()
-    if not current_job:
-        return
-    store = read_repository_store(config)
-    changed = False
-    next_rows = []
-    for row in store.get("repositories", []):
-        used_by = [str(item).strip() for item in row.get("used_by", []) if str(item).strip()]
-        source_jobs = [str(item).strip() for item in row.get("source_job_keys", []) if str(item).strip()]
-        next_used_by = [item for item in used_by if item != current_job]
-        next_source_jobs = [item for item in source_jobs if item != current_job]
-        if next_used_by != used_by or next_source_jobs != source_jobs:
-            changed = True
-            row = {
-                **row,
-                "used_by": next_used_by,
-                "source_job_keys": next_source_jobs,
-                "updated_at": _now(),
-            }
-        next_rows.append(row)
-    if changed:
-        write_repository_store(config, {"repositories": next_rows})
-
-
-def unlink_job_from_repositories(config: dict, job_key: str) -> None:
-    path = repositories_file(config)
-    with inventory_lock(path.parent):
-        _unlink_job_from_repositories_locked(config, job_key)
-
-
-def save_job_repository_transaction(
-    config: dict,
-    metadata_path: Path,
-    metadata: dict[str, Any],
-    repository_key: str,
-    job_key: str,
-    *,
-    previous_repository_key: str = "",
-    previous_job_key: str = "",
-    previous_metadata_path: Path | None = None,
-) -> None:
-    """Persist job metadata and both repository link lists as one recoverable unit."""
-    repo_path = repositories_file(config)
-    target = Path(metadata_path)
-    previous = Path(previous_metadata_path) if previous_metadata_path else None
-    try:
-        with inventory_lock(repo_path.parent):
-            old_target = target.read_bytes() if target.exists() else None
-            old_previous = None
-            if previous is not None and previous != target and previous.exists():
-                old_previous = previous.read_bytes()
-            old_repo = repo_path.read_bytes() if repo_path.exists() else None
-            try:
-                link_repository_to_job(
-                    config,
-                    repository_key,
-                    job_key,
-                    previous_repository_key=previous_repository_key,
-                    previous_job_key=previous_job_key,
-                )
-                atomic_write_json(target, metadata)
-                if previous is not None and previous != target and previous.exists():
-                    previous.unlink()
-            except Exception:
-                if old_repo is None:
-                    repo_path.unlink(missing_ok=True)
-                else:
-                    atomic_write_bytes(repo_path, old_repo)
-                if old_target is None:
-                    target.unlink(missing_ok=True)
-                else:
-                    atomic_write_bytes(target, old_target)
-                if previous is not None and previous != target:
-                    if old_previous is None:
-                        previous.unlink(missing_ok=True)
-                    else:
-                        atomic_write_bytes(previous, old_previous)
-                raise
-    finally:
-        from jobs_api import invalidate_job_discovery_cache
-        invalidate_job_discovery_cache()
-
-
-def delete_job_metadata_transaction(config: dict, metadata_paths: list[Path], job_key: str) -> int:
-    """Delete job metadata and unlink its repository references with rollback."""
-    repo_path = repositories_file(config)
-    paths = [Path(path) for path in metadata_paths]
-    try:
-        with inventory_lock(repo_path.parent):
-            snapshots = {path: path.read_bytes() for path in paths if path.exists()}
-            old_repo = repo_path.read_bytes() if repo_path.exists() else None
-            try:
-                unlink_job_from_repositories(config, job_key)
-                for path in snapshots:
-                    path.unlink()
-            except Exception:
-                if old_repo is None:
-                    repo_path.unlink(missing_ok=True)
-                else:
-                    atomic_write_bytes(repo_path, old_repo)
-                for path, content in snapshots.items():
-                    atomic_write_bytes(path, content)
-                raise
-    finally:
-        from jobs_api import invalidate_job_discovery_cache
-        invalidate_job_discovery_cache()
-    return len(snapshots)

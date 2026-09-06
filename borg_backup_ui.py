@@ -1695,153 +1695,35 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_all_runtime_states(self.config)
 
     def _get_schedules(self) -> dict:
-        from schedule_api import get_schedules, prune_orphaned_schedules
-        prune_orphaned_schedules(self.config, log_fn=self.log_message)
+        from schedule_api import get_schedules
         return get_schedules(self.config)
 
     def _put_schedule(self) -> dict:
         from schedule_api import save_schedule
+        from job_actions import resolve_request_schedule_id
         body = self._read_json_body()
-        job_key = body.get("job_key", "")
-        cron    = body.get("cron", "")
-        enabled = bool(body.get("enabled", True))
-        if not job_key or not cron:
-            raise ValueError("job_key and cron are required")
-        result = save_schedule(self.config, job_key, cron, enabled)
-        return {"saved": True, **result}
+        job_id = resolve_request_schedule_id(self.config, body, endpoint="schedules/save")
+        return save_schedule(self.config, job_id, body.get("cron", ""), body.get("enabled", True))
 
     def _put_job_enabled(self) -> dict:
-        from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
+        from job_actions import resolve_request_job_id, set_job_enabled
         body = self._read_json_body()
-        job_key = str(body.get("job_key", "")).strip()
-        enabled = bool(body.get("enabled", True))
-        if not job_key:
-            raise ValueError("job_key is required")
-        scripts_dir = resolve_scripts_dir(self.config)
-        data_root = resolve_data_root(self.config)
-        meta_file = get_jobs_meta_dir(scripts_dir, data_root) / f"{job_key}.json"
-        if not meta_file.exists():
-            raise FileNotFoundError(f"Job metadata file not found: {job_key}")
-        raw = json.loads(meta_file.read_text(encoding="utf-8"))
-        raw["enabled"] = enabled
-        meta_file.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        return {"saved": True, "job_key": job_key, "enabled": enabled}
+        job_id = resolve_request_job_id(self.config, body, endpoint="jobs/enabled")
+        return set_job_enabled(self.config, job_id, body.get("enabled", True))
 
     def _delete_job(self) -> dict:
-        from jobs_api import discover_jobs, get_job_runtime_state, get_jobs_meta_dirs, resolve_data_root, resolve_scripts_dir
-        from restore_tests_api import resolve_restore_test_dir
-        from config_api import read_expanded_conf
-        from schedule_api import delete_schedule
+        from job_actions import resolve_request_job_id, delete_job_configuration, prepare_job_action
+        from jobs_api import get_job_runtime_state
+        from job_model import JobValidationError
         body = self._read_json_body()
-        job_key = body.get("job_key", "")
-        if not job_key:
-            raise ValueError("job_key is required")
-
-        scripts_dir = resolve_scripts_dir(self.config)
-        data_root = resolve_data_root(self.config)
-        jobs = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
-        if job_key not in jobs:
-            raise ValueError(f"Unknown job: {job_key}")
-
-        if get_job_runtime_state(self.config, job_key).get("running"):
+        job_id = resolve_request_job_id(self.config, body, endpoint="jobs/delete")
+        prepare_job_action(self.config, job_id)
+        if get_job_runtime_state(self.config, job_id).get("running"):
             raise RuntimeError("The job is currently running; wait for it to finish")
-
-        info = jobs[job_key]
-        conf = read_expanded_conf(self.config)
-        status_dir = Path(self.config.get("STATUS_DIR", "/mnt/user/backup-status"))
-        log_dir    = Path(conf.get("GLOBAL_LOG_DIR", "/mnt/user/Logs"))
-        jobs_meta_dirs = get_jobs_meta_dirs(scripts_dir, data_root)
-
-        # Skript (+ optionale .description) löschen
-        deleted_script = False
-        script_name = ""
-        if info.script_path is not None:
-            script_name = info.script_path.name
-            try:
-                if info.script_path.exists():
-                    info.script_path.unlink()
-                    deleted_script = True
-            except OSError:
-                pass
-            desc = info.script_path.with_suffix(".description")
-            if desc.exists():
-                try:
-                    desc.unlink()
-                except OSError:
-                    pass
-
-        # Metadatei des Jobs löschen (Wizard-First)
-        metadata_paths = [jobs_meta_dir / f"{job_key}.json" for jobs_meta_dir in jobs_meta_dirs]
-        from repositories_api import delete_job_metadata_transaction
-        deleted_metadata = bool(delete_job_metadata_transaction(self.config, metadata_paths, job_key))
-
-        delete_artifacts = bool(body.get("delete_artifacts", False))
-
-        # Status-Dateien: *_{backup_type}_{location}.status
-        deleted_status = 0
-        if delete_artifacts:
-            for f in status_dir.glob(f"*_{info.backup_type}_{info.location}.status"):
-                try:
-                    f.unlink()
-                    deleted_status += 1
-                except OSError:
-                    pass
-
-        deleted_restore_test = False
-        if delete_artifacts:
-            rt_file = resolve_restore_test_dir(self.config) / f"{job_key}.test"
-            try:
-                if rt_file.exists():
-                    rt_file.unlink()
-                    deleted_restore_test = True
-            except OSError:
-                pass
-
-        # Log-Dateien: Borg-Backup[_-]{backup_type}--*.log
-        deleted_logs = 0
-        if delete_artifacts:
-            for pattern in (
-                f"Borg-Backup_{info.backup_type}--*.log",
-                f"Borg-Backup-{info.backup_type}--*.log",
-            ):
-                for f in log_dir.glob(pattern):
-                    try:
-                        f.unlink()
-                        deleted_logs += 1
-                    except OSError:
-                        pass
-
-        # Passphrase-Datei (optional)
-        deleted_passphrase = False
-        if body.get("delete_passphrase"):
-            suffix = f"{info.backup_type}_{info.location}".lower()
-            candidates = [
-                Path(f"/boot/config/borg-backup/secrets/.borg-passphrase-{suffix}"),
-                Path(f"/boot/config/borg-backup/secrets/.borg-passphrase-{info.backup_type}".lower()),
-            ]
-            for p in candidates:
-                try:
-                    if p.is_symlink() or p.exists():
-                        p.unlink()
-                        deleted_passphrase = True
-                except OSError:
-                    pass
-
-        # Schedule-Eintrag immer mit aufräumen (idempotent),
-        # damit keine verwaisten Cron-Trigger für gelöschte Jobs bleiben.
-        delete_schedule(self.config, job_key)
-
-        return {
-            "deleted": True,
-            "filename": script_name,
-            "deleted_script": deleted_script,
-            "deleted_metadata": deleted_metadata,
-            "deleted_status_files": deleted_status,
-            "deleted_restore_test": deleted_restore_test,
-            "deleted_log_files": deleted_logs,
-            "deleted_passphrase": deleted_passphrase,
-            "deleted_artifacts": delete_artifacts,
-        }
+        if body.get("delete_artifacts") or body.get("delete_passphrase"):
+            # Historical attribution and shared-secret cleanup belong to #478.
+            raise JobValidationError("job_artifact_cutover_pending", "Artifact deletion is not available in this integration phase")
+        return delete_job_configuration(self.config, job_id)
 
     def _delete_restore_test(self) -> dict:
         from restore_tests_api import delete_restore_test
@@ -1850,12 +1732,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _delete_schedule(self) -> dict:
         from schedule_api import delete_schedule
+        from job_actions import resolve_request_schedule_id
         body = self._read_json_body()
-        job_key = body.get("job_key", "")
-        if not job_key:
-            raise ValueError("job_key is required")
-        result = delete_schedule(self.config, job_key)
-        return {"deleted": True, **result}
+        job_id = resolve_request_schedule_id(self.config, body, endpoint="schedules/delete")
+        return delete_schedule(self.config, job_id)
 
     def _get_storage(self) -> dict:
         from config_api import get_repositories_data
@@ -2277,13 +2157,15 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise ValueError("Invalid mode parameter")
         from check_api import CheckManager
         action = str(body.get("action") or "check").strip().lower()
-        job_key = str(body.get("job_key") or "").strip()
+        if "job_key" in body:
+            raise ValueError("Repository maintenance requires job_id")
+        job_id = body.get("job_id", "")
         ok, err = CheckManager.get().start_repository(
             self.config,
             repository_key,
             action,
             mode,
-            job_key=job_key,
+            job_id=job_id,
         )
         if not ok:
             raise RuntimeError(err)
@@ -3298,94 +3180,33 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _post_run_job(self) -> dict:
         self._require_data_dir_ready()
-        from jobs_api import JobManager, discover_jobs, get_job_runtime_state, resolve_data_root, resolve_scripts_dir
-        from lifecycle_log import emit_lifecycle
+        from job_actions import prepare_job_action, resolve_request_job_id
+        from job_model import JobValidationError
         body = self._read_json_body()
-        job_key = body.get("job_key", "")
-        if not job_key:
-            raise ValueError("job_key is required")
-
-        borg_scripts_dir = resolve_scripts_dir(self.config)
-        backup_scripts_dir = Path(self.config["BACKUP_SCRIPTS_DIR"])
-        data_root = resolve_data_root(self.config)
-        jobs = {j.key: j for j in discover_jobs(borg_scripts_dir, data_root)}
-        if job_key not in jobs:
-            raise ValueError(f"Unknown job: {job_key}")
-        if not jobs[job_key].enabled:
-            raise RuntimeError(f"Job is disabled: {job_key}")
-        if get_job_runtime_state(self.config, job_key).get("running"):
-            raise RuntimeError("Job is already running")
-
-        info = jobs[job_key]
-        plugin_runtime = Path(__file__).resolve().parent / "runtime"
-        existing_pp = os.environ.get("PYTHONPATH", "")
-        runtime_pp = str(plugin_runtime)
-        merged_pp = f"{runtime_pp}:{existing_pp}" if existing_pp else runtime_pp
-        if info.standard != "wizard":
-            raise RuntimeError(f"Unsupported job standard: {info.standard}")
-        runner = Path(__file__).resolve().parent / "api" / "wizard_runner.py"
-        request_id = str(getattr(self, "_current_request_id", "") or "")
-        session = self._get_current_session_meta() or {}
-        actor = _normalize_username(session.get("username", ""))
-        source = "schedule" if bool(body.get("scheduled")) else (
-            "api-token" if self._has_valid_api_token_header() else "manual"
-        )
-        if not actor and source == "schedule":
-            actor = "scheduler"
-        if not actor and source == "api-token":
-            actor = "api-token"
-        extra_env = {
-            "BORG_UI_BORG_SCRIPTS_DIR": str(borg_scripts_dir),
-            "BORG_UI_JOB_KEY": job_key,
-            "BORG_UI_APP_VERSION": APP_VERSION,
-            "BORG_UI_REQUEST_ID": request_id,
-            "BORG_UI_REQUEST_SOURCE": source,
-            "BORG_UI_REQUEST_ACTOR": actor,
-            "BORG_UI_FILE_ACTIVITY_RUN": "1" if getattr(info, "file_activity", False) else "0",
-            "PYTHONPATH": merged_pp,
-        }
-        if extra_env["BORG_UI_FILE_ACTIVITY_RUN"] == "1":
-            from jobs_api import _runtime_log_dir
-            extra_env["BORG_UI_ACTIVITY_LOG_DIR"] = str(_runtime_log_dir(self.config))
-        ok, err = JobManager.get().start(
-            job_key,
-            ["python3", str(runner)],
-            backup_scripts_dir,
-            extra_env=extra_env,
-        )
-        if not ok:
-            raise RuntimeError(err)
-        state = JobManager.get().get_state(job_key)
-        emit_lifecycle(
-            "JOB",
-            "requested",
-            request_id=request_id,
-            source=source,
-            actor=actor,
-            job_key=job_key,
-            backup_type=info.backup_type,
-            location=info.location,
-            run_id=state.get("run_id", ""),
-        )
-        return {"started": True, "job_key": job_key, "run_id": state.get("run_id", "")}
+        job_id = resolve_request_job_id(self.config, body, endpoint="jobs/run")
+        prepare_job_action(self.config, job_id, require_enabled=True)
+        # This draft is deliberately not installable before #479. #475 replaces
+        # this boundary with the UUID runner; never feed a UUID to the old runner.
+        raise JobValidationError("job_runtime_cutover_pending", "Backup runtime cutover is pending in this integration phase")
 
     def _post_cancel_job(self) -> dict:
         from jobs_api import cancel_job
 
         body = self._read_json_body()
-        job_key = str(body.get("job_key") or "").strip()
+        from job_actions import resolve_request_job_id
+        job_id = resolve_request_job_id(self.config, body, endpoint="jobs/cancel")
         run_id = str(body.get("run_id") or "").strip()
-        if not job_key or not run_id:
-            raise ValueError("job_key and run_id are required")
+        if not run_id:
+            raise ValueError("job_id and run_id are required")
         session = self._get_current_session_meta() or {}
         requested_by = _normalize_username(session.get("username", ""))
         try:
-            state = cancel_job(self.config, job_key, run_id, requested_by=requested_by)
+            state = cancel_job(self.config, job_id, run_id, requested_by=requested_by)
         except (FileNotFoundError, RuntimeError) as exc:
             raise ApiConflictError(str(exc), "job_cancel_unavailable") from exc
         return {
             "cancel_requested": True,
-            "job_key": job_key,
+            "job_id": job_id,
             "run_id": run_id,
             "phase": state.get("phase", ""),
             "cancellation_deferred": bool(state.get("cancellation_deferred")),
@@ -3919,6 +3740,7 @@ btn.addEventListener('click',doRecovery);
             return ""
 
         context: dict[str, object] = {}
+        self._add_context_value(context, "job_id", pick("job_id"))
         self._add_context_value(context, "job_key", pick("job_key", "job"))
         job_keys = body.get("job_keys")
         if not context.get("job_key") and isinstance(job_keys, list) and len(job_keys) == 1:
@@ -4415,16 +4237,14 @@ def _start_normal_runtime_services(config: dict) -> None:
         _log(
             "Repository assignments: "
             f"status={'ok' if repository_usage.get('ok') else 'attention'}, reconciled={len(changed)}, "
-            f"errors={len(repository_usage.get('errors', []))}"
+            f"errors={len(repository_usage.get('errors', []))}, "
+            f"mismatches={len(repository_usage.get('usage_mismatches', []))}"
         )
     except Exception as exc:
         _log(f"WARNING: Repository assignments could not be reconciled: {_mask_secrets(str(exc))}")
 
     try:
-        from schedule_api import apply_all_schedules, prune_orphaned_schedules
-        pruned = prune_orphaned_schedules(config, log_fn=_log)
-        if pruned.get("changed"):
-            _log(f"AUTO-PRUNE schedules.json completed: removed={len(pruned.get('removed_keys', []))}")
+        from schedule_api import apply_all_schedules
         apply_all_schedules(config)
         _log("Cron schedules applied.")
     except Exception as exc:

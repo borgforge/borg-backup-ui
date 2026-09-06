@@ -6,6 +6,18 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #474 (integration work for #447; not released)
+- Converted job discovery, configuration actions, repository assignments and
+  schedules to UUID job IDs; editable descriptors no longer rename identity.
+- Validate all active references before writes; preserve schedule bytes on
+  job edits and roll back ordinary metadata/repository/cron failures.
+- Reconciliation and schedule reads report invalid references without repair
+  or automatic deletion. Cron sends job_id and preserves disabled settings.
+- Added a bounded deprecated HTTP alias adapter, current UI labels and tests
+  for configuration rename, storage changes, rollback and concurrent updates.
+- Runtime execution, combined-prefix retention, historical artifact cleanup
+  and full startup activation remain guarded follow-up phases (#475-#479).
+
 ### Issue #473 (integration work for #447; not released)
 - Added strict schema-v4 job validation, UUID-named metadata and canonical
   create/edit/duplicate operations, retaining unexposed operational settings.

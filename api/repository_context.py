@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -34,38 +33,32 @@ def jobs_dir(config: dict) -> Path:
     return _data_root(config) / "config" / "jobs"
 
 
-def load_job_metadata(config: dict, job_key: str) -> dict[str, Any]:
-    key = str(job_key or "").strip()
-    if not key:
-        raise RepositoryContextError("Job key is missing")
-    path = jobs_dir(config) / f"{key}.json"
-    if not path.is_file():
-        raise RepositoryContextError(f"Job metadata was not found: {key}")
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise RepositoryContextError(f"Job metadata is not readable: {key}") from exc
-    if not isinstance(payload, dict):
-        raise RepositoryContextError(f"Job metadata is invalid: {key}")
-    return payload
+def load_job_metadata(config: dict, job_id: str) -> dict[str, Any]:
+    from job_store import read_job
+    return read_job(jobs_dir(config), job_id)
 
 
 def load_repository_inventory(config: dict) -> dict[str, dict[str, dict[str, Any]]]:
     """Load canonical repository and storage objects once for one operation."""
-    from repositories_api import read_repository_store
-    from storage_objects_api import read_storage_store
+    from inventory_store import inventory_lock
+    with inventory_lock(jobs_dir(config).parent):
+        from repositories_api import read_repository_store
+        from storage_objects_api import read_storage_store
 
-    repositories = {
-        str(row.get("repository_key") or "").strip(): row
-        for row in read_repository_store(config).get("repositories", [])
-        if isinstance(row, dict) and str(row.get("repository_key") or "").strip()
-    }
-    storages = {
-        str(row.get("storage_key") or "").strip(): row
-        for row in read_storage_store(config).get("storages", [])
-        if isinstance(row, dict) and str(row.get("storage_key") or "").strip()
-    }
-    return {"repositories": repositories, "storages": storages}
+        from job_store import read_jobs, validate_assignments
+        store = read_repository_store(config)
+        validate_assignments(read_jobs(jobs_dir(config)), store)
+        repositories = {
+            str(row.get("repository_key") or "").strip(): row
+            for row in store.get("repositories", [])
+            if isinstance(row, dict) and str(row.get("repository_key") or "").strip()
+        }
+        storages = {
+            str(row.get("storage_key") or "").strip(): row
+            for row in read_storage_store(config).get("storages", [])
+            if isinstance(row, dict) and str(row.get("storage_key") or "").strip()
+        }
+        return {"repositories": repositories, "storages": storages}
 
 
 def repository_by_key(
@@ -136,22 +129,20 @@ def repository_path(repository: dict[str, Any], storage: dict[str, Any]) -> str:
 
 def resolve_job_repository_context(
     config: dict,
-    job_key: str = "",
+    job_id: str = "",
     *,
     job: dict[str, Any] | None = None,
     require_passphrase_file: bool = True,
-    allow_legacy_job: bool = False,
     inventory: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    metadata = dict(job) if isinstance(job, dict) else load_job_metadata(config, job_key)
-    resolved_job_key = str(metadata.get("job_key") or job_key or "").strip()
-    if not allow_legacy_job:
-        legacy_fields = sorted(field for field in LEGACY_JOB_REPOSITORY_FIELDS if field in metadata)
-        if int(metadata.get("schema_version") or 1) < 2 or legacy_fields:
-            details = ", ".join(legacy_fields) if legacy_fields else "schema_version"
-            raise RepositoryContextError(
-                f"Job '{resolved_job_key}' awaits repository migration ({details})"
-            )
+    from job_model import JobValidationError, validate_job
+    metadata = dict(job) if isinstance(job, dict) else load_job_metadata(config, job_id)
+    validate_job(metadata)
+    resolved_job_id = metadata["job_id"]
+    if job_id and job_id != resolved_job_id:
+        raise JobValidationError("conflicting_job_identity", "Requested job_id does not match metadata")
+    if LEGACY_JOB_REPOSITORY_FIELDS.intersection(metadata):
+        raise RepositoryContextError("Job still contains legacy repository fields")
     repository_key = str(metadata.get("repository_key") or "").strip()
     source = inventory if isinstance(inventory, dict) else load_repository_inventory(config)
     repository = repository_by_key(config, repository_key, inventory=source)
@@ -179,7 +170,10 @@ def resolve_job_repository_context(
             raise RepositoryContextError("Repository passphrase file does not exist")
 
     return {
-        "job_key": resolved_job_key,
+        "job_id": resolved_job_id,
+        "name": metadata["name"],
+        "archive_prefix": metadata["archive_prefixes"][0],
+        "archive_prefixes": list(metadata["archive_prefixes"]),
         "job": metadata,
         "repository_key": repository_key,
         "repository": repository,
@@ -195,59 +189,23 @@ def resolve_job_repository_context(
 
 
 def profile_job_references(config: dict, location: str) -> dict[str, list[str]]:
+    from job_store import read_jobs
     wanted = str(location or "").strip().lower()
     references: dict[str, list[str]] = {}
-    directory = jobs_dir(config)
-    if not directory.is_dir():
-        return references
     inventory = load_repository_inventory(config)
-    for path in sorted(directory.glob("*.json")):
-        try:
-            job = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            continue
-        if not isinstance(job, dict):
-            continue
-        job_key = str(job.get("job_key") or path.stem).strip()
-        try:
-            context = resolve_job_repository_context(
-                config,
-                job_key,
-                job=job,
-                require_passphrase_file=False,
-                inventory=inventory,
-            )
-        except RepositoryContextError:
-            continue
-        if str(context.get("location") or "").strip().lower() != wanted:
-            continue
-        profile_key = str(context.get("profile_key") or "").strip().lower()
-        if not profile_key:
-            continue
-        name = str(job.get("name") or "").strip()
-        label = f"{job_key} ({name})" if name else job_key
-        references.setdefault(profile_key, []).append(label)
+    for job_id, job in read_jobs(jobs_dir(config)).items():
+        context = resolve_job_repository_context(config, job_id, job=job,
+            require_passphrase_file=False, inventory=inventory)
+        if context["location"] == wanted and context["profile_key"]:
+            references.setdefault(context["profile_key"], []).append(f"{job['name']} ({job_id})")
     return references
 
 
 def jobs_using_repository(config: dict, repository_key: str) -> list[str]:
-    wanted = str(repository_key or "").strip()
-    if not wanted:
-        return []
-    jobs: list[str] = []
-    directory = jobs_dir(config)
-    if not directory.is_dir():
-        return jobs
-    for path in sorted(directory.glob("*.json")):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            continue
-        if not isinstance(payload, dict):
-            continue
-        if str(payload.get("repository_key") or "").strip() != wanted:
-            continue
-        key = str(payload.get("job_key") or path.stem).strip()
-        if key:
-            jobs.append(key)
-    return jobs
+    from inventory_store import inventory_lock
+    with inventory_lock(jobs_dir(config).parent):
+        from job_store import read_jobs, validate_assignments
+        from repositories_api import read_repository_store
+        jobs = read_jobs(jobs_dir(config))
+        validate_assignments(jobs, read_repository_store(config))
+        return [job_id for job_id, job in jobs.items() if job["repository_key"] == repository_key]

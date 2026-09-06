@@ -89,12 +89,12 @@
         {
           "path": "api/job_store.py",
           "anchor": "save_job_transaction",
-          "role": "strict canonical inventory reads and UUID repository assignment transaction; general API cutover remains #474"
+          "role": "strict schema-v4 inventory, schedule prevalidation and durable UUID configuration transactions (#473, #474)"
         },
         {
           "path": "api/jobs_api.py",
           "anchor": "discover_jobs",
-          "role": "metadata discovery and JobManager identity/runtime access; lazy migrations are not read-only"
+          "role": "strict UUID discovery without lazy migration; runtime state cutover remains #475"
         },
         {
           "path": "api/wizard_api.py",
@@ -118,18 +118,23 @@
         },
         {
           "path": "ui/js/pages/jobs.js",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "actions, edit selection, last run and live state"
         },
         {
           "path": "ui/js/core/app-core.js",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "shared job actions/state joins"
         },
         {
           "path": "api/config_api.py",
           "anchor": "backup_type",
           "role": "legacy type-specific config defaults; preserve effective behavior"
+        },
+        {
+          "path": "api/job_actions.py",
+          "anchor": "resolve_request_job_id",
+          "role": "bounded deprecated HTTP alias adapter, UUID run/delete preparation and configuration transactions (#474)"
         }
       ]
     },
@@ -146,8 +151,8 @@
       "files": [
         {
           "path": "api/repositories_api.py",
-          "anchor": "save_job_repository_transaction",
-          "role": "assignment/reverse-link writer, reconciliation, maintenance filters and deletion guard"
+          "anchor": "repository_assignment_report",
+          "role": "canonical UUID reverse references and read-only reconciliation; active persistence rejects mutable-key links (#474)"
         },
         {
           "path": "api/storage_profiles_api.py",
@@ -161,13 +166,13 @@
         },
         {
           "path": "api/repository_context.py",
-          "anchor": "job_key",
-          "role": "repository resolution for a selected job"
+          "anchor": "job_id",
+          "role": "strict UUID repository resolution and validated active references (#474)"
         },
         {
           "path": "api/check_api.py",
-          "anchor": "_job_retention",
-          "role": "repository check/prune/compact execution, job selection and archive-prefix filtering"
+          "anchor": "_repository_command",
+          "role": "UUID retention selection; combined prefix retention engine remains #475 (blocked until implemented)"
         },
         {
           "path": "api/inventory_store.py",
@@ -181,7 +186,7 @@
         },
         {
           "path": "ui/js/pages/storage.js",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "assignment/maintenance display and actions"
         }
       ]
@@ -250,6 +255,16 @@
           "path": "ui/js/components/log-viewer.js",
           "anchor": "log",
           "role": "readable log UI; full-ID lookup supplied by callers"
+        },
+        {
+          "path": "api/activity_log.py",
+          "anchor": "job_key",
+          "role": "windowed log readers and run attribution from merged #463"
+        },
+        {
+          "path": "api/activity_log_capture.py",
+          "anchor": "job_key",
+          "role": "RAM capture registration and finalization identity from merged #463"
         }
       ]
     },

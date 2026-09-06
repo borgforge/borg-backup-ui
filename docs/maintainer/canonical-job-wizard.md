@@ -50,7 +50,8 @@ Create/save returns `job_id`, `revision`, `job_name`, `archive_name_preview`
 and the existing scriptless result fields. The UI uses the returned ID for
 `PUT /api/schedules`; it never reconstructs a key from name/prefix/location.
 If schedule saving fails after job creation, a retry edits the returned ID
-instead of creating another job. General schedule API conversion is #474.
+instead of creating another job. The schedule API is now converted in #474;
+see [canonical-job-control.md](canonical-job-control.md).
 
 ## Persistence and failure limits
 
@@ -75,10 +76,9 @@ not claim full cross-store migration or whole-installation verification.
 
 ## Remaining phase owners and release gate
 
-- #474: general job discovery and inventory APIs, repository normalizers,
-  deletion guards and maintenance, UUID schedule map/managed cron. Until then,
-  **do not run old repository writers on schema-v4 data**: they still normalize
-  legacy assignment fields. Do not feed new jobs into legacy discovery.
+- #474: general discovery, repository references, UUID configuration actions
+  and managed cron are implemented; see the control-plane boundary document
+  for transaction guarantees and explicit pending runtime/retention guards.
 - #475: runner, archive creation with the exact prefix, status, logs, recovery
   and notifications. Model
   and preview tests are not evidence of an end-to-end backup yet.

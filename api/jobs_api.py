@@ -338,10 +338,11 @@ def migrate_jobs_metadata_dir(scripts_dir: Path, data_root: Path | None = None) 
 
 @dataclass
 class JobInfo:
-    key: str
-    backup_type: str
+    job_id: str
+    repository_key: str
+    archive_prefixes: list[str]
     location: str
-    script_path: Optional[Path]
+    script_path: Optional[Path] = None
     name: str = ""
     has_docker: bool = False
     has_vm: bool = False
@@ -367,10 +368,7 @@ class JobInfo:
 
     @property
     def display_name(self) -> str:
-        loc_label = {"local": "Lokal", "usb": "USB", "smb": "SMB", "storagebox": "Storagebox"}.get(
-            self.location, self.location
-        )
-        return f"{self.backup_type.capitalize()} – {loc_label}"
+        return self.name
 
 
 class _JobState:
@@ -699,169 +697,35 @@ def stream_job_output(config: dict, job_key: str) -> Generator[str, None, None]:
 # ── Job-Erkennung ─────────────────────────────────────────────────────────────
 
 def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
-    """
-    Finds backup jobs from canonical JSON metadata.
-    """
-    utility_types = {"restore_test"}
-
-    def _make_job(
-        py_file: Optional[Path],
-        backup_type: str,
-        location: str,
-        *,
-        key: Optional[str] = None,
-        name: Optional[str] = None,
-        has_docker: Optional[bool] = None,
-        has_vm: Optional[bool] = None,
-        description: Optional[str] = None,
-        icon: Optional[str] = None,
-        icon_color: Optional[str] = None,
-        standard: str = "wizard",
-        enabled: bool = True,
-        compression: str = "",
-        retention_daily: str = "",
-        retention_weekly: str = "",
-        retention_monthly: str = "",
-        retention_yearly: str = "",
-        restore_test_policy_mode: str = "",
-        restore_test_interval_days: int = 30,
-        restore_test_validity_days: int = 30,
-        restore_test_level: int = 2,
-        restore_test_max_runtime_minutes: int = 0,
-        docker_control: Optional[dict] = None,
-        vm_control: Optional[dict] = None,
-        file_activity: bool = False,
-    ) -> JobInfo:
-        desc_file = py_file.with_suffix(".description") if py_file is not None else None
-        desc_text = (
-            description
-            if description is not None
-            else (
-                desc_file.read_text(encoding="utf-8").strip()
-                if desc_file is not None and desc_file.exists()
-                else ""
-            )
-        )
-        bt_lc = backup_type.lower()
-        default_docker_control = {
-            "mode": "all" if ((bt_lc == "appdata") if has_docker is None else bool(has_docker)) else "none",
-            "selected": [],
-            "ack_appdata_risk": False,
-        }
-        default_vm_control = {
-            "mode": "all" if ((bt_lc == "vms") if has_vm is None else bool(has_vm)) else "none",
-            "selected": [],
-            "ack_domains_risk": False,
-        }
-        return JobInfo(
-            key=key or f"{bt_lc}_{location}",
-            backup_type=backup_type,
-            location=location,
-            script_path=py_file,
-            name=(name or "").strip(),
-            has_docker=(bt_lc == "appdata") if has_docker is None else bool(has_docker),
-            has_vm=(bt_lc == "vms") if has_vm is None else bool(has_vm),
-            description=desc_text,
-            icon=(icon or "").strip().lower(),
-            icon_color=(icon_color or "").strip().lower(),
-            # Only explicit utility jobs should be filtered from normal
-            # backup selectors. Custom/unknown backup types are still jobs.
-            is_utility=bt_lc in utility_types,
-            standard=standard,
-            enabled=bool(enabled),
-            file_activity=file_activity,
-            compression=str(compression or "").strip(),
-            retention_daily=str(retention_daily or "").strip(),
-            retention_weekly=str(retention_weekly or "").strip(),
-            retention_monthly=str(retention_monthly or "").strip(),
-            retention_yearly=str(retention_yearly or "").strip(),
-            docker_control=docker_control or default_docker_control,
-            vm_control=vm_control or default_vm_control,
-            restore_test_policy_mode=str(restore_test_policy_mode or "").strip().lower(),
-            restore_test_interval_days=_safe_int(restore_test_interval_days, 30),
-            restore_test_validity_days=_safe_int(restore_test_validity_days, 30),
-            restore_test_level=_safe_int(restore_test_level, 2),
-            restore_test_max_runtime_minutes=_safe_int(restore_test_max_runtime_minutes, 0),
-        )
-
-    jobs_by_key: Dict[str, JobInfo] = {}
+    from job_store import read_jobs
+    from repository_context import load_repository_inventory, resolve_job_repository_context
     root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
-    # ── Wizard-Metadaten (prioritär) ──────────────────────────────────────────
-    meta_dirs = get_jobs_meta_dirs(scripts_dir, root)
-    for meta_dir in meta_dirs:
-        if not meta_dir.is_dir():
-            continue
-        for meta_file in sorted(meta_dir.glob("*.json")):
-            try:
-                raw = json.loads(meta_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                continue
-
-            # Pflichtfelder V1
-            try:
-                key = str(raw["job_key"]).strip()
-                backup_type = str(raw["backup_type"]).strip()
-                location = str(raw["location"]).strip().lower()
-                script_name = str(raw.get("script") or "").strip()
-            except (KeyError, TypeError, ValueError):
-                continue
-
-            if not key or not backup_type or not location:
-                continue
-            if location not in {"local", "usb", "smb", "storagebox", "custom"}:
-                continue
-
-            script_path = (scripts_dir / script_name).resolve()
-            if script_name:
-                try:
-                    script_path.relative_to(scripts_dir.resolve())
-                except ValueError:
-                    # Pfad außerhalb scripts_dir ignorieren
-                    continue
-            else:
-                script_path = None
-
-            features = raw.get("features") if isinstance(raw.get("features"), dict) else {}
-            retention = raw.get("retention") if isinstance(raw.get("retention"), dict) else {}
-            rt_policy = raw.get("restore_test_policy") if isinstance(raw.get("restore_test_policy"), dict) else {}
-            docker_control = _runtime_control_from_meta(raw, "docker")
-            vm_control = _runtime_control_from_meta(raw, "vm")
-            has_docker = bool(features.get("docker", False))
-            has_vm = bool(features.get("vm", False))
-            description = raw.get("description")
-            if description is not None:
-                description = str(description)
-
-            # Preferred dir wins: only set if job key not seen yet.
-            jobs_by_key.setdefault(key, _make_job(
-                script_path,
-                backup_type,
-                location,
-                key=key,
-                name=str(raw.get("name") or "").strip(),
-                has_docker=has_docker,
-                has_vm=has_vm,
-                description=description,
-                icon=str(raw.get("icon") or "").strip().lower(),
-                icon_color=str(raw.get("icon_color") or "").strip().lower(),
-                standard="wizard",
-                enabled=bool(raw.get("enabled", True)),
-                file_activity=str(raw.get("file_activity", False)).strip().lower() in {"1", "true", "yes", "on"},
-                compression=str(raw.get("compression") or "").strip(),
-                retention_daily=str(retention.get("daily") or "").strip(),
-                retention_weekly=str(retention.get("weekly") or "").strip(),
-                retention_monthly=str(retention.get("monthly") or "").strip(),
-                retention_yearly=str(retention.get("yearly") or "").strip(),
-                docker_control=docker_control,
-                vm_control=vm_control,
-                restore_test_policy_mode=str(rt_policy.get("mode") or "").strip().lower(),
-                restore_test_interval_days=_safe_int(rt_policy.get("interval_days"), 30),
-                restore_test_validity_days=_safe_int(rt_policy.get("validity_days") or rt_policy.get("interval_days"), 30),
-                restore_test_level=_safe_int(rt_policy.get("level"), 2),
-                restore_test_max_runtime_minutes=_safe_int(rt_policy.get("max_runtime_minutes"), 0),
-            ))
-
-    return list(jobs_by_key.values())
+    config = {"BACKUP_SCRIPTS_DIR": str(root)}
+    inventory = load_repository_inventory(config)
+    jobs = []
+    for job_id, raw in read_jobs(get_jobs_meta_dir(scripts_dir, root)).items():
+        context = resolve_job_repository_context(config, job_id, job=raw,
+            require_passphrase_file=False, inventory=inventory)
+        retention = raw.get("retention", {})
+        policy = raw.get("restore_test_policy", {})
+        docker = _runtime_control_from_meta(raw, "docker")
+        vm = _runtime_control_from_meta(raw, "vm")
+        jobs.append(JobInfo(
+            job_id=job_id, repository_key=raw["repository_key"], archive_prefixes=list(raw["archive_prefixes"]),
+            location=context["location"], name=raw["name"], description=raw.get("description", ""),
+            icon=raw.get("icon", ""), icon_color=raw.get("icon_color", ""),
+            enabled=raw.get("enabled", True), standard=raw.get("standard", "wizard"),
+            file_activity=raw.get("file_activity", False), compression=raw.get("compression", ""),
+            has_docker=docker["mode"] != "none", has_vm=vm["mode"] != "none",
+            docker_control=docker, vm_control=vm,
+            **{"retention_" + key: retention.get(key, "") for key in ("daily", "weekly", "monthly", "yearly")},
+            restore_test_policy_mode=policy.get("mode", ""),
+            restore_test_interval_days=_safe_int(policy.get("interval_days"), 30),
+            restore_test_validity_days=_safe_int(policy.get("validity_days"), 30),
+            restore_test_level=_safe_int(policy.get("level"), 2),
+            restore_test_max_runtime_minutes=_safe_int(policy.get("max_runtime_minutes"), 0),
+        ))
+    return jobs
 
 
 def _job_metadata_signature(meta_dir: Path, scripts_dir: Path, *, include_files: bool) -> tuple:
@@ -888,39 +752,11 @@ def invalidate_job_discovery_cache() -> None:
 
 
 def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobInfo]:
-    """Read static job metadata once while keeping external changes observable."""
+    """Read the validated canonical inventory; never migrate on discovery."""
+    from inventory_store import inventory_lock
     root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
-    meta_dir = get_jobs_meta_dir(scripts_dir, root)
-    cache_key = f"{scripts_dir.resolve()}::{root.resolve()}"
-    with _job_discovery_cache_lock:
-        if cache_key not in _job_metadata_migrations:
-            migrate_jobs_metadata_dir(scripts_dir, root)
-            _job_metadata_migrations.add(cache_key)
-
-    now = time.monotonic()
-    quick_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=False)
-    with _job_discovery_cache_lock:
-        cached = _job_discovery_cache.get(cache_key)
-        if cached and cached["quick_signature"] == quick_signature and now < cached["expires_at"]:
-            return copy.deepcopy(cached["jobs"])
-
-    full_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=True)
-    with _job_discovery_cache_lock:
-        cached = _job_discovery_cache.get(cache_key)
-        if cached and cached["full_signature"] == full_signature:
-            cached["quick_signature"] = quick_signature
-            cached["expires_at"] = now + _JOB_DISCOVERY_CACHE_TTL_SECONDS
-            return copy.deepcopy(cached["jobs"])
-
-    jobs = _discover_jobs_uncached(scripts_dir, root)
-    with _job_discovery_cache_lock:
-        _job_discovery_cache[cache_key] = {
-            "quick_signature": quick_signature,
-            "full_signature": full_signature,
-            "expires_at": now + _JOB_DISCOVERY_CACHE_TTL_SECONDS,
-            "jobs": copy.deepcopy(jobs),
-        }
-    return jobs
+    with inventory_lock(root / "config"):
+        return _discover_jobs_uncached(scripts_dir, root)
 
 
 def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
@@ -931,38 +767,24 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
     scripts_dir = resolve_scripts_dir(config)
     data_root = resolve_data_root(config)
     runtime_states = get_all_runtime_states(config)
-    try:
-        from repository_context import load_repository_inventory
-        repository_inventory = load_repository_inventory(config)
-    except Exception:
-        repository_inventory = {"repositories": {}, "storages": {}}
+    from repository_context import load_repository_inventory, resolve_job_repository_context
+    repository_inventory = load_repository_inventory(config)
     result = []
     for info in discover_jobs(scripts_dir, data_root):
-        last = latest_statuses.get(info.key)
-        run_state = runtime_states.get(info.key, {"running": False})
-        try:
-            from repository_context import resolve_job_repository_context
-            repository_context = resolve_job_repository_context(
-                config,
-                info.key,
-                require_passphrase_file=False,
-                inventory=repository_inventory,
-            )
-            repo_path = str(repository_context.get("repository_path") or "")
-            repository_key = str(repository_context.get("repository_key") or "")
-            repository = repository_context.get("repository")
-            repository_name = str(
-                repository.get("display_name") or repository.get("repository_name") or repository_key
-            ) if isinstance(repository, dict) else repository_key
-        except Exception:
-            repo_path = ""
-            repository_key = ""
-            repository_name = ""
+        last = latest_statuses.get(info.job_id)
+        run_state = runtime_states.get(info.job_id, {"running": False})
+        repository_context = resolve_job_repository_context(config, info.job_id,
+            require_passphrase_file=False, inventory=repository_inventory)
+        repo_path = repository_context["repository_path"]
+        repository_key = repository_context["repository_key"]
+        repository = repository_context["repository"]
+        repository_name = repository.get("display_name") or repository.get("repository_name") or repository_key
 
         result.append(
             {
-                "key": info.key,
-                "backup_type": info.backup_type,
+                "job_id": info.job_id,
+                "archive_prefix": info.archive_prefixes[0],
+                "archive_prefixes": list(info.archive_prefixes),
                 "location": info.location,
                 "display_name": info.display_name,
                 "name": info.name or info.display_name,
@@ -1011,7 +833,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
         verification = {}
 
     for job in result:
-        meta = verification.get(job["key"], {})
+        meta = verification.get(job["job_id"], {})
         job["restore_verification_status"] = meta.get("status", "never")
         job["restore_verification_reason"] = meta.get("reason", "")
         job["restore_verification_last_test_date"] = meta.get("last_test_date", "")

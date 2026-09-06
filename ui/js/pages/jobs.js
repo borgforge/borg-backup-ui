@@ -142,6 +142,7 @@ async function refreshJobs() {
       fetch('/api/jobs/running'),
     ]);
     if (!jobsRes.ok) throw new Error(`Jobs: HTTP ${jobsRes.status}`);
+    if (!schedRes.ok) throw new Error(apiErrorMessage(await schedRes.json(), schedRes.status));
     if (!statusRes.ok) throw new Error(`Status: HTTP ${statusRes.status}`);
     if (!runningRes.ok) throw new Error(`Running jobs: HTTP ${runningRes.status}`);
 
@@ -160,13 +161,13 @@ async function refreshJobs() {
 
     jobsState.jobs = (jobsData.jobs || []).map(j => ({
       ...j,
-      ...statusMap[j.key] ? {
-        last_status:    statusMap[j.key].status,
-        last_time_ago:  statusMap[j.key].time_ago,
-        last_timestamp: statusMap[j.key].timestamp,
-        last_exit_code: statusMap[j.key].exit_code,
+      ...statusMap[j.job_id] ? {
+        last_status:    statusMap[j.job_id].status,
+        last_time_ago:  statusMap[j.job_id].time_ago,
+        last_timestamp: statusMap[j.job_id].timestamp,
+        last_exit_code: statusMap[j.job_id].exit_code,
       } : {},
-      ...jobRuntimeState(runningData[j.key]),
+      ...jobRuntimeState(runningData[j.job_id]),
     }));
     jobsState.lastRunningSnapshot = JSON.stringify(runningData);
 
@@ -206,12 +207,12 @@ async function _pollRunningStates() {
 
     jobsState.jobs = jobsState.jobs.map(j => ({
       ...j,
-      ...jobRuntimeState(running[j.key], j),
+      ...jobRuntimeState(running[j.job_id], j),
     }));
     renderJobsGrid(jobsState.jobs);
 
     const anyJustFinished = jobsState.jobs.some(
-      j => !j.running && running[j.key] && running[j.key].exit_code !== null
+      j => !j.running && running[j.job_id] && running[j.job_id].exit_code !== null
     );
     if (anyJustFinished) {
       setTimeout(refreshJobs, 1500);
@@ -268,14 +269,13 @@ function renderJobsGrid(jobs) {
   }
   if (jobsNewBtn) jobsNewBtn.classList.remove('hidden');
 
-  const typeOrder = { flash: 0, appdata: 1, photos: 2, VMs: 3, vms: 3, sonstiges: 4 };
   const visible = jobs
     .filter((job) => jobsState.selectedLocation === 'all' || jobsLocationKey(job) === jobsState.selectedLocation)
     .sort((a, b) => {
       const locationDelta = JOBS_LOCATION_ORDER.indexOf(jobsLocationKey(a))
         - JOBS_LOCATION_ORDER.indexOf(jobsLocationKey(b));
       if (locationDelta) return locationDelta;
-      return (typeOrder[a.backup_type] ?? 99) - (typeOrder[b.backup_type] ?? 99);
+      return String(a.name || '').localeCompare(String(b.name || ''));
     });
 
   renderJobsLocationSidebar(jobs);
@@ -379,13 +379,13 @@ function renderJobsLocationGroup(location, jobs) {
 
 function renderJobCard(job) {
   const isRunning = job.running;
-  const titleName = job.name || job.display_name || capitalize(job.backup_type);
+  const titleName = job.name || job.display_name || job.archive_prefix || '';
   const iconKey = resolveJobIcon(job);
   const iconColorKey = resolveJobIconColor(job);
   const iconColorClass = iconColorKey ? ` type-icon-color-${iconColorKey}` : '';
 
   const schedules = _coreSchedules();
-  const sched = schedules[job.key];
+  const sched = schedules[job.job_id];
   const schedActive = sched && sched.enabled;
 
   const features = [];
@@ -449,29 +449,29 @@ function renderJobCard(job) {
       ? jobsT(job.cancel_message_key)
       : '';
   const cancelButton = job.cancel_allowed && !job.cancel_requested && job.run_id
-    ? `<button class="btn btn-danger btn-sm" data-jobs-action="cancel-job" data-job-key="${escHtml(job.key)}">${jobsT('jobs.cancelJob')}</button>`
+    ? `<button class="btn btn-danger btn-sm" data-jobs-action="cancel-job" data-job-id="${escHtml(job.job_id)}">${jobsT('jobs.cancelJob')}</button>`
     : '';
   const actionHtml = isRunning
     ? `<div class="jobs-running-actions">
          <div class="jobs-running-state"><span class="running-dot"></span><span>${jobsT('jobs.running')}</span></div>
          <div class="jobs-running-buttons">
-           ${job.run_log_available === false ? '' : `<button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-key="${escHtml(job.key)}">${jobsT('jobs.showLog')}</button>`}
+           ${job.run_log_available === false ? '' : `<button class="btn btn-secondary btn-sm" data-jobs-action="open-log" data-job-id="${escHtml(job.job_id)}">${jobsT('jobs.showLog')}</button>`}
            ${cancelButton}
          </div>
          ${cancelStatus ? `<div class="jobs-running-message">${escHtml(cancelStatus)}</div>` : ''}
        </div>`
-    : `<button class="btn btn-primary" data-jobs-action="start-job" data-job-key="${escHtml(job.key)}" ${effectiveStartDisabled ? `disabled title="${job.enabled === false ? jobsT('jobs.disabled') : jobsT('jobs.dataDirRequired')}"` : ''}>
+    : `<button class="btn btn-primary" data-jobs-action="start-job" data-job-id="${escHtml(job.job_id)}" ${effectiveStartDisabled ? `disabled title="${job.enabled === false ? jobsT('jobs.disabled') : jobsT('jobs.dataDirRequired')}"` : ''}>
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
            <polygon points="5 3 19 12 5 21 5 3"/>
          </svg>
          ${jobsT('jobs.startAction')}
        </button>`;
 
-  return `<article class="jobs-redesign-row ${isRunning ? 'is-running' : ''} ${job.enabled === false ? 'is-disabled' : ''}" id="job-card-${escHtml(job.key)}">
+  return `<article class="jobs-redesign-row ${isRunning ? 'is-running' : ''} ${job.enabled === false ? 'is-disabled' : ''}" id="job-card-${escHtml(job.job_id)}">
     <div class="jobs-redesign-cell jobs-redesign-main">
       <div class="job-card-title">
-        <div class="type-icon type-icon-${escHtml(String(job.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</div>
-        <div><div class="type-name">${escHtml(titleName)}</div><span class="type-sub">${escHtml(job.key)}</span></div>
+        <div class="type-icon type-icon-${escHtml(String(job.icon || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</div>
+        <div><div class="type-name">${escHtml(titleName)}</div><span class="type-sub">${escHtml(job.archive_prefix || '')}</span></div>
       </div>
       ${job.description ? `<div class="job-description">${renderDescriptionMarkdown(job.description)}</div>` : ''}
       <div class="job-meta">${features.join('')}</div>
@@ -491,26 +491,26 @@ function renderJobCard(job) {
     <div class="jobs-redesign-cell jobs-redesign-actions">
       ${actionHtml}
       <div class="job-card-menu">
-            <button class="job-menu-btn" data-jobs-action="toggle-menu" data-job-key="${escHtml(job.key)}" title="${jobsT('jobs.options')}" aria-label="${jobsT('jobs.options')}">
+            <button class="job-menu-btn" data-jobs-action="toggle-menu" data-job-id="${escHtml(job.job_id)}" title="${jobsT('jobs.options')}" aria-label="${jobsT('jobs.options')}">
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                 <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
               </svg>
             </button>
-            <div class="job-menu-dropdown hidden" id="job-menu-${escHtml(job.key)}">
-              <button class="job-menu-item" data-jobs-action="edit-job" data-job-key="${escHtml(job.key)}">
+            <div class="job-menu-dropdown hidden" id="job-menu-${escHtml(job.job_id)}">
+              <button class="job-menu-item" data-jobs-action="edit-job" data-job-id="${escHtml(job.job_id)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <path d="M12 20h9"/>
                   <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
                 </svg>
                 ${jobsT('jobs.edit')}
               </button>
-              ${job.enabled === false ? '' : `<button class="job-menu-item ${schedActive ? 'sched-active' : ''}" data-jobs-action="show-schedule" data-job-key="${escHtml(job.key)}">
+              ${job.enabled === false ? '' : `<button class="job-menu-item ${schedActive ? 'sched-active' : ''}" data-jobs-action="show-schedule" data-job-id="${escHtml(job.job_id)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                 </svg>
                 ${jobsT('jobs.schedule')}${schedActive ? ' <span class="menu-active-dot"></span>' : ''}
               </button>`}
-              <button class="job-menu-item" data-jobs-action="toggle-enabled" data-job-key="${escHtml(job.key)}" data-job-enabled="${job.enabled === false ? 'false' : 'true'}">
+              <button class="job-menu-item" data-jobs-action="toggle-enabled" data-job-id="${escHtml(job.job_id)}" data-job-enabled="${job.enabled === false ? 'false' : 'true'}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   ${job.enabled === false
                     ? '<path d="M12 2v20"/><path d="M2 12h20"/>'
@@ -518,7 +518,7 @@ function renderJobCard(job) {
                 </svg>
                 ${job.enabled === false ? jobsT('jobs.enable') : jobsT('jobs.disable')}
               </button>
-              <button class="job-menu-item danger" data-jobs-action="delete-job" data-job-key="${escHtml(job.key)}">
+              <button class="job-menu-item danger" data-jobs-action="delete-job" data-job-id="${escHtml(job.job_id)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <polyline points="3 6 5 6 21 6"/>
                   <path d="M19 6l-1 14H6L5 6"/>
@@ -562,7 +562,7 @@ function resolveJobIcon(job) {
   ]);
   const icon = String(job?.icon || '').trim().toLowerCase();
   if (icon && allowed.has(icon)) return icon;
-  return String(job?.backup_type || 'sonstiges').trim().toLowerCase() || 'sonstiges';
+  return String(job?.icon || 'sonstiges').trim().toLowerCase() || 'sonstiges';
 }
 
 function resolveJobIconColor(job) {
@@ -603,9 +603,9 @@ function closeAllJobMenus() {
 document.addEventListener('click', closeAllJobMenus);
 
 function _showDeleteJobModalForKey(jobKey) {
-  const job = jobsState.jobs.find(j => j.key === jobKey);
+  const job = jobsState.jobs.find(j => j.job_id === jobKey);
   if (!job) return;
-  showDeleteJobModal(jobKey, job.display_name || job.name || job.key, job.backup_type || '', job.location || '');
+  showDeleteJobModal(jobKey, job.display_name || job.name || job.job_id, '', job.location || '');
 }
 
 function onJobsGridClick(event) {
@@ -613,7 +613,7 @@ function onJobsGridClick(event) {
   if (!btn) return;
 
   const action = btn.dataset.jobsAction || '';
-  const jobKey = btn.dataset.jobKey || '';
+  const jobKey = btn.dataset.jobId || '';
 
   if (action === 'open-wizard') return openWizard();
   if (action === 'open-log') return openLogPanel(jobKey);
@@ -643,7 +643,7 @@ async function setJobEnabled(jobKey, enabled) {
     const res = await fetch('/api/jobs/enabled', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_key: jobKey, enabled: !!enabled }),
+      body: JSON.stringify({ job_id: jobKey, enabled: !!enabled }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
@@ -663,7 +663,7 @@ function showStartModal(jobKey) {
     showMsg('jobs-message', 'error', jobsT('jobs.dataDirRequired'));
     return;
   }
-  const job = jobsState.jobs.find(j => j.key === jobKey);
+  const job = jobsState.jobs.find(j => j.job_id === jobKey);
   if (!job) return;
   if (job.enabled === false) {
     showMsg('jobs-message', 'warning', jobsT('jobs.disabledWithKey', { key: jobKey }));
@@ -673,10 +673,10 @@ function showStartModal(jobKey) {
   jobsState.pendingJobKey = jobKey;
   jobsState.confirmAction = 'start';
 
-  const titleName = job.name || job.display_name || capitalize(job.backup_type);
+  const titleName = job.name || job.display_name || job.archive_prefix || '';
   document.getElementById('modal-title').textContent = jobsT('jobs.startTitle', { name: titleName });
   document.getElementById('modal-description').textContent =
-    jobsT('jobs.startDescription', { name: job.display_name || job.key });
+    jobsT('jobs.startDescription', { name: job.display_name || job.job_id });
 
   const infoEl = document.getElementById('modal-info');
   const items = [];
@@ -730,11 +730,11 @@ function showStartModal(jobKey) {
 }
 
 function showCancelJobModal(jobKey) {
-  const job = jobsState.jobs.find(j => j.key === jobKey);
+  const job = jobsState.jobs.find(j => j.job_id === jobKey);
   if (!job || !job.running || !job.run_id) return;
   jobsState.pendingJobKey = jobKey;
   jobsState.confirmAction = 'cancel';
-  const name = job.name || job.display_name || job.key;
+  const name = job.name || job.display_name || job.job_id;
   document.getElementById('modal-title').textContent = jobsT('jobs.cancelTitle', { name });
   document.getElementById('modal-description').textContent = jobsT('jobs.cancelDescription');
   document.getElementById('modal-info').innerHTML = `<div class="modal-info-item warning"><span class="modal-info-text">${jobsT('jobs.cancelWarning')}</span></div>`;
@@ -854,14 +854,14 @@ function confirmModalPrimaryAction() {
 
 async function confirmJobCancel() {
   const jobKey = jobsState.pendingJobKey;
-  const job = jobsState.jobs.find(j => j.key === jobKey);
+  const job = jobsState.jobs.find(j => j.job_id === jobKey);
   if (!job?.run_id) return;
   closeModal({ force: true });
   try {
     const res = await fetch('/api/jobs/cancel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_key: jobKey, run_id: job.run_id }),
+      body: JSON.stringify({ job_id: jobKey, run_id: job.run_id }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
@@ -882,7 +882,7 @@ async function confirmJobDelete() {
     const res = await fetch('/api/jobs', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_key: jobKey, delete_passphrase: deletePassphrase, delete_artifacts: deleteArtifacts }),
+      body: JSON.stringify({ job_id: jobKey, delete_passphrase: deletePassphrase, delete_artifacts: deleteArtifacts }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
@@ -913,7 +913,7 @@ async function confirmJobStart() {
     const res = await fetch('/api/jobs/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_key: jobKey }),
+      body: JSON.stringify({ job_id: jobKey }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
@@ -932,8 +932,8 @@ async function confirmJobStart() {
 function openLogPanel(jobKey) {
   jobsState.activityLog?.close();
   jobsState.activityLog = null;
-  const job = jobsState.jobs.find(j => j.key === jobKey);
-  const title = jobsT('jobs.logTitle', { name: job ? (job.display_name || job.key) : jobKey });
+  const job = jobsState.jobs.find(j => j.job_id === jobKey);
+  const title = jobsT('jobs.logTitle', { name: job ? (job.display_name || job.job_id) : jobKey });
 
   document.getElementById('log-panel-title-text').textContent = title;
   document.getElementById('log-output').textContent = '';
@@ -1167,10 +1167,10 @@ function _updateScheduleModalTitle(jobKey, displayName) {
   if (displayName) {
     titleEl.textContent = jobsT('schedule.titleFor', { name: displayName });
   } else {
-    const job = jobsState.jobs.find(j => j.key === jobKey);
+    const job = jobsState.jobs.find(j => j.job_id === jobKey);
     if (job) {
       titleEl.textContent = jobsT('schedule.titleFor', {
-        name: `${capitalize(job.backup_type)} (${jobsLocationLabel(job.location)})`,
+        name: `${(job.name || job.archive_prefix || '')} (${jobsLocationLabel(job.location)})`,
       });
     } else {
       titleEl.textContent = jobsT('schedule.titleFor', { name: jobKey });
@@ -1286,7 +1286,7 @@ async function saveScheduleAction() {
     const res = await fetch('/api/schedules', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_key: jobKey, cron, enabled }),
+      body: JSON.stringify({ ...(jobKey === 'restore_test' ? { service: 'restore_test' } : { job_id: jobKey }), cron, enabled }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
@@ -1312,7 +1312,7 @@ async function deleteScheduleAction() {
     const res = await fetch('/api/schedules', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_key: jobKey }),
+      body: JSON.stringify(jobKey === 'restore_test' ? { service: 'restore_test' } : { job_id: jobKey }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));

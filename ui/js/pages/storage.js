@@ -140,52 +140,21 @@ function storageRepositoryName(repo) {
 }
 
 function storageJobName(repo, job) {
-  return String(repo?.job_name || job?.name || repo?.display_name || repo?.used_by?.[0] || repo?.source_job_keys?.[0] || '').trim();
+  return String(job?.name || repo?.jobs?.[0]?.name || '').trim();
 }
 
 function storageJobsForRepository(repo) {
-  const jobs = Array.isArray(storageState.jobs) ? storageState.jobs : [];
-  const confKey = String(repo?.conf_key || '');
-  const jobKey = confKey.startsWith('JOB:') ? confKey.slice(4) : '';
-  const usedBy = Array.isArray(repo?.used_by) ? repo.used_by.map((x) => String(x || '')) : [];
-  const sourceJobKeys = Array.isArray(repo?.source_job_keys) ? repo.source_job_keys.map((x) => String(x || '')) : [];
-  const matches = jobs.filter((job) => usedBy.includes(String(job.key || '')) || sourceJobKeys.includes(String(job.key || '')));
-  if (!matches.length && jobKey) {
-    const direct = jobs.find((job) => String(job.key || '') === jobKey);
-    if (direct) matches.push(direct);
-  }
-  if (!matches.length) {
-    const fallback = jobs.find((job) =>
-      String(job.backup_type || '').toLowerCase() === String(repo?.backup_type || '').toLowerCase()
-      && String(job.location || '').toLowerCase() === String(repo?.location || '').toLowerCase()
-    );
-    if (fallback) matches.push(fallback);
-  }
-  const seen = new Set();
-  return matches.filter((job) => {
-    const key = String(job?.key || '');
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const ids = Array.isArray(repo?.job_ids) ? repo.job_ids : [];
+  return (storageState.jobs || []).filter(job => ids.includes(job.job_id)
+    && job.repository_key === (repo.repository_key || repo.conf_key));
 }
 
 function storageArchivePrefixFromJob(job) {
-  const key = String(job?.key || job?.job_key || '').trim();
-  for (const location of ['storagebox', 'local', 'usb', 'smb']) {
-    const suffix = `_${location}`;
-    if (key.endsWith(suffix)) {
-      const typeId = key.slice(0, -suffix.length);
-      return typeId ? `${typeId}-backup` : '';
-    }
-  }
-  const typeId = key.includes('_') ? key.split('_').slice(0, -1).join('_') : key;
-  return typeId ? `${typeId}-backup` : '';
+  return String(job?.archive_prefix || job?.archive_prefixes?.[0] || '');
 }
 
 function storageArchiveFilterFromJob(job) {
-  const prefix = storageArchivePrefixFromJob(job);
-  return prefix ? `${prefix}-*` : '';
+  return (job?.archive_prefixes || []).map(prefix => `${prefix}-*`).join(' | ');
 }
 
 function storageRetentionFromJob(job) {
@@ -212,7 +181,7 @@ function storageRetentionSummary(job) {
 function storageMaintenancePruneDetailsHtml(repo, job) {
   if (!job) return '';
   const source = storageT('storage.repositoryMaintenanceRetentionSource', {
-    job: storageJobName(repo || {}, job) || String(job.key || ''),
+    job: storageJobName(repo || {}, job) || String(job.job_id || ''),
   });
   const filter = storageT('storage.repositoryMaintenanceArchiveFilter', {
     filter: storageArchiveFilterFromJob(job) || '-',
@@ -226,9 +195,9 @@ function storageMaintenancePruneDetailsHtml(repo, job) {
 function updateStorageMaintenanceRetentionPreview() {
   const pending = storageState.maintenanceConfirmation;
   if (!pending || pending.action !== 'prune') return;
-  const selectedJobKey = String(document.getElementById('storage-maintenance-retention-job')?.value || pending.selectedJobKey || '').trim();
-  const job = (pending.jobs || []).find((item) => String(item?.key || '') === selectedJobKey) || pending.jobs?.[0] || null;
-  pending.selectedJobKey = String(job?.key || selectedJobKey || '').trim();
+  const selectedJobId = String(document.getElementById('storage-maintenance-retention-job')?.value || pending.selectedJobId || '').trim();
+  const job = (pending.jobs || []).find((item) => String(item?.job_id || '') === selectedJobId) || pending.jobs?.[0] || null;
+  pending.selectedJobId = String(job?.job_id || selectedJobId || '').trim();
   const preview = document.getElementById('storage-maintenance-retention-preview');
   if (preview) preview.innerHTML = storageMaintenancePruneDetailsHtml(pending.repo || {}, job);
 }
@@ -736,9 +705,9 @@ function renderStorageRepositoryMaintenance(repo, job) {
   </div>`;
 }
 
-function storageLifecycleJobLabel(jobKey) {
-  const job = (storageState.jobs || []).find((row) => String(row.key || '') === String(jobKey || ''));
-  return String(job?.display_name || job?.name || jobKey || '').trim();
+function storageLifecycleJobLabel(jobId) {
+  const job = (storageState.jobs || []).find((row) => String(row.job_id || '') === String(jobId || ''));
+  return String(job?.display_name || job?.name || jobId || '').trim();
 }
 
 function renderStorageRepositoryManagement(repo) {
@@ -750,12 +719,12 @@ function renderStorageRepositoryManagement(repo) {
   if (state.error) {
     return `<div class="status-message error">${escHtml(state.error)}</div><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-lifecycle" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button>`;
   }
-  const jobs = Array.isArray(state.job_keys) ? state.job_keys : [];
+  const jobs = Array.isArray(state.job_ids) ? state.job_ids : [];
   const blockers = Array.isArray(state.blockers) ? state.blockers : [];
   const blocked = !state.allowed;
   const keyActionBlocked = blockers.some((item) => String(item || '') !== 'jobs_linked');
   const jobList = jobs.length
-    ? `<div class="storage-lifecycle-jobs"><strong>${storageT('storage.repositoryLinkedJobs')}</strong><div>${jobs.map((jobKey) => `<span>${escHtml(storageLifecycleJobLabel(jobKey))}</span>`).join('')}</div></div>`
+    ? `<div class="storage-lifecycle-jobs"><strong>${storageT('storage.repositoryLinkedJobs')}</strong><div>${jobs.map((jobId) => `<span>${escHtml(storageLifecycleJobLabel(jobId))}</span>`).join('')}</div></div>`
     : `<div class="status-message success">${storageT('storage.repositoryNoLinkedJobs')}</div>`;
   const blockerText = blockers.length
     ? `<p class="storage-lifecycle-blocker">${escHtml(storageT('storage.repositoryLifecycleBlocked'))}</p>`
@@ -1632,13 +1601,13 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
       ? `<span id="storage-maintenance-retention-preview">${storageMaintenancePruneDetailsHtml(repo || {}, job)}</span>`
       : '';
     const selector = action === 'prune' && jobs.length > 1
-      ? `<label class="ui-field storage-maintenance-retention-source"><span>${escHtml(storageT('storage.repositoryMaintenanceSelectRetentionSource'))}</span><select id="storage-maintenance-retention-job" class="form-select">${jobs.map((item) => `<option value="${escHtml(String(item.key || ''))}">${escHtml(storageJobName(repo || {}, item) || String(item.key || ''))} - ${escHtml(storageArchiveFilterFromJob(item) || '-')} - ${escHtml(storageRetentionSummary(item))}</option>`).join('')}</select><small>${escHtml(storageT('storage.repositoryMaintenanceMultipleJobsHint'))}</small></label>`
+      ? `<label class="ui-field storage-maintenance-retention-source"><span>${escHtml(storageT('storage.repositoryMaintenanceSelectRetentionSource'))}</span><select id="storage-maintenance-retention-job" class="form-select">${jobs.map((item) => `<option value="${escHtml(String(item.job_id || ''))}">${escHtml(storageJobName(repo || {}, item) || String(item.job_id || ''))} - ${escHtml(storageArchiveFilterFromJob(item) || '-')} - ${escHtml(storageRetentionSummary(item))}</option>`).join('')}</select><small>${escHtml(storageT('storage.repositoryMaintenanceMultipleJobsHint'))}</small></label>`
       : '';
     if (info) info.innerHTML = `<div class="modal-info-item warning"><span class="modal-info-text"><strong>${escHtml(storageRepositoryTitle(repo || {}, job))}</strong><br>${escHtml(storageT('storage.repositoryMaintenanceConfirmAction', { action: storageMaintenanceTitle(resultKey) }))}${pruneDetails}${selector}</span></div>`;
     storageState.maintenanceConfirmation = {
       resolve,
       action,
-      selectedJobKey: action === 'prune' ? String(job?.key || '') : '',
+      selectedJobId: action === 'prune' ? String(job?.job_id || '') : '',
       repo: repo || {},
       jobs,
     };
@@ -1656,11 +1625,11 @@ function closeStorageMaintenanceConfirm(confirmed = false, options = {}) {
   storageState.maintenanceConfirmation = null;
   document.getElementById('storage-maintenance-confirm-modal')?.classList.add('hidden');
   storageState.maintenanceCloseSnapshot = '';
-  const selectedJobKey = confirmed && pending?.action === 'prune'
-    ? String(document.getElementById('storage-maintenance-retention-job')?.value || pending.selectedJobKey || '').trim()
+  const selectedJobId = confirmed && pending?.action === 'prune'
+    ? String(document.getElementById('storage-maintenance-retention-job')?.value || pending.selectedJobId || '').trim()
     : '';
   if (typeof pending?.resolve === 'function') {
-    pending.resolve({ confirmed: !!confirmed, jobKey: selectedJobKey });
+    pending.resolve({ confirmed: !!confirmed, jobId: selectedJobId });
   }
 }
 
@@ -1787,7 +1756,7 @@ async function confirmRepositoryLifecycle() {
 
 async function checkRun(repositoryKey, action = 'check', mode = 'quick') {
   if (!repositoryKey) return;
-  let confirmation = { confirmed: true, jobKey: '' };
+  let confirmation = { confirmed: true, jobId: '' };
   if (['prune', 'compact', 'verify_data'].includes(action === 'check' ? mode : action)) {
     confirmation = await openStorageMaintenanceConfirm(repositoryKey, action, mode);
     if (!confirmation?.confirmed) return;
@@ -1804,7 +1773,7 @@ async function checkRun(repositoryKey, action = 'check', mode = 'quick') {
 
   try {
     const payload = { repository_key: repositoryKey, action, mode };
-    if (action === 'prune' && confirmation.jobKey) payload.job_key = confirmation.jobKey;
+    if (action === 'prune' && confirmation.jobId) payload.job_id = confirmation.jobId;
     const res = await fetch('/api/storage/check/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
