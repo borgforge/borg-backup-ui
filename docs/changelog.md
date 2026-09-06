@@ -19,6 +19,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   interrupted-run/restart tests and protected HTTP export/approval tests.
 - Removed active HTTP job-key adapters. Historical aliases remain preserved in
   migration and bounded legacy import; normal operations require immutable IDs.
+- Corrected settings profile usage to count distinct UUID jobs and show current
+  names, and qualified existing wizard, keyfile, logging and storage regressions
+  with canonical job inventories and explicit validated-startup fixtures.
 - Stable promotion remains a separate decision after volunteer/maintainer testing.
 
 ### Issue #478 (integration work for #447; not released)

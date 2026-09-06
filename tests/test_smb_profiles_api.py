@@ -21,6 +21,7 @@ from smb_profiles_api import (
 )
 from smb_protocol import build_smb_mount_options, normalize_smb_version
 from repositories_api import write_repository_store
+from job_model import new_job_defaults
 from storage_objects_api import write_storage_store
 
 
@@ -207,19 +208,21 @@ def test_startup_smb_mounts_only_profiles_marked_for_start(monkeypatch):
 
 def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: Path, monkeypatch):
     import config_api
-    import jobs_api
 
+    job_id = "11111111-1111-4111-8111-111111111111"
     scripts_dir = tmp_path / "scripts"
     data_root = tmp_path / "data"
     meta_dir = data_root / "config" / "jobs"
     meta_dir.mkdir(parents=True)
-    (meta_dir / "job1.json").write_text(
+    (meta_dir / (job_id + ".json")).write_text(
         json.dumps({
-            "schema_version": 2,
-            "job_key": "job1",
+            **new_job_defaults(),
+            "job_id": job_id,
             "name": "Job 1",
-            "location": "smb",
             "repository_key": "repo_job1",
+            "source_paths": [str(data_root)],
+            "archive_prefixes": ["job1"],
+            "legacy_job_keys": ["job1"],
         }) + "\n",
         encoding="utf-8",
     )
@@ -251,6 +254,8 @@ def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: P
         "relative_path": "borg-backup-job1",
         "path_raw": "/mnt/user/borg-backup-ui/remotes/nas-a/borg-backup-job1",
         "encryption": "none",
+        "job_ids": [job_id],
+        "source_job_ids": [job_id],
     }]})
     monkeypatch.setattr(config_api, "get_conf_file", lambda _cfg: scripts_dir / "config" / "backup.conf")
     monkeypatch.setattr(config_api, "read_expanded_conf", lambda _cfg: {
@@ -258,5 +263,9 @@ def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: P
         "GLOBAL_DATA_DIR": str(data_root),
     })
 
-    with pytest.raises(ValueError, match="SMB profile cannot be deleted"):
+    before = {path: path.read_bytes() for path in (data_root / "config").rglob("*.json")}
+    with pytest.raises(ValueError, match="SMB profile cannot be deleted") as exc_info:
         validate_smb_profile_usage_before_save(config, [])
+
+    assert f"nas-a: Job 1 ({job_id})" in str(exc_info.value)
+    assert {path: path.read_bytes() for path in (data_root / "config").rglob("*.json")} == before

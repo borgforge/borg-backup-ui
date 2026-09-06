@@ -72,7 +72,8 @@ def test_storage_prune_confirmation_shows_archive_filter() -> None:
     assert "function updateStorageMaintenanceRetentionPreview()" in script
     assert 'id="storage-maintenance-retention-job"' in script
     assert 'id="storage-maintenance-retention-preview"' in script
-    assert "if (action === 'prune' && confirmation.jobKey) payload.job_key = confirmation.jobKey" in script
+    assert "if (action === 'prune' && confirmation.jobId) payload.job_id = confirmation.jobId" in script
+    assert "payload.job_key" not in script
     assert "updateStorageMaintenanceRetentionPreview()" in bindings
     assert "storage.repositoryMaintenanceRetentionSource" in script
     assert "storage.repositoryMaintenanceArchiveFilter" in script

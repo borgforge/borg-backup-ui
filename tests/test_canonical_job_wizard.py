@@ -326,8 +326,9 @@ def test_wizard_http_handlers_use_ids_and_do_not_allocate_on_preview(setup, monk
     assert updated["archive_name_preview"] == "RenamedPrefix-YYYY-MM-DD_HH-mm-ss"
 
 
-def test_planner_target_jobs_can_be_opened_without_startup_registration(tmp_path):
-    from identity_contract_support import load_cases, materialize
+def test_planner_target_jobs_can_be_opened_under_explicit_activation_contract(tmp_path):
+    from identity_contract_support import load_cases, materialize, tree_bytes
+    from migrations import immutable_job_id_activation, immutable_job_id_v1
     from migrations.immutable_job_id_v1 import build_plan
     from migrations.registry import MIGRATIONS
 
@@ -335,19 +336,29 @@ def test_planner_target_jobs_can_be_opened_without_startup_registration(tmp_path
     root = tmp_path / "installation"
     fixture = materialize(case, root)
     fixture["config"]["PLUGIN_DIR"] = str(root / "plugin")
+    before = tree_bytes(root)
     plan = build_plan(fixture["config"], control_root=root / "run")
     assert plan["classification"] == "applicable"
+    assert tree_bytes(root) == before
+    assert immutable_job_id_v1 not in MIGRATIONS
+    assert immutable_job_id_activation in MIGRATIONS
+    assert immutable_job_id_activation.USER_INITIATED is True
+    assert plan["jobs"]
     # Explicit synthetic target setup, not a production apply engine.
+    for job_id, job in plan["jobs"].items():
+        path = root / "data" / "config" / "jobs" / (job_id + ".json")
+        atomic_write_json(path, job)
+        source = Path(plan["job_sources"][job_id])
+        if source != path:
+            source.unlink()
     for path, record in plan["records"].items():
-        if record["kind"] in {"job", "repositories", "schedules"}:
+        if record["kind"] in {"repositories", "schedules"}:
             atomic_write_json(Path(path), record["data"])
-            for source in record.get("sources", []):
-                if record["kind"] == "job" and source != path:
-                    Path(source).unlink()
-    for path, record in plan["records"].items():
-        if record["kind"] == "job":
-            job = record["data"]
-            validate_job(job, filename=Path(path).name)
-            opened = load_job_for_wizard(job["job_id"], root / "data" / "scripts", fixture["config"])
-            assert opened["archive_prefix"] == "config-backup"
-    assert all(getattr(m, "MIGRATION_ID", "") != "immutable_job_id_v1" for m in MIGRATIONS)
+    before_open = tree_bytes(root)
+    for job_id, job in plan["jobs"].items():
+        validate_job(job, filename=job_id + ".json")
+        opened = load_job_for_wizard(job_id, root / "data" / "scripts", fixture["config"])
+        assert opened["job_id"] == job_id
+        assert opened["archive_prefix"] == "config-backup"
+    # A repository read may create its empty shared lock, never user metadata.
+    assert tree_bytes(root) == {**before_open, "data/config/.inventory.lock": b""}

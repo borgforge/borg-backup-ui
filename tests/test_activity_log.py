@@ -20,6 +20,7 @@ import jobs_api
 from borg_backup_ui import BackupUIHandler
 from wizard_runner import ResourceLockSet
 from runtime_fixture_support import JOB_ID, RUN_ID, write_run_fixture
+from migration_gate_support import ready_gate
 
 
 @pytest.fixture
@@ -31,6 +32,8 @@ def activity(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs_api.JobManager, "get", classmethod(lambda cls: manager))
     monkeypatch.setattr("job_control.read_control_state", lambda _run: {})
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "GLOBAL_LOG_DIR": str(tmp_path / "logs")}
+    # These captures represent jobs started after successful normal startup.
+    ready_gate(config, monkeypatch, tmp_path / "writer-gate")
     path = activity_log.activity_log_path(tmp_path / "logs", JOB_ID, RUN_ID)
     path.parent.mkdir()
     path.write_bytes(b"")
@@ -41,6 +44,7 @@ def activity(tmp_path, monkeypatch):
     BackupStatus(job_id=JOB_ID,run_id=RUN_ID,job_name_snapshot='job',file_activity=True,log_file=str(path)).save(tmp_path / 'status')
     original_start = manager.start
     def start(job_id, command, cwd, extra_env=None):
+        extra_env = {**(extra_env or {}), "BORG_SCRIPT_DIR": str(tmp_path)}
         snapshot = write_run_fixture(path.parent, job_id=job_id, file_activity=(extra_env or {}).get('BORG_UI_FILE_ACTIVITY_RUN') == '1')
         return original_start(job_id, command, cwd, extra_env, run_context=snapshot)
     monkeypatch.setattr(manager, 'start', start)

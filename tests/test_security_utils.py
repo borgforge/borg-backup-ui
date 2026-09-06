@@ -76,6 +76,8 @@ def test_repository_test_output_is_sanitized(monkeypatch, tmp_path: Path):
         "relative_path": "repo",
         "path_raw": "ssh://user@example.test:22/repo",
         "encryption": "none",
+        "job_ids": [],
+        "source_job_ids": [],
     }]})
 
     result = config_api.test_repository(config, "repo_test")
