@@ -20,6 +20,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+try:
+    from .run_identity import SNAPSHOT_FIELDS, valid_uuid, filename_stem
+except ImportError:
+    from run_identity import SNAPSHOT_FIELDS, valid_uuid, filename_stem
+
+
 logger = logging.getLogger(__name__)
 
 BACKUP_TYPES = ["flash", "appdata", "photos", "VMs", "sonstiges"]
@@ -96,6 +102,18 @@ def _clear_unavailable_status_path_log(path: Path) -> None:
 class BackupStatus:
     """Repräsentiert den Inhalt einer einzelnen .status Datei."""
 
+    schema_version: int = 1
+    job_id: str = ""
+    run_id: str = ""
+    job_name_snapshot: str = ""
+    archive_prefix_snapshot: str = ""
+    archive_prefixes_snapshot: List[str] = field(default_factory=list)
+    repository_key_snapshot: str = ""
+    repository_snapshot: str = ""
+    location_snapshot: str = ""
+    file_activity: bool = False
+    identity_state: str = "unassigned"
+    # Historical descriptors are read for unassigned/migrated records only.
     backup_type: str = "unknown"
     location: str = "unknown"
     timestamp: str = ""
@@ -131,7 +149,18 @@ class BackupStatus:
             logger.warning("Could not read %s: %s", path, exc)
             return cls(source_path=path)
 
+        if not isinstance(data, dict):
+            return cls(source_path=path)
         obj = cls(source_path=path)
+        for key in SNAPSHOT_FIELDS:
+            if key in data:
+                setattr(obj, key, data[key])
+        if not valid_uuid(obj.job_id):
+            obj.job_id = ""
+        if not isinstance(obj.run_id, str):
+            obj.run_id = ""  # Missing historical IDs remain missing; existing IDs are retained.
+        obj.identity_state = str(data.get("identity_state") or ("assigned" if obj.job_id else "unassigned"))
+        obj.file_activity = data.get("file_activity") is True
         obj.backup_type = str(data.get("backup_type", "unknown"))
         obj.location = str(data.get("location", "unknown"))
         obj.timestamp = str(data.get("timestamp", ""))
@@ -177,8 +206,8 @@ class BackupStatus:
 
     @property
     def key(self) -> str:
-        """Eindeutiger Schlüssel: backup_type_location."""
-        return f"{self.backup_type}_{self.location}"
+        """Only authoritative payload identity can group backup records."""
+        return self.job_id if self.identity_state != "unassigned" else ""
 
     @property
     def timestamp_dt(self) -> Optional[datetime]:
@@ -201,10 +230,15 @@ class BackupStatus:
     def save(self, status_dir: Path) -> Path:
         """Schreibt Status als JSON-Datei in status_dir. Gibt den Dateipfad zurück."""
         ensure_status_storage_directory(status_dir)
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        path = status_dir / f"{timestamp}_{self.backup_type}_{self.location}.status"
-        data = {k: v for k, v in asdict(self).items() if k != "source_path"}
-        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        stem = filename_stem(self.job_id, self.run_id, self.job_name_snapshot)
+        path = status_dir / (stem + ".status")
+        self.identity_state = "assigned"
+        data = {k: v for k, v in asdict(self).items() if k not in {"source_path", "backup_type", "location"}}
+        # A run is written once, never overwriting an earlier or legacy record.
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as handle:
+            json.dump(data, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
         logger.info("Saved backup status: %s", path)
         return path
 
@@ -428,6 +462,8 @@ class StatusStore:
         latest: Dict[str, BackupStatus] = {}
         for st in data:
             key = st.key
+            if not key:
+                continue
             existing = latest.get(key)
             if existing is None:
                 latest[key] = st
@@ -445,6 +481,8 @@ class StatusStore:
         result: Dict[str, _BackupAggregate] = {}
         for st in data:
             key = st.key
+            if not key:
+                continue
             if key not in result:
                 result[key] = _BackupAggregate(key=key)
             result[key].add(st)

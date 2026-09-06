@@ -122,6 +122,9 @@
     },
     "logs/Borg-Backup_config--2026-08-31_08-00-00.log": {
       "text": "Synthetic backup log; config_local; keep these bytes.\n"
+    },
+    "data/config/backup.conf": {
+      "text": "GLOBAL_BORG_CACHE_BASE=/fixture/cache\n"
     }
   }
 }

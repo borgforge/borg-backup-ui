@@ -1,3 +1,4 @@
+from runtime_fixture_support import job_config_identity
 from pathlib import Path
 import sys
 
@@ -16,7 +17,7 @@ from runtime.lib.backup_job import BackupJob, BackupJobConfig
 def _cfg(lock_file: Path) -> BackupJobConfig:
     return BackupJobConfig(
         job_name="test-job",
-        backup_type="flash",
+        **job_config_identity("flash"),
         backup_location="local",
         lock_file=lock_file,
         log_dir=lock_file.parent,

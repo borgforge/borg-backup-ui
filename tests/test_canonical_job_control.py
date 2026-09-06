@@ -274,16 +274,20 @@ def test_http_control_boundaries_accept_uuid_and_keep_service_separate(setup, cr
         handler._put_schedule()
 
 
-def test_manual_prune_resolves_uuid_and_never_prunes_prefixes_separately(setup):
+def test_manual_prune_resolves_uuid_and_never_prunes_prefixes_separately(setup, monkeypatch):
     from check_api import CheckManager
+    from job_runs import read_run_context
+    monkeypatch.setenv('BORG_UI_CONTROL_ROOT', str(setup[3] / 'run'))
     result, _ = create(setup)
     repository = read_json(setup[3] / 'config/repositories.json')['repositories'][0]
     manager = CheckManager()
-    cmd = manager._repository_command(setup[0], repository, '/synthetic/repo', 'prune', 'quick', job_id=result['job_id'])
-    assert cmd.count('--glob-archives') == 1 and cmd[cmd.index('--glob-archives') + 1] == 'Exact.Prefix_1-*'
+    repo_path = prepare_job_action(setup[0], result['job_id'])['repository_path']
+    cmd = manager._repository_command(setup[0], repository, repo_path, 'prune', 'quick', job_id=result['job_id'])
+    assert Path(cmd[1]).name == 'retention_runner.py'
+    assert read_run_context(cmd[2], cmd[3])['archive_prefixes_snapshot'] == ['Exact.Prefix_1']
     edit(setup, result['job_id'], archive_prefix='Second')
-    with pytest.raises(JobValidationError, match='Combined prefix retention'):
-        manager._repository_command(setup[0], repository, '/synthetic/repo', 'prune', 'quick', job_id=result['job_id'])
+    cmd = manager._repository_command(setup[0], repository, repo_path, 'prune', 'quick', job_id=result['job_id'])
+    assert read_run_context(cmd[2], cmd[3])['archive_prefixes_snapshot'] == ['Second', 'Exact.Prefix_1']
 
 
 def test_two_concurrent_schedule_saves_retain_both_jobs(setup, cron):
@@ -321,18 +325,28 @@ def test_repository_deletion_stays_blocked_for_linked_uuid(setup, monkeypatch):
     assert 'job_keys' not in preview
 
 
-def test_run_preparation_cannot_launch_the_legacy_runner(setup, monkeypatch):
+@pytest.mark.parametrize('scheduled', [False, True])
+def test_manual_and_scheduled_api_launch_the_uuid_runner(setup, monkeypatch, scheduled):
     from borg_backup_ui import BackupUIHandler
     import jobs_api
+    from job_runs import read_run_context
+    monkeypatch.setenv('BORG_UI_CONTROL_ROOT', str(setup[3] / 'run'))
     result, _ = create(setup)
     handler = object.__new__(BackupUIHandler)
     handler.config = setup[0]
     handler._require_data_dir_ready = lambda: None
-    handler._read_json_body = lambda: {'job_id': result['job_id']}
-    monkeypatch.setattr(jobs_api.JobManager, 'start', lambda *_args, **_kwargs: pytest.fail('legacy runner must not start'))
-    with pytest.raises(JobValidationError) as exc:
-        handler._post_run_job()
-    assert exc.value.api_code == 'job_runtime_cutover_pending'
+    handler._read_json_body = lambda: {'job_id': result['job_id'], 'scheduled': scheduled}
+    handler._get_current_session_meta = lambda: {}
+    calls = []
+    monkeypatch.setattr(jobs_api, 'get_job_runtime_state', lambda *_: {'running':False})
+    monkeypatch.setattr(jobs_api.JobManager, 'start', lambda *args, **kwargs: calls.append((args,kwargs)) or (True,None))
+    response = handler._post_run_job()
+    assert response['started'] and response['job_id'] == result['job_id']
+    args, kwargs = calls[0]
+    assert args[1] == result['job_id']
+    assert Path(args[2][1]).name == 'wizard_runner.py'
+    assert kwargs['extra_env']['BORG_UI_REQUEST_SOURCE'] == ('schedule' if scheduled else 'manual')
+    assert read_run_context(response['job_id'], response['run_id'])['context']['job']['job_id'] == result['job_id']
 
 
 def test_prune_scope_is_validated_before_mounting_storage(setup, monkeypatch):
@@ -345,5 +359,5 @@ def test_prune_scope_is_validated_before_mounting_storage(setup, monkeypatch):
     store['storages'][0].update(location='smb', storage_type='smb', profile_key='synthetic')
     monkeypatch.setattr(storage_objects_api, 'read_storage_store', lambda _: store)
     monkeypatch.setattr(smb_profiles_api, 'run_smb_profile_action', lambda *_: pytest.fail('invalid scope must not mount'))
-    ok, message = CheckManager().start_repository(setup[0], 'repo_a', action='prune', job_id=result['job_id'])
-    assert not ok and 'Combined prefix retention' in message
+    ok, message = CheckManager().start_repository(setup[0], 'repo_a', action='prune', job_id='99999999-9999-4999-8999-999999999999')
+    assert not ok and 'does not use this repository' in message

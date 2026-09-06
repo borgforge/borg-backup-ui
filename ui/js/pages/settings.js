@@ -1748,7 +1748,7 @@ function _renderRuntimeRecoveryEntry(entry, tone = 'warn') {
   return `
     <div class="migration-action-row ${escHtml(tone)}">
       <div>
-        <strong>${escHtml(String(entry?.job_name || entry?.backup_type || 'Backup'))}</strong>
+        <strong>${escHtml(String(entry?.job_name_snapshot || entry?.job_name || entry?.backup_type || 'Backup'))}</strong>
         <span>${escHtml(settingsT('health.runtimeRecoveryDetail', {
           kind: kind || 'runtime',
           state: state || 'pending',

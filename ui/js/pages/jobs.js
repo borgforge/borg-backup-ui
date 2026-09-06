@@ -933,7 +933,7 @@ function openLogPanel(jobKey) {
   jobsState.activityLog?.close();
   jobsState.activityLog = null;
   const job = jobsState.jobs.find(j => j.job_id === jobKey);
-  const title = jobsT('jobs.logTitle', { name: job ? (job.display_name || job.job_id) : jobKey });
+  const title = jobsT('jobs.logTitle', { name: job ? (job.run_name_snapshot || job.display_name || job.job_id) : jobKey });
 
   document.getElementById('log-panel-title-text').textContent = title;
   document.getElementById('log-output').textContent = '';
@@ -980,7 +980,7 @@ function openLogPanel(jobKey) {
     return;
   }
 
-  const es = new EventSource(`/api/jobs/log/stream?job=${encodeURIComponent(jobKey)}`);
+  const es = new EventSource(`/api/jobs/log/stream?${new URLSearchParams({ job_id: jobKey, run_id: job?.run_id || "" })}`);
   jobsState.activeEventSource = es;
   jobsState.logAutoScroll = true;
 

@@ -203,7 +203,7 @@
       "files": [
         {
           "path": "api/wizard_runner.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "subprocess environment, paths, archive name, cache selection and maintenance"
         },
         {
@@ -213,7 +213,7 @@
         },
         {
           "path": "runtime/lib/backup_job.py",
-          "anchor": "BORG_UI_JOB_KEY",
+          "anchor": "job_id",
           "role": "backup process, lock/log/status/recovery/notification writers"
         },
         {
@@ -223,7 +223,7 @@
         },
         {
           "path": "runtime/lib/runtime_recovery.py",
-          "anchor": "backup_type",
+          "anchor": "job_id",
           "role": "stopped target records and explicit recovery acknowledgement"
         },
         {
@@ -243,12 +243,12 @@
         },
         {
           "path": "runtime/lib/notification_events.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "queue, retry delivery history, dedup state and detached writer"
         },
         {
           "path": "api/smb_mount.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "job-configured mount/runtime ownership"
         },
         {
@@ -258,13 +258,33 @@
         },
         {
           "path": "api/activity_log.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "windowed log readers and run attribution from merged #463"
         },
         {
           "path": "api/activity_log_capture.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "RAM capture registration and finalization identity from merged #463"
+        },
+        {
+          "path": "api/job_runs.py",
+          "anchor": "run_id",
+          "role": "private immutable run context, public snapshot projection and historical run lookup"
+        },
+        {
+          "path": "api/retention_runner.py",
+          "anchor": "prune_union",
+          "role": "manual maintenance uses the shared frozen prefix-union policy"
+        },
+        {
+          "path": "runtime/lib/run_identity.py",
+          "anchor": "SNAPSHOT_FIELDS",
+          "role": "UUID validation and bounded readable artifact names"
+        },
+        {
+          "path": "runtime/lib/retention.py",
+          "anchor": "plan_retention",
+          "role": "shared calendar retention over explicit archive-prefix ownership"
         }
       ]
     },
@@ -300,7 +320,7 @@
         },
         {
           "path": "api/notification_reminder_api.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "overdue schedule/status/test joins and reminder keys"
         },
         {

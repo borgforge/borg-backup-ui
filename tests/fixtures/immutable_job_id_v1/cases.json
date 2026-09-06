@@ -97,6 +97,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -233,6 +238,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -374,6 +384,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -509,6 +524,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -777,6 +797,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_pfsense",
+              "check_flag_file": "/fixture/cache/local_pfsense/.last_check_pfsense",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -968,6 +993,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           },
           "22222222-2222-4222-8222-222222222222": {
@@ -1015,6 +1045,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/storagebox_photos",
+              "check_flag_file": "/fixture/cache/storagebox_photos/.last_check_photos",
+              "repository_key": "repo_remote"
             }
           }
         },
@@ -1173,6 +1208,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           },
           "22222222-2222-4222-8222-222222222222": {
@@ -1220,6 +1260,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_photos",
+              "check_flag_file": "/fixture/cache/local_photos/.last_check_photos",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -1499,6 +1544,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config_home",
+              "check_flag_file": "/fixture/cache/local_config_home/.last_check_config_home",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -1599,6 +1649,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -1748,6 +1803,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -1870,6 +1930,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -2863,6 +2928,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -3037,6 +3107,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -3179,6 +3254,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -3299,6 +3379,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },
@@ -3649,6 +3734,11 @@
               "validity_days": 30,
               "level": 1,
               "max_runtime_minutes": 0
+            },
+            "cache_reference": {
+              "directory": "/fixture/cache/local_config",
+              "check_flag_file": "/fixture/cache/local_config/.last_check_config",
+              "repository_key": "repo_docs"
             }
           }
         },

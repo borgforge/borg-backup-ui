@@ -71,7 +71,16 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
 
         backups.append(
             {
-                "key": key,
+                "key": key,  # Reporting shape is completed in #476.
+                "job_id": st.job_id,
+                "run_id": st.run_id,
+                "job_name_snapshot": st.job_name_snapshot,
+                "archive_prefix_snapshot": st.archive_prefix_snapshot,
+                "repository_key_snapshot": st.repository_key_snapshot,
+                "repository_snapshot": st.repository_snapshot,
+                "location_snapshot": st.location_snapshot,
+                "file_activity": st.file_activity,
+                "identity_state": st.identity_state,
                 "backup_type": st.backup_type,
                 "location": st.location,
                 "status": st.status,

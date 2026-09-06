@@ -60,7 +60,7 @@ def _local_repository_config(tmp_path: Path) -> dict:
         "display_name": "Files",
         "storage_key": "storage_local_test",
         "relative_path": "borg-backup-files",
-        "encryption": "none",
+        "encryption": "none", "job_ids": [], "source_job_ids": [],
     }]})
     return config
 
@@ -173,22 +173,17 @@ def test_missing_job_field_is_disabled_and_preview_exposes_setting(tmp_path: Pat
 
 
 @pytest.mark.parametrize("file_activity, expected", [(True, "1"), (False, "0"), (None, "0")])
-def test_legacy_runner_file_activity_environment(tmp_path: Path, monkeypatch, file_activity, expected):
-    # The actual UUID runner cutover and end-to-end wiring belong to #475.
-    # Keep the existing runner regression independently of canonical wizard tests.
-    _local_repository_config(tmp_path)
-    jobs = tmp_path / "config" / "jobs"
-    jobs.mkdir()
-    meta = {
-        "schema_version": 3, "job_key": "files_local", "backup_type": "files", "location": "local",
-        "repository_key": "repo_files_test", "source_paths": [str(tmp_path / "source")],
-    }
-    if file_activity is not None:
-        meta["file_activity"] = file_activity
-    (jobs / "files_local.json").write_text(json.dumps(meta))
-    monkeypatch.setenv("BORG_FILE_ACTIVITY", "1")
-    env, _ = wizard_runner._load_env_from_job("files_local", tmp_path / "scripts", tmp_path)
-    assert env["BORG_FILE_ACTIVITY"] == expected
+def test_canonical_runner_file_activity_environment(tmp_path: Path, monkeypatch, file_activity, expected):
+    from test_canonical_job_wizard import setup as setup_fixture, create
+    from job_runs import create_run_context
+    fixture=setup_fixture.__wrapped__(tmp_path)
+    result, _ = create(fixture, **({'file_activity':file_activity} if file_activity is not None else {}))
+    monkeypatch.setenv('BORG_UI_CONTROL_ROOT', str(tmp_path / 'run'))
+    snapshot=create_run_context(fixture[0], result['job_id'])
+    monkeypatch.setenv('BORG_UI_RUN_ID',snapshot['run_id'])
+    monkeypatch.setenv('BORG_FILE_ACTIVITY','1')
+    env, _ = wizard_runner._load_env_from_job(result['job_id'],fixture[2],tmp_path)
+    assert env['BORG_FILE_ACTIVITY'] == expected
 
 
 def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
@@ -226,18 +221,17 @@ def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
 
 @pytest.mark.parametrize('started_enabled', [False, True])
 def test_managed_run_preserves_start_time_option_and_capture_path(tmp_path, monkeypatch, started_enabled):
-    _local_repository_config(tmp_path)
-    jobs = tmp_path / 'config' / 'jobs'
-    jobs.mkdir()
-    meta = {
-        'schema_version': 3, 'job_key': 'files_local', 'backup_type': 'files', 'location': 'local',
-        'repository_key': 'repo_files_test', 'source_paths': [str(tmp_path / 'source')],
-        'file_activity': not started_enabled,
-    }
-    (jobs / 'files_local.json').write_text(json.dumps(meta))
-    capture = tmp_path / 'logs' / 'Borg-Backup_files_local--activity-test.log'
-    monkeypatch.setenv('BORG_UI_FILE_ACTIVITY_RUN', '1' if started_enabled else '0')
-    monkeypatch.setenv('BORG_UI_CAPTURE_LOG', str(capture))
-    env, _ = wizard_runner._load_env_from_job('files_local', tmp_path / 'scripts', tmp_path)
+    from test_canonical_job_wizard import setup as setup_fixture, create, edit
+    from job_runs import create_run_context
+    fixture=setup_fixture.__wrapped__(tmp_path)
+    result, _ = create(fixture,file_activity=started_enabled)
+    monkeypatch.setenv('BORG_UI_CONTROL_ROOT',str(tmp_path / 'run'))
+    snapshot=create_run_context(fixture[0],result['job_id'])
+    monkeypatch.setenv('BORG_UI_RUN_ID',snapshot['run_id'])
+    edit(fixture,result['job_id'],file_activity=not started_enabled)
+    capture=tmp_path / 'ram/capture.log'
+    monkeypatch.setenv('BORG_UI_FILE_ACTIVITY_RUN','0' if started_enabled else '1')
+    monkeypatch.setenv('BORG_UI_CAPTURE_LOG',str(capture))
+    env,_=wizard_runner._load_env_from_job(result['job_id'],fixture[2],tmp_path)
     assert env['BORG_FILE_ACTIVITY'] == ('1' if started_enabled else '0')
-    assert (env['LOG_FILE'] == str(capture)) == started_enabled
+    assert (env['LOG_FILE']==str(capture)) == started_enabled

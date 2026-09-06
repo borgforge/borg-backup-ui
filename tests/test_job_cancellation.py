@@ -1,3 +1,4 @@
+from runtime_fixture_support import job_config_identity
 import json
 import signal
 import sys
@@ -31,7 +32,7 @@ from runtime.lib.vm_manager import VmShutdownResult, VmStartResult  # noqa: E402
 def _config(tmp_path: Path) -> BackupJobConfig:
     return BackupJobConfig(
         job_name="cancel-test",
-        backup_type="appdata",
+        **job_config_identity("appdata"),
         backup_location="local",
         lock_file=tmp_path / "backup.lock",
         log_dir=tmp_path,
@@ -44,7 +45,7 @@ def _config(tmp_path: Path) -> BackupJobConfig:
 
 
 def test_cancel_marker_preserves_deferred_stop_phase(tmp_path: Path):
-    control = JobControl("appdata_local", "20260716T120000Z-abcdef12", tmp_path)
+    control = JobControl("11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", tmp_path)
     control.update_phase(
         "stopping_docker",
         cancel_allowed=True,
@@ -53,7 +54,7 @@ def test_cancel_marker_preserves_deferred_stop_phase(tmp_path: Path):
     )
 
     state = request_cancel(
-        "appdata_local",
+        "11111111-1111-4111-8111-111111111111",
         control.run_id,
         requested_by="admin",
         root=tmp_path,
@@ -68,7 +69,7 @@ def test_cancel_marker_preserves_deferred_stop_phase(tmp_path: Path):
 
 
 def test_cancel_is_rejected_during_runtime_recovery(tmp_path: Path):
-    control = JobControl("vms_local", "20260716T120100Z-abcdef12", tmp_path)
+    control = JobControl("11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", tmp_path)
     control.update_phase(
         "recovering_vms",
         cancel_allowed=False,
@@ -76,7 +77,7 @@ def test_cancel_is_rejected_during_runtime_recovery(tmp_path: Path):
     )
 
     with pytest.raises(RuntimeError, match="no longer possible"):
-        request_cancel("vms_local", control.run_id, root=tmp_path)
+        request_cancel("11111111-1111-4111-8111-111111111111", control.run_id, root=tmp_path)
 
 
 def test_cancel_monitor_sends_sigint_to_active_borg_process(tmp_path: Path):
@@ -91,11 +92,11 @@ def test_cancel_monitor_sends_sigint_to_active_borg_process(tmp_path: Path):
             self.signals.append(sig)
 
     process = Process()
-    control = JobControl("flash_local", "20260716T120200Z-abcdef12", tmp_path)
+    control = JobControl("11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", tmp_path)
     control.update_phase("borg_create", cancel_allowed=True)
     control.attach_process(process)
     try:
-        request_cancel("flash_local", control.run_id, root=tmp_path)
+        request_cancel("11111111-1111-4111-8111-111111111111", control.run_id, root=tmp_path)
         deadline = time.monotonic() + 2.0
         while not process.signals and time.monotonic() < deadline:
             time.sleep(0.02)
@@ -179,7 +180,7 @@ def test_jobs_page_keeps_runtime_state_during_full_refresh():
     refresh_source = jobs[refresh_start:refresh_end]
 
     assert "fetch('/api/jobs/running')" in refresh_source
-    assert "jobRuntimeState(runningData[j.key])" in refresh_source
+    assert "jobRuntimeState(runningData[j.job_id])" in refresh_source
     assert "setInterval(_pollRunningStates, 3_000)" in jobs
 
 

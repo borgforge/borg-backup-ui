@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import subprocess
+from contextlib import nullcontext
 import threading
 import time
 from dataclasses import dataclass, field
@@ -169,88 +170,34 @@ class BorgRunner:
 
     Typischer Workflow in einem Backup-Skript:
         runner = BorgRunner(BorgConfig.from_config(cfg))
-        prune_exit = runner.prune()
+        prune_exit = runner.prune("explicit-job-prefix")
         compact_exit = runner.compact()
         check_exit = runner.check()
     """
 
-    def __init__(self, config: Optional[BorgConfig] = None, process_controller=None, phase_callback=None) -> None:
+    def __init__(self, config: Optional[BorgConfig] = None, process_controller=None, phase_callback=None, prune_guard=None) -> None:
         self.config = config or BorgConfig()
         self.process_controller = process_controller
         self.phase_callback = phase_callback
+        self.prune_guard = prune_guard
 
-    def prune(self, archive_prefix: str = "") -> int:
-        """
-        Löscht alte Backups nach der konfigurierten Retention Policy.
-
-        Entspricht borg_prune() in borg-common.sh.
-        Exit 0 = OK, 1 = Warnungen (Backup nutzbar), >1 = Fehler.
-
-        Args:
-            archive_prefix: Optional job-specific archive prefix. When set,
-                prune is scoped to archives matching '<prefix>-*'.
-
-        Returns:
-            Borg Exit-Code (0, 1 oder 2)
-        """
+    def prune(self, archive_prefix: str = "", *, archive_prefixes=None, before_delete=None) -> int:
         if self.phase_callback:
             self.phase_callback("borg_prune")
-        retention_counts = (
-            self.config.keep_daily,
-            self.config.keep_weekly,
-            self.config.keep_monthly,
-            self.config.keep_yearly,
-        )
-        if not any(count > 0 for count in retention_counts):
-            logger.error(
-                "Borg prune blocked: at least one retention value must be greater than zero"
-            )
+        from .retention import prune_union
+        prefixes = archive_prefixes if archive_prefixes is not None else ([archive_prefix] if archive_prefix else [])
+        policy = {period: getattr(self.config, "keep_" + period)
+                  for period in ("daily", "weekly", "monthly", "yearly")}
+        try:
+            with self.prune_guard() if self.prune_guard else nullcontext():
+                if before_delete and not before_delete():
+                    logger.warning("Job repository ownership changed; retention skipped")
+                    return BORG_EXIT_WARNING
+                return prune_union(self.config.repo or os.environ.get("BORG_REPO", ""), prefixes, policy,
+                                   process_controller=self.process_controller, before_delete=before_delete)
+        except (ValueError, OSError, TypeError) as exc:
+            logger.error("Borg retention stopped: %s", exc)
             return BORG_EXIT_ERROR
-        archive_prefix = str(archive_prefix or "").strip()
-        if archive_prefix:
-            logger.info(
-                "Borg prune: applying retention only to archives matching %s-* "
-                "(keep: %dd/%dw/%dm/%dy)",
-                archive_prefix,
-                self.config.keep_daily,
-                self.config.keep_weekly,
-                self.config.keep_monthly,
-                self.config.keep_yearly,
-            )
-        else:
-            logger.info(
-                "Borg prune: applying retention to all repository archives "
-                "(keep: %dd/%dw/%dm/%dy)",
-                self.config.keep_daily,
-                self.config.keep_weekly,
-                self.config.keep_monthly,
-                self.config.keep_yearly,
-            )
-
-        cmd = [
-            "borg", "prune",
-            "--verbose",
-            "--list",
-            "--show-rc",
-            *(["--glob-archives", f"{archive_prefix}-*"] if archive_prefix else []),
-            "--keep-daily",   str(self.config.keep_daily),
-            "--keep-weekly",  str(self.config.keep_weekly),
-            "--keep-monthly", str(self.config.keep_monthly),
-            "--keep-yearly",  str(self.config.keep_yearly),
-        ]
-        if self.config.repo:
-            cmd.append(self.config.repo)
-
-        exit_code = _run_borg(cmd, self.process_controller)
-
-        if exit_code == BORG_EXIT_OK:
-            logger.info("Borg prune succeeded")
-        elif exit_code == BORG_EXIT_WARNING:
-            logger.info("Borg prune completed with warnings (exit 1)")
-        else:
-            logger.warning("WARNING: Borg prune failed (exit %d)", exit_code)
-
-        return exit_code
 
     def compact(self) -> int:
         """
@@ -447,7 +394,7 @@ class BorgRunner:
 
         return exit_code
 
-    def maintenance(self, archive_prefix: str = "") -> int:
+    def maintenance(self, archive_prefix: str = "", *, archive_prefixes=None, before_delete=None) -> int:
         """
         Führt Wartungssequenz aus: prune → compact → check.
 
@@ -464,7 +411,7 @@ class BorgRunner:
         worst = BORG_EXIT_OK
 
         steps = [
-            ("prune",   lambda: self.prune(archive_prefix)),
+            ("prune",   lambda: self.prune(archive_prefix, archive_prefixes=archive_prefixes, before_delete=before_delete)),
             ("compact", self.compact),
             ("check",   self.check),
         ]

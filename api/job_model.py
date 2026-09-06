@@ -102,6 +102,16 @@ def validate_job(meta, *, filename=None):
             for key in ("daily", "weekly", "monthly", "yearly")
         ):
             raise JobValidationError("invalid_retention", "Unsupported retention settings")
+    if "cache_reference" in meta:
+        cache = meta["cache_reference"]
+        if not isinstance(cache, dict) or any(
+            not isinstance(cache.get(key), str) or not cache[key].startswith("/")
+            or any(ch in cache[key] for ch in ("\x00", "\n", "\r"))
+            for key in ("directory", "check_flag_file")
+        ):
+            raise JobValidationError("invalid_cache_reference", "Cache references must be explicit absolute paths")
+        if not isinstance(cache.get("repository_key"), str) or not _SAFE.fullmatch(cache["repository_key"]):
+            raise JobValidationError("invalid_cache_reference", "Cache check markers require their original repository reference")
     return meta
 
 
@@ -162,6 +172,7 @@ def apply_wizard_changes(params, *, existing=None, job_id, now, duplicate=False)
     result.update(schema_version=JOB_SCHEMA_VERSION, job_id=validate_job_id(job_id), updated_at=now)
     if fresh:
         result.update(created_at=now, legacy_job_keys=[])
+        result.pop("cache_reference", None)
     if "job_name" in params:
         result["name"] = params["job_name"].strip()
     prefix = params.get("archive_prefix", (result.get("archive_prefixes") or [""])[0])

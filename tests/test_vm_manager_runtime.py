@@ -1,3 +1,4 @@
+from runtime_fixture_support import job_config_identity
 from pathlib import Path
 import subprocess
 import sys
@@ -23,7 +24,7 @@ def _completed(cmd, returncode=0, stdout="", stderr=""):
 def _backup_config(tmp_path: Path) -> BackupJobConfig:
     return BackupJobConfig(
         job_name="VMs",
-        backup_type="vms",
+        **job_config_identity("vms"),
         backup_location="local",
         lock_file=tmp_path / "backup.lock",
         log_dir=tmp_path,

@@ -15,14 +15,9 @@ from pathlib import Path
 
 WINDOW_BYTES = 65536
 SEARCH_BYTES = 1024 * 1024
-_KEY = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
-_RUN = re.compile(r"^[A-Za-z0-9_.-]{8,96}$")
-
-
-def activity_log_path(directory: Path, job_key: str, run_id: str) -> Path:
-    if not _KEY.fullmatch(job_key) or not _RUN.fullmatch(run_id):
-        raise ValueError("Invalid activity log identity")
-    return directory / f"Borg-Backup_{job_key}--activity-{run_id}.log"
+def activity_log_path(directory: Path, job_id: str, run_id: str, name: str = "job") -> Path:
+    from job_runs import log_filename
+    return directory / log_filename(job_id, run_id, name)
 
 
 def open_activity_file(path: Path):
@@ -33,49 +28,48 @@ def open_activity_file(path: Path):
     return os.fdopen(fd, "rb")
 
 
-def resolve_activity_run(config: dict, job_key: str, run_id: str = "") -> tuple[Path, dict]:
-    from jobs_api import JobManager, durable_running_states, _runtime_log_dir
+def resolve_activity_run(config: dict, job_id: str, run_id: str = "") -> tuple[Path, dict]:
+    from jobs_api import JobManager, durable_running_states
     from job_control import read_control_state
-
-    if not _KEY.fullmatch(job_key):
-        raise ValueError("Invalid job key")
-    memory = JobManager.get().get_state(job_key)
-    current = memory if memory.get("running") else durable_running_states(config).get(job_key, memory)
-    run_id = run_id or str(current.get("run_id") or "")
-    path = activity_log_path(_runtime_log_dir(config), job_key, run_id)
+    from job_model import validate_job_id
+    from job_runs import find_run_status, validate_run_id
+    validate_job_id(job_id)
+    validate_run_id(run_id)
+    memory = JobManager.get().get_state(job_id)
+    current = memory if memory.get("running") else durable_running_states(config).get(job_id, memory)
     if current.get("run_id") == run_id:
-        if not current.get("file_activity"):
-            raise ValueError("File activity is not enabled for this run")
-        # The configured directory may have changed since this run started.
-        path = Path(current["log_file"])
         state = dict(current)
     else:
-        # Exact run filenames allow reconnecting after completion or a UI
-        # restart, without accepting arbitrary filesystem paths from clients.
-        state = {"running": False, "exit_code": None, "run_id": run_id}
+        state = find_run_status(config, job_id, run_id)
     control = read_control_state(run_id)
-    if control.get("job_key") == job_key:
+    if control.get("job_id") == job_id:
+        if not state:
+            state = {**control, "running": not control.get("finished")}
         state["phase"] = control.get("phase", "")
         if control.get("finished") and not state.get("running"):
             state["exit_code"] = control.get("exit_code")
     from activity_log_capture import capture_record, capture_path
-    capture = capture_record(job_key, run_id)
+    capture = capture_record(job_id, run_id)
     if capture:
-        path = capture_path(capture)
+        state.setdefault("run_id", run_id)
+        state["file_activity"] = True
+        state["log_file"] = str(capture_path(capture))
         state["capture"] = capture
         if capture.get("status") in {"saved", "failed"}:
             state["running"] = False
             state["exit_code"] = capture.get("exit_code")
         state["log_persistence_failed"] = capture.get("status") == "failed" or (capture.get("status") == "running" and not state.get("running"))
-    return path, state
+    if not state or not state.get("file_activity") or not state.get("log_file"):
+        raise FileNotFoundError("File activity is not available for this run")
+    return Path(state["log_file"]), state
 
 
 @contextmanager
-def open_activity_run(config: dict, job_key: str, run_id: str = ""):
+def open_activity_run(config: dict, job_id: str, run_id: str = ""):
     # RAM can be released between resolving its path and opening it. The saved
     # location is published first, allowing a retry without resetting cursors.
     for attempt in range(2):
-        path, state = resolve_activity_run(config, job_key, run_id)
+        path, state = resolve_activity_run(config, job_id, run_id)
         try:
             handle = open_activity_file(path)
             break
@@ -119,8 +113,8 @@ def read_window(handle, start: int, end: int, *, running: bool = False, align_st
 
 
 def get_activity_window(config: dict, qs: dict) -> dict:
-    job = (qs.get("job") or [""])[0]
-    run = (qs.get("run") or [""])[0]
+    job = (qs.get("job_id") or [""])[0]
+    run = (qs.get("run_id") or [""])[0]
     with open_activity_run(config, job, run) as (_path, state, handle):
         info = os.fstat(handle.fileno())
         size = info.st_size

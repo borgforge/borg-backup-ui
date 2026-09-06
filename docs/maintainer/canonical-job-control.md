@@ -74,16 +74,9 @@ any candidate is published. No automatic migration or downgrade is introduced.
 
 ## Explicit remaining boundaries
 
-- #475 replaces the temporary run-preparation stop with the UUID runner, run
-  snapshots, logs/status/recovery/notifications, including the RAM activity
-  capture merged from #463. A UUID is never passed to the old Type-ID runner.
-- #475 also owns the shared retention engine over the union of historical and
-  current prefixes. The bundled Borg 1.4.5 accepts one shell glob and its
-  translator does not implement alternation. Multi-prefix manual prune is
-  therefore explicitly blocked here, rather than applying a separate policy to
-  each prefix or using a broad filter. The UI already previews the complete
-  prefix set. Keep this integration item open until the union engine is tested.
-  Primary implementation reference: [Borg 1.4.5 shell-pattern translator](https://github.com/borgbackup/borg/blob/1.4.5/src/borg/shellpattern.py).
+- #475 implements the UUID runner, immutable run snapshots, log/status/recovery
+  correlation and shared retention over the prefix union. The RAM activity
+  capture from #463 remains intact. See [canonical-job-runtime.md](canonical-job-runtime.md).
 - #476 converts status/dashboard/history consumers of the former `JobInfo.key`
   and `backup_type` shape; #477 converts restore selection and verification.
 - #478 handles historical artifact/secret deletion, transfer and recovery.

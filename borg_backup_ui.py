@@ -929,8 +929,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self._serve_file(UI_DIR / path[4:], allowed_root=UI_DIR)
         elif path == "/api/jobs/log/stream":
             qs = parse_qs(parsed.query)
-            job_key = (qs.get("job") or [""])[0]
-            self._handle_direct_api(lambda: self._handle_sse(job_key))
+            job_id = (qs.get("job_id") or [""])[0]
+            run_id = (qs.get("run_id") or [""])[0]
+            self._handle_direct_api(lambda: self._handle_sse(job_id, run_id))
         elif path == "/api/jobs/log/download":
             self._handle_direct_api(lambda: self._download_activity_log(parsed.query))
         elif path == "/api/restore-tests/log/stream":
@@ -1675,17 +1676,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return {"ok": True, "removed": entry_id}
 
     def _get_jobs(self) -> dict:
-        from jobs_api import list_jobs
+        from jobs_api import list_jobs, latest_job_statuses
         latest = {}
         try:
-            from status_api import get_status_data
-            status = get_status_data(self.config)
-            for b in status.get("backups", []):
-                key = str(b.get("key", ""))
-                if not key:
-                    continue
-                latest[key] = b
-                latest.setdefault(key.lower(), b)
+            latest = latest_job_statuses(self.config)
         except Exception as exc:
             self.log_message("WARN /api/jobs status fallback active: %s", str(exc))
         return {"jobs": list_jobs(self.config, latest)}
@@ -3180,21 +3174,49 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _post_run_job(self) -> dict:
         self._require_data_dir_ready()
-        from job_actions import prepare_job_action, resolve_request_job_id
-        from job_model import JobValidationError
+        from inventory_store import inventory_lock
+        from job_actions import resolve_request_job_id
+        from job_runs import create_run_context, descriptors
+        from repository_context import jobs_dir
+        from jobs_api import JobManager, get_job_runtime_state, resolve_scripts_dir
         body = self._read_json_body()
         job_id = resolve_request_job_id(self.config, body, endpoint="jobs/run")
-        prepare_job_action(self.config, job_id, require_enabled=True)
-        # This draft is deliberately not installable before #479. #475 replaces
-        # this boundary with the UUID runner; never feed a UUID to the old runner.
-        raise JobValidationError("job_runtime_cutover_pending", "Backup runtime cutover is pending in this integration phase")
+        session = self._get_current_session_meta() or {}
+        source = self._request_source(body)
+        actor = _normalize_username(session.get("username", "")) or ("scheduler" if source == "schedule" else source)
+        request_id = str(getattr(self, "_current_request_id", "") or "")
+        scripts_dir = resolve_scripts_dir(self.config)
+        backup_scripts_dir = Path(self.config["BACKUP_SCRIPTS_DIR"])
+        with inventory_lock(jobs_dir(self.config).parent):
+            if get_job_runtime_state(self.config, job_id).get("running"):
+                raise ApiConflictError("The job is already running", "job_already_running")
+            snapshot = create_run_context(self.config, job_id)
+            ok, error = JobManager.get().start(
+                job_id, [sys.executable, str(SCRIPT_DIR / "api" / "wizard_runner.py")],
+                backup_scripts_dir,
+                extra_env={"BORG_UI_BORG_SCRIPTS_DIR": str(scripts_dir),
+                           "BORG_UI_APP_VERSION": APP_VERSION,
+                           "BORG_UI_REQUEST_ID": request_id,
+                           "BORG_UI_REQUEST_SOURCE": source, "BORG_UI_REQUEST_ACTOR": actor},
+                run_context=snapshot,
+            )
+        if not ok:
+            raise ApiConflictError(error or "Backup could not be started", "job_start_failed")
+        from lifecycle_log import emit_lifecycle
+        emit_lifecycle("JOB", "requested", job_id=job_id, run_id=snapshot["run_id"],
+                       source=source, actor=actor, request_id=request_id)
+        return {"started": True, **descriptors(snapshot)}
 
     def _post_cancel_job(self) -> dict:
         from jobs_api import cancel_job
 
         body = self._read_json_body()
         from job_actions import resolve_request_job_id
-        job_id = resolve_request_job_id(self.config, body, endpoint="jobs/cancel")
+        from job_model import validate_job_id
+        # Active run ownership is authoritative. In particular cancellation
+        # must not wait on the configuration lock held during retention.
+        job_id = (validate_job_id(body["job_id"]) if "job_id" in body and "job_key" not in body
+                  else resolve_request_job_id(self.config, body, endpoint="jobs/cancel"))
         run_id = str(body.get("run_id") or "").strip()
         if not run_id:
             raise ValueError("job_id and run_id are required")
@@ -3225,7 +3247,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(query_string)
         stack = ExitStack()
         try:
-            path, _state, handle = stack.enter_context(open_activity_run(self.config, (qs.get("job") or [""])[0], (qs.get("run") or [""])[0]))
+            path, _state, handle = stack.enter_context(open_activity_run(self.config, (qs.get("job_id") or [""])[0], (qs.get("run_id") or [""])[0]))
         except (ValueError, OSError):
             stack.close()
             self._send_api_error(404, "not_found", "Activity log is not available", request_id=self._current_request_id)
@@ -3235,7 +3257,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             remaining = os.fstat(handle.fileno()).st_size
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
+            download_name = re.sub(r"[^A-Za-z0-9_.-]", "_", path.name)[:160]
+            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
             self.send_header("Content-Length", str(remaining))
             self.send_header("Cache-Control", "no-store")
             self._send_refreshed_session_header()
@@ -3250,7 +3273,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
-    def _handle_sse(self, job_key: str):
+    def _handle_sse(self, job_id: str, run_id: str = ""):
+        if job_id != "restore_test":
+            from job_model import validate_job_id
+            from job_runs import validate_run_id
+            validate_job_id(job_id)
+            validate_run_id(run_id)
         from jobs_api import stream_job_output
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -3260,7 +3288,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         self._send_refreshed_session_header()
         self.end_headers()
         try:
-            for chunk in stream_job_output(self.config, job_key):
+            for chunk in stream_job_output(self.config, job_id, run_id):
                 self.wfile.write(chunk.encode("utf-8"))
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
@@ -3774,13 +3802,13 @@ btn.addEventListener('click',doRecovery);
     @staticmethod
     def _augment_context_from_response(path: str, data: dict, ctx: dict) -> dict:
         out = dict(ctx or {})
-        if path == "/api/jobs/running" and not str(out.get("job_key") or "").strip() and isinstance(data, dict):
+        if path == "/api/jobs/running" and not str(out.get("job_id") or "").strip() and isinstance(data, dict):
             running_keys = [
                 str(k) for k, v in data.items()
                 if isinstance(v, dict) and bool(v.get("running"))
             ]
             if running_keys:
-                out["job_key"] = _mask_secrets(",".join(running_keys[:5]))
+                out["job_id"] = _mask_secrets(",".join(running_keys[:5]))
         if path == "/api/repositories" and isinstance(data, dict):
             for key in ("repository_key", "mode"):
                 if data.get(key):

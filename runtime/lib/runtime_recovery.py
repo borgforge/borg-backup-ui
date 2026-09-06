@@ -10,6 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+try:
+    from .run_identity import require_identity, SNAPSHOT_FIELDS
+except ImportError:
+    from run_identity import require_identity, SNAPSHOT_FIELDS
+
+
 
 _SCHEMA_VERSION = 1
 
@@ -58,11 +64,10 @@ def record_runtime_stopped(
     *,
     kind: str,
     targets: list[dict[str, str]],
-    job_name: str,
-    backup_type: str,
-    backup_location: str,
+    snapshot: dict[str, Any],
     log_file: str,
 ) -> str:
+    require_identity(snapshot.get("job_id"), snapshot.get("run_id"))
     normalized_targets = _normalize_targets(targets)
     if not normalized_targets:
         return ""
@@ -71,9 +76,7 @@ def record_runtime_stopped(
         "id": entry_id,
         "state": "pending_restart",
         "kind": str(kind or "").strip(),
-        "job_name": str(job_name or "").strip(),
-        "backup_type": str(backup_type or "").strip(),
-        "backup_location": str(backup_location or "").strip(),
+        **{key: snapshot[key] for key in SNAPSHOT_FIELDS},
         "log_file": str(log_file or "").strip(),
         "pid": os.getpid(),
         "stopped_at": _now(),

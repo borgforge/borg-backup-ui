@@ -305,7 +305,7 @@ class RestoreTest:
                     message=message,
                     severity="warning" if event_type == "restore_test_failed" else "info",
                     job_name=f"Borg Backup UI ({job_name})",
-                    job_key=job_name,
+                    job_name_snapshot=job_name,  # Service descriptor; per-job correlation follows in #477.
                     status=result,
                     duration_seconds=duration,
                     repository=str(repo.get("path") or ""),

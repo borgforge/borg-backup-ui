@@ -6,6 +6,7 @@ signal and presents the persisted structured result.
 """
 
 import subprocess
+import sys
 import threading
 import time
 import json
@@ -85,8 +86,11 @@ class CheckManager:
     ) -> tuple:
         """Start a maintenance action for one managed repository object."""
         with self._lock:
-            if self._state is not None and not self._state.finished:
-                return False, "A repository maintenance action is already running"
+            return self._start_repository_locked(config, repository_key, action, mode, job_id=job_id)
+
+    def _start_repository_locked(self, config, repository_key, action, mode, *, job_id):
+        if self._state is not None and not self._state.finished:
+            return False, "A repository maintenance action is already running"
 
         action = str(action or "check").strip().lower()
         mode = str(mode or "quick").strip().lower()
@@ -163,8 +167,7 @@ class CheckManager:
         )
         state.cleanup = cleanup
         state.append_line(f"[Info] Starting repository {action}: {' '.join(cmd[:-1])} {repo_path}")
-        with self._lock:
-            self._state = state
+        self._state = state
         threading.Thread(
             target=self._reader,
             args=(state,),
@@ -194,7 +197,7 @@ class CheckManager:
                 "--progress", repo_path,
             ]
 
-        from job_model import JobValidationError, validate_job_id
+        from job_model import validate_job_id
         from repository_context import jobs_using_repository, load_job_metadata
         ids = jobs_using_repository(config, repository["repository_key"])
         if job_id:
@@ -206,29 +209,17 @@ class CheckManager:
         else:
             raise ValueError("Select one backup job as the retention source")
         metadata = load_job_metadata(config, job_id)
-        prefixes = metadata["archive_prefixes"]
-        if len(prefixes) != 1:
-            # Borg 1.4 accepts one shell glob, without alternation. #475 owns
-            # the shared retention engine over the union; never prune per prefix.
-            raise JobValidationError("job_retention_cutover_pending", "Combined prefix retention is pending in this integration phase")
         retention = metadata.get("retention", {})
-        cmd = ["borg", "prune", "--lock-wait", self._LOCK_WAIT_SECONDS,
-               "--list", "--progress", "--glob-archives", f"{prefixes[0]}-*"]
-        retention_counts = []
-        for key, option in (("daily", "--keep-daily"), ("weekly", "--keep-weekly"), ("monthly", "--keep-monthly"), ("yearly", "--keep-yearly")):
-            value = str(retention.get(key) or "").strip()
-            if value:
-                if not re.fullmatch(r"\d+", value):
-                    raise ValueError("Retention values must be non-negative whole numbers")
-                normalized = str(int(value))
-                retention_counts.append(int(normalized))
-                cmd.extend([option, normalized])
-        if not retention_counts:
-            raise ValueError("The selected job has no retention policy")
-        if not any(value > 0 for value in retention_counts):
+        counts = [int(retention.get(period, "0")) for period in ("daily", "weekly", "monthly", "yearly")]
+        if not any(counts):
             raise ValueError("At least one retention value must be greater than zero")
-        cmd.append(repo_path)
-        return cmd
+        from job_runs import create_run_context
+        from jobs_api import resolve_data_root
+        snapshot = create_run_context(config, job_id, require_enabled=False)
+        if snapshot["repository_snapshot"] != repo_path or snapshot["repository_key_snapshot"] != repository["repository_key"]:
+            raise ValueError("Repository assignment changed during maintenance preparation")
+        return [sys.executable, str(Path(__file__).with_name("retention_runner.py")),
+                job_id, snapshot["run_id"], str(resolve_data_root(config))]
 
     def _reader(self, state: _CheckState) -> None:
         last_emitted: Optional[str] = None

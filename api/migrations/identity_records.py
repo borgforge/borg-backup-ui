@@ -28,7 +28,7 @@ _COLLECTIONS = {
     "runtime_recovery": ("entries", True),
     "restore_index": ("runs", False),
 }
-_DIRECT = {"status", "restore_test", "restore_detail", "control", "cancel_request", "resource_lock"}
+_DIRECT = {"status", "restore_test", "restore_detail", "control", "cancel_request", "resource_lock", "run_context"}
 _STATUS_FILENAME = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)\.status$")
 _RESTORE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 _RESTORE_SHARED_FIELDS = (
@@ -128,6 +128,15 @@ class _Projection:
             return deepcopy(data)
         original = deepcopy(data)
         row = deepcopy(data)
+        if kind == "run_context":
+            try:
+                from job_runs import validate_run_context
+                validate_run_context(row, row.get("job_id"), row.get("run_id"))
+                if source.rsplit("/", 2)[-2] != row["run_id"]:
+                    raise ValueError("Run directory does not match the payload")
+            except (ValueError, OSError, TypeError, KeyError, AttributeError):
+                self.reason("invalid_run_context", source, locator)
+                return row
         if kind.startswith("restore_") and kind != "restore_test":
             state = row.get("state")
             if not isinstance(state, str) or state not in _TERMINAL | {"running"}:
@@ -176,6 +185,10 @@ class _Projection:
                      and not row.get("job_id")
                      and ((raw_key == "restore_test" and row.get("source") == "restore_test")
                           or (not raw_key and row.get("source") == "system")))
+        if kind in {"notification_queue", "notification_deliveries"} and not row.get("job_id") and not raw_key:
+            is_system = row.get("service") in {"restore_test", "system"}
+        if kind == "resource_lock" and not row.get("job_id") and row.get("service") == "restore":
+            is_system = row.get("operation") == "restore"
         if kind == "resource_lock" and not row.get("job_id") and raw_key == "restore_test":
             is_system = row.get("operation") == "restore_test"
         if is_system:
@@ -478,7 +491,7 @@ class _Projection:
                 self.reminders(source, record)
             elif kind in _DIRECT:
                 legacy = record.get("legacy_key", "")
-                if kind == "status":
+                if kind == "status" and isinstance(data, dict) and not data.get("job_id"):
                     match = _STATUS_FILENAME.fullmatch(source.rsplit("/", 1)[-1])
                     legacy = match.group(1) if match else legacy
                 output = self.row(data, source, "", kind, legacy=legacy)

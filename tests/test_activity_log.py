@@ -19,19 +19,31 @@ import activity_log_capture
 import jobs_api
 from borg_backup_ui import BackupUIHandler
 from wizard_runner import ResourceLockSet
+from runtime_fixture_support import JOB_ID, RUN_ID, write_run_fixture
 
 
 @pytest.fixture
 def activity(tmp_path, monkeypatch):
+    monkeypatch.setenv('BORG_UI_CONTROL_ROOT', str(tmp_path / 'run'))
+    monkeypatch.syspath_prepend(str(ROOT / 'runtime'))
     monkeypatch.setattr(activity_log_capture, "CAPTURE_ROOT", tmp_path / "ram")
     manager = jobs_api.JobManager()
     monkeypatch.setattr(jobs_api.JobManager, "get", classmethod(lambda cls: manager))
     monkeypatch.setattr("job_control.read_control_state", lambda _run: {})
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "GLOBAL_LOG_DIR": str(tmp_path / "logs")}
-    path = activity_log.activity_log_path(tmp_path / "logs", "files_local", "20260905T120000Z-abcdef123456")
+    path = activity_log.activity_log_path(tmp_path / "logs", JOB_ID, RUN_ID)
     path.parent.mkdir()
     path.write_bytes(b"")
-    params = {"job": ["files_local"], "run": ["20260905T120000Z-abcdef123456"]}
+    params = {"job_id": [JOB_ID], "run_id": [RUN_ID]}
+    # A persisted payload, not its filename, authorizes this historical log.
+    from lib.status import BackupStatus
+    config['STATUS_DIR'] = str(tmp_path / 'status')
+    BackupStatus(job_id=JOB_ID,run_id=RUN_ID,job_name_snapshot='job',file_activity=True,log_file=str(path)).save(tmp_path / 'status')
+    original_start = manager.start
+    def start(job_id, command, cwd, extra_env=None):
+        snapshot = write_run_fixture(path.parent, job_id=job_id, file_activity=(extra_env or {}).get('BORG_UI_FILE_ACTIVITY_RUN') == '1')
+        return original_start(job_id, command, cwd, extra_env, run_context=snapshot)
+    monkeypatch.setattr(manager, 'start', start)
     return config, path, params, manager
 
 
@@ -116,7 +128,7 @@ def test_status_requests_do_not_read_file_contents(activity, monkeypatch):
 
 
 @pytest.mark.parametrize("params", [
-    {"job": ["../../etc/passwd"]}, {"run": ["../../etc/passwd"]},
+    {"job_id": ["../../etc/passwd"]}, {"run_id": ["../../etc/passwd"]},
     {"start": ["-1"]}, {"before": ["99999"]}, {"start": ["1.1"]},
     {"start": ["9" * 50]}, {"search": [""]}, {"search": ["a" * 257]},
     {"file_id": ["replaced-file"]},
@@ -144,13 +156,13 @@ def test_real_process_capture_only_uses_file_when_enabled(activity, enabled):
     config, path, _params, manager = activity
     env = {"BORG_UI_FILE_ACTIVITY_RUN": "1" if enabled else "0", "BORG_UI_ACTIVITY_LOG_DIR": str(path.parent)}
     script = "import sys; sys.stdout.write('A changed.stl\\n' * 10000); sys.stderr.write('E unreadable'); sys.exit(1)"
-    assert manager.start("files_local", [sys.executable, "-c", script], path.parent, env) == (True, None)
-    state = manager._states["files_local"]
+    assert manager.start(JOB_ID, [sys.executable, "-c", script], path.parent, env) == (True, None)
+    state = manager._states[JOB_ID]
     deadline = time.monotonic() + 10
     while not state.finished and time.monotonic() < deadline:
         time.sleep(0.01)
     assert state.finished
-    assert manager.get_state("files_local")["exit_code"] == 1
+    assert manager.get_state(JOB_ID)["exit_code"] == 1
     if enabled:
         assert state.lines == []
         assert state.proc.stdout is None
@@ -159,28 +171,28 @@ def test_real_process_capture_only_uses_file_when_enabled(activity, enabled):
         assert text.endswith("E unreadable")
         assert state.log_file.stat().st_mode & 0o777 == 0o600
         state.snapshot = lambda: pytest.fail("activity status copied an in-memory log")
-        assert manager.get_state("files_local")["file_activity"] is True
-        assert manager.get_state("files_local")["line_count"] == 10001
-        stream = manager.stream_output("files_local")
+        assert manager.get_state(JOB_ID)["file_activity"] is True
+        assert manager.get_state(JOB_ID)["line_count"] == 10001
+        stream = manager.stream_output(JOB_ID)
         assert sum(1 for item in stream if item.startswith("data:")) == 10001
     else:
         assert state.log_file is None
         assert len(state.lines) == 10001
-        assert "file_activity" not in manager.get_state("files_local")
+        assert manager.get_state(JOB_ID)["file_activity"] is False
 
 
 def test_restart_recovers_active_run_mode_and_completed_exit(activity, monkeypatch):
     config, path, params, _manager = activity
     lock_dir = Path(config["BACKUP_SCRIPTS_DIR"]) / "locks"
     lock_dir.mkdir()
-    locks = ResourceLockSet(lock_dir, "files_local", log_file=str(path), run_id=params["run"][0], file_activity=True)
+    locks = ResourceLockSet(lock_dir, JOB_ID, log_file=str(path), run_id=params["run_id"][0], file_activity=True)
     lock = lock_dir / "repo.lock.json"
     lock.write_text(json.dumps(locks._payload("repo:test")))
-    result = activity_log.get_activity_window(config, {"job": ["files_local"]})
+    result = activity_log.get_activity_window(config, params)
     assert result["running"] is True
-    assert result["run_id"] == params["run"][0]
+    assert result["run_id"] == params["run_id"][0]
     lock.unlink()
-    monkeypatch.setattr("job_control.read_control_state", lambda _run: {"job_key": "files_local", "finished": True, "exit_code": 130, "phase": "cancelled"})
+    monkeypatch.setattr("job_control.read_control_state", lambda _run: {"job_id": JOB_ID, "finished": True, "exit_code": 130, "phase": "cancelled", "run_id": RUN_ID, "file_activity": True, "log_file": str(path)})
     result = activity_log.get_activity_window(config, params)
     assert result["running"] is False
     assert result["exit_code"] == 130
@@ -204,7 +216,7 @@ def test_download_includes_complete_log_without_large_writes(activity):
             assert len(data) <= 65536
             chunks.append(data)
     handler.wfile = Sink()
-    handler._download_activity_log(f"job=files_local&run={params['run'][0]}")
+    handler._download_activity_log(f"job_id={JOB_ID}&run_id={params['run_id'][0]}")
     assert headers["status"] == 200
     assert int(headers["Content-Length"]) == len(content)
     assert b"".join(chunks) == content
@@ -228,8 +240,8 @@ _setup_full_logging(log_file)
 logging.info('A changed file.stl')
 logging.warning('warning remains visible')
 '''
-    assert manager.start('files_local', [sys.executable, '-c', script], path.parent, env)[0]
-    state = manager._states['files_local']
+    assert manager.start(JOB_ID, [sys.executable, '-c', script], path.parent, env)[0]
+    state = manager._states[JOB_ID]
     deadline = time.monotonic() + 10
     while not state.finished and time.monotonic() < deadline:
         time.sleep(0.01)
@@ -264,8 +276,8 @@ if code == 137: os.kill(os.getpid(), 9)
 sys.exit(code)
 '''
     env = {'BORG_UI_FILE_ACTIVITY_RUN': '1', 'BORG_UI_ACTIVITY_LOG_DIR': str(path.parent)}
-    assert manager.start('files_local', [sys.executable, '-c', script, str(exit_code)], path.parent, env)[0]
-    state = manager._states['files_local']
+    assert manager.start(JOB_ID, [sys.executable, '-c', script, str(exit_code)], path.parent, env)[0]
+    state = manager._states[JOB_ID]
     try:
         deadline = time.monotonic() + 10
         while not ready.exists() and time.monotonic() < deadline:
@@ -278,9 +290,9 @@ sys.exit(code)
         # Drop API state entirely. Resource-lock-independent recovery sees the
         # supervisor and the live file; no parent thread is needed for saving.
         manager._states.clear()
-        recovered = jobs_api.durable_running_states(config)['files_local']
+        recovered = jobs_api.durable_running_states(config)[JOB_ID]
         assert recovered['run_id'] == state.run_id and recovered['file_activity']
-        params = {'job': ['files_local'], 'run': [state.run_id]}
+        params = {'job_id': [JOB_ID], 'run_id': [state.run_id]}
         before = activity_log.get_activity_window(config, params)
         assert before['running'] is True and 'changed-Größe.stl' in before['text']
         release.touch()
@@ -291,7 +303,7 @@ sys.exit(code)
         assert after['running'] is False and after['exit_code'] == exit_code
         assert not state.log_file.exists(), 'the full RAM allocation must be released'
         assert retained.read_text() == 'A changed-Größe.stl\n' * 10000 + after['text']
-        assert 'files_local' not in jobs_api.durable_running_states(config)
+        assert JOB_ID not in jobs_api.durable_running_states(config)
     finally:
         release.touch()
         state.proc.wait(timeout=10)
@@ -299,7 +311,7 @@ sys.exit(code)
 
 def test_failed_retention_preserves_complete_ram_log_and_existing_destination(activity):
     config, path, params, _manager = activity
-    active, record_path = activity_log_capture.prepare_capture('files_local', params['run'][0], path.parent)
+    active, record_path = activity_log_capture.prepare_capture(JOB_ID, params['run_id'][0], path.parent)
     content = 'A changed-Größe.stl\n' * 10000
     active.write_text(content)
     path.write_text('existing log must not be overwritten')
@@ -315,7 +327,7 @@ def test_failed_retention_preserves_complete_ram_log_and_existing_destination(ac
 def test_partial_copy_failure_keeps_ram_and_removes_incomplete_destination(activity, monkeypatch):
     config, path, params, _manager = activity
     path.unlink()
-    active, record_path = activity_log_capture.prepare_capture('files_local', params['run'][0], path.parent)
+    active, record_path = activity_log_capture.prepare_capture(JOB_ID, params['run_id'][0], path.parent)
     content = b'A changed.stl\n' * 10000
     active.write_bytes(content)
     def fail_copy(source, target, length):
@@ -333,7 +345,7 @@ def test_partial_copy_failure_keeps_ram_and_removes_incomplete_destination(activ
 def test_open_retries_ram_to_retained_transition_and_rejects_replacement(activity, monkeypatch):
     config, path, params, _manager = activity
     path.unlink()
-    active, record_path = activity_log_capture.prepare_capture('files_local', params['run'][0], path.parent)
+    active, record_path = activity_log_capture.prepare_capture(JOB_ID, params['run_id'][0], path.parent)
     active.write_text('A first.stl\nA second.stl\n')
     before = activity_log.get_activity_window(config, params)
     original_open = activity_log.open_activity_file
@@ -361,7 +373,7 @@ def test_saved_history_references_retained_log_while_active_reads_use_ram(tmp_pa
     active.parent.mkdir()
     active.write_text('WARNING source changed\n')
     cfg = BackupJobConfig(
-        job_name='Files', backup_type='files', backup_location='local',
+        job_name='Files', job_id=JOB_ID, run_id=RUN_ID, archive_prefix='files', repository_key='synthetic', backup_location='local',
         lock_file=tmp_path / 'job.lock', log_dir=retained.parent, log_file=active,
         backup_paths=[tmp_path], borg_cache_dir=tmp_path / 'cache', date_tag='2026-09-06',
         status_dir=tmp_path / 'status', retained_log_file=retained,

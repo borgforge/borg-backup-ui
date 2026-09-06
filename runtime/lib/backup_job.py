@@ -127,7 +127,10 @@ class BackupJobConfig:
     """
 
     job_name: str
-    backup_type: str
+    job_id: str
+    run_id: str
+    archive_prefix: str
+    repository_key: str
     backup_location: str
     lock_file: Path
     log_dir: Path
@@ -149,6 +152,8 @@ class BackupJobConfig:
     borg_keep_yearly: int = 3
 
     retained_log_file: Optional[Path] = None
+    archive_prefixes: List[str] = field(default_factory=list)
+    file_activity: bool = False
 
     @classmethod
     def from_config(cls, env: dict) -> "BackupJobConfig":
@@ -209,7 +214,11 @@ class BackupJobConfig:
 
         return cls(
             job_name=env.get("JOB_NAME", "Borg Backup"),
-            backup_type=env.get("BACKUP_TYPE", "unknown"),
+            job_id=env.get("JOB_ID", ""), run_id=env.get("RUN_ID", ""),
+            archive_prefix=env.get("ARCHIVE_PREFIX", ""),
+            archive_prefixes=json.loads(env.get("ARCHIVE_PREFIXES_JSON", "[]")),
+            repository_key=env.get("REPOSITORY_KEY", ""),
+            file_activity=env.get("BORG_FILE_ACTIVITY") == "1",
             backup_location=env.get("BACKUP_LOCATION") or env.get("LOCATION", "unknown"),
             lock_file=Path(env.get("LOCK_FILE", "/tmp/borg-backup.lock")),
             log_dir=Path(env.get("LOG_DIR", "/tmp")),
@@ -233,6 +242,19 @@ class BackupJobConfig:
             borg_keep_monthly=int(env.get("BORG_KEEP_MONTHLY", "6") or "6"),
             borg_keep_yearly=int(env.get("BORG_KEEP_YEARLY", "3") or "3"),
         )
+
+    def identity_snapshot(self) -> dict:
+        from .run_identity import require_identity
+        require_identity(self.job_id, self.run_id)
+        return {
+            "job_id": self.job_id, "run_id": self.run_id,
+            "job_name_snapshot": self.job_name,
+            "archive_prefix_snapshot": self.archive_prefix,
+            "archive_prefixes_snapshot": list(self.archive_prefixes),
+            "repository_key_snapshot": self.repository_key,
+            "repository_snapshot": self.borg_repo,
+            "location_snapshot": self.backup_location,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +576,7 @@ class BackupJob:
             self._write_mini_log(
                 "USB_NOT_MOUNTED",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because the USB drive is missing",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because the USB drive is missing",
                     f"Mount path: {mount_path}",
                     "Status: directory does not exist",
                     "Reason: USB drive is not connected or mounted",
@@ -568,7 +590,7 @@ class BackupJob:
             self._write_mini_log(
                 "USB_NOT_WRITABLE",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because the USB drive is read-only",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because the USB drive is read-only",
                     f"Mount path: {mount_path}",
                     "Status: not writable",
                     "Reason: USB drive is read-only or lacks write permissions",
@@ -622,7 +644,7 @@ class BackupJob:
             self._write_mini_log(
                 "SKIPPED_PARITY",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because a parity operation is running",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because a parity operation is running",
                     f"Operation: {resync_action}",
                     f"Progress: {progress}% ({resync_pos}/{resync_size})",
                     "Reason: Preserve system performance during the parity operation",
@@ -685,14 +707,19 @@ class BackupJob:
             "Removing logs older than %d days...", self.config.log_retention_days
         )
         cutoff = time.time() - (self.config.log_retention_days * 86400)
-        pattern = f"Borg-Backup_{self.config.backup_type}--*.log"
-        for log_path in self.config.log_dir.glob(pattern):
+        from lib.status import StatusStore
+        current_log = self.config.retained_log_file or self.config.log_file
+        for status in StatusStore(self.config.status_dir).load():
+            if status.job_id != self.config.job_id or status.identity_state == "unassigned" or not status.log_file:
+                continue
+            log_path = Path(status.log_file)
+            if log_path == current_log or log_path.parent != self.config.log_dir:
+                continue
             try:
-                if log_path.stat().st_mtime < cutoff:
+                if not log_path.is_symlink() and log_path.stat().st_mtime < cutoff:
                     log_path.unlink()
-                    logger.debug("Deleted log: %s", log_path)
             except OSError as exc:
-                logger.warning("Could not delete log %s: %s", log_path, exc)
+                logger.warning("Could not delete old run log: %s", type(exc).__name__)
 
     # ------------------------------------------------------------------
     # Interne Methoden
@@ -785,9 +812,7 @@ class BackupJob:
             self.config.runtime_recovery_file,
             kind="docker",
             targets=targets,
-            job_name=self.config.job_name,
-            backup_type=self.config.backup_type,
-            backup_location=self.config.backup_location,
+            snapshot=self.config.identity_snapshot(),
             log_file=str(self.config.log_file),
         )
         if self._docker_recovery_id:
@@ -806,9 +831,7 @@ class BackupJob:
             self.config.runtime_recovery_file,
             kind="vm",
             targets=[{"id": name, "name": name} for name in result.stopped_vms],
-            job_name=self.config.job_name,
-            backup_type=self.config.backup_type,
-            backup_location=self.config.backup_location,
+            snapshot=self.config.identity_snapshot(),
             log_file=str(self.config.log_file),
         )
         if self._vm_recovery_id:
@@ -989,8 +1012,8 @@ class BackupJob:
             reason_code = "skipped"
         logger.info("Saving skipped status: %s", reason)
         bs = BackupStatus(
-            backup_type=self.config.backup_type,
-            location=self.config.backup_location,
+            **self.config.identity_snapshot(),
+            file_activity=self.config.file_activity,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             duration_seconds=duration,
             exit_code=0,
@@ -1070,13 +1093,12 @@ class BackupJob:
                     title=title,
                     message=message,
                     severity=severity,
-                    job_name=f"Borg Backup ({self.config.backup_type})",
-                    job_key=f"{self.config.backup_type}_{self.config.backup_location}",
+                    job_name=self.config.job_name,
+                    **self.config.identity_snapshot(),
                     status=event_type,
                     duration_seconds=duration,
                     repository=self.config.borg_repo or os.environ.get("BORG_REPO", ""),
                     log_file=str(self.config.log_file),
-                    backup_type=self.config.backup_type,
                     date_tag=self.config.date_tag,
                     exit_code=exit_code,
                     source="backup_job",
@@ -1118,8 +1140,8 @@ class BackupJob:
             transfer_speed = stats.deduplicated_size // duration
 
         bs = BackupStatus(
-            backup_type=self.config.backup_type,
-            location=self.config.backup_location,
+            **self.config.identity_snapshot(),
+            file_activity=self.config.file_activity,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             duration_seconds=duration,
             exit_code=exit_code,
@@ -1165,8 +1187,8 @@ class BackupJob:
                 request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
                 source=os.environ.get("BORG_UI_REQUEST_SOURCE", "backup_job"),
                 actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
-                job_key=os.environ.get("BORG_UI_JOB_KEY", f"{self.config.backup_type}_{self.config.backup_location}"),
-                run_id=os.environ.get("BORG_UI_RUN_ID", ""),
+                job_id=self.config.job_id,
+                run_id=self.config.run_id,
                 status=status,
                 exit_code=exit_code,
                 duration_seconds=duration,
@@ -1253,17 +1275,8 @@ class BackupJob:
 
     def _write_mini_log(self, suffix: str, lines: List[str]) -> None:
         """Schreibt einen kleinen Informations-Log für Skip-Szenarien."""
-        try:
-            self.config.log_dir.mkdir(parents=True, exist_ok=True)
-            mini_log = (
-                self.config.log_dir
-                / f"Borg-Backup_{self.config.backup_type}--{self.config.date_tag}_{suffix}.log"
-            )
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            content = "\n".join(f"[{ts}] {line}" for line in lines) + "\n"
-            mini_log.write_text(content, encoding="utf-8")
-        except OSError as exc:
-            logger.warning("Could not write mini log: %s", exc)
+        for line in lines:
+            logger.info("%s: %s", suffix, line)
 
 
 # ---------------------------------------------------------------------------
@@ -1299,7 +1312,7 @@ if __name__ == "__main__":
 
     if args.command == "info":
         print(f"job_name:            {cfg.job_name}")
-        print(f"backup_type:         {cfg.backup_type}")
+        print(f"job_id:              {cfg.job_id}")
         print(f"backup_location:     {cfg.backup_location}")
         print(f"lock_file:           {cfg.lock_file}")
         print(f"log_dir:             {cfg.log_dir}")

@@ -6,6 +6,18 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #475 (integration work for #447; not released)
+- Added immutable UUID run contexts for manual/scheduled backup execution, exact
+  prefix creation, status/log lookup, cancellation, recovery and notifications.
+- Preserved start-time configuration, RAM activity-log capture and existing
+  cache directories; repository changes do not reuse another target's check flag.
+- Added one shared prefix-union retention engine, verified against the bundled
+  Borg 1.4.5, and replaced the manual multi-prefix guard from #474.
+- Serialized concurrent starts/stale resource recovery; payload IDs and process
+  start tokens identify owners, and cancellation stays independent of retention.
+- Added canonical runtime/real Borg regression coverage. Reporting, restore,
+  transfer and final startup/migration activation remain #476-#479 work.
+
 ### Issue #474 (integration work for #447; not released)
 - Converted job discovery, configuration actions, repository assignments and
   schedules to UUID job IDs; editable descriptors no longer rename identity.

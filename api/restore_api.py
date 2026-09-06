@@ -436,7 +436,8 @@ def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, rest
     resource = _repository_resource(info)
     lock_set = ResourceLockSet(
         lock_dir=resolve_resource_lock_dir(config),
-        job_key=_validate_job_key(job_key),
+        job_id="",  # Service lock; per-job restore correlation is converted in #477.
+        snapshot={"job_name_snapshot": _validate_job_key(job_key)},
         ttl_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_TTL_SECONDS", 7200),
         grace_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_GRACE_SECONDS", 60),
         heartbeat_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_HEARTBEAT_SECONDS", 20),

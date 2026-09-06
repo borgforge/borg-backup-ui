@@ -214,6 +214,8 @@ def _inventory(config, control_root):
             path = str(controls / run / name)
             if name == "cancel.request.json":
                 scan.records[path]["kind"] = "cancel_request"
+            elif name == "context.json":
+                scan.records[path]["kind"] = "run_context"
             elif name != "state.json":
                 _fail("unknown_control_file", path)
     widget = _path(effective.get("UNRAID_DASHBOARD_WIDGET_FILE") or str(plugin / "widget-status.json"))
@@ -282,6 +284,19 @@ def _operational_defaults(meta, conf, source):
     if meta["schema_version"] == 4:
         return result
     tu = meta["backup_type"].upper()
+    # Preserve the runner's existing cache namespace and check marker. These
+    # paths are references, not identities, and are never renamed or deleted.
+    cache_dir = conf.get("BORG_CACHE_DIR") or str(
+        Path(conf.get("GLOBAL_BORG_CACHE_BASE") or "/mnt/cache/borg-cache")
+        / (meta["location"] + "_" + meta["backup_type"])
+    )
+    if "cache_reference" in result:
+        _fail("ambiguous_cache_reference", source)
+    result["cache_reference"] = {
+        "repository_key": meta["repository_key"],
+        "directory": cache_dir,
+        "check_flag_file": conf.get("BORG_CHECK_FLAG_FILE") or str(Path(cache_dir) / (".last_check_" + meta["backup_type"])),
+    }
     # Env overrides unrelated to job metadata cannot be inferred safely. The
     # startup coordinator must supply the actual expanded backup.conf, captured
     # here, rather than invoking the runner which mutates process environment.

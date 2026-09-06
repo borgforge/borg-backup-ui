@@ -8,6 +8,10 @@ API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
+from test_canonical_job_wizard import setup, create
+from job_runs import create_run_context
+from inventory_store import atomic_write_json
+from storage_objects_api import read_storage_store
 import wizard_runner  # noqa: E402
 from repositories_api import write_repository_store  # noqa: E402
 from storage_objects_api import write_storage_store  # noqa: E402
@@ -46,124 +50,52 @@ def test_wizard_runner_preserves_docker_exclusion_runtime_control():
     }
 
 
-def test_wizard_runner_passes_archive_prefix_to_maintenance() -> None:
-    source = (ROOT / "api" / "wizard_runner.py").read_text(encoding="utf-8")
-
-    assert "archive_prefix = f\"{env.get('BACKUP_TYPE', 'job')}-backup\"" in source
-    assert "runner.maintenance(archive_prefix=archive_prefix)" in source
-
-
-def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
-    tmp_path: Path,
-    monkeypatch,
-):
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    jobs_dir = tmp_path / "config" / "jobs"
-    jobs_dir.mkdir(parents=True)
-    (jobs_dir / "appdata_local.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "appdata_local",
-        "name": "Appdata",
-        "backup_type": "appdata",
-        "location": "local",
-        "repository_key": "repo_appdata_test",
-        "source_paths": ["/mnt/user/appdata"],
-        "compression": "lz4",
-        "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
-    }) + "\n", encoding="utf-8")
-    secret = tmp_path / "secrets" / ".borg-passphrase-repo_appdata_test"
-    secret.parent.mkdir()
-    secret.write_text("secret\n", encoding="utf-8")
-    write_storage_store(config, {"storages": [{
-        "storage_key": "storage_local_test",
-        "display_name": "Local",
-        "storage_type": "local",
-        "location": "local",
-        "identity": "local:/mnt/backup",
-        "base_path": "/mnt/backup",
-    }]})
-    write_repository_store(config, {"repositories": [{
-        "repository_key": "repo_appdata_test",
-        "display_name": "Appdata",
-        "storage_key": "storage_local_test",
-        "relative_path": "borg-backup-appdata",
-        "path_raw": "/mnt/backup/borg-backup-appdata",
-        "passphrase_ref": str(secret),
-        "encryption": "repokey-blake2",
-    }]})
-    (tmp_path / "config" / "backup.conf").write_text(
-        "GLOBAL_LOG_DIR=/mnt/user/logs\n",
-        encoding="utf-8",
-    )
-    monkeypatch.delenv("BORG_PASSCOMMAND", raising=False)
-
-    env, metadata = wizard_runner._load_env_from_job("appdata_local", tmp_path / "scripts", tmp_path)
-
-    assert env["BORG_REPO"] == "/mnt/backup/borg-backup-appdata"
-    assert metadata["repository_key"] == "repo_appdata_test"
-    assert metadata["_resolved_repository"]["passphrase_ref"] == str(secret)
-    assert json.loads(env["BACKUP_PATHS_JSON"]) == ["/mnt/user/appdata"]
-    assert "BACKUP_PATHS" not in env
-    assert "repo" not in metadata
-    assert "passphrase" not in metadata
-    assert "BORG_PASSCOMMAND" not in env
-    assert wizard_runner.os.environ["BORG_PASSCOMMAND"] == f"cat {secret}"
+def test_wizard_runner_passes_exact_prefix_union_to_maintenance() -> None:
+    source = (ROOT / "api/wizard_runner.py").read_text()
+    assert 'archive_prefix = snapshot["archive_prefix_snapshot"]' in source
+    assert 'archive_prefixes=snapshot["archive_prefixes_snapshot"]' in source
 
 
-def test_wizard_runner_keeps_ssh_identity_and_keepalive_options(tmp_path: Path, monkeypatch):
-    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
-    jobs_dir = tmp_path / "config" / "jobs"
-    jobs_dir.mkdir(parents=True)
-    (jobs_dir / "appdata_storagebox.json").write_text(json.dumps({
-        "schema_version": 3,
-        "job_key": "appdata_storagebox",
-        "name": "Appdata",
-        "backup_type": "appdata",
-        "location": "storagebox",
-        "repository_key": "repo_appdata_storagebox",
-        "source_paths": ["/mnt/user/appdata"],
-        "compression": "lz4",
-        "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
-    }) + "\n", encoding="utf-8")
-    secret = tmp_path / "secrets" / ".borg-passphrase-repo_appdata_storagebox"
-    secret.parent.mkdir()
-    secret.write_text("secret\n", encoding="utf-8")
-    key_path = tmp_path / "keys" / "storage box"
+def test_wizard_runner_resolves_repository_and_secret_from_repository_object(setup, monkeypatch):
+    config, _, scripts, root = setup
+    result, _ = create(setup)
+    secret = root / 'synthetic.passphrase'
+    secret.write_text('synthetic-only')
+    repo_file = root / 'config/repositories.json'
+    repos = json.loads(repo_file.read_text())
+    repos['repositories'][0].update(passphrase_ref=str(secret),encryption='repokey-blake2')
+    atomic_write_json(repo_file,repos)
+    monkeypatch.setenv('BORG_UI_CONTROL_ROOT',str(root / 'run'))
+    monkeypatch.delenv('BORG_PASSCOMMAND',raising=False)
+    snapshot = create_run_context(config,result['job_id'])
+    monkeypatch.setenv('BORG_UI_RUN_ID',snapshot['run_id'])
+    env, metadata = wizard_runner._load_env_from_job(result['job_id'],scripts,root)
+    assert env['BORG_REPO'] == str(root / 'repos/repo_a')
+    assert metadata['_resolved_repository']['passphrase_ref'] == str(secret)
+    assert json.loads(env['BACKUP_PATHS_JSON']) == [str(root / 'source')]
+    assert 'repo' not in metadata and 'passphrase' not in metadata
+    assert wizard_runner.os.environ['BORG_PASSCOMMAND'] == f'cat {secret}'
+
+
+def test_wizard_runner_keeps_ssh_identity_and_keepalive_options(setup, monkeypatch):
+    config, _, scripts, root = setup
+    key_path = root / 'keys/storage box'
     key_path.parent.mkdir()
-    key_path.write_text("private-key", encoding="utf-8")
-    write_storage_store(config, {"storages": [{
-        "storage_key": "storage_ssh_test",
-        "display_name": "Storagebox",
-        "storage_type": "ssh",
-        "location": "storagebox",
-        "endpoint": "backup@example.test:23",
-        "host": "example.test",
-        "port": "23",
-        "user": "backup",
-        "base_path": "./backup",
-        "ssh_key_path": str(key_path),
-    }]})
-    write_repository_store(config, {"repositories": [{
-        "repository_key": "repo_appdata_storagebox",
-        "display_name": "Appdata",
-        "storage_key": "storage_ssh_test",
-        "relative_path": "borg-backup-appdata",
-        "passphrase_ref": str(secret),
-        "encryption": "repokey-blake2",
-    }]})
-    (tmp_path / "config" / "backup.conf").write_text(
-        "GLOBAL_LOG_DIR=/mnt/user/logs\n",
-        encoding="utf-8",
-    )
-    monkeypatch.delenv("BORG_RSH", raising=False)
-
-    env, _metadata = wizard_runner._load_env_from_job("appdata_storagebox", tmp_path / "scripts", tmp_path)
-
-    tokens = shlex.split(env["BORG_RSH"])
-    assert tokens[tokens.index("-i") + 1] == str(key_path)
-    assert "ServerAliveInterval=30" in tokens
-    assert "ServerAliveCountMax=10" in tokens
-    assert "TCPKeepAlive=yes" in tokens
+    key_path.write_text('synthetic-key-fixture')
+    storages = read_storage_store(config)
+    storages['storages'][1]['ssh_key_path'] = str(key_path)
+    write_storage_store(config,storages)
+    result, _ = create(setup,repository_key='repo_b')
+    monkeypatch.setenv('BORG_UI_CONTROL_ROOT',str(root / 'run'))
+    monkeypatch.delenv('BORG_RSH',raising=False)
+    snapshot = create_run_context(config,result['job_id'])
+    monkeypatch.setenv('BORG_UI_RUN_ID',snapshot['run_id'])
+    env, _ = wizard_runner._load_env_from_job(result['job_id'],scripts,root)
+    tokens = shlex.split(env['BORG_RSH'])
+    assert tokens[tokens.index('-i')+1] == str(key_path)
+    assert 'ServerAliveInterval=30' in tokens
+    assert 'ServerAliveCountMax=10' in tokens
+    assert 'TCPKeepAlive=yes' in tokens
 
 
 def test_runtime_repository_resolution_does_not_read_legacy_job_fields():
@@ -196,7 +128,7 @@ def test_wizard_runner_mounts_smb_from_resolved_storage_object(tmp_path: Path, m
     secret = tmp_path / ".smb-nas.cred"
     secret.write_text("username=backup\npassword=secret\n", encoding="utf-8")
     metadata = {
-        "location": "smb",
+        "_resolved_location": "smb",
         "mount_before_run": True,
         "unmount_after_run": True,
         "_resolved_storage": {
@@ -238,7 +170,7 @@ def test_wizard_runner_auto_smb_mount_does_not_force_protocol(tmp_path: Path, mo
     secret = tmp_path / ".smb-nas.cred"
     secret.write_text("username=backup\npassword=secret\n", encoding="utf-8")
     metadata = {
-        "location": "smb",
+        "_resolved_location": "smb",
         "mount_before_run": True,
         "unmount_after_run": True,
         "_resolved_storage": {
@@ -275,7 +207,7 @@ def test_wizard_runner_respects_keep_mounted_profile_flag(tmp_path: Path, monkey
     secret = tmp_path / ".smb-nas.cred"
     secret.write_text("username=backup\npassword=secret\n", encoding="utf-8")
     metadata = {
-        "location": "smb",
+        "_resolved_location": "smb",
         "mount_before_run": True,
         "unmount_after_run": True,
         "_resolved_storage": {
