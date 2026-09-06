@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.09.05.1319">
+<!ENTITY version   "2026.09.06.0112">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,14 @@
 
 <CHANGES>
 <![CDATA[
+###2026.09.06.0112###
+- Keep the live log responsive for large backups when optional file activity is enabled, while retaining every emitted log entry (#463).
+- Browse earlier log sections and download the full log directly from the file-activity view. Jobs without file activity keep their existing live-log behavior (#463).
+- Follow new output through the final line even while catching up or refreshing job cards; pause only when browsing back and clarify previous/next section navigation (#463).
+- Keep the live view filled during small updates and make its controls readable in both light and dark themes (#463).
+- Show completed file-activity runs with Borg exit code 1 as warnings in the log panel (#463).
+- Keep active file-activity logs in RAM and save the complete log after the backup ends, avoiding changing-log warnings when the log directory is backed up. The active log is not part of that backup; a server restart before it is saved loses the volatile log (#463).
+
 ###2026.09.05.1319###
 - Added an optional per-job file activity view for live and stored backup logs. When enabled, Borg lists added, modified, and errored entries while unchanged files remain hidden; the wizard includes privacy and files-cache context.
 - Repositories can now browse folders and files inside any archive in a read-only view, including imported archives without a backup-job assignment.
@@ -27,11 +35,6 @@
 ###2026.09.04.1114###
 - Refreshed the complete German and English user manuals for stable 2026.08.31.0907, including Docker restart priorities, current safety workflows, and aligned high-resolution screenshots.
 - Clarified period-based Borg retention in the Job Wizard and manuals, added retention to the flow preview, and now require at least one retention value greater than zero.
-
-###2026.08.31.0907###
-- Browse and Restore now filters archives by the selected job archive prefix, keeps prefix history for edited jobs, and shows the active archive pattern with a compact history popover in both the archive selection and job editor.
-- Requires Unraid 7.2.0 or newer so managed Borg SSH connections use a compatible OpenSSH runtime.
-- Dialogs with unsaved input now ignore backdrop clicks and ask before discarding changed job, repository, schedule, setup, and settings form values.
 
 ]]>
 </CHANGES>
@@ -58,7 +61,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="bbe186c5b577cdd75a7cf37307173f50"
+EXPECTED_MD5="c2d76b11b0f9ce7e7b9f5fb69ddc07a1"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
