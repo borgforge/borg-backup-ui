@@ -380,6 +380,10 @@
       .catch(() => ({}));
 
     Promise.all([core()?.updateDataDirWarning?.({ deferMissingWarning: true }), startupStatePromise]).then(([setupStatus]) => {
+      if (core()?.isStartupMaintenanceMode?.()) {
+        core()?.navigate?.(_isAdmin() ? 'settings' : 'hilfe');
+        return;
+      }
       if (core()?.isSetupRequired?.()) {
         core()?.navigate?.('settings');
         if (!setupStatus?.global_data_dir_set) {
@@ -394,10 +398,6 @@
         return;
       }
       core()?.updateSidebarSystemHealth?.(true);
-      if (core()?.isStartupMaintenanceMode?.()) {
-        core()?.navigate?.(_isAdmin() ? 'settings' : 'hilfe');
-        return;
-      }
       refreshStatus();
       window.BBUI?.setupWizard?.maybeOpen?.(false);
       scheduleAutoRefresh();

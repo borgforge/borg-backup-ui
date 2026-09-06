@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import shutil
+import subprocess
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,6 +13,28 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("scenario", [
+    "maintenance_response",
+    "status_markers",
+    "stale_setup_response",
+    "existing_mandatory_modal",
+    "startup_response_order",
+    "pending_return_and_actions",
+    "normal_initial_setup",
+    "normal_optional_setup",
+    "normal_save_data_dir",
+])
+def test_setup_wizard_yields_to_migration_maintenance(scenario: str) -> None:
+    node = os.environ.get("BBUI_TEST_NODE") or shutil.which("node")
+    if not node:
+        pytest.skip("Node.js unavailable")
+    result = subprocess.run(
+        [node, str(ROOT / "tests/setup_wizard_maintenance_ui.cjs"), scenario],
+        cwd=ROOT, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_first_run_setup_wizard_is_loaded_and_has_modal_contract() -> None:

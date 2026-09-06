@@ -22,6 +22,9 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Corrected settings profile usage to count distinct UUID jobs and show current
   names, and qualified existing wizard, keyfile, logging and storage regressions
   with canonical job inventories and explicit validated-startup fixtures.
+- Give migration maintenance priority over first-run setup, close an already-open
+  setup dialog and prevent delayed responses from reopening it. Fresh installs
+  retain the normal required setup flow (#479).
 - Stable promotion remains a separate decision after volunteer/maintainer testing.
 
 ### Issue #478 (integration work for #447; not released)
