@@ -38,7 +38,8 @@ async function run(lang) {
     archive_prefix: 'new-prefix', enabled: true, location: 'local', identity_scope: 'configured',
     running: true, status: 'error', backup_overdue: true, legacy_status: true };
   const row = context.renderDashboardInventoryRow(job);
-  assert.ok(row.includes('>pfsense</strong>') && row.includes(t('identity.migratedStatus')));
+  assert.ok(row.includes('>pfsense</strong>'));
+  assert.ok(!row.includes(t('identity.migratedStatus')) && !row.includes(t('history.migratedStatus')));
   assert.ok(row.includes('badge running') && row.includes('0 3 * * *'));
   assert.ok(!row.includes('badge error') && !row.includes('badge warning'));
   assert.equal(context.dashboardRunStatus({ ...job, running: false }).cls, 'error');
@@ -48,12 +49,50 @@ async function run(lang) {
   context.renderRestoreVerificationSummary([{ enabled: false, restore_verification_status: 'failed' },
     { enabled: true, restore_verification_status: 'verified' }]);
   assert.ok(element('restore-summary-bar').innerHTML.includes('1/1'));
+  const proof = { restore_verification_status: 'stale', restore_verification_reason: 'target_unknown',
+    restore_verification_last_test_date: '2026-09-04 13:40:05',
+    restore_verification_valid_until: '2026-10-04 13:40:05' };
+  for (const reason of ['target_unknown', 'target_changed', 'test_date_unknown']) {
+    const badge = context.renderDashboardRestoreVerificationBadge({ ...proof, restore_verification_reason: reason });
+    assert.ok(badge.includes(t('jobs.restoreOpen')) && !badge.includes(t('jobs.restoreStale')));
+    assert.ok(badge.includes(t('dashboard.previousValidityLabel')) && badge.includes(proof.restore_verification_valid_until));
+    assert.ok(badge.includes(`<span class="dashboard-cell-detail">${t('identity.' + reason)}</span>`));
+  }
+  const validProof = context.renderDashboardRestoreVerificationBadge({ ...proof,
+    restore_verification_status: 'verified', restore_verification_reason: 'within_validity' });
+  assert.ok(validProof.includes(t('jobs.restoreVerified')) && validProof.includes(t('dashboard.validUntilLabel')));
+  context.renderRestoreVerificationSummary([proof, { ...proof, restore_verification_reason: 'target_changed' },
+    { restore_verification_status: 'stale', restore_verification_reason: 'validity_expired' },
+    { restore_verification_status: 'never' }, { restore_verification_status: 'verified' }]);
+  const totals = [...element('restore-summary-bar').innerHTML.matchAll(/class="stat-value">([^<]+)/g)].map(m => m[1]);
+  assert.deepEqual(totals, ['1/5', '1', '0', '3', '0']);
+  const checkedJob = { ...job, running: false, repository_check_scope: 'historical_target_unknown',
+    repository_check_status: 'ok', repository_check_date: '2026-08-18 15:13:33', repository_next_check: '2026-09-17' };
+  context.isStaleDate = () => true;
+  const historicalCheck = context.renderDashboardInventoryRow(checkedJob);
+  assert.ok(historicalCheck.includes(t('dashboard.checkTargetUnknown')));
+  assert.ok(historicalCheck.includes('2026-08-18') && historicalCheck.includes('2026-09-17'));
+  assert.ok(historicalCheck.includes('repo-check unknown') && !historicalCheck.includes('repo-check ok')
+    && !historicalCheck.includes('repo-check overdue'));
+  context.isStaleDate = () => false;
+  const currentCheck = context.renderDashboardInventoryRow({ ...checkedJob, repository_check_scope: 'current' });
+  assert.ok(currentCheck.includes('repo-check ok') && !currentCheck.includes(t('dashboard.checkTargetUnknown')));
   assert.equal(context.historyLocationLabel('unknown'), t('history.unknownLocation'));
   const historical = { job_id: id, current_job_name: 'pfsense', historical_name: 'config', display_name: 'pfsense',
     archive_prefix_snapshot: 'old-prefix', repository_snapshot: '/old-repository', identity_scope: 'configured',
     date: '2026-09-01', time: '12:00:00', status: 'success' };
   const history = context.renderHistoryRow(historical, 0);
   for (const text of ['pfsense', 'config', 'old-prefix', '/old-repository', id]) assert.ok(history.includes(text), text);
+  assert.ok(!history.includes(t('history.migratedStatus')));
+  const migratedHistory = context.renderHistoryRow({ ...historical, legacy_status: true,
+    archive_prefix_snapshot: '', repository_snapshot: '', run_id: '' }, 1);
+  const [migratedSummary, migratedDetails] = migratedHistory.split('<tr id="hdetail-1"');
+  for (const key of ['migratedStatus', 'migratedDescription']) {
+    assert.ok(!migratedSummary.includes(t(`history.${key}`)));
+    assert.ok(migratedDetails.includes(t(`history.${key}`)));
+  }
+  for (const key of ['currentName', 'runName', 'jobId']) assert.ok(migratedDetails.includes(t(`history.${key}`)));
+  for (const key of ['runId', 'runPrefix', 'runRepository']) assert.ok(!migratedDetails.includes(t(`history.${key}`)));
   element('history-filter-type').value = id;
   element('history-filter-scope').value = 'configured';
   response = { jobs: [job], entries: [historical], total: 1, location_counts: {} };
@@ -100,6 +139,17 @@ function widget() {
   assert.equal(context.overallStateFromCounts(counts, {}, 'fresh', true), 'error');
   assert.equal(context.adjustedJobCounts({ ...data, identity_schema_version: 0 }, new Date()).total, 0);
   assert.equal(context.jobStatusEvidence({ ...data, identity_schema_version: 0 }), false);
+  context.isPast = () => true;
+  const restoreItems = [
+    { job_id: id, restore_verification_status: 'stale', restore_verification_reason: 'target_unknown',
+      restore_verification_is_overdue: true, restore_verification_valid_until: '2020-01-01' },
+    { job_id: secondId, restore_verification_status: 'stale', restore_verification_reason: 'target_changed' },
+    { job_id: '33333333-3333-4333-8333-333333333333', restore_verification_status: 'stale',
+      restore_verification_reason: 'validity_expired' },
+  ];
+  const restoreProof = context.adjustedRestoreProof({ identity_schema_version: 1, jobs: { items: restoreItems } }, new Date());
+  assert.equal(restoreProof.configured, 3); assert.equal(restoreProof.open, 2);
+  assert.equal(restoreProof.overdue, 1); assert.equal(restoreProof.verified, 0);
 }
 (async () => { await run('de'); await run('en'); widget(); console.log('Canonical dashboard/history/reports DE/EN and Unraid counters passed'); })()
   .catch(error => { console.error(error); process.exitCode = 1; });

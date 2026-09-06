@@ -345,6 +345,11 @@ def _job_cache_items(jobs: list[dict[str, Any]], backups_by_key: dict[str, dict[
                 or job.get("restore_verification_status")
                 or "never"
             ).strip().lower(),
+            "restore_verification_reason": str(
+                latest.get("restore_verification_reason")
+                or job.get("restore_verification_reason")
+                or ""
+            ).strip(),
             "restore_verification_valid_until": str(
                 latest.get("restore_verification_valid_until")
                 or job.get("restore_verification_valid_until")
@@ -449,6 +454,9 @@ def _restore_proof_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if status == "not_required":
             continue
         configured += 1
+        if status == 'stale' and row.get('restore_verification_reason') in {'target_unknown', 'target_changed', 'test_date_unknown'}:
+            open_count += 1
+            continue
         if status == "verified":
             verified += 1
         elif status == "failed":

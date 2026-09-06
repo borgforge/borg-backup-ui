@@ -1,7 +1,7 @@
 """#477: restore ownership, frozen execution and proof continuity."""
 from copy import deepcopy
 from migration_gate_support import ready_gate
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 import sys
@@ -123,6 +123,134 @@ def test_policy_plan_proof_and_runner_keep_id_across_prefix_edit(setup, monkeypa
     edit(setup, job_id, repository_key='repo_b')
     assert tests_api.list_restore_test_plan(cfg)['jobs'][0]['is_overdue']
     assert instance._should_test(runner.discover_repos(cfg)[0])
+
+
+def test_migrated_shipped_restore_evidence_remains_valid_after_rename(setup, monkeypatch):
+    from migrations.identity_records import project_records, verify_records
+    result, metadata = create(setup, job_name='Appdata', archive_prefix='appdata-backup')
+    job_id = result['job_id']; cfg = setup[0]
+    cfg.update(STATUS_DIR=str(setup[3]/'status'), RESTORE_TEST_STATUS_DIR=str(setup[3]/'tests'))
+    directory = Path(cfg['RESTORE_TEST_STATUS_DIR']); directory.mkdir()
+    tests_api.update_restore_test_policy(cfg, job_id, {'mode':'scheduled','level':1,'interval_days':30})
+    target = capture_repository(cfg, job_id)['repo']
+    legacy = {'report_schema_version':1, 'report_id':'RT-20260906-120000-appdata_local',
+              'type':'appdata', 'location':'local', 'repository':target,
+              'tested_archive':'appdata-backup-2026-09-06_12-00-00', 'test_result':'success',
+              'test_level':1, 'test_date':datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    path = directory/f'{job_id}.test'
+    projection = project_records({str(directory/'appdata_local.test'):{'kind':'restore_test',
+        'data':legacy, 'legacy_key':'appdata_local', 'target_path':str(path)}},
+        {job_id:metadata}, {'appdata_local':job_id})
+    assert not projection['reasons']
+    assert not verify_records(projection['records'], {job_id:metadata}, {'appdata_local':job_id})
+    migrated = projection['records'][str(path)]['data']
+    assert migrated == {**legacy, 'schema_version':1, 'job_id':job_id}
+    path.write_text(json.dumps(migrated)); before = path.read_bytes()
+    edit(setup, job_id, job_name='Renamed', archive_prefix='new-prefix')
+    plan = tests_api.list_restore_test_plan(cfg)['jobs'][0]
+    assert plan['verification_status'] == 'verified' and not plan['is_overdue']
+    runner = _load_restore_runner(); monkeypatch.setenv('BORG_UI_DATA_ROOT', str(setup[3]))
+    tester = object.__new__(runner.RestoreTest)
+    tester.args=SimpleNamespace(force=False); tester.status_dir=directory; tester.test_interval=30; tester.log=lambda *a:None
+    assert not tester._should_test(runner.discover_repos(cfg)[0])
+    edit(setup, job_id, repository_key='repo_b')
+    assert tests_api.list_restore_test_plan(cfg)['jobs'][0]['verification_reason'] == 'target_changed'
+    assert tester._should_test(runner.discover_repos(cfg)[0])
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(('evidence', 'status', 'reason'), [
+    ({}, 'verified', 'within_validity'),
+    ({'repository':'/different'}, 'stale', 'target_changed'),
+    ({'tested_archive':'foreign-2026'}, 'stale', 'target_changed'),
+    ({'tested_archive':'archive2-2026'}, 'stale', 'target_changed'),
+    ({'tested_archive':''}, 'stale', 'target_unknown'),
+    ({'repository':''}, 'stale', 'target_unknown'),
+    ({'repository_snapshot':'/different', 'archive_prefix_snapshot':'archive'}, 'stale', 'target_changed'),
+    ({'repository_snapshot':'/repo', 'archive_prefix_snapshot':'foreign'}, 'stale', 'target_changed'),
+    ({'repository_snapshot':'', 'archive_prefix_snapshot':'archive'}, 'stale', 'target_unknown'),
+    ({'run_id':RUN_ID}, 'stale', 'target_unknown'),
+    ({'report_id':RUN_ID}, 'stale', 'target_unknown'),
+    ({'archive_prefixes_snapshot':['archive']}, 'stale', 'target_unknown'),
+    ({'policy_snapshot':{'mode':'scheduled'}}, 'stale', 'target_unknown'),
+    ({'job_id':OTHER_ID}, 'never', 'no_test_report'),
+    ({'identity_state':'unassigned'}, 'never', 'no_test_report'),
+    ({'repository_snapshot':'/repo', 'archive_prefix_snapshot':'archive',
+      'repository':'/different', 'tested_archive':'foreign-2026', 'run_id':RUN_ID}, 'verified', 'within_validity'),
+])
+def test_restore_api_and_runner_agree_on_recorded_target_evidence(tmp_path, evidence, status, reason):
+    cfg = {'RESTORE_TEST_STATUS_DIR':str(tmp_path)}
+    repository = info()
+    job = {**repository['job'], 'location':'local', 'repo_path':repository['repo'],
+           'restore_test_policy':{'mode':'scheduled','interval_days':30,'validity_days':30}}
+    report = {'schema_version':1, 'job_id':JOB_ID, 'repository':'/repo',
+              'type':'archive', 'location':'local', 'tested_archive':'archive-2026',
+              'test_date':datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'test_result':'success', **evidence}
+    path = tmp_path/f'{JOB_ID}.test'; path.write_text(json.dumps(report)); before = path.read_bytes()
+    proof = tests_api.build_restore_verification_map(cfg, [job])[JOB_ID]
+    assert (proof['status'], proof['reason']) == (status, reason)
+    assert not proof['is_overdue']
+    runner = _load_restore_runner(); tester = object.__new__(runner.RestoreTest)
+    tester.args=SimpleNamespace(force=False); tester.status_dir=tmp_path; tester.test_interval=30; tester.log=lambda *a:None
+    assert tester._should_test(repository) == (status != 'verified')
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize('target', ['/different', ''])
+def test_expired_restore_evidence_stays_overdue_with_unverified_target(tmp_path, target):
+    cfg = {'RESTORE_TEST_STATUS_DIR':str(tmp_path)}
+    report = {'job_id':JOB_ID, 'repository':target, 'tested_archive':'archive-2026',
+              'test_result':'success', 'test_date':(datetime.now()-timedelta(days=32)).strftime('%Y-%m-%d %H:%M:%S')}
+    (tmp_path/f'{JOB_ID}.test').write_text(json.dumps(report))
+    job = {'job_id':JOB_ID, 'repo_path':'/repo', 'archive_prefixes':['archive'], 'location':'local',
+           'restore_test_policy':{'mode':'scheduled','interval_days':30,'validity_days':30}}
+    proof = tests_api.build_restore_verification_map(cfg, [job])[JOB_ID]
+    assert proof['status'] == 'stale' and proof['reason'] in {'target_unknown', 'target_changed'}
+    assert proof['is_overdue']
+
+
+@pytest.mark.parametrize('time_evidence', [{}, {'test_date':'invalid'}])
+@pytest.mark.parametrize('mode', ['scheduled', 'manual_only'])
+@pytest.mark.parametrize('native', [False, True])
+def test_restore_file_mtime_cannot_replace_missing_recorded_test_date(tmp_path, monkeypatch, time_evidence, mode, native):
+    cfg = {'BACKUP_SCRIPTS_DIR':str(tmp_path), 'RESTORE_TEST_STATUS_DIR':str(tmp_path)}
+    report = {'job_id':JOB_ID, 'repository':'/repo', 'tested_archive':'archive-2026',
+              'test_result':'success', **time_evidence}
+    if native:
+        report.update(run_id=RUN_ID, repository_snapshot='/repo', archive_prefix_snapshot='archive')
+    path = tmp_path/f'{JOB_ID}.test'; path.write_text(json.dumps(report)); before = path.read_bytes()
+    assert path.stat().st_mtime > (datetime.now()-timedelta(minutes=1)).timestamp()
+    job = {'job_id':JOB_ID, 'repo_path':'/repo', 'archive_prefixes':['archive'], 'location':'local',
+           'restore_test_policy':{'mode':mode,'interval_days':30,'validity_days':30}}
+    proof = tests_api.build_restore_verification_map(cfg, [job])[JOB_ID]
+    assert (proof['status'], proof['reason']) == ('stale', 'test_date_unknown')
+    assert proof['last_test_date'] == proof['valid_until'] == '' and not proof['is_overdue']
+    monkeypatch.setattr('status_read_model.configured_jobs', lambda conf: {JOB_ID:job})
+    plan = tests_api.list_restore_test_plan(cfg)['jobs'][0]
+    assert plan['verification_reason'] == 'test_date_unknown'
+    assert plan['last_test_date'] == plan['next_due_at'] == ''
+    assert plan['is_overdue'] == (mode == 'scheduled')
+    runner = _load_restore_runner(); tester = object.__new__(runner.RestoreTest)
+    tester.args=SimpleNamespace(force=False); tester.status_dir=tmp_path; tester.test_interval=30; tester.log=lambda *a:None
+    assert tester._should_test(info())
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize('field', ['start_ts', 'end_ts'])
+def test_restore_recorded_time_fallback_preserves_age_after_file_copy(tmp_path, field):
+    cfg = {'RESTORE_TEST_STATUS_DIR':str(tmp_path)}
+    recorded_date = (datetime.now()-timedelta(days=32)).strftime('%Y-%m-%d %H:%M:%S')
+    report = {'job_id':JOB_ID, 'repository':'/repo', 'tested_archive':'archive-2026',
+              'test_result':'success', 'test_date':'invalid', field:recorded_date}
+    (tmp_path/f'{JOB_ID}.test').write_text(json.dumps(report))
+    job = {'job_id':JOB_ID, 'repo_path':'/repo', 'archive_prefixes':['archive'], 'location':'local',
+           'restore_test_policy':{'mode':'scheduled','interval_days':30,'validity_days':30}}
+    proof = tests_api.build_restore_verification_map(cfg, [job])[JOB_ID]
+    assert (proof['status'], proof['reason']) == ('stale', 'validity_expired')
+    assert proof['last_test_date'] == recorded_date and proof['is_overdue']
+    runner = _load_restore_runner(); tester = object.__new__(runner.RestoreTest)
+    tester.args=SimpleNamespace(force=False); tester.status_dir=tmp_path; tester.test_interval=30; tester.log=lambda *a:None
+    assert tester._should_test(info())
 
 
 def test_result_payload_authority_does_not_create_ghost_plan(setup):

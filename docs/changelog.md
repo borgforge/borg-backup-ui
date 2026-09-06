@@ -31,6 +31,21 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
   Show immediate preparation feedback, retain safe failure details through
   readiness polling, and group/explain diagnostics in German and English (#447).
 
+- Read migrated restore proof from its recorded repository and tested archive,
+  keeping native snapshots authoritative and rejecting mismatched ownership.
+  Share this evaluation with scheduled restore tests without rewriting reports.
+  Use only recorded test dates so migration file timestamps cannot renew proof.
+- Preserve recorded legacy check values with explicit historical target scope.
+  Distinguish missing or changed restore targets from expired proof in dashboard
+  summaries and show readable explanations alongside retained dates.
+- Keep migrated-run provenance only in expanded history details, and lay out
+  available identity fields without empty cells. Explain separate status/report
+  files in both migration guides (#447).
+- Restore complete sanitized job/configuration diagnostics in support bundles,
+  including source paths, exclusions, prefix history and policies. Export full
+  structured run/restore JSON instead of unreadable text tails; document oversized
+  or unreadable files explicitly and keep credentials/recovery data excluded.
+
 ### Issue #478 (integration work for #447; not released)
 - Added versioned ID-based job transfer with explicit new/merge/skip choices,
   complete selected reference maps, bounded v2 conversion and protected-file

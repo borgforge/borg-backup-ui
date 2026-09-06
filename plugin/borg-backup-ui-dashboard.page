@@ -361,6 +361,10 @@ $mytiles[$pluginname]['column1'] =
       const status = String(item.restore_verification_status || 'never').toLowerCase();
       if (status === 'not_required') return;
       proof.configured += 1;
+      if (status === 'stale' && ['target_changed', 'target_unknown', 'test_date_unknown'].includes(item.restore_verification_reason)) {
+        proof.open += 1;
+        return;
+      }
       if (status === 'verified') proof.verified += 1;
       else if (status === 'failed') proof.failed += 1;
       else if (status === 'never' || status === '') proof.open += 1;

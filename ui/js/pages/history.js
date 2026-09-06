@@ -146,7 +146,7 @@ function renderHistoryRow(e, idx) {
     <tr id="${rowId}" class="history-row" data-history-action="toggle-detail" data-row-id="${rowId}" data-detail-id="${detailId}">
       <td><svg class="history-chevron" id="chev-${idx}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></td>
       <td style="white-space:nowrap;color:var(--text-primary)">${escHtml(e.date)} <span style="color:var(--text-muted)">${escHtml(e.time)}</span></td>
-      <td><span class="history-type-badge">${escHtml(typeLabel)}</span>${e.identity_scope !== 'configured' ? `<small>${escHtml(historyT(e.identity_scope))}</small>` : ''}${e.legacy_status ? `<small>${escHtml(historyT('migratedStatus'))}</small>` : ''}</td>
+      <td><span class="history-type-badge">${escHtml(typeLabel)}</span>${e.identity_scope !== 'configured' ? `<small>${escHtml(historyT(e.identity_scope))}</small>` : ''}</td>
       <td><span class="history-loc-chip ${escHtml(locClass)}">${escHtml(historyLocationLabel(e.location))}</span></td>
       <td>${escHtml(e.duration_fmt || '–')}</td>
       <td>${escHtml(e.original_size_fmt || '–')}</td>
@@ -156,13 +156,16 @@ function renderHistoryRow(e, idx) {
     <tr id="${detailId}" class="history-detail-row" style="display:none">
       <td colspan="8">
         ${detailError ? renderHistoryError(detailError, e.status === 'skipped') : ''}
+        ${e.legacy_status ? `<div class="history-migration-note"><strong>${escHtml(historyT('migratedStatus'))}</strong><span>${escHtml(historyT('migratedDescription'))}</span></div>` : ''}
         <div class="history-detail-panel">
-          ${detailGroup(historyT('currentName'), e.current_job_name)}
-          ${detailGroup(historyT('runName'), e.historical_name)}
-          ${detailGroup(historyT('jobId'), e.job_id)}
-          ${detailGroup(historyT('runId'), e.run_id)}
-          ${detailGroup(historyT('runPrefix'), e.archive_prefix_snapshot)}
-          ${detailGroup(historyT('runRepository'), e.repository_snapshot)}
+          <div class="history-detail-identity">
+            ${detailGroup(historyT('currentName'), e.current_job_name)}
+            ${detailGroup(historyT('runName'), e.historical_name)}
+            ${detailGroup(historyT('jobId'), e.job_id)}
+            ${detailGroup(historyT('runId'), e.run_id)}
+            ${detailGroup(historyT('runPrefix'), e.archive_prefix_snapshot)}
+            ${detailGroup(historyT('runRepository'), e.repository_snapshot)}
+          </div>
           ${detailGroup(historyT('archive'), e.archive_name || '-', 'archive')}
           ${detailGroup(historyT('compressed'), e.compressed_size_fmt)}
           ${detailGroup(historyT('repositorySize'), e.repository_size_fmt)}

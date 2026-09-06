@@ -7,6 +7,7 @@ import base64
 import json
 import re
 import socket
+import stat
 import zipfile
 from datetime import datetime
 from io import BytesIO
@@ -14,9 +15,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-SECRET_KEY_RE = re.compile(r"(exclude|exclusion|rules|patterns|password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
-SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
-SECRET_WORD_RE = re.compile(r"(?i)\b(password|passphrase|token|secret)\s+([^\s\"'<>]+)")
+SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|api[_-]?key|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
+SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|api[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
+SECRET_WORD_RE = re.compile(r"(?i)\b(password|passphrase|token|secret|api[_-]?key)\s+([^\s\"'<>]+)")
 # Keep legacy native ntfy keys in the sanitizer so old support snippets remain safe.
 PRIVACY_KEY_RE = re.compile(
     r"(?i)(mail|email|recipient|sender|smtp_(host|user)|ntfy_(server_url|username|click_url)|storagebox_(host|user)|"
@@ -33,6 +34,8 @@ SSH_PRIVATE_KEY_RE = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
     re.DOTALL,
 )
+MAX_STRUCTURED_STATUS_BYTES = 64 * 1024 * 1024
+MAX_STRUCTURED_STATUS_TOTAL_BYTES = 128 * 1024 * 1024
 
 
 def _root_from_config(config: dict) -> Path:
@@ -123,6 +126,32 @@ def _safe_json_file(path: Path) -> Any:
         return {"_unreadable": True, "path": str(path)}
 
 
+def _structured_status_payload(path: Path, remaining_bytes: int) -> tuple[bytes | None, dict]:
+    """Return complete sanitized JSON, or an explicit omission with its size."""
+    details: Dict[str, Any] = {}
+    try:
+        source = path.lstat()
+        details["size_bytes"] = source.st_size
+        if not stat.S_ISREG(source.st_mode):
+            return None, {**details, "reason": "not_regular_file"}
+        if source.st_size > MAX_STRUCTURED_STATUS_BYTES:
+            return None, {**details, "reason": "structured_file_too_large"}
+        if source.st_size > remaining_bytes:
+            return None, {**details, "reason": "structured_budget_exceeded"}
+        from job_store import read_json
+        payload = read_json(path)
+        if not isinstance(payload, dict):
+            return None, {**details, "reason": "invalid_json"}
+        encoded = (json.dumps(sanitize_data(payload), ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        if len(encoded) > remaining_bytes:
+            return None, {**details, "sanitized_size_bytes": len(encoded), "reason": "structured_budget_exceeded"}
+        return encoded, details
+    except (ValueError, UnicodeError, RecursionError):
+        return None, {**details, "reason": "invalid_json"}
+    except Exception:
+        return None, {**details, "reason": "status_file_unreadable"}
+
+
 def _candidate_jobs_dirs(root: Path, scripts_dir: Path) -> List[Path]:
     candidates = [
         root / "config" / "jobs",
@@ -197,7 +226,7 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     from startup_state import is_maintenance_mode
     if is_maintenance_mode(config):
         return _maintenance_support_bundle(config, app_version)
-    from config_api import get_conf_file, read_expanded_conf
+    from config_api import read_expanded_conf
     from system_health_api import get_system_health_data
 
     created_at = datetime.now().isoformat(timespec="seconds")
@@ -206,21 +235,18 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     expanded = read_expanded_conf(config)
     health = get_system_health_data(config)
 
-    safe_settings = {key: value for key, value in expanded.items() if key in {
-        "GLOBAL_DATA_DIR", "GLOBAL_LOG_DIR", "STATUS_DIR", "RESTORE_TEST_STATUS_DIR",
-        "GLOBAL_LOG_LEVEL", "GLOBAL_DEBUG", "GLOBAL_WEEKLY_REPORT_ENABLED", "PORT"}}
     files: List[str] = []
-    skipped: List[Dict[str, str]] = []
+    skipped: List[Dict[str, Any]] = []
 
     def _record_added(name: str) -> None:
         files.append(name)
 
-    def _record_skipped(path: Path, reason: str) -> None:
-        skipped.append({"path": str(path), "reason": reason})
+    def _record_skipped(path: Path, reason: str, **details: Any) -> None:
+        skipped.append({"path": str(path), "reason": reason, **details})
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        _add_json(zf, "config/expanded-conf.sanitized.json", safe_settings)
+        _add_json(zf, "config/expanded-conf.sanitized.json", expanded)
         _record_added("config/expanded-conf.sanitized.json")
         for filename in (
             "storages.json",
@@ -255,7 +281,7 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
         _add_json(zf, "system/health.json", health)
         _record_added("system/health.json")
 
-        _add_json(zf, "config/backup.conf.sanitized.json", safe_settings)
+        _add_json(zf, "config/backup.conf.sanitized.json", expanded)
         _record_added("config/backup.conf.sanitized.json")
         from identity_lifecycle import identity_health
         _add_json(zf, "system/identity-integrity.json", identity_health(config))
@@ -267,12 +293,7 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
                 continue
             for p in sorted(jobs_dir.glob("*.json"))[:250]:
                 rel = f"jobs/{p.stem}.json"
-                raw = _safe_json_file(p)
-                descriptor = {key: raw[key] for key in ('schema_version', 'job_id', 'name', 'repository_key', 'enabled') if key in raw}
-                if isinstance(descriptor.get('name'), str): descriptor['name'] = descriptor['name'][:160]
-                descriptor['source_count'] = len(raw.get('source_paths', [])) if isinstance(raw.get('source_paths'), list) else 0
-                descriptor['exclusion_count'] = len(raw.get('exclude_paths', [])) if isinstance(raw.get('exclude_paths'), list) else 0
-                _add_json(zf, rel, descriptor)
+                _add_json(zf, rel, _safe_json_file(p))
                 _record_added(rel)
 
         status_dirs = []
@@ -280,15 +301,22 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
             raw = str(expanded.get(key, "")).strip()
             if raw:
                 status_dirs.append(Path(raw))
+        structured_status_bytes = 0
         for status_dir in status_dirs:
             if not status_dir.is_dir():
                 _record_skipped(status_dir, "status_dir_not_found")
                 continue
             for p in _status_files(status_dir):
                 rel = f"status/{status_dir.name}/{p.name}"
-                if p.suffix.lower() == ".json":
-                    _add_json(zf, rel, _safe_json_file(p))
-                    _record_added(rel)
+                if p.suffix.lower() in {".json", ".status", ".test"}:
+                    encoded, details = _structured_status_payload(
+                        p, MAX_STRUCTURED_STATUS_TOTAL_BYTES - structured_status_bytes)
+                    if encoded is None:
+                        _record_skipped(p, **details)
+                    else:
+                        zf.writestr(rel, encoded)
+                        structured_status_bytes += len(encoded)
+                        _record_added(rel)
                 elif _add_text_file(zf, rel, p, max_bytes=65536):
                     _record_added(rel)
                 else:

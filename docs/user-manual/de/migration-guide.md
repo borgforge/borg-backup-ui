@@ -26,6 +26,18 @@ Nach **Migration vorbereiten** zeigt der Assistent die laufende Anfrage und ansc
 
 `invalid_identity_descriptor` bedeutet, dass gespeicherte Job- oder Laufdaten unvollständige oder ungültig formatierte Angaben zur bisherigen Zuordnung enthalten. Der Code betrifft nicht den Sicherungsordner. Gültige ältere Restore-Test-Berichte mit `type` und `location` werden bei der Migration berücksichtigt. Bleibt der Code sichtbar, bewahre die Daten auf und melde ihn zusammen mit dem angezeigten Schritt; ändere die Zuordnungsfelder nicht von Hand.
 
+## Anzeigen nach der Migration
+
+Die Dashboard-Zähler beziehen sich auf die konfigurierten Jobs. **Läuft** zählt aktive Jobs, **Nie ausgeführt** Jobs ohne zugeordneten abgeschlossenen Lauf. Diese Zustände bedeuten nicht, dass die Migration zusätzliche Backups angelegt hat.
+
+**Vor der Migration aufgezeichnet** erscheint nur in aufgeklappten Laufdetails. Der Hinweis beschreibt die Herkunft eines vorhandenen Ergebnisses und bleibt für diesen alten Lauf erhalten. Neue Läufe erhalten ihre eigenen Laufdaten.
+
+Restore-Ergebnisse bleiben in den `.test`-Dateien erhalten. Ein älterer Nachweis wird weiter anerkannt, wenn seine Job-ID, sein gespeichertes Repository und sein tatsächlich getestetes Archiv zum Job passen und die gewählte Gültigkeitsregel erfüllt ist. Ohne gespeicherten Testzeitpunkt ist ein neuer Test erforderlich; das Änderungsdatum der Datei erneuert keinen Nachweis. Ein unbekanntes oder geändertes Ziel wird im Dashboard als **Offen** erklärt; nur eine abgelaufene Gültigkeit erscheint dort als **Überfällig**.
+
+Check-Ergebnisse stehen in den `.status`-Dateien. Alte Laufdateien enthalten den damaligen Check-Status und die Termine, aber nicht das genaue Prüfziel. Das Dashboard zeigt diese Werte als Angaben des letzten Laufs mit dem Hinweis auf das fehlende Prüfziel. Ein neuer Lauf mit erfasstem Repository kann wieder einen Check für das aktuelle Ziel belegen.
+
+Das Supportpaket enthält die vollständigen Job-Felder und Konfigurationseinstellungen einschließlich Quellen, Ausschlüssen, Archivpräfixen und Richtlinien. Zugangsdaten und sensible Verbindungsangaben bleiben maskiert. Strukturierte Lauf- und Restore-Berichte werden als vollständiges JSON exportiert. Größenbedingte Auslassungen werden mit einem Grund vermerkt; Textlogs bleiben begrenzte Ausschnitte. Die Originaldateien auf Unraid werden nicht verändert.
+
 ## Browser schließen oder Plugin neu starten
 
 Du kannst den Browser schließen und später den gespeicherten Schritt ansehen. Eine bereits freigegebene Aktion kann auf dem Server weiterlaufen; beim erneuten Öffnen wird sie nicht erneut gestartet. Ein Neustart erhält die ursprünglich vergebenen Identitäten, den Plan, die Sicherung und das Journal und gibt die Umstellung nicht automatisch frei.

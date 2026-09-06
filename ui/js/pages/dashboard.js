@@ -156,9 +156,9 @@ function renderRestoreVerificationSummary(backups) {
   const scoped = backups.filter((b) => String(b.restore_verification_status || '').toLowerCase() !== 'not_required');
   const notRequired = backups.length - scoped.length;
   const verified = scoped.filter((b) => b.restore_verification_status === 'verified').length;
-  const stale = scoped.filter((b) => b.restore_verification_status === 'stale').length;
+  const stale = scoped.filter((b) => b.restore_verification_status === 'stale' && !dashboardRestoreProofOpen(b)).length;
   const failed = scoped.filter((b) => b.restore_verification_status === 'failed').length;
-  const never = scoped.filter((b) => b.restore_verification_status === 'never').length;
+  const never = scoped.filter((b) => b.restore_verification_status === 'never' || dashboardRestoreProofOpen(b)).length;
 
   el.innerHTML = [
     statTile('success', `${verified}/${scoped.length}`, dashboardT('dashboard.restoreVerified'), iconCheck()),
@@ -412,6 +412,11 @@ function dashboardNextRun(jobKey, enabled) {
     : (sched.cron || dashboardT('dashboard.unknown'));
 }
 
+function dashboardRestoreProofOpen(backup) {
+  return backup.restore_verification_status === 'stale'
+    && ['target_changed', 'target_unknown', 'test_date_unknown'].includes(backup.restore_verification_reason);
+}
+
 function renderDashboardRestoreVerificationBadge(backup) {
   const status = String(backup.restore_verification_status || '').toLowerCase();
   if (!status) return '';
@@ -422,20 +427,21 @@ function renderDashboardRestoreVerificationBadge(backup) {
     never: { cls: 'unknown', text: dashboardT('jobs.restoreOpen') },
     not_required: { cls: 'neutral', text: dashboardT('jobs.restoreNotRequired') },
   };
-  const m = map[status];
+  const proofOpen = dashboardRestoreProofOpen(backup);
+  const m = proofOpen ? map.never : map[status];
   if (!m) return '';
   const details = [
     backup.restore_verification_last_test_date
       ? [dashboardT('dashboard.lastTestLabel'), backup.restore_verification_last_test_date]
       : null,
     backup.restore_verification_valid_until
-      ? [dashboardT('dashboard.validUntilLabel'), backup.restore_verification_valid_until]
+      ? [dashboardT(proofOpen ? 'dashboard.previousValidityLabel' : 'dashboard.validUntilLabel'), backup.restore_verification_valid_until]
       : null,
   ].filter(Boolean);
-  const reason = ['target_changed', 'target_unknown'].includes(backup.restore_verification_reason)
+  const reason = proofOpen
     ? dashboardT('identity.' + backup.restore_verification_reason) : '';
   const title = [...details.map(([label, value]) => `${label}: ${value}`), reason].filter(Boolean).join(' · ');
-  return `<span class="restore-v-badge ${m.cls}" title="${escHtml(title || m.text)}">${m.text}</span>${details.length ? `<span class="dashboard-restore-facts">${details.map(([label, value]) => `<span class="dashboard-fact-row"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`).join('')}</span>` : ''}`;
+  return `<span class="restore-v-badge ${m.cls}" title="${escHtml(title || m.text)}">${m.text}</span>${details.length ? `<span class="dashboard-restore-facts">${details.map(([label, value]) => `<span class="dashboard-fact-row"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`).join('')}</span>` : ''}${reason ? `<span class="dashboard-cell-detail">${escHtml(reason)}</span>` : ''}`;
 }
 
 function renderDashboardInventoryRow(backup) {
@@ -443,7 +449,8 @@ function renderDashboardInventoryRow(backup) {
   const message = dashboardRunMessage(backup);
   const growthClass = backup.growth_bytes == null ? 'neutral' : backup.growth_bytes > 0 ? 'positive' : 'negative';
   let checkStatus = backup.repository_check_status;
-  if (checkStatus === 'ok' && isStaleDate(backup.repository_check_date)) checkStatus = 'overdue';
+  if (backup.repository_check_scope !== 'historical_target_unknown'
+      && checkStatus === 'ok' && isStaleDate(backup.repository_check_date)) checkStatus = 'overdue';
   const checkLabel = checkStatus ? repoCheckLabel({ ...backup, repository_check_status: checkStatus }) : dashboardT('dashboard.checkUnknown');
   const type = backup.name || backup.display_name || '—';
   const iconKey = typeof resolveJobIcon === 'function' ? resolveJobIcon(backup) : (backup.icon || backup.backup_type);
@@ -481,17 +488,23 @@ function renderDashboardInventoryRow(backup) {
       <span><strong class="dashboard-cell-primary">${escHtml(type)}</strong><span class="dashboard-cell-detail mono" title="${escHtml(identityDetail)}">${escHtml(identityDetail)}</span></span>
     </div></td>
     <td><div class="dashboard-table-badges">
-      ${backup.legacy_status ? `<span class="badge unknown">${dashboardT('identity.migratedStatus')}</span>` : ''}
       ${backup.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
       <span class="badge ${run.cls}"><span class="badge-dot"></span>${escHtml(run.label)}</span>
     </div>${runFacts}${message.text ? `<div class="dashboard-table-message ${message.cls}">${escHtml(message.text)}</div>` : ''}</td>
     <td>${renderDashboardRestoreVerificationBadge(backup) || `<span class="dashboard-cell-detail">${dashboardT('dashboard.unknown')}</span>`}</td>
     <td>${sizeFacts.length ? `<span class="dashboard-storage-facts">${sizeFacts.map(([label, value, primary]) => `<span class="dashboard-fact-row ${primary ? 'primary' : ''}"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`).join('')}</span>` : `<span class="dashboard-cell-detail">${dashboardT('dashboard.noSizeData')}</span>`}</td>
-    <td><strong class="dashboard-cell-primary dashboard-growth ${growthClass}">${escHtml(growth)}</strong>${renderDashboardRepositoryCheck(checkStatus, checkLabel, backup.repository_next_check)}</td>
+    <td><strong class="dashboard-cell-primary dashboard-growth ${growthClass}">${escHtml(growth)}</strong>${renderDashboardRepositoryCheck(checkStatus, checkLabel, backup.repository_next_check, backup.repository_check_scope)}</td>
   </tr>`;
 }
 
-function renderDashboardRepositoryCheck(status, label, nextCheck) {
+function renderDashboardRepositoryCheck(status, label, nextCheck, scope) {
+  if (scope === 'historical_target_unknown') {
+    return `<span class="dashboard-cell-detail repo-check unknown">
+      <span>${escHtml(dashboardT('dashboard.recordedCheck', { status: label }))}</span>
+      ${nextCheck ? `<span class="dashboard-cell-detail">${escHtml(dashboardT('dashboard.recordedNextCheck', { date: nextCheck }))}</span>` : ''}
+      <span class="dashboard-cell-detail">${escHtml(dashboardT('dashboard.checkTargetUnknown'))}</span>
+    </span>`;
+  }
   if (status === 'overdue') {
     return `<span class="dashboard-cell-detail repo-check overdue">
       <span class="dashboard-check-line">${repoCheckIcon(status)} ${escHtml(dashboardT('dashboard.checkOverdueShort'))}</span>

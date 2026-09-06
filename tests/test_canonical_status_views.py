@@ -82,6 +82,31 @@ def test_payload_identity_ignores_filename_and_does_not_invent_legacy_snapshots(
     assert path.read_bytes() == original
 
 
+def test_migrated_check_remains_visible_without_attesting_unknown_target(setup):
+    result, _ = create(setup)
+    directory = Path(setup[0]['STATUS_DIR']); directory.mkdir()
+    path = directory / '2026-09-01_12-00-00_config_local.status'
+    payload = {'job_id':result['job_id'], 'backup_type':'config', 'location':'local',
+               'timestamp':'2026-09-01 12:00:00', 'status':'success', 'exit_code':0,
+               'repository_check_status':'ok', 'repository_check_date':'2026-08-17 13:42:34',
+               'repository_next_check':'2026-09-16'}
+    path.write_text(json.dumps(payload)); before = path.read_bytes()
+    row = get_status_data(setup[0], write_snapshots=False)['backups'][0]
+    assert row['repository_check_scope'] == 'historical_target_unknown'
+    for field in ('repository_check_status', 'repository_check_date', 'repository_next_check'):
+        assert row[field] == payload[field]
+    assert row['repository_snapshot'] == '' and path.read_bytes() == before
+    saved(setup, result['job_id'], repository_check_status='ok',
+          repository_check_date='2026-09-06 12:00:00', repository_next_check='2026-10-06')
+    assert get_status_data(setup[0], write_snapshots=False)['backups'][0]['repository_check_scope'] == 'current'
+    edit(setup, result['job_id'], repository_key='repo_b')
+    moved = get_status_data(setup[0], write_snapshots=False)['backups'][0]
+    assert moved['repository_check_scope'] == 'target_changed'
+    assert moved['repository_check_status'] == 'unknown'
+    assert moved['repository_check_date'] == moved['repository_next_check'] == ''
+    assert path.read_bytes() == before
+
+
 def test_unassigned_and_deleted_statuses_never_create_active_jobs(setup):
     result, _ = create(setup)
     live = saved(setup, result['job_id'])

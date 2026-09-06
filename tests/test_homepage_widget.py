@@ -259,6 +259,7 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
             "backup_overdue_expected_run": "",
             "backup_overdue_next_run": "",
             "restore_verification_status": "verified",
+            "restore_verification_reason": "",
             "restore_verification_valid_until": "",
             "restore_verification_is_overdue": False,
         }
@@ -395,6 +396,26 @@ def test_unraid_dashboard_widget_restore_proof_matches_dashboard_backup_rows(tmp
         "open": 0,
     }
     assert result["jobs"]["items"][-1]["restore_verification_status"] == "not_required"
+
+
+def test_restore_widgets_distinguish_open_target_proof_from_expired_validity(monkeypatch):
+    proof_cases = [
+        {'status':'stale', 'reason':'target_unknown', 'is_overdue':True},
+        {'status':'stale', 'reason':'target_changed', 'is_overdue':False},
+        {'status':'stale', 'reason':'test_date_unknown', 'is_overdue':False},
+        {'status':'stale', 'reason':'validity_expired', 'is_overdue':True},
+        {'status':'verified', 'reason':'within_validity', 'is_overdue':False},
+    ]
+    verification = {job_id_for('proof_'+str(i)):proof for i,proof in enumerate(proof_cases)}
+    monkeypatch.setattr('restore_tests_api.build_restore_verification_map', lambda *a: verification)
+    homepage = homepage_widget_api._restore_summary({}, [])
+    assert homepage == {'configured':5, 'verified':1, 'failed':0, 'overdue':1, 'never':3}
+    rows = [{'job_id':job_id, **{'restore_verification_'+key:value for key,value in proof.items()}}
+            for job_id,proof in verification.items()]
+    items = unraid_dashboard_widget._job_cache_items(rows, {row['job_id']:row for row in rows})
+    assert [item['restore_verification_reason'] for item in items] == [proof['reason'] for proof in proof_cases]
+    assert unraid_dashboard_widget._restore_proof_summary(items) == {
+        'configured':5, 'verified':1, 'failed':0, 'overdue':1, 'open':3}
 
 
 def test_unraid_dashboard_widget_repository_summary_counts_not_known_offline_as_online(monkeypatch):

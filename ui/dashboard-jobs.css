@@ -361,6 +361,10 @@
   line-height: 1.35;
 }
 
+.dashboard-restore-facts .dashboard-fact-row > b {
+  white-space: normal;
+}
+
 .dashboard-inventory-table .loc-badge {
   max-width: 100%;
   white-space: nowrap;

@@ -1057,7 +1057,11 @@
     "checkOverdue": "Check überfällig – nächster: {date}",
     "checkOverdueShort": "Check überfällig",
     "nextCheck": "Nächster Check: {date}",
-    "checkUnknown": "Check-Status unbekannt"
+    "checkUnknown": "Check-Status unbekannt",
+    "previousValidityLabel": "Frühere Gültigkeit bis",
+    "recordedCheck": "Letzter Lauf: {status}",
+    "recordedNextCheck": "Nächster Check laut Lauf: {date}",
+    "checkTargetUnknown": "Prüfziel damals nicht gespeichert."
   },
   "history": {
     "title": "History",
@@ -1144,7 +1148,8 @@
     "runPrefix": "Präfix beim Lauf",
     "runRepository": "Repository beim Lauf",
     "unknownLocation": "Unbekannter Speicherort",
-    "migratedStatus": "Übernommener früherer Lauf"
+    "migratedStatus": "Vor der Migration aufgezeichnet",
+    "migratedDescription": "Dieser Lauf stammt aus der Zeit vor der Umstellung auf feste Job-IDs. Seine gespeicherten Daten und sein Log bleiben erhalten. Damals nicht aufgezeichnete Laufdetails werden nicht nachträglich ergänzt."
   },
   "reports": {
     "title": "Berichte",
@@ -2905,6 +2910,7 @@
     }
   },
   "identity": {
+    "test_date_unknown": "Der Zeitpunkt des früheren Restore-Tests wurde nicht gespeichert. Ein neuer Test ist erforderlich.",
     "migratedStatus": "Übernommener früherer Lauf",
     "target_changed": "Der frühere Restore-Nachweis gilt für ein anderes Repository oder Archivpräfix.",
     "target_unknown": "Das Repository oder Archivpräfix des früheren Restore-Nachweises ist unbekannt."

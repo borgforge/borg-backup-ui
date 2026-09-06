@@ -26,6 +26,18 @@ After **Prepare migration**, the assistant shows the pending request followed by
 
 `invalid_identity_descriptor` means that stored job or run data has missing or malformed legacy job descriptors. It does not refer to the backup directory. Valid older restore-test reports using `type` and `location` are supported by the migration. If the code persists, preserve the data and report it with the displayed stage; do not edit identity fields manually.
 
+## Displays after migration
+
+Dashboard counters describe configured jobs. **Running** counts active jobs; **Never run** counts jobs without an assigned completed run. These states do not mean that migration created additional backups.
+
+**Recorded before migration** appears only in expanded run details. It describes the origin of an existing result and remains with that historical run. New runs capture their own run data.
+
+Restore results remain in `.test` files. An older proof remains valid when its job ID, recorded repository and actually tested archive match the job and its selected validity policy is satisfied. A missing recorded test date requires a new test; the file modification time cannot renew proof. An unknown or changed target is explained as **Pending** on the dashboard; only expired validity is shown there as **Overdue**.
+
+Check results are stored in `.status` files. Older run files record the check status and dates, but not the exact check target. The dashboard shows these as values recorded at the last run and explains the missing target. A new run with a captured repository can attest a check for the current target again.
+
+The support bundle includes complete job fields and configuration settings, including sources, exclusions, archive prefixes and policies. Credentials and sensitive connection details remain masked. Structured run and restore reports are exported as complete JSON. Size-related omissions are recorded with a reason; text logs remain bounded excerpts. Original files on Unraid are not changed.
+
 ## Closing the browser or restarting
 
 You may close the browser and return to observe the saved stage. A previously authorized operation can continue on the server; reopening the page does not submit it again. A restart retains the original allocated identities, plan, backup and journal and does not automatically approve application.

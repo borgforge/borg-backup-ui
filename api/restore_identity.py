@@ -1,5 +1,6 @@
 """Immutable restore ownership and captured repository descriptors (#477)."""
 from copy import deepcopy
+from datetime import datetime
 
 from job_model import validate_job_id
 
@@ -44,6 +45,64 @@ def snapshots(info, archive='', run_id=''):
         'archive_prefixes_snapshot': list(job['archive_prefixes']),
         'location_snapshot': info['location'],
     }
+
+
+def restore_test_target_scope(report, job, repository_path=None):
+    """Read captured test evidence without inventing snapshots or ownership.
+
+    Migrated reports already own their UUID. Their old writer recorded the
+    repository and tested archive, but no snapshot fields, and could test the
+    latest archive of another job in a shared repository. Therefore both the
+    exact target and an owned archive prefix must match. Native snapshot fields
+    remain authoritative even when incomplete or inconsistent with old fields.
+    """
+    if not isinstance(report, dict) or not isinstance(job, dict):
+        return 'target_unknown'
+    try:
+        job_id = validate_job_id(job.get('job_id'))
+    except ValueError:
+        return 'target_unknown'
+    if report.get('job_id') != job_id or report.get('identity_state') == 'unassigned':
+        return 'target_unknown'
+    target = repository_path if repository_path is not None else job.get('repo_path')
+    prefixes = job.get('archive_prefixes') or [job.get('archive_prefix')]
+    if (not isinstance(target, str) or not target
+            or not isinstance(prefixes, list)
+            or not prefixes or any(not isinstance(p, str) or not p for p in prefixes)):
+        return 'target_unknown'
+
+    try:
+        native_report_id = bool(validate_job_id(report.get('report_id')))
+    except ValueError:
+        native_report_id = False
+    native = native_report_id or 'run_id' in report or any(
+        isinstance(field, str) and field.endswith('_snapshot') for field in report)
+    if native:
+        repository, prefix = report.get('repository_snapshot'), report.get('archive_prefix_snapshot')
+        if not isinstance(repository, str) or not repository or not isinstance(prefix, str) or not prefix:
+            return 'target_unknown'
+        matches = repository == target and prefix in prefixes
+    else:
+        repository, archive = report.get('repository'), report.get('tested_archive')
+        if not isinstance(repository, str) or not repository or not isinstance(archive, str) or not archive:
+            return 'target_unknown'
+        # Inventory validation rejects overlapping prefixes between jobs in the
+        # same repository. Prefixes check evidence, never establish the UUID.
+        matches = repository == target and any(archive.startswith(prefix + '-') for prefix in prefixes)
+    return 'current' if matches else 'target_changed'
+
+
+def restore_test_datetime(report):
+    """Read recorded test time; copying/migrating a file cannot renew proof."""
+    for field in ('test_date', 'end_ts', 'start_ts'):
+        value = report.get(field)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        try:
+            return datetime.strptime(value.strip(), '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            continue
+    return None
 
 
 def historical_identity(row, jobs):

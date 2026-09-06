@@ -132,16 +132,8 @@ def _resolve_restore_test_dir(conf: dict) -> Path:
 
 
 def _extract_test_datetime(test_data: dict, test_file: Path) -> datetime | None:
-    date_str = str(test_data.get("test_date") or "").strip()
-    if date_str:
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            pass
-    try:
-        return datetime.fromtimestamp(test_file.stat().st_mtime)
-    except OSError:
-        return None
+    from restore_identity import restore_test_datetime
+    return restore_test_datetime(test_data)
 
 
 def _repository_data_root() -> Path:
@@ -451,10 +443,10 @@ class RestoreTest:
             return True
         try:
             from job_store import read_json
+            from restore_identity import restore_test_target_scope
             raw = read_json(tf)
-            if (raw.get('job_id') != key or raw.get('identity_state') == 'unassigned'
-                    or raw.get('repository_snapshot') != repo['path']
-                    or raw.get('archive_prefix_snapshot') not in repo['job']['archive_prefixes']):
+            if (raw.get('job_id') != key
+                    or restore_test_target_scope(raw, repo['job'], repo['path']) != 'current'):
                 return True
             last_result = str(raw.get("test_result", "")).strip().lower()
             if last_result != "success":

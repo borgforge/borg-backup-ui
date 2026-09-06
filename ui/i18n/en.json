@@ -1057,7 +1057,11 @@
     "checkOverdue": "Check overdue – next: {date}",
     "checkOverdueShort": "Check overdue",
     "nextCheck": "Next check: {date}",
-    "checkUnknown": "Check status unknown"
+    "checkUnknown": "Check status unknown",
+    "previousValidityLabel": "Previous validity until",
+    "recordedCheck": "Last run: {status}",
+    "recordedNextCheck": "Next check recorded at run: {date}",
+    "checkTargetUnknown": "Check target was not recorded."
   },
   "history": {
     "title": "History",
@@ -1144,7 +1148,8 @@
     "runPrefix": "Run-time prefix",
     "runRepository": "Run-time repository",
     "unknownLocation": "Unknown location",
-    "migratedStatus": "Migrated earlier run"
+    "migratedStatus": "Recorded before migration",
+    "migratedDescription": "This run predates the switch to permanent job IDs. Its saved data and log are preserved. Run details that were not recorded at the time are not added later."
   },
   "reports": {
     "title": "Reports",
@@ -2905,6 +2910,7 @@
     }
   },
   "identity": {
+    "test_date_unknown": "The earlier restore test has no recorded date. A new test is required.",
     "migratedStatus": "Migrated earlier run",
     "target_changed": "The earlier restore proof applies to another repository or archive prefix.",
     "target_unknown": "The repository or archive prefix of the earlier restore proof is unknown."

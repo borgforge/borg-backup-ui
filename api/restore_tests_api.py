@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from job_model import validate_job_id
 from job_store import read_json
 from migrations.identity_storage import IdentityStorageError
-from restore_identity import historical_identity
+from restore_identity import historical_identity, restore_test_datetime, restore_test_target_scope
 
 
 def resolve_restore_test_dir(config: dict) -> Path:
@@ -234,11 +234,7 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
         test_data = _load_test_file(test_file)
         if test_data.get('job_id') != job_id or test_data.get('identity_state') == 'unassigned':
             test_data = {}
-        proof_repo = test_data.get('repository_snapshot')
-        proof_prefix = test_data.get('archive_prefix_snapshot')
-        owned_prefixes = job.get('archive_prefixes') or [job.get('archive_prefix')]
-        scope_known = bool(proof_repo and proof_prefix and job.get('repo_path') and any(owned_prefixes))
-        scope_matches = scope_known and proof_repo == job['repo_path'] and proof_prefix in owned_prefixes
+        target_scope = restore_test_target_scope(test_data, job)
 
         status = "never"
         reason = ""
@@ -273,7 +269,10 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
                 age_days = max(0, int((datetime.now() - dt).total_seconds() // 86400))
 
             if last_result == "success":
-                if mode == "manual_only":
+                if dt is None:
+                    status = 'stale'
+                    reason = 'test_date_unknown'
+                elif mode == "manual_only":
                     status = "verified"
                     reason = "manual_success"
                 else:
@@ -295,10 +294,11 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
                 status = "failed"
                 reason = "unknown_last_result"
 
-        if test_data and mode != 'off' and not scope_matches:
+        if test_data and mode != 'off' and target_scope != 'current':
             status = 'stale'
-            reason = 'target_changed' if scope_known else 'target_unknown'
-            is_overdue = True
+            reason = target_scope
+            # A missing or changed target requires new proof, but does not
+            # imply that the recorded test's validity period has expired.
         out[job_id] = {
             'job_id': job_id,
             "status": status,
@@ -428,13 +428,4 @@ def _load_test_file(test_file: Path) -> Dict[str, Any]:
 
 
 def _extract_test_datetime(test_data: Dict[str, Any], test_file: Path) -> datetime | None:
-    date_str = str(test_data.get("test_date") or "").strip()
-    if date_str:
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            pass
-    try:
-        return datetime.fromtimestamp(test_file.stat().st_mtime)
-    except OSError:
-        return None
+    return restore_test_datetime(test_data)

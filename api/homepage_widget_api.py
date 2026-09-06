@@ -32,6 +32,9 @@ def _restore_summary(config: dict, jobs: list[dict]) -> dict[str, int]:
             continue
         configured += 1
         state = str(item.get("status") or "")
+        if state == 'stale' and item.get('reason') in {'target_unknown', 'target_changed', 'test_date_unknown'}:
+            never += 1  # Existing API counter for proof that remains open.
+            continue
         if state == "verified":
             verified += 1
         elif state == "failed":

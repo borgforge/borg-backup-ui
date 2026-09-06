@@ -59,8 +59,14 @@ def get_status_data(config: dict, force_snapshot_write: bool = False, *, write_s
             'status_repository_changed': bool(status.repository_snapshot and status.repository_snapshot != job['repo_path']),
             **{key + '_formatted': format_bytes(getattr(status, key)) for key in ('original_size', 'compressed_size', 'deduplicated_size', 'repository_size')},
         })
-        # A previous run is still this job's run, but cannot attest a new target.
-        if not status.repository_snapshot or status.repository_snapshot != job['repo_path']:
+        # Preserve the last recorded legacy check without attesting its unknown
+        # historical target. A known previous target cannot attest a new one.
+        if status.repository_snapshot == job['repo_path'] and status.repository_snapshot:
+            row['repository_check_scope'] = 'current'
+        elif not status.repository_snapshot and row['legacy_status']:
+            row['repository_check_scope'] = 'historical_target_unknown'
+        else:
+            row['repository_check_scope'] = 'target_changed' if status.repository_snapshot else 'target_unknown'
             row.update(repository_check_status='unknown', repository_check_date='', repository_next_check='')
         backups.append(row)
     apply_restore_verification(config, backups)
