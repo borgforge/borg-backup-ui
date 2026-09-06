@@ -340,6 +340,8 @@ def test_duplicate_restore_history_ids_block(kind):
 @pytest.mark.parametrize("field,value", [
     ("state", "error"), ("archive", "different-archive"), ("source_path", "different.txt"),
     ("target_dir", "/fixture/other-output"), ("repository_key", "other-repository"),
+    ("location_snapshot", "usb"), ("archive_prefixes_snapshot", ["other-prefix"]),
+    ("run_id", "33333333-3333-4333-8333-333333333333"),
 ])
 def test_restore_summary_detail_snapshot_disagreement_blocks(field, value):
     records = restore_pair()

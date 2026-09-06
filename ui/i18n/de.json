@@ -1250,6 +1250,11 @@
     "runSnapshot": "Letzter Lauf: {name} · Präfix: {prefix} · Repository: {repository}"
   },
   "restore": {
+    "identityUnassigned": "Nicht zugeordnet",
+    "identityDeleted": "Gelöschter Job",
+    "jobAtRun": "Job zum Ausführungszeitpunkt",
+    "repositoryAtRun": "Repository zum Ausführungszeitpunkt",
+    "prefixAtRun": "Archivpräfix zum Ausführungszeitpunkt",
     "title": "Browse & Restore",
     "subtitle": "Geführter Assistent in festen Schritten",
     "stepJob": "1 Job",
@@ -1482,6 +1487,11 @@
     "serverRestartedDuringRestore": "Der Restore wurde abgebrochen, weil der Server während des Restore-Laufs neu gestartet wurde."
   },
   "restoreTests": {
+    "identityUnassigned": "Nicht zugeordnet",
+    "identityDeleted": "Gelöschter Job",
+    "jobAtRun": "Job zum Ausführungszeitpunkt",
+    "repositoryAtRun": "Repository zum Ausführungszeitpunkt",
+    "prefixAtRun": "Getestetes Archivpräfix",
     "title": "Restore Tests",
     "subtitle": "Verifizierung der Wiederherstellbarkeit",
     "selection": "Auswahl",

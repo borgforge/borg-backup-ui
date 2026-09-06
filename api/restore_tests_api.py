@@ -1,11 +1,13 @@
 """
 api/restore_tests_api.py – Restore-Test-Ergebnisse aus .test-Dateien lesen
 """
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List
-import re
+from job_model import validate_job_id
+from job_store import read_json
+from migrations.identity_storage import IdentityStorageError
+from restore_identity import historical_identity
 
 
 def resolve_restore_test_dir(config: dict) -> Path:
@@ -28,16 +30,20 @@ def list_restore_tests(config: dict) -> List[dict]:
     if not test_dir.exists():
         return []
 
+    from status_read_model import configured_jobs
+    jobs = configured_jobs(config)
     results = []
     for test_file in sorted(test_dir.glob("*.test")):
         try:
-            data = json.loads(test_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+            data = read_json(test_file)
+        except (ValueError, OSError, IdentityStorageError):
             continue
 
-        stem = test_file.stem
-        data["job_key"] = stem
-        data["key"] = stem or f"{data.get('type', '?')}_{data.get('location', '?')}"
+        if not isinstance(data, dict):
+            continue
+        data = historical_identity(data, jobs)
+        data['filename'] = test_file.name
+        data['deletable'] = bool(data['job_id'] and test_file.name == data['job_id'] + '.test')
         data["time_ago"] = _time_ago(data.get("test_date", ""))
         data["duration_formatted"] = _fmt_duration(data.get("test_duration_seconds", 0))
         data["report_schema_version"] = _safe_int(data.get("report_schema_version"), 0)
@@ -70,9 +76,11 @@ def list_restore_tests(config: dict) -> List[dict]:
 
 
 def list_restore_test_plan(config: dict) -> dict:
-    from jobs_api import list_jobs, resolve_data_root
+    from jobs_api import resolve_data_root
+    from status_read_model import configured_jobs
 
-    jobs = list_jobs(config, {})
+    jobs = list(configured_jobs(config).values())
+    proofs = build_restore_verification_map(config, jobs)
     interval_default = max(1, _safe_int(config.get("RESTORE_TEST_INTERVAL_DAYS"), 30))
     level_default = _safe_int(config.get("RESTORE_TEST_LEVEL"), 2)
     if level_default not in {1, 2, 3}:
@@ -85,7 +93,7 @@ def list_restore_test_plan(config: dict) -> dict:
     test_dir = resolve_restore_test_dir(config)
 
     for job in jobs:
-        key = str(job.get("key") or "").strip()
+        key = str(job.get("job_id") or "").strip()
         if not key:
             continue
         raw_policy = job.get("restore_test_policy") if isinstance(job.get("restore_test_policy"), dict) else {}
@@ -95,15 +103,18 @@ def list_restore_test_plan(config: dict) -> dict:
 
         test_file = test_dir / f"{key}.test"
         test_data = _load_test_file(test_file)
+        if test_data.get('job_id') != key or test_data.get('identity_state') == 'unassigned':
+            test_data = {}
+        proof = proofs[key]
         dt = _extract_test_datetime(test_data, test_file) if test_data else None
         last_test_date = dt.strftime("%Y-%m-%d %H:%M:%S") if dt else ""
         last_result = str(test_data.get("test_result") or "").strip().lower() if test_data else ""
 
         next_due = ""
         is_overdue = False
-        if mode == "scheduled":
+        if mode == "scheduled" and job.get("enabled", True):
             interval_days = max(1, _safe_int(eff.get("interval_days"), interval_default))
-            if test_data and last_result != "success":
+            if proof["reason"] in {"target_changed", "target_unknown"} or (test_data and last_result != "success"):
                 next_due = last_test_date
                 is_overdue = True
             elif dt is None:
@@ -117,7 +128,7 @@ def list_restore_test_plan(config: dict) -> dict:
                 counts["overdue"] += 1
 
         rows.append({
-            "job_key": key,
+            "job_id": key,
             "display_name": job.get("display_name") or job.get("name") or key,
             "name": job.get("name") or job.get("display_name") or key,
             "location": job.get("location") or "",
@@ -132,8 +143,8 @@ def list_restore_test_plan(config: dict) -> dict:
             "last_test_result": last_result,
             "next_due_at": next_due,
             "is_overdue": is_overdue,
-            "verification_status": job.get("restore_verification_status") or "never",
-            "verification_reason": job.get("restore_verification_reason") or "",
+            "verification_status": proof["status"],
+            "verification_reason": proof["reason"],
             "job_meta_file": str((data_root / "config" / "jobs" / f"{key}.json")),
         })
 
@@ -155,13 +166,12 @@ def list_restore_test_plan(config: dict) -> dict:
     }
 
 
-def update_restore_test_policy(config: dict, job_key: str, policy_raw: dict) -> dict:
-    from jobs_api import resolve_data_root
-    key = str(job_key or "").strip()
-    if not key:
-        raise ValueError("job_key is missing")
-    if not re.fullmatch(r"[A-Za-z0-9_]+", key):
-        raise ValueError("Invalid job_key")
+def update_restore_test_policy(config: dict, job_id: str, policy_raw: dict) -> dict:
+    from repository_context import jobs_dir
+    from inventory_store import inventory_lock
+    from job_store import read_job, write_transaction
+    from job_model import validate_job
+    key = validate_job_id(job_id)
     if not isinstance(policy_raw, dict):
         raise ValueError("policy must be an object")
     mode_raw = str(policy_raw.get("mode") or "").strip().lower()
@@ -182,24 +192,18 @@ def update_restore_test_policy(config: dict, job_key: str, policy_raw: dict) -> 
         if level_value not in {1, 2, 3}:
             raise ValueError("level must be 1, 2, or 3")
 
-    data_root = resolve_data_root(config)
-    meta_file = data_root / "config" / "jobs" / f"{key}.json"
-    if not meta_file.exists():
-        raise FileNotFoundError(f"Job not found: {key}")
-    try:
-        raw = json.loads(meta_file.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise RuntimeError(f"Job metadata is invalid: {key}") from exc
-    if not isinstance(raw, dict):
-        raise RuntimeError(f"Job metadata is invalid: {key}")
-
-    interval_default = max(1, _safe_int(config.get("RESTORE_TEST_INTERVAL_DAYS"), 30))
-    location = raw.get("location", "")
-    normalized = _normalize_restore_policy(policy_raw, location, interval_default)
-    raw["restore_test_policy"] = normalized
-    raw["updated_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    meta_file.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return {"saved": True, "job_key": key, "policy": normalized}
+    directory = jobs_dir(config)
+    with inventory_lock(directory.parent):
+        raw = read_job(directory, key)
+        interval_default = max(1, _safe_int(config.get('RESTORE_TEST_INTERVAL_DAYS'), 30))
+        from repository_context import resolve_job_repository_context
+        location = resolve_job_repository_context(config, key, job=raw, require_passphrase_file=False)['location']
+        normalized = _normalize_restore_policy(policy_raw, location, interval_default)
+        raw['restore_test_policy'] = normalized
+        raw['updated_at'] = datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+        validate_job(raw)
+        write_transaction({directory / f'{key}.json': raw})
+    return {'saved': True, 'job_id': key, 'policy': normalized}
 
 
 def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, dict]:
@@ -220,15 +224,15 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
     for job in jobs or []:
         from job_model import validate_job_id
         try:
-            job_key = validate_job_id(job.get('job_id'))
+            job_id = validate_job_id(job.get('job_id'))
         except ValueError:
             continue
 
         policy = _normalize_restore_policy(job.get("restore_test_policy"), job.get("location"), interval_default)
         mode = policy["mode"]
-        test_file = test_dir / f"{job_key}.test"
+        test_file = test_dir / f"{job_id}.test"
         test_data = _load_test_file(test_file)
-        if test_data.get('job_id') != job_key or test_data.get('identity_state') == 'unassigned':
+        if test_data.get('job_id') != job_id or test_data.get('identity_state') == 'unassigned':
             test_data = {}
         proof_repo = test_data.get('repository_snapshot')
         proof_prefix = test_data.get('archive_prefix_snapshot')
@@ -295,8 +299,8 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
             status = 'stale'
             reason = 'target_changed' if scope_known else 'target_unknown'
             is_overdue = True
-        out[job_key] = {
-            'job_id': job_key,
+        out[job_id] = {
+            'job_id': job_id,
             "status": status,
             "reason": reason,
             "policy": policy,
@@ -314,16 +318,20 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
     return out
 
 
-def delete_restore_test(config: dict, job_key: str) -> dict:
-    key = str(job_key or "").strip()
-    if not key:
-        raise ValueError("job_key is missing")
-    test_dir = resolve_restore_test_dir(config)
-    target = test_dir / f"{key}.test"
-    if not target.exists():
-        raise FileNotFoundError(f"Restore test not found: {target.name}")
-    target.unlink()
-    return {"deleted": True, "job_key": key}
+def delete_restore_test(config: dict, job_id: str) -> dict:
+    from inventory_store import inventory_lock
+    from repository_context import jobs_dir
+    from job_store import read_json
+    key = validate_job_id(job_id)
+    with inventory_lock(jobs_dir(config).parent):
+        target = resolve_restore_test_dir(config) / f'{key}.test'
+        data = read_json(target)
+        if data is None:
+            raise FileNotFoundError('Restore test not found')
+        if data.get('job_id') != key or data.get('identity_state') == 'unassigned':
+            raise ValueError('Restore test ownership is unresolved')
+        target.unlink()
+    return {'deleted': True, 'job_id': key}
 
 
 def _time_ago(date_str: str):
@@ -413,9 +421,9 @@ def _load_test_file(test_file: Path) -> Dict[str, Any]:
     if not test_file.exists():
         return {}
     try:
-        raw = json.loads(test_file.read_text(encoding="utf-8"))
+        raw = read_json(test_file)
         return raw if isinstance(raw, dict) else {}
-    except (json.JSONDecodeError, OSError):
+    except (ValueError, OSError, IdentityStorageError):
         return {}
 
 

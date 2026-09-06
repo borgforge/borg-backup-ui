@@ -1250,6 +1250,11 @@
     "runSnapshot": "Latest run: {name} · Prefix: {prefix} · Repository: {repository}"
   },
   "restore": {
+    "identityUnassigned": "Unassigned",
+    "identityDeleted": "Deleted job",
+    "jobAtRun": "Job at run time",
+    "repositoryAtRun": "Repository at run time",
+    "prefixAtRun": "Archive prefix at run time",
     "title": "Browse & Restore",
     "subtitle": "Guided wizard with fixed steps",
     "stepJob": "1 Job",
@@ -1482,6 +1487,11 @@
     "serverRestartedDuringRestore": "The restore was aborted because the server restarted during the restore run."
   },
   "restoreTests": {
+    "identityUnassigned": "Unassigned",
+    "identityDeleted": "Deleted job",
+    "jobAtRun": "Job at run time",
+    "repositoryAtRun": "Repository at run time",
+    "prefixAtRun": "Tested archive prefix",
     "title": "Restore tests",
     "subtitle": "Verify that backups can be restored",
     "selection": "Selection",

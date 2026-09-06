@@ -35,6 +35,7 @@ _RESTORE_SHARED_FIELDS = (
     "state", "archive", "started_at", "finished_at", "source_path", "target_dir",
     "destination_path", "conflict_mode", "preserve_owner", "repository_key",
     "repository_snapshot", "job_name_snapshot", "archive_prefix_snapshot",
+    "run_id", "repository_key_snapshot", "location_snapshot", "archive_prefixes_snapshot",
 )
 
 

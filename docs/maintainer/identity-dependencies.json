@@ -386,13 +386,18 @@
           "role": "browse/context, async run map, history index/detail and locks"
         },
         {
+          "path": "api/restore_identity.py",
+          "anchor": "capture_repository",
+          "role": "immutable restore scope, captured descriptors and unassigned history"
+        },
+        {
           "path": "api/restore_tests_api.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "plan/policy/result filenames and proof scope"
         },
         {
           "path": "runtime/scripts/borg_restore_test.py",
-          "anchor": "backup_type",
+          "anchor": "discover_repos",
           "role": "standalone result/log writer, invocation and notification identity"
         },
         {
@@ -402,12 +407,12 @@
         },
         {
           "path": "ui/js/pages/restore.js",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "restore selection, execution and history"
         },
         {
           "path": "ui/js/pages/restore-tests.js",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "plan/manual test selection and result display"
         }
       ]

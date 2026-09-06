@@ -13,18 +13,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-from archive_prefix import (
-    archive_prefix_from_backup_type,
-    archive_prefix_from_job_key,
-    normalize_archive_prefixes,
-)
+from restore_identity import (SNAPSHOT_FIELDS, capture_repository, archive_prefix,
+                              snapshots, historical_identity)
+from job_model import validate_job_id
 
 _RESTORE_RUNS: dict = {}
 _RESTORE_LOCK = threading.Lock()
 _RESTORE_KEEP = 20
 _RESTORE_RUNS_LOADED = False
 
-_JOB_KEY_RX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _ARCHIVE_RX = re.compile(r"^[a-zA-Z0-9_.:-]+$")
 
 
@@ -39,11 +36,8 @@ class RestoreRepositoryBusy(ValueError):
         }
 
 
-def _validate_job_key(job_key: str) -> str:
-    key = str(job_key or "").strip()
-    if not _JOB_KEY_RX.fullmatch(key):
-        raise ValueError("Invalid job key")
-    return key
+def _validate_job_id(job_id: str) -> str:
+    return validate_job_id(job_id)
 
 
 def _validate_archive_name(archive: str) -> str:
@@ -191,17 +185,15 @@ def _restore_history_runs_dir(config: dict) -> Path:
 
 
 def _write_json_atomic(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    from inventory_store import atomic_write_json
+    atomic_write_json(path, payload)
 
 
 def _persist_restore_runs(config: dict) -> None:
     fp = _restore_runs_file(config)
     active_runs = {
         rid: run for rid, run in _RESTORE_RUNS.items()
-        if isinstance(run, dict) and not _is_restore_terminal(run.get("state"))
+        if isinstance(run, dict) and (not _is_restore_terminal(run.get("state")) or not run.get("history_recorded"))
     }
     payload = {
         "schema_version": 1,
@@ -232,13 +224,15 @@ def _history_summary_from_run(run: dict) -> dict:
     state = str(run.get("state") or "").strip() or "unknown"
     restore_id = str(run.get("restore_id") or "").strip()
     return {
+        **{field: run[field] for field in SNAPSHOT_FIELDS if field in run},
         "restore_id": restore_id,
         "state": state,
         "phase": run.get("phase") or state,
         "started_at": run.get("started_at") or "",
         "finished_at": run.get("finished_at") or "",
         "duration_seconds": _restore_run_duration_seconds(run),
-        "job_key": run.get("job_key") or "",
+        "job_id": run.get("job_id") or "",
+        **({"legacy_job_key": run["job_key"]} if run.get("job_key") else {}),
         "archive": run.get("archive") or "",
         "source_path": run.get("source_path") or "",
         "target_dir": run.get("target_dir") or "",
@@ -263,17 +257,12 @@ def _history_detail_from_run(run: dict, source: str) -> dict:
 
 
 def _read_history_index(config: dict) -> list[dict]:
-    fp = _restore_history_index_file(config)
-    if not fp.exists():
-        return []
-    try:
-        raw = json.loads(fp.read_text(encoding="utf-8"))
-        rows = raw.get("runs") if isinstance(raw, dict) else []
-        if isinstance(rows, list):
-            return [row for row in rows if isinstance(row, dict)]
-    except Exception:
-        return []
-    return []
+    from job_store import read_json
+    raw = read_json(_restore_history_index_file(config), missing={'runs': []})
+    rows = raw.get('runs')
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise ValueError('Invalid restore history index; existing history was not overwritten')
+    return rows
 
 
 def _write_history_index(config: dict, rows: list[dict]) -> None:
@@ -291,10 +280,10 @@ def _record_restore_history(config: dict, run: dict, source: str) -> None:
     restore_id = str(run.get("restore_id") or "").strip()
     if not restore_id:
         return
+    rows = [row for row in _read_history_index(config) if str(row.get("restore_id") or "") != restore_id]
     detail = _history_detail_from_run(run, source)
     detail_path = _restore_history_runs_dir(config) / f"{restore_id}.json"
     _write_json_atomic(detail_path, detail)
-    rows = [row for row in _read_history_index(config) if str(row.get("restore_id") or "") != restore_id]
     rows.append(_history_summary_from_run(run))
     _write_history_index(config, rows)
 
@@ -307,15 +296,15 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
         fp = _restore_runs_file(config)
         loaded: dict = {}
         if fp.exists():
-            try:
-                raw = json.loads(fp.read_text(encoding="utf-8"))
-                runs = raw.get("runs") if isinstance(raw, dict) else {}
-                if isinstance(runs, dict):
-                    for rid, val in runs.items():
-                        if isinstance(rid, str) and isinstance(val, dict):
-                            loaded[rid] = val
-            except Exception:
-                loaded = {}
+            from job_store import read_json
+            raw = read_json(fp)
+            loaded = raw.get('runs')
+            if not isinstance(loaded, dict) or any(
+                not isinstance(rid, str) or not re.fullmatch(r'[A-Za-z0-9_.-]+', rid)
+                or not isinstance(run, dict) or run.get('restore_id') != rid
+                for rid, run in loaded.items()
+            ):
+                raise ValueError('Invalid persisted restore runs; recovery is required')
 
         changed = False
         now_iso = datetime.now().isoformat(timespec="seconds")
@@ -330,10 +319,10 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
                     lines = []
                 lines.append("Restore was marked as aborted after the server restarted.")
                 run["lines"] = lines[-200:]
-                try:
-                    _record_restore_history(config, run, "restore-run-restart-recovery")
-                except Exception:
-                    pass
+                changed = True
+            if _is_restore_terminal(run.get('state')) and not run.get('history_recorded'):
+                _record_restore_history(config, run, 'restore-run-restart-recovery')
+                run['history_recorded'] = True
                 changed = True
 
         _RESTORE_RUNS.clear()
@@ -347,20 +336,8 @@ def _ensure_restore_runs_loaded(config: dict) -> None:
                 pass
 
 
-def _get_job_repo_info(config: dict, job_key: str) -> dict:
-    """Resolve repository and passphrase from the canonical repository object."""
-    job_key = _validate_job_key(job_key)
-    from repository_context import resolve_job_repository_context
-
-    context = resolve_job_repository_context(config, job_key)
-    return {
-        "repo": context["repository_path"],
-        "passphrase_file": context["passphrase_ref"] or None,
-        "repository_key": context["repository_key"],
-        "storage_key": context["storage_key"],
-        "storage": context.get("storage") if isinstance(context.get("storage"), dict) else {},
-        "job": context.get("job") if isinstance(context.get("job"), dict) else {},
-    }
+def _get_job_repo_info(config: dict, job_id: str) -> dict:
+    return capture_repository(config, job_id)
 
 
 def _borg_env(config: dict, passphrase_file: str | None) -> dict:
@@ -426,54 +403,43 @@ def ensure_restore_repository_available(config: dict, info: dict) -> None:
     resource = _repository_resource(info)
     lock = _active_repository_lock(config, info)
     if lock:
-        _raise_repository_busy(resource, str(lock.get("job_key") or "").strip())
+        _raise_repository_busy(resource, str(lock.get("job_name_snapshot") or lock.get("job_id") or "").strip())
 
 
-def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, restore_id: str):
+def acquire_restore_repository_lock(config: dict, info: dict, job_id: str, restore_id: str, *, operation="restore"):
     from jobs_api import resolve_resource_lock_dir
     from wizard_runner import ResourceLockSet
 
     resource = _repository_resource(info)
     lock_set = ResourceLockSet(
         lock_dir=resolve_resource_lock_dir(config),
-        job_id="",  # Service lock; per-job restore correlation is converted in #477.
-        snapshot={"job_name_snapshot": _validate_job_key(job_key)},
+        job_id=_validate_job_id(job_id),
+        snapshot=snapshots(info),
         ttl_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_TTL_SECONDS", 7200),
         grace_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_GRACE_SECONDS", 60),
         heartbeat_seconds=_resource_lock_int(config, "BORG_RESOURCE_LOCK_HEARTBEAT_SECONDS", 20),
         run_id=str(restore_id or "").strip(),
-        operation="restore",
+        operation=operation,
     )
     ok, reason = lock_set.acquire([resource])
     if ok:
         return lock_set
     lock = _active_repository_lock(config, info)
-    holder = str(lock.get("job_key") or "").strip() if lock else ""
+    holder = str(lock.get("job_name_snapshot") or lock.get("job_id") or "").strip() if lock else ""
     lock_set.release()
     _raise_repository_busy(resource, holder or reason)
 
 
-def _archive_filter_rows_for_restore_job(job_key: str, info: dict) -> list[dict]:
-    job = info.get("job") if isinstance(info.get("job"), dict) else {}
-    current_prefix = archive_prefix_from_backup_type(job.get("backup_type") if isinstance(job, dict) else "")
-    stored = job.get("archive_prefixes") if isinstance(job.get("archive_prefixes"), list) else []
-    prefixes = normalize_archive_prefixes([
-        current_prefix,
-        *stored,
-        archive_prefix_from_job_key(job_key),
-    ])
-    return [
-        {
-            "prefix": prefix,
-            "filter": f"{prefix}-*",
-            "current": bool(current_prefix and prefix == current_prefix),
-        }
-        for prefix in prefixes
-    ]
+def _archive_filter_rows_for_restore_job(job_id: str, info: dict) -> list[dict]:
+    prefixes = info['job']['archive_prefixes']
+    if not prefixes:
+        raise ValueError('Job has no archive prefixes')
+    return [dict(prefix=prefix, filter=f'{prefix}-*', current=index == 0)
+            for index, prefix in enumerate(prefixes)]
 
 
-def _archive_prefixes_for_restore_job(job_key: str, info: dict) -> list[str]:
-    return [str(row["prefix"]) for row in _archive_filter_rows_for_restore_job(job_key, info)]
+def _archive_prefixes_for_restore_job(job_id: str, info: dict) -> list[str]:
+    return [str(row["prefix"]) for row in _archive_filter_rows_for_restore_job(job_id, info)]
 
 
 def _run_borg_archive_list(repo: str, env: dict, archive_filter: str = "") -> dict:
@@ -521,15 +487,15 @@ def _get_max_runtime_hours(config: dict) -> int:
         return 0
 
 
-def list_archives_with_context(config: dict, job_key: str) -> dict:
-    job_key = _validate_job_key(job_key)
-    from smb_mount import ensure_smb_mount_for_job
-    guard = ensure_smb_mount_for_job(config, job_key)
+def list_archives_with_context(config: dict, job_id: str) -> dict:
+    job_id = _validate_job_id(job_id)
+    from smb_mount import ensure_smb_mount_for_context
+    info = _get_job_repo_info(config, job_id)
+    guard = ensure_smb_mount_for_context(info)
     try:
-        info = _get_job_repo_info(config, job_key)
         ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
-        archive_filters = _archive_filter_rows_for_restore_job(job_key, info)
+        archive_filters = _archive_filter_rows_for_restore_job(job_id, info)
         prefixes = [str(row["prefix"]) for row in archive_filters]
 
         archives: list[dict] = []
@@ -538,10 +504,6 @@ def list_archives_with_context(config: dict, job_key: str) -> dict:
                 archives.extend(_archive_rows_from_borg_payload(
                     _run_borg_archive_list(info["repo"], env, f"{prefix}-*")
                 ))
-        else:
-            archives.extend(_archive_rows_from_borg_payload(
-                _run_borg_archive_list(info["repo"], env)
-            ))
 
         by_name = {str(row.get("name") or ""): row for row in archives if str(row.get("name") or "")}
         return {
@@ -552,17 +514,18 @@ def list_archives_with_context(config: dict, job_key: str) -> dict:
         guard.cleanup()
 
 
-def list_archives(config: dict, job_key: str) -> List[dict]:
-    return list_archives_with_context(config, job_key)["archives"]
+def list_archives(config: dict, job_id: str) -> List[dict]:
+    return list_archives_with_context(config, job_id)["archives"]
 
 
-def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict]:
-    job_key = _validate_job_key(job_key)
+def list_files(config: dict, job_id: str, archive: str, path: str) -> List[dict]:
+    job_id = _validate_job_id(job_id)
     archive = _validate_archive_name(archive)
-    from smb_mount import ensure_smb_mount_for_job
-    guard = ensure_smb_mount_for_job(config, job_key)
+    from smb_mount import ensure_smb_mount_for_context
+    info = _get_job_repo_info(config, job_id)
+    archive_prefix(info, archive)
+    guard = ensure_smb_mount_for_context(info)
     try:
-        info = _get_job_repo_info(config, job_key)
         ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
 
@@ -573,17 +536,17 @@ def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict
         guard.cleanup()
 
 
-def get_repo_info(config: dict, job_key: str) -> dict:
-    job_key = _validate_job_key(job_key)
-    return _get_job_repo_info(config, job_key)
+def get_repo_info(config: dict, job_id: str) -> dict:
+    job_id = _validate_job_id(job_id)
+    return _get_job_repo_info(config, job_id)
 
 
-def get_repo_stats(config: dict, job_key: str) -> dict:
-    job_key = _validate_job_key(job_key)
-    from smb_mount import ensure_smb_mount_for_job
-    guard = ensure_smb_mount_for_job(config, job_key)
+def get_repo_stats(config: dict, job_id: str) -> dict:
+    job_id = _validate_job_id(job_id)
+    from smb_mount import ensure_smb_mount_for_context
+    info = _get_job_repo_info(config, job_id)
+    guard = ensure_smb_mount_for_context(info)
     try:
-        info = _get_job_repo_info(config, job_key)
         ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
 
@@ -811,19 +774,20 @@ def _precheck_metadata(repo: str, archive: str, source_path: str, env: dict) -> 
 
 def restore_precheck(
     config: dict,
-    job_key: str,
+    job_id: str,
     archive: str,
     source_path: str,
     target_dir: str,
     conflict_mode: str,
     dry_run: bool = True,
 ) -> dict:
-    job_key = _validate_job_key(job_key)
+    job_id = _validate_job_id(job_id)
     archive = _validate_archive_name(archive)
-    from smb_mount import ensure_smb_mount_for_job
-    guard = ensure_smb_mount_for_job(config, job_key)
+    from smb_mount import ensure_smb_mount_for_context
+    info = _get_job_repo_info(config, job_id)
+    archive_prefix(info, archive)
+    guard = ensure_smb_mount_for_context(info)
     try:
-        info = _get_job_repo_info(config, job_key)
         ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
         target = _validate_target_dir(target_dir, config)
@@ -841,7 +805,7 @@ def restore_precheck(
 
         return {
             "ok": bool(meta["ok"]),
-            "job_key": job_key,
+            "job_id": job_id,
             "archive": archive,
             "repo": info["repo"],
             "source_path": source_path,
@@ -866,7 +830,7 @@ def restore_precheck(
 
 def start_restore(
     config: dict,
-    job_key: str,
+    job_id: str,
     archive: str,
     source_path: str,
     target_dir: str,
@@ -874,21 +838,26 @@ def start_restore(
     preserve_owner: bool = False,
     progress_cb=None,
     restore_id: str = "",
+    *, _info: dict | None = None,
 ) -> dict:
-    job_key = _validate_job_key(job_key)
+    job_id = _validate_job_id(job_id)
     archive = _validate_archive_name(archive)
-    from smb_mount import ensure_smb_mount_for_job
+    from smb_mount import ensure_smb_mount_for_context
 
-    guard = ensure_smb_mount_for_job(config, job_key)
+    info = _info if _info is not None else _get_job_repo_info(config, job_id)
+    if info['job']['job_id'] != job_id:
+        raise ValueError('Conflicting restore identity')
+    archive_prefix(info, archive)
+    guard = None
     lock_set = None
     try:
-        info = _get_job_repo_info(config, job_key)
         lock_set = acquire_restore_repository_lock(
             config,
             info,
-            job_key,
-            str(restore_id or "").strip() or f"restore-sync-{uuid.uuid4().hex[:8]}",
+            job_id,
+            str(restore_id or "").strip() or str(uuid.uuid4()),
         )
+        guard = ensure_smb_mount_for_context(info)
         env = _repository_borg_env(config, info)
         target = _validate_target_dir(target_dir, config)
         if conflict_mode not in {"skip", "overwrite", "rename"}:
@@ -1097,18 +1066,23 @@ def start_restore(
             "stderr": "",
         }
     finally:
-        if lock_set is not None:
-            lock_set.release()
-        guard.cleanup()
+        try:
+            if guard is not None:
+                guard.cleanup()
+        finally:
+            if lock_set is not None:
+                lock_set.release()
 
 
 def _trim_runs(config: dict) -> None:
     with _RESTORE_LOCK:
         if len(_RESTORE_RUNS) <= _RESTORE_KEEP:
             return
-        keys = sorted(_RESTORE_RUNS.keys(), key=lambda k: _RESTORE_RUNS[k].get("started_at", ""), reverse=True)
-        for k in keys[_RESTORE_KEEP:]:
-            _RESTORE_RUNS.pop(k, None)
+        keys = sorted((key for key, run in _RESTORE_RUNS.items()
+                       if _is_restore_terminal(run.get('state')) and run.get('history_recorded')),
+                      key=lambda key: _RESTORE_RUNS[key].get('started_at', ''), reverse=True)
+        for key in keys[_RESTORE_KEEP:]:
+            _RESTORE_RUNS.pop(key, None)
         try:
             _persist_restore_runs(config)
         except Exception:
@@ -1117,24 +1091,27 @@ def _trim_runs(config: dict) -> None:
 
 def start_restore_async(
     config: dict,
-    job_key: str,
+    job_id: str,
     archive: str,
     source_path: str,
     target_dir: str,
     conflict_mode: str,
     preserve_owner: bool = False,
 ) -> dict:
-    job_key = _validate_job_key(job_key)
+    job_id = _validate_job_id(job_id)
     archive = _validate_archive_name(archive)
     _ensure_restore_runs_loaded(config)
-    restore_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8]
+    info = _get_job_repo_info(config, job_id)
+    archive_prefix(info, archive)
+    restore_id = str(uuid.uuid4())
     state = {
+        **snapshots(info, archive, restore_id),
         "restore_id": restore_id,
         "state": "running",
         "phase": "starting",
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "finished_at": "",
-        "job_key": job_key,
+        "job_id": job_id,
         "archive": archive,
         "source_path": source_path,
         "target_dir": target_dir,
@@ -1151,7 +1128,8 @@ def start_restore_async(
         try:
             _persist_restore_runs(config)
         except Exception:
-            pass
+            del _RESTORE_RUNS[restore_id]
+            raise
     _trim_runs(config)
 
     def _append(line: str) -> None:
@@ -1190,7 +1168,9 @@ def start_restore_async(
             s["skipped"] = bool(result.get("skipped", False))
             s["skip_reason_code"] = str(result.get("skip_reason_code", "") or "")
             try:
+                _persist_restore_runs(config)
                 _record_restore_history(config, s, "restore-run-finished")
+                s['history_recorded'] = True
             except Exception as exc:
                 lines = s.setdefault("lines", [])
                 lines.append(f"Restore history write failed: {exc}")
@@ -1209,7 +1189,9 @@ def start_restore_async(
             s["finished_at"] = datetime.now().isoformat(timespec="seconds")
             s["error"] = msg
             try:
+                _persist_restore_runs(config)
                 _record_restore_history(config, s, "restore-run-finished")
+                s['history_recorded'] = True
             except Exception as exc:
                 lines = s.setdefault("lines", [])
                 lines.append(f"Restore history write failed: {exc}")
@@ -1224,7 +1206,7 @@ def start_restore_async(
             _append("Starting restore extract ...")
             result = start_restore(
                 config,
-                job_key,
+                job_id,
                 archive,
                 source_path,
                 target_dir,
@@ -1232,6 +1214,7 @@ def start_restore_async(
                 preserve_owner,
                 progress_cb=_append,
                 restore_id=restore_id,
+                _info=info,
             )
             if result.get("skipped"):
                 _append(f"Skipped: {result.get('reason', 'unknown')}")
@@ -1254,6 +1237,8 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
         limit = max(1, min(50, int(limit)))
     except (TypeError, ValueError):
         limit = 20
+    from status_read_model import configured_jobs
+    jobs = configured_jobs(config)
     with _RESTORE_LOCK:
         rows = []
         for run in _RESTORE_RUNS.values():
@@ -1262,12 +1247,13 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
             if _is_restore_terminal(run.get("state")):
                 continue
             rows.append({
+                **{field: run[field] for field in SNAPSHOT_FIELDS if field in run},
                 "restore_id": run.get("restore_id"),
                 "state": run.get("state"),
                 "phase": run.get("phase"),
                 "started_at": run.get("started_at"),
                 "finished_at": run.get("finished_at"),
-                "job_key": run.get("job_key"),
+                "job_id": run.get("job_id"),
                 "archive": run.get("archive"),
                 "source_path": run.get("source_path"),
                 "target_dir": run.get("target_dir"),
@@ -1277,6 +1263,7 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
                 "skip_reason_code": run.get("skip_reason_code", ""),
                 "lines": list(run.get("lines", []))[-20:],
             })
+        rows = [historical_identity(row, jobs) for row in rows]
         rows.sort(key=lambda item: str(item.get("started_at") or ""), reverse=True)
         active = [r for r in rows if str(r.get("state") or "").lower() == "running"]
         return {
@@ -1297,7 +1284,9 @@ def list_restore_history(config: dict, limit: int = 20, offset: int = 0) -> dict
         offset = max(0, int(offset))
     except (TypeError, ValueError):
         offset = 0
-    rows = _read_history_index(config)
+    from status_read_model import configured_jobs
+    jobs = configured_jobs(config)
+    rows = [historical_identity(row, jobs) for row in _read_history_index(config)]
     rows.sort(key=lambda item: str(item.get("started_at") or ""), reverse=True)
     selected = rows[offset:] if limit <= 0 else rows[offset:offset + limit]
     return {
@@ -1324,7 +1313,8 @@ def get_restore_history_detail(config: dict, restore_id: str) -> dict:
         raise ValueError(f"Could not read restore history detail: {exc}") from exc
     if not isinstance(raw, dict):
         raise ValueError("Invalid restore history detail")
-    return raw
+    from status_read_model import configured_jobs
+    return historical_identity(raw, configured_jobs(config))
 
 
 def delete_restore_history_entry(config: dict, restore_id: str) -> dict:
@@ -1362,12 +1352,13 @@ def get_restore_state(config: dict, restore_id: str) -> dict:
         if not s:
             raise ValueError("Unknown restore_id")
         return {
+            **{field: s[field] for field in SNAPSHOT_FIELDS if field in s},
             "restore_id": s.get("restore_id"),
             "state": s.get("state"),
             "phase": s.get("phase"),
             "started_at": s.get("started_at"),
             "finished_at": s.get("finished_at"),
-            "job_key": s.get("job_key"),
+            "job_id": s.get("job_id"),
             "archive": s.get("archive"),
             "source_path": s.get("source_path"),
             "target_dir": s.get("target_dir"),

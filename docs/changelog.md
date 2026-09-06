@@ -6,6 +6,18 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #477 (integration work for #447; not released)
+- Converted Browse & Restore, prechecks/downloads and restore-test invocation to
+  full job IDs and literal current/historical prefixes in the current repository.
+- Captured restore start contexts and persisted readable run snapshots; retained
+  terminal state for history-write retry without losing active runs to trimming.
+- Converted restore-test plans, policies, results, proof and notification/reminder
+  ownership; scheduled tests honor each job's captured level and interval.
+- Limited the tested archive to the job's prefix union and retained proof across
+  name/current-prefix changes; other repositories require a new proof.
+- Added canonical API, DE/EN UI, real Borg restore/proof and migration regressions.
+  Transfer and guarded activation remain #478/#479; no test package yet.
+
 ### Issue #476 (integration work for #447; not released)
 - Made configured UUIDs authoritative for dashboard, widget, history and report
   navigation; disabled and deleted/unassigned history do not inflate active counts.

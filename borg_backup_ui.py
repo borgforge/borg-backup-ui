@@ -1721,8 +1721,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _delete_restore_test(self) -> dict:
         from restore_tests_api import delete_restore_test
+        from restore_identity import request_job_id
         body = self._read_json_body()
-        return delete_restore_test(self.config, body.get("job_key", ""))
+        return delete_restore_test(self.config, request_job_id(body))
 
     def _delete_schedule(self) -> dict:
         from schedule_api import delete_schedule
@@ -2069,22 +2070,24 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from restore_api import list_archives_with_context
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
-        job_key = (qs.get("job") or [""])[0]
-        if not job_key:
+        from restore_identity import request_job_id
+        job_id = request_job_id(qs, query=True)
+        if not job_id:
             raise ValueError("job parameter is required")
-        return list_archives_with_context(self.config, job_key)
+        return list_archives_with_context(self.config, job_id)
 
     def _get_restore_files(self, qs_str: str) -> dict:
         self._require_data_dir_ready()
         from restore_api import list_files
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(qs_str)
-        job_key = (qs.get("job") or [""])[0]
+        from restore_identity import request_job_id
+        job_id = request_job_id(qs, query=True)
         archive = (qs.get("archive") or [""])[0]
         path = unquote((qs.get("path") or [""])[0])
-        if not job_key or not archive:
+        if not job_id or not archive:
             raise ValueError("job and archive parameters are required")
-        return {"files": list_files(self.config, job_key, archive, path)}
+        return {"files": list_files(self.config, job_id, archive, path)}
 
     def _get_report_jobs(self) -> dict:
         from reports_api import get_report_jobs
@@ -2106,8 +2109,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from job_model import validate_job_id
         if 'job' in qs or len(qs.get('job_id', [])) != 1:
             raise ValueError('One canonical job_id is required')
-        job_key = validate_job_id(qs['job_id'][0])
-        return get_repo_stats(self.config, job_key)
+        job_id = validate_job_id(qs['job_id'][0])
+        return get_repo_stats(self.config, job_id)
 
     def _get_restore_target_dirs(self, qs_str: str) -> dict:
         self._require_data_dir_ready()
@@ -2193,31 +2196,41 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         import subprocess
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(parsed.query)
-        job_key = (qs.get("job") or [""])[0]
+        from restore_identity import request_job_id
+        try:
+            job_id = request_job_id(qs, query=True)
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return
         archive = (qs.get("archive") or [""])[0]
         path = unquote((qs.get("path") or [""])[0])
         confirm_large = str((qs.get("confirm_large") or ["0"])[0]).strip().lower() in {"1", "true", "yes"}
 
-        if not all([job_key, archive, path]):
-            self.send_error(400, "job, archive, and path are required")
+        if not all([job_id, archive, path]):
+            self.send_error(400, "job_id, archive, and path are required")
             return
 
         lock_set = None
         try:
             from restore_api import RestoreRepositoryBusy, acquire_restore_repository_lock, get_repo_info, _repository_borg_env
-            info = get_repo_info(self.config, job_key)
+            info = get_repo_info(self.config, job_id)
+            from restore_api import _validate_archive_name
+            from restore_identity import archive_prefix
+            archive_prefix(info, _validate_archive_name(archive))
             lock_set = acquire_restore_repository_lock(
                 self.config,
                 info,
-                job_key,
-                f"restore-download-{datetime.now().strftime('%Y%m%dT%H%M%S')}",
+                job_id,
+                str(uuid.uuid4()),
             )
             env = _repository_borg_env(self.config, info)
         except RestoreRepositoryBusy as exc:
             self.send_error(409, str(exc))
             return
         except Exception as exc:
-            self.send_error(500, str(exc))
+            if lock_set is not None:
+                lock_set.release()
+            self.send_error(400 if isinstance(exc, ValueError) else 500, str(exc))
             return
 
         repo_archive = f"{info['repo']}::{archive}"
@@ -2401,12 +2414,16 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from urllib.parse import parse_qs, unquote
         from restore_api import ensure_restore_repository_available, get_repo_info, _repository_borg_env
         qs = parse_qs(query or "")
-        job_key = (qs.get("job") or [""])[0]
+        from restore_identity import request_job_id
+        job_id = request_job_id(qs, query=True)
         archive = (qs.get("archive") or [""])[0]
         path = unquote((qs.get("path") or [""])[0])
-        if not all([job_key, archive, path]):
-            raise ValueError("job, archive, and path are required")
-        info = get_repo_info(self.config, job_key)
+        if not all([job_id, archive, path]):
+            raise ValueError("job_id, archive, and path are required")
+        info = get_repo_info(self.config, job_id)
+        from restore_api import _validate_archive_name
+        from restore_identity import archive_prefix
+        archive_prefix(info, _validate_archive_name(archive))
         ensure_restore_repository_available(self.config, info)
         env = _repository_borg_env(self.config, info)
         repo_archive = f"{info['repo']}::{archive}"
@@ -2452,28 +2469,31 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         level = str(body.get("level", conf.get("RESTORE_TEST_LEVEL", "2"))).strip()
         location = str(body.get("location", conf.get("RESTORE_TEST_LOCATION", "local"))).strip().lower()
         smb_auto_mount = bool(body.get("smb_auto_mount", True))
-        job_keys = body.get("job_keys", [])
+        job_ids = body.get("job_ids", [])
 
         if level not in {"1", "2", "3"}:
             raise ValueError("Invalid level (allowed: 1, 2, 3)")
         if location not in {"local", "usb", "smb", "storagebox", "all"}:
             raise ValueError("Invalid location")
-        if not isinstance(job_keys, list):
-            raise ValueError("job_keys must be a list")
-        clean_job_keys = [str(k).strip() for k in job_keys if str(k).strip()]
+        if not isinstance(job_ids, list):
+            raise ValueError("job_ids must be a list")
+        from job_model import validate_job_id
+        if "job_keys" in body or "job_key" in body:
+            raise ValueError("Restore tests require job_ids")
+        clean_job_ids = list(dict.fromkeys(validate_job_id(k) for k in job_ids))
         auto_selected = False
         skipped = []
-        if clean_job_keys:
+        if clean_job_ids:
             jobs = list_jobs(self.config, {})
-            known = {str(j.get("key") or "").strip(): j for j in jobs if isinstance(j, dict)}
-            for k in clean_job_keys:
+            known = {str(j.get("job_id") or "").strip(): j for j in jobs if isinstance(j, dict)}
+            for k in clean_job_ids:
                 row = known.get(k)
                 if not row:
                     raise ValueError(f"Unknown job: {k}")
                 if row.get("enabled") is False:
                     raise ValueError(f"Job is disabled: {k}")
         scheduled = bool(body.get("scheduled", False))
-        if scheduled and not clean_job_keys:
+        if scheduled and not clean_job_ids:
             plan = list_restore_test_plan(self.config)
             due_rows = []
             for row in (plan.get("jobs") or []):
@@ -2482,19 +2502,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 policy = row.get("policy") if isinstance(row.get("policy"), dict) else {}
                 mode = str(policy.get("mode") or "").strip().lower()
                 if mode != "scheduled":
-                    skipped.append({"job_key": str(row.get("job_key") or ""), "reason": f"mode={mode or 'unknown'}"})
+                    skipped.append({"job_id": str(row.get("job_id") or ""), "reason": f"mode={mode or 'unknown'}"})
                     continue
                 if row.get("enabled") is False:
-                    skipped.append({"job_key": str(row.get("job_key") or ""), "reason": "disabled"})
+                    skipped.append({"job_id": str(row.get("job_id") or ""), "reason": "disabled"})
                     continue
                 if not bool(row.get("is_overdue", False)):
-                    skipped.append({"job_key": str(row.get("job_key") or ""), "reason": "not_due"})
+                    skipped.append({"job_id": str(row.get("job_id") or ""), "reason": "not_due"})
                     continue
                 due_rows.append(row)
-            clean_job_keys = [str(r.get("job_key") or "").strip() for r in due_rows if str(r.get("job_key") or "").strip()]
+            clean_job_ids = [str(r.get("job_id") or "").strip() for r in due_rows if str(r.get("job_id") or "").strip()]
             auto_selected = True
             location = "all"
-            if not clean_job_keys:
+            if not clean_job_ids:
                 return {
                     "started": False,
                     "reason": "no_due_jobs",
@@ -2503,7 +2523,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     "skipped_jobs": skipped,
                 }
 
-        from jobs_api import resolve_scripts_dir
+        if not scheduled and not clean_job_ids:
+            jobs = list_jobs(self.config, {})
+            clean_job_ids = [j['job_id'] for j in jobs if j.get('enabled', True)
+                             and (location == 'all' or j.get('location') == location)]
+            if not clean_job_ids:
+                return {'started': False, 'reason': 'no_jobs', 'selected_jobs': []}
+
+        from jobs_api import resolve_scripts_dir, resolve_data_root
         scripts_dir = resolve_scripts_dir(self.config)
         script_path = scripts_dir / "borg_restore_test.py"
         if not script_path.exists():
@@ -2517,8 +2544,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cmd.append("--scheduled")
         if not scheduled:
             cmd.append("--force")
-        for job_key in clean_job_keys:
-            cmd.extend(["--job-key", job_key])
+        for job_id in clean_job_ids:
+            cmd.extend(["--job-id", job_id])
         request_id = str(getattr(self, "_current_request_id", "") or "")
         session = self._get_current_session_meta() or {}
         actor = _normalize_username(session.get("username", ""))
@@ -2532,7 +2559,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             cmd,
             backup_scripts_dir,
             extra_env={
-                "BORG_UI_DATA_ROOT": str(backup_scripts_dir),
+                "BORG_UI_DATA_ROOT": str(resolve_data_root(self.config)),
                 "BORG_UI_APP_VERSION": APP_VERSION,
                 "BORG_UI_REQUEST_ID": request_id,
                 "BORG_UI_REQUEST_SOURCE": source,
@@ -2556,14 +2583,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             run_id=state.get("run_id", ""),
             level=level,
             location=location,
-            selected_jobs=clean_job_keys,
+            selected_jobs=clean_job_ids,
             auto_selected=auto_selected,
         )
         return {
             "started": True,
             "scheduled": scheduled,
             "auto_selected": auto_selected,
-            "selected_jobs": clean_job_keys,
+            "selected_jobs": clean_job_ids,
             "run_id": state.get("run_id", ""),
             "skipped_jobs": skipped,
         }
@@ -2574,20 +2601,21 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _post_run_restore_test_job(self) -> dict:
         from jobs_api import list_jobs
+        from restore_identity import request_job_id
         body = self._read_json_body()
-        job_key = str(body.get("job_key", "")).strip()
-        if not job_key:
-            raise ValueError("job_key is required")
+        job_id = request_job_id(body)
+        if not job_id:
+            raise ValueError("job_id is required")
         requested_level = str(body.get("level", "")).strip()
         effective_level = requested_level
         if not effective_level:
             jobs = list_jobs(self.config, {})
-            row = next((j for j in jobs if str(j.get("key") or "").strip() == job_key), None)
+            row = next((j for j in jobs if str(j.get("job_id") or "").strip() == job_id), None)
             policy = row.get("restore_test_policy") if isinstance(row, dict) and isinstance(row.get("restore_test_policy"), dict) else {}
             policy_level = str(policy.get("level", "")).strip()
             effective_level = policy_level or str(self.config.get("RESTORE_TEST_LEVEL", "2"))
         run_body = {
-            "job_keys": [job_key],
+            "job_ids": [job_id],
             "location": "all",
             "scheduled": False,
             "smb_auto_mount": bool(body.get("smb_auto_mount", True)),
@@ -2597,10 +2625,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _put_restore_test_policy(self) -> dict:
         from restore_tests_api import update_restore_test_policy
+        from restore_identity import request_job_id
         body = self._read_json_body()
-        job_key = str(body.get("job_key", "")).strip()
+        job_id = request_job_id(body)
         policy = body.get("policy")
-        return update_restore_test_policy(self.config, job_key, policy if isinstance(policy, dict) else {})
+        return update_restore_test_policy(self.config, job_id, policy if isinstance(policy, dict) else {})
 
     def _post_test_repo(self) -> dict:
         from config_api import test_repository
@@ -2620,10 +2649,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_restore_precheck(self) -> dict:
         self._require_data_dir_ready()
         from restore_api import restore_precheck
+        from restore_identity import request_job_id
         body = self._read_json_body()
         return restore_precheck(
             self.config,
-            str(body.get("job_key", "")).strip(),
+            request_job_id(body),
             str(body.get("archive", "")).strip(),
             str(body.get("source_path", "")).strip(),
             str(body.get("target_dir", "")).strip(),
@@ -2634,13 +2664,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _post_restore_start(self) -> dict:
         self._require_data_dir_ready()
         from restore_api import start_restore_async
+        from restore_identity import request_job_id
         body = self._read_json_body()
         confirm = bool(body.get("confirm", False))
         if not confirm:
             raise ValueError("Confirmation is required")
         return start_restore_async(
             self.config,
-            str(body.get("job_key", "")).strip(),
+            request_job_id(body),
             str(body.get("archive", "")).strip(),
             str(body.get("source_path", "")).strip(),
             str(body.get("target_dir", "")).strip(),

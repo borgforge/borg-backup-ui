@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from restore_identity_support import JOB_ID, info
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +31,7 @@ def test_restore_runner_supports_scheduled_notifications() -> None:
     assert 'restore_test_success' in source
     assert 'restore_test_failed' in source
     assert 'self._notify_event("restore_test_overdue"' not in source
-    assert 'clear_reminder_prefix(self.conf, f"restore_test_overdue:{job_name}:")' in source
+    assert "restore_test_overdue:{repo['job_id']}:" in source
 
 
 def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) -> None:
@@ -48,7 +49,7 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
             "schema_version": 2,
             "enabled": True,
             "runner": "scriptless-wizard-runner",
-            "job_key": "testjob_usb",
+            "job_key": "testjob_usb", "name": "USB job", "source_paths": [str(tmp_path)],
             "backup_type": "testjob",
             "location": "usb",
             "repository_key": "repo_testjob_usb",
@@ -80,18 +81,20 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
         }],
     }), encoding="utf-8")
 
+    from canonical_wizard_support import canonical_fixture
+    ids = canonical_fixture({"BACKUP_SCRIPTS_DIR": str(tmp_path / "runtime")})
     repos = runner.discover_repos({})
 
     assert [{key: row[key] for key in (
-        "job_key", "type", "location", "path", "encryption", "passphrase_file", "profile_key",
+        "job_id", "type", "location", "path", "encryption", "passphrase_file", "profile_key",
         "mount_before_run", "unmount_after_run",
     )} for row in repos] == [{
-        "job_key": "testjob_usb",
-        "type": "testjob",
+        "job_id": ids["testjob_usb"],
+        "type": "testjob-backup",
         "location": "usb",
         "path": "/mnt/disks/WCJ54TRQ/borg-backup-testjob",
         "encryption": "none",
-        "passphrase_file": "",
+        "passphrase_file": None,
         "profile_key": "usb-5tb",
         "mount_before_run": True,
         "unmount_after_run": True,
@@ -104,6 +107,8 @@ def _restore_test_instance(runner, monkeypatch):
     instance.args = SimpleNamespace(dry_run=False)
     instance.test_level = 1
     instance.conf = {}
+    import restore_api
+    monkeypatch.setattr(restore_api, 'acquire_restore_repository_lock', lambda *a, **kw: SimpleNamespace(release=lambda:None))
     monkeypatch.setattr(instance, "_should_test", lambda _key: True)
     monkeypatch.setattr(instance, "_write", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(instance, "_cleanup_smb_mount", lambda *_args, **_kwargs: None)
@@ -123,8 +128,8 @@ def test_restore_runner_tests_unencrypted_repository_without_passphrase(tmp_path
         return {}
 
     def fake_borg(args, _env, timeout=None):
-        if args[:3] == ["list", "--short", "--last"]:
-            return SimpleNamespace(returncode=0, stdout="archive-1\n", stderr="")
+        if args[:3] == ["list", "--json", "--glob-archives"]:
+            return SimpleNamespace(returncode=0, stdout=json.dumps({"archives":[{"name":"testdata-1","start":"2026-09-06"}]}), stderr="")
         if args[:2] == ["info", "--json"]:
             return SimpleNamespace(returncode=0, stdout=json.dumps({"archives": [{"stats": {}}]}), stderr="")
         raise AssertionError(f"Unexpected Borg call: {args}, timeout={timeout}")
@@ -138,7 +143,7 @@ def test_restore_runner_tests_unencrypted_repository_without_passphrase(tmp_path
     )
 
     result = instance.test_repo({
-        "job_key": "testdata_local",
+        **info(str(repository), prefix="testdata"),
         "type": "testdata",
         "location": "local",
         "path": str(repository),
@@ -173,7 +178,7 @@ def test_restore_runner_keeps_passphrase_requirement_for_encrypted_repository(tm
     monkeypatch.setattr(instance, "log", messages.append)
 
     result = instance.test_repo({
-        "job_key": "testdata_local",
+        **info(str(repository), prefix="testdata"),
         "type": "testdata",
         "location": "local",
         "path": str(repository),
@@ -201,7 +206,7 @@ def test_restore_runner_discovers_smb_profile_repository(tmp_path, monkeypatch) 
             "schema_version": 2,
             "enabled": True,
             "runner": "scriptless-wizard-runner",
-            "job_key": "photos_smb",
+            "job_key": "photos_smb", "name": "SMB job", "source_paths": [str(tmp_path)],
             "backup_type": "photos",
             "location": "smb",
             "repository_key": "repo_photos_smb",
@@ -233,6 +238,8 @@ def test_restore_runner_discovers_smb_profile_repository(tmp_path, monkeypatch) 
         }],
     }), encoding="utf-8")
 
+    from canonical_wizard_support import canonical_fixture
+    ids = canonical_fixture({"BACKUP_SCRIPTS_DIR": str(tmp_path / "runtime")})
     repos = runner.discover_repos({})
 
     assert repos[0]["path"] == "/mnt/remotes/nas-a/borg-backup-photos"
