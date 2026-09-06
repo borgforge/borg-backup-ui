@@ -218,14 +218,23 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
     test_dir = resolve_restore_test_dir(config)
 
     for job in jobs or []:
-        job_key = str(job.get("key") or "").strip()
-        if not job_key:
+        from job_model import validate_job_id
+        try:
+            job_key = validate_job_id(job.get('job_id'))
+        except ValueError:
             continue
 
         policy = _normalize_restore_policy(job.get("restore_test_policy"), job.get("location"), interval_default)
         mode = policy["mode"]
         test_file = test_dir / f"{job_key}.test"
         test_data = _load_test_file(test_file)
+        if test_data.get('job_id') != job_key or test_data.get('identity_state') == 'unassigned':
+            test_data = {}
+        proof_repo = test_data.get('repository_snapshot')
+        proof_prefix = test_data.get('archive_prefix_snapshot')
+        owned_prefixes = job.get('archive_prefixes') or [job.get('archive_prefix')]
+        scope_known = bool(proof_repo and proof_prefix and job.get('repo_path') and any(owned_prefixes))
+        scope_matches = scope_known and proof_repo == job['repo_path'] and proof_prefix in owned_prefixes
 
         status = "never"
         reason = ""
@@ -282,7 +291,12 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
                 status = "failed"
                 reason = "unknown_last_result"
 
+        if test_data and mode != 'off' and not scope_matches:
+            status = 'stale'
+            reason = 'target_changed' if scope_known else 'target_unknown'
+            is_overdue = True
         out[job_key] = {
+            'job_id': job_key,
             "status": status,
             "reason": reason,
             "policy": policy,

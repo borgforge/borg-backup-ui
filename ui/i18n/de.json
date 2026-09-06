@@ -1085,7 +1085,7 @@
     "entryCount": "{count} Einträge",
     "empty": "Keine Backup-Einträge gefunden.",
     "dateTime": "Datum / Zeit",
-    "type": "Typ",
+    "type": "Job",
     "location": "Ort",
     "duration": "Dauer",
     "originalSize": "Originalgröße",
@@ -1129,7 +1129,21 @@
     "stepMetadataCheck": "Metadaten-Check",
     "stepRestoreProbe": "Stichprobe Restore",
     "stepIntegrityCheck": "Integritätsvergleich",
-    "stepCleanup": "Cleanup Testdaten"
+    "stepCleanup": "Cleanup Testdaten",
+    "allJobs": "Alle Jobs",
+    "allHistory": "Gesamter Verlauf",
+    "configured": "Konfigurierte Jobs",
+    "deleted": "Gelöschter Job",
+    "unassigned": "Nicht zugeordneter Verlauf",
+    "scope": "Zuordnung",
+    "currentName": "Aktueller Jobname",
+    "runName": "Name beim Lauf",
+    "jobId": "Job-ID",
+    "runId": "Lauf-ID",
+    "runPrefix": "Präfix beim Lauf",
+    "runRepository": "Repository beim Lauf",
+    "unknownLocation": "Unbekannter Speicherort",
+    "migratedStatus": "Übernommener früherer Lauf"
   },
   "reports": {
     "title": "Berichte",
@@ -1229,7 +1243,11 @@
     "statusSkipped": "Übersprungen",
     "statusCancelled": "Abgebrochen",
     "statusError": "Fehler",
-    "statusUnknown": "Unbekannt"
+    "statusUnknown": "Unbekannt",
+    "configured": "Konfigurierte Jobs",
+    "deleted": "Gelöschter Job",
+    "unassigned": "Nicht zugeordneter Verlauf",
+    "runSnapshot": "Letzter Lauf: {name} · Präfix: {prefix} · Repository: {repository}"
   },
   "restore": {
     "title": "Browse & Restore",
@@ -2757,5 +2775,10 @@
       "advanced": "Erweitert",
       "factoryReset": "Werkseinstellungen"
     }
+  },
+  "identity": {
+    "migratedStatus": "Übernommener früherer Lauf",
+    "target_changed": "Der frühere Restore-Nachweis gilt für ein anderes Repository oder Archivpräfix.",
+    "target_unknown": "Das Repository oder Archivpräfix des früheren Restore-Nachweises ist unbekannt."
   }
 }

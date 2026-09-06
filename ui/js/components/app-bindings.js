@@ -153,6 +153,7 @@
     document.getElementById('repository-lifecycle-name-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
     document.getElementById('repository-lifecycle-phrase-input')?.addEventListener('input', updateRepositoryLifecycleConfirmation);
     document.getElementById('history-filter-type')?.addEventListener('change', applyHistoryFilters);
+    document.getElementById('history-filter-scope')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-location')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('history-filter-status')?.addEventListener('change', applyHistoryFilters);
     document.getElementById('bericht-job-sel')?.addEventListener('change', berichtLoad);

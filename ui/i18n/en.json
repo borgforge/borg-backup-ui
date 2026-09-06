@@ -1085,7 +1085,7 @@
     "entryCount": "{count} entries",
     "empty": "No backup entries found.",
     "dateTime": "Date / time",
-    "type": "Type",
+    "type": "Job",
     "location": "Location",
     "duration": "Duration",
     "originalSize": "Original size",
@@ -1129,7 +1129,21 @@
     "stepMetadataCheck": "Metadata check",
     "stepRestoreProbe": "Restore sample",
     "stepIntegrityCheck": "Integrity comparison",
-    "stepCleanup": "Test data cleanup"
+    "stepCleanup": "Test data cleanup",
+    "allJobs": "All jobs",
+    "allHistory": "All history",
+    "configured": "Configured jobs",
+    "deleted": "Deleted job",
+    "unassigned": "Unassigned history",
+    "scope": "Assignment",
+    "currentName": "Current job name",
+    "runName": "Run-time name",
+    "jobId": "Job-ID",
+    "runId": "Run ID",
+    "runPrefix": "Run-time prefix",
+    "runRepository": "Run-time repository",
+    "unknownLocation": "Unknown location",
+    "migratedStatus": "Migrated earlier run"
   },
   "reports": {
     "title": "Reports",
@@ -1229,7 +1243,11 @@
     "statusSkipped": "Skipped",
     "statusCancelled": "Cancelled",
     "statusError": "Error",
-    "statusUnknown": "Unknown"
+    "statusUnknown": "Unknown",
+    "configured": "Configured jobs",
+    "deleted": "Deleted job",
+    "unassigned": "Unassigned history",
+    "runSnapshot": "Latest run: {name} · Prefix: {prefix} · Repository: {repository}"
   },
   "restore": {
     "title": "Browse & Restore",
@@ -2757,5 +2775,10 @@
       "advanced": "Advanced",
       "factoryReset": "Factory Reset"
     }
+  },
+  "identity": {
+    "migratedStatus": "Migrated earlier run",
+    "target_changed": "The earlier restore proof applies to another repository or archive prefix.",
+    "target_unknown": "The repository or archive prefix of the earlier restore proof is unknown."
   }
 }

@@ -113,6 +113,8 @@ class BackupStatus:
     location_snapshot: str = ""
     file_activity: bool = False
     identity_state: str = "unassigned"
+    identity_reason: str = ""
+    legacy_job_key: str = ""
     # Historical descriptors are read for unassigned/migrated records only.
     backup_type: str = "unknown"
     location: str = "unknown"
@@ -160,6 +162,8 @@ class BackupStatus:
         if not isinstance(obj.run_id, str):
             obj.run_id = ""  # Missing historical IDs remain missing; existing IDs are retained.
         obj.identity_state = str(data.get("identity_state") or ("assigned" if obj.job_id else "unassigned"))
+        obj.identity_reason = str(data.get("identity_reason") or "")
+        obj.legacy_job_key = str(data.get("legacy_job_key") or data.get("job_key") or "")
         obj.file_activity = data.get("file_activity") is True
         obj.backup_type = str(data.get("backup_type", "unknown"))
         obj.location = str(data.get("location", "unknown"))
@@ -457,7 +461,7 @@ class StatusStore:
     def get_latest_per_key(
         self, statuses: Optional[List[BackupStatus]] = None
     ) -> Dict[str, BackupStatus]:
-        """Gibt pro (backup_type_location) den neuesten Status zurück."""
+        """Latest payload-owned run; native runs supersede migrated legacy status."""
         data = statuses if statuses is not None else self._statuses
         latest: Dict[str, BackupStatus] = {}
         for st in data:
@@ -468,8 +472,7 @@ class StatusStore:
             if existing is None:
                 latest[key] = st
             else:
-                # Neuerer Timestamp gewinnt
-                if (st.timestamp or "") > (existing.timestamp or ""):
+                if (valid_uuid(st.run_id), st.timestamp or "", st.run_id) > (valid_uuid(existing.run_id), existing.timestamp or "", existing.run_id):
                     latest[key] = st
         return latest
 

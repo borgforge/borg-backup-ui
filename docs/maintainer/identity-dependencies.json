@@ -300,18 +300,18 @@
       "files": [
         {
           "path": "api/status_api.py",
-          "anchor": "_auto_write_weekly_snapshot",
-          "role": "dashboard aggregation and both live weekly stores; GET path currently writes"
+          "anchor": "get_status_data",
+          "role": "configured job projection, UUID runtime/schedule/proof overlays and canonical weekly observations"
         },
         {
           "path": "api/history_api.py",
-          "anchor": "backup_type",
-          "role": "status filename parser and history selection"
+          "anchor": "get_history_data",
+          "role": "payload ID filters and explicit configured/deleted/unassigned history"
         },
         {
           "path": "api/reports_api.py",
-          "anchor": "job_key",
-          "role": "report discovery and time series joins"
+          "anchor": "job_id",
+          "role": "UUID report navigation and original run snapshots"
         },
         {
           "path": "api/report_mail_api.py",
@@ -325,8 +325,8 @@
         },
         {
           "path": "api/homepage_widget_api.py",
-          "anchor": "job_key",
-          "role": "external widget aggregation"
+          "anchor": "get_status_data",
+          "role": "shared configured-job aggregate without historical ghost jobs"
         },
         {
           "path": "api/unraid_dashboard_widget.py",
@@ -350,13 +350,23 @@
         },
         {
           "path": "ui/js/pages/history.js",
-          "anchor": "job_key",
-          "role": "history labels/filtering without filename-derived identity"
+          "anchor": "job_id",
+          "role": "UUID navigation and historical payload labels"
         },
         {
           "path": "ui/js/pages/reports.js",
           "anchor": "jobKey",
           "role": "report selectors and continuity"
+        },
+        {
+          "path": "api/status_read_model.py",
+          "anchor": "historical_row",
+          "role": "shared strict configured inventory, historical projection and exclusive active counters"
+        },
+        {
+          "path": "api/weekly_snapshots.py",
+          "anchor": "merge_observations",
+          "role": "canonical weekly provenance merge, retained conflicts and repository-scoped growth"
         }
       ]
     },

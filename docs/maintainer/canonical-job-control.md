@@ -77,8 +77,9 @@ any candidate is published. No automatic migration or downgrade is introduced.
 - #475 implements the UUID runner, immutable run snapshots, log/status/recovery
   correlation and shared retention over the prefix union. The RAM activity
   capture from #463 remains intact. See [canonical-job-runtime.md](canonical-job-runtime.md).
-- #476 converts status/dashboard/history consumers of the former `JobInfo.key`
-  and `backup_type` shape; #477 converts restore selection and verification.
+- #476 converts status/dashboard/history consumers to configured UUIDs and
+  historical payload snapshots; see [canonical-status-views.md](canonical-status-views.md).
+  #477 still converts restore selection, execution and result writers.
 - #478 handles historical artifact/secret deletion, transfer and recovery.
   Configuration-only deletion preserves existing logs/status/secrets/scripts.
   Requests to delete artifacts or passphrases stop before any write in this

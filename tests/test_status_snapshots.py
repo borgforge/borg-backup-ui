@@ -16,31 +16,20 @@ if str(RUNTIME_LIB) not in sys.path:
 
 import status_api  # noqa: E402
 import status  # noqa: E402
-from status_api import get_status_data, _auto_write_weekly_snapshot, _import_legacy_snapshot_if_needed  # noqa: E402
+from status_api import get_status_data
+from weekly_snapshots import write_current as _auto_write_weekly_snapshot
+from status_view_fixture_support import job_id_for, write_job, status_identity
+import pytest
+from test_canonical_status_views import observation, snapshot  # noqa: E402
 
 
-def test_weekly_snapshots_import_legacy_once_and_write_only_canonical(tmp_path: Path):
-    status_dir = tmp_path / "status"
-    snapshot_file = tmp_path / "weekly-snapshots.json"
-    legacy_snapshot_file = status_dir / "weekly-snapshots.json"
-    legacy_snapshot_file.parent.mkdir(parents=True)
-    legacy_snapshot_file.write_text(
-        json.dumps({"appdata_local": [{"week": "2026-06-22", "size": 100}]}),
-        encoding="utf-8",
-    )
-
-    _import_legacy_snapshot_if_needed(snapshot_file, legacy_snapshot_file)
-    _auto_write_weekly_snapshot(
-        snapshot_file,
-        {"appdata_local": SimpleNamespace(repository_size=200)},
-        force_write=True,
-    )
-
-    canonical = json.loads(snapshot_file.read_text(encoding="utf-8"))
-    legacy = json.loads(legacy_snapshot_file.read_text(encoding="utf-8"))
-
-    assert canonical["appdata_local"][-1]["size"] == 200
-    assert legacy == {"appdata_local": [{"week": "2026-06-22", "size": 100}]}
+def test_weekly_snapshots_block_unmigrated_input_without_modifying_it(tmp_path):
+    path = tmp_path / 'weekly-snapshots.json'
+    path.write_text(json.dumps({'appdata_local': [{'week': '2026-06-22', 'size': 100}]}))
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match='approved identity migration'):
+        _auto_write_weekly_snapshot(path, {}, force=True)
+    assert path.read_bytes() == before
 
 
 def test_weekly_snapshot_does_not_create_path_below_unmounted_user_share(monkeypatch):
@@ -53,7 +42,7 @@ def test_weekly_snapshot_does_not_create_path_below_unmounted_user_share(monkeyp
         _auto_write_weekly_snapshot(
             Path("/mnt/user/borg_backup_ui/weekly-snapshots.json"),
             {"appdata_local": SimpleNamespace(repository_size=200)},
-            force_write=True,
+            force=True,
         )
 
     mkdir_mock.assert_not_called()
@@ -71,6 +60,8 @@ def _write_status(status_dir: Path, name: str, payload: dict) -> None:
         "status": "success",
         "repository_size": 0,
     }
+    write_job(status_dir.parent, 'appdata_local', name='Appdata')
+    base.update(status_identity(status_dir.parent, 'appdata_local'))
     base.update(payload)
     (status_dir / name).write_text(json.dumps(base), encoding="utf-8")
 
@@ -87,10 +78,10 @@ def test_dashboard_growth_falls_back_to_previous_status_when_snapshot_baseline_m
         "repository_size": 150,
     })
 
-    data = get_status_data({"STATUS_DIR": str(status_dir), "SNAPSHOT_FILE": str(snapshot_file)})
+    data = get_status_data({"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir), "SNAPSHOT_FILE": str(snapshot_file)})
     row = data["backups"][0]
 
-    assert row["key"] == "appdata_local"
+    assert row["job_id"] == job_id_for("appdata_local")
     assert row["growth_bytes"] == 50
     assert row["growth_formatted"] == "+50 B"
 
@@ -98,13 +89,9 @@ def test_dashboard_growth_falls_back_to_previous_status_when_snapshot_baseline_m
 def test_dashboard_growth_prefers_weekly_snapshot_over_previous_status(tmp_path: Path):
     status_dir = tmp_path / "status"
     snapshot_file = tmp_path / "weekly-snapshots.json"
-    snapshot_file.write_text(
-        json.dumps({"appdata_local": [
-            {"week": "2026-06-22", "size": 120},
-            {"week": "2026-06-29", "size": 140},
-        ]}),
-        encoding="utf-8",
-    )
+    snapshot(snapshot_file, [observation(job_id_for('appdata_local'), week, size,
+        repository_snapshot=str(tmp_path / 'repos/local/appdata_local')) for week, size in (
+            ('2026-06-22', 120), ('2026-06-29', 140))])
     _write_status(status_dir, "old.status", {
         "timestamp": "2026-07-01 09:00:00",
         "repository_size": 100,
@@ -114,7 +101,7 @@ def test_dashboard_growth_prefers_weekly_snapshot_over_previous_status(tmp_path:
         "repository_size": 150,
     })
 
-    data = get_status_data({"STATUS_DIR": str(status_dir), "SNAPSHOT_FILE": str(snapshot_file)})
+    data = get_status_data({"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir), "SNAPSHOT_FILE": str(snapshot_file)})
     row = data["backups"][0]
 
     assert row["growth_bytes"] == 10
@@ -123,7 +110,7 @@ def test_dashboard_growth_prefers_weekly_snapshot_over_previous_status(tmp_path:
 
 def test_dashboard_marks_missed_scheduled_backup_overdue(monkeypatch):
     backups = [{
-        "key": "appdata_local",
+        "job_id": job_id_for("appdata_local"),
         "backup_type": "appdata",
         "location": "local",
         "status": "success",
@@ -131,10 +118,10 @@ def test_dashboard_marks_missed_scheduled_backup_overdue(monkeypatch):
     }]
 
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {
-        "appdata_local": {"enabled": True, "cron": "0 14 * * *"},
+        job_id_for("appdata_local"): {"enabled": True, "cron": "0 14 * * *"},
     })
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, ctx: [{
-        "key": "appdata_local",
+        "job_id": job_id_for("appdata_local"),
         "name": "Appdata",
         "enabled": True,
     }])
@@ -153,7 +140,7 @@ def test_dashboard_marks_missed_scheduled_backup_overdue(monkeypatch):
 
 def test_dashboard_keeps_current_scheduled_backup_success(monkeypatch):
     backups = [{
-        "key": "appdata_local",
+        "job_id": job_id_for("appdata_local"),
         "backup_type": "appdata",
         "location": "local",
         "status": "success",
@@ -161,10 +148,10 @@ def test_dashboard_keeps_current_scheduled_backup_success(monkeypatch):
     }]
 
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {
-        "appdata_local": {"enabled": True, "cron": "0 14 * * *"},
+        job_id_for("appdata_local"): {"enabled": True, "cron": "0 14 * * *"},
     })
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, ctx: [{
-        "key": "appdata_local",
+        "job_id": job_id_for("appdata_local"),
         "name": "Appdata",
         "enabled": True,
     }])

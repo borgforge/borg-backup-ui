@@ -27,12 +27,6 @@ async function fetchStatus() {
   return res.json();
 }
 
-async function fetchJobsList() {
-  const res = await fetch('/api/jobs');
-  if (!res.ok) return { jobs: [] };
-  return res.json();
-}
-
 async function fetchSystemHealth() {
   try {
     return await window.BBUI.core.fetchSystemHealth(false);
@@ -58,9 +52,8 @@ async function refreshStatus() {
   hideMessage();
 
   try {
-    const [statusData, jobsData, schedulesData, systemHealth] = await Promise.all([
+    const [statusData, schedulesData, systemHealth] = await Promise.all([
       fetchStatus(),
-      fetchJobsList(),
       fetchDashboardSchedules(),
       fetchSystemHealth(),
     ]);
@@ -68,40 +61,6 @@ async function refreshStatus() {
     window.BBUI.core.setAppCheckIntervalDays(statusData.check_interval_days || 30);
     if (schedulesData) {
       window.BBUI.core.setSchedulesData(schedulesData);
-    }
-
-    const jobMap = {};
-    for (const job of (jobsData.jobs || [])) {
-      const k = String(job.key || '').toLowerCase();
-      if (!k) continue;
-      jobMap[k] = job;
-    }
-
-    const knownKeys = new Set((statusData.backups || []).map(b => String(b.key || '').toLowerCase()));
-    for (const job of (jobsData.jobs || [])) {
-      if (!job.is_utility && !knownKeys.has(String(job.key || '').toLowerCase())) {
-        statusData.backups.push({
-          key:         job.key,
-          backup_type: job.backup_type,
-          location:    job.location,
-          display_name: job.display_name || job.name || '',
-          name:        job.name || job.display_name || '',
-          icon:        job.icon || '',
-          icon_color:  job.icon_color || '',
-          enabled:     job.enabled !== false,
-          never_run:   true,
-        });
-      }
-    }
-
-    for (const b of (statusData.backups || [])) {
-      const job = jobMap[String(b.key || '').toLowerCase()];
-      if (!job) continue;
-      b.enabled = job.enabled !== false;
-      b.display_name = job.display_name || job.name || b.display_name || '';
-      b.name = job.name || job.display_name || b.name || '';
-      b.icon = job.icon || b.icon || '';
-      b.icon_color = job.icon_color || b.icon_color || '';
     }
 
     const coreState = window.BBUI.core.state;
@@ -176,6 +135,8 @@ function renderSummaryBar(summary) {
 
   el.innerHTML = [
     statTile('total',   summary.total,   dashboardT('dashboard.total'), iconGrid()),
+    statTile('running', summary.running || 0, dashboardT('jobs.running'), iconGrid()),
+    statTile('unknown', summary.never || 0, dashboardT('dashboard.neverExecuted'), iconGrid()),
     statTile('success', summary.success, dashboardT('dashboard.successful'), iconCheck()),
     statTile('skipped', summary.skipped || 0, dashboardT('dashboard.skipped'), iconSkip()),
     statTile('warning', summary.warning, dashboardT('dashboard.warnings'), iconWarn()),
@@ -191,6 +152,7 @@ function renderRestoreVerificationSummary(backups) {
     return;
   }
 
+  backups = backups.filter((b) => b.enabled !== false);
   const scoped = backups.filter((b) => String(b.restore_verification_status || '').toLowerCase() !== 'not_required');
   const notRequired = backups.length - scoped.length;
   const verified = scoped.filter((b) => b.restore_verification_status === 'verified').length;
@@ -229,14 +191,13 @@ function renderBackupGrid(backups) {
     return;
   }
 
-  const typeOrder = { flash: 0, appdata: 1, photos: 2, VMs: 3, vms: 3, sonstiges: 4 };
   const visible = backups
     .filter((backup) => dashboardSelectedLocation === 'all' || dashboardLocationKey(backup) === dashboardSelectedLocation)
     .sort((a, b) => {
       const locationDelta = DASHBOARD_LOCATION_ORDER.indexOf(dashboardLocationKey(a))
         - DASHBOARD_LOCATION_ORDER.indexOf(dashboardLocationKey(b));
       if (locationDelta) return locationDelta;
-      return (typeOrder[a.backup_type] ?? 99) - (typeOrder[b.backup_type] ?? 99);
+      return String(a.name || '').localeCompare(String(b.name || ''));
     });
 
   renderDashboardLocationSidebar(backups);
@@ -331,7 +292,9 @@ function updateDashboardSelection(visible) {
 }
 
 function dashboardRunStatus(backup) {
+  if (backup.running) return { cls: 'running', label: dashboardT('jobs.running') };
   if (backup.never_run) return { cls: 'unknown', label: dashboardT('dashboard.neverExecuted') };
+  if (['error', 'failed', 'failure'].includes(backup.status)) return { cls: 'error', label: dashboardT('jobs.statusError') };
   if (backup.backup_overdue) return { cls: 'warning', label: dashboardT('dashboard.backupOverdue') };
   const status = String(backup.status || 'unknown').toLowerCase();
   return {
@@ -347,7 +310,11 @@ function dashboardRunStatus(backup) {
 }
 
 function dashboardRunMessage(backup) {
+  if (backup.running) return { cls: '', text: dashboardT('jobs.running') };
   if (backup.never_run) return { cls: '', text: dashboardT('dashboard.neverExecutedHint') };
+  if (backup.status === 'error') {
+    return { cls: 'error', text: backup.error_message || backup.message || dashboardT('dashboard.backupFailedDetails') };
+  }
   if (backup.backup_overdue) {
     return {
       cls: 'warning',
@@ -355,9 +322,6 @@ function dashboardRunMessage(backup) {
         date: dashboardAbsoluteTimestamp(backup.backup_overdue_after || backup.backup_overdue_expected_run || ''),
       }),
     };
-  }
-  if (backup.status === 'error') {
-    return { cls: 'error', text: backup.error_message || backup.message || dashboardT('dashboard.backupFailedDetails') };
   }
   if (backup.status === 'skipped') {
     const key = `dashboard.skipReasons.${backup.skip_reason_code || 'skipped'}`;
@@ -468,7 +432,9 @@ function renderDashboardRestoreVerificationBadge(backup) {
       ? [dashboardT('dashboard.validUntilLabel'), backup.restore_verification_valid_until]
       : null,
   ].filter(Boolean);
-  const title = details.map(([label, value]) => `${label}: ${value}`).join(' · ');
+  const reason = ['target_changed', 'target_unknown'].includes(backup.restore_verification_reason)
+    ? dashboardT('identity.' + backup.restore_verification_reason) : '';
+  const title = [...details.map(([label, value]) => `${label}: ${value}`), reason].filter(Boolean).join(' · ');
   return `<span class="restore-v-badge ${m.cls}" title="${escHtml(title || m.text)}">${m.text}</span>${details.length ? `<span class="dashboard-restore-facts">${details.map(([label, value]) => `<span class="dashboard-fact-row"><b>${escHtml(label)}:</b><span>${escHtml(value)}</span></span>`).join('')}</span>` : ''}`;
 }
 
@@ -479,14 +445,14 @@ function renderDashboardInventoryRow(backup) {
   let checkStatus = backup.repository_check_status;
   if (checkStatus === 'ok' && isStaleDate(backup.repository_check_date)) checkStatus = 'overdue';
   const checkLabel = checkStatus ? repoCheckLabel({ ...backup, repository_check_status: checkStatus }) : dashboardT('dashboard.checkUnknown');
-  const type = capitalize(backup.backup_type || '—');
+  const type = backup.name || backup.display_name || '—';
   const iconKey = typeof resolveJobIcon === 'function' ? resolveJobIcon(backup) : (backup.icon || backup.backup_type);
   const iconColorKey = typeof resolveJobIconColor === 'function' ? resolveJobIconColor(backup) : '';
   const iconColorClass = iconColorKey ? ` type-icon-color-${iconColorKey}` : '';
-  const identityDetail = backup.archive_name || backup.key || dashboardT('dashboard.neverExecuted');
+  const identityDetail = backup.archive_name || backup.archive_prefix || dashboardT('dashboard.neverExecuted');
   const runTime = dashboardRelativeRunTime(backup.timestamp);
   const runDuration = dashboardRunDuration(backup.duration_seconds);
-  const nextRun = dashboardNextRun(backup.key, backup.enabled);
+  const nextRun = dashboardNextRun(backup.job_id, backup.enabled);
   const runFactRows = [
     ...(!backup.never_run ? [
       [dashboardT('dashboard.lastRunTime'), runTime, ''],
@@ -515,6 +481,7 @@ function renderDashboardInventoryRow(backup) {
       <span><strong class="dashboard-cell-primary">${escHtml(type)}</strong><span class="dashboard-cell-detail mono" title="${escHtml(identityDetail)}">${escHtml(identityDetail)}</span></span>
     </div></td>
     <td><div class="dashboard-table-badges">
+      ${backup.legacy_status ? `<span class="badge unknown">${dashboardT('identity.migratedStatus')}</span>` : ''}
       ${backup.enabled === false ? `<span class="badge warning"><span class="badge-dot"></span>${dashboardT('dashboard.disabled')}</span>` : ''}
       <span class="badge ${run.cls}"><span class="badge-dot"></span>${escHtml(run.label)}</span>
     </div>${runFacts}${message.text ? `<div class="dashboard-table-message ${message.cls}">${escHtml(message.text)}</div>` : ''}</td>

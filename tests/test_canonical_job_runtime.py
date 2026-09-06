@@ -239,14 +239,16 @@ def test_real_runner_creates_exact_archive_and_retains_run_status(setup, monkeyp
     monkeypatch.setenv('BORG_UI_DATA_ROOT', str(root))
     monkeypatch.setenv('UNRAID_DASHBOARD_WIDGET_FILE', str(root / 'widget.json'))
     repo = Path(snapshot['repository_snapshot']); repo.parent.mkdir(parents=True)
-    result = subprocess.run(['borg','init','--encryption=none',str(repo)],capture_output=True,text=True,timeout=30)
+    # Repository-local durable I/O can exceed 30 seconds on slow development
+    # filesystems even before plugin execution starts (#476).
+    result = subprocess.run(['borg','init','--encryption=none',str(repo)],capture_output=True,text=True,timeout=120)
     assert result.returncode == 0, result.stderr
     manager = JobManager.get()
     ok, error = manager.start(snapshot['job_id'], [sys.executable,str(ROOT / 'api/wizard_runner.py')], root,
         {'BORG_UI_BORG_SCRIPTS_DIR':str(setup[2])}, run_context=snapshot)
     assert ok, error
     state = manager._states[snapshot['job_id']]
-    deadline = time.monotonic() + 40
+    deadline = time.monotonic() + 180
     while not state.finished and time.monotonic() < deadline:
         time.sleep(.02)
     if not state.finished:

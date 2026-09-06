@@ -412,14 +412,14 @@
         <section class="history-workspace ui-workspace">
           <header class="ui-workspace-header"><div class="ui-workspace-header__title"><small data-i18n="history.selection">Auswahl</small><h2 id="history-selection-title" data-i18n="history.allLocations">Alle Standorte</h2><span class="ui-workspace-header__subtitle" data-i18n="history.workspaceSubtitle">Backup-Läufe und Restore-Testberichte</span></div><span id="history-selection-count" class="ui-badge"></span></header>
       <div class="history-filters ui-filter-bar">
-        <select class="history-filter-select" id="history-filter-type">
-          <option value="" data-i18n="history.allTypes">Alle Typen</option>
-          <option value="flash">Flash</option>
-          <option value="appdata">Appdata</option>
-          <option value="photos">Photos</option>
-          <option value="vms">VMs</option>
-          <option value="sonstiges" data-i18n="history.other">Sonstiges</option>
-          <option value="custom">Custom</option>
+        <select class="history-filter-select" id="history-filter-type" aria-label="Job" data-i18n-aria-label="history.job">
+          <option value="" data-i18n="history.allJobs">Alle Jobs</option>
+        </select>
+        <select class="history-filter-select" id="history-filter-scope" data-i18n-aria-label="history.scope">
+          <option value="all" data-i18n="history.allHistory">Gesamter Verlauf</option>
+          <option value="configured" data-i18n="history.configured">Konfigurierte Jobs</option>
+          <option value="deleted" data-i18n="history.deleted">Gelöschte Jobs</option>
+          <option value="unassigned" data-i18n="history.unassigned">Nicht zugeordneter Verlauf</option>
         </select>
         <select class="history-filter-select history-location-contract" id="history-filter-location" aria-hidden="true" tabindex="-1">
           <option value="" data-i18n="history.allLocations">Alle Standorte</option>
@@ -427,6 +427,7 @@
           <option value="usb">USB</option>
           <option value="smb">SMB</option>
           <option value="storagebox" data-i18n="jobs.locationStoragebox">Storagebox</option>
+          <option value="unknown" data-i18n="history.unknownLocation">Unbekannter Speicherort</option>
         </select>
         <select class="history-filter-select" id="history-filter-status">
           <option value="" data-i18n="history.allStatuses">Alle Status</option>
@@ -497,6 +498,7 @@
       </div>
 
       <div id="bericht-body" style="display:none">
+        <p id="report-run-snapshot" class="ui-muted" style="overflow-wrap:anywhere"></p>
         <section class="report-metric-ledger">
           <header><div><strong data-i18n="reports.metricsTitle">Berichtskennzahlen</strong><small data-i18n="reports.metricsSubtitle">Kompakte Zusammenfassung des ausgewählten Jobs</small></div><span id="br-run-badge" class="ui-badge"></span></header>
           <div class="report-ledger-columns">

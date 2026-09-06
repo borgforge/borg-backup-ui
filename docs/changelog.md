@@ -6,6 +6,18 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #476 (integration work for #447; not released)
+- Made configured UUIDs authoritative for dashboard, widget, history and report
+  navigation; disabled and deleted/unassigned history do not inflate active counts.
+- Preserved historical payload descriptors and legacy continuity until the first
+  native run. Runtime ownership takes precedence over completed-run outcomes.
+- Added canonical weekly observations with provenance, preserved conflicts and
+  repository-scoped growth; normal reads never perform a legacy conversion.
+- Scoped restore proof to UUID and the recorded target, retained reminder keys
+  across renames, and invalidated legacy widget aggregates.
+- Added DE/EN navigation/counter tests and canonical status, weekly, mail and
+  HTTP regressions. Restore, transfer and guarded activation remain #477-#479.
+
 ### Issue #475 (integration work for #447; not released)
 - Added immutable UUID run contexts for manual/scheduled backup execution, exact
   prefix creation, status/log lookup, cancellation, recovery and notifications.

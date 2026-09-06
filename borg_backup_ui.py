@@ -2000,8 +2000,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from history_api import get_history_data
         from urllib.parse import parse_qs
         qs = parse_qs(query_string)
+        if 'type' in qs or any(len(qs.get(key, [])) > 1 for key in ('job_id', 'scope')):
+            raise ValueError('Use one canonical history job_id and scope')
         filters = {
-            "type": (qs.get("type") or [""])[0].lower() or None,
+            "job_id": (qs.get("job_id") or [""])[0],
+            "scope": (qs.get("scope") or ["all"])[0],
             "location": (qs.get("location") or [""])[0].lower() or None,
             "status": (qs.get("status") or [""])[0].lower() or None,
             "page": (qs.get("page") or ["1"])[0],
@@ -2091,19 +2094,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from reports_api import get_report_data
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
-        job_key = (qs.get("job") or [""])[0]
-        if not job_key:
-            raise ValueError("job parameter is required")
-        return get_report_data(self.config, job_key)
+        if any(len(qs.get(key, [])) > 1 for key in ('job_id', 'scope')):
+            raise ValueError('Only one report identity is allowed')
+        return get_report_data(self.config, (qs.get('job_id') or [''])[0], scope=(qs.get('scope') or [''])[0])
 
     def _get_repo_stats(self, qs_str: str) -> dict:
         self._require_data_dir_ready()
         from restore_api import get_repo_stats
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
-        job_key = (qs.get("job") or [""])[0]
-        if not job_key:
-            raise ValueError("job parameter is required")
+        from job_model import validate_job_id
+        if 'job' in qs or len(qs.get('job_id', [])) != 1:
+            raise ValueError('One canonical job_id is required')
+        job_key = validate_job_id(qs['job_id'][0])
         return get_repo_stats(self.config, job_key)
 
     def _get_restore_target_dirs(self, qs_str: str) -> dict:

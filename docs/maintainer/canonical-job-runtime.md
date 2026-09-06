@@ -39,7 +39,8 @@ code and statistics. Filenames use a bounded readable slug, short job UUID and
 full run UUID. New writes never overwrite an existing status. Legacy status
 filenames/bytes remain unchanged. Only payload job IDs group records; missing
 historical run IDs remain missing and unassigned history cannot create a job.
-The remaining dashboard/report/history presentation is converted in #476.
+Dashboard/report/history presentation is converted in #476; see
+[canonical-status-views.md](canonical-status-views.md).
 
 Log requests use `job_id` and `run_id`. SSE stays pinned to the selected run;
 starting another run never retargets an open stream. Completed run references
