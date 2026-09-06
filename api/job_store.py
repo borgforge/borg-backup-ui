@@ -104,6 +104,8 @@ def write_transaction(changes, *, after_write=None, rollback_after=None):
         for path, payload in changes.items():
             if payload is None:
                 Path(path).unlink(missing_ok=True)
+            elif isinstance(payload, bytes):
+                atomic_write_bytes(Path(path), payload)
             else:
                 atomic_write_json(Path(path), payload)
         if after_write:

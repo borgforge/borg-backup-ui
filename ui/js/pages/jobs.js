@@ -796,26 +796,21 @@ async function showDeleteJobModal(jobKey, displayName, typeId, location) {
       </svg>
       <span class="modal-info-text">${jobsT('jobs.deleteKeepsRepository')}</span>
     </div>`;
-  document.getElementById('modal-info').innerHTML += `
-    <label class="form-checkbox-row" style="margin-top:10px">
-      <input type="checkbox" id="modal-delete-artifacts">
-      ${jobsT('jobs.deleteArtifacts')}
-    </label>`;
-
   const pwWrap = document.getElementById('modal-passphrase-delete-wrap');
-  const pwCb   = document.getElementById('modal-delete-passphrase');
-  const pwPath = document.getElementById('modal-delete-passphrase-path');
+  const pwCb = document.getElementById('modal-delete-passphrase');
   pwWrap.classList.add('hidden');
   pwCb.checked = false;
-  if (typeId) {
-    try {
-      const res  = await fetch(`/api/wizard/passphrase-check?type_id=${encodeURIComponent(typeId)}&location=${encodeURIComponent(location || '')}`);
-      const data = await res.json();
-      if (data.exists) {
-        pwPath.textContent = data.path;
-        pwWrap.classList.remove('hidden');
-      }
-    } catch (_) {}
+  try {
+    const response = await fetch('/api/jobs/delete-preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: jobKey }),
+    });
+    const preview = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(preview, response.status));
+    document.getElementById('modal-info').innerHTML += `<p>${jobsT('jobs.deleteExactHistory')}</p>` +
+      (preview.artifacts || []).map((item) => `<label class="form-checkbox-row"><input type="checkbox" data-delete-artifact="${escHtml(item.id)}">${escHtml(item.file)} ${escHtml(item.run_id || '')}</label>`).join('');
+  } catch (error) {
+    showJobsError(error.message);
+    return;
   }
 
   const wrap = document.getElementById('modal-confirm-input-wrap');
@@ -875,14 +870,13 @@ async function confirmJobCancel() {
 async function confirmJobDelete() {
   const jobKey = jobsState.pendingDeleteJobKey;
   if (!jobKey) return;
-  const deletePassphrase = document.getElementById('modal-delete-passphrase').checked;
-  const deleteArtifacts = document.getElementById('modal-delete-artifacts')?.checked || false;
+  const confirmedArtifacts = Array.from(document.querySelectorAll('[data-delete-artifact]:checked'), (el) => el.dataset.deleteArtifact);
   closeModal({ force: true });
   try {
     const res = await fetch('/api/jobs', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: jobKey, delete_passphrase: deletePassphrase, delete_artifacts: deleteArtifacts }),
+      body: JSON.stringify({ job_id: jobKey, confirmed_artifacts: confirmedArtifacts }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
@@ -894,7 +888,7 @@ async function confirmJobDelete() {
       data.deleted_passphrase   ? jobsT('jobs.passphraseFile') : '',
     ].filter(Boolean).join(', ');
     showMsg('jobs-message', 'success',
-      jobsT('jobs.deleted', { filename: data.filename, extra: extra ? ` · ${extra}` : '' }));
+      jobsT('jobs.deleted', { filename: jobKey, extra: extra ? ` · ${extra}` : '' }));
   } catch (err) {
     showJobsError(jobsT('jobs.deleteFailed', { message: err.message }));
   }

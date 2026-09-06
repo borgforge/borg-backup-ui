@@ -691,7 +691,8 @@
     "activityLogDownload": "Vollständiges Log herunterladen",
     "activityLogComplete": "Alle Einträge bleiben erhalten. Beim Scrollen werden weitere Abschnitte geladen. Die Browsersuche durchsucht nur den geladenen Abschnitt.",
     "activityLogSaveFailed": "Das Log konnte nicht ins Logverzeichnis gespeichert werden. Es liegt weiterhin im RAM. Bitte vor einem Serverneustart das vollständige Log herunterladen.",
-    "activityLogEnded": "Lauf beendet; Exit-Code nicht verfügbar"
+    "activityLogEnded": "Lauf beendet; Exit-Code nicht verfügbar",
+    "deleteExactHistory": "Die Historie bleibt erhalten, sofern unten keine einzelnen Einträge ausgewählt werden. Bei Wiederherstellungen müssen Indexeintrag und Detaildatei gemeinsam ausgewählt werden. Repository-Secrets bleiben erhalten."
   },
   "schedule": {
     "title": "Zeitplan",
@@ -2261,7 +2262,15 @@
       "secretImportSkipExisting": "Vorhandene Dateien überspringen",
       "secretImportOverwriteExisting": "Vorhandene Dateien ersetzen",
       "profilesImportOk": "Profile+Secrets Import OK: {count} Dateien",
-      "profilesImportFailed": "Profile+Secrets Import fehlgeschlagen: {message}"
+      "profilesImportFailed": "Profile+Secrets Import fehlgeschlagen: {message}",
+      "explicitIdentityHelp": "Neue Jobs erhalten neue IDs. Zum Zusammenführen muss ein Zieljob gewählt werden. Dessen ID bleibt erhalten. Für eine Kopie im selben Repository ist ein eigener Archivpräfix erforderlich.",
+      "newIdentity": "Mit neuer ID anlegen",
+      "mergeIdentity": "In gewählten Job übernehmen",
+      "skipIdentity": "Überspringen",
+      "explicitTarget": "Zieljob zum Zusammenführen",
+      "chooseTarget": "Ziel ausdrücklich auswählen",
+      "newPrefix": "Archivpräfix (optional ändern)",
+      "legacyJobScope": "Dieser ältere Export wird für den Job-Import umgewandelt. Importiert werden nur die ausgewählten Jobs und ihre Repository-, Speicher- und Zeitplan-Abhängigkeiten. Globale Einstellungen und Dienstzeitpläne bleiben separat."
     },
     "forms": {
       "smtpTitle": "E-Mail (SMTP)",
@@ -2767,7 +2776,10 @@
       "registryBorgKeyfilesTitle": "Persistente Borg-Keyfiles",
       "registryBorgKeyfilesApplied": "Passende Borg-Keyfiles wurden in den geschützten Plugin-Speicher übernommen.",
       "registryBorgKeyfilesCurrent": "Keine Keyfile-Übernahme erforderlich.",
-      "registryBorgKeyfilesPending": "Vorhandene Borg-Keyfiles müssen in den geschützten Plugin-Speicher übernommen werden."
+      "registryBorgKeyfilesPending": "Vorhandene Borg-Keyfiles müssen in den geschützten Plugin-Speicher übernommen werden.",
+      "identityIntegrity": "Integrität der Job-IDs",
+      "identityOk": "Keine aktiven ID-Fehler gefunden.",
+      "identityNeedsReview": "Die gemeldeten Dateien und Verweise vor Konfigurationsänderungen prüfen."
     },
     "tabs": {
       "general": "Allgemein",

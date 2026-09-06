@@ -430,17 +430,17 @@
       "files": [
         {
           "path": "api/settings_transfer_api.py",
-          "anchor": "bbui-job-bundle-v2",
-          "role": "export/import collision rewrite and backup.conf restore"
+          "anchor": "import_jobs_bundle",
+          "role": "Canonical v3 job transfer boundary; authenticated envelopes and explicit separate profile/secrets transfer"
         },
         {
           "path": "api/factory_reset_api.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "explicit destructive scope and store enumeration"
         },
         {
           "path": "api/system_health_api.py",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "integrity and ownership diagnostics"
         },
         {
@@ -455,8 +455,23 @@
         },
         {
           "path": "ui/js/pages/settings.js",
-          "anchor": "job_key",
+          "anchor": "job_id",
           "role": "partial transfer, selected jobs, settings restore and diagnostics"
+        },
+        {
+          "path": "api/job_transfer.py",
+          "anchor": "plan_import",
+          "role": "ID-only partial transfer plans, complete references and protected-file transactions"
+        },
+        {
+          "path": "api/identity_lifecycle.py",
+          "anchor": "legacy_job_key",
+          "role": "Closed owned-store registry; typed remapping, exact history confirmation and legacy diagnostic boundary"
+        },
+        {
+          "path": "api/legacy_job_transfer.py",
+          "anchor": "job_key",
+          "role": "Bounded legacy v2 import conversion using temporary source selectors and pure migration metadata projection; no live alias matching"
         }
       ]
     },

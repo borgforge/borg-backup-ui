@@ -35,7 +35,8 @@ def _now() -> str:
 
 
 def _data_root(config: dict) -> Path:
-    return Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
+    from jobs_api import resolve_data_root
+    return resolve_data_root(config)
 
 
 def _configured_operational_root(config: dict) -> Path | None:
@@ -119,11 +120,13 @@ def _active_operation_blockers(config: dict) -> list[dict[str, str]]:
 
         locked_jobs: set[str] = set()
         for row in active_resource_locks(config):
-            job_key = str(row.get("job_key") or "Backup job")
-            locked_jobs.add(job_key)
+            job_id = str(row.get("job_id") or "Backup job")
+            locked_jobs.add(job_id)
             blockers.append({
                 "type": "backup",
-                "name": job_key,
+                "name": job_id,
+                "job_id": str(row.get("job_id") or ""),
+                "run_id": str(row.get("run_id") or ""),
             })
         for key, state in JobManager.get().get_all_states().items():
             if key == "restore_test" or key in locked_jobs:
@@ -154,7 +157,7 @@ def _active_operation_blockers(config: dict) -> list[dict[str, str]]:
         for row in list_restore_runs(config, 100).get("active", []):
             blockers.append({
                 "type": "restore",
-                "name": str(row.get("restore_id") or row.get("job_key") or "restore"),
+                "name": str(row.get("restore_id") or row.get("job_id") or "restore"),
             })
     except Exception as exc:
         raise FactoryResetBlocked(f"Restore state cannot be verified: {exc}") from exc
@@ -178,6 +181,12 @@ def factory_reset_status(config: dict) -> dict[str, Any]:
         roots.append(operational)
     repository_blockers = _repository_blockers(config, roots)
     operation_blockers = _active_operation_blockers(config)
+    from identity_lifecycle import owned_paths
+    outside = [name for name, (path, _) in owned_paths(config).items()
+               if path.exists() and not any(_inside(path, item) for item in roots)]
+    if outside:
+        raise FactoryResetBlocked("Identity stores are outside the confirmed reset roots; relocate them before reset: " + ", ".join(outside[:8]))
+
     return {
         "ok": True,
         "server_name": socket.gethostname(),

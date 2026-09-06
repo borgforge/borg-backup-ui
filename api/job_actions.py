@@ -96,7 +96,7 @@ def set_job_enabled(config, job_id, enabled):
         return {"saved": True, "job_id": job_id, "enabled": enabled}
 
 
-def delete_job_configuration(config, job_id):
+def delete_job_configuration(config, job_id, *, confirmed_artifacts=None, preview=False):
     """Remove exactly one job, its reverse links and schedule, preserving artifacts."""
     from repository_context import jobs_dir
     from repositories_api import repositories_file
@@ -106,6 +106,13 @@ def delete_job_configuration(config, job_id):
         jobs, store = _inventory(config)
         if job_id not in jobs:
             raise JobValidationError("unknown_job_id", "Unknown job_id")
+        from identity_lifecycle import deletion_plan
+        from jobs_api import get_job_runtime_state
+        if get_job_runtime_state(config, job_id).get("running"):
+            raise JobValidationError("job_running", "Wait for the running job before deleting it")
+        plan = deletion_plan(config, job_id, confirmed_artifacts)
+        if preview:
+            return {"job_id": job_id, "name": jobs[job_id]["name"], "artifacts": plan["artifacts"], "repository_preserved": True}
         schedules = get_schedules(config)
         old_lines = schedule_lines(config, schedules, jobs)
         del jobs[job_id]
@@ -116,9 +123,10 @@ def delete_job_configuration(config, job_id):
         validate_assignments(jobs, store)
         new_lines = schedule_lines(config, schedules, jobs)
         write_transaction({
+            **plan["changes"],
             jobs_dir(config) / (job_id + ".json"): None,
             repositories_file(config): store,
             _schedules_path(config): schedules,
         }, after_write=lambda: _update_crontab(new_lines),
            rollback_after=lambda: _update_crontab(old_lines))
-        return {"deleted": True, "job_id": job_id, "deleted_metadata": 1, "deleted_artifacts": False}
+        return {"deleted": True, "job_id": job_id, "deleted_metadata": 1, "deleted_artifacts": plan["deleted_count"]}

@@ -1280,11 +1280,12 @@ function renderSettingsSystemHealth(data) {
   ];
   const assignmentDetail = assignments.ok
     ? settingsT('health.repositoryAssignmentsOk')
-    : (assignmentProblems.map((row) => String(row?.message || row?.job_key || row?.repository_key || '')).filter(Boolean).join(' | ')
+    : (assignmentProblems.map((row) => String(row?.message || row?.job_id || row?.repository_key || '')).filter(Boolean).join(' | ')
       || settingsT('health.repositoryAssignmentsFailed'));
   const checks = [
     [settingsT('health.dataRoot'), data?.checks?.data_root_ok, data?.paths?.data_root || '—'],
     [settingsT('health.jobsPath'), data?.checks?.jobs_path_ok, data?.paths?.jobs || '—'],
+    [settingsT('health.identityIntegrity'), data?.identity_integrity?.ok !== false, ''],
     [settingsT('health.secretsPath'), data?.checks?.secrets_path_ok, data?.paths?.secrets || '—'],
     [settingsT('health.mountAvailable'), data?.checks?.mount_bin_ok, `${data?.paths?.mount_bin || '—'} | ${data?.paths?.umount_bin || '—'}`],
     [settingsT('health.cifsSupport'), data?.checks?.cifs_supported, cifsDetail],
@@ -1382,6 +1383,9 @@ function renderSettingsSystemHealth(data) {
         </div>
 
         <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.identityIntegrity')}</div>
+          <p>${settingsT(data?.identity_integrity?.ok ? 'health.identityOk' : 'health.identityNeedsReview')}</p>
+          <ul>${(data?.identity_integrity?.findings || []).slice(0, 30).map((row) => `<li>${escHtml(row.code)} · ${escHtml(row.category)} · ${escHtml(row.file || '')} ${escHtml(row.job_id || '')}</li>`).join('')}</ul>
           <div class="system-health-block-title">${settingsT('health.jobs')}</div>
           ${_renderJobHealthOverview(jobSummary, jobItems)}
         </div>
@@ -1541,7 +1545,7 @@ function _renderReminderTableRow(item) {
   return `
     <tr>
       <td>
-        <strong class="reminder-job-name" ${reminderKey ? `title="${escHtml(reminderKey)}"` : ''}>${escHtml(String(item?.display_name || item?.job_key || 'Job'))}</strong>
+        <strong class="reminder-job-name" ${reminderKey ? `title="${escHtml(reminderKey)}"` : ''}>${escHtml(String(item?.display_name || item?.job_id || 'Job'))}</strong>
       </td>
       <td><span class="badge reminder-state-badge ${escHtml(tone)}">${escHtml(_reminderStateLabel(state))}</span></td>
       <td class="reminder-date-cell">
@@ -1685,7 +1689,7 @@ function _renderJobHealthProblems(items) {
     return `
       <div class="migration-action-row ${escHtml(String(item?.state || 'bad'))}">
         <div>
-          <strong>${escHtml(String(item?.name || item?.job_key || 'Job'))}</strong>
+          <strong>${escHtml(String(item?.name || item?.job_id || 'Job'))}</strong>
           <span>${escHtml(details || settingsT('health.checkFailed'))}</span>
         </div>
       </div>
@@ -2713,7 +2717,7 @@ function renderJobsImportPreview(d) {
   const rows = Array.isArray(d?.jobs) ? d.jobs : [];
   const sp = d?.settings_preview || null;
   if (!rows.length && !(sp && sp.present)) return '';
-  const securePreview = String(d?.secure_format || '') === 'bbui-job-bundle-secure-v2';
+  const securePreview = ['bbui-job-bundle-secure-v2', 'bbui-job-bundle-secure-v3'].includes(String(d?.secure_format || ''));
   const stats = rows.reduce((acc, r) => {
     const c = String(r?.conflict || 'new');
     acc.total += 1;
@@ -2767,8 +2771,8 @@ function renderJobsImportPreview(d) {
         })[r?.passphrase?.status || 'unknown'] || settingsT('transfer.unknown');
         return `<tr>
           <td><input type="checkbox" data-job-preview-select="${idx}" ${r.conflict === 'invalid' ? 'disabled' : 'checked'}></td>
-          <td>${escHtml(r.name || r.job_key || '')}</td>
-          <td>${escHtml(r.backup_type || '—')}</td>
+          <td>${escHtml(r.name || r.job_id || '')}</td>
+          <td>${escHtml(r.job_id || '—')}</td>
           <td>${escHtml(r.location || '—')}</td>
           <td>${escHtml(sch)}</td>
           <td>${escHtml(feats)}</td>
@@ -2776,7 +2780,7 @@ function renderJobsImportPreview(d) {
           <td>${escHtml(pp)}</td>
           <td>
             <select class="form-select" data-job-preview-mode="${idx}" style="width:140px">
-              ${['skip','overwrite','rename'].map(m => `<option value="${m}" ${(r.suggested_mode || 'skip') === m ? 'selected' : ''}>${m}</option>`).join('')}
+              <option value="new">${settingsT('transfer.newIdentity')}</option>
             </select>
           </td>
         </tr>`;
@@ -3352,30 +3356,16 @@ async function importJobsBundle(dryRun) {
   hideEl('settings-transfer-msg');
   try {
     const picked = await _pickFileText();
-    const text = picked.content;
-    const modeRaw = await _openSettingsDialog({
-      title: settingsT('transfer.importJobsTitle'),
-      message: settingsT('transfer.importModePrompt'),
-      input: { label: settingsT('transfer.importMode'), value: 'skip', placeholder: 'skip | overwrite | rename', validate: (v) => ['skip', 'overwrite', 'rename'].includes((v || '').trim()) },
-      confirmText: dryRun ? settingsT('transfer.checkAction') : settingsT('transfer.importAction'),
-    });
-    if (!modeRaw) return;
-    const mode = modeRaw.trim();
-    const res = await fetch('/api/settings/jobs-import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bundle_text: text, mode, dry_run: !!dryRun }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
-    const lines = (data.report || []).slice(0, 10).map(r => `${r.job_key || '-'} -> ${r.new_job_key || r.job_key || '-'} [${r.status}]`);
-    const summary = `Jobs: ${data.imported_count || 0}, Schedules: ${data.scheduled_count || 0}`;
-    const suffix = lines.length ? `\n${lines.join('\n')}` : '';
-    showMsg('settings-transfer-msg', dryRun ? 'warning' : 'success', `${dryRun ? settingsT('transfer.checkOk') : settingsT('transfer.importOk')}: ${summary}${suffix}`);
-    if (!dryRun) await refreshSettings();
-  } catch (err) {
-    showMsg('settings-transfer-msg', 'error', settingsT('transfer.importFailed', { message: err.message }));
-  }
+    const response = await fetch('/api/settings/jobs-import-preview', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bundle_text: picked.content }) });
+    const preview = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(preview, response.status));
+    settingsState.transferJobsPreview = preview;
+    settingsState.transferJobsBundleText = picked.content;
+    settingsState.transferJobsSecureMode = false;
+    if (!dryRun) await importJobsApplySelected({ fileName: picked.name });
+    else showMsg('settings-transfer-msg', 'success', settingsT('transfer.checkOk'));
+  } catch (error) { showMsg('settings-transfer-msg', 'error', error.message); }
 }
 
 async function importJobsPreviewSelectFile() {
@@ -3455,7 +3445,7 @@ async function importJobsSecurePreviewSelectFile() {
 
 function settingsTransferImportableJobRows(preview) {
   return (Array.isArray(preview?.jobs) ? preview.jobs : [])
-    .filter((row) => row && row.conflict !== 'invalid' && String(row.job_key || '').trim());
+    .filter((row) => row && row.conflict !== 'invalid' && String(row.job_id || '').trim());
 }
 
 function settingsTransferJobStatusLabel(row) {
@@ -3478,14 +3468,12 @@ function settingsTransferPassphraseStatusLabel(row) {
 }
 
 function settingsTransferJobSubline(row) {
-  const location = String(row?.location || '').trim();
-  const type = String(row?.backup_type || '').trim();
-  return [location, type && type !== location ? type : ''].filter(Boolean).join(' · ') || String(row?.job_key || '');
+  return [row?.job_id, row?.repository_key].filter(Boolean).join(' · ');
 }
 
 function settingsTransferJobByKey(preview, key) {
   return (Array.isArray(preview?.jobs) ? preview.jobs : [])
-    .find((row) => String(row?.job_key || '').trim() === String(key || '').trim()) || null;
+    .find((row) => String(row?.job_id || '').trim() === String(key || '').trim()) || null;
 }
 
 function settingsTransferImportScopeLabel(scope) {
@@ -3503,15 +3491,6 @@ function settingsTransferImportKindLabel(kind) {
   })[kind] || settingsT('transfer.importKindSelective');
 }
 
-function settingsTransferJobModeLabel(mode, row) {
-  if (String(row?.conflict || '') !== 'exists') return settingsT('transfer.jobImportCreateNew');
-  return ({
-    skip: settingsT('transfer.jobImportSkipExisting'),
-    overwrite: settingsT('transfer.jobImportOverwriteExisting'),
-    rename: settingsT('transfer.jobImportRenameExisting'),
-  })[mode] || settingsT('transfer.jobImportSkipExisting');
-}
-
 function settingsTransferScopeIncludesJobs(scope) {
   return scope === 'all' || scope === 'jobs_only';
 }
@@ -3523,37 +3502,6 @@ function settingsTransferScopeIncludesPassphrases(scope) {
 function settingsTransferRepositoryName(row) {
   const repo = row?.repository || {};
   return String(repo.display_name || repo.repository_name || row?.repository_key || '').trim() || settingsT('transfer.unknown');
-}
-
-function settingsTransferPlannedActionLines(row, scope, rowModes) {
-  const jobKey = String(row?.job_key || '').trim();
-  const jobName = String(row?.name || jobKey).trim() || jobKey;
-  const conflict = String(row?.conflict || 'new');
-  const mode = String(rowModes?.[jobKey] || 'skip');
-  const lines = [];
-  if (settingsTransferScopeIncludesJobs(scope)) {
-    if (conflict !== 'exists') {
-      lines.push(settingsT('transfer.planJobCreate', { job: jobName }));
-    } else if (mode === 'overwrite') {
-      lines.push(settingsT('transfer.planJobOverwrite', { job: jobName }));
-    } else if (mode === 'rename') {
-      lines.push(settingsT('transfer.planJobCopy', { job: jobName }));
-    } else {
-      lines.push(settingsT('transfer.planJobSkip', { job: jobName }));
-    }
-  } else {
-    lines.push(settingsT('transfer.planJobUnchanged', { job: jobName }));
-  }
-
-  if (settingsTransferScopeIncludesPassphrases(scope)) {
-    const path = String(row?.passphrase?.bundle?.path || '').trim();
-    if (path) {
-      const exists = !!row?.passphrase?.local;
-      lines.push(settingsT(exists ? 'transfer.planPassphraseReplace' : 'transfer.planPassphraseCreate', { path }));
-    }
-  }
-
-  return lines;
 }
 
 function renderSettingsTransferStepper(step, total = 3) {
@@ -3622,201 +3570,38 @@ function renderSettingsTransferKindStep(preview, fileName) {
 }
 
 function renderSettingsTransferSelectAndActionStep(preview, rows, fileName, kind = 'selective') {
-  const complete = String(kind || '') === 'complete';
-  const selectedRows = complete ? rows : [];
-  const existingCount = (complete ? selectedRows : rows).filter((row) => String(row?.conflict || '') === 'exists').length;
-  return `
-    ${renderSettingsTransferStepHeader(2, settingsT('transfer.importStepSelectTitle'), settingsT(complete ? 'transfer.importStepCompleteActionText' : 'transfer.importStepSelectText'), 3)}
+  return `${renderSettingsTransferStepHeader(2, settingsT('transfer.importStepSelectTitle'), settingsT('transfer.explicitIdentityHelp'), 3)}
     ${renderSettingsTransferFileSummary(preview, fileName)}
-    ${complete ? `
-      <div class="settings-transfer-info-box">
-        <strong>${settingsT('transfer.importKindComplete')}</strong>
-        <span>${settingsT('transfer.importKindCompleteReview')}</span>
-      </div>
-    ` : `
-      <div class="settings-transfer-job-toolbar">
-        <input class="form-input" type="search" placeholder="${escHtml(settingsT('transfer.jobSearchPlaceholder'))}" data-jobs-secure-search>
-        <span id="jobs-secure-selection-count" class="settings-transfer-chip">${settingsT('transfer.selectedJobsCount', { count: 0 })}</span>
-      </div>
-      <div class="settings-transfer-job-list">
-        ${rows.map((row) => {
-          const jobKey = String(row?.job_key || '').trim();
-          return `<label class="settings-transfer-job-card" data-jobs-secure-row-card data-filter-text="${escHtml(`${row?.name || ''} ${settingsTransferJobSubline(row)} ${settingsTransferJobStatusLabel(row)}`.toLowerCase())}">
-            <input type="checkbox" data-jobs-secure-row-select="${escHtml(jobKey)}">
-            <span class="settings-transfer-job-card-main">
-              <strong>${escHtml(row?.name || jobKey)}</strong>
-              <small>${escHtml(settingsTransferJobSubline(row))}</small>
-            </span>
-            <span class="settings-transfer-job-badges">
-              <span class="settings-transfer-chip">${escHtml(settingsTransferJobStatusLabel(row))}</span>
-              <span class="settings-transfer-chip">${escHtml(settingsTransferPassphraseStatusLabel(row))}</span>
-            </span>
-          </label>`;
-        }).join('')}
-      </div>
-    `}
-    <div class="settings-transfer-scope-grid">
-      <label class="settings-transfer-scope-card settings-transfer-scope-card-primary">
-        <input type="radio" name="jobs-secure-scope" value="all" checked>
-        <span><strong>${settingsT('transfer.importScopeAll')}</strong><small>${settingsT('transfer.importScopeAllHelp')}</small></span>
-      </label>
-      <div class="settings-transfer-advanced-title">${settingsT('transfer.importAdvancedOptions')}</div>
-      <label class="settings-transfer-scope-card">
-        <input type="radio" name="jobs-secure-scope" value="jobs_only">
-        <span><strong>${settingsT('transfer.importScopeJobsOnly')}</strong><small>${settingsT('transfer.importScopeJobsOnlyHelp')}</small></span>
-      </label>
-      <label class="settings-transfer-scope-card">
-        <input type="radio" name="jobs-secure-scope" value="passphrases_only">
-        <span><strong>${settingsT('transfer.importScopePassphrasesOnly')}</strong><small>${settingsT('transfer.importScopePassphrasesOnlyHelp')}</small></span>
-      </label>
-    </div>
-    <div class="settings-transfer-action-list">
-      <div class="settings-transfer-job-picker-title">${settingsT('transfer.jobImportMode')}</div>
-      ${existingCount ? `
-        <div class="settings-transfer-segmented" data-jobs-secure-global-mode-wrap>
-          <label><input type="radio" name="jobs-secure-global-mode" value="skip" checked><span>${settingsT('transfer.jobImportSkipExisting')}</span></label>
-          <label><input type="radio" name="jobs-secure-global-mode" value="overwrite"><span>${settingsT('transfer.jobImportOverwriteExisting')}</span></label>
-          <label><input type="radio" name="jobs-secure-global-mode" value="rename"><span>${settingsT('transfer.jobImportRenameExisting')}</span></label>
-        </div>
-      ` : `<div class="status-message success">${settingsT('transfer.completeImportNoConflicts')}</div>`}
-    </div>
-  `;
-}
-
-function renderSettingsTransferJobSelectionStep(preview, rows, fileName, step = 2, total = 4) {
-  return `
-    ${renderSettingsTransferStepHeader(step, settingsT('transfer.importStepSelectTitle'), settingsT('transfer.importStepSelectText'), total)}
-    ${renderSettingsTransferFileSummary(preview, fileName)}
-    <div class="settings-transfer-selection-counter" id="jobs-secure-selection-count">${settingsT('transfer.selectedJobsCount', { count: 0 })}</div>
-    ${rows.length ? '' : `<div class="status-message warning" style="margin-top:10px">${settingsT('transfer.noJobsSelected')}</div>`}
-    <div class="settings-transfer-job-list">
-      ${rows.map((row) => {
-        const jobKey = String(row?.job_key || '').trim();
-        return `<label class="settings-transfer-job-card">
-          <input type="checkbox" data-jobs-secure-row-select="${escHtml(jobKey)}">
-          <span class="settings-transfer-job-card-main">
-            <strong>${escHtml(row?.name || jobKey)}</strong>
-            <small>${escHtml(settingsTransferJobSubline(row))}</small>
-          </span>
-          <span class="settings-transfer-job-badges">
-            <span class="settings-transfer-chip">${escHtml(settingsTransferJobStatusLabel(row))}</span>
-            <span class="settings-transfer-chip">${escHtml(settingsTransferPassphraseStatusLabel(row))}</span>
-          </span>
-        </label>`;
-      }).join('')}
-    </div>
-  `;
-}
-
-function renderSettingsTransferActionStep(preview, selectedRows, fileName, kind = 'selective', step = 2, total = 3) {
-  const complete = String(kind || '') === 'complete';
-  const existingRows = selectedRows.filter((row) => String(row?.conflict || '') === 'exists');
-  return `
-    ${renderSettingsTransferStepHeader(step, settingsT('transfer.importStepActionTitle'), settingsT('transfer.importStepActionText'), total)}
-    ${renderSettingsTransferFileSummary(preview, fileName)}
-    <div class="settings-transfer-context-strip">
-      <strong>${escHtml(settingsTransferImportKindLabel(kind))}</strong>
-      <span>${escHtml(complete ? settingsT('transfer.importKindCompleteReview') : settingsT('transfer.importKindSelectiveReview', { count: selectedRows.length }))}</span>
-    </div>
-    <div class="settings-transfer-scope-grid">
-      <label class="settings-transfer-scope-card settings-transfer-scope-card-primary">
-        <input type="radio" name="jobs-secure-scope" value="all" checked>
-        <span><strong>${settingsT('transfer.importScopeAll')}</strong><small>${settingsT('transfer.importScopeAllHelp')}</small></span>
-      </label>
-      <div class="settings-transfer-advanced-title">${settingsT('transfer.importAdvancedOptions')}</div>
-      <label class="settings-transfer-scope-card">
-        <input type="radio" name="jobs-secure-scope" value="jobs_only">
-        <span><strong>${settingsT('transfer.importScopeJobsOnly')}</strong><small>${settingsT('transfer.importScopeJobsOnlyHelp')}</small></span>
-      </label>
-      <label class="settings-transfer-scope-card">
-        <input type="radio" name="jobs-secure-scope" value="passphrases_only">
-        <span><strong>${settingsT('transfer.importScopePassphrasesOnly')}</strong><small>${settingsT('transfer.importScopePassphrasesOnlyHelp')}</small></span>
-      </label>
-    </div>
-    <div class="settings-transfer-action-list">
-      <div class="settings-transfer-job-picker-title">${settingsT('transfer.jobImportMode')}</div>
-      ${complete && existingRows.length ? `
-        <div class="settings-transfer-action-row">
-          <div>
-            <strong>${settingsT('transfer.completeImportExistingJobs')}</strong>
-            <small>${settingsT('transfer.completeImportExistingJobsHelp', { count: existingRows.length })}</small>
-          </div>
-          <span class="settings-transfer-chip">${escHtml(settingsT('transfer.jobStatusExists'))}</span>
-          <div class="settings-transfer-job-action">
-            <select class="form-select" data-jobs-secure-global-mode>
-              <option value="skip" selected>${settingsT('transfer.jobImportSkipExisting')}</option>
-              <option value="overwrite">${settingsT('transfer.jobImportOverwriteExisting')}</option>
-              <option value="rename">${settingsT('transfer.jobImportRenameExisting')}</option>
-            </select>
-          </div>
-        </div>
-      ` : ''}
-      ${complete ? '' : selectedRows.map((row) => {
-        const jobKey = String(row?.job_key || '').trim();
-        const conflict = String(row?.conflict || 'new');
-        const actionHtml = conflict === 'exists'
-          ? `<select class="form-select" data-jobs-secure-row-mode="${escHtml(jobKey)}">
-              <option value="skip" selected>${settingsT('transfer.jobImportSkipExisting')}</option>
-              <option value="overwrite">${settingsT('transfer.jobImportOverwriteExisting')}</option>
-              <option value="rename">${settingsT('transfer.jobImportRenameExisting')}</option>
-            </select>`
-          : `<span class="settings-transfer-job-action-static">${settingsT('transfer.jobImportCreateNew')}</span>`;
-        return `<div class="settings-transfer-action-row">
-          <div>
-            <strong>${escHtml(row?.name || jobKey)}</strong>
-            <small>${escHtml(settingsTransferJobSubline(row))}</small>
-          </div>
-          <span class="settings-transfer-chip">${escHtml(settingsTransferJobStatusLabel(row))}</span>
-          <div class="settings-transfer-job-action">${actionHtml}</div>
-        </div>`;
-      }).join('')}
-      ${complete && !existingRows.length ? `<div class="status-message success">${settingsT('transfer.completeImportNoConflicts')}</div>` : ''}
-    </div>
-  `;
+    ${preview.legacy_conversion ? `<p>${settingsT('transfer.legacyJobScope')}</p>` : ''}
+    <div class="settings-transfer-job-toolbar"><input class="form-input" type="search" data-jobs-secure-search placeholder="${escHtml(settingsT('transfer.jobSearchPlaceholder'))}"><span id="jobs-secure-selection-count"></span></div>
+    <div class="settings-transfer-job-list">${rows.map((row) => {
+      const id = String(row.job_id);
+      return `<div class="settings-transfer-action-row" data-jobs-secure-row-card data-filter-text="${escHtml(`${row.name} ${id}`.toLowerCase())}">
+        <label><input type="checkbox" data-jobs-secure-row-select="${escHtml(id)}" ${kind === 'complete' ? 'checked' : ''}>${escHtml(row.name)}<small>${escHtml(id)}</small></label>
+        <label>${settingsT('transfer.jobImportMode')}<select class="form-select" data-jobs-secure-row-mode="${escHtml(id)}">
+          <option value="new">${settingsT('transfer.newIdentity')}</option><option value="merge">${settingsT('transfer.mergeIdentity')}</option><option value="skip">${settingsT('transfer.skipIdentity')}</option></select></label>
+        <label>${settingsT('transfer.explicitTarget')}<select class="form-select" data-jobs-secure-row-target="${escHtml(id)}"><option value="">${settingsT('transfer.chooseTarget')}</option>
+          ${(preview.current_jobs || []).map((target) => `<option value="${escHtml(target.job_id)}">${escHtml(target.name)} · ${escHtml(target.job_id)}</option>`).join('')}</select></label>
+        <label>${settingsT('transfer.newPrefix')}<input class="form-input" data-jobs-secure-row-prefix="${escHtml(id)}" placeholder="${escHtml(row.archive_prefix || '')}"></label>
+      </div>`;
+    }).join('')}</div>
+    <label><input type="radio" name="jobs-secure-scope" value="all" checked>${settingsT('transfer.importScopeAll')}</label>
+    <label><input type="radio" name="jobs-secure-scope" value="jobs_only">${settingsT('transfer.importScopeJobsOnly')}</label>
+    <label><input type="radio" name="jobs-secure-scope" value="passphrases_only">${settingsT('transfer.importScopePassphrasesOnly')}</label>`;
 }
 
 function renderSettingsTransferConfirmStep(preview, selectedRows, fileName, decision) {
-  const scope = String(decision?.scope || 'all');
-  const rowModes = decision?.rowModes || {};
-  const existingCount = selectedRows.filter((row) => String(row?.conflict || '') === 'exists').length;
-  const newCount = selectedRows.length - existingCount;
-  const overwriteCount = selectedRows.filter((row) => String(row?.conflict || '') === 'exists' && String(rowModes[String(row?.job_key || '').trim()] || 'skip') === 'overwrite').length;
-  const renameCount = selectedRows.filter((row) => String(row?.conflict || '') === 'exists' && String(rowModes[String(row?.job_key || '').trim()] || 'skip') === 'rename').length;
-  const passphraseCount = settingsTransferScopeIncludesPassphrases(scope)
-    ? selectedRows.filter((row) => String(row?.passphrase?.bundle?.path || '').trim()).length
-    : 0;
-  return `
-    ${renderSettingsTransferStepHeader(3, settingsT('transfer.importStepConfirmTitle'), settingsT('transfer.importStepConfirmText'), 3)}
+  const merge = selectedRows.some((row) => decision.rowModes[row.job_id] === 'merge');
+  return `${renderSettingsTransferStepHeader(3, settingsT('transfer.importStepConfirmTitle'), settingsT('transfer.explicitIdentityHelp'), 3)}
     ${renderSettingsTransferFileSummary(preview, fileName)}
-    <div class="settings-transfer-review-stats settings-transfer-review-stats-two">
-      <div class="settings-transfer-stat-card state-info"><span>${settingsT('transfer.selectedJobs')}</span><strong>${selectedRows.length}</strong><small>${settingsT('transfer.importReviewJobsDetail', { selected: selectedRows.length, existing: existingCount, new: newCount })}</small></div>
-      <div class="settings-transfer-stat-card state-warning"><span>${settingsT('transfer.passphrase')}</span><strong>${passphraseCount}</strong><small>${settingsT('transfer.importReviewPassphrases')}</small></div>
-    </div>
-    <div class="settings-transfer-info-box">
-      <strong>${settingsT('transfer.importReviewNoBorgKeysTitle')}</strong>
-      <span>${settingsT('transfer.importReviewNoBorgKeysText')}</span>
-    </div>
-    <div class="settings-transfer-plan-list">
-      ${selectedRows.map((row) => {
-        const jobKey = String(row?.job_key || '').trim();
-        const mode = String(rowModes[jobKey] || 'skip');
-        const lines = settingsTransferPlannedActionLines(row, scope, rowModes);
-        return `<div class="settings-transfer-plan-row">
-          <header>
-            <span><strong>${escHtml(row?.name || jobKey)}</strong><small>${escHtml(settingsTransferJobSubline(row))}</small></span>
-            <em>${escHtml(settingsTransferJobModeLabel(mode, row))}</em>
-          </header>
-          <ul>${lines.map((line) => `<li>${escHtml(line)}</li>`).join('')}</ul>
-        </div>`;
-      }).join('')}
-    </div>
-    ${(overwriteCount || renameCount) ? `
-      <label class="settings-transfer-confirm-check">
-        <input type="checkbox" data-settings-transfer-confirm-overwrite>
-        <span>${settingsT('transfer.importOverwriteAck')}</span>
-      </label>
-    ` : ''}
-  `;
+    <p>${escHtml(settingsTransferImportScopeLabel(decision.scope))}</p>
+    <ul>${selectedRows.map((row) => {
+      const id = row.job_id, mode = decision.rowModes[id];
+      return `<li>${escHtml(row.name)} · ${settingsT(mode === 'merge' ? 'transfer.mergeIdentity' : mode === 'skip' ? 'transfer.skipIdentity' : 'transfer.newIdentity')}
+        ${mode === 'merge' ? escHtml(decision.targetJobs[id]) : ''}
+        ${decision.archivePrefixes[id] ? ' · ' + escHtml(decision.archivePrefixes[id]) : ''}</li>`;
+    }).join('')}</ul>
+    ${merge ? `<label><input type="checkbox" data-settings-transfer-confirm-overwrite>${settingsT('transfer.importOverwriteAck')}</label>` : ''}`;
 }
 
 function settingsTransferImportResultMessage(data) {
@@ -3830,9 +3615,9 @@ function settingsTransferImportResultMessage(data) {
   const parts = [];
   [
     ['new', 'importResultNew'],
-    ['overwrite', 'importResultOverwrite'],
+    ['merge', 'importResultOverwrite'],
     ['renamed', 'importResultRenamed'],
-    ['skipped_exists', 'importResultSkipped'],
+    ['skipped', 'importResultSkipped'],
     ['invalid', 'importResultInvalid'],
   ].forEach(([status, key]) => {
     const count = Number(byStatus[status] || 0);
@@ -3878,12 +3663,19 @@ async function settingsTransferRunSecureJobsWizard(preview, importableRows, file
         });
       };
       const updateSelection = () => {
-        const count = importKind === 'complete'
-          ? importableRows.length
-          : modal.querySelectorAll('[data-jobs-secure-row-select]:checked').length;
+        const count = modal.querySelectorAll('[data-jobs-secure-row-select]:checked').length;
+        const secretOnly = modal.querySelector('input[name="jobs-secure-scope"]:checked')?.value === 'passphrases_only';
+        let invalid = false;
+        modal.querySelectorAll('[data-jobs-secure-row-select]').forEach((checkbox) => {
+          const id = checkbox.dataset.jobsSecureRowSelect;
+          const mode = modal.querySelector(`[data-jobs-secure-row-mode="${id}"]`).value;
+          const target = modal.querySelector(`[data-jobs-secure-row-target="${id}"]`);
+          target.disabled = mode !== 'merge';
+          if (checkbox.checked && ((mode === 'merge' && !target.value) || (secretOnly && mode === 'new'))) invalid = true;
+        });
         const counter = modal.querySelector('#jobs-secure-selection-count');
         if (counter) counter.textContent = settingsT('transfer.selectedJobsCount', { count });
-        okBtn.disabled = count < 1;
+        okBtn.disabled = count < 1 || invalid;
       };
       modal.addEventListener('change', updateSelection);
       if (searchEl) searchEl.addEventListener('input', updateRows);
@@ -3895,27 +3687,18 @@ async function settingsTransferRunSecureJobsWizard(preview, importableRows, file
       updateSelection();
     },
     resolveValue: ({ modal }) => {
-      const selectedJobs = importKind === 'complete'
-        ? importableRows.map((row) => String(row.job_key || '').trim()).filter(Boolean)
-        : Array.from(modal?.querySelectorAll('[data-jobs-secure-row-select]:checked') || [])
-          .map((el) => String(el.getAttribute('data-jobs-secure-row-select') || '').trim())
-          .filter(Boolean);
-      const selectedRows = selectedJobs.map((key) => settingsTransferJobByKey(preview, key)).filter(Boolean);
-      const rowModes = {};
-      const globalMode = String(modal?.querySelector('input[name="jobs-secure-global-mode"]:checked')?.value || 'skip').trim();
-      if (globalMode) {
-        selectedRows.forEach((row) => {
-          const key = String(row?.job_key || '').trim();
-          if (key && String(row?.conflict || '') === 'exists') rowModes[key] = globalMode;
-        });
-      }
-      return {
-        kind: importKind,
-        scope: String(modal?.querySelector('input[name="jobs-secure-scope"]:checked')?.value || 'all'),
-        selectedJobs,
-        selectedRows,
-        rowModes,
-      };
+      const selectedJobs = Array.from(modal.querySelectorAll('[data-jobs-secure-row-select]:checked'), (el) => el.dataset.jobsSecureRowSelect);
+      const selectedRows = selectedJobs.map((id) => settingsTransferJobByKey(preview, id)).filter(Boolean);
+      const rowModes = {}, targetJobs = {}, archivePrefixes = {};
+      selectedJobs.forEach((id) => {
+        rowModes[id] = modal.querySelector(`[data-jobs-secure-row-mode="${id}"]`).value;
+        if (rowModes[id] === 'merge') targetJobs[id] = modal.querySelector(`[data-jobs-secure-row-target="${id}"]`).value;
+        const prefix = modal.querySelector(`[data-jobs-secure-row-prefix="${id}"]`).value.trim();
+        if (prefix) archivePrefixes[id] = prefix;
+      });
+      return { kind: importKind, scope: modal.querySelector('input[name="jobs-secure-scope"]:checked')?.value || 'all',
+               selectedJobs, selectedRows, rowModes, targetJobs, archivePrefixes };
+
     },
   });
   if (!action || typeof action !== 'object') return null;
@@ -3947,58 +3730,14 @@ async function importJobsApplySelected(options = {}) {
       ? !!settingsState.transferJobsSecurePayloadB64
       : !!settingsState.transferJobsBundleText;
     if (!preview || !hasPayload) throw new Error(settingsT('transfer.noJobsPreview'));
-    let selected = [];
-    const perMode = {};
-    const perProfileMode = {};
-    let usedVisibleJobSelection = false;
-    (preview.jobs || []).forEach((r, idx) => {
-      const cb = document.querySelector(`[data-job-preview-select="${idx}"]`);
-      const modeSel = document.querySelector(`[data-job-preview-mode="${idx}"]`);
-      if (cb) usedVisibleJobSelection = true;
-      if (cb?.checked) {
-        selected.push(r.job_key);
-        if (modeSel?.value) perMode[r.job_key] = modeSel.value;
-      }
-    });
     const importableRows = settingsTransferImportableJobRows(preview);
-    if (!usedVisibleJobSelection) {
-      selected = importableRows.map((row) => String(row.job_key || '').trim()).filter(Boolean);
-    }
-    const settingsModeEl = document.getElementById('settings-import-mode');
-    const settingsMode = String(settingsModeEl?.value || settingsState.transferSettingsMode || 'merge').trim().toLowerCase();
-    document.querySelectorAll('[data-settings-profile-mode]').forEach((el) => {
-      const k = String(el.getAttribute('data-settings-profile-mode') || '').trim();
-      const v = String(el.value || 'skip').trim().toLowerCase();
-      if (k) perProfileMode[k] = v;
-    });
-    let importJobs = true;
-    let importPassphrases = true;
-    let importBorgKeys = false;
-    if (settingsState.transferJobsSecureMode) {
-      const decision = await settingsTransferRunSecureJobsWizard(preview, importableRows, options.fileName || settingsT('transfer.file'));
-      if (!decision || typeof decision !== 'object') return;
-      importJobs = decision.scope === 'all' || decision.scope === 'jobs_only';
-      importPassphrases = decision.scope === 'all' || decision.scope === 'passphrases_only';
-      importBorgKeys = false;
-      selected = Array.isArray(decision.selectedJobs) ? decision.selectedJobs : [];
-      selected.forEach((jobKey) => {
-        const mode = String(decision.rowModes?.[jobKey] || 'skip');
-        if (jobKey) perMode[jobKey] = ['skip', 'overwrite', 'rename'].includes(mode) ? mode : 'skip';
-      });
-    }
+    const decision = await settingsTransferRunSecureJobsWizard(preview, importableRows, options.fileName || settingsT('transfer.file'));
+    if (!decision) return;
+    const selected = decision.selectedJobs, perMode = decision.rowModes;
+    const importJobs = decision.scope !== 'passphrases_only';
+    const importPassphrases = decision.scope !== 'jobs_only';
+    const importBorgKeys = false, settingsMode = 'ignore', perProfileMode = {};
     if (!selected.length) throw new Error(settingsT('transfer.noJobsSelected'));
-    if (!settingsState.transferJobsSecureMode) {
-      const selectedExistsCnt = selected.filter((key) => {
-        const row = (preview.jobs || []).find((r) => r.job_key === key);
-        return String(row?.conflict || '') === 'exists';
-      }).length;
-      const ok = await _openSettingsDialog({
-        title: settingsT('transfer.importJobsTitle'),
-        message: settingsT('transfer.confirmJobsImport', { count: selected.length, existing: selectedExistsCnt ? settingsT('transfer.existingSelection', { count: selectedExistsCnt }) : '' }),
-        confirmText: settingsT('transfer.startImport'),
-      });
-      if (!ok) return;
-    }
     const endpoint = settingsState.transferJobsSecureMode ? '/api/settings/jobs-import-secure' : '/api/settings/jobs-import';
     const body = settingsState.transferJobsSecureMode ? {
       password: settingsState.transferJobsSecurePassword,
@@ -4007,6 +3746,9 @@ async function importJobsApplySelected(options = {}) {
       dry_run: false,
       selected_jobs: selected,
       per_job_mode: perMode,
+      target_jobs: decision.targetJobs,
+      archive_prefixes: decision.archivePrefixes,
+      legacy_source_ids: preview.legacy_source_ids,
       settings_mode: settingsMode,
       per_profile_mode: perProfileMode,
       import_jobs: importJobs,
@@ -4018,6 +3760,9 @@ async function importJobsApplySelected(options = {}) {
       dry_run: false,
       selected_jobs: selected,
       per_job_mode: perMode,
+      target_jobs: decision.targetJobs,
+      archive_prefixes: decision.archivePrefixes,
+      legacy_source_ids: preview.legacy_source_ids,
       settings_mode: settingsMode,
       per_profile_mode: perProfileMode,
     };

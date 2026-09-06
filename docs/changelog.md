@@ -6,6 +6,19 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #478 (integration work for #447; not released)
+- Added versioned ID-based job transfer with explicit new/merge/skip choices,
+  complete selected reference maps, bounded v2 conversion and protected-file
+  transactions with metadata/schedule/cron rollback.
+- Added content-bound history deletion previews, retained repository-owned
+  secrets and blocked deletion while pending work still references the job.
+- Centralized owned-store/reference diagnostics, reduced support configuration
+  exposure and covered ID stores/runtime controls in guarded factory reset.
+- Kept settings recovery scoped to backup.conf as required by the approved C6
+  contract. Complete installation recovery remains a future conditional feature.
+- Added canonical/legacy transfer, lifecycle, privacy, reset and DE/EN UI tests.
+  The migration and first installable test candidate remain gated on #479.
+
 ### Issue #477 (integration work for #447; not released)
 - Converted Browse & Restore, prechecks/downloads and restore-test invocation to
   full job IDs and literal current/historical prefixes in the current repository.

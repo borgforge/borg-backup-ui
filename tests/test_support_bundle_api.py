@@ -142,7 +142,9 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
     }) + "\n", encoding="utf-8")
     (jobs_dir / "job1.json").write_text(
         json.dumps({
-            "job_key": "job1",
+            "job_id": "11111111-1111-4111-8111-111111111111",
+            "exclude_paths": ["PRIVATE-IMPORTED-RULE-CONTENT"],
+            "unknown_config": "PRIVATE-UNEXPOSED-JOB-SETTING",
             "passphrase": {"default": "secret-passphrase"},
             "repository": "ssh://u123@u123.your-storagebox.de:23/./backup/job1",
         }) + "\n",
@@ -182,7 +184,7 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         names = set(zf.namelist())
         assert "manifest.json" in names
         assert "support/sanitizing-report.json" in names
-        assert "config/backup.conf.sanitized.txt" in names
+        assert "config/backup.conf.sanitized.json" in names
         assert "config/settings.sanitized.json" not in names
         assert "config/storages.sanitized.json" in names
         assert "config/repositories.sanitized.json" in names
@@ -202,6 +204,8 @@ def test_support_bundle_contains_sanitized_config_and_jobs(tmp_path: Path, monke
         )
 
     assert "test-version" in all_text
+    assert "PRIVATE-IMPORTED-RULE-CONTENT" not in all_text
+    assert "PRIVATE-UNEXPOSED-JOB-SETTING" not in all_text
     assert "supersecret" not in all_text
     assert "secret-passphrase" not in all_text
     assert "PRIVATE-BORG-KEY-DATA" not in all_text

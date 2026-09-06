@@ -1036,6 +1036,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/setup-wizard": self._post_setup_wizard,
             "/api/settings/migration-backups-cleanup": self._post_settings_migration_backups_cleanup,
             "/api/settings/jobs-import": self._post_settings_jobs_import,
+            "/api/jobs/delete-preview": self._post_job_delete_preview,
             "/api/settings/jobs-import-preview": self._post_settings_jobs_import_preview,
             "/api/settings/jobs-export-secure": self._post_settings_jobs_export_secure,
             "/api/settings/jobs-import-secure-preview": self._post_settings_jobs_import_secure_preview,
@@ -1714,10 +1715,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         prepare_job_action(self.config, job_id)
         if get_job_runtime_state(self.config, job_id).get("running"):
             raise RuntimeError("The job is currently running; wait for it to finish")
-        if body.get("delete_artifacts") or body.get("delete_passphrase"):
-            # Historical attribution and shared-secret cleanup belong to #478.
-            raise JobValidationError("job_artifact_cutover_pending", "Artifact deletion is not available in this integration phase")
-        return delete_job_configuration(self.config, job_id)
+        if body.get("delete_passphrase") or body.get("delete_artifacts"):
+            raise JobValidationError("explicit_artifact_confirmation_required", "Select exact artifacts from the deletion preview. Repository secrets are retained.")
+        return delete_job_configuration(self.config, job_id, confirmed_artifacts=body.get("confirmed_artifacts"))
+
+    def _post_job_delete_preview(self) -> dict:
+        from job_actions import delete_job_configuration
+        from restore_identity import request_job_id
+        return delete_job_configuration(self.config, request_job_id(self._read_json_body()), preview=True)
 
     def _delete_restore_test(self) -> dict:
         from restore_tests_api import delete_restore_test
@@ -1961,7 +1966,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from urllib.parse import parse_qs
         from settings_transfer_api import export_jobs_bundle
         qs = parse_qs(qs_str)
-        keys = [str(x).strip() for x in (qs.get("job_key") or []) if str(x).strip()]
+        keys = [str(x).strip() for x in (qs.get("job_id") or []) if str(x).strip()]
         return export_jobs_bundle(self.config, keys if keys else None)
 
     def _get_log_file(self, query_string: str) -> dict:
@@ -2993,10 +2998,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         bundle = body.get("bundle")
         bundle_text = str(body.get("bundle_text") or "").strip()
         if bundle is None and bundle_text:
-            bundle = json.loads(bundle_text)
+            from job_transfer import decode_json
+            bundle = decode_json(bundle_text)
         if bundle is None:
             raise ValueError("bundle or bundle_text is required")
-        mode = str(body.get("mode", "skip")).strip().lower()
+        mode = str(body.get("mode", "new")).strip().lower()
         dry_run = bool(body.get("dry_run", True))
         selected_jobs = body.get("selected_jobs") if isinstance(body.get("selected_jobs"), list) else None
         per_job_mode = body.get("per_job_mode") if isinstance(body.get("per_job_mode"), dict) else None
@@ -3009,6 +3015,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             dry_run=dry_run,
             selected_jobs=selected_jobs,
             per_job_mode=per_job_mode,
+            target_jobs=body.get("target_jobs"),
+            archive_prefixes=body.get("archive_prefixes"),
+            legacy_source_ids=body.get("legacy_source_ids"),
             settings_mode=settings_mode,
             per_profile_mode=per_profile_mode,
         )
@@ -3019,7 +3028,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         bundle = body.get("bundle")
         bundle_text = str(body.get("bundle_text") or "").strip()
         if bundle is None and bundle_text:
-            bundle = json.loads(bundle_text)
+            from job_transfer import decode_json
+            bundle = decode_json(bundle_text)
         if bundle is None:
             raise ValueError("bundle or bundle_text is required")
         return preview_jobs_bundle(self.config, bundle)
@@ -3052,7 +3062,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         payload_b64 = str(body.get("payload_b64") or "")
         if not payload_b64:
             raise ValueError("payload_b64 is required")
-        mode = str(body.get("mode", "skip")).strip().lower()
+        mode = str(body.get("mode", "new")).strip().lower()
         dry_run = bool(body.get("dry_run", True))
         selected_jobs = body.get("selected_jobs") if isinstance(body.get("selected_jobs"), list) else None
         per_job_mode = body.get("per_job_mode") if isinstance(body.get("per_job_mode"), dict) else None
@@ -3069,6 +3079,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             dry_run=dry_run,
             selected_jobs=selected_jobs,
             per_job_mode=per_job_mode,
+            target_jobs=body.get("target_jobs"),
+            archive_prefixes=body.get("archive_prefixes"),
+            legacy_source_ids=body.get("legacy_source_ids"),
             settings_mode=settings_mode,
             per_profile_mode=per_profile_mode,
             import_jobs=import_jobs,

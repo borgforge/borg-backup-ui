@@ -691,7 +691,8 @@
     "activityLogDownload": "Download complete log",
     "activityLogComplete": "All entries are retained. Scrolling loads additional sections. Browser search only searches the loaded section.",
     "activityLogSaveFailed": "The log could not be saved to the log directory and remains in RAM. Download the complete log before restarting the server.",
-    "activityLogEnded": "Run ended; exit code unavailable"
+    "activityLogEnded": "Run ended; exit code unavailable",
+    "deleteExactHistory": "History is retained unless you select individual records below. Select both the index entry and detail file for a restore. Repository secrets are retained."
   },
   "schedule": {
     "title": "Schedule",
@@ -2261,7 +2262,15 @@
       "secretImportSkipExisting": "Skip existing files",
       "secretImportOverwriteExisting": "Replace existing files",
       "profilesImportOk": "Profiles+secrets import OK: {count} files",
-      "profilesImportFailed": "Profiles+secrets import failed: {message}"
+      "profilesImportFailed": "Profiles+secrets import failed: {message}",
+      "explicitIdentityHelp": "New jobs receive new IDs. Merging requires an explicitly selected target. The target keeps its ID. Choose a separate archive prefix when creating a copy in the same repository.",
+      "newIdentity": "Create with a new ID",
+      "mergeIdentity": "Merge into selected job",
+      "skipIdentity": "Skip",
+      "explicitTarget": "Target job for merge",
+      "chooseTarget": "Select a target explicitly",
+      "newPrefix": "Archive prefix (optional override)",
+      "legacyJobScope": "This older export is converted for job import. Only the selected jobs and their repository, storage and schedule dependencies are imported. Global settings and service schedules stay separate."
     },
     "forms": {
       "smtpTitle": "Email (SMTP)",
@@ -2767,7 +2776,10 @@
       "registryBorgKeyfilesTitle": "Persistent Borg keyfiles",
       "registryBorgKeyfilesApplied": "Matching Borg keyfiles were moved into protected plugin storage.",
       "registryBorgKeyfilesCurrent": "No keyfile migration is required.",
-      "registryBorgKeyfilesPending": "Existing Borg keyfiles must be moved into protected plugin storage."
+      "registryBorgKeyfilesPending": "Existing Borg keyfiles must be moved into protected plugin storage.",
+      "identityIntegrity": "Job identity integrity",
+      "identityOk": "No active identity errors found.",
+      "identityNeedsReview": "Review the reported files and references before changing configuration."
     },
     "tabs": {
       "general": "General",

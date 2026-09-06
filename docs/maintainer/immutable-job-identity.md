@@ -383,3 +383,6 @@ workers, same-second runs, renamed jobs, partial imports, rejected corrupt
 inputs and repeated startup. Verify snapshots independently, old archives
 and log bytes unchanged, no wrong-job joins, and no background writes during
 maintenance. A passing fixture schema test alone cannot authorize release.
+
+Phase #478 implementation and supported recovery boundaries are documented in
+[Job identity lifecycle](identity-lifecycle.md).

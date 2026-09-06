@@ -261,7 +261,7 @@ def test_collect_job_health_rejects_job_without_repository_assignment(tmp_path, 
     health = _collect_job_health({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, jobs_dir)
 
     assert health["summary"]["failed"] == 1
-    assert "awaits repository migration" in " ".join(health["items"][0]["errors"])
+    assert "Repository context could not be validated" in " ".join(health["items"][0]["errors"])
     assert [row["code"] for row in health["items"][0]["error_details"]] == [
         "repository_context_invalid",
     ]
@@ -279,7 +279,7 @@ def test_system_health_surfaces_corrupt_canonical_inventory(tmp_path: Path) -> N
 
     assert health["checks"]["canonical_inventories_ok"] is False
     assert health["canonical_inventories"]["errors"][0]["inventory"] == "repositories"
-    assert "malformed JSON" in health["canonical_inventories"]["errors"][0]["error"]
+    assert "malformed" in health["canonical_inventories"]["errors"][0]["error"]
     assert "notification_reminders" not in health
 
 

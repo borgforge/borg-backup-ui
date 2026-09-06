@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-SECRET_KEY_RE = re.compile(r"(password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
+SECRET_KEY_RE = re.compile(r"(exclude|exclusion|rules|patterns|password|passphrase|secret|token|auth|private[_-]?key|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)", re.IGNORECASE)
 SECRET_LINE_RE = re.compile(r"(?i)(password|passphrase|token|secret|ssh[_-]?key|borg[_-]?key|keyfile|borg_passcommand)\s*=\s*([^\s]+)")
 SECRET_WORD_RE = re.compile(r"(?i)\b(password|passphrase|token|secret)\s+([^\s\"'<>]+)")
 # Keep legacy native ntfy keys in the sanitizer so old support snippets remain safe.
@@ -75,12 +75,11 @@ def sanitize_text(text: str) -> str:
 
 
 def _read_text_tail(path: Path, max_bytes: int = 65536) -> str:
-    data = path.read_bytes()
-    if len(data) > max_bytes:
-        data = data[-max_bytes:]
-        prefix = f"[truncated to last {max_bytes} bytes]\n"
-    else:
-        prefix = ""
+    with path.open('rb') as handle:
+        size = handle.seek(0, 2)
+        handle.seek(max(0, size - max_bytes))
+        data = handle.read(max_bytes)
+    prefix = f"[truncated to last {max_bytes} bytes]\n" if size > max_bytes else ""
     return prefix + data.decode("utf-8", errors="replace")
 
 
@@ -116,7 +115,10 @@ def _add_jsonl_file(zf: zipfile.ZipFile, arcname: str, path: Path, *, max_bytes:
         return False
 def _safe_json_file(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        if path.is_symlink() or path.stat().st_size > 1024 * 1024:
+            return {"_omitted": "not_regular_or_too_large"}
+        from job_store import read_json
+        return read_json(path)
     except Exception:
         return {"_unreadable": True, "path": str(path)}
 
@@ -183,6 +185,9 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     expanded = read_expanded_conf(config)
     health = get_system_health_data(config)
 
+    safe_settings = {key: value for key, value in expanded.items() if key in {
+        "GLOBAL_DATA_DIR", "GLOBAL_LOG_DIR", "STATUS_DIR", "RESTORE_TEST_STATUS_DIR",
+        "GLOBAL_LOG_LEVEL", "GLOBAL_DEBUG", "GLOBAL_WEEKLY_REPORT_ENABLED", "PORT"}}
     files: List[str] = []
     skipped: List[Dict[str, str]] = []
 
@@ -194,7 +199,7 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        _add_json(zf, "config/expanded-conf.sanitized.json", expanded)
+        _add_json(zf, "config/expanded-conf.sanitized.json", safe_settings)
         _record_added("config/expanded-conf.sanitized.json")
         for filename in (
             "storages.json",
@@ -229,11 +234,11 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
         _add_json(zf, "system/health.json", health)
         _record_added("system/health.json")
 
-        conf_file = get_conf_file(config)
-        if _add_text_file(zf, "config/backup.conf.sanitized.txt", conf_file, max_bytes=196608):
-            _record_added("config/backup.conf.sanitized.txt")
-        else:
-            _record_skipped(conf_file, "not_found_or_unreadable")
+        _add_json(zf, "config/backup.conf.sanitized.json", safe_settings)
+        _record_added("config/backup.conf.sanitized.json")
+        from identity_lifecycle import identity_health
+        _add_json(zf, "system/identity-integrity.json", identity_health(config))
+        _record_added("system/identity-integrity.json")
 
         for jobs_dir in _candidate_jobs_dirs(root, scripts_dir):
             if not jobs_dir.is_dir():
@@ -241,7 +246,12 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
                 continue
             for p in sorted(jobs_dir.glob("*.json"))[:250]:
                 rel = f"jobs/{p.stem}.json"
-                _add_json(zf, rel, _safe_json_file(p))
+                raw = _safe_json_file(p)
+                descriptor = {key: raw[key] for key in ('schema_version', 'job_id', 'name', 'repository_key', 'enabled') if key in raw}
+                if isinstance(descriptor.get('name'), str): descriptor['name'] = descriptor['name'][:160]
+                descriptor['source_count'] = len(raw.get('source_paths', [])) if isinstance(raw.get('source_paths'), list) else 0
+                descriptor['exclusion_count'] = len(raw.get('exclude_paths', [])) if isinstance(raw.get('exclude_paths'), list) else 0
+                _add_json(zf, rel, descriptor)
                 _record_added(rel)
 
         status_dirs = []
