@@ -210,8 +210,9 @@ def _fallback_runtime_log(config: dict, job_key: str, started_at: str) -> str:
     if not log_dir.is_dir():
         return ""
     try:
+        from job_identity import job_log_paths
         candidates = sorted(
-            log_dir.glob(f"Borg-Backup_{job_key}--*.log"),
+            job_log_paths(log_dir, job_key),
             key=lambda path: path.stat().st_mtime,
             reverse=True,
         )
@@ -450,13 +451,15 @@ class JobManager:
         log_handle = None
         try:
             if env.get("BORG_UI_FILE_ACTIVITY_RUN") == "1":
-                from activity_log import activity_log_path
-                from activity_log_capture import prepare_capture
+                from activity_log_capture import prepare_capture, read_record
 
-                log_file, capture_record_file = prepare_capture(job_key, run_id, Path(env["BORG_UI_ACTIVITY_LOG_DIR"]))
+                log_file, capture_record_file = prepare_capture(
+                    job_key, run_id, Path(env["BORG_UI_ACTIVITY_LOG_DIR"]),
+                    job_name=env.get("BORG_UI_JOB_NAME", ""), location=env.get("BORG_UI_JOB_LOCATION", ""),
+                )
                 log_handle = os.fdopen(os.open(log_file, os.O_WRONLY | os.O_NOFOLLOW), "wb")
                 env["BORG_UI_CAPTURE_LOG"] = str(log_file)
-                env["BORG_UI_RETAINED_LOG"] = str(activity_log_path(Path(env["BORG_UI_ACTIVITY_LOG_DIR"]), job_key, run_id))
+                env["BORG_UI_RETAINED_LOG"] = read_record(capture_record_file)["retained_file"]
                 command = [sys.executable, str(Path(__file__).with_name("activity_log_capture.py")), str(capture_record_file), *command]
                 env["PYTHONUNBUFFERED"] = "1"
                 env["PYTHONIOENCODING"] = "utf-8"

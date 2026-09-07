@@ -182,15 +182,18 @@ function storageRetentionFromJob(job) {
   };
 }
 
-function storageRetentionSummary(job) {
+function storageRetentionTableHtml(job) {
   const retention = storageRetentionFromJob(job);
-  const values = [
-    storageT('storage.repositoryRetentionDaily', { count: retention.daily || '0' }),
-    storageT('storage.repositoryRetentionWeekly', { count: retention.weekly || '0' }),
-    storageT('storage.repositoryRetentionMonthly', { count: retention.monthly || '0' }),
-    storageT('storage.repositoryRetentionYearly', { count: retention.yearly || '0' }),
-  ];
-  return values.join(', ');
+  const rows = ['Daily', 'Weekly', 'Monthly', 'Yearly'].map((period) => {
+    const value = storageT(`storage.repositoryRetention${period}`, { count: retention[period.toLowerCase()] || '0' });
+    const limit = storageT(`storage.repositoryRetention${period}Limit`);
+    return `<tr><td>${escHtml(value)}</td><td>${escHtml(limit)}</td></tr>`;
+  }).join('');
+  return `<table class="retention-table storage-maintenance-retention-table">
+    <caption>${escHtml(storageT('storage.repositoryMaintenanceRetention'))}</caption>
+    <thead><tr><th scope="col">${escHtml(storageT('storage.repositoryRetentionPoints'))}</th><th scope="col">${escHtml(storageT('storage.repositoryRetentionMaximum'))}</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function storageMaintenancePruneDetailsHtml(repo, job) {
@@ -201,10 +204,7 @@ function storageMaintenancePruneDetailsHtml(repo, job) {
   const filter = storageT('storage.repositoryMaintenanceArchiveFilter', {
     filter: storageArchiveFilterFromJob(job) || '-',
   });
-  const retention = storageT('storage.repositoryMaintenanceRetention', {
-    retention: storageRetentionSummary(job),
-  });
-  return `<br>${escHtml(source)}<br>${escHtml(filter)}<br>${escHtml(retention)}`;
+  return `<div>${escHtml(source)}</div><div>${escHtml(filter)}</div>${storageRetentionTableHtml(job)}`;
 }
 
 function updateStorageMaintenanceRetentionPreview() {
@@ -1613,12 +1613,12 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
     if (title) title.textContent = storageT('storage.repositoryMaintenanceConfirmTitle');
     if (description) description.textContent = storageT(confirmKey);
     const pruneDetails = action === 'prune'
-      ? `<span id="storage-maintenance-retention-preview">${storageMaintenancePruneDetailsHtml(repo || {}, job)}</span>`
+      ? `<div id="storage-maintenance-retention-preview">${storageMaintenancePruneDetailsHtml(repo || {}, job)}</div>`
       : '';
     const selector = action === 'prune' && jobs.length > 1
-      ? `<label class="ui-field storage-maintenance-retention-source"><span>${escHtml(storageT('storage.repositoryMaintenanceSelectRetentionSource'))}</span><select id="storage-maintenance-retention-job" class="form-select">${jobs.map((item) => `<option value="${escHtml(String(item.key || ''))}">${escHtml(storageJobName(repo || {}, item) || String(item.key || ''))} - ${escHtml(storageArchiveFilterFromJob(item) || '-')} - ${escHtml(storageRetentionSummary(item))}</option>`).join('')}</select><small>${escHtml(storageT('storage.repositoryMaintenanceMultipleJobsHint'))}</small></label>`
+      ? `<label class="ui-field storage-maintenance-retention-source"><span>${escHtml(storageT('storage.repositoryMaintenanceSelectRetentionSource'))}</span><select id="storage-maintenance-retention-job" class="form-select">${jobs.map((item) => `<option value="${escHtml(String(item.key || ''))}">${escHtml(storageJobName(repo || {}, item) || String(item.key || ''))} - ${escHtml(storageArchiveFilterFromJob(item) || '-')}</option>`).join('')}</select><small>${escHtml(storageT('storage.repositoryMaintenanceMultipleJobsHint'))}</small></label>`
       : '';
-    if (info) info.innerHTML = `<div class="modal-info-item warning"><span class="modal-info-text"><strong>${escHtml(storageRepositoryTitle(repo || {}, job))}</strong><br>${escHtml(storageT('storage.repositoryMaintenanceConfirmAction', { action: storageMaintenanceTitle(resultKey) }))}${pruneDetails}${selector}</span></div>`;
+    if (info) info.innerHTML = `<div class="modal-info-item warning"><div class="modal-info-text"><strong>${escHtml(storageRepositoryTitle(repo || {}, job))}</strong><br>${escHtml(storageT('storage.repositoryMaintenanceConfirmAction', { action: storageMaintenanceTitle(resultKey) }))}${pruneDetails}${selector}</div></div>`;
     storageState.maintenanceConfirmation = {
       resolve,
       action,

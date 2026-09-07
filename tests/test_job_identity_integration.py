@@ -180,6 +180,24 @@ def test_migrated_jobs_remain_complete_in_support_bundle(tmp_path, monkeypatch):
             assert json.loads(bundle.read('jobs/' + key + '.json')) == expected
 
 
+@pytest.mark.parametrize('character', ['a', 'ä', '資'])
+def test_wizard_limits_job_name_characters_without_truncating_saved_metadata(tmp_path, character):
+    from wizard_api import JobNameValidationError
+    config, jobs, ids, root = migrated(tmp_path)
+    key = ids[jobs[0]['job_key']]
+    params = load_job_for_wizard(key, root / 'scripts', config)
+    params.update(existing_job_key=key, job_name=character * 100)
+    assert save_job(params, root / 'scripts', root, config)['job_id'] == key
+    path = root / 'config/jobs' / (key + '.json')
+    before = path.read_bytes()
+    assert json.loads(before)['name'] == character * 100
+    params['job_name'] += character
+    with pytest.raises(JobNameValidationError) as error:
+        save_job(params, root / 'scripts', root, config)
+    assert error.value.api_code == 'job_name_too_long'
+    assert path.read_bytes() == before
+
+
 def test_delete_optional_artifacts_selects_only_the_requested_id(tmp_path, monkeypatch):
     from borg_backup_ui import BackupUIHandler
     import schedule_api
@@ -193,6 +211,11 @@ def test_delete_optional_artifacts_selects_only_the_requested_id(tmp_path, monke
     other = log_dir / 'other.log'
     owned.write_text('selected')
     other.write_text('retained')
+    from job_identity import job_log_filename
+    new_owned = log_dir / job_log_filename('Earlier name', 'local', selected, '2026-09-07_15-00-01')
+    new_other = log_dir / job_log_filename('Earlier name', 'local', retained, '2026-09-07_15-00-01')
+    new_owned.write_text('orphaned selected log')
+    new_other.write_text('other job log')
     for path in Path(config['STATUS_DIR']).glob('*.status'):
         payload = json.loads(path.read_text())
         payload['log_file'] = str(owned if payload['job_id'] == selected else other)
@@ -205,5 +228,7 @@ def test_delete_optional_artifacts_selects_only_the_requested_id(tmp_path, monke
     assert [j.key for j in discover_jobs(root / 'scripts', root)] == [retained]
     assert len(list(Path(config['STATUS_DIR']).glob('*.status'))) == 1
     assert not owned.exists()
+    assert not new_owned.exists()
+    assert new_other.read_text() == 'other job log'
     assert other.read_text() == 'retained'
     assert [r['job_key'] for r in list_restore_tests(config)] == [retained]

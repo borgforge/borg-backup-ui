@@ -1821,7 +1821,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         # New logs use the ID; old logs are selected through owned status records.
         deleted_logs = 0
         if delete_artifacts:
-            owned_logs.update(log_dir.glob(f"Borg-Backup_{job_key}--*.log"))
+            from job_identity import job_log_paths
+            owned_logs.update(job_log_paths(log_dir, job_key))
             for f in owned_logs:
                 try:
                     f.unlink()
@@ -3350,6 +3351,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         extra_env = {
             "BORG_UI_BORG_SCRIPTS_DIR": str(borg_scripts_dir),
             "BORG_UI_JOB_KEY": job_key,
+            "BORG_UI_JOB_NAME": info.name or info.display_name,
+            "BORG_UI_JOB_LOCATION": info.location,
             "BORG_UI_APP_VERSION": APP_VERSION,
             "BORG_UI_REQUEST_ID": request_id,
             "BORG_UI_REQUEST_SOURCE": source,

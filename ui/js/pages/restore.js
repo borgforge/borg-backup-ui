@@ -225,11 +225,16 @@ function restoreArchiveFilterPopover(filters) {
     }))
     .filter((item) => item.filter);
   if (rows.length <= 1) return '';
+  const groups = [true, false].map((current) => {
+    const group = rows.filter((row) => row.current === current);
+    if (!group.length) return '';
+    return `<span><em>${escHtml(restoreT(current ? 'archiveFilterCurrent' : 'archiveFilterPrevious'))}</em>${group.map((row) => `<code>${escHtml(row.filter)}</code>`).join('')}</span>`;
+  }).join('');
   return `<span class="archive-pattern-popover">
     <button type="button" class="archive-pattern-popover-button" aria-haspopup="true" aria-label="${escHtml(restoreT('archiveFilterHistoryButton'))}">i</button>
     <span class="archive-pattern-popover-panel" role="tooltip">
       <strong>${escHtml(restoreT('archiveFilterHistoryTitle'))}</strong>
-      ${rows.map((row) => `<span><em>${escHtml(restoreT(row.current ? 'archiveFilterCurrent' : 'archiveFilterPrevious'))}</em><code>${escHtml(row.filter)}</code></span>`).join('')}
+      ${groups}
     </span>
   </span>`;
 }

@@ -59,6 +59,29 @@ for (const language of ['de', 'en']) {
   });
 }
 
+for (const language of ['de', 'en']) {
+  test(`wizard accepts 100 characters and rejects longer names (${language})`, () => {
+    const labels = JSON.parse(fs.readFileSync(`ui/i18n/${language}.json`, 'utf8'));
+    const context = vm.createContext({
+      window: {BBUI: {components: {i18n: {t(key) {
+        return key.split('.').reduce((value, part) => value?.[part], labels) || key;
+      }}}}, addEventListener() {}},
+      document: {}, input: {job_name: 'ä'.repeat(100), archive_prefix: 'test-backup'}, error: '',
+    });
+    vm.runInContext(fs.readFileSync('ui/js/pages/wizard.js', 'utf8'), context);
+    vm.runInContext(`
+      wizardClearError = () => { error = ''; };
+      _wizardCollectParams = () => input;
+      _wizardShowError = (step, message) => { error = message; };
+    `, context);
+    assert.equal(vm.runInContext('_wizardValidate(1)', context), true);
+    context.input.job_name += 'ä';
+    assert.equal(vm.runInContext('_wizardValidate(1)', context), false);
+    assert.equal(context.error, labels.wizard.validationJobNameLength);
+    assert.equal(vm.runInContext("wizardApiErrorMessage({code:'job_name_too_long'})", context), context.error);
+  });
+}
+
 test('wizard schedules the saved UUID and retries without creating another job', async () => {
   const id = '645de013-df1e-49e3-89f0-39c9bb3e299b';
   const elements = new Map();

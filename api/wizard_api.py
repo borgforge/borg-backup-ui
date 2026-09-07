@@ -205,6 +205,15 @@ _RETENTION_DEFAULTS = {
 }
 
 
+class JobNameValidationError(ValueError):
+    api_code = "job_name_too_long"
+
+
+def _validate_job_name_length(name: str) -> None:
+    if len(name.strip()) > 100:
+        raise JobNameValidationError("Job name must not exceed 100 characters")
+
+
 class RetentionValidationError(ValueError):
     """Expose a stable API code for localized wizard retention errors."""
 
@@ -252,6 +261,7 @@ def validate_params(
         raise ValueError("An existing job ID requires edit mode")
     if not params.get("job_name", "").strip():
         raise ValueError("Job name must not be empty")
+    _validate_job_name_length(params["job_name"])
     retention = _retention_from_params(params)
     params["file_activity"] = _bool_value(params.get("file_activity"), default=False)
     for period, value in retention.items():
@@ -573,6 +583,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     from archive_prefix import job_archive_prefixes, validate_archive_prefix
     from job_identity import new_job_id, metadata_job_id, validate_job_id
     from jobs_api import get_jobs_meta_dir
+    _validate_job_name_length(params.get("job_name", ""))
     archive_prefix = validate_archive_prefix(params.get("archive_prefix"))
     location    = params.get("location", "local")
     description = params.get("description", "").strip()

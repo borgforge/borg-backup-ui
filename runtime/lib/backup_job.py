@@ -303,6 +303,8 @@ class BackupJob:
         cfg = self.config
         _log_section("BACKUP START")
         logger.info("Job:   %s", cfg.job_name)
+        if cfg.job_id:
+            logger.info("Job ID: %s", cfg.job_id)
         logger.info("Date: %s", cfg.date_tag)
         logger.info("Log:   %s", cfg.log_file)
         logger.info("")
@@ -687,8 +689,12 @@ class BackupJob:
             "Removing logs older than %d days...", self.config.log_retention_days
         )
         cutoff = time.time() - (self.config.log_retention_days * 86400)
-        pattern = f"Borg-Backup_{self.config.job_id or self.config.backup_type}--*.log"
-        for log_path in self.config.log_dir.glob(pattern):
+        if self.config.job_id:
+            from job_identity import job_log_paths
+            paths = job_log_paths(self.config.log_dir, self.config.job_id)
+        else:
+            paths = self.config.log_dir.glob(f"Borg-Backup_{self.config.backup_type}--*.log")
+        for log_path in paths:
             try:
                 if log_path.stat().st_mtime < cutoff:
                     log_path.unlink()
@@ -994,6 +1000,9 @@ class BackupJob:
         logger.info("Saving skipped status: %s", reason)
         bs = BackupStatus(
             job_id=self.config.job_id,
+            job_name=self.config.job_name,
+            run_id=os.environ.get("BORG_UI_RUN_ID", ""),
+            file_activity=bool(self.config.retained_log_file),
             backup_type=self.config.backup_type,
             location=self.config.backup_location,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1124,6 +1133,9 @@ class BackupJob:
 
         bs = BackupStatus(
             job_id=self.config.job_id,
+            job_name=self.config.job_name,
+            run_id=os.environ.get("BORG_UI_RUN_ID", ""),
+            file_activity=bool(self.config.retained_log_file),
             backup_type=self.config.backup_type,
             location=self.config.backup_location,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1261,11 +1273,16 @@ class BackupJob:
         """Schreibt einen kleinen Informations-Log für Skip-Szenarien."""
         try:
             self.config.log_dir.mkdir(parents=True, exist_ok=True)
-            mini_log = (
-                self.config.log_dir
-                / f"Borg-Backup_{self.config.backup_type}--{self.config.date_tag}_{suffix}.log"
-            )
+            if self.config.job_id:
+                from job_identity import job_log_filename
+                filename = job_log_filename(self.config.job_name, self.config.backup_location,
+                                            self.config.job_id, f"{self.config.date_tag}_{suffix}")
+            else:
+                filename = f"Borg-Backup_{self.config.backup_type}--{self.config.date_tag}_{suffix}.log"
+            mini_log = self.config.log_dir / filename
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if self.config.job_id:
+                lines = [f"Job: {self.config.job_name}", f"Job ID: {self.config.job_id}", *lines]
             content = "\n".join(f"[{ts}] {line}" for line in lines) + "\n"
             mini_log.write_text(content, encoding="utf-8")
         except OSError as exc:

@@ -384,7 +384,8 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     if any(not name or Path(name).name != name or name in {".", ".."} for name in (cache_subdir, check_flag_name)):
         raise ValueError("Invalid job cache reference")
     cache_dir = f"{cache_base}/{cache_subdir}"
-    date_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    from job_identity import job_run_date_tag
+    date_tag = job_run_date_tag(os.environ.get("BORG_UI_RUN_ID", ""))
     log_dir = env.get("GLOBAL_LOG_DIR", "/mnt/user/Logs")
 
     from job_source_paths import normalize_source_paths
@@ -402,14 +403,16 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     meta_keep_monthly = str(meta_ret.get("monthly") or "").strip()
     meta_keep_yearly = str(meta_ret.get("yearly") or "").strip()
 
-    env.setdefault("JOB_NAME", str(meta.get("name") or job_key))
+    env["JOB_NAME"] = os.environ.get("BORG_UI_JOB_NAME") or str(meta.get("name") or job_key)
     env.setdefault("BACKUP_SCRIPTS_DIR", str(backup_scripts_dir))
     env.setdefault("BACKUP_TYPE", type_id)
-    env.setdefault("BACKUP_LOCATION", location)
+    env["BACKUP_LOCATION"] = os.environ.get("BORG_UI_JOB_LOCATION") or location
     env.setdefault("DATE_TAG", date_tag)
     env.setdefault("LOG_DIR", log_dir)
-    # The permanent ID keeps logs attached to the job across name/prefix changes.
-    env.setdefault("LOG_FILE", f"{log_dir}/Borg-Backup_{job_key}--{date_tag}.log")
+    from job_identity import job_log_filename
+    env.setdefault("LOG_FILE", str(Path(log_dir) / job_log_filename(
+        env["JOB_NAME"], env["BACKUP_LOCATION"], job_key, date_tag,
+    )))
     if meta_file_activity and os.environ.get("BORG_UI_CAPTURE_LOG"):
         env["LOG_FILE"] = os.environ["BORG_UI_CAPTURE_LOG"]
         # Retention still applies to saved logs; only this run's writes use RAM.

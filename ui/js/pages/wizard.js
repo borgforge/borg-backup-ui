@@ -43,6 +43,7 @@ function wizardT(key, params = {}) {
 
 function wizardApiErrorMessage(payload, status = 0) {
   const data = payload && typeof payload === 'object' ? payload : {};
+  if (data.code === 'job_name_too_long') return wizardT('wizard.validationJobNameLength');
   if (data.code === 'retention_invalid') return wizardT('wizard.validationRetentionInvalid');
   if (data.code === 'retention_all_zero') return wizardT('wizard.validationRetentionRequired');
   for (const key of ['details', 'message', 'error']) {
@@ -1185,6 +1186,7 @@ function _wizardValidate(step) {
   const p = _wizardCollectParams();
   if (step === 1) {
     if (!p.job_name) { _wizardShowError(1, wizardT('wizard.validationJobName')); return false; }
+    if ([...p.job_name].length > 100) { _wizardShowError(1, wizardT('wizard.validationJobNameLength')); return false; }
     if (!p.archive_prefix)  { _wizardShowError(1, wizardT('wizard.validationTypeId')); return false; }
     if (!/^[A-Za-z0-9_.-]+$/.test(p.archive_prefix)) {
       _wizardShowError(1, wizardT('wizard.validationTypeFormat'));

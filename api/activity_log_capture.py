@@ -63,10 +63,10 @@ def open_capture_file(record_path: Path):
                 raise
 
 
-def prepare_capture(job_key: str, run_id: str, destination: Path) -> tuple[Path, Path]:
+def prepare_capture(job_key: str, run_id: str, destination: Path, *, job_name: str = "", location: str = "") -> tuple[Path, Path]:
     from activity_log import activity_log_path
 
-    retained = activity_log_path(destination, job_key, run_id)
+    retained = activity_log_path(destination, job_key, run_id, job_name=job_name, location=location)
     active = activity_log_path(CAPTURE_ROOT / run_id, job_key, run_id)
     active.parent.mkdir(parents=True, mode=0o700)
     with os.fdopen(os.open(active, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as handle:
@@ -157,6 +157,10 @@ def supervise(record_path: Path, command: list[str]) -> int:
     record["pid"] = os.getpid()
     record["process_start"] = process_token(os.getpid())
     write_record(record_path, record)
+    if Path(record["retained_file"]).name.startswith("BBUI-"):
+        # The visible filename is the same as for a normal run. Keep the exact
+        # run identity in the log even if startup fails before status is saved.
+        print(f"INFO File activity run: job_id={record['job_key']} run_id={record['run_id']}", flush=True)
     try:
         process = subprocess.Popen(command)
         code = process.wait()

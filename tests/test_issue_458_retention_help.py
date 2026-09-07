@@ -143,8 +143,8 @@ def test_retention_step_explains_periods_and_blocks_all_zero_in_both_languages()
     assert "time periods" in en["wizard"]["retentionExplanation"]
     assert "größer als 0" in de["wizard"]["validationRetentionRequired"]
     assert "greater than 0" in en["wizard"]["validationRetentionRequired"]
-    assert "max. 1/Tag" in de["storage"]["repositoryRetentionDaily"]
-    assert "max. 1/day" in en["storage"]["repositoryRetentionDaily"]
+    assert "1 pro Tag" in de["storage"]["repositoryRetentionDailyLimit"]
+    assert "1 per day" in en["storage"]["repositoryRetentionDailyLimit"]
 
 
 def test_quick_help_and_manuals_use_the_same_retention_semantics() -> None:

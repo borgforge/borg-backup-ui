@@ -67,7 +67,7 @@ def test_storage_prune_confirmation_shows_archive_filter() -> None:
     assert "function storageJobsForRepository(repo)" in script
     assert "function storageArchivePrefixFromJob(job)" in script
     assert "function storageArchiveFilterFromJob(job)" in script
-    assert "function storageRetentionSummary(job)" in script
+    assert "function storageRetentionTableHtml(job)" in script
     assert "function storageMaintenancePruneDetailsHtml(repo, job)" in script
     assert "function updateStorageMaintenanceRetentionPreview()" in script
     assert 'id="storage-maintenance-retention-job"' in script
@@ -80,10 +80,10 @@ def test_storage_prune_confirmation_shows_archive_filter() -> None:
     assert "storage.repositoryMaintenanceMultipleJobsHint" in script
     assert '"repositoryMaintenanceRetentionSource": "Retention-Quelle: {job}"' in de
     assert '"repositoryMaintenanceArchiveFilter": "Archivfilter: {filter}"' in de
-    assert '"repositoryMaintenanceRetention": "Retention: {retention}"' in de
+    assert '"repositoryMaintenanceRetention": "Aufbewahrung"' in de
     assert '"repositoryMaintenanceRetentionSource": "Retention source: {job}"' in en
     assert '"repositoryMaintenanceArchiveFilter": "Archive filter: {filter}"' in en
-    assert '"repositoryMaintenanceRetention": "Retention: {retention}"' in en
+    assert '"repositoryMaintenanceRetention": "Retention"' in en
 
 
 def test_repository_information_has_a_background_refresh_loop() -> None:

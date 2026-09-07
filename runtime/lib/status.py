@@ -119,6 +119,9 @@ class BackupStatus:
     repository_check_status: str = "unknown"  # ok | overdue | unknown
     repository_next_check: str = ""
     job_id: str = ""
+    job_name: str = ""
+    run_id: str = ""
+    file_activity: bool = False
 
     # Pfad der Quelldatei (nicht serialisiert)
     source_path: Optional[Path] = field(default=None, repr=False, compare=False)
@@ -134,6 +137,9 @@ class BackupStatus:
 
         obj = cls(source_path=path)
         obj.job_id = str(data.get("job_id") or "")
+        obj.job_name = str(data.get("job_name") or "")
+        obj.run_id = str(data.get("run_id") or "")
+        obj.file_activity = data.get("file_activity") is True
         obj.backup_type = str(data.get("backup_type", "unknown"))
         obj.location = str(data.get("location", "unknown"))
         obj.timestamp = str(data.get("timestamp", ""))
@@ -204,7 +210,11 @@ class BackupStatus:
         """Schreibt Status als JSON-Datei in status_dir. Gibt den Dateipfad zurück."""
         ensure_status_storage_directory(status_dir)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        identity = self.job_id or f"{self.backup_type}_{self.location}"
+        if self.job_id:
+            from job_identity import job_file_component
+            identity = job_file_component(self.job_name or self.backup_type, self.location, self.job_id)
+        else:
+            identity = f"{self.backup_type}_{self.location}"
         path = status_dir / f"{timestamp}_{identity}.status"
         data = {k: v for k, v in asdict(self).items() if k != "source_path"}
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")

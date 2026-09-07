@@ -845,6 +845,26 @@
   gap: var(--ui-space-2);
 }
 
+#storage-maintenance-confirm-info .modal-info-text {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.storage-maintenance-retention-table {
+  margin: 10px 0;
+}
+
+.storage-maintenance-retention-table caption {
+  padding-bottom: 4px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.storage-maintenance-retention-table th,
+.storage-maintenance-retention-table td {
+  padding: 6px 8px;
+}
+
 .storage-repository-management {
   display: grid;
   gap: var(--ui-space-4);

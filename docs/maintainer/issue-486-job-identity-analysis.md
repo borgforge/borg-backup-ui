@@ -26,6 +26,33 @@ Activity-log capture and lookup are present on Main but were not in the original
 
 ## Starting records and path rules
 
+### Readable run filenames (approved maintainer follow-up)
+
+New runs write `BBUI-<job-name>_<location>_<full-job-id>--<timestamp>.log`
+and `<timestamp>_<job-name>_<location>_<full-job-id>.status`. The saved log uses
+the same local start-time format with or without the file-list option. Internal
+RAM capture paths remain tied to the run ID. Status metadata records the run ID,
+file-list option and saved log path so reopening a completed file list does not
+depend on the current job name or RAM state after a reboot. Previous activity
+filenames remain readable. A run marker at the start of a captured log also
+preserves lookup if startup fails before a status file is written. Additional
+skip logs retain their reason suffix
+(`SKIPPED_PARITY`, `USB_NOT_MOUNTED`, or `USB_NOT_WRITABLE`); the status payload
+records the corresponding reason and points to the complete run log.
+Existing files are not renamed and do not require another migration.
+
+The filename label records the name at run start. Unsafe filename characters
+are replaced, and the label is limited to 100 UTF-8 bytes (or less if needed
+to keep a longer activity filename within 255 bytes). This does not truncate
+the stored job name. The Wizard input and save API limit job names to 100
+characters. New status payloads include the full job name and ID; log headers
+include both as well.
+
+Log lookup, retention and optional job-artifact deletion match the full ID in
+both old and new filenames. Activity-log lookup after a restart matches the
+full job ID and run ID independently of the current job name. Status readers
+continue to use the payload ID and preserve the date-first filename layout.
+
 The canonical starting objects are the existing JSON files under
 `<data-root>/config/jobs/`, resolved by `jobs_api.get_jobs_meta_dir()` and
 `repository_context.jobs_dir()`. Their current `job_key` and filename are mapping
@@ -387,6 +414,18 @@ and an interrupted run reports failure before resuming with the original IDs.
 
 ### Maintainer test on Unraid
 
+For a repeated test from the supplied pre-migration state (`2026.09.07.0935`),
+first let backup/restore workers finish and stop the plugin service with
+`/etc/rc.d/rc.borg_backup_ui stop`. Preserve the current test data separately,
+then restore `/mnt/user/borg_backup_ui` and `/boot/config/borg-backup` together
+from the same original backup. Replace the directory contents completely;
+merging copies can leave UUID job files from the previous attempt behind.
+The migration state, ID assignment journal and audit are under
+`/boot/config/borg-backup/config`, so they must belong to the restored state
+as well. Install the new test package before starting the plugin again.
+A fresh migration can generate different UUIDs than the discarded test;
+subsequent starts of that newly migrated state must preserve its UUIDs.
+
 1. Keep the supplied original data copy; install the verified test-channel
    package on the existing Main data with the array/pools available and no
    backup/restore worker running.
@@ -401,3 +440,15 @@ and an interrupted run reports failure before resuming with the original IDs.
 6. Check prefix conflicts in a shared repository and allowed equal prefixes in
    separate repositories. Verify alphabetical names in existing job groups,
    and the ID in Edit Job and expanded History details.
+7. Check the 100-character job-name limit, including umlauts. Run a test job
+   with and without the file-list option: saved logs use the same readable
+   filename format, with the name at run start, location and full job ID.
+   Status files retain the job ID and point to the correct complete log.
+8. Where available, inspect runs skipped by parity or unavailable/read-only
+   USB storage: additional information logs keep their reason suffix and
+   the status contains the matching skip reason. Reopen a saved file list
+   after restarting the plugin.
+9. Check the compact retention-source selector and the retention table in
+   Repository Maintenance. Changing the source updates the current archive
+   filter and retention values. Browse & Restore lists earlier filters under
+   one shared heading.
