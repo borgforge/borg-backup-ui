@@ -80,6 +80,15 @@ Build and publish the test package with:
 It does not rerun pytest and does not modify stable release files in the
 feature branch.
 
+For #484, both package builders pass their archive through the same permission
+filter. Only plugin-owned directories and Slackware package metadata retain
+directory entries; shared ancestors such as `/`, `/boot`, `/etc/rc.d` and `/usr`
+are omitted. Payload directories/executables use `0755`, other regular files
+use `0644`, and ownership is `root:root`. Artifact verification rejects shared
+directory entries and unsafe payload modes before publication or promotion.
+This preserves existing host permissions; it does not repair an already affected
+host. Recovery instructions are in user-manual section 13.6 (German and English).
+
 Verify the published snapshot:
 
 ```bash

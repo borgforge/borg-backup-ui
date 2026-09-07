@@ -1176,6 +1176,46 @@ Eine fehlgeschlagene Pflichtmigration versetzt die Anwendung in einen eingeschr�
 
 > **Warnung:** Bearbeiten Sie JSON-Dateien nicht ohne vorherige Sicherung. Verwenden Sie für Support ein Support-Paket und das strukturierte Migrationslog.
 
+### 13.6 Verzeichnisrechte nach einer Plugin-Installation verändert (#484)
+
+Ältere Plugin-Pakete konnten bei der Installation oder einem Update die Rechte
+gemeinsamer Systemverzeichnisse verändern. Im bestätigten Test wechselten `/`,
+`/etc`, `/usr`, `/usr/local`, `/usr/local/emhttp` und
+`/usr/local/emhttp/plugins` von `755` auf `775`. Das kann die Anmeldung mit einem
+SSH-Schlüssel verhindern.
+
+Die korrigierten Pakete lassen die vorhandenen Rechte dieser Verzeichnisse
+unverändert. Bereits veränderte Rechte werden bei der Installation des Fixes
+jedoch nicht automatisch repariert.
+
+**Wiederherstellung:** Auf dem getesteten System mit **Unraid 7.4.0 Beta 2** stellte
+ein normaler Neustart die ursprünglichen Rechte wieder her. Borg Backup UI blieb
+dabei installiert und lief nach dem Start. Eine Deinstallation oder manuelle
+Rechtekorrektur war nicht nötig.
+
+1. Erfassen Sie die Rechte mit dem folgenden Befehl und sichern Sie die Ausgabe.
+2. Starten Sie Unraid über die Weboberfläche normal neu.
+3. Erfassen Sie die Rechte erneut und vergleichen Sie sie mit dem Ausgangszustand
+   vor der betroffenen Installation. Prüfen Sie gegebenenfalls auch die
+   SSH-Schlüsselanmeldung.
+
+```bash
+stat -c '%a %U:%G %n' \
+  / /boot /boot/config /boot/config/plugins \
+  /etc /etc/rc.d \
+  /usr /usr/local /usr/local/emhttp /usr/local/emhttp/plugins \
+  /mnt /var
+```
+
+Im getesteten Ausgangszustand hatten die aufgeführten `/boot`-Verzeichnisse `700`,
+`/etc/rc.d` hatte `777` und die übrigen aufgeführten Verzeichnisse `755`; alle
+gehörten `root:root`. Das sind die gemessenen Referenzwerte dieses Systems, keine
+pauschale Vorgabe für andere Versionen oder bewusst angepasste Rechte. Setzen Sie
+daher nicht alle Verzeichnisse auf `755` und verwenden Sie kein rekursives `chmod`.
+Wenn die Rechte nach dem Neustart abweichen, dokumentieren Sie Unraid-Version
+und beide Ausgaben für die weitere Prüfung. Die Wiederherstellung durch Neustart
+ist hier für Unraid 7.4.0 Beta 2 bestätigt.
+
 ## 14. FAQ
 
 ### Muss ich BorgBackup kennen?
