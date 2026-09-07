@@ -140,7 +140,7 @@ function storageRepositoryName(repo) {
 }
 
 function storageJobName(repo, job) {
-  return String(repo?.job_name || job?.name || repo?.display_name || repo?.used_by?.[0] || repo?.source_job_keys?.[0] || '').trim();
+  return String(job?.name || job?.display_name || repo?.job_name || repo?.display_name || '').trim();
 }
 
 function storageJobsForRepository(repo) {
@@ -154,33 +154,17 @@ function storageJobsForRepository(repo) {
     const direct = jobs.find((job) => String(job.key || '') === jobKey);
     if (direct) matches.push(direct);
   }
-  if (!matches.length) {
-    const fallback = jobs.find((job) =>
-      String(job.backup_type || '').toLowerCase() === String(repo?.backup_type || '').toLowerCase()
-      && String(job.location || '').toLowerCase() === String(repo?.location || '').toLowerCase()
-    );
-    if (fallback) matches.push(fallback);
-  }
   const seen = new Set();
   return matches.filter((job) => {
     const key = String(job?.key || '');
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
-  });
+  }).sort((a, b) => storageJobName(repo, a).localeCompare(storageJobName(repo, b)));
 }
 
 function storageArchivePrefixFromJob(job) {
-  const key = String(job?.key || job?.job_key || '').trim();
-  for (const location of ['storagebox', 'local', 'usb', 'smb']) {
-    const suffix = `_${location}`;
-    if (key.endsWith(suffix)) {
-      const typeId = key.slice(0, -suffix.length);
-      return typeId ? `${typeId}-backup` : '';
-    }
-  }
-  const typeId = key.includes('_') ? key.split('_').slice(0, -1).join('_') : key;
-  return typeId ? `${typeId}-backup` : '';
+  return String(job?.archive_prefix || '').trim();
 }
 
 function storageArchiveFilterFromJob(job) {

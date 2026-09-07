@@ -163,7 +163,7 @@ def test_repository_prune_uses_selected_job_retention_source(tmp_path: Path):
         "repository_key": "repo_shared",
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
     }), encoding="utf-8")
-    (jobs / (job_id('appdata_local') + ".json")).write_text(json.dumps({"job_id": job_id('appdata_local'), "archive_prefix": "appdata-backup",
+    (jobs / (job_id('appdata_local') + ".json")).write_text(json.dumps({"job_id": job_id('appdata_local'), "archive_prefix": "Appdata-Config",
         "job_key": job_id('appdata_local'),
         "repository_key": "repo_shared",
         "retention": {"daily": "14", "weekly": "8", "monthly": "3", "yearly": "1"},
@@ -180,7 +180,7 @@ def test_repository_prune_uses_selected_job_retention_source(tmp_path: Path):
 
     assert command == [
         "borg", "prune", "--lock-wait", "30", "--list", "--progress",
-        "--glob-archives", "appdata-backup-*",
+        "--glob-archives", "Appdata-Config-*",
         "--keep-daily", "14", "--keep-weekly", "8", "--keep-monthly", "3", "--keep-yearly", "1",
         "/mnt/backup/shared",
     ]

@@ -3,6 +3,62 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const test = require('node:test');
 
+for (const language of ['de', 'en']) {
+  test(`maintenance confirmation uses the selected job's name and full prefix (${language})`, async () => {
+    const labels = JSON.parse(fs.readFileSync(`ui/i18n/${language}.json`, 'utf8'));
+    const elements = new Map();
+    const context = vm.createContext({
+      window: {BBUI: {components: {i18n: {t(key, params = {}) {
+        const label = key.split('.').reduce((value, part) => value?.[part], labels) || key;
+        return label.replace(/\{(\w+)\}/g, (_, name) => params[name] ?? '');
+      }}}}, addEventListener() {}},
+      document: {getElementById(key) {
+        if (!elements.has(key)) elements.set(key, {value: '', innerHTML: '',
+          classList: {add() {}, remove() {}, contains() {return false;}}});
+        return elements.get(key);
+      }},
+      escHtml: value => String(value),
+    });
+    vm.runInContext(fs.readFileSync('ui/js/pages/storage.js', 'utf8'), context);
+    const alpha = {key: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Zulu',
+      archive_prefix: 'Flash-Config', backup_type: 'old_type', location: 'local',
+      retention: {daily: '14', weekly: '4', monthly: '6', yearly: '3'}};
+    const zulu = {key: 'ffffffff-ffff-4fff-8fff-ffffffffffff', name: 'Alpha',
+      archive_prefix: 'testdata-backup', backup_type: 'old_type', location: 'local',
+      retention: {daily: '7', weekly: '4', monthly: '6', yearly: '3'}};
+    const repo = {repository_key: 'shared', display_name: 'Repository title',
+      job_name: 'Old repository job label', used_by: [alpha.key, zulu.key]};
+    const state = context.window.BBUI.storageState;
+    state.data = {groups: {local: [repo]}};
+    state.jobs = [alpha, zulu];
+    const confirmation = vm.runInContext("openStorageMaintenanceConfirm('shared', 'prune', 'quick')", context);
+    const html = elements.get('storage-maintenance-confirm-info').innerHTML;
+    assert.ok(html.includes('testdata-backup-*'));
+    assert.ok(html.includes('Flash-Config-*'));
+    assert.ok(html.includes('Repository title'));
+    assert.ok(!html.includes('Old repository job label'));
+    assert.ok(!html.includes(alpha.key + '-backup'));
+    assert.ok(!html.includes(zulu.key + '-backup'));
+    assert.ok(html.indexOf(`value="${zulu.key}"`) < html.indexOf(`value="${alpha.key}"`));
+    context.document.getElementById('storage-maintenance-retention-job').value = alpha.key;
+    vm.runInContext('updateStorageMaintenanceRetentionPreview()', context);
+    const preview = elements.get('storage-maintenance-retention-preview').innerHTML;
+    assert.ok(preview.includes('Zulu'));
+    assert.ok(preview.includes('Flash-Config-*'));
+    assert.ok(preview.includes('14'));
+    assert.ok(!preview.includes('testdata-backup-*'));
+    vm.runInContext('closeStorageMaintenanceConfirm(true)', context);
+    const result = await confirmation;
+    assert.equal(result.jobKey, alpha.key);
+    assert.equal(result.confirmed, true);
+    // An unlinked job with the same former type/location must not become a source.
+    context.unlinked = {backup_type: 'old_type', location: 'local'};
+    assert.equal(vm.runInContext('storageJobsForRepository(unlinked).length', context), 0);
+    context.missingPrefix = {key: alpha.key};
+    assert.equal(vm.runInContext('storageArchiveFilterFromJob(missingPrefix)', context), '');
+  });
+}
+
 test('wizard schedules the saved UUID and retries without creating another job', async () => {
   const id = '645de013-df1e-49e3-89f0-39c9bb3e299b';
   const elements = new Map();

@@ -357,8 +357,24 @@ or the installed plugin.
   Ten unresolved historical references remain: four notification deliveries
   and six weekly keys (containing eight measurements), as identified above.
 
-The maintainer's live Unraid installation test is still required. Keep PR #494
+The remaining maintainer acceptance checks on Unraid are still required. Keep PR #494
 unmerged until that test is accepted. Stable release promotion remains separate.
+
+### Maintainer findings on test version 2026.09.07.1400
+
+On Unraid the job-ID migration completed successfully at 14:14:16, following
+startup at 14:10:34. Repository assignments had no errors, schedules were applied,
+and the web server started at 14:14:17. This confirms the live migration step;
+the remaining acceptance checks below are still pending. The 3m42s startup wait
+had no progress messages. A limited start-log progress proposal awaits approval.
+
+The repository maintenance confirmation still derived its displayed archive
+filter from the UUID. The backend already used the stored full archive prefix.
+The correction reads `archive_prefix` in the dialog, prefers the selected job's
+current name, sorts retention sources by name, and removes the former type/location
+fallback for job ownership. Browser-logic tests cover German and English, selected
+source changes and UUID submission. A local browser check confirmed the dialog
+and filter changes without executing maintenance.
 
 ### Maintainer test on Unraid
 
