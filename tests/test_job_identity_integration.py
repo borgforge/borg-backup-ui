@@ -64,9 +64,39 @@ def test_new_wizard_id_is_stateless_and_uses_the_admin_api_route(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.parametrize('scripts_setting', [False, True])
+def test_new_wizard_id_skips_existing_ids_before_display(tmp_path, monkeypatch, scripts_setting):
+    import job_identity
+    from borg_backup_ui import BackupUIHandler
+    occupied = job_id('already-saved')
+    unused = job_id('not-yet-saved')
+    metadata = tmp_path / 'config/jobs' / (occupied + '.json')
+    write(metadata, {'job_id': occupied, 'name': 'Existing job'})
+    before = metadata.read_bytes()
+    candidates = iter([occupied, occupied, unused])
+    monkeypatch.setattr(job_identity.uuid, 'uuid4', lambda: next(candidates))
+    handler = BackupUIHandler.__new__(BackupUIHandler)
+    handler.config = {'BACKUP_SCRIPTS_DIR': str(tmp_path / 'scripts' if scripts_setting else tmp_path)}
+    assert handler._get_wizard_new_job_id() == {'job_id': unused}
+    assert metadata.read_bytes() == before
+    assert list(metadata.parent.iterdir()) == [metadata]
+
+
+def test_unusable_id_generator_stops_without_writing_jobs(tmp_path, monkeypatch):
+    import job_identity
+    occupied = job_id('already-saved')
+    target = tmp_path / (occupied + '.json')
+    target.write_text('existing')
+    monkeypatch.setattr(job_identity.uuid, 'uuid4', lambda: occupied)
+    with pytest.raises(job_identity.JobIdConflictError):
+        job_identity.new_job_id(tmp_path)
+    assert target.read_text() == 'existing'
+    assert list(tmp_path.iterdir()) == [target]
+
+
 def test_new_wizard_saves_displayed_id_after_failed_write_without_overwriting(tmp_path, monkeypatch):
     import repositories_api
-    from job_identity import JobIdConflictError, new_job_id
+    from job_identity import new_job_id
     config, jobs, ids, root = migrated(tmp_path)
     params = load_job_for_wizard(ids[jobs[0]['job_key']], root / 'scripts', config)
     displayed = new_job_id()
@@ -89,11 +119,19 @@ def test_new_wizard_saves_displayed_id_after_failed_write_without_overwriting(tm
     assert result['job_id'] == result['job_key'] == displayed
     saved = target.read_bytes()
     assert json.loads(saved)['job_id'] == displayed
-    params['job_name'] = 'Must not overwrite'
-    with pytest.raises(JobIdConflictError) as error:
-        save_job(params, root / 'scripts', root, config)
-    assert error.value.api_status == 409
+    params.update(job_name='Another job with all inputs retained', archive_prefix='another-job')
+    params.update(description='Keep this description', icon='flash', icon_color='blue',
+                  compression='zstd,3', keep_daily='11', file_activity=True)
+    replacement = save_job(params, root / 'scripts', root, config)
+    assert replacement['job_id'] != displayed
     assert target.read_bytes() == saved
+    new_job = json.loads(Path(replacement['metadata_path']).read_text())
+    for field, expected in {'name': params['job_name'], 'description': params['description'],
+                            'icon': 'flash', 'icon_color': 'blue', 'compression': 'zstd,3',
+                            'file_activity': True, 'archive_prefix': 'another-job',
+                            'source_paths': params['source_paths'], 'repository_key': 'separate'}.items():
+        assert new_job[field] == expected
+    assert new_job['retention']['daily'] == '11'
     params['job_id'] = '../invalid-id'
     with pytest.raises(ValueError, match='UUID'):
         save_job(params, root / 'scripts', root, config)
@@ -103,7 +141,7 @@ def test_simultaneous_creates_with_the_same_displayed_id_cannot_overwrite(tmp_pa
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
     import repositories_api
-    from job_identity import JobIdConflictError, new_job_id
+    from job_identity import new_job_id
     config, jobs, ids, root = migrated(tmp_path)
     params = load_job_for_wizard(ids[jobs[0]['job_key']], root / 'scripts', config)
     displayed = new_job_id()
@@ -113,26 +151,27 @@ def test_simultaneous_creates_with_the_same_displayed_id_cannot_overwrite(tmp_pa
 
     def concurrent_transaction(*args, **kwargs):
         # Both requests have passed the existence check outside the inventory lock.
-        barrier.wait(timeout=10)
+        if args[4] == displayed:
+            barrier.wait(timeout=10)
         return transaction(*args, **kwargs)
 
     monkeypatch.setattr(repositories_api, 'save_job_repository_transaction', concurrent_transaction)
 
     def create(name):
-        try:
-            save_job({**params, 'job_name': name}, root / 'scripts', root, config)
-            return name
-        except JobIdConflictError:
-            return None
+        result = save_job({**params, 'job_name': name, 'archive_prefix': name.replace(' ', '-')},
+                          root / 'scripts', root, config)
+        return name, result['job_id']
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(create, ['First request', 'Second request']))
-    winners = [name for name in results if name is not None]
-    assert len(winners) == 1
-    stored = json.loads((root / 'config/jobs' / (displayed + '.json')).read_text())
-    assert stored['name'] == winners[0]
+    created_ids = {saved_id for _, saved_id in results}
+    assert len(created_ids) == 2
+    assert displayed in created_ids
+    for name, saved_id in results:
+        stored = json.loads((root / 'config/jobs' / (saved_id + '.json')).read_text())
+        assert stored['name'] == name
     repository = next(row for row in read_repository_store(config)['repositories'] if row['repository_key'] == 'separate')
-    assert repository['used_by'] == [displayed]
+    assert set(repository['used_by']) == created_ids
 
 
 def test_name_and_full_prefix_edit_keeps_every_job_relationship(tmp_path, monkeypatch):

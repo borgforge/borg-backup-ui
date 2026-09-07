@@ -15,8 +15,12 @@ class JobIdConflictError(ValueError):
     api_status = 409
 
 
-def new_job_id() -> str:
-    return str(uuid.uuid4())
+def new_job_id(jobs_dir: Path | None = None) -> str:
+    for _ in range(100):
+        candidate = str(uuid.uuid4())
+        if jobs_dir is None or not (jobs_dir / f"{candidate}.json").exists():
+            return candidate
+    raise JobIdConflictError("Could not generate an unused job ID. Please try again.")
 
 
 def validate_job_id(value: object) -> str:

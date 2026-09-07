@@ -2164,7 +2164,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_wizard_new_job_id(self) -> dict:
         from job_identity import new_job_id
-        return {"job_id": new_job_id()}
+        from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
+        jobs_dir = get_jobs_meta_dir(resolve_scripts_dir(self.config), resolve_data_root(self.config))
+        return {"job_id": new_job_id(jobs_dir)}
 
     def _get_wizard_job(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs

@@ -1474,6 +1474,8 @@ async function saveWizardJob() {
 
     // Retrying a failed schedule write edits the job that was already saved.
     wizardState.existingJobKey = data.job_id;
+    wizardState.jobId = data.job_id;
+    document.getElementById('wiz-job-id').value = data.job_id;
     wizardState.mode = 'edit';
 
     // Save schedule changes and surface crontab/application failures.

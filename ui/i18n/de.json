@@ -731,7 +731,7 @@
     "jobIdInvalid": "Der Server hat keine gültige Job-ID geliefert.",
     "jobIdLoadFailed": "Job-ID konnte nicht geladen werden. Bitte den Wizard schließen und erneut öffnen. {message}",
     "jobIdNotReady": "Die Job-ID ist noch nicht verfügbar. Bitte warten oder den Wizard erneut öffnen.",
-    "jobIdExists": "Diese Job-ID wird bereits verwendet. Bitte den Wizard erneut öffnen, um einen neuen Job anzulegen.",
+    "jobIdExists": "Es konnte keine freie Job-ID vergeben werden. Bitte erneut speichern. Deine Eingaben bleiben erhalten.",
     "archivePrefixPlaceholder": "z.B. meinedaten-backup",
     "archivePrefix": "Archivpräfix",
     "newTitle": "Neuer Backup-Job",

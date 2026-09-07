@@ -579,6 +579,22 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
 
 
 def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
+    """Keep new-job input intact if its proposed ID was taken before saving."""
+    from job_identity import JobIdConflictError, new_job_id
+    from jobs_api import get_jobs_meta_dir
+    attempt = dict(params)
+    for _ in range(10):
+        try:
+            return _save_job(attempt, scripts_dir, data_root, ui_config)
+        except JobIdConflictError:
+            if str(attempt.get("existing_job_key") or "").strip():
+                raise
+            # Both conflict checks run before any job or repository writes.
+            attempt["job_id"] = new_job_id(get_jobs_meta_dir(scripts_dir, data_root))
+    raise JobIdConflictError("Could not save with an unused job ID. Please try saving again.")
+
+
+def _save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
     """Speichert Job-eigene Wizard-Metadaten mit kanonischer Repository-Referenz."""
     from archive_prefix import job_archive_prefixes, validate_archive_prefix
     from job_identity import JobIdConflictError, new_job_id, metadata_job_id, validate_job_id
@@ -601,7 +617,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
 
     # ── Wizard-Metadaten schreiben (Phase 2) ─────────────────────────────────
     requested_id = validate_job_id(params["job_id"]) if "job_id" in params else ""
-    job_key = validate_job_id(existing_job_key) if existing_job_key else (requested_id or new_job_id())
+    job_key = validate_job_id(existing_job_key) if existing_job_key else (requested_id or new_job_id(get_jobs_meta_dir(scripts_dir, data_root)))
     if params.get("job_id") and params["job_id"] != job_key:
         raise ValueError("The permanent job ID cannot be changed")
     now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")

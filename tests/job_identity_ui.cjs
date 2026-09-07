@@ -84,6 +84,7 @@ for (const language of ['de', 'en']) {
 
 test('wizard schedules the saved UUID and retries without creating another job', async () => {
   const id = '645de013-df1e-49e3-89f0-39c9bb3e299b';
+  const proposedId = 'bc198590-b17b-4a30-a5c4-f721c45cdaea';
   const elements = new Map();
   const requests = [];
   let failSchedule = true;
@@ -107,22 +108,29 @@ test('wizard schedules the saved UUID and retries without creating another job',
     closePreview: () => {closed = true;},
   });
   vm.runInContext(fs.readFileSync('ui/js/pages/wizard.js', 'utf8'), context);
+  context.window.BBUI.wizardState.jobId = proposedId;
   vm.runInContext(`
     _wizardValidate = () => true;
     _wizardCollectParams = () => ({job_name: 'My job', archive_prefix: 'flash-config',
-      existing_job_key: wizardState.existingJobKey, location: 'local'});
+      job_id: wizardState.jobId, existing_job_key: wizardState.existingJobKey, location: 'local'});
     _wizardBuildCron = () => '0 9 * * *';
     closeWizard = closePreview;
   `, context);
   assert.equal(vm.runInContext("_wizardArchivePrefix('flash-config')", context), 'flash-config');
   assert.equal(vm.runInContext("_wizardArchivePrefix('Flash-Config')", context), 'Flash-Config');
   await vm.runInContext('saveWizardJob()', context);
+  assert.equal(requests[0].body.job_id, proposedId);
   assert.equal(requests[0].body.existing_job_key, '');
   assert.equal(requests[1].body.job_key, id);
   assert.equal(closed, false);
   assert.equal(context.window.BBUI.wizardState.existingJobKey, id);
+  assert.equal(context.window.BBUI.wizardState.jobId, id);
+  assert.equal(elements.get('wiz-job-id').value, id);
   failSchedule = false;
   await vm.runInContext('saveWizardJob()', context);
+  assert.equal(requests[2].body.job_id, id);
+  assert.equal(requests[2].body.job_name, requests[0].body.job_name);
+  assert.equal(requests[2].body.archive_prefix, requests[0].body.archive_prefix);
   assert.equal(requests[2].body.existing_job_key, id);
   assert.equal(requests[3].body.job_key, id);
   assert.equal(closed, true);
