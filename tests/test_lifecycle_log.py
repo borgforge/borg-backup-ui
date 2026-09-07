@@ -178,6 +178,7 @@ def test_scheduled_backup_run_sets_lifecycle_source_env(tmp_path: Path, monkeypa
     monkeypatch.setattr(jobs_api, "discover_jobs", lambda _scripts, _data: [
         SimpleNamespace(
             key="flash_local",
+            name="Flash configuration",
             enabled=True,
             standard="wizard",
             backup_type="flash",
@@ -192,6 +193,8 @@ def test_scheduled_backup_run_sets_lifecycle_source_env(tmp_path: Path, monkeypa
     assert captured["extra_env"]["BORG_UI_REQUEST_ID"] == "req-scheduled"
     assert captured["extra_env"]["BORG_UI_REQUEST_SOURCE"] == "schedule"
     assert captured["extra_env"]["BORG_UI_REQUEST_ACTOR"] == "scheduler"
+    assert captured["extra_env"]["BORG_UI_JOB_NAME"] == "Flash configuration"
+    assert captured["extra_env"]["BORG_UI_JOB_LOCATION"] == "local"
 
 
 def test_restore_test_script_contains_lifecycle_summary_hooks():
