@@ -228,18 +228,8 @@ ${NAME}:
 EOF
 
 # ── .txz bauen ────────────────────────────────────────────────────────────
-cd "${BUILD_DIR}"
-if command -v makepkg &>/dev/null; then
-  makepkg -l y -c y "${PKG_FILE}"
-else
-  tar --create \
-      --xz \
-      --file="${PKG_FILE}" \
-      --owner=root --group=root \
-      --exclude='./.git' \
-      .
-fi
-cd - >/dev/null
+python3 "${SCRIPT_DIR}/release_workflow.py" build-package \
+  --root "${BUILD_DIR}" --package "${PKG_FILE}"
 
 echo "==> Paket: ${PKG_FILE}"
 

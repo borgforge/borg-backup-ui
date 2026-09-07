@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -38,6 +39,70 @@ EXPECTED_PACKAGE_MEMBERS = (
     f"usr/local/emhttp/plugins/{NAME}/app-icon.png",
     PROVENANCE_MEMBER,
 )
+
+# Shared ancestors must never be extracted with build-host permissions (#484).
+PACKAGE_OWNED_DIRECTORIES = (
+    f"boot/config/plugins/{NAME}",
+    f"usr/local/emhttp/plugins/{NAME}",
+    "install",  # Slackware package metadata and generated installation hooks.
+)
+PACKAGE_OWNED_FILES = {"etc/rc.d/rc.borg_backup_ui"}
+
+
+def package_owns_path(name: str) -> bool:
+    return name in PACKAGE_OWNED_FILES or any(
+        name == root or name.startswith(root + "/")
+        for root in PACKAGE_OWNED_DIRECTORIES
+    )
+
+
+def verify_package_permissions(members: list[tarfile.TarInfo]) -> None:
+    for member in members:
+        name = member.name.removeprefix("./").rstrip("/")
+        if not package_owns_path(name):
+            raise RuntimeError(f"Package contains a shared or unexpected system path: {member.name}")
+        if member.uid != 0 or member.gid != 0:
+            raise RuntimeError(f"Package member is not owned by root:root: {member.name}")
+        if member.isdir() or member.isfile():
+            expected = 0o755 if member.isdir() or member.mode & 0o111 else 0o644
+            if member.mode != expected:
+                raise RuntimeError(f"Package member has unsafe permissions: {member.name}")
+
+
+def build_package(root: Path, package: Path) -> None:
+    """Keep both builders, but publish only plugin-owned paths and explicit modes."""
+    makepkg = shutil.which("makepkg")
+    if makepkg:
+        subprocess.run([makepkg, "-l", "y", "-c", "y", str(package)], cwd=root, check=True)
+    else:
+        subprocess.run(
+            ["tar", "--create", "--xz", f"--file={package}",
+             "--owner=root", "--group=root", "--exclude=./.git", "."],
+            cwd=root, check=True,
+        )
+
+    # Filter the finished archive, including makepkg-generated install hooks.
+    # Never extract it or chmod live host paths. The temporary archive stays
+    # beside the build output and replaces it only after successful validation.
+    with tempfile.TemporaryDirectory(prefix=".package-permissions-", dir=package.parent) as temp:
+        filtered = Path(temp) / package.name
+        with tarfile.open(package, "r:xz") as source, tarfile.open(filtered, "w:xz") as target:
+            for member in source:
+                name = member.name.removeprefix("./").rstrip("/")
+                if member.isdir() and not package_owns_path(name):
+                    continue
+                member.uid = member.gid = 0
+                member.uname = member.gname = "root"
+                # PAX metadata must not override the normalized ownership.
+                for key in ("uid", "gid", "uname", "gname"):
+                    member.pax_headers.pop(key, None)
+                if member.isdir() or member.isfile():
+                    member.mode = 0o755 if member.isdir() or member.mode & 0o111 else 0o644
+                target.addfile(member, source.extractfile(member) if member.isfile() else None)
+        with tarfile.open(filtered, "r:xz") as archive:
+            verify_package_permissions(archive.getmembers())
+        os.replace(filtered, package)
+
 
 PACKAGE_INSTALL_BEGIN = "<!-- BEGIN borg-backup-ui package installer -->"
 PACKAGE_INSTALL_END = "<!-- END borg-backup-ui package installer -->"
@@ -666,6 +731,7 @@ def prepare_build_tree(
 
 def package_provenance(package: Path) -> dict[str, object]:
     with tarfile.open(package, "r:*") as archive:
+        verify_package_permissions(archive.getmembers())
         members = {member.name.lstrip("./"): member for member in archive.getmembers()}
         missing = [name for name in EXPECTED_PACKAGE_MEMBERS if name not in members]
         if missing:
@@ -843,6 +909,13 @@ def command_rewrite_package_installer(args: argparse.Namespace) -> None:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser()
     subparsers = result.add_subparsers(dest="command", required=True)
+
+    item = subparsers.add_parser("build-package")
+    item.add_argument("--root", required=True)
+    item.add_argument("--package", required=True)
+    item.set_defaults(func=lambda args: build_package(
+        Path(args.root).resolve(), Path(args.package).resolve()
+    ))
 
     item = subparsers.add_parser("source-digest")
     item.add_argument("--repo", default=".")

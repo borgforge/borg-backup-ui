@@ -1174,6 +1174,42 @@ A failed required migration places the application in restricted maintenance mod
 
 > **Warning:** Do not edit JSON files without a backup. Use a support bundle and the structured migration log when requesting support.
 
+### 13.6 Directory Permissions Changed After Plugin Installation (#484)
+
+Older plugin packages could change shared system-directory permissions during
+installation or updates. In the confirmed test, `/`, `/etc`, `/usr`, `/usr/local`,
+`/usr/local/emhttp` and `/usr/local/emhttp/plugins` changed from `755` to `775`.
+This can prevent SSH public-key login.
+
+Corrected packages preserve the existing permissions of these directories.
+Installing the fix does not automatically repair permissions already changed
+by an older package.
+
+**Recovery:** On the tested **Unraid 7.4.0 Beta 2** system, a normal reboot restored
+the original permissions. Borg Backup UI remained installed and was running after
+startup. Uninstalling the plugin or manually changing permissions was unnecessary.
+
+1. Capture permissions with the command below and save the output.
+2. Reboot Unraid normally through its web interface.
+3. Capture permissions again and compare them with the state before the affected
+   installation. Also check SSH public-key login if applicable.
+
+```bash
+stat -c '%a %U:%G %n' \
+  / /boot /boot/config /boot/config/plugins \
+  /etc /etc/rc.d \
+  /usr /usr/local /usr/local/emhttp /usr/local/emhttp/plugins \
+  /mnt /var
+```
+
+In the tested baseline, the listed `/boot` directories had mode `700`, `/etc/rc.d`
+had `777`, and the other listed directories had `755`; all were owned by
+`root:root`. These are observed reference values for that system, not blanket
+requirements for other versions or intentionally customized permissions. Do not
+set every directory to `755` or use recursive `chmod`. If permissions differ after
+reboot, record the Unraid version and both captures for investigation. Reboot
+recovery is confirmed here for Unraid 7.4.0 Beta 2.
+
 ## 14. FAQ
 
 ### Do I Need BorgBackup Experience?
