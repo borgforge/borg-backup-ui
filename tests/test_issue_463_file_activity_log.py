@@ -197,7 +197,7 @@ def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
     assert "white-space: nowrap" in styles
     assert "#wizard-modal .modal-wizard" in styles
     assert "max-height: calc(100vh - 32px)" in styles
-    assert "flex: 1 1 448px" in styles
+    assert "flex: 1 1 480px" in styles
     assert "file_activity: !!document.getElementById('wiz-file-activity').checked" in script
     assert "wizard.previewFileActivity" in script
     assert "Support-Paketen" in de["wizard"]["fileActivityPrivacy"]
