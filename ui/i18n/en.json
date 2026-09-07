@@ -728,7 +728,6 @@
   },
   "wizard": {
     "jobId": "Job ID",
-    "archivePrefixHint": "Complete prefix; only the timestamp is appended. A–Z, a–z, 0–9, dots, _ and - are allowed.",
     "archivePrefixPlaceholder": "e.g. mydata-backup",
     "archivePrefix": "Archive prefix",
     "newTitle": "New backup job",

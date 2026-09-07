@@ -728,7 +728,6 @@
   },
   "wizard": {
     "jobId": "Job-ID",
-    "archivePrefixHint": "Vollständiger Präfix; nur der Zeitstempel wird angehängt. A–Z, a–z, 0–9, Punkt, _ und - sind erlaubt.",
     "archivePrefixPlaceholder": "z.B. meinedaten-backup",
     "archivePrefix": "Archivpräfix",
     "newTitle": "Neuer Backup-Job",
