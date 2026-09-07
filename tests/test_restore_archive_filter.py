@@ -149,7 +149,7 @@ def test_save_job_preserves_previous_archive_prefixes(tmp_path: Path, monkeypatc
     }, scripts_dir, tmp_path, {"BACKUP_SCRIPTS_DIR": str(tmp_path)})
 
     assert captured["job_key"] == job_id("oldtype_local")
-    assert captured["metadata"]["backup_type"] == "oldtype"
+    assert "backup_type" not in captured["metadata"]
     assert captured["metadata"]["archive_prefixes"] == [
         "newtype-backup",
         "oldtype-backup",

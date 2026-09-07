@@ -13,6 +13,8 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tests"))
+from job_fixtures import identified_job, job_id
 API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
@@ -131,13 +133,15 @@ def test_encrypted_job_transfer_restores_keyfile_to_target_store(tmp_path: Path)
     source_config = {"BACKUP_SCRIPTS_DIR": str(source)}
     jobs = source / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "flash_local.json").write_text(json.dumps({
-        "schema_version": 3,
+    (jobs / f"{job_id('flash_local')}.json").write_text(json.dumps(identified_job({
+        "schema_version": 5,
+        "backup_type": "flash",
+        "location": "local",
         "job_key": "flash_local",
         "name": "Flash",
         "repository_key": "repo_flash",
         "source_paths": ["/boot"],
-    }), encoding="utf-8")
+    })), encoding="utf-8")
     write_storage_store(source_config, {"storages": [{
         "storage_key": "storage_local",
         "display_name": "Local",

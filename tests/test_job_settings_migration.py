@@ -135,3 +135,19 @@ def test_orphan_status_and_restore_files_remain_without_becoming_jobs(tmp_path):
     assert {row['job_id'] for row in get_history_data(config)['entries']} == set(ids.values())
     assert {row['job_key'] for row in list_restore_tests(config)} == set(ids.values())
     assert {path: path.read_bytes() for path in before} == before
+
+
+def test_new_backup_run_without_uuid_is_rejected():
+    from runtime.lib.backup_job import BackupJobConfig
+    with pytest.raises(ValueError, match="Job ID must be a UUID"):
+        BackupJobConfig.from_config({"BACKUP_TYPE": "flash", "BACKUP_LOCATION": "local"})
+
+
+def test_new_restore_status_without_uuid_is_rejected_before_writing(tmp_path):
+    from test_restore_test_runner_profiles import _load_restore_runner
+    runner = _load_restore_runner()
+    instance = object.__new__(runner.RestoreTest)
+    instance.status_dir = tmp_path / "not-created"
+    with pytest.raises(ValueError, match="Job ID must be a UUID"):
+        instance._write("flash_local", {}, "success", 1, 0, 0, 0, "unknown", "", {}, [])
+    assert not instance.status_dir.exists()

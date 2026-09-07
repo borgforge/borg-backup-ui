@@ -1,3 +1,4 @@
+from job_fixtures import job_id
 import hashlib
 import io
 import json
@@ -361,7 +362,7 @@ def test_saved_history_references_retained_log_while_active_reads_use_ram(tmp_pa
     active.parent.mkdir()
     active.write_text('WARNING source changed\n')
     cfg = BackupJobConfig(
-        job_name='Files', backup_type='files', backup_location='local',
+        job_name='Files', job_id=job_id('files_local'), backup_type='files', backup_location='local',
         lock_file=tmp_path / 'job.lock', log_dir=retained.parent, log_file=active,
         backup_paths=[tmp_path], borg_cache_dir=tmp_path / 'cache', date_tag='2026-09-06',
         status_dir=tmp_path / 'status', retained_log_file=retained,

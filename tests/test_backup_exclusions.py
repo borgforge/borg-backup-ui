@@ -1,3 +1,4 @@
+from job_fixtures import job_id
 import io
 import json
 import logging
@@ -35,6 +36,7 @@ def test_exclusion_must_exist_below_a_source(tmp_path: Path):
 
 def test_backup_job_config_reads_exclusions_as_json(tmp_path: Path):
     cfg = BackupJobConfig.from_config({
+        "BORG_UI_JOB_KEY": job_id("sources_local"),
         "BACKUP_PATHS_JSON": json.dumps([str(tmp_path / "source")]),
         "BACKUP_EXCLUDE_PATHS_JSON": json.dumps([str(tmp_path / "source" / "cache")]),
     })
@@ -47,6 +49,7 @@ def test_backup_job_config_preserves_multiple_source_paths_with_spaces(tmp_path:
     second = tmp_path / "Second source"
 
     cfg = BackupJobConfig.from_config({
+        "BORG_UI_JOB_KEY": job_id("sources_local"),
         "BACKUP_PATHS_JSON": json.dumps([str(first), str(second)]),
         "BACKUP_EXCLUDE_PATHS_JSON": "[]",
     })
@@ -63,6 +66,7 @@ def test_backup_job_config_resolves_symlinked_source_root_for_borg(tmp_path: Pat
     visible_root.symlink_to(real_root, target_is_directory=True)
 
     cfg = BackupJobConfig.from_config({
+        "BORG_UI_JOB_KEY": job_id("sources_local"),
         "BACKUP_PATHS_JSON": json.dumps([str(visible_root)]),
         "BACKUP_EXCLUDE_PATHS_JSON": json.dumps([str(visible_root / "cache")]),
     })
@@ -81,6 +85,7 @@ def test_backup_job_config_resolves_nested_path_below_symlinked_share_for_borg(t
     visible_root.symlink_to(real_root, target_is_directory=True)
 
     cfg = BackupJobConfig.from_config({
+        "BORG_UI_JOB_KEY": job_id("sources_local"),
         "BACKUP_PATHS_JSON": json.dumps([str(visible_root / "adguard")]),
         "BACKUP_EXCLUDE_PATHS_JSON": json.dumps([str(visible_root / "adguard" / "cache")]),
     })
