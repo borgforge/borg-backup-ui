@@ -192,7 +192,11 @@ def discover_repos(conf: dict) -> list:
         if str(raw.get("runner", "")).strip() != "scriptless-wizard-runner":
             continue
         btype = str(raw.get("backup_type", "")).strip()
-        job_key = str(raw.get("job_key") or jf.stem).strip()
+        from job_identity import metadata_job_id
+        try:
+            job_key = metadata_job_id(raw)
+        except ValueError:
+            continue
         if not btype or not job_key:
             continue
         try:
@@ -565,7 +569,7 @@ class RestoreTest:
         path     = repo["path"]
         encryption = str(repo.get("encryption") or "").strip().lower()
         pp_file  = repo["passphrase_file"]
-        key      = str(repo.get("job_key") or f"{btype}_{location}")
+        key      = str(repo["job_key"])
 
         self.log(f"{'─'*60}")
         self.log(f"TEST: {btype} ({location})")
@@ -955,6 +959,7 @@ class RestoreTest:
         )
 
         data = {
+            "job_id":                   key,
             "report_schema_version":    1,
             "report_id":                f"RT-{now.strftime('%Y%m%d-%H%M%S')}-{key}",
             "repository":              repo["path"],

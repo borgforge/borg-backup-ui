@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 import importlib.util
 import json
 from pathlib import Path
@@ -43,16 +44,16 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
     monkeypatch.setattr(runner, "SCRIPT_DIR", script_dir)
     monkeypatch.setenv("BORG_UI_DATA_ROOT", str(tmp_path / "runtime"))
 
-    (jobs_dir / "testjob_usb.json").write_text(
-        json.dumps({
+    (jobs_dir / (job_id('testjob_usb') + ".json")).write_text(
+        json.dumps(identified_job({
             "schema_version": 2,
             "enabled": True,
             "runner": "scriptless-wizard-runner",
-            "job_key": "testjob_usb",
+            "job_key": job_id('testjob_usb'),
             "backup_type": "testjob",
             "location": "usb",
             "repository_key": "repo_testjob_usb",
-        }),
+        })),
         encoding="utf-8",
     )
     (config_dir / "storages.json").write_text(json.dumps({
@@ -86,7 +87,7 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
         "job_key", "type", "location", "path", "encryption", "passphrase_file", "profile_key",
         "mount_before_run", "unmount_after_run",
     )} for row in repos] == [{
-        "job_key": "testjob_usb",
+        "job_key": job_id('testjob_usb'),
         "type": "testjob",
         "location": "usb",
         "path": "/mnt/disks/WCJ54TRQ/borg-backup-testjob",
@@ -196,16 +197,16 @@ def test_restore_runner_discovers_smb_profile_repository(tmp_path, monkeypatch) 
     monkeypatch.setattr(runner, "SCRIPT_DIR", script_dir)
     monkeypatch.setenv("BORG_UI_DATA_ROOT", str(tmp_path / "runtime"))
 
-    (jobs_dir / "photos_smb.json").write_text(
-        json.dumps({
+    (jobs_dir / (job_id('photos_smb') + ".json")).write_text(
+        json.dumps(identified_job({
             "schema_version": 2,
             "enabled": True,
             "runner": "scriptless-wizard-runner",
-            "job_key": "photos_smb",
+            "job_key": job_id('photos_smb'),
             "backup_type": "photos",
             "location": "smb",
             "repository_key": "repo_photos_smb",
-        }),
+        })),
         encoding="utf-8",
     )
     (config_dir / "storages.json").write_text(json.dumps({

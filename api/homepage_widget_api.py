@@ -28,7 +28,11 @@ def _read_jobs(config: dict) -> list[dict]:
             continue
         if not isinstance(raw, dict):
             continue
-        key = str(raw.get("job_key") or path.stem).strip()
+        from job_identity import metadata_job_id
+        try:
+            key = metadata_job_id(raw)
+        except ValueError:
+            continue
         if not key:
             continue
         policy = raw.get("restore_test_policy") if isinstance(raw.get("restore_test_policy"), dict) else {}
@@ -49,7 +53,7 @@ def _read_jobs(config: dict) -> list[dict]:
             "is_utility": bool(raw.get("is_utility", False)),
             "restore_test_policy": policy,
         })
-    return rows
+    return sorted(rows, key=lambda row: row["name"].casefold())
 
 
 def _read_latest_backup_rows(config: dict) -> list[dict]:

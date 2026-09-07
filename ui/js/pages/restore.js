@@ -158,9 +158,14 @@ function renderRestoreJobSidebar() {
     if (!locationJobs.length) return '';
     return `<section class="restore-sidebar-group"><header>${escHtml(restoreLocationLabel(location))}<span>${locationJobs.length}</span></header>${locationJobs.map((job) => {
       const active = String(job.key) === String(restoreState.job);
-      return `<button type="button" class="restore-sidebar-job ${active ? 'is-active' : ''}" data-restore-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.key)}</strong><small>${escHtml(job.key)}</small></span></button>`;
+      return `<button type="button" class="restore-sidebar-job ${active ? 'is-active' : ''}" data-restore-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreJobIcon(job)}<span><strong>${escHtml(job.name || job.display_name || job.key)}</strong><small>${escHtml(job.archive_prefix || '')}</small></span></button>`;
     }).join('')}</section>`;
   }).join('');
+}
+
+function restoreJobName(key) {
+  const job = (restoreState.jobs || []).find((item) => String(item.key) === String(key));
+  return job?.name || job?.display_name || key || '—';
 }
 
 function restoreLocationLabel(location) {
@@ -183,7 +188,7 @@ function renderRestoreSelectedJob() {
     if (badge) badge.textContent = '';
     return;
   }
-  card.innerHTML = `${restoreJobIcon(job)}<div><small>${escHtml(restoreT('selectedJob'))}</small><h3>${escHtml(job.display_name || job.name || job.key)}</h3><small>${escHtml(job.key)} · ${escHtml(restoreLocationLabel(job.location))}</small></div><span class="ready">${escHtml(restoreT('ready'))}</span>`;
+  card.innerHTML = `${restoreJobIcon(job)}<div><small>${escHtml(restoreT('selectedJob'))}</small><h3>${escHtml(job.name || job.display_name || job.key)}</h3><small>${escHtml(job.archive_prefix || '')} · ${escHtml(restoreLocationLabel(job.location))}</small></div><span class="ready">${escHtml(restoreT('ready'))}</span>`;
   if (badge) badge.textContent = restoreT('jobSelected');
 }
 
@@ -427,7 +432,7 @@ function renderRestoreRuns(runs) {
     return `<article class="restore-run-card is-active">
       <div class="restore-run-main">
         <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
-        <strong>${escHtml(run.job_key || '—')}</strong>
+        <strong>${escHtml(run.job_name || restoreJobName(run.job_key))}</strong>
         <small>${escHtml(run.archive || '—')}</small>
       </div>
       <div class="restore-run-meta">
@@ -478,7 +483,7 @@ function renderRestoreHistory(payload) {
     const state = String(run.state || '');
     return `<article class="restore-history-card ${selected ? 'is-selected' : ''}" data-restore-history-id="${escHtml(id)}">
       <div class="restore-run-main">
-        <strong>${escHtml(run.job_key || '—')}</strong>
+        <strong>${escHtml(run.job_name || restoreJobName(run.job_key))}</strong>
         <small>${escHtml(run.archive || '—')}</small>
       </div>
       <div class="restore-run-meta">
@@ -518,7 +523,7 @@ async function restoreDeleteHistoryEntry(restoreId) {
   const id = String(restoreId || '').trim();
   if (!id) return;
   const run = (restoreState.history || []).find((item) => String(item.restore_id || '') === id) || {};
-  const label = run.job_key || id;
+  const label = run.job_name || restoreJobName(run.job_key) || id;
   const ok = await openRestoreHistoryDeleteConfirmModal(label, id);
   if (!ok) return;
   try {
@@ -789,7 +794,7 @@ async function restoreInit() {
       if (job.is_utility) continue;
       const opt = document.createElement('option');
       opt.value = job.key;
-      opt.textContent = job.display_name || job.name || job.key;
+      opt.textContent = job.name || job.display_name || job.key;
       sel.appendChild(opt);
     }
 

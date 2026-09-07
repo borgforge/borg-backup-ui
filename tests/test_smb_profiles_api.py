@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 from pathlib import Path
 import json
 import sys
@@ -213,10 +214,10 @@ def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: P
     data_root = tmp_path / "data"
     meta_dir = data_root / "config" / "jobs"
     meta_dir.mkdir(parents=True)
-    (meta_dir / "job1.json").write_text(
-        json.dumps({
+    (meta_dir / (job_id('job1') + ".json")).write_text(
+        json.dumps({"job_id": job_id('job1'), "archive_prefix": "job1-backup",
             "schema_version": 2,
-            "job_key": "job1",
+            "job_key": job_id('job1'),
             "name": "Job 1",
             "location": "smb",
             "repository_key": "repo_job1",

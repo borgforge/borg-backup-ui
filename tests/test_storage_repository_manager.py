@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 import json
 import subprocess
 import sys
@@ -103,12 +104,12 @@ def test_repository_maintenance_commands_use_repository_and_job_retention(tmp_pa
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs = tmp_path / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "photos_local.json").write_text(json.dumps({
-        "job_key": "photos_local",
+    (jobs / (job_id('photos_local') + ".json")).write_text(json.dumps({"job_id": job_id('photos_local'), "archive_prefix": "photos-backup",
+        "job_key": job_id('photos_local'),
         "repository_key": "repo_photos",
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
     }), encoding="utf-8")
-    repository = {"repository_key": "repo_photos", "used_by": ["photos_local"]}
+    repository = {"repository_key": "repo_photos", "used_by": [job_id('photos_local')]}
     manager = CheckManager()
 
     assert manager._repository_command(config, repository, "/mnt/backup/photos", "check", "quick") == [
@@ -139,7 +140,7 @@ def test_repository_prune_requires_explicit_retention_source_for_shared_reposito
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs = tmp_path / "config" / "jobs"
     jobs.mkdir(parents=True)
-    for job_key in ("photos_local", "appdata_local"):
+    for job_key in (job_id('photos_local'), job_id('appdata_local')):
         (jobs / f"{job_key}.json").write_text(json.dumps({
             "job_key": job_key,
             "repository_key": "repo_shared",
@@ -147,7 +148,7 @@ def test_repository_prune_requires_explicit_retention_source_for_shared_reposito
         }), encoding="utf-8")
 
     manager = CheckManager()
-    repository = {"repository_key": "repo_shared", "used_by": ["photos_local", "appdata_local"]}
+    repository = {"repository_key": "repo_shared", "used_by": [job_id('photos_local'), job_id('appdata_local')]}
 
     with pytest.raises(ValueError, match="select a retention source job"):
         manager._repository_command(config, repository, "/mnt/backup/shared", "prune", "quick")
@@ -157,24 +158,24 @@ def test_repository_prune_uses_selected_job_retention_source(tmp_path: Path):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs = tmp_path / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "photos_local.json").write_text(json.dumps({
-        "job_key": "photos_local",
+    (jobs / (job_id('photos_local') + ".json")).write_text(json.dumps({"job_id": job_id('photos_local'), "archive_prefix": "photos-backup",
+        "job_key": job_id('photos_local'),
         "repository_key": "repo_shared",
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
     }), encoding="utf-8")
-    (jobs / "appdata_local.json").write_text(json.dumps({
-        "job_key": "appdata_local",
+    (jobs / (job_id('appdata_local') + ".json")).write_text(json.dumps({"job_id": job_id('appdata_local'), "archive_prefix": "appdata-backup",
+        "job_key": job_id('appdata_local'),
         "repository_key": "repo_shared",
         "retention": {"daily": "14", "weekly": "8", "monthly": "3", "yearly": "1"},
     }), encoding="utf-8")
 
     command = CheckManager()._repository_command(
         config,
-        {"repository_key": "repo_shared", "used_by": ["photos_local", "appdata_local"]},
+        {"repository_key": "repo_shared", "used_by": [job_id('photos_local'), job_id('appdata_local')]},
         "/mnt/backup/shared",
         "prune",
         "quick",
-        job_key="appdata_local",
+        job_key=job_id('appdata_local'),
     )
 
     assert command == [
@@ -189,13 +190,13 @@ def test_repository_prune_rejects_retention_source_from_other_repository(tmp_pat
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs = tmp_path / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "photos_local.json").write_text(json.dumps({
-        "job_key": "photos_local",
+    (jobs / (job_id('photos_local') + ".json")).write_text(json.dumps({"job_id": job_id('photos_local'), "archive_prefix": "photos-backup",
+        "job_key": job_id('photos_local'),
         "repository_key": "repo_photos",
         "retention": {"daily": "7"},
     }), encoding="utf-8")
-    (jobs / "appdata_local.json").write_text(json.dumps({
-        "job_key": "appdata_local",
+    (jobs / (job_id('appdata_local') + ".json")).write_text(json.dumps({"job_id": job_id('appdata_local'), "archive_prefix": "appdata-backup",
+        "job_key": job_id('appdata_local'),
         "repository_key": "repo_appdata",
         "retention": {"daily": "14"},
     }), encoding="utf-8")
@@ -203,11 +204,11 @@ def test_repository_prune_rejects_retention_source_from_other_repository(tmp_pat
     with pytest.raises(ValueError, match="does not use this repository"):
         CheckManager()._repository_command(
             config,
-            {"repository_key": "repo_photos", "used_by": ["photos_local"]},
+            {"repository_key": "repo_photos", "used_by": [job_id('photos_local')]},
             "/mnt/backup/photos",
             "prune",
             "quick",
-            job_key="appdata_local",
+            job_key=job_id('appdata_local'),
         )
 
 
@@ -541,16 +542,16 @@ def test_repository_lifecycle_blocks_live_job_reference(tmp_path: Path):
     config, repository_path, _secret = _write_lifecycle_repository(tmp_path)
     jobs = tmp_path / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "photos_local.json").write_text(json.dumps({
+    (jobs / (job_id('photos_local') + ".json")).write_text(json.dumps({"job_id": job_id('photos_local'), "archive_prefix": "photos-backup",
         "schema_version": 2,
-        "job_key": "photos_local",
+        "job_key": job_id('photos_local'),
         "repository_key": "repo_photos",
     }), encoding="utf-8")
 
     preview = prepare_repository_lifecycle(config, "repo_photos", "remove")
 
     assert preview["allowed"] is False
-    assert preview["job_keys"] == ["photos_local"]
+    assert preview["job_keys"] == [job_id('photos_local')]
     assert "jobs_linked" in preview["blockers"]
     with pytest.raises(RepositoryLifecycleConflict, match="jobs or operations"):
         apply_repository_lifecycle(config, {
@@ -562,9 +563,9 @@ def test_repository_lifecycle_blocks_live_job_reference(tmp_path: Path):
 
 
 def test_deleted_job_is_unlinked_from_repository_inventory(tmp_path: Path):
-    config, _repository_path, _secret = _write_lifecycle_repository(tmp_path, used_by=["photos_local"])
+    config, _repository_path, _secret = _write_lifecycle_repository(tmp_path, used_by=[job_id('photos_local')])
 
-    unlink_job_from_repositories(config, "photos_local")
+    unlink_job_from_repositories(config, job_id('photos_local'))
 
     repository = read_repository_store(config)["repositories"][0]
     assert repository["used_by"] == []

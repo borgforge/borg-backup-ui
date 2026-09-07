@@ -22,7 +22,7 @@ async function refreshHistory() {
   const status   = document.getElementById('history-filter-status')?.value   || '';
 
   const params = new URLSearchParams();
-  if (type)     params.set('type', type);
+  if (type)     params.set('job_key', type);
   if (location) params.set('location', location);
   if (status)   params.set('status', status);
   params.set('page', String(historyState.page || 1));
@@ -32,6 +32,11 @@ async function refreshHistory() {
     const res  = await fetch('/api/history?' + params.toString(), { credentials: 'include' });
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status));
+    const filter = document.getElementById('history-filter-type');
+    if (filter && Array.isArray(data.jobs)) {
+      filter.innerHTML = `<option value="">${escHtml(historyT('allTypes'))}</option>` + data.jobs.map((job) => `<option value="${escHtml(job.job_id)}">${escHtml(job.name)}</option>`).join('');
+      filter.value = type;
+    }
     historyState.data   = data;
     historyState.loaded = true;
     renderHistory(data);
@@ -130,7 +135,7 @@ function renderHistoryRow(e, idx) {
   const statusClass = e.status === 'cancelled' ? 'warning' : e.status;
   const statusBadge = `<span class="history-status-badge ${statusClass}">${historyStatusLabel(e.status)}</span>`;
   const locClass = e.location || '';
-  const typeLabel = historyTypeLabel(e.backup_type);
+  const typeLabel = e.job_name || historyTypeLabel(e.backup_type);
   const rowId = `hrow-${idx}`;
   const detailId = `hdetail-${idx}`;
 
@@ -149,6 +154,7 @@ function renderHistoryRow(e, idx) {
       <td colspan="8">
         ${detailError ? renderHistoryError(detailError, e.status === 'skipped') : ''}
         <div class="history-detail-panel">
+          ${detailGroup(historyT('jobId'), e.job_id || '—', 'wide')}
           ${detailGroup(historyT('archive'), e.archive_name || '-', 'archive')}
           ${detailGroup(historyT('compressed'), e.compressed_size_fmt)}
           ${detailGroup(historyT('repositorySize'), e.repository_size_fmt)}

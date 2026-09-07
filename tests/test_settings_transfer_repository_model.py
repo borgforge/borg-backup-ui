@@ -1,4 +1,5 @@
 from __future__ import annotations
+from job_fixtures import identified_job, job_id
 
 import json
 import sys
@@ -23,15 +24,15 @@ def _canonical_source(root: Path) -> tuple[dict, Path]:
     secret.write_text("secret\n", encoding="utf-8")
     jobs_dir = root / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "appdata_local.json").write_text(json.dumps({
+    (jobs_dir / (job_id('appdata_local') + ".json")).write_text(json.dumps(identified_job({
         "schema_version": 3,
-        "job_key": "appdata_local",
+        "job_key": job_id('appdata_local'),
         "name": "Appdata",
         "backup_type": "appdata",
         "location": "local",
         "repository_key": "repo_appdata",
         "source_paths": ["/mnt/user/appdata"],
-    }) + "\n", encoding="utf-8")
+    })) + "\n", encoding="utf-8")
     write_storage_store(config, {"storages": [{
         "storage_key": "storage_local",
         "display_name": "Local",
@@ -96,15 +97,15 @@ def test_job_import_restores_repository_and_storage_before_job(tmp_path: Path):
     assert result["imported_count"] == 1
     assert result["repository_inventory"] == {"repositories": 1, "storages": 1}
     imported_job = json.loads(
-        (tmp_path / "target" / "config" / "jobs" / "appdata_local.json").read_text(encoding="utf-8")
+        (tmp_path / "target" / "config" / "jobs" / (job_id('appdata_local') + ".json")).read_text(encoding="utf-8")
     )
-    assert imported_job["schema_version"] == 3
+    assert imported_job["schema_version"] == 4
     assert imported_job["source_paths"] == ["/mnt/user/appdata"]
     assert read_repository_store(target_config)["repositories"][0]["repository_key"] == "repo_appdata"
     assert read_storage_store(target_config)["storages"][0]["storage_key"] == "storage_local"
     context = resolve_job_repository_context(
         target_config,
-        "appdata_local",
+        job_id('appdata_local'),
         require_passphrase_file=False,
     )
     assert context["repository_path"] == "/mnt/backup/borg-backup-appdata"

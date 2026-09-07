@@ -1,4 +1,5 @@
 from __future__ import annotations
+from job_fixtures import identified_job, job_id
 
 import json
 import os
@@ -92,12 +93,12 @@ def test_general_api_token_cannot_replace_widget_token(tmp_path: Path):
 
 def test_homepage_widget_summary_is_stable_and_redacted(monkeypatch):
     jobs = [
-        {"key": "flash_local", "name": "Flash", "display_name": "Flash - Local", "enabled": True},
+        {"key": job_id('flash_local'), "name": "Flash", "display_name": "Flash - Local", "enabled": True},
         {"key": "appdata_usb", "name": "Appdata", "display_name": "Appdata - USB", "enabled": True},
         {"key": "photos_local", "name": "Photos", "display_name": "Photos - Local", "enabled": False},
     ]
     latest = [
-        {"key": "flash_local", "status": "success", "timestamp": "2026-07-14 09:00:00"},
+        {"key": job_id('flash_local'), "status": "success", "timestamp": "2026-07-14 09:00:00"},
         {"key": "appdata_usb", "status": "warning", "timestamp": "2026-07-14 10:00:00"},
     ]
     monkeypatch.setattr(homepage_widget_api, "_read_jobs", lambda _config: jobs)
@@ -111,7 +112,7 @@ def test_homepage_widget_summary_is_stable_and_redacted(monkeypatch):
     monkeypatch.setattr(
         jobs_api,
         "get_all_runtime_states",
-        lambda _config: {"flash_local": {"running": True, "log_file": "/secret/job.log"}},
+        lambda _config: {job_id('flash_local'): {"running": True, "log_file": "/secret/job.log"}},
     )
 
     result = homepage_widget_api.build_homepage_widget_summary(
@@ -171,7 +172,7 @@ def test_unraid_dashboard_widget_cache_is_flash_safe_and_redacted(tmp_path: Path
     status = {
         "summary": {"success": 1, "warning": 1, "skipped": 0, "error": 0},
         "backups": [
-            {
+            {"job_id": job_id('appdata_local'),
                 "key": "appdata_local",
                 "backup_type": "appdata",
                 "location": "local",
@@ -267,7 +268,7 @@ def test_unraid_dashboard_widget_status_file_cache_marks_overdue_jobs(tmp_path: 
         "NOTIFY_BACKUP_OVERDUE_TOLERANCE_HOURS": "1",
     }
     (status_dir / "2026-08-09_12-00-00_flash_local.status").write_text(
-        json.dumps({
+        json.dumps({"job_id": job_id('flash_local'),
             "backup_type": "flash",
             "location": "local",
             "timestamp": "2026-08-09 12:00:00",
@@ -278,14 +279,14 @@ def test_unraid_dashboard_widget_status_file_cache_marks_overdue_jobs(tmp_path: 
         encoding="utf-8",
     )
     monkeypatch.setattr("schedule_api.get_schedules", lambda _config: {
-        "flash_local": {"enabled": True, "cron": "0 12 * * *"},
+        job_id('flash_local'): {"enabled": True, "cron": "0 12 * * *"},
     })
     monkeypatch.setattr(
         unraid_dashboard_widget,
         "_read_jobs",
         lambda _config, _backups: [
             {
-                "key": "flash_local",
+                "key": job_id('flash_local'),
                 "display_name": "Flash - Lokal",
                 "enabled": True,
                 "running": False,
@@ -297,7 +298,7 @@ def test_unraid_dashboard_widget_status_file_cache_marks_overdue_jobs(tmp_path: 
         "jobs_api.list_jobs",
         lambda _config, _context: [
             {
-                "key": "flash_local",
+                "key": job_id('flash_local'),
                 "display_name": "Flash - Lokal",
                 "enabled": True,
             }
@@ -400,7 +401,7 @@ def test_unraid_dashboard_widget_status_file_cache_clears_finished_running_lock(
         "STATUS_DIR": str(status_dir),
     }
     (status_dir / "2026-08-29_22-20-06_sonstiges_usb.status").write_text(
-        json.dumps({
+        json.dumps({"job_id": job_id('sonstiges_usb'),
             "backup_type": "sonstiges",
             "location": "usb",
             "timestamp": "2026-08-29 22:20:06",
@@ -415,7 +416,7 @@ def test_unraid_dashboard_widget_status_file_cache_clears_finished_running_lock(
         "_read_jobs",
         lambda _config, _backups: [
             {
-                "key": "sonstiges_usb",
+                "key": job_id('sonstiges_usb'),
                 "display_name": "Sonstiges - USB",
                 "enabled": True,
                 "running": True,
@@ -454,7 +455,7 @@ def test_unraid_dashboard_widget_status_file_cache_keeps_newer_running_job(tmp_p
         "STATUS_DIR": str(status_dir),
     }
     (status_dir / "2026-08-29_22-20-06_sonstiges_usb.status").write_text(
-        json.dumps({
+        json.dumps({"job_id": job_id('sonstiges_usb'),
             "backup_type": "sonstiges",
             "location": "usb",
             "timestamp": "2026-08-29 22:20:06",
@@ -469,7 +470,7 @@ def test_unraid_dashboard_widget_status_file_cache_keeps_newer_running_job(tmp_p
         "_read_jobs",
         lambda _config, _backups: [
             {
-                "key": "sonstiges_usb",
+                "key": job_id('sonstiges_usb'),
                 "display_name": "Sonstiges - USB",
                 "enabled": True,
                 "running": True,
@@ -510,7 +511,7 @@ def test_unraid_dashboard_widget_startup_cache_is_written_without_backup_status(
         "discover_jobs",
         lambda _scripts_dir, _data_root: [
             SimpleNamespace(
-                key="flash_local",
+                key=job_id('flash_local'),
                 name="Flash",
                 display_name="Flash - Lokal",
                 enabled=True,
@@ -565,7 +566,7 @@ def test_unraid_dashboard_widget_startup_cache_preserves_existing_fresh_cache(tm
             "warnings": 0,
             "failed": 0,
             "running": 0,
-            "items": [{"key": "flash_local", "last_status": "success"}],
+            "items": [{"key": job_id('flash_local'), "last_status": "success"}],
         },
     }
     cache_file.write_text(json.dumps(existing), encoding="utf-8")
@@ -607,7 +608,7 @@ def test_unraid_dashboard_widget_startup_cache_rebuilds_running_only_fresh_cache
                 "running": 1,
                 "items": [
                     {
-                        "key": "flash_local",
+                        "key": job_id('flash_local'),
                         "enabled": True,
                         "last_status": "",
                         "last_timestamp": "",
@@ -618,7 +619,7 @@ def test_unraid_dashboard_widget_startup_cache_rebuilds_running_only_fresh_cache
         encoding="utf-8",
     )
     (status_dir / "2026-08-28_12-30-00_flash_local.status").write_text(
-        json.dumps({
+        json.dumps({"job_id": job_id('flash_local'),
             "backup_type": "flash",
             "location": "local",
             "timestamp": "2026-08-28 12:30:00",
@@ -633,7 +634,7 @@ def test_unraid_dashboard_widget_startup_cache_rebuilds_running_only_fresh_cache
         "_read_jobs",
         lambda _config, _backups: [
             {
-                "key": "flash_local",
+                "key": job_id('flash_local'),
                 "display_name": "Flash - Lokal",
                 "enabled": True,
                 "running": False,
@@ -685,14 +686,14 @@ def test_unraid_dashboard_widget_startup_cache_rejects_empty_fresh_status_scan(t
                 "warnings": 0,
                 "failed": 0,
                 "running": 0,
-                "items": [{"key": "flash_local", "enabled": True, "last_status": "", "last_timestamp": ""}],
+                "items": [{"key": job_id('flash_local'), "enabled": True, "last_status": "", "last_timestamp": ""}],
             },
             "status": {"state": "ok"},
         }),
         encoding="utf-8",
     )
     job = {
-        "key": "flash_local",
+        "key": job_id('flash_local'),
         "display_name": "Flash - Lokal",
         "enabled": True,
         "running": False,
@@ -706,7 +707,7 @@ def test_unraid_dashboard_widget_startup_cache_rejects_empty_fresh_status_scan(t
         "discover_jobs",
         lambda _scripts_dir, _data_root: [
             SimpleNamespace(
-                key="flash_local",
+                key=job_id('flash_local'),
                 name="Flash",
                 display_name="Flash - Lokal",
                 enabled=True,
@@ -745,7 +746,7 @@ def test_unraid_dashboard_widget_startup_cache_import_is_one_time(tmp_path: Path
             "state": "skipped",
             "reason": "no_backup_status_rows",
         },
-        "jobs": {"enabled": 1, "items": [{"key": "flash_local"}]},
+        "jobs": {"enabled": 1, "items": [{"key": job_id('flash_local')}]},
     }
     cache_file.write_text(json.dumps(existing), encoding="utf-8")
     monkeypatch.setattr(
@@ -814,7 +815,7 @@ def test_unraid_dashboard_widget_startup_cache_rebuilds_old_fresh_cache_without_
         "schema_version": 1,
         "cache_state": "fresh",
         "generated_at": "2026-08-10T12:00:00Z",
-        "jobs": {"items": [{"key": "flash_local"}]},
+        "jobs": {"items": [{"key": job_id('flash_local')}]},
     }
     monkeypatch.setattr(
         unraid_dashboard_widget,

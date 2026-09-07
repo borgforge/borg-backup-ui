@@ -208,7 +208,9 @@ class CheckManager:
         if not selected_job_key:
             raise ValueError("Prune requires a backup job with a retention policy")
         retention = self._job_retention(config, selected_job_key)
-        archive_prefix = _archive_prefix_from_job_key(selected_job_key)
+        from archive_prefix import archive_prefix_from_metadata
+        from repository_context import load_job_metadata
+        archive_prefix = archive_prefix_from_metadata(load_job_metadata(config, selected_job_key))
         cmd = [
             "borg", "prune", "--lock-wait", self._LOCK_WAIT_SECONDS,
             "--list", "--progress",

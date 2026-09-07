@@ -118,6 +118,7 @@ class BackupStatus:
     repository_check_date: str = ""
     repository_check_status: str = "unknown"  # ok | overdue | unknown
     repository_next_check: str = ""
+    job_id: str = ""
 
     # Pfad der Quelldatei (nicht serialisiert)
     source_path: Optional[Path] = field(default=None, repr=False, compare=False)
@@ -132,6 +133,7 @@ class BackupStatus:
             return cls(source_path=path)
 
         obj = cls(source_path=path)
+        obj.job_id = str(data.get("job_id") or "")
         obj.backup_type = str(data.get("backup_type", "unknown"))
         obj.location = str(data.get("location", "unknown"))
         obj.timestamp = str(data.get("timestamp", ""))
@@ -177,8 +179,8 @@ class BackupStatus:
 
     @property
     def key(self) -> str:
-        """Eindeutiger Schlüssel: backup_type_location."""
-        return f"{self.backup_type}_{self.location}"
+        """Use the permanent ID; unresolved history cannot own an active job."""
+        return self.job_id or f"legacy:{self.backup_type}_{self.location}"
 
     @property
     def timestamp_dt(self) -> Optional[datetime]:
@@ -202,7 +204,8 @@ class BackupStatus:
         """Schreibt Status als JSON-Datei in status_dir. Gibt den Dateipfad zurück."""
         ensure_status_storage_directory(status_dir)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        path = status_dir / f"{timestamp}_{self.backup_type}_{self.location}.status"
+        identity = self.job_id or f"{self.backup_type}_{self.location}"
+        path = status_dir / f"{timestamp}_{identity}.status"
         data = {k: v for k, v in asdict(self).items() if k != "source_path"}
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info("Saved backup status: %s", path)
@@ -213,6 +216,7 @@ class BackupStatus:
 class RestoreTest:
     """Repräsentiert den Inhalt einer .test Datei."""
 
+    job_id: str = ""
     test_date: str = ""
     test_result: str = "unknown"     # success | failed | unavailable
     test_level: int = 0
@@ -273,7 +277,9 @@ class RestoreTest:
         backup_type = parts[0] if len(parts) > 0 else "unknown"
         location = parts[1] if len(parts) > 1 else "unknown"
 
-        obj = cls(source_path=path, backup_type=backup_type, location=location)
+        obj = cls(source_path=path, job_id=str(data.get("job_id") or ""),
+                  backup_type=str(data.get("backup_type") or data.get("type") or backup_type),
+                  location=str(data.get("location") or location))
         obj.test_date = str(data.get("test_date", "") or "")
         obj.test_result = str(data.get("test_result", "unknown") or "unknown")
         obj.test_level = int(data.get("test_level", 0) or 0)
@@ -328,7 +334,7 @@ class RestoreTest:
 
     @property
     def key(self) -> str:
-        return f"{self.backup_type}_{self.location}"
+        return self.job_id or f"legacy:{self.backup_type}_{self.location}"
 
     @property
     def test_date_dt(self) -> Optional[datetime]:
@@ -495,11 +501,11 @@ class _BackupAggregate:
 
     @property
     def backup_type(self) -> str:
-        return self.key.rsplit("_", 1)[0] if "_" in self.key else self.key
+        return self.latest.backup_type if self.latest else ""
 
     @property
     def location(self) -> str:
-        return self.key.rsplit("_", 1)[1] if "_" in self.key else ""
+        return self.latest.location if self.latest else ""
 
 
 # ---------------------------------------------------------------------------

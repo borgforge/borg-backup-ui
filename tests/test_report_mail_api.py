@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 import json
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ REPORT_NOW = datetime(2026, 6, 12, 12, 0, 0)
 
 
 def _write_status(status_dir: Path, name: str, data: dict) -> None:
+    data = {**data, "job_id": job_id(data["backup_type"] + "_" + data["location"])}
     path = status_dir / name
     path.write_text(json.dumps(data), encoding="utf-8")
 
@@ -29,7 +31,7 @@ def _write_job_meta(root: Path, key: str, *, name: str, backup_type: str, locati
     jobs_dir = root / "config" / "jobs"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     jobs_dir.mkdir(parents=True, exist_ok=True)
-    (jobs_dir / f"{key}.json").write_text(json.dumps({
+    (jobs_dir / f"{job_id(key)}.json").write_text(json.dumps(identified_job({
         "schema_version": 3,
         "job_key": key,
         "name": name,
@@ -37,10 +39,11 @@ def _write_job_meta(root: Path, key: str, *, name: str, backup_type: str, locati
         "location": location,
         "repository_key": f"repo_{key}",
         "source_paths": ["/mnt/user/appdata"],
-    }), encoding="utf-8")
+    })), encoding="utf-8")
 
 
 def _write_schedules(root: Path, schedules: dict) -> None:
+    schedules = {job_id(k): v for k, v in schedules.items()}
     config_dir = root / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "schedules.json").write_text(json.dumps(schedules), encoding="utf-8")

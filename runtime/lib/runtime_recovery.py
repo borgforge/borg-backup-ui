@@ -62,6 +62,7 @@ def record_runtime_stopped(
     backup_type: str,
     backup_location: str,
     log_file: str,
+    job_id: str = "",
 ) -> str:
     normalized_targets = _normalize_targets(targets)
     if not normalized_targets:
@@ -72,6 +73,7 @@ def record_runtime_stopped(
         "state": "pending_restart",
         "kind": str(kind or "").strip(),
         "job_name": str(job_name or "").strip(),
+        "job_id": str(job_id or ""),
         "backup_type": str(backup_type or "").strip(),
         "backup_location": str(backup_location or "").strip(),
         "log_file": str(log_file or "").strip(),

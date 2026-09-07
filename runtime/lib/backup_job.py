@@ -149,6 +149,7 @@ class BackupJobConfig:
     borg_keep_yearly: int = 3
 
     retained_log_file: Optional[Path] = None
+    job_id: str = ""
 
     @classmethod
     def from_config(cls, env: dict) -> "BackupJobConfig":
@@ -208,6 +209,7 @@ class BackupJobConfig:
         )
 
         return cls(
+            job_id=str(env.get("BORG_UI_JOB_KEY") or ""),
             job_name=env.get("JOB_NAME", "Borg Backup"),
             backup_type=env.get("BACKUP_TYPE", "unknown"),
             backup_location=env.get("BACKUP_LOCATION") or env.get("LOCATION", "unknown"),
@@ -685,7 +687,7 @@ class BackupJob:
             "Removing logs older than %d days...", self.config.log_retention_days
         )
         cutoff = time.time() - (self.config.log_retention_days * 86400)
-        pattern = f"Borg-Backup_{self.config.backup_type}--*.log"
+        pattern = f"Borg-Backup_{self.config.job_id or self.config.backup_type}--*.log"
         for log_path in self.config.log_dir.glob(pattern):
             try:
                 if log_path.stat().st_mtime < cutoff:
@@ -786,6 +788,7 @@ class BackupJob:
             kind="docker",
             targets=targets,
             job_name=self.config.job_name,
+            job_id=self.config.job_id,
             backup_type=self.config.backup_type,
             backup_location=self.config.backup_location,
             log_file=str(self.config.log_file),
@@ -807,6 +810,7 @@ class BackupJob:
             kind="vm",
             targets=[{"id": name, "name": name} for name in result.stopped_vms],
             job_name=self.config.job_name,
+            job_id=self.config.job_id,
             backup_type=self.config.backup_type,
             backup_location=self.config.backup_location,
             log_file=str(self.config.log_file),
@@ -989,6 +993,7 @@ class BackupJob:
             reason_code = "skipped"
         logger.info("Saving skipped status: %s", reason)
         bs = BackupStatus(
+            job_id=self.config.job_id,
             backup_type=self.config.backup_type,
             location=self.config.backup_location,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1070,8 +1075,8 @@ class BackupJob:
                     title=title,
                     message=message,
                     severity=severity,
-                    job_name=f"Borg Backup ({self.config.backup_type})",
-                    job_key=f"{self.config.backup_type}_{self.config.backup_location}",
+                    job_name=self.config.job_name,
+                    job_key=self.config.job_id,
                     status=event_type,
                     duration_seconds=duration,
                     repository=self.config.borg_repo or os.environ.get("BORG_REPO", ""),
@@ -1118,6 +1123,7 @@ class BackupJob:
             transfer_speed = stats.deduplicated_size // duration
 
         bs = BackupStatus(
+            job_id=self.config.job_id,
             backup_type=self.config.backup_type,
             location=self.config.backup_location,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1165,7 +1171,7 @@ class BackupJob:
                 request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
                 source=os.environ.get("BORG_UI_REQUEST_SOURCE", "backup_job"),
                 actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
-                job_key=os.environ.get("BORG_UI_JOB_KEY", f"{self.config.backup_type}_{self.config.backup_location}"),
+                job_key=self.config.job_id,
                 run_id=os.environ.get("BORG_UI_RUN_ID", ""),
                 status=status,
                 exit_code=exit_code,

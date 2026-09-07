@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 from pathlib import Path
 import json
 import shlex
@@ -49,7 +50,7 @@ def test_wizard_runner_preserves_docker_exclusion_runtime_control():
 def test_wizard_runner_passes_archive_prefix_to_maintenance() -> None:
     source = (ROOT / "api" / "wizard_runner.py").read_text(encoding="utf-8")
 
-    assert "archive_prefix = f\"{env.get('BACKUP_TYPE', 'job')}-backup\"" in source
+    assert "archive_prefix = archive_prefix_from_metadata(meta)" in source
     assert "runner.maintenance(archive_prefix=archive_prefix)" in source
 
 
@@ -60,9 +61,9 @@ def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "appdata_local.json").write_text(json.dumps({
+    (jobs_dir / (job_id('appdata_local') + ".json")).write_text(json.dumps(identified_job({
         "schema_version": 3,
-        "job_key": "appdata_local",
+        "job_key": job_id('appdata_local'),
         "name": "Appdata",
         "backup_type": "appdata",
         "location": "local",
@@ -70,7 +71,7 @@ def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
         "source_paths": ["/mnt/user/appdata"],
         "compression": "lz4",
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
-    }) + "\n", encoding="utf-8")
+    })) + "\n", encoding="utf-8")
     secret = tmp_path / "secrets" / ".borg-passphrase-repo_appdata_test"
     secret.parent.mkdir()
     secret.write_text("secret\n", encoding="utf-8")
@@ -97,7 +98,7 @@ def test_wizard_runner_resolves_repository_and_secret_from_repository_object(
     )
     monkeypatch.delenv("BORG_PASSCOMMAND", raising=False)
 
-    env, metadata = wizard_runner._load_env_from_job("appdata_local", tmp_path / "scripts", tmp_path)
+    env, metadata = wizard_runner._load_env_from_job(job_id('appdata_local'), tmp_path / "scripts", tmp_path)
 
     assert env["BORG_REPO"] == "/mnt/backup/borg-backup-appdata"
     assert metadata["repository_key"] == "repo_appdata_test"
@@ -114,9 +115,9 @@ def test_wizard_runner_keeps_ssh_identity_and_keepalive_options(tmp_path: Path, 
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "appdata_storagebox.json").write_text(json.dumps({
+    (jobs_dir / (job_id('appdata_storagebox') + ".json")).write_text(json.dumps(identified_job({
         "schema_version": 3,
-        "job_key": "appdata_storagebox",
+        "job_key": job_id('appdata_storagebox'),
         "name": "Appdata",
         "backup_type": "appdata",
         "location": "storagebox",
@@ -124,7 +125,7 @@ def test_wizard_runner_keeps_ssh_identity_and_keepalive_options(tmp_path: Path, 
         "source_paths": ["/mnt/user/appdata"],
         "compression": "lz4",
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
-    }) + "\n", encoding="utf-8")
+    })) + "\n", encoding="utf-8")
     secret = tmp_path / "secrets" / ".borg-passphrase-repo_appdata_storagebox"
     secret.parent.mkdir()
     secret.write_text("secret\n", encoding="utf-8")
@@ -157,7 +158,7 @@ def test_wizard_runner_keeps_ssh_identity_and_keepalive_options(tmp_path: Path, 
     )
     monkeypatch.delenv("BORG_RSH", raising=False)
 
-    env, _metadata = wizard_runner._load_env_from_job("appdata_storagebox", tmp_path / "scripts", tmp_path)
+    env, _metadata = wizard_runner._load_env_from_job(job_id('appdata_storagebox'), tmp_path / "scripts", tmp_path)
 
     tokens = shlex.split(env["BORG_RSH"])
     assert tokens[tokens.index("-i") + 1] == str(key_path)

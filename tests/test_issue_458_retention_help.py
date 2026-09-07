@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 import json
 import sys
 from pathlib import Path
@@ -82,8 +83,8 @@ def test_manual_repository_prune_blocks_all_zero_policy(tmp_path: Path) -> None:
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs = tmp_path / "config" / "jobs"
     jobs.mkdir(parents=True)
-    (jobs / "appdata_local.json").write_text(json.dumps({
-        "job_key": "appdata_local",
+    (jobs / (job_id('appdata_local') + ".json")).write_text(json.dumps({"job_id": job_id('appdata_local'), "archive_prefix": "appdata-backup",
+        "job_key": job_id('appdata_local'),
         "repository_key": "repo_appdata",
         "retention": {"daily": "0", "weekly": "0", "monthly": "0", "yearly": "0"},
     }), encoding="utf-8")
@@ -91,7 +92,7 @@ def test_manual_repository_prune_blocks_all_zero_policy(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="At least one retention value"):
         CheckManager()._repository_command(
             config,
-            {"repository_key": "repo_appdata", "used_by": ["appdata_local"]},
+            {"repository_key": "repo_appdata", "used_by": [job_id('appdata_local')]},
             "/mnt/backup/appdata",
             "prune",
             "quick",

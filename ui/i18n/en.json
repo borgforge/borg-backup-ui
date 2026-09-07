@@ -721,6 +721,10 @@
     "deleteError": "Error deleting schedule: {message}"
   },
   "wizard": {
+    "jobId": "Job ID",
+    "archivePrefixHint": "Complete prefix; only the timestamp is appended. A–Z, a–z, 0–9, dots, _ and - are allowed.",
+    "archivePrefixPlaceholder": "e.g. mydata-backup",
+    "archivePrefix": "Archive prefix",
     "newTitle": "New backup job",
     "editTitle": "Edit backup job",
     "loadFailed": "Could not load wizard: {message}",
@@ -909,8 +913,8 @@
     "removeExclude": "Remove exclusion path",
     "removeSource": "Remove",
     "validationJobName": "Job name cannot be empty.",
-    "validationTypeId": "Type ID cannot be empty.",
-    "validationTypeFormat": "Type ID may contain lowercase letters, digits, and underscores only.",
+    "validationTypeId": "Archive prefix cannot be empty.",
+    "validationTypeFormat": "Archive prefix may contain only letters, digits, dots, _ and -.",
     "validationSource": "Select at least one folder or file to back up.",
     "validationExcludeAbsolute": "Exclusion paths must be absolute paths below /mnt or /boot.",
     "validationExcludeBelowSource": "An exclusion path must be below a selected folder to back up.",
@@ -1048,6 +1052,7 @@
     "checkUnknown": "Check status unknown"
   },
   "history": {
+    "jobId": "Job ID",
     "title": "History",
     "subtitle": "All backup runs",
     "grouping": "Grouping",
@@ -1059,7 +1064,7 @@
     "locationLocal": "Local",
     "locationNetwork": "Network",
     "refresh": "Refresh",
-    "allTypes": "All types",
+    "allTypes": "All jobs",
     "other": "Other",
     "allLocations": "All locations",
     "allStatuses": "All statuses",
@@ -1074,7 +1079,7 @@
     "entryCount": "{count} entries",
     "empty": "No backup entries found.",
     "dateTime": "Date / time",
-    "type": "Type",
+    "type": "Job",
     "location": "Location",
     "duration": "Duration",
     "originalSize": "Original size",

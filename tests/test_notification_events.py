@@ -659,6 +659,7 @@ def test_backup_overdue_uses_type_location_status_when_key_is_missing(monkeypatc
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_usb": {"enabled": True, "cron": "0 10 * * *"}})
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_usb", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "key": "appdata_usb",
         "backup_type": "appdata",
         "location": "usb",
         "timestamp": "2026-07-01 10:04:45",
@@ -716,8 +717,8 @@ def test_backup_overdue_sender_matches_diagnostics_and_sends_only_ready_jobs(mon
         {"key": "sonstiges_usb", "display_name": "Sonstiges - USB", "enabled": True, "repo_path": "/repo/sonstiges"},
     ])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [
-        {"backup_type": "appdata", "location": "usb", "timestamp": "2026-07-02 12:10:27", "status": "success"},
-        {"backup_type": "sonstiges", "location": "usb", "timestamp": "2026-07-01 15:00:01", "status": "success"},
+        {"key": "appdata_usb", "backup_type": "appdata", "location": "usb", "timestamp": "2026-07-02 12:10:27", "status": "success"},
+        {"key": "sonstiges_usb", "backup_type": "sonstiges", "location": "usb", "timestamp": "2026-07-01 15:00:01", "status": "success"},
     ]})
     stale_appdata = "backup_overdue:appdata_usb:2026-07-02 10:00:00"
     mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, stale_appdata, now=datetime(2026, 7, 2, 8, 0, 0).timestamp())
@@ -744,6 +745,7 @@ def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeyp
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_usb": {"enabled": True, "cron": "0 10 * * *"}})
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_usb", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "key": "appdata_usb",
         "backup_type": "appdata",
         "location": "usb",
         "timestamp": "2026-07-02 10:04:45",
@@ -815,6 +817,7 @@ def test_notification_reminder_diagnostics_distinguishes_missed_and_next_backup_
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"photos_usb": {"enabled": True, "cron": "0 14 * * 0"}})
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "photos_usb", "display_name": "Photos - USB", "enabled": True, "repo_path": "/repo"}])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "key": "photos_usb",
         "backup_type": "photos",
         "location": "usb",
         "timestamp": "2026-07-01 07:58:54",

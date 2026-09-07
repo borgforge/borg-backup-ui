@@ -112,13 +112,13 @@ function _wizardUniqueList(values) {
   return out;
 }
 
-function _wizardArchivePrefixFromTypeId(typeId) {
-  const clean = String(typeId || '').trim().toLowerCase();
-  return /^[a-z0-9_]+$/.test(clean) ? `${clean}-backup` : '';
+function _wizardArchivePrefix(typeId) {
+  const clean = String(typeId || '').trim();
+  return /^[A-Za-z0-9_.-]+$/.test(clean) ? clean : '';
 }
 
 function wizardArchivePrefixRows() {
-  const currentPrefix = _wizardArchivePrefixFromTypeId(document.getElementById('wiz-type-id')?.value || '');
+  const currentPrefix = _wizardArchivePrefix(document.getElementById('wiz-archive-prefix')?.value || '');
   const prefixes = _wizardUniqueList([
     currentPrefix,
     ...(Array.isArray(wizardState.archivePrefixes) ? wizardState.archivePrefixes : []),
@@ -513,6 +513,10 @@ function openWizard() {
   wizardBindRuntimeControls();
   wizardState.mode = 'create';
   wizardState.existingJobKey = '';
+  wizardState.backupType = '';
+  document.getElementById('wiz-job-id-group').hidden = true;
+  document.getElementById('wiz-job-id-group').classList.add('hidden');
+  document.getElementById('wiz-job-id').value = '';
   wizardState.original = null;
   wizardState.step = 1;
   wizardState.unlockedStep = 1;
@@ -521,7 +525,7 @@ function openWizard() {
   const title = document.getElementById('wizard-modal-title');
   if (title) title.textContent = wizardT('wizard.newTitle');
   document.getElementById('wiz-job-name').value = '';
-  document.getElementById('wiz-type-id').value = '';
+  document.getElementById('wiz-archive-prefix').value = '';
   document.getElementById('wiz-icon').value = '';
   document.getElementById('wiz-icon-color').value = '';
   document.getElementById('wiz-description').value = '';
@@ -597,7 +601,11 @@ function _wizardFillFromJob(job) {
   wizardState.remoteRepoStatus = null;
   wizardState.archivePrefixes = _wizardUniqueList(Array.isArray(job.archive_prefixes) ? job.archive_prefixes : []);
   document.getElementById('wiz-job-name').value = job.job_name || '';
-  document.getElementById('wiz-type-id').value = (job.type_id || '').toLowerCase();
+  document.getElementById('wiz-archive-prefix').value = job.archive_prefix || '';
+  wizardState.backupType = job.type_id || '';
+  document.getElementById('wiz-job-id-group').hidden = false;
+  document.getElementById('wiz-job-id-group').classList.remove('hidden');
+  document.getElementById('wiz-job-id').value = job.job_id || '';
   document.getElementById('wiz-icon').value = (job.icon || '').toLowerCase();
   document.getElementById('wiz-icon-color').value = (job.icon_color || '').toLowerCase();
   document.getElementById('wiz-description').value = job.description || '';
@@ -648,7 +656,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
     const job = data.job || {};
     _wizardFillFromJob(job);
     wizardState.original = {
-      type_id: (job.type_id || '').toLowerCase(),
+      archive_prefix: job.archive_prefix || '',
       location: job.location || 'local',
       repository_key: String(job.repository_key || '').trim(),
       use_docker: !!job.use_docker,
@@ -675,7 +683,7 @@ function wizardNeedsScriptRegeneration(params) {
   if ((wizardState.mode || 'create') === 'create') return true;
   const orig = wizardState.original;
   if (!orig) return true;
-  if (params.type_id !== orig.type_id) return true;
+  if (params.archive_prefix !== orig.archive_prefix) return true;
   if (params.location !== orig.location) return true;
   if (params.repository_key !== orig.repository_key) return true;
   if (!!params.use_docker !== !!orig.use_docker) return true;
@@ -769,7 +777,7 @@ function wizardIconMarkup(kind) {
 function wizardEffectiveIcon() {
   const chosen = (document.getElementById('wiz-icon')?.value || '').trim().toLowerCase();
   if (chosen) return chosen;
-  const typeId = (document.getElementById('wiz-type-id')?.value || '').trim().toLowerCase();
+  const typeId = wizardState.backupType || (document.getElementById('wiz-archive-prefix')?.value || '').trim().toLowerCase().replace(/-backup$/, '');
   return typeId || 'sonstiges';
 }
 
@@ -838,7 +846,8 @@ function _wizardCollectParams() {
   const dockerMode = _wizardRuntimeMode('docker');
   const vmMode = _wizardRuntimeMode('vm');
   return {
-    type_id:      (document.getElementById('wiz-type-id').value || '').trim().toLowerCase(),
+    archive_prefix: (document.getElementById('wiz-archive-prefix').value || '').trim(),
+    type_id: wizardState.backupType || '',
     icon:         (document.getElementById('wiz-icon').value || '').trim().toLowerCase(),
     icon_color:   (document.getElementById('wiz-icon-color').value || '').trim().toLowerCase(),
     job_name:     (document.getElementById('wiz-job-name').value || '').trim(),
@@ -1176,8 +1185,8 @@ function _wizardValidate(step) {
   const p = _wizardCollectParams();
   if (step === 1) {
     if (!p.job_name) { _wizardShowError(1, wizardT('wizard.validationJobName')); return false; }
-    if (!p.type_id)  { _wizardShowError(1, wizardT('wizard.validationTypeId')); return false; }
-    if (!/^[a-z0-9_]+$/.test(p.type_id)) {
+    if (!p.archive_prefix)  { _wizardShowError(1, wizardT('wizard.validationTypeId')); return false; }
+    if (!/^[A-Za-z0-9_.-]+$/.test(p.archive_prefix)) {
       _wizardShowError(1, wizardT('wizard.validationTypeFormat'));
       return false;
     }
@@ -1412,10 +1421,14 @@ async function saveWizardJob() {
     const data = await res.json();
     if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
 
+    // Retrying a failed schedule write edits the job that was already saved.
+    wizardState.existingJobKey = data.job_id;
+    wizardState.mode = 'edit';
+
     // Save schedule changes and surface crontab/application failures.
     const schedEnabled = document.getElementById('wiz-sched-enabled').checked;
     if (schedEnabled || wizardState.originalSchedule) {
-      const jobKey = `${params.type_id}_${params.location}`;
+      const jobKey = data.job_id;
       const cron   = _wizardBuildCron();
       const sRes = await fetch('/api/schedules', {
         method: 'PUT',
@@ -1436,7 +1449,7 @@ async function saveWizardJob() {
     closeWizard({ force: true });
     jobsState.loaded = false;
     await refreshJobs();
-    showMsg('jobs-message', 'success', wizardT('wizard.saved', { key: `${params.type_id}_${params.location}` }));
+    showMsg('jobs-message', 'success', wizardT('wizard.saved', { key: params.job_name }));
     await window.BBUI?.setupWizard?.resumeAfterExternalSave?.('job');
   } catch (err) {
     errEl.textContent = wizardT('wizard.saveError', { message: err.message });

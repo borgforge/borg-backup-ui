@@ -2660,6 +2660,13 @@ def save_job_repository_transaction(
     previous = Path(previous_metadata_path) if previous_metadata_path else None
     try:
         with inventory_lock(repo_path.parent):
+            from archive_prefix import validate_prefix_ownership
+            from job_identity import metadata_job_id
+            if metadata_job_id(metadata) != job_key:
+                raise ValueError("Job identity does not match the repository assignment")
+            other_jobs = [json.loads(path.read_text(encoding="utf-8"))
+                          for path in target.parent.glob("*.json") if path != target]
+            validate_prefix_ownership(metadata, other_jobs)
             old_target = target.read_bytes() if target.exists() else None
             old_previous = None
             if previous is not None and previous != target and previous.exists():

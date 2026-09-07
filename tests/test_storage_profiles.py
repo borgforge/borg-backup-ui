@@ -1,3 +1,5 @@
+from job_fixtures import identified_job, job_id
+import json
 from pathlib import Path
 import sys
 
@@ -26,9 +28,9 @@ def _write_storagebox_reference(data_root: Path) -> dict:
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     meta_dir = data_root / "config" / "jobs"
     meta_dir.mkdir(parents=True, exist_ok=True)
-    (meta_dir / "job1.json").write_text(
-        '{"schema_version":2,"job_key":"job1","name":"Job 1",'
-        '"location":"storagebox","repository_key":"repo_job1"}\n',
+    (meta_dir / (job_id("job1") + ".json")).write_text(
+        json.dumps(identified_job({"job_key": "job1", "name": "Job 1", "backup_type": "job1",
+                                   "location": "storagebox", "repository_key": "repo_job1"})),
         encoding="utf-8",
     )
     write_storage_store(config, {"storages": [{

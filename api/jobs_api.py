@@ -364,13 +364,14 @@ class JobInfo:
     restore_test_level: int = 2
     restore_test_max_runtime_minutes: int = 0
     file_activity: bool = False
+    archive_prefix: str = ""
 
     @property
     def display_name(self) -> str:
         loc_label = {"local": "Lokal", "usb": "USB", "smb": "SMB", "storagebox": "Storagebox"}.get(
             self.location, self.location
         )
-        return f"{self.backup_type.capitalize()} – {loc_label}"
+        return f"{self.name or self.backup_type.capitalize()} – {loc_label}"
 
 
 class _JobState:
@@ -731,6 +732,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
         docker_control: Optional[dict] = None,
         vm_control: Optional[dict] = None,
         file_activity: bool = False,
+        archive_prefix: str = "",
     ) -> JobInfo:
         desc_file = py_file.with_suffix(".description") if py_file is not None else None
         desc_text = (
@@ -754,7 +756,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             "ack_domains_risk": False,
         }
         return JobInfo(
-            key=key or f"{bt_lc}_{location}",
+            key=key,
             backup_type=backup_type,
             location=location,
             script_path=py_file,
@@ -770,6 +772,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             standard=standard,
             enabled=bool(enabled),
             file_activity=file_activity,
+            archive_prefix=archive_prefix,
             compression=str(compression or "").strip(),
             retention_daily=str(retention_daily or "").strip(),
             retention_weekly=str(retention_weekly or "").strip(),
@@ -799,7 +802,8 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
 
             # Pflichtfelder V1
             try:
-                key = str(raw["job_key"]).strip()
+                from job_identity import metadata_job_id
+                key = metadata_job_id(raw)
                 backup_type = str(raw["backup_type"]).strip()
                 location = str(raw["location"]).strip().lower()
                 script_name = str(raw.get("script") or "").strip()
@@ -838,6 +842,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 backup_type,
                 location,
                 key=key,
+                archive_prefix=str(raw.get("archive_prefix") or ""),
                 name=str(raw.get("name") or "").strip(),
                 has_docker=has_docker,
                 has_vm=has_vm,
@@ -861,7 +866,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 restore_test_max_runtime_minutes=_safe_int(rt_policy.get("max_runtime_minutes"), 0),
             ))
 
-    return list(jobs_by_key.values())
+    return sorted(jobs_by_key.values(), key=lambda job: (job.name or job.display_name).casefold())
 
 
 def _job_metadata_signature(meta_dir: Path, scripts_dir: Path, *, include_files: bool) -> tuple:
@@ -892,11 +897,6 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
     root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
     meta_dir = get_jobs_meta_dir(scripts_dir, root)
     cache_key = f"{scripts_dir.resolve()}::{root.resolve()}"
-    with _job_discovery_cache_lock:
-        if cache_key not in _job_metadata_migrations:
-            migrate_jobs_metadata_dir(scripts_dir, root)
-            _job_metadata_migrations.add(cache_key)
-
     now = time.monotonic()
     quick_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=False)
     with _job_discovery_cache_lock:
@@ -962,6 +962,8 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
         result.append(
             {
                 "key": info.key,
+                "job_id": info.key,
+                "archive_prefix": info.archive_prefix,
                 "backup_type": info.backup_type,
                 "location": info.location,
                 "display_name": info.display_name,

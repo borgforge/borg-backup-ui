@@ -191,7 +191,7 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     issues = []
     log_notes = []
 
-    for key, st in sorted(latest.items(), key=lambda item: _status_sort_key(item[1], item[0])):
+    for key, st in sorted(latest.items(), key=lambda item: _report_key_sort(item[0], latest, job_meta)):
         location_key = _location_key(st)
         meta = job_meta.get(key, {})
         job_label = _job_label(key, st, meta)
@@ -831,16 +831,13 @@ def _report_key_sort(key: str, latest: dict[str, Any], job_meta: dict[str, dict[
     meta = job_meta.get(key, {})
     st = latest.get(key)
     location = _report_location(key, st, meta)
-    backup_type = str(getattr(st, "backup_type", "") or meta.get("backup_type") or "unknown")
-    return (*_location_order(location), backup_type.lower(), _report_job_label(key, st, meta).lower(), key.lower())
+    return (*_location_order(location), _report_job_label(key, st, meta).casefold())
 
 
 def _report_location(key: str, st: Any, meta: dict[str, Any]) -> str:
     value = str(meta.get("location") or getattr(st, "location", "") or "").strip().lower()
     if value:
         return value
-    if "_" in key:
-        return key.rsplit("_", 1)[1].lower()
     return "unknown"
 
 
@@ -871,23 +868,8 @@ def _app_icon_img_html() -> str:
 
 
 def _status_sort_key(st, fallback_key: str) -> tuple:
-    backup_type_order = {
-        "appdata": 0,
-        "flash": 1,
-        "photos": 2,
-        "vms": 3,
-        "VMs": 3,
-        "sonstiges": 4,
-        "unknown": 9,
-    }
     location = str(getattr(st, "location", "") or "unknown")
-    backup_type = str(getattr(st, "backup_type", "") or "unknown")
-    return (
-        *_location_order(location),
-        backup_type_order.get(backup_type, backup_type_order.get(backup_type.lower(), 8)),
-        backup_type.lower(),
-        fallback_key.lower(),
-    )
+    return (*_location_order(location), fallback_key.casefold())
 
 
 def _time_ago(timestamp_str: str, reference: datetime) -> str:

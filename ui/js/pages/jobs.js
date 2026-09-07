@@ -268,14 +268,13 @@ function renderJobsGrid(jobs) {
   }
   if (jobsNewBtn) jobsNewBtn.classList.remove('hidden');
 
-  const typeOrder = { flash: 0, appdata: 1, photos: 2, VMs: 3, vms: 3, sonstiges: 4 };
   const visible = jobs
     .filter((job) => jobsState.selectedLocation === 'all' || jobsLocationKey(job) === jobsState.selectedLocation)
     .sort((a, b) => {
       const locationDelta = JOBS_LOCATION_ORDER.indexOf(jobsLocationKey(a))
         - JOBS_LOCATION_ORDER.indexOf(jobsLocationKey(b));
       if (locationDelta) return locationDelta;
-      return (typeOrder[a.backup_type] ?? 99) - (typeOrder[b.backup_type] ?? 99);
+      return String(a.name || a.display_name || a.backup_type || '').localeCompare(String(b.name || b.display_name || b.backup_type || ''));
     });
 
   renderJobsLocationSidebar(jobs);
@@ -471,7 +470,7 @@ function renderJobCard(job) {
     <div class="jobs-redesign-cell jobs-redesign-main">
       <div class="job-card-title">
         <div class="type-icon type-icon-${escHtml(String(job.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</div>
-        <div><div class="type-name">${escHtml(titleName)}</div><span class="type-sub">${escHtml(job.key)}</span></div>
+        <div><div class="type-name">${escHtml(titleName)}</div><span class="type-sub">${escHtml(job.archive_prefix || '')}</span></div>
       </div>
       ${job.description ? `<div class="job-description">${renderDescriptionMarkdown(job.description)}</div>` : ''}
       <div class="job-meta">${features.join('')}</div>
@@ -807,9 +806,9 @@ async function showDeleteJobModal(jobKey, displayName, typeId, location) {
   const pwPath = document.getElementById('modal-delete-passphrase-path');
   pwWrap.classList.add('hidden');
   pwCb.checked = false;
-  if (typeId) {
+  if (jobKey) {
     try {
-      const res  = await fetch(`/api/wizard/passphrase-check?type_id=${encodeURIComponent(typeId)}&location=${encodeURIComponent(location || '')}`);
+      const res  = await fetch(`/api/wizard/passphrase-check?job_key=${encodeURIComponent(jobKey)}`);
       const data = await res.json();
       if (data.exists) {
         pwPath.textContent = data.path;
@@ -1170,7 +1169,7 @@ function _updateScheduleModalTitle(jobKey, displayName) {
     const job = jobsState.jobs.find(j => j.key === jobKey);
     if (job) {
       titleEl.textContent = jobsT('schedule.titleFor', {
-        name: `${capitalize(job.backup_type)} (${jobsLocationLabel(job.location)})`,
+        name: job.name || job.display_name,
       });
     } else {
       titleEl.textContent = jobsT('schedule.titleFor', { name: jobKey });

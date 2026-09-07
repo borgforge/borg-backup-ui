@@ -1747,6 +1747,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise RuntimeError("The job is currently running; wait for it to finish")
 
         info = jobs[job_key]
+        passphrase_path = None
+        if body.get("delete_passphrase"):
+            from repository_context import resolve_job_repository_context
+            from repositories_api import read_repository_store
+            context = resolve_job_repository_context(self.config, job_key, require_passphrase_file=False)
+            reference = str(context.get("passphrase_ref") or "")
+            if reference:
+                for repository in read_repository_store(self.config)["repositories"]:
+                    if str(repository.get("passphrase_ref") or "") == reference:
+                        if repository.get("repository_key") != context["repository_key"] or any(
+                            key != job_key for key in repository.get("used_by", [])
+                        ):
+                            raise ValueError("Passphrase is still referenced by another job or repository")
+                passphrase_path = Path(reference)
         conf = read_expanded_conf(self.config)
         status_dir = Path(self.config.get("STATUS_DIR", "/mnt/user/backup-status"))
         log_dir    = Path(conf.get("GLOBAL_LOG_DIR", "/mnt/user/Logs"))
@@ -1777,14 +1791,21 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
         delete_artifacts = bool(body.get("delete_artifacts", False))
 
-        # Status-Dateien: *_{backup_type}_{location}.status
+        # Historical filenames remain unchanged; ownership lives in the payload.
         deleted_status = 0
+        owned_logs = set()
         if delete_artifacts:
-            for f in status_dir.glob(f"*_{info.backup_type}_{info.location}.status"):
+            for f in status_dir.glob("*.status"):
                 try:
+                    record = json.loads(f.read_text(encoding="utf-8"))
+                    if record.get("job_id") != job_key:
+                        continue
+                    log = Path(str(record.get("log_file") or ""))
+                    if log.is_absolute() and log.resolve().parent == log_dir.resolve():
+                        owned_logs.add(log)
                     f.unlink()
                     deleted_status += 1
-                except OSError:
+                except (OSError, ValueError):
                     pass
 
         deleted_restore_test = False
@@ -1797,35 +1818,26 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             except OSError:
                 pass
 
-        # Log-Dateien: Borg-Backup[_-]{backup_type}--*.log
+        # New logs use the ID; old logs are selected through owned status records.
         deleted_logs = 0
         if delete_artifacts:
-            for pattern in (
-                f"Borg-Backup_{info.backup_type}--*.log",
-                f"Borg-Backup-{info.backup_type}--*.log",
-            ):
-                for f in log_dir.glob(pattern):
-                    try:
-                        f.unlink()
-                        deleted_logs += 1
-                    except OSError:
-                        pass
+            owned_logs.update(log_dir.glob(f"Borg-Backup_{job_key}--*.log"))
+            for f in owned_logs:
+                try:
+                    f.unlink()
+                    deleted_logs += 1
+                except OSError:
+                    pass
 
         # Passphrase-Datei (optional)
         deleted_passphrase = False
-        if body.get("delete_passphrase"):
-            suffix = f"{info.backup_type}_{info.location}".lower()
-            candidates = [
-                Path(f"/boot/config/borg-backup/secrets/.borg-passphrase-{suffix}"),
-                Path(f"/boot/config/borg-backup/secrets/.borg-passphrase-{info.backup_type}".lower()),
-            ]
-            for p in candidates:
-                try:
-                    if p.is_symlink() or p.exists():
-                        p.unlink()
-                        deleted_passphrase = True
-                except OSError:
-                    pass
+        if passphrase_path is not None:
+            try:
+                if passphrase_path.is_symlink() or passphrase_path.exists():
+                    passphrase_path.unlink()
+                    deleted_passphrase = True
+            except OSError:
+                pass
 
         # Schedule-Eintrag immer mit aufräumen (idempotent),
         # damit keine verwaisten Cron-Trigger für gelöschte Jobs bleiben.
@@ -2127,6 +2139,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from urllib.parse import parse_qs
         qs = parse_qs(query_string)
         filters = {
+            "job_key": (qs.get("job_key") or [""])[0] or None,
             "type": (qs.get("type") or [""])[0].lower() or None,
             "location": (qs.get("location") or [""])[0].lower() or None,
             "status": (qs.get("status") or [""])[0].lower() or None,

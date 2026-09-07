@@ -721,6 +721,10 @@
     "deleteError": "Fehler beim Löschen: {message}"
   },
   "wizard": {
+    "jobId": "Job-ID",
+    "archivePrefixHint": "Vollständiger Präfix; nur der Zeitstempel wird angehängt. A–Z, a–z, 0–9, Punkt, _ und - sind erlaubt.",
+    "archivePrefixPlaceholder": "z.B. meinedaten-backup",
+    "archivePrefix": "Archivpräfix",
     "newTitle": "Neuer Backup-Job",
     "editTitle": "Backup-Job bearbeiten",
     "loadFailed": "Wizard laden fehlgeschlagen: {message}",
@@ -909,8 +913,8 @@
     "removeExclude": "Ausschlusspfad entfernen",
     "removeSource": "Entfernen",
     "validationJobName": "Job-Name darf nicht leer sein.",
-    "validationTypeId": "Typ-ID darf nicht leer sein.",
-    "validationTypeFormat": "Typ-ID darf nur Kleinbuchstaben, Ziffern und _ enthalten.",
+    "validationTypeId": "Archivpräfix darf nicht leer sein.",
+    "validationTypeFormat": "Archivpräfix darf nur Buchstaben, Ziffern, Punkt, _ und - enthalten.",
     "validationSource": "Bitte mindestens einen Ordner oder eine Datei auswählen, die gesichert werden soll.",
     "validationExcludeAbsolute": "Ausschlusspfade müssen absolute Pfade unter /mnt oder /boot sein.",
     "validationExcludeBelowSource": "Ein Ausschlusspfad muss unter einem ausgewählten zu sichernden Ordner liegen.",
@@ -1048,6 +1052,7 @@
     "checkUnknown": "Check-Status unbekannt"
   },
   "history": {
+    "jobId": "Job-ID",
     "title": "History",
     "subtitle": "Alle Backup-Läufe",
     "grouping": "Gruppierung",
@@ -1059,7 +1064,7 @@
     "locationLocal": "Lokal",
     "locationNetwork": "Netzwerk",
     "refresh": "Aktualisieren",
-    "allTypes": "Alle Typen",
+    "allTypes": "Alle Jobs",
     "other": "Sonstiges",
     "allLocations": "Alle Standorte",
     "allStatuses": "Alle Status",
@@ -1074,7 +1079,7 @@
     "entryCount": "{count} Einträge",
     "empty": "Keine Backup-Einträge gefunden.",
     "dateTime": "Datum / Zeit",
-    "type": "Typ",
+    "type": "Job",
     "location": "Ort",
     "duration": "Dauer",
     "originalSize": "Originalgröße",

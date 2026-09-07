@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 import json
 import subprocess
 import sys
@@ -119,9 +120,9 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
     jobs_dir = data_root / "config" / "jobs"
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "flash_local.json").write_text(json.dumps({
+    (jobs_dir / (job_id('flash_local') + ".json")).write_text(json.dumps(identified_job({
         "schema_version": 3,
-        "job_key": "flash_local",
+        "job_key": job_id('flash_local'),
         "backup_type": "flash",
         "location": "local",
         "name": "Flash",
@@ -129,9 +130,9 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
         "runner": "scriptless-wizard-runner",
         "repository_key": "repo_flash_local_test",
         "source_paths": ["/boot"],
-    }), encoding="utf-8")
+    })), encoding="utf-8")
     (data_root / "config" / "schedules.json").write_text(json.dumps({
-        "flash_local": {"cron": "10 6 * * 2", "enabled": True},
+        job_id('flash_local'): {"cron": "10 6 * * 2", "enabled": True},
     }), encoding="utf-8")
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     write_storage_store(config, {"storages": [{
@@ -152,7 +153,7 @@ def test_edit_wizard_loads_existing_weekly_schedule(tmp_path: Path, monkeypatch:
     }]})
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
 
-    loaded = load_job_for_wizard("flash_local", scripts_dir, config)
+    loaded = load_job_for_wizard(job_id('flash_local'), scripts_dir, config)
 
     assert loaded["schedule"] == {"cron": "10 6 * * 2", "enabled": True}
 
@@ -178,18 +179,18 @@ def test_edit_wizard_preserves_schedule_inventory_values(
     jobs_dir = data_root / "config" / "jobs"
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "flash_local.json").write_text(json.dumps({
+    (jobs_dir / (job_id('flash_local') + ".json")).write_text(json.dumps(identified_job({
         "schema_version": 3,
-        "job_key": "flash_local",
+        "job_key": job_id('flash_local'),
         "backup_type": "flash",
         "location": "local",
         "name": "Flash",
         "runner": "scriptless-wizard-runner",
         "repository_key": "repo_flash_local_test",
         "source_paths": ["/boot"],
-    }), encoding="utf-8")
+    })), encoding="utf-8")
     (data_root / "config" / "schedules.json").write_text(json.dumps({
-        "flash_local": {"cron": cron, "enabled": enabled},
+        job_id('flash_local'): {"cron": cron, "enabled": enabled},
     }), encoding="utf-8")
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     write_storage_store(config, {"storages": [{
@@ -210,7 +211,7 @@ def test_edit_wizard_preserves_schedule_inventory_values(
     }]})
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
 
-    loaded = load_job_for_wizard("flash_local", scripts_dir, config)
+    loaded = load_job_for_wizard(job_id('flash_local'), scripts_dir, config)
 
     assert loaded["schedule"] == {"cron": cron, "enabled": enabled}
 

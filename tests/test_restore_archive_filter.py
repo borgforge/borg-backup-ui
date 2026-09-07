@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 from pathlib import Path
 from types import SimpleNamespace
 import json
@@ -34,7 +35,7 @@ def test_browse_restore_filters_archives_by_job_prefix_history(tmp_path: Path, m
         "storage_key": "local",
         "storage": {},
         "job": {
-            "job_key": "testdaten_local",
+            "job_key": job_id("testdaten_local"), "job_id": job_id("testdaten_local"), "archive_prefix": "testdaten-backup",
             "backup_type": "testdaten",
             "archive_prefixes": ["oldtestdaten-backup"],
         },
@@ -116,9 +117,9 @@ def test_save_job_preserves_previous_archive_prefixes(tmp_path: Path, monkeypatc
     scripts_dir = tmp_path / "scripts"
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "oldtype_local.json").write_text(json.dumps({
+    (jobs_dir / (job_id("oldtype_local") + ".json")).write_text(json.dumps({
         "schema_version": 2,
-        "job_key": "oldtype_local",
+        "job_key": job_id("oldtype_local"), "job_id": job_id("oldtype_local"), "archive_prefix": "oldtype-backup",
         "name": "Old type",
         "backup_type": "oldtype",
         "archive_prefixes": ["oldertype-backup"],
@@ -139,14 +140,16 @@ def test_save_job_preserves_previous_archive_prefixes(tmp_path: Path, monkeypatc
     monkeypatch.setattr("repositories_api.save_job_repository_transaction", fake_transaction)
 
     wizard_api.save_job({
-        "existing_job_key": "oldtype_local",
+        "existing_job_key": job_id("oldtype_local"),
+        "archive_prefix": "newtype-backup",
         "type_id": "newtype",
         "location": "local",
         "repository_key": "repo-shared",
         "source_paths": ["/mnt/user/appdata"],
     }, scripts_dir, tmp_path, {"BACKUP_SCRIPTS_DIR": str(tmp_path)})
 
-    assert captured["job_key"] == "newtype_local"
+    assert captured["job_key"] == job_id("oldtype_local")
+    assert captured["metadata"]["backup_type"] == "oldtype"
     assert captured["metadata"]["archive_prefixes"] == [
         "newtype-backup",
         "oldtype-backup",

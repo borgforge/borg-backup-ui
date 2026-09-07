@@ -232,27 +232,38 @@ def _collect_repository_key_exports(config: dict, bundle: dict) -> dict[str, dic
 
 
 def _normalize_job_key(base: str) -> str:
-    out = "".join(ch.lower() if ch.isalnum() else "_" for ch in str(base or "").strip())
-    while "__" in out:
-        out = out.replace("__", "_")
-    return out.strip("_")
+    value = str(base or "").strip()
+    return value if value and all(ch.isalnum() or ch in "_-" for ch in value) else ""
+
+
+def _import_identity(config: dict, raw: dict) -> str:
+    """Resolve old exports only at the import boundary; never by display name."""
+    from job_identity import metadata_job_id, new_job_id
+    if raw.get("job_id"):
+        return metadata_job_id(raw)
+    journal = _jobs_dir(config).parent / "job-id-migration.json"
+    if journal.is_file():
+        plan = json.loads(journal.read_text(encoding="utf-8"))
+        assigned = plan.get("assignment", {}).get(raw.get("job_key"))
+        if assigned and (_jobs_dir(config) / f"{assigned}.json").is_file():
+            return assigned
+    return new_job_id()
 
 
 def _resolve_import_key(existing: set[str], desired: str, mode: str) -> Tuple[str | None, str]:
+    from job_identity import new_job_id, validate_job_id
     key = _normalize_job_key(desired)
     if not key:
         return None, "invalid"
+    validate_job_id(key)
+    if mode == "rename":
+        return new_job_id(), "renamed"
     if key not in existing:
         return key, "new"
     if mode == "skip":
         return None, "skipped_exists"
     if mode == "overwrite":
         return key, "overwrite"
-    if mode == "rename":
-        idx = 2
-        while f"{key}_{idx}" in existing:
-            idx += 1
-        return f"{key}_{idx}", "renamed"
     return None, "skipped_exists"
 
 
@@ -300,7 +311,7 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
         if not isinstance(raw, dict):
             continue
         src_key = str(raw.get("job_key") or "").strip()
-        key_norm = _normalize_job_key(src_key)
+        key_norm = _import_identity(config, raw) if _normalize_job_key(src_key) else ""
         conflict = "new"
         if not key_norm:
             conflict = "invalid"
@@ -356,7 +367,7 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
             "suggested_mode": "overwrite" if conflict == "exists" else "skip",
             "passphrase": {"status": pp_status, "bundle": pp, "local": pp_local},
         })
-    return rows
+    return sorted(rows, key=lambda row: row["name"].casefold())
 
 
 def preview_jobs_bundle(config: dict, bundle: dict) -> dict:
@@ -614,7 +625,7 @@ def _apply_repository_inventory(config: dict, bundle: dict, jobs: list[dict], dr
     }
 
 
-def import_jobs_bundle(
+def _import_jobs_bundle_locked(
     config: dict,
     bundle: dict,
     mode: str = "skip",
@@ -644,7 +655,7 @@ def import_jobs_bundle(
         row for row in jobs
         if isinstance(row, dict) and (not selected_set or str(row.get("job_key") or "").strip() in selected_set)
     ]
-    inventory_report = _apply_repository_inventory(config, bundle, inventory_jobs, bool(dry_run))
+    inventory_report = _apply_repository_inventory(config, bundle, inventory_jobs, True)
 
     jobs_dir = _jobs_dir(config)
     existing_files = {p.stem for p in jobs_dir.glob("*.json")}
@@ -652,6 +663,10 @@ def import_jobs_bundle(
     report: List[dict] = []
     applied_jobs: List[Tuple[str, dict]] = []
     schedule_updates: Dict[str, dict] = {}
+    current_jobs = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in jobs_dir.glob("*.json")}
+    source_keys = [str(row.get("job_key") or "") for row in inventory_jobs]
+    if len(set(source_keys)) != len(source_keys):
+        raise ValueError("Duplicate job identity in import bundle")
 
     selected = selected_set
     per_mode = per_job_mode if isinstance(per_job_mode, dict) else {}
@@ -666,27 +681,42 @@ def import_jobs_bundle(
         mode_job = str(per_mode.get(src_key, mode)).strip().lower()
         if mode_job not in {"skip", "overwrite", "rename"}:
             mode_job = mode
-        final_key, action = _resolve_import_key(existing, src_key, mode_job)
+        if not _normalize_job_key(src_key):
+            raise ValueError("Invalid source job identity in import bundle")
+        final_key, action = _resolve_import_key(existing, _import_identity(config, raw), mode_job)
         if not final_key:
             report.append({"job_key": src_key, "status": action})
             continue
         patched = dict(raw)
         patched["job_key"] = final_key
-        if final_key != src_key:
-            name = str(patched.get("name") or final_key)
-            if f"({src_key})" not in name and src_key:
-                patched["name"] = f"{name} ({final_key})"
+        patched["job_id"] = final_key
+        patched["schema_version"] = 4
+        from archive_prefix import job_archive_prefixes
+        patched.setdefault("archive_prefix", str(patched.get("backup_type") or "").lower() + "-backup")
+        old = current_jobs.get(final_key)
+        patched["cache_subdir"] = old["cache_subdir"] if old else final_key
+        patched["check_flag_name"] = old["check_flag_name"] if old else ".last_check"
+        patched["archive_prefixes"] = list(dict.fromkeys([
+            *job_archive_prefixes(patched), *(job_archive_prefixes(old) if old else []),
+        ]))
         applied_jobs.append((final_key, patched))
         existing.add(final_key)
         if src_key in schedules:
             schedule_updates[final_key] = schedules[src_key]
         report.append({"job_key": src_key, "new_job_key": final_key, "status": action, "mode": mode_job})
 
+    from archive_prefix import validate_prefix_ownership
+    final_jobs = {**current_jobs, **dict(applied_jobs)}
+    for _, candidate in applied_jobs:
+        validate_prefix_ownership(candidate, final_jobs.values())
+
     settings_applied = False
     settings_report = {"mode": settings_mode, "applied": 0, "conflicts": 0}
     settings_backup = None
     settings_payload = bundle.get("settings_payload")
     if not dry_run:
+        # Prefix validation and all identity decisions precede inventory writes.
+        inventory_report = _apply_repository_inventory(config, bundle, inventory_jobs, False)
         settings_applied, settings_report, settings_backup = _apply_settings_payload(
             config,
             settings_payload,
@@ -695,13 +725,18 @@ def import_jobs_bundle(
         )
 
     if not dry_run:
+        from inventory_store import atomic_write_json
         for key, raw in applied_jobs:
             target = jobs_dir / f"{key}.json"
-            target.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            atomic_write_json(target, raw)
         # merge schedules
         merged = get_schedules(config)
         merged.update(schedule_updates)
         write_schedules(config, merged)
+        from repositories_api import reconcile_repository_usage
+        from jobs_api import invalidate_job_discovery_cache
+        reconcile_repository_usage(config)
+        invalidate_job_discovery_cache()
 
     return {
         "dry_run": bool(dry_run),
@@ -714,6 +749,17 @@ def import_jobs_bundle(
         "settings_backup": settings_backup,
         "repository_inventory": inventory_report,
     }
+
+
+def import_jobs_bundle(
+    config: dict, bundle: dict, mode: str = "skip", dry_run: bool = True,
+    selected_jobs: list[str] | None = None, per_job_mode: dict | None = None,
+    settings_mode: str = "merge", per_profile_mode: dict | None = None,
+) -> dict:
+    from inventory_store import inventory_lock
+    with inventory_lock(_jobs_dir(config).parent):
+        return _import_jobs_bundle_locked(config, bundle, mode, dry_run, selected_jobs,
+                                          per_job_mode, settings_mode, per_profile_mode)
 
 
 def _secrets_dir() -> Path:

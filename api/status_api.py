@@ -72,6 +72,7 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
         backups.append(
             {
                 "key": key,
+                "job_id": st.job_id,
                 "backup_type": st.backup_type,
                 "location": st.location,
                 "status": st.status,
@@ -114,7 +115,8 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
         scripts_dir = resolve_scripts_dir(config)
         data_root = resolve_data_root(config)
         jobs = []
-        for j in discover_jobs(scripts_dir, data_root):
+        job_info = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
+        for j in job_info.values():
             jobs.append(
                 {
                     "key": j.key,
@@ -131,8 +133,12 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
         verification = build_restore_verification_map(config, jobs)
     except Exception:
         verification = {}
+        job_info = {}
 
     for b in backups:
+        info = job_info.get(b["key"])
+        if info:
+            b["name"] = info.name or info.display_name
         meta = verification.get(str(b.get("key") or ""), {})
         b["restore_verification_status"] = meta.get("status", "never")
         b["restore_verification_reason"] = meta.get("reason", "")
@@ -146,6 +152,7 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
             b["restore_test_policy"] = meta.get("policy")
 
     _apply_backup_overdue_metadata(config, backups)
+    backups.sort(key=lambda row: str(row.get("name") or row.get("backup_type") or "").casefold())
 
     total = len(backups)
     success = sum(1 for b in backups if b["status"] == "success" and not bool(b.get("backup_overdue")))
@@ -340,7 +347,7 @@ def _status_key(st: Any) -> str:
     key = getattr(st, "key", None)
     if key:
         return str(key)
-    return f"{getattr(st, 'backup_type', 'unknown')}_{getattr(st, 'location', 'unknown')}"
+    return str(getattr(st, "job_id", "") or "")
 
 
 def _load_previous_status_sizes(all_statuses: List[Any], latest_per_key: Dict[str, Any]) -> Dict[str, int]:

@@ -1,6 +1,7 @@
 # Job identity dependency analysis (#486)
 
-Status: analysis only; no plugin implementation or live data migration.
+Status: implementation on the isolated #486 branch; awaiting the maintainer test.
+No live Unraid data has been migrated by the development agent.
 
 ## Baseline and use of #447
 
@@ -202,16 +203,17 @@ For the new migration:
 - Preserve native prune output, import/export behavior and support-bundle scope.
 - Keep focus on #486: no implementation of #493 and no adoption of #447 extras.
 
-This analysis does not execute a migration or test the installed plugin on the
-maintainer's Unraid host. The supplied-copy checks below establish a baseline
-for later migration tests; they do not demonstrate migration success.
+The original analysis below establishes the baseline. Implementation and
+copy-based migration validation are documented in the final section; the live
+Unraid installation test remains the maintainer's next step.
 
 ## Supplied production copy: 2026.09.07.0935
 
 On 2026-09-07 the maintainer supplied an unmodified production-data copy for
 #486. The copied application's `APP_VERSION` confirms `2026.09.07.0935`.
 Inspection used direct, read-only JSON parsing, not copied application code or
-normal application readers that could write. No migration was executed.
+normal application readers that could write. No migration was executed during
+this initial inventory; subsequent copy-only migration results are listed below.
 Production payloads, configuration secrets and authentication data are not
 included in this branch. A local ignored fingerprint manifest records the 671
 JSON records read for the identity audit.
@@ -274,9 +276,9 @@ Coverage gaps for synthetic fixtures, not missing production files:
 - Use deliberately different UUID and name orders for UI checks. Do not rely
   on the order of the current filenames as a sufficient sorting test.
 
-This is sufficient input for representative migration fixtures. Fixture
-generation and executable before/after checks remain implementation work;
-private source files are not committed as test fixtures.
+This provided the input for representative migration fixtures. The implementation
+validation below records the executable before/after checks; private source files
+are not committed as test fixtures.
 
 ## Discarding the experiment and Unraid limitation
 
@@ -290,3 +292,87 @@ old migration-state files as a substitute, or invent a rollback feature in #486.
 Corrections to an installed test version use a corrected version and documented
 data repair where necessary. Any separate installation recovery would require
 its own concrete plan and authorization. Test data copies first.
+
+## Implementation and test candidate (#486)
+
+The implementation uses one new registered migration, `job_ids_v1`, after the
+existing canonical inventory migrations. It assigns each job a UUID, stores
+`job_id` and the existing API field `job_key` with that UUID, and renames job
+metadata to `<UUID>.json`. Main's public API structures and page layouts are
+retained. The full editable current prefix is `archive_prefix`; existing
+`archive_prefixes` remains the prefix history used by Browse & Restore.
+`backup_type` remains descriptive and preserves automatic icon/color and
+runtime defaults, but is no longer used as the job's identity.
+
+Migration preserves unknown job fields, existing status filenames, status and
+check values, restore-test results/report IDs, weekly observations, timestamps,
+and repository assignments. Restore-test files become `<UUID>.test`;
+notification/restore stores and schedule keys are converted without discarding
+unresolved historical entries. Conflicting historical evidence is retained and
+recorded for review rather than claimed by an active job. Invalid active
+references block startup before the first data change.
+
+`cache_subdir` and `check_flag_name` preserve the exact previous cache/check
+location for migrated jobs. New jobs receive an ID-specific cache location.
+These references stay stable when names and prefixes change. Borg still handles
+pruning once for the current prefix, with its existing verbose output; older
+prefixes remain available for restore, as on Main.
+
+### Data preservation and recovery
+
+Before replacing any input, migration stages complete originals and proposed
+files under `<data-root>/config/migration-backups/job_ids_v1-<run-id>/` and
+persists `config/job-id-migration.json`. The journal records the UUID assignment,
+source/target filenames, before/after SHA-256 checksums, timestamps and actions.
+The existing migration JSONL log and central failure gate are reused.
+
+If interrupted, startup resumes the same journal and IDs. A file modified since
+the snapshot causes a failure rather than being overwritten. Do not delete or
+edit the journal to force another migration. Preserve it, the matching snapshot
+and the migration audit log when diagnosing a failure. Restore an individual
+original only with the plugin stopped and after checking its journal entry and
+checksum; record the exact files and reason. A partial/manual restore is not a
+completed migration and must not be used to bypass the startup gate. Use a
+corrected plugin version for code fixes. The snapshots do not downgrade Unraid
+or the installed plugin.
+
+### Validation performed during implementation
+
+- Migration tests cover field preservation, repeat execution, interrupted
+  replacement/rename, changed input on retry, unavailable storage, active
+  workers, conflicting active references and ambiguous history.
+- Integration tests exercise name/full-prefix editing, unchanged IDs/schedules,
+  cache/check references, history/report/restore joins, alphabetical job lists,
+  complete support-bundle job records, old/new exports and import conflicts.
+- Prefix tests include historical prefixes and overlapping Borg selections in
+  one repository, allowed reuse by the same job, and separate repositories.
+- Runtime, native prune, notification, repository and UI tests retain their
+  existing behavioral assertions with canonical UUID fixtures.
+- Local browser review uses synthetic data and real API readers; it does not
+  start backups or install anything on the maintainer's server.
+- A private copy of 598 relevant supplied files was migrated: 14 jobs and 594
+  converted files. Settings, status/check/restore payloads and weekly values
+  were compared against the originals. A repeat invocation made no changes.
+  The 598 input files on the supplied share were verified unchanged afterwards.
+  Ten unresolved historical references remain: four notification deliveries
+  and six weekly keys (containing eight measurements), as identified above.
+
+The maintainer's live Unraid installation test is still required. Keep PR #494
+unmerged until that test is accepted. Stable release promotion remains separate.
+
+### Maintainer test on Unraid
+
+1. Keep the supplied original data copy; install the verified test-channel
+   package on the existing Main data with the array/pools available and no
+   backup/restore worker running.
+2. Confirm the existing migration status reports success and all 14 jobs remain
+   present, with their icons, colors, schedules, histories and restore/check
+   evidence. Check the complete job JSON in a new support bundle.
+3. Restart the plugin once: the same IDs must remain, without a second conversion.
+4. Rename a selected test job and change its full prefix. Its ID, old history,
+   restore evidence, schedule and cache/check reference must remain attached.
+5. Run that test job: inspect the new archive prefix and native verbose prune
+   output. The new status/history entry must use the same job ID.
+6. Check prefix conflicts in a shared repository and allowed equal prefixes in
+   separate repositories. Verify alphabetical names in existing job groups,
+   and the ID in Edit Job and expanded History details.
