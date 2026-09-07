@@ -987,6 +987,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/history/log": lambda: self._get_log_file(parsed.query),
                 "/api/jobs/log/window": lambda: self._get_activity_log(parsed.query),
                 "/api/wizard/job": lambda: self._get_wizard_job(parsed.query),
+                "/api/wizard/new-job-id": self._get_wizard_new_job_id,
                 "/api/wizard/source-dirs": lambda: self._get_wizard_source_dirs(parsed.query),
                 "/api/wizard/runtime-inventory": self._get_wizard_runtime_inventory,
                 "/api/storage/check/jobs": self._get_check_jobs,
@@ -2160,6 +2161,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_rt_running(self) -> dict:
         from jobs_api import JobManager
         return JobManager.get().get_state("restore_test")
+
+    def _get_wizard_new_job_id(self) -> dict:
+        from job_identity import new_job_id
+        return {"job_id": new_job_id()}
 
     def _get_wizard_job(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs
@@ -3834,7 +3839,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export"}
+                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export", "/api/wizard/new-job-id"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)

@@ -6,6 +6,8 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   step: 1,
   mode: 'create',
   existingJobKey: '',
+  jobId: '',
+  jobIdRequest: 0,
   original: null,
   storages: [],
   selectedStorageKey: '',
@@ -44,6 +46,7 @@ function wizardT(key, params = {}) {
 function wizardApiErrorMessage(payload, status = 0) {
   const data = payload && typeof payload === 'object' ? payload : {};
   if (data.code === 'job_name_too_long') return wizardT('wizard.validationJobNameLength');
+  if (data.code === 'job_id_exists') return wizardT('wizard.jobIdExists');
   if (data.code === 'retention_invalid') return wizardT('wizard.validationRetentionInvalid');
   if (data.code === 'retention_all_zero') return wizardT('wizard.validationRetentionRequired');
   for (const key of ['details', 'message', 'error']) {
@@ -514,15 +517,42 @@ function _setWizardFormDisabled(disabled) {
   });
 }
 
-function openWizard() {
+async function wizardLoadNewJobId(request) {
+  try {
+    const res = await fetch('/api/wizard/new-job-id', {cache: 'no-store'});
+    const data = await res.json();
+    if (request !== wizardState.jobIdRequest) return;
+    if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
+    if (typeof data?.job_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(data.job_id)) {
+      throw new Error(wizardT('wizard.jobIdInvalid'));
+    }
+    wizardState.jobId = data.job_id;
+    document.getElementById('wiz-job-id').value = data.job_id;
+  } catch (err) {
+    if (request !== wizardState.jobIdRequest) return;
+    _wizardShowError(1, wizardT('wizard.jobIdLoadFailed', {message: err.message}));
+  } finally {
+    if (request === wizardState.jobIdRequest) {
+      _wizardUpdateStepNavigation();
+      if (!wizardState.closeSnapshotTouched) _wizardCaptureCloseSnapshot();
+    }
+  }
+}
+
+function openWizard(existingJobKey = '') {
+  // The New Job button also calls this function directly as an event handler.
+  existingJobKey = typeof existingJobKey === 'string' ? existingJobKey : '';
   wizardBindCloseDirtyTracking();
   wizardBindRuntimeControls();
+  _setWizardFormDisabled(false);
   wizardState.mode = 'create';
-  wizardState.existingJobKey = '';
+  wizardState.existingJobKey = existingJobKey;
+  wizardState.jobId = existingJobKey;
+  const request = ++wizardState.jobIdRequest;
   wizardState.backupType = '';
-  document.getElementById('wiz-job-id-group').hidden = true;
-  document.getElementById('wiz-job-id-group').classList.add('hidden');
-  document.getElementById('wiz-job-id').value = '';
+  document.getElementById('wiz-job-id-group').hidden = false;
+  document.getElementById('wiz-job-id-group').classList.remove('hidden');
+  document.getElementById('wiz-job-id').value = existingJobKey;
   wizardState.original = null;
   wizardState.step = 1;
   wizardState.unlockedStep = 1;
@@ -588,10 +618,12 @@ function openWizard() {
   wizardUpdateIconPreview();
   wizardRenderArchivePrefixSummary();
   wizardState.loadingPromise = Promise.all([
+    existingJobKey ? Promise.resolve() : wizardLoadNewJobId(request),
     wizardLoadStorageTargets(),
     wizardLoadRepositories(),
     wizardLoadRuntimeInventory(),
   ]).finally(() => {
+    if (request !== wizardState.jobIdRequest) return;
     wizardAutoFill();
     if (!wizardState.closeSnapshotTouched) _wizardCaptureCloseSnapshot();
   });
@@ -611,7 +643,8 @@ function _wizardFillFromJob(job) {
   wizardState.backupType = job.type_id || '';
   document.getElementById('wiz-job-id-group').hidden = false;
   document.getElementById('wiz-job-id-group').classList.remove('hidden');
-  document.getElementById('wiz-job-id').value = job.job_id || '';
+  wizardState.jobId = job.job_id || '';
+  document.getElementById('wiz-job-id').value = wizardState.jobId;
   document.getElementById('wiz-icon').value = (job.icon || '').toLowerCase();
   document.getElementById('wiz-icon-color').value = (job.icon_color || '').toLowerCase();
   document.getElementById('wiz-description').value = job.description || '';
@@ -648,7 +681,8 @@ function _wizardFillFromJob(job) {
 }
 
 async function openWizardForJob(jobKey, mode = 'edit') {
-  openWizard();
+  openWizard(jobKey);
+  const request = wizardState.jobIdRequest;
   wizardState.mode = mode;
   wizardState.existingJobKey = jobKey;
   const title = document.getElementById('wizard-modal-title');
@@ -656,8 +690,10 @@ async function openWizardForJob(jobKey, mode = 'edit') {
   _setWizardFormDisabled(true);
   try {
     await wizardState.loadingPromise;
+    if (request !== wizardState.jobIdRequest) return;
     const res = await fetch(`/api/wizard/job?job_key=${encodeURIComponent(jobKey)}`);
     const data = await res.json();
+    if (request !== wizardState.jobIdRequest) return;
     if (!res.ok) throw new Error(wizardApiErrorMessage(data, res.status));
     const job = data.job || {};
     _wizardFillFromJob(job);
@@ -677,11 +713,14 @@ async function openWizardForJob(jobKey, mode = 'edit') {
     _renderWizardStep(wizardState.step);
     _wizardCaptureCloseSnapshot();
   } catch (err) {
+    if (request !== wizardState.jobIdRequest) return;
     closeWizard({ force: true });
     showMsg('jobs-message', 'error', wizardT('wizard.loadFailed', { message: err.message }));
   } finally {
-    _setWizardFormDisabled(false);
-    _wizardUpdateStepNavigation();
+    if (request === wizardState.jobIdRequest) {
+      _setWizardFormDisabled(false);
+      _wizardUpdateStepNavigation();
+    }
   }
 }
 
@@ -703,6 +742,8 @@ function closeWizard(options = {}) {
   if (!options?.force && !_wizardConfirmDiscard()) return false;
   document.getElementById('wizard-modal').classList.add('hidden');
   document.body.classList.remove('wizard-modal-open');
+  wizardState.jobIdRequest++;
+  wizardState.jobId = '';
   wizardState.closeSnapshot = '';
   wizardState.closeSnapshotTouched = false;
   return true;
@@ -732,11 +773,12 @@ function _renderWizardStep(n) {
 }
 
 function _wizardUpdateStepNavigation() {
+  document.getElementById('wizard-next-btn').disabled = !wizardState.jobId;
   [1,2,3,4,5,7,8,9].forEach((step) => {
     const dot = document.getElementById(`wstep-dot-${step}`);
     if (!dot) return;
     const skipped = !_wizardStepEnabled(step);
-    const locked = step > Number(wizardState.unlockedStep || 1);
+    const locked = !wizardState.jobId || step > Number(wizardState.unlockedStep || 1);
     dot.disabled = skipped || locked;
     dot.setAttribute('aria-disabled', String(skipped || locked));
     dot.classList.toggle('wizard-step-skipped', skipped);
@@ -852,6 +894,7 @@ function _wizardCollectParams() {
   const dockerMode = _wizardRuntimeMode('docker');
   const vmMode = _wizardRuntimeMode('vm');
   return {
+    job_id: wizardState.jobId || '',
     archive_prefix: (document.getElementById('wiz-archive-prefix').value || '').trim(),
     type_id: wizardState.backupType || '',
     icon:         (document.getElementById('wiz-icon').value || '').trim().toLowerCase(),
@@ -1189,6 +1232,7 @@ function wizardSourcePathsClick(event) {
 function _wizardValidate(step) {
   wizardClearError(step);
   const p = _wizardCollectParams();
+  if (!p.job_id) { _wizardShowError(step, wizardT('wizard.jobIdNotReady')); return false; }
   if (step === 1) {
     if (!p.job_name) { _wizardShowError(1, wizardT('wizard.validationJobName')); return false; }
     if ([...p.job_name].length > 100) { _wizardShowError(1, wizardT('wizard.validationJobNameLength')); return false; }

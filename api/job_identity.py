@@ -10,6 +10,11 @@ from datetime import datetime, timezone
 JOB_SCHEMA_VERSION = 4
 
 
+class JobIdConflictError(ValueError):
+    api_code = "job_id_exists"
+    api_status = 409
+
+
 def new_job_id() -> str:
     return str(uuid.uuid4())
 

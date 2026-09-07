@@ -47,6 +47,94 @@ def migrated(tmp_path):
     return config, jobs, plan['assignment'], root
 
 
+def test_new_wizard_id_is_stateless_and_uses_the_admin_api_route(tmp_path):
+    from borg_backup_ui import BackupUIHandler
+    from job_identity import validate_job_id
+    handler = BackupUIHandler.__new__(BackupUIHandler)
+    handler.config = {'BACKUP_SCRIPTS_DIR': str(tmp_path)}
+    handler.path = '/api/wizard/new-job-id'
+    handler.command = 'GET'
+    replies = []
+    handler._handle_api = lambda fn: replies.append(fn())
+    handler.do_GET()
+    handler.do_GET()
+    first, second = [validate_job_id(reply['job_id']) for reply in replies]
+    assert first != second
+    assert handler._required_role_for_request(handler.path, 'GET') == 'admin'
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_new_wizard_saves_displayed_id_after_failed_write_without_overwriting(tmp_path, monkeypatch):
+    import repositories_api
+    from job_identity import JobIdConflictError, new_job_id
+    config, jobs, ids, root = migrated(tmp_path)
+    params = load_job_for_wizard(ids[jobs[0]['job_key']], root / 'scripts', config)
+    displayed = new_job_id()
+    params.update(job_id=displayed, job_name='New job', repository_key='separate')
+    target = root / 'config/jobs' / (displayed + '.json')
+    original_repo = (root / 'config/repositories.json').read_bytes()
+    original_write = repositories_api.atomic_write_json
+
+    def failed_write(*args, **kwargs):
+        raise OSError('simulated write failure')
+
+    monkeypatch.setattr(repositories_api, 'atomic_write_json', failed_write)
+    with pytest.raises(OSError, match='simulated write failure'):
+        save_job(params, root / 'scripts', root, config)
+    assert not target.exists()
+    assert (root / 'config/repositories.json').read_bytes() == original_repo
+
+    monkeypatch.setattr(repositories_api, 'atomic_write_json', original_write)
+    result = save_job(params, root / 'scripts', root, config)
+    assert result['job_id'] == result['job_key'] == displayed
+    saved = target.read_bytes()
+    assert json.loads(saved)['job_id'] == displayed
+    params['job_name'] = 'Must not overwrite'
+    with pytest.raises(JobIdConflictError) as error:
+        save_job(params, root / 'scripts', root, config)
+    assert error.value.api_status == 409
+    assert target.read_bytes() == saved
+    params['job_id'] = '../invalid-id'
+    with pytest.raises(ValueError, match='UUID'):
+        save_job(params, root / 'scripts', root, config)
+
+
+def test_simultaneous_creates_with_the_same_displayed_id_cannot_overwrite(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    import repositories_api
+    from job_identity import JobIdConflictError, new_job_id
+    config, jobs, ids, root = migrated(tmp_path)
+    params = load_job_for_wizard(ids[jobs[0]['job_key']], root / 'scripts', config)
+    displayed = new_job_id()
+    params.update(job_id=displayed, repository_key='separate')
+    transaction = repositories_api.save_job_repository_transaction
+    barrier = Barrier(2)
+
+    def concurrent_transaction(*args, **kwargs):
+        # Both requests have passed the existence check outside the inventory lock.
+        barrier.wait(timeout=10)
+        return transaction(*args, **kwargs)
+
+    monkeypatch.setattr(repositories_api, 'save_job_repository_transaction', concurrent_transaction)
+
+    def create(name):
+        try:
+            save_job({**params, 'job_name': name}, root / 'scripts', root, config)
+            return name
+        except JobIdConflictError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(create, ['First request', 'Second request']))
+    winners = [name for name in results if name is not None]
+    assert len(winners) == 1
+    stored = json.loads((root / 'config/jobs' / (displayed + '.json')).read_text())
+    assert stored['name'] == winners[0]
+    repository = next(row for row in read_repository_store(config)['repositories'] if row['repository_key'] == 'separate')
+    assert repository['used_by'] == [displayed]
+
+
 def test_name_and_full_prefix_edit_keeps_every_job_relationship(tmp_path, monkeypatch):
     config, jobs, ids, root = migrated(tmp_path)
     key = ids[jobs[0]['job_key']]

@@ -2653,6 +2653,7 @@ def save_job_repository_transaction(
     previous_repository_key: str = "",
     previous_job_key: str = "",
     previous_metadata_path: Path | None = None,
+    create_only: bool = False,
 ) -> None:
     """Persist job metadata and both repository link lists as one recoverable unit."""
     repo_path = repositories_file(config)
@@ -2661,7 +2662,9 @@ def save_job_repository_transaction(
     try:
         with inventory_lock(repo_path.parent):
             from archive_prefix import validate_prefix_ownership
-            from job_identity import metadata_job_id
+            from job_identity import JobIdConflictError, metadata_job_id
+            if create_only and target.exists():
+                raise JobIdConflictError("New job ID already exists")
             if metadata_job_id(metadata) != job_key:
                 raise ValueError("Job identity does not match the repository assignment")
             other_jobs = [json.loads(path.read_text(encoding="utf-8"))

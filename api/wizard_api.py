@@ -581,7 +581,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
 def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
     """Speichert Job-eigene Wizard-Metadaten mit kanonischer Repository-Referenz."""
     from archive_prefix import job_archive_prefixes, validate_archive_prefix
-    from job_identity import new_job_id, metadata_job_id, validate_job_id
+    from job_identity import JobIdConflictError, new_job_id, metadata_job_id, validate_job_id
     from jobs_api import get_jobs_meta_dir
     _validate_job_name_length(params.get("job_name", ""))
     archive_prefix = validate_archive_prefix(params.get("archive_prefix"))
@@ -600,7 +600,8 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     existing_job_key = str(params.get("existing_job_key", "")).strip()
 
     # ── Wizard-Metadaten schreiben (Phase 2) ─────────────────────────────────
-    job_key = validate_job_id(existing_job_key) if existing_job_key else new_job_id()
+    requested_id = validate_job_id(params["job_id"]) if "job_id" in params else ""
+    job_key = validate_job_id(existing_job_key) if existing_job_key else (requested_id or new_job_id())
     if params.get("job_id") and params["job_id"] != job_key:
         raise ValueError("The permanent job ID cannot be changed")
     now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -614,7 +615,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         if metadata_job_id(existing) != job_key:
             raise ValueError("The permanent job ID cannot be changed")
     elif meta_path.exists():
-        raise FileExistsError("New job ID already exists")
+        raise JobIdConflictError("New job ID already exists")
     type_id = str(existing.get("backup_type") or params.get("type_id") or archive_prefix.removesuffix("-backup")).strip()
 
     mount_before_run = bool(params.get("mount_before_run", existing.get("mount_before_run", True)))
@@ -679,6 +680,7 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         previous_repository_key=str(existing.get("repository_key") or ""),
         previous_job_key=existing_job_key or job_key,
         previous_metadata_path=previous_meta_path,
+        create_only=not bool(existing_job_key),
     )
 
     return {

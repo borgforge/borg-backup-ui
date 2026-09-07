@@ -66,7 +66,7 @@ for (const language of ['de', 'en']) {
       window: {BBUI: {components: {i18n: {t(key) {
         return key.split('.').reduce((value, part) => value?.[part], labels) || key;
       }}}}, addEventListener() {}},
-      document: {}, input: {job_name: 'ä'.repeat(100), archive_prefix: 'test-backup'}, error: '',
+      document: {}, input: {job_id: '645de013-df1e-49e3-89f0-39c9bb3e299b', job_name: 'ä'.repeat(100), archive_prefix: 'test-backup'}, error: '',
     });
     vm.runInContext(fs.readFileSync('ui/js/pages/wizard.js', 'utf8'), context);
     vm.runInContext(`
@@ -127,3 +127,110 @@ test('wizard schedules the saved UUID and retries without creating another job',
   assert.equal(requests[3].body.job_key, id);
   assert.equal(closed, true);
 });
+
+function newJobWizardContext(language = 'en') {
+  const labels = JSON.parse(fs.readFileSync(`ui/i18n/${language}.json`, 'utf8'));
+  const elements = new Map();
+  const requests = [];
+  function element(key) {
+    if (!elements.has(key)) {
+      const classes = new Set();
+      elements.set(key, {id: key, value: '', style: {}, dataset: {}, checked: false,
+        classList: {add: key => classes.add(key), remove: key => classes.delete(key),
+          contains: key => classes.has(key), toggle(key, active) {active ? classes.add(key) : classes.delete(key);}},
+        setAttribute() {}, removeAttribute() {}, addEventListener() {}, closest: () => null,
+        querySelectorAll: () => [...elements.values()],
+      });
+    }
+    return elements.get(key);
+  }
+  const context = vm.createContext({
+    window: {BBUI: {components: {i18n: {t(key, params = {}) {
+      const value = key.split('.').reduce((value, part) => value?.[part], labels) || key;
+      return value.replace(/\{(\w+)\}/g, (_, name) => params[name] ?? '');
+    }}}}, addEventListener() {}},
+    document: {getElementById: element, body: element('body')},
+    fetch(url, options) {return new Promise(resolve => requests.push({url, options, resolve}));},
+    apiErrorMessage: data => data.message || 'Request failed',
+  });
+  vm.runInContext(fs.readFileSync('ui/js/pages/wizard.js', 'utf8'), context);
+  // Keep identity lifecycle, form collection and navigation real; omit unrelated UI rendering.
+  for (const name of ['wizardBindRuntimeControls', '_wizardSyncRiskAcknowledgement',
+    'wizardCancelSourceSuggestRequest', 'wizardRenderSourcePaths', 'wizardCancelExcludeSuggestRequest',
+    'wizardRenderExcludePaths', 'wizardUpdateRetentionManualLink', '_wizardScheduleApplyUI',
+    'wizardSchedulePreview', 'wizardUpdateIconPreview', 'wizardRenderArchivePrefixSummary',
+    'wizardAutoFill', 'wizardRenderRuntimeControls', 'wizardUpdateFinalRiskAcknowledgements']) {
+    vm.runInContext(`${name} = () => {};`, context);
+  }
+  vm.runInContext(`
+    wizardLoadStorageTargets = wizardLoadRepositories = wizardLoadRuntimeInventory = async () => {};
+    wizardSelectedStorage = wizardSelectedRepository = () => ({});
+    _wizardRuntimeMode = () => 'none';
+    _wizardRiskAcknowledged = () => false;
+  `, context);
+  return {context, elements, requests, state: context.window.BBUI.wizardState};
+}
+
+test('new job shows one ID, preserves it during navigation, and discards it on cancel', async () => {
+  const {context, elements, requests, state} = newJobWizardContext();
+  const displayed = '645de013-df1e-49e3-89f0-39c9bb3e299b';
+  vm.runInContext("openWizard({type: 'click'})", context);
+  assert.equal(elements.get('wiz-job-id-group').hidden, false);
+  assert.equal(elements.get('wizard-next-btn').disabled, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/api/wizard/new-job-id');
+  assert.equal(requests[0].options.cache, 'no-store');
+  requests[0].resolve({ok: true, json: async () => ({job_id: displayed})});
+  await state.loadingPromise;
+  assert.equal(elements.get('wiz-job-id').value, displayed);
+  assert.equal(elements.get('wizard-next-btn').disabled, false);
+  elements.get('wiz-job-name').value = 'New job';
+  elements.get('wiz-archive-prefix').value = 'new-job-backup';
+  await vm.runInContext('wizardNext()', context);
+  assert.equal(state.step, 2);
+  vm.runInContext('wizardBack()', context);
+  assert.equal(state.jobId, displayed);
+  assert.equal(vm.runInContext('_wizardCollectParams().job_id', context), displayed);
+  vm.runInContext('closeWizard({force:true})', context);
+  assert.equal(state.jobId, '');
+  assert.equal(requests.length, 1); // Cancel sends no write or deletion request.
+});
+
+test('late ID replies cannot change a reopened wizard or an existing job', async () => {
+  const {context, elements, requests, state} = newJobWizardContext();
+  const oldId = '645de013-df1e-49e3-89f0-39c9bb3e299b';
+  const newId = 'bc198590-b17b-4a30-a5c4-f721c45cdaea';
+  vm.runInContext('openWizard()', context);
+  const abandoned = state.loadingPromise;
+  vm.runInContext('closeWizard({force:true}); openWizard()', context);
+  requests[1].resolve({ok: true, json: async () => ({job_id: newId})});
+  await state.loadingPromise;
+  requests[0].resolve({ok: true, json: async () => ({job_id: oldId})});
+  await abandoned;
+  assert.equal(elements.get('wiz-job-id').value, newId);
+  vm.runInContext('closeWizard({force:true}); openWizard()', context);
+  const replaced = state.loadingPromise;
+  vm.runInContext(`openWizard('${oldId}')`, context);
+  assert.equal(requests.length, 3); // Edit initialization never generates a new ID.
+  requests[2].resolve({ok: true, json: async () => ({job_id: newId})});
+  await replaced;
+  assert.equal(state.jobId, oldId);
+  assert.equal(elements.get('wiz-job-id').value, oldId);
+});
+
+for (const language of ['de', 'en']) {
+  test(`failed or invalid ID responses keep the wizard from continuing (${language})`, async () => {
+    for (const response of [{ok:false, message:'Unavailable'}, {ok:true, job_id:'not-a-uuid'},
+      {ok:true}, {ok:true, job_id:['645de013-df1e-49e3-89f0-39c9bb3e299b']}]) {
+      const {context, elements, requests, state} = newJobWizardContext(language);
+      vm.runInContext('openWizard()', context);
+      requests[0].resolve({ok: response.ok, status:503, json: async () => response});
+      await state.loadingPromise;
+      assert.equal(state.jobId, '');
+      assert.equal(elements.get('wizard-next-btn').disabled, true);
+      assert.equal(elements.get('wizard-error-1').classList.contains('hidden'), false);
+      assert.ok(elements.get('wizard-error-1').textContent.includes(language === 'de' ? 'erneut öffnen' : 'reopen'));
+      assert.equal(vm.runInContext('_wizardValidate(9)', context), false);
+    }
+  });
+}

@@ -728,6 +728,10 @@
   },
   "wizard": {
     "jobId": "Job-ID",
+    "jobIdInvalid": "Der Server hat keine gültige Job-ID geliefert.",
+    "jobIdLoadFailed": "Job-ID konnte nicht geladen werden. Bitte den Wizard schließen und erneut öffnen. {message}",
+    "jobIdNotReady": "Die Job-ID ist noch nicht verfügbar. Bitte warten oder den Wizard erneut öffnen.",
+    "jobIdExists": "Diese Job-ID wird bereits verwendet. Bitte den Wizard erneut öffnen, um einen neuen Job anzulegen.",
     "archivePrefixPlaceholder": "z.B. meinedaten-backup",
     "archivePrefix": "Archivpräfix",
     "newTitle": "Neuer Backup-Job",
