@@ -150,11 +150,16 @@ function wizardRenderArchivePrefixSummary() {
 function wizardArchivePrefixPopover(rows) {
   const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => String(row?.filter || '').trim());
   if (cleanRows.length <= 1) return '';
+  const groups = [true, false].map((current) => {
+    const group = cleanRows.filter((row) => !!row.current === current);
+    if (!group.length) return '';
+    return `<span><em>${escHtml(wizardT(current ? 'wizard.archiveFilterCurrentBadge' : 'wizard.archiveFilterPreviousBadge'))}</em>${group.map((row) => `<code>${escHtml(row.filter)}</code>`).join('')}</span>`;
+  }).join('');
   return `<span class="archive-pattern-popover">
     <button type="button" class="archive-pattern-popover-button" aria-haspopup="true" aria-label="${escHtml(wizardT('wizard.archivePatternHistoryButton'))}">i</button>
     <span class="archive-pattern-popover-panel" role="tooltip">
       <strong>${escHtml(wizardT('wizard.archivePatternHistoryTitle'))}</strong>
-      ${cleanRows.map((row) => `<span><em>${escHtml(wizardT(row.current ? 'wizard.archiveFilterCurrentBadge' : 'wizard.archiveFilterPreviousBadge'))}</em><code>${escHtml(row.filter)}</code></span>`).join('')}
+      ${groups}
     </span>
   </span>`;
 }
