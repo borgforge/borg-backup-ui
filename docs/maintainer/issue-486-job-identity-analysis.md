@@ -202,9 +202,81 @@ For the new migration:
 - Preserve native prune output, import/export behavior and support-bundle scope.
 - Keep focus on #486: no implementation of #493 and no adoption of #447 extras.
 
-This analysis does not execute a migration, test on the maintainer's Unraid host,
-or prove the current host's data mappings. Those checks belong to the later
-implementation and test candidate.
+This analysis does not execute a migration or test the installed plugin on the
+maintainer's Unraid host. The supplied-copy checks below establish a baseline
+for later migration tests; they do not demonstrate migration success.
+
+## Supplied production copy: 2026.09.07.0935
+
+On 2026-09-07 the maintainer supplied an unmodified production-data copy for
+#486. The copied application's `APP_VERSION` confirms `2026.09.07.0935`.
+Inspection used direct, read-only JSON parsing, not copied application code or
+normal application readers that could write. No migration was executed.
+Production payloads, configuration secrets and authentication data are not
+included in this branch. A local ignored fingerprint manifest records the 671
+JSON records read for the identity audit.
+
+The actual job root in this copy is `/boot/config/borg-backup/config/jobs/`,
+represented by `borg-backup/config/jobs/` in the supplied directory. Runtime
+status, restore-test, log and cache paths are under `/mnt/user/borg_backup_ui`,
+represented by `borg_backup_ui/`. Do not mistake `GLOBAL_DATA_DIR` for the
+canonical job root. Main's `_apply_runtime_dirs_from_conf()` applies the paths
+in canonical `config/backup.conf`; the older `STATUS_DIR` in the UI bootstrap
+configuration is not the effective status path for these records.
+
+| Store in the supplied copy | Observed baseline | Required preservation check |
+| --- | --- | --- |
+| Job metadata | 14 schema-v3 jobs, no `job_id`; unique keys; filenames, `job_key` and type/location pairs agree | Assign exactly 14 stable IDs; preserve all original settings and fields |
+| Schedules | 11 backup schedules, 10 enabled; all keys resolve | Preserve expressions and enabled flags; the absent `restore_test` trigger belongs to #493 |
+| Repositories | 13 repositories for 14 jobs; both reverse-reference lists match job assignments | Preserve the shared repository and all 14 assignments |
+| Regular backup status/history | 568 `.status` files; all resolve to existing jobs and agree with their filenames | Preserve all results, check fields, timestamps, statistics and log references |
+| Current weekly snapshots | 14 keys, 28 week/size observations; all resolve | Remap keys without changing the observations |
+| Legacy weekly snapshots under `status/` | 17 keys, 107 observations; six keys with eight observations have no current job | Preserve unresolved history and both input files; do not silently merge or replace the current snapshot |
+| Restore-test results | Six `.test` files; filenames and payload type/location agree with existing jobs; dates/results present | Preserve full reports and the existing proof, independent of whether the current policy is enabled |
+| Notification delivery history | 200 records; 196 resolve, four refer to two absent jobs | Preserve all delivery records; do not guess the four historical owners |
+| Reminder state | Three job-specific reminder keys | Preserve event names, due markers and sent timestamps |
+| Cache/check markers | All 14 current jobs have their expected existing `.last_check_<type>` file | Continue to reference existing markers and caches after introducing IDs |
+
+Important cases already represented by this copy:
+
+- Eleven jobs have empty explicit icon and color fields. Their effective display
+  depends on Main's type defaults; empty fields must not become a visual change
+  when identity changes. Three jobs carry explicit icon/color selections.
+- Ten jobs have no explicit prefix list, three have one entry, and one has two
+  current/historical prefixes. Retain both entries of the latter. Two jobs share
+  a repository; their current and recorded prefixes do not overlap. Identical
+  prefixes across different repositories are present and remain permitted.
+- The two weekly files have 11 shared job keys, with different arrays for all
+  11. Main imports the legacy file only when the current file is absent; this
+  migration must not introduce a new merge policy.
+- The six unmatched legacy weekly keys and two unmatched notification keys do
+  not exist in the current job inventory. Their eight weekly observations and
+  four deliveries account for the previously reported unresolved-history
+  diagnostics by store and count. That is historical missing ownership, not
+  evidence that an active job is missing its new ID.
+- Existing backup outcomes are 536 success, 19 skipped, nine error, three
+  warning and one cancelled. Check status is already `unknown` in 19 records
+  and `ok` in 549. Preservation tests must compare these original values rather
+  than manufacture success or known check results.
+- The status recycle directory also contains 69 `.status` files and four old
+  restore-test files. Two status records and one test do not exactly match a
+  current job key. Keep recycle contents separate from active history; do not
+  revive them or infer ownership by case folding/name similarity.
+
+Coverage gaps for synthetic fixtures, not missing production files:
+
+- Restore runs, Restore History, the notification queue and runtime recovery
+  are present but empty. Add synthetic nonempty examples from their existing
+  Main schemas to test identity references without creating real operations.
+- Add controlled prefix conflicts, ambiguous references, duplicate IDs,
+  unknown fields and interrupted/repeated migration cases. The real copy does
+  not demonstrate those failure/retry behaviors.
+- Use deliberately different UUID and name orders for UI checks. Do not rely
+  on the order of the current filenames as a sufficient sorting test.
+
+This is sufficient input for representative migration fixtures. Fixture
+generation and executable before/after checks remain implementation work;
+private source files are not committed as test fixtures.
 
 ## Discarding the experiment and Unraid limitation
 
