@@ -1,4 +1,4 @@
-from job_fixtures import identified_job, job_id
+from job_fixtures import identified_job, job_id, write_job
 import json
 import sys
 from pathlib import Path
@@ -24,6 +24,7 @@ def _write_status(path: Path, **overrides) -> None:
         "files_count": 10,
     }
     payload.update(overrides)
+    write_job(path.parent.parent, payload["backup_type"] + "_" + payload["location"])
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -35,7 +36,7 @@ def test_reports_parse_status_files_for_multi_underscore_job_keys(tmp_path: Path
         job_id=job_id("borg_backup_taeglich_backuppf1_local"), backup_type="borg_backup_taeglich_backuppf1", location="local"
     )
 
-    config = {"STATUS_DIR": str(status_dir)}
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir)}
 
     jobs = get_report_jobs(config)
     assert [job["key"] for job in jobs] == [job_id("borg_backup_taeglich_backuppf1_local")]
@@ -58,7 +59,7 @@ def test_reports_parse_smb_status_files(tmp_path: Path) -> None:
         job_id=job_id("methusalix_backup_taeglich_smb"), backup_type="methusalix_backup_taeglich", location="smb"
     )
 
-    config = {"STATUS_DIR": str(status_dir)}
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir)}
 
     jobs = get_report_jobs(config)
     assert [job["key"] for job in jobs] == [job_id("methusalix_backup_taeglich_smb")]

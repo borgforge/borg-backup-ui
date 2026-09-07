@@ -328,8 +328,22 @@ existing canonical inventory migrations. It assigns each job a UUID, stores
 metadata to `<UUID>.json`. Main's public API structures and page layouts are
 retained. The full editable current prefix is `archive_prefix`; existing
 `archive_prefixes` remains the prefix history used by Browse & Restore.
-`backup_type` remains descriptive and preserves automatic icon/color and
-runtime defaults, but is no longer used as the job's identity.
+The initial #486 candidate retained descriptive `backup_type` values. The
+maintainer subsequently approved implementing #495 in this same branch/PR:
+`job_settings_v1` now saves effective settings and appearance directly, then removes
+obsolete type fields. Existing installations pass through both registered migrations;
+already migrated #486 installations only need the explicit-settings migration.
+
+The supported configuration boundary is job schema 5, job bundle v3, encrypted job
+bundle v3 and profile export v2. Previous job AND profile exports are rejected before
+import writes. Create fresh exports after successful migration. Current calculations
+exclude historical records without a matching existing UUID; their files are retained.
+
+The maintainer approved removing the restore-test type rule instead of adding a
+per-job chunk option. The existing archive-size threshold selects chunk mode.
+Coverage and sample limits now count regular files, excluding directories. Default
+5% coverage is capped at 1,000 files; the actual achieved percentage is reported.
+See `issue-495-publication-notice.md` for the required bilingual release/forum notice.
 
 Migration preserves unknown job fields, existing status filenames, status and
 check values, restore-test results/report IDs, weekly observations, timestamps,

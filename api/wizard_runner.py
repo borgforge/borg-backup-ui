@@ -40,9 +40,6 @@ def _ensure_runtime_import_paths(backup_scripts_dir: Path) -> None:
         sys.path.insert(0, raw)
 
 
-def _type_upper(type_id: str) -> str:
-    return "".join(c if c.isalnum() else "_" for c in type_id.upper())
-
 
 def _env_flag(value: object, default: bool = False) -> bool:
     if value is None:
@@ -365,10 +362,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
         env.update(load_config(conf_file))
 
     env["BORG_UI_JOB_KEY"] = job_key
-    type_id = str(meta.get("backup_type") or "").strip().lower()
     location = str(repository_context.get("location") or meta.get("location") or "local").strip().lower()
-    if not type_id:
-        raise ValueError("backup_type is missing from job metadata")
     if location not in {"local", "usb", "smb", "storagebox", "custom"}:
         raise ValueError(f"invalid location in job metadata: {location}")
     if location == "storagebox":
@@ -377,7 +371,6 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
         env["STORAGEBOX_USER"] = str(storage.get("user", "")).strip()
         env["STORAGEBOX_BASE_PATH"] = str(storage.get("base_path", "/./backup")).strip() or "/./backup"
 
-    tu = _type_upper(type_id)
     cache_base = env.get("GLOBAL_BORG_CACHE_BASE", "/mnt/cache/borg-cache")
     cache_subdir = str(meta["cache_subdir"])
     check_flag_name = str(meta["check_flag_name"])
@@ -392,12 +385,12 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     source_paths = normalize_source_paths(meta.get("source_paths"), field=f"Job '{job_key}' source_paths")
     exclude_paths = meta.get("exclude_paths") if isinstance(meta.get("exclude_paths"), list) else []
 
-    meta_compression = str(meta.get("compression") or "").strip()
+    from job_settings import explicit_job_settings
+    meta_compression, meta_ret = explicit_job_settings(meta)
     meta_file_activity = _env_flag(meta.get("file_activity"), default=False)
     # A managed run keeps its start-time option even if the job is edited.
     if os.environ.get("BORG_UI_FILE_ACTIVITY_RUN") in {"0", "1"}:
         meta_file_activity = os.environ["BORG_UI_FILE_ACTIVITY_RUN"] == "1"
-    meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
     meta_keep_daily = str(meta_ret.get("daily") or "").strip()
     meta_keep_weekly = str(meta_ret.get("weekly") or "").strip()
     meta_keep_monthly = str(meta_ret.get("monthly") or "").strip()
@@ -405,7 +398,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
 
     env["JOB_NAME"] = os.environ.get("BORG_UI_JOB_NAME") or str(meta.get("name") or job_key)
     env.setdefault("BACKUP_SCRIPTS_DIR", str(backup_scripts_dir))
-    env.setdefault("BACKUP_TYPE", type_id)
+    env.pop("BACKUP_TYPE", None)
     env["BACKUP_LOCATION"] = os.environ.get("BORG_UI_JOB_LOCATION") or location
     env.setdefault("DATE_TAG", date_tag)
     env.setdefault("LOG_DIR", log_dir)
@@ -428,16 +421,16 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
         if "@" not in netloc and netloc:
             env["BORG_REPO"] = urlunsplit((parts.scheme, f"{storagebox_user}@{netloc}", parts.path, parts.query, parts.fragment))
             logging.info("Storage Box repository URI has no user; using STORAGEBOX_USER=%s", storagebox_user)
-    env.setdefault("BORG_COMPRESSION", meta_compression or env.get(f"COMPRESSION_{tu}", "lz4"))
+    env["BORG_COMPRESSION"] = meta_compression
     env["BORG_FILE_ACTIVITY"] = "1" if meta_file_activity else "0"
     env.setdefault("BORG_CHECKPOINT_INTERVAL", env.get("GLOBAL_BORG_CHECKPOINT_INTERVAL", "1800"))
     env["BORG_CACHE_DIR"] = cache_dir
     env.setdefault("BORG_CHECK_INTERVAL_DAYS", env.get("GLOBAL_BORG_CHECK_INTERVAL_DAYS", "30"))
     env["BORG_CHECK_FLAG_FILE"] = f"{cache_dir}/{check_flag_name}"
-    env.setdefault("BORG_KEEP_DAILY", meta_keep_daily or env.get(f"RETENTION_{tu}_DAILY", "7"))
-    env.setdefault("BORG_KEEP_WEEKLY", meta_keep_weekly or env.get(f"RETENTION_{tu}_WEEKLY", "4"))
-    env.setdefault("BORG_KEEP_MONTHLY", meta_keep_monthly or env.get(f"RETENTION_{tu}_MONTHLY", "6"))
-    env.setdefault("BORG_KEEP_YEARLY", meta_keep_yearly or env.get(f"RETENTION_{tu}_YEARLY", "3"))
+    env["BORG_KEEP_DAILY"] = meta_keep_daily
+    env["BORG_KEEP_WEEKLY"] = meta_keep_weekly
+    env["BORG_KEEP_MONTHLY"] = meta_keep_monthly
+    env["BORG_KEEP_YEARLY"] = meta_keep_yearly
     env.setdefault("LOCK_FILE", f"{env.get('LOCK_FILE_DIR', '/var/run')}/borg-backup-{job_key}.lock")
     env["BACKUP_PATHS_JSON"] = json.dumps(source_paths, ensure_ascii=False)
     env["BACKUP_EXCLUDE_PATHS_JSON"] = json.dumps(

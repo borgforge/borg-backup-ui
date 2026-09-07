@@ -1,4 +1,4 @@
-from job_fixtures import identified_job, job_id
+from job_fixtures import identified_job, job_id, write_job
 import json
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +22,7 @@ REPORT_NOW = datetime(2026, 6, 12, 12, 0, 0)
 
 def _write_status(status_dir: Path, name: str, data: dict) -> None:
     data = {**data, "job_id": job_id(data["backup_type"] + "_" + data["location"])}
+    write_job(status_dir.parent, data["backup_type"] + "_" + data["location"])
     path = status_dir / name
     path.write_text(json.dumps(data), encoding="utf-8")
 
@@ -178,7 +179,7 @@ def test_weekly_report_job_details_show_repository_growth(tmp_path: Path):
         "repository_size": 2 * 1024 ** 3,
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
+    html = _build_html_report({"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
     assert "Growth 7d" in html
     assert "+1.0 GB" in html
@@ -295,12 +296,12 @@ def test_weekly_report_sorts_jobs_by_location(tmp_path: Path):
         "status": "success",
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
+    html = _build_html_report({"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
     assert html.index(">Local<") < html.index(">USB<")
     assert html.index(">USB<") < html.index(">Storagebox<")
-    assert html.index("Photos - Local") < html.index("Flash - USB")
-    assert html.index("Flash - USB") < html.index("Appdata - Storagebox")
+    assert html.index(">photos</div>") < html.index(">flash</div>")
+    assert html.index(">flash</div>") < html.index(">appdata</div>")
 
 
 def test_weekly_report_ignores_non_error_log_hints(tmp_path: Path):
@@ -321,7 +322,7 @@ def test_weekly_report_ignores_non_error_log_hints(tmp_path: Path):
         "log_file": str(log_file),
     })
 
-    html = _build_html_report({"STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
+    html = _build_html_report({"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir)}, now=REPORT_NOW)
 
     assert "Log Details" not in html
     assert "Kein Mail-Versand" not in html

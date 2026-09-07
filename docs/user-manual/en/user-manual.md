@@ -700,6 +700,10 @@ Typical status values:
 - **Failed**
 - **Not available**
 
+For restore tests at level 2 or above, the configured archive size selects the dry-run mode: below the threshold, the full archive is checked; at or above it, a file sample is checked in groups. The default threshold is 500 GB; 0 disables switching. The former special rule for the `photos` and `vms` types is removed.
+
+The sample targets 5% of regular files by default, capped by the configured file limits (1,000 by default). Directories do not count as files or towards coverage. For example, 10,000 files give a 500-file sample; with 100,000 files, the 1,000-file cap gives 1% coverage. The report shows achieved file coverage. The additional level 3 check continues to use its separate sample size.
+
 ### 8.6 Best Practices
 
 - Schedule restore tests regularly for important jobs.
@@ -951,7 +955,9 @@ Import strategies can keep, replace, or rename existing entries depending on the
 
 > **Warning:** Store export passwords securely. Encrypted exports cannot be restored without the matching password.
 
-New encrypted exports use a versioned, authenticated envelope. Wrong passwords and damaged, truncated, or manipulated files are checked before import data is written. Older AES-CBC exports remain importable but show a legacy warning in the preview. Create a new export in the current format after a legacy import.
+New encrypted exports use a versioned, authenticated envelope. Wrong passwords and damaged, truncated, or manipulated files are checked before import data is written. The enclosed configuration format must also be supported; the filename and export date do not determine compatibility.
+
+> **Create fresh exports after updating:** Previous-format job and profile exports can no longer be imported. After successful migration, create new job and profile exports. Old formats are rejected before changing jobs, settings, or secrets. Existing Borg backup archives remain usable for restoring data and do not need to be recreated.
 
 ### 9.11 Advanced
 

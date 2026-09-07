@@ -1,6 +1,7 @@
 from job_fixtures import identified_job, job_id
 import importlib.util
 import json
+import pytest
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -88,7 +89,7 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
         "mount_before_run", "unmount_after_run",
     )} for row in repos] == [{
         "job_key": job_id('testjob_usb'),
-        "type": "testjob",
+        "type": "",
         "location": "usb",
         "path": "/mnt/disks/WCJ54TRQ/borg-backup-testjob",
         "encryption": "none",
@@ -270,3 +271,60 @@ def test_restore_runner_auto_smb_mount_does_not_force_protocol(tmp_path, monkeyp
 
     assert mounted is True
     assert error == ""
+
+
+@pytest.mark.parametrize("size_gb,file_count,directory_count,expected,chunked", [
+    (600, 10_000, 5_000, 500, True),
+    (600, 100_000, 5_000, 1_000, True),
+    (500, 20_000, 25_000, 1_000, True),
+    (500, 30, 3_000, 2, True),
+    (499, 10_000, 5_000, 10_000, False),
+])
+def test_restore_probe_uses_size_and_regular_file_limits(tmp_path, monkeypatch, size_gb, file_count, directory_count, expected, chunked):
+    runner = _load_restore_runner()
+    instance = _restore_test_instance(runner, monkeypatch)
+    instance.test_level = 2
+    instance.min_coverage = 5
+    instance.max_entries = 1000
+    instance.dryrun_max_files = 1000
+    instance.dryrun_chunk = 100
+    instance.dryrun_timeout = 0
+    instance.sample_size = 5
+    instance.full_dryrun_max_archive_gb = 500
+    # An old configuration entry must no longer force sampling below the size threshold.
+    instance.conf = {"RESTORE_TEST_FORCE_CHUNK_TYPES": "photos,vms"}
+    rows = [{"type": "d", "path": f"folder-{i}"} for i in range(directory_count)]
+    rows += [{"type": "-", "path": f"folder-{i % 10}/file-{i}"} for i in range(file_count)]
+    rows += [{"type": "l", "path": "symbolic-link"}]
+    calls, results = [], []
+    def fake_borg(args, _env, timeout=None):
+        if args[:3] == ["list", "--short", "--last"]:
+            output = "archive-1\n"
+        elif args[:2] == ["info", "--json"]:
+            output = json.dumps({"archives": [{"stats": {"original_size": size_gb * 1024**3}}]})
+        elif args[:2] == ["list", "--json-lines"]:
+            output = "\n".join(json.dumps(row) for row in rows)
+        elif args[:2] == ["extract", "--dry-run"]:
+            calls.append(args)
+            output = ""
+        else:
+            raise AssertionError(args)
+        return SimpleNamespace(returncode=0, stdout=output, stderr="")
+    monkeypatch.setattr(instance, "_env", lambda *_args: {})
+    monkeypatch.setattr(instance, "_borg", fake_borg)
+    monkeypatch.setattr(instance, "_write", lambda *args, **kwargs: results.append((args, kwargs)))
+    result = instance.test_repo({"job_key": job_id("photos_local"), "type": "photos", "name": "Renamed job",
+                                 "location": "local", "path": str(tmp_path), "encryption": "none", "passphrase_file": ""})
+    assert result == 0
+    args, details = results[-1]
+    assert args[4:7] == (expected, 0, expected)
+    assert details["test_coverage_pct"] == round(expected / file_count * 100, 1)
+    assert args[9]["files_count"] == file_count
+    if chunked:
+        selected = [path for call in calls for path in call[3:]]
+        assert len(selected) == len(set(selected)) == expected
+        assert all("/file-" in path for path in selected)
+        assert all(0 < len(call[3:]) <= 100 for call in calls)
+        assert len(args[10]) == expected
+    else:
+        assert len(calls) == 1 and len(calls[0]) == 3

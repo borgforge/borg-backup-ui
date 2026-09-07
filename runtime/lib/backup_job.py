@@ -154,6 +154,8 @@ class BackupJobConfig:
     @classmethod
     def from_config(cls, env: dict) -> "BackupJobConfig":
         """Liest Konfiguration aus Umgebungsvariablen."""
+        from job_identity import validate_job_id
+        job_id = validate_job_id(env.get("BORG_UI_JOB_KEY"))
         try:
             raw_paths = json.loads(env.get("BACKUP_PATHS_JSON", "") or "")
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
@@ -209,9 +211,9 @@ class BackupJobConfig:
         )
 
         return cls(
-            job_id=str(env.get("BORG_UI_JOB_KEY") or ""),
+            job_id=job_id,
             job_name=env.get("JOB_NAME", "Borg Backup"),
-            backup_type=env.get("BACKUP_TYPE", "unknown"),
+            backup_type="",
             backup_location=env.get("BACKUP_LOCATION") or env.get("LOCATION", "unknown"),
             lock_file=Path(env.get("LOCK_FILE", "/tmp/borg-backup.lock")),
             log_dir=Path(env.get("LOG_DIR", "/tmp")),
@@ -558,7 +560,7 @@ class BackupJob:
             self._write_mini_log(
                 "USB_NOT_MOUNTED",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because the USB drive is missing",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because the USB drive is missing",
                     f"Mount path: {mount_path}",
                     "Status: directory does not exist",
                     "Reason: USB drive is not connected or mounted",
@@ -572,7 +574,7 @@ class BackupJob:
             self._write_mini_log(
                 "USB_NOT_WRITABLE",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because the USB drive is read-only",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because the USB drive is read-only",
                     f"Mount path: {mount_path}",
                     "Status: not writable",
                     "Reason: USB drive is read-only or lacks write permissions",
@@ -626,7 +628,7 @@ class BackupJob:
             self._write_mini_log(
                 "SKIPPED_PARITY",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because a parity operation is running",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because a parity operation is running",
                     f"Operation: {resync_action}",
                     f"Progress: {progress}% ({resync_pos}/{resync_size})",
                     "Reason: Preserve system performance during the parity operation",
@@ -1322,7 +1324,7 @@ if __name__ == "__main__":
 
     if args.command == "info":
         print(f"job_name:            {cfg.job_name}")
-        print(f"backup_type:         {cfg.backup_type}")
+        print(f"job_id:              {cfg.job_id}")
         print(f"backup_location:     {cfg.backup_location}")
         print(f"lock_file:           {cfg.lock_file}")
         print(f"log_dir:             {cfg.log_dir}")

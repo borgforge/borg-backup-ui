@@ -1,4 +1,4 @@
-from job_fixtures import identified_job, job_id
+from job_fixtures import identified_job, job_id, write_job
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -63,6 +63,7 @@ def test_weekly_snapshot_does_not_create_path_below_unmounted_user_share(monkeyp
 
 def _write_status(status_dir: Path, name: str, payload: dict) -> None:
     status_dir.mkdir(parents=True, exist_ok=True)
+    write_job(status_dir.parent, "appdata_local")
     base = {"job_id": job_id('appdata_local'),
         "backup_type": "appdata",
         "location": "local",
@@ -88,7 +89,7 @@ def test_dashboard_growth_falls_back_to_previous_status_when_snapshot_baseline_m
         "repository_size": 150,
     })
 
-    data = get_status_data({"STATUS_DIR": str(status_dir), "SNAPSHOT_FILE": str(snapshot_file)})
+    data = get_status_data({"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir), "SNAPSHOT_FILE": str(snapshot_file)})
     row = data["backups"][0]
 
     assert row["key"] == job_id('appdata_local')
@@ -115,7 +116,7 @@ def test_dashboard_growth_prefers_weekly_snapshot_over_previous_status(tmp_path:
         "repository_size": 150,
     })
 
-    data = get_status_data({"STATUS_DIR": str(status_dir), "SNAPSHOT_FILE": str(snapshot_file)})
+    data = get_status_data({"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(status_dir), "SNAPSHOT_FILE": str(snapshot_file)})
     row = data["backups"][0]
 
     assert row["growth_bytes"] == 10

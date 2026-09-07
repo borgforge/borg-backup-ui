@@ -6,6 +6,15 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #495 - explicit job settings and supported export formats
+- Continue with #486 in PR #494 as explicitly approved by the maintainer; #447 remains frozen.
+- Register `job_settings_v1` after `job_ids_v1`. Snapshot original job metadata, materialize effective compression/retention and automatic appearance, preserve other fields, and remove obsolete job type fields in schema 5. Audit and resume interrupted writes without changing explicit values.
+- Read saved settings in the Wizard and runner. Use a neutral archive icon for new jobs without an explicit selection; retain migrated theme colors exactly.
+- Accept job bundle v3, encrypted job bundle v3 and profile export v2. Check inner formats and required job fields before preview/import writes; retain the existing authenticated encryption envelope. Old exports are deliberately not converted during import.
+- Keep unresolved historical files without synthetic job identities, reassignment or cleanup. Current job calculations use only matching UUIDs.
+- Remove the restore-test type rule and its settings input. Use the existing archive-size threshold; sample regular files across the archive, cap the target coverage by the configured file limits, and report file-based coverage. A successful full-archive dry-run reports full file coverage.
+- Document the need for fresh job AND profile exports in German and English, including a forum announcement draft; Borg archives are unaffected.
+
 ### Issue #463 - file activity log performance
 - Capture stdout and stderr directly in a RAM-backed runtime file only for jobs with file activity enabled, avoiding an unbounded API-process line buffer and writes into backed-up log directories during the run.
 - Retain the complete log only after the runner exits, using an independent supervisor that survives a WebUI restart. Preserve cursor identity across the copy, release RAM after successful persistence, and keep a downloadable RAM copy with a visible error if saving fails. History/status references point at the final path.

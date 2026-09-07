@@ -372,7 +372,7 @@ class JobInfo:
         loc_label = {"local": "Lokal", "usb": "USB", "smb": "SMB", "storagebox": "Storagebox"}.get(
             self.location, self.location
         )
-        return f"{self.name or self.backup_type.capitalize()} – {loc_label}"
+        return f"{self.name or 'Backup'} – {loc_label}"
 
 
 class _JobState:
@@ -706,7 +706,6 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
     """
     Finds backup jobs from canonical JSON metadata.
     """
-    utility_types = {"restore_test"}
 
     def _make_job(
         py_file: Optional[Path],
@@ -747,14 +746,13 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 else ""
             )
         )
-        bt_lc = backup_type.lower()
         default_docker_control = {
-            "mode": "all" if ((bt_lc == "appdata") if has_docker is None else bool(has_docker)) else "none",
+            "mode": "all" if has_docker else "none",
             "selected": [],
             "ack_appdata_risk": False,
         }
         default_vm_control = {
-            "mode": "all" if ((bt_lc == "vms") if has_vm is None else bool(has_vm)) else "none",
+            "mode": "all" if has_vm else "none",
             "selected": [],
             "ack_domains_risk": False,
         }
@@ -764,14 +762,14 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             location=location,
             script_path=py_file,
             name=(name or "").strip(),
-            has_docker=(bt_lc == "appdata") if has_docker is None else bool(has_docker),
-            has_vm=(bt_lc == "vms") if has_vm is None else bool(has_vm),
+            has_docker=bool(has_docker),
+            has_vm=bool(has_vm),
             description=desc_text,
             icon=(icon or "").strip().lower(),
             icon_color=(icon_color or "").strip().lower(),
             # Only explicit utility jobs should be filtered from normal
             # backup selectors. Custom/unknown backup types are still jobs.
-            is_utility=bt_lc in utility_types,
+            is_utility=False,
             standard=standard,
             enabled=bool(enabled),
             file_activity=file_activity,
@@ -807,13 +805,13 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             try:
                 from job_identity import metadata_job_id
                 key = metadata_job_id(raw)
-                backup_type = str(raw["backup_type"]).strip()
+                backup_type = ""
                 location = str(raw["location"]).strip().lower()
                 script_name = str(raw.get("script") or "").strip()
             except (KeyError, TypeError, ValueError):
                 continue
 
-            if not key or not backup_type or not location:
+            if not key or not location:
                 continue
             if location not in {"local", "usb", "smb", "storagebox", "custom"}:
                 continue

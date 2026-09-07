@@ -41,6 +41,21 @@ def metadata_job_id(meta: dict) -> str:
     return job_id
 
 
+def active_job_ids(config: dict) -> set[str]:
+    from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
+    if not config.get("BACKUP_SCRIPTS_DIR"):
+        return set()
+    return {job.key for job in discover_jobs(resolve_scripts_dir(config), resolve_data_root(config))}
+
+
+def historical_job_id(value: object) -> str:
+    """An unresolved historical record has no job identity (#495)."""
+    try:
+        return validate_job_id(value)
+    except (ValueError, TypeError):
+        return ""
+
+
 def _filename_label(value: str, max_bytes: int, fallback: str) -> str:
     """Readable path component, bounded in UTF-8 without splitting a character."""
     value = re.sub(r"[^\w.-]+", "_", str(value or ""), flags=re.UNICODE)

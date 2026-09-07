@@ -17,10 +17,10 @@ from job_source_paths import (  # noqa: E402
     convert_legacy_source_paths,
     normalize_source_paths,
 )
-from settings_transfer_api import _canonical_import_jobs  # noqa: E402
+from settings_transfer_api import ConfigurationExportError, _canonical_import_jobs  # noqa: E402
 
 
-def test_old_job_bundle_is_upgraded_only_at_import_boundary(tmp_path: Path) -> None:
+def test_old_job_bundle_is_rejected_at_import_boundary(tmp_path: Path) -> None:
     source = tmp_path / "Source with spaces"
     source.mkdir()
     jobs = [{
@@ -29,11 +29,9 @@ def test_old_job_bundle_is_upgraded_only_at_import_boundary(tmp_path: Path) -> N
         "paths": {"default": str(source)},
     }]
 
-    upgraded = _canonical_import_jobs(jobs)
+    with pytest.raises(ConfigurationExportError):
+        _canonical_import_jobs(jobs)
 
-    assert upgraded[0]["schema_version"] == 3
-    assert upgraded[0]["source_paths"] == [str(source)]
-    assert "paths" not in upgraded[0]
     assert "paths" in jobs[0]
 
 
@@ -46,7 +44,7 @@ def test_old_job_bundle_reports_ambiguous_paths_clearly(tmp_path: Path) -> None:
         "paths": {"default": f"{existing} {tmp_path / 'missing'}"},
     }]
 
-    with pytest.raises(ValueError, match="Imported job 'data_local'.*cannot be migrated unambiguously"):
+    with pytest.raises(ConfigurationExportError):
         _canonical_import_jobs(jobs)
 
 

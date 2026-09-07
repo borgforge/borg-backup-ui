@@ -38,7 +38,9 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
     _import_legacy_snapshot_if_needed(snapshot_file, legacy_snapshot_file)
 
     store = StatusStore(status_dir)
-    all_statuses = store.load()
+    from job_identity import active_job_ids
+    job_ids = active_job_ids(config)
+    all_statuses = [status for status in store.load() if status.key in job_ids]
     latest = store.get_latest_per_key(all_statuses)
 
     _auto_write_weekly_snapshot(snapshot_file, latest, force_write=force_snapshot_write)
@@ -160,7 +162,7 @@ def get_status_data(config: dict, force_snapshot_write: bool = False) -> Dict[st
     skipped = sum(1 for b in backups if b["status"] == "skipped")
     error = sum(1 for b in backups if b["status"] == "error")
 
-    snapshots = _load_all_snapshots(snapshot_file)
+    snapshots = {key: values for key, values in _load_all_snapshots(snapshot_file).items() if key in job_ids}
 
     check_interval_days = int(config.get("GLOBAL_BORG_CHECK_INTERVAL_DAYS", "30") or "30")
 

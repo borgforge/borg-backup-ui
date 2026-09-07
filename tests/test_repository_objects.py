@@ -179,7 +179,7 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     store = read_repository_store(config)
     assert job["repository_key"] == repo_key
-    assert job["schema_version"] == 4
+    assert job["schema_version"] == 5
     assert job["source_paths"] == [str(source)]
     assert "repo" not in job
     assert "passphrase" not in job

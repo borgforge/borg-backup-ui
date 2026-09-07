@@ -1194,10 +1194,10 @@ body.wizard-modal-open {
   height: 18px;
 }
 
-.type-icon-flash      { background: var(--state-info-dim); border-color: var(--state-info-border); color: var(--accent-hover); }
-.type-icon-appdata    { background: var(--loc-storagebox-dim);  border-color: var(--state-warning-border);  color: var(--loc-storagebox); }
-.type-icon-photos     { background: rgba(188, 123, 255, 0.12); border-color: rgba(188, 123, 255, 0.3); color: var(--violet); }
-.type-icon-vms        { background: var(--success-dim);   border-color: var(--state-success-border);   color: var(--success); }
+.type-icon-color-theme-blue      { background: var(--state-info-dim); border-color: var(--state-info-border); color: var(--accent-hover); }
+.type-icon-color-theme-orange    { background: var(--loc-storagebox-dim);  border-color: var(--state-warning-border);  color: var(--loc-storagebox); }
+.type-icon-color-theme-purple     { background: rgba(188, 123, 255, 0.12); border-color: rgba(188, 123, 255, 0.3); color: var(--violet); }
+.type-icon-color-theme-green        { background: var(--success-dim);   border-color: var(--state-success-border);   color: var(--success); }
 .type-icon-color-blue   { background: rgba(59, 130, 246, 0.14) !important; border-color: rgba(59, 130, 246, 0.45) !important; color: #2563eb !important; }
 .type-icon-color-indigo { background: rgba(99, 102, 241, 0.14) !important; border-color: rgba(99, 102, 241, 0.45) !important; color: #4f46e5 !important; }
 .type-icon-color-purple { background: rgba(147, 51, 234, 0.14) !important; border-color: rgba(147, 51, 234, 0.45) !important; color: #9333ea !important; }

@@ -237,7 +237,7 @@ function renderBackupGrid(backups) {
       const locationDelta = DASHBOARD_LOCATION_ORDER.indexOf(dashboardLocationKey(a))
         - DASHBOARD_LOCATION_ORDER.indexOf(dashboardLocationKey(b));
       if (locationDelta) return locationDelta;
-      return String(a.name || a.display_name || a.backup_type || '').localeCompare(String(b.name || b.display_name || b.backup_type || ''));
+      return String(a.name || a.display_name || '').localeCompare(String(b.name || b.display_name || ''));
     });
 
   renderDashboardLocationSidebar(backups);
@@ -480,8 +480,8 @@ function renderDashboardInventoryRow(backup) {
   let checkStatus = backup.repository_check_status;
   if (checkStatus === 'ok' && isStaleDate(backup.repository_check_date)) checkStatus = 'overdue';
   const checkLabel = checkStatus ? repoCheckLabel({ ...backup, repository_check_status: checkStatus }) : dashboardT('dashboard.checkUnknown');
-  const type = backup.name || backup.display_name || capitalize(backup.backup_type || '—');
-  const iconKey = typeof resolveJobIcon === 'function' ? resolveJobIcon(backup) : (backup.icon || backup.backup_type);
+  const type = backup.name || backup.display_name || 'Backup';
+  const iconKey = typeof resolveJobIcon === 'function' ? resolveJobIcon(backup) : (backup.icon || 'archive');
   const iconColorKey = typeof resolveJobIconColor === 'function' ? resolveJobIconColor(backup) : '';
   const iconColorClass = iconColorKey ? ` type-icon-color-${iconColorKey}` : '';
   const identityDetail = backup.archive_name || backup.archive_prefix || dashboardT('dashboard.neverExecuted');
@@ -512,7 +512,7 @@ function renderDashboardInventoryRow(backup) {
 
   return `<tr class="dashboard-inventory-row ${run.cls}">
     <td><div class="dashboard-backup-identity">
-      <span class="type-icon type-icon-${escHtml(String(backup.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</span>
+      <span class="type-icon${iconColorClass}">${typeIcon(iconKey)}</span>
       <span><strong class="dashboard-cell-primary">${escHtml(type)}</strong><span class="dashboard-cell-detail mono" title="${escHtml(identityDetail)}">${escHtml(identityDetail)}</span></span>
     </div></td>
     <td><div class="dashboard-table-badges">

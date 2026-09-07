@@ -795,7 +795,6 @@ def get_settings_data(ui_config: dict, include_storagebox_setup: bool = True) ->
             "RESTORE_TEST_LEVEL":         conf.get("RESTORE_TEST_LEVEL", "2"),
             "RESTORE_TEST_INTERVAL_DAYS": conf.get("RESTORE_TEST_INTERVAL_DAYS", "30"),
             "RESTORE_TEST_LOCATION":      conf.get("RESTORE_TEST_LOCATION", "local"),
-            "RESTORE_TEST_FORCE_CHUNK_TYPES": conf.get("RESTORE_TEST_FORCE_CHUNK_TYPES", "vms,photos"),
             "RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB": conf.get("RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB", "500"),
             "RESTORE_TEST_MIN_COVERAGE": conf.get("RESTORE_TEST_MIN_COVERAGE", "5"),
             "RESTORE_TEST_MAX_ENTRIES": conf.get("RESTORE_TEST_MAX_ENTRIES", "1000"),

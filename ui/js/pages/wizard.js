@@ -45,6 +45,7 @@ function wizardT(key, params = {}) {
 
 function wizardApiErrorMessage(payload, status = 0) {
   const data = payload && typeof payload === 'object' ? payload : {};
+  if (data.code === 'job_settings_invalid') return apiErrorMessage(data, status);
   if (data.code === 'job_name_too_long') return wizardT('wizard.validationJobNameLength');
   if (data.code === 'job_id_exists') return wizardT('wizard.jobIdExists');
   if (data.code === 'retention_invalid') return wizardT('wizard.validationRetentionInvalid');
@@ -116,8 +117,8 @@ function _wizardUniqueList(values) {
   return out;
 }
 
-function _wizardArchivePrefix(typeId) {
-  const clean = String(typeId || '').trim();
+function _wizardArchivePrefix(prefix) {
+  const clean = String(prefix || '').trim();
   return /^[A-Za-z0-9_.-]+$/.test(clean) ? clean : '';
 }
 
@@ -549,7 +550,6 @@ function openWizard(existingJobKey = '') {
   wizardState.existingJobKey = existingJobKey;
   wizardState.jobId = existingJobKey;
   const request = ++wizardState.jobIdRequest;
-  wizardState.backupType = '';
   document.getElementById('wiz-job-id-group').hidden = false;
   document.getElementById('wiz-job-id-group').classList.remove('hidden');
   document.getElementById('wiz-job-id').value = existingJobKey;
@@ -640,13 +640,22 @@ function _wizardFillFromJob(job) {
   wizardState.archivePrefixes = _wizardUniqueList(Array.isArray(job.archive_prefixes) ? job.archive_prefixes : []);
   document.getElementById('wiz-job-name').value = job.job_name || '';
   document.getElementById('wiz-archive-prefix').value = job.archive_prefix || '';
-  wizardState.backupType = job.type_id || '';
   document.getElementById('wiz-job-id-group').hidden = false;
   document.getElementById('wiz-job-id-group').classList.remove('hidden');
   wizardState.jobId = job.job_id || '';
   document.getElementById('wiz-job-id').value = wizardState.jobId;
   document.getElementById('wiz-icon').value = (job.icon || '').toLowerCase();
-  document.getElementById('wiz-icon-color').value = (job.icon_color || '').toLowerCase();
+  const colorSelect = document.getElementById('wiz-icon-color');
+  colorSelect.querySelectorAll('option[data-saved-theme]').forEach((option) => option.remove());
+  const savedColor = (job.icon_color || '').toLowerCase();
+  if (['theme-blue', 'theme-orange', 'theme-purple', 'theme-green'].includes(savedColor)) {
+    const option = document.createElement('option');
+    option.value = savedColor;
+    option.textContent = wizardT('wizard.savedThemeColor');
+    option.dataset.savedTheme = 'true';
+    colorSelect.appendChild(option);
+  }
+  colorSelect.value = savedColor;
   document.getElementById('wiz-description').value = job.description || '';
   document.getElementById('wiz-location').value = job.location || 'local';
   _wizardSetRuntimeControl('docker', job.docker_control || { mode: job.use_docker ? 'all' : 'none' });
@@ -811,8 +820,6 @@ function wizardAutoFill() {
   wizardSetStorageOptions();
   const storage = wizardSelectedStorage();
   wizardUpdateStorageTargetHint(storage);
-  // If icon not explicitly chosen, keep "auto" (empty) and let rendering
-  // derive it from backup_type/type_id.
   if (iconEl && iconEl.value === '') iconEl.value = '';
   wizardUpdateIconPreview();
 }
@@ -825,8 +832,7 @@ function wizardIconMarkup(kind) {
 function wizardEffectiveIcon() {
   const chosen = (document.getElementById('wiz-icon')?.value || '').trim().toLowerCase();
   if (chosen) return chosen;
-  const typeId = wizardState.backupType || (document.getElementById('wiz-archive-prefix')?.value || '').trim().toLowerCase().replace(/-backup$/, '');
-  return typeId || 'sonstiges';
+  return 'archive';
 }
 
 function wizardUpdateIconPreview() {
@@ -841,9 +847,9 @@ function wizardUpdateIconPreview() {
     'green', 'lime', 'violet',
     'amber', 'orange',
     'red', 'rose',
-    'teal', 'cyan', 'gray',
+    'teal', 'cyan', 'gray', 'theme-blue', 'theme-orange', 'theme-purple', 'theme-green',
   ]);
-  box.className = `type-icon type-icon-${iconKey || 'sonstiges'}${knownColor.has(colorKey) ? ` type-icon-color-${colorKey}` : ''}`;
+  box.className = `type-icon${knownColor.has(colorKey) ? ` type-icon-color-${colorKey}` : ''}`;
   label.textContent = iconKey || wizardT('wizard.automatic');
 }
 
@@ -896,7 +902,6 @@ function _wizardCollectParams() {
   return {
     job_id: wizardState.jobId || '',
     archive_prefix: (document.getElementById('wiz-archive-prefix').value || '').trim(),
-    type_id: wizardState.backupType || '',
     icon:         (document.getElementById('wiz-icon').value || '').trim().toLowerCase(),
     icon_color:   (document.getElementById('wiz-icon-color').value || '').trim().toLowerCase(),
     job_name:     (document.getElementById('wiz-job-name').value || '').trim(),

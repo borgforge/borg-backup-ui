@@ -59,7 +59,7 @@ def test_job_export_contains_canonical_repository_inventory(tmp_path: Path):
     result = export_jobs_bundle(config)
     bundle = result["bundle"]
 
-    assert bundle["format"] == "bbui-job-bundle-v2"
+    assert bundle["format"] == "bbui-job-bundle-v3"
     assert bundle["jobs"][0]["repository_key"] == "repo_appdata"
     assert "repo" not in bundle["jobs"][0]
     assert bundle["repositories"][0]["storage_key"] == "storage_local"
@@ -99,7 +99,7 @@ def test_job_import_restores_repository_and_storage_before_job(tmp_path: Path):
     imported_job = json.loads(
         (tmp_path / "target" / "config" / "jobs" / (job_id('appdata_local') + ".json")).read_text(encoding="utf-8")
     )
-    assert imported_job["schema_version"] == 4
+    assert imported_job["schema_version"] == 5
     assert imported_job["source_paths"] == ["/mnt/user/appdata"]
     assert read_repository_store(target_config)["repositories"][0]["repository_key"] == "repo_appdata"
     assert read_storage_store(target_config)["storages"][0]["storage_key"] == "storage_local"

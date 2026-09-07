@@ -59,8 +59,10 @@ def get_report_jobs(config: dict) -> List[dict]:
             continue
         job_id = str(record.get("job_id") or "")
         backup_type, location = record.get("backup_type", "unknown"), record.get("location", "unknown")
-        key = job_id or f"legacy:{backup_type}_{location}"
+        key = job_id
         job = metadata.get(key)
+        if job is None:
+            continue
         seen[key] = {
             "key": key, "job_id": job_id,
             "backup_type": backup_type, "location": location,
@@ -71,6 +73,9 @@ def get_report_jobs(config: dict) -> List[dict]:
 
 def get_report_data(config: dict, job_key: str) -> dict:
     """Returns full time-series report for a job from its .status files."""
+    from job_identity import active_job_ids
+    if job_key not in active_job_ids(config):
+        raise ValueError("Job no longer exists")
     backup_type, location = "", ""
     status_dir = Path(config["STATUS_DIR"])
 
@@ -81,7 +86,7 @@ def get_report_data(config: dict, job_key: str) -> dict:
         except (OSError, json.JSONDecodeError):
             continue
 
-        key = str(raw.get("job_id") or f"legacy:{raw.get('backup_type', '')}_{raw.get('location', '')}")
+        key = str(raw.get("job_id") or "")
         if key != job_key:
             continue
         backup_type, location = raw.get("backup_type", ""), raw.get("location", "")

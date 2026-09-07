@@ -176,7 +176,7 @@ def test_every_secret_bearing_export_entry_point_uses_authenticated_format(tmp_p
     secrets_dir.mkdir()
     monkeypatch.setattr(transfer, "_secrets_dir", lambda: secrets_dir)
     monkeypatch.setattr(transfer, "export_jobs_bundle", lambda config, selected_keys=None: {
-        "bundle": {"format": "bbui-job-bundle-v2", "jobs": []},
+        "bundle": {"format": "bbui-job-bundle-v3", "jobs": []},
         "job_count": 0,
     })
     monkeypatch.setattr(transfer, "_collect_job_passphrase_files", lambda bundle: {})

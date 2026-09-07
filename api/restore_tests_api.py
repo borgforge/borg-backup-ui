@@ -28,6 +28,8 @@ def list_restore_tests(config: dict) -> List[dict]:
     if not test_dir.exists():
         return []
 
+    from job_identity import active_job_ids
+    job_ids = active_job_ids(config)
     results = []
     for test_file in sorted(test_dir.glob("*.test")):
         try:
@@ -35,9 +37,10 @@ def list_restore_tests(config: dict) -> List[dict]:
         except (json.JSONDecodeError, OSError):
             continue
 
-        stem = test_file.stem
         data["job_key"] = str(data.get("job_id") or "")
-        data["key"] = data["job_key"] or f"legacy:{stem}"
+        if data["job_key"] not in job_ids:
+            continue
+        data["key"] = data["job_key"]
         data["time_ago"] = _time_ago(data.get("test_date", ""))
         data["duration_formatted"] = _fmt_duration(data.get("test_duration_seconds", 0))
         data["report_schema_version"] = _safe_int(data.get("report_schema_version"), 0)

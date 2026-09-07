@@ -237,7 +237,9 @@ def _read_status_file_data(config: dict) -> dict[str, Any]:
 
         status_dir = Path(str(config.get("STATUS_DIR") or ""))
         store = StatusStore(status_dir)
-        latest = store.get_latest_per_key(store.load())
+        from job_identity import active_job_ids
+        job_ids = active_job_ids(config)
+        latest = store.get_latest_per_key([status for status in store.load() if status.key in job_ids])
     except Exception:
         latest = {}
 
@@ -538,19 +540,7 @@ def _read_jobs(config: dict, backups: list[dict[str, Any]]) -> list[dict[str, An
 
         return [row for row in list_jobs(config, latest) if isinstance(row, dict)]
     except Exception:
-        return [
-            {
-                "key": str(row.get("key") or "").strip(),
-                "display_name": _display_job_name(row),
-                "name": _display_job_name(row),
-                "enabled": True,
-                "running": False,
-                "restore_verification_status": row.get("restore_verification_status") or "never",
-                "restore_verification_is_overdue": bool(row.get("restore_verification_is_overdue", False)),
-            }
-            for row in backups
-            if str(row.get("key") or "").strip()
-        ]
+        return _read_static_jobs(config)
 
 
 def _read_static_jobs(config: dict) -> list[dict[str, Any]]:

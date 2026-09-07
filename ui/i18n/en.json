@@ -208,7 +208,9 @@
       "restore_test_already_running": "A restore test is already running.",
       "inventory_unavailable": "Repository or storage data is corrupt or unreadable. Check System Health and the migration backup.",
       "maintenance_mode": "The application is in restricted maintenance mode because a startup migration failed. Review System Health & Migration.",
-      "internal_error": "Internal server error. Check the log and request ID."
+      "internal_error": "Internal server error. Check the log and request ID.",
+      "configuration_export_unsupported": "This configuration package uses a format that is no longer supported. The import was aborted and no changes were made. Update and migrate the source installation, then create a new configuration export.",
+      "job_settings_invalid": "The job settings are incomplete or invalid. Check compression and retention, then save the job again."
     },
     "messages": {
       "smb_already_mounted": "The SMB share is already mounted.",
@@ -980,7 +982,10 @@
     "previewError": "Preview error: {message}",
     "confirmRemoteRequired": "Confirm remote repository creation.",
     "saved": "Job saved: {key}",
-    "saveError": "Error: {message}"
+    "saveError": "Error: {message}",
+    "defaultIcon": "Default (archive)",
+    "defaultColor": "Default (neutral)",
+    "savedThemeColor": "Preserved theme color"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -2238,7 +2243,8 @@
       "secretImportSkipExisting": "Skip existing files",
       "secretImportOverwriteExisting": "Replace existing files",
       "profilesImportOk": "Profiles+secrets import OK: {count} files",
-      "profilesImportFailed": "Profiles+secrets import failed: {message}"
+      "profilesImportFailed": "Profiles+secrets import failed: {message}",
+      "archivePrefix": "Archive prefix"
     },
     "forms": {
       "smtpTitle": "Email (SMTP)",
@@ -2310,12 +2316,11 @@
       "intervalDays": "Interval (days)",
       "defaultLocation": "Default location",
       "dryRunStrategy": "Dry-run strategy",
-      "forceChunkTypes": "Force chunk mode for types (CSV)",
       "chunkFromSize": "Use chunk mode from size (GB)",
-      "chunkHint": "Example types: vms,photos. A size value of 0 disables automatic switching.",
+      "chunkHint": "At this archive size, a file sample is checked in groups. 0 disables switching. File limits can reduce the target coverage.",
       "limitsPerformance": "Limits & performance",
-      "minimumCoverage": "Minimum coverage (%)",
-      "maxEntries": "Maximum entries per test",
+      "minimumCoverage": "Target file coverage (%)",
+      "maxEntries": "Maximum files per sample",
       "sampleFiles": "Level 3 sample files",
       "borgTimeout": "Borg default timeout (s)",
       "dryRunTimeout": "Dry-run timeout (s, 0 = off)",

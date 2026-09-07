@@ -164,7 +164,9 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
 
     status_dir = Path(config["STATUS_DIR"])
     store = StatusStore(status_dir)
-    all_statuses = store.load()
+    job_meta = _job_metadata_by_key(config)
+    job_ids = set(job_meta)
+    all_statuses = [status for status in store.load() if status.key in job_ids]
     latest = store.get_latest_per_key(all_statuses)
     generated_at = now or datetime.now()
     period_start_dt, period_end_dt = _weekly_report_period(generated_at)
@@ -175,7 +177,6 @@ def _build_html_report(config: dict, now: Optional[datetime] = None) -> str:
     rows = []
     grouped_rows: dict[str, list[str]] = {}
     group_stats: dict[str, dict[str, int]] = {}
-    job_meta = _job_metadata_by_key(config)
     schedules = _report_schedules(config)
     planned_job_keys = _planned_job_keys_for_period(
         set(latest.keys()) | set(job_meta.keys()),

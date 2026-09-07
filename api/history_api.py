@@ -64,6 +64,8 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
         location = str(raw.get("location") or "unknown")
         job_id = str(raw.get("job_id") or "")
         job = jobs.get(job_id)
+        if job is None:
+            continue
         if filters.get("job_key") and filters["job_key"] != job_id:
             continue
 

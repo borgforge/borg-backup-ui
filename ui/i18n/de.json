@@ -208,7 +208,9 @@
       "restore_test_already_running": "Ein Restore-Test läuft bereits.",
       "inventory_unavailable": "Repository- oder Storage-Daten sind beschädigt oder nicht lesbar. Bitte Systemzustand und Migrations-Backup prüfen.",
       "maintenance_mode": "Die Anwendung läuft wegen einer fehlgeschlagenen Startmigration im eingeschränkten Wartungsmodus. Bitte Systemzustand & Migration prüfen.",
-      "internal_error": "Interner Serverfehler. Bitte Protokoll und Request-ID prüfen."
+      "internal_error": "Interner Serverfehler. Bitte Protokoll und Request-ID prüfen.",
+      "configuration_export_unsupported": "Dieses Konfigurationspaket verwendet ein nicht mehr unterstütztes Format. Der Import wurde abgebrochen. Es wurden keine Änderungen vorgenommen. Erstelle nach dem Update und der Migration der Quellinstallation einen neuen Export.",
+      "job_settings_invalid": "Die Job-Einstellungen sind unvollständig oder ungültig. Prüfe Kompression und Aufbewahrung und speichere den Job erneut."
     },
     "messages": {
       "smb_already_mounted": "SMB-Freigabe ist bereits eingehängt.",
@@ -980,7 +982,10 @@
     "previewError": "Vorschau-Fehler: {message}",
     "confirmRemoteRequired": "Bitte Remote-Repository-Anlage bestätigen.",
     "saved": "Job gespeichert: {key}",
-    "saveError": "Fehler: {message}"
+    "saveError": "Fehler: {message}",
+    "defaultIcon": "Standard (Archiv)",
+    "defaultColor": "Standard (Neutral)",
+    "savedThemeColor": "Bisherige Theme-Farbe"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -2238,7 +2243,8 @@
       "secretImportSkipExisting": "Vorhandene Dateien überspringen",
       "secretImportOverwriteExisting": "Vorhandene Dateien ersetzen",
       "profilesImportOk": "Profile+Secrets Import OK: {count} Dateien",
-      "profilesImportFailed": "Profile+Secrets Import fehlgeschlagen: {message}"
+      "profilesImportFailed": "Profile+Secrets Import fehlgeschlagen: {message}",
+      "archivePrefix": "Archivpräfix"
     },
     "forms": {
       "smtpTitle": "E-Mail (SMTP)",
@@ -2310,12 +2316,11 @@
       "intervalDays": "Intervall (Tage)",
       "defaultLocation": "Standard Location",
       "dryRunStrategy": "Strategie Dry-Run",
-      "forceChunkTypes": "Chunk-Modus erzwingen für Typen (CSV)",
       "chunkFromSize": "Ab Größe (GB) direkt Chunk-Modus",
-      "chunkHint": "Beispiel Typen: vms,photos. Wert 0 bei Größe deaktiviert die automatische Umschaltung.",
+      "chunkHint": "Ab dieser Archivgröße wird eine Dateistichprobe in Gruppen geprüft. 0 deaktiviert die Umschaltung. Dateigrenzen können die angestrebte Abdeckung begrenzen.",
       "limitsPerformance": "Limits & Performance",
-      "minimumCoverage": "Mindest-Coverage (%)",
-      "maxEntries": "Max. Einträge je Test",
+      "minimumCoverage": "Angestrebte Datei-Abdeckung (%)",
+      "maxEntries": "Maximale Dateien pro Stichprobe",
       "sampleFiles": "Level-3 Sample-Dateien",
       "borgTimeout": "Borg Standard Timeout (s)",
       "dryRunTimeout": "Dry-Run Timeout (s, 0 = aus)",

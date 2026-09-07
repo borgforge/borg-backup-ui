@@ -2753,7 +2753,7 @@ function renderJobsImportPreview(d) {
   ` : '';
   const jobTable = `
     <table class="settings-table">
-      <thead><tr><th>${settingsT('transfer.import')}</th><th>${settingsT('transfer.name')}</th><th>${settingsT('transfer.type')}</th><th>${settingsT('transfer.location')}</th><th>${settingsT('transfer.schedule')}</th><th>${settingsT('transfer.features')}</th><th>${settingsT('transfer.job')}</th><th>${settingsT('transfer.passphrase')}</th><th>${settingsT('transfer.mode')}</th></tr></thead>
+      <thead><tr><th>${settingsT('transfer.import')}</th><th>${settingsT('transfer.name')}</th><th>${settingsT('transfer.archivePrefix')}</th><th>${settingsT('transfer.location')}</th><th>${settingsT('transfer.schedule')}</th><th>${settingsT('transfer.features')}</th><th>${settingsT('transfer.job')}</th><th>${settingsT('transfer.passphrase')}</th><th>${settingsT('transfer.mode')}</th></tr></thead>
       <tbody>
       ${rows.map((r, idx) => {
         const feats = `${r?.features?.docker ? 'docker ' : ''}${r?.features?.vm ? 'vm' : ''}`.trim() || '—';
@@ -2768,7 +2768,7 @@ function renderJobsImportPreview(d) {
         return `<tr>
           <td><input type="checkbox" data-job-preview-select="${idx}" ${r.conflict === 'invalid' ? 'disabled' : 'checked'}></td>
           <td>${escHtml(r.name || r.job_key || '')}</td>
-          <td>${escHtml(r.backup_type || '—')}</td>
+          <td>${escHtml(r.archive_prefix || '—')}</td>
           <td>${escHtml(r.location || '—')}</td>
           <td>${escHtml(sch)}</td>
           <td>${escHtml(feats)}</td>
@@ -2884,7 +2884,7 @@ function renderProfileSecretsImportPreview(d) {
       ${settingsT('transfer.total', { count: stats.total })} · ${settingsT('transfer.presentCount', { count: stats.match })} · ${settingsT('transfer.differentCount', { count: stats.mismatch })} · ${settingsT('transfer.missingCount', { count: stats.missing })} · ${settingsT('transfer.profileMissingCount', { count: stats.profile_missing })}${stats.other ? ` · ${settingsT('transfer.other', { count: stats.other })}` : ''}
     </div>
     <table class="settings-table">
-      <thead><tr><th>${settingsT('transfer.import')}</th><th>${settingsT('transfer.type')}</th><th>${settingsT('transfer.profile')}</th><th>${settingsT('transfer.targetProfile')}</th><th>${settingsT('transfer.secret')}</th><th>${settingsT('transfer.status')}</th><th>${settingsT('transfer.targetPath')}</th></tr></thead>
+      <thead><tr><th>${settingsT('transfer.import')}</th><th>${settingsT('transfer.archivePrefix')}</th><th>${settingsT('transfer.profile')}</th><th>${settingsT('transfer.targetProfile')}</th><th>${settingsT('transfer.secret')}</th><th>${settingsT('transfer.status')}</th><th>${settingsT('transfer.targetPath')}</th></tr></thead>
       <tbody>
       ${rows.map((r, idx) => {
         const pType = String(r.profile_type || '').toLowerCase();
@@ -3479,8 +3479,8 @@ function settingsTransferPassphraseStatusLabel(row) {
 
 function settingsTransferJobSubline(row) {
   const location = String(row?.location || '').trim();
-  const type = String(row?.backup_type || '').trim();
-  return [location, type && type !== location ? type : ''].filter(Boolean).join(' · ') || String(row?.job_key || '');
+  const prefix = String(row?.archive_prefix || '').trim();
+  return [location, prefix].filter(Boolean).join(' · ') || String(row?.job_key || '');
 }
 
 function settingsTransferJobByKey(preview, key) {
@@ -5732,7 +5732,6 @@ function renderSettingsRestoreTests(rt) {
 
       <h4 class="settings-subtitle">${settingsT('forms.dryRunStrategy')}</h4>
       <div class="two-col">
-        ${ftext('RESTORE_TEST_FORCE_CHUNK_TYPES', settingsT('forms.forceChunkTypes'), rt.RESTORE_TEST_FORCE_CHUNK_TYPES || 'vms,photos')}
         ${fnum('RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB', settingsT('forms.chunkFromSize'), rt.RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB || '500')}
       </div>
       <div class="muted" style="font-size:12px;margin-top:-6px">

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from job_fixtures import identified_job, job_id
+from job_fixtures import identified_job, job_id, write_job
 
 import json
 import os
@@ -261,7 +261,9 @@ def test_unraid_dashboard_widget_status_file_cache_marks_overdue_jobs(tmp_path: 
     status_dir = tmp_path / "status"
     status_dir.mkdir()
     snapshot_file = tmp_path / "weekly-snapshots.json"
+    write_job(tmp_path, "flash_local")
     config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
         "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
         "STATUS_DIR": str(status_dir),
         "SNAPSHOT_FILE": str(snapshot_file),
@@ -396,7 +398,9 @@ def test_unraid_dashboard_widget_status_file_cache_clears_finished_running_lock(
     cache_file = tmp_path / "widget-status.json"
     status_dir = tmp_path / "status"
     status_dir.mkdir()
+    write_job(tmp_path, "sonstiges_usb")
     config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
         "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
         "STATUS_DIR": str(status_dir),
     }
@@ -450,7 +454,9 @@ def test_unraid_dashboard_widget_status_file_cache_keeps_newer_running_job(tmp_p
     cache_file = tmp_path / "widget-status.json"
     status_dir = tmp_path / "status"
     status_dir.mkdir()
+    write_job(tmp_path, "sonstiges_usb")
     config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
         "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
         "STATUS_DIR": str(status_dir),
     }
@@ -590,7 +596,9 @@ def test_unraid_dashboard_widget_startup_cache_rebuilds_running_only_fresh_cache
     cache_file = tmp_path / "widget-status.json"
     status_dir = tmp_path / "status"
     status_dir.mkdir()
+    write_job(tmp_path, "flash_local")
     config = {
+        "BACKUP_SCRIPTS_DIR": str(tmp_path),
         "UNRAID_DASHBOARD_WIDGET_FILE": str(cache_file),
         "STATUS_DIR": str(status_dir),
     }

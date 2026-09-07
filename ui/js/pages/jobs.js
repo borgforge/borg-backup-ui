@@ -274,7 +274,7 @@ function renderJobsGrid(jobs) {
       const locationDelta = JOBS_LOCATION_ORDER.indexOf(jobsLocationKey(a))
         - JOBS_LOCATION_ORDER.indexOf(jobsLocationKey(b));
       if (locationDelta) return locationDelta;
-      return String(a.name || a.display_name || a.backup_type || '').localeCompare(String(b.name || b.display_name || b.backup_type || ''));
+      return String(a.name || a.display_name || '').localeCompare(String(b.name || b.display_name || ''));
     });
 
   renderJobsLocationSidebar(jobs);
@@ -378,7 +378,7 @@ function renderJobsLocationGroup(location, jobs) {
 
 function renderJobCard(job) {
   const isRunning = job.running;
-  const titleName = job.name || job.display_name || capitalize(job.backup_type);
+  const titleName = job.name || job.display_name || 'Backup';
   const iconKey = resolveJobIcon(job);
   const iconColorKey = resolveJobIconColor(job);
   const iconColorClass = iconColorKey ? ` type-icon-color-${iconColorKey}` : '';
@@ -469,7 +469,7 @@ function renderJobCard(job) {
   return `<article class="jobs-redesign-row ${isRunning ? 'is-running' : ''} ${job.enabled === false ? 'is-disabled' : ''}" id="job-card-${escHtml(job.key)}">
     <div class="jobs-redesign-cell jobs-redesign-main">
       <div class="job-card-title">
-        <div class="type-icon type-icon-${escHtml(String(job.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</div>
+        <div class="type-icon${iconColorClass}">${typeIcon(iconKey)}</div>
         <div><div class="type-name">${escHtml(titleName)}</div><span class="type-sub">${escHtml(job.archive_prefix || '')}</span></div>
       </div>
       ${job.description ? `<div class="job-description">${renderDescriptionMarkdown(job.description)}</div>` : ''}
@@ -561,7 +561,7 @@ function resolveJobIcon(job) {
   ]);
   const icon = String(job?.icon || '').trim().toLowerCase();
   if (icon && allowed.has(icon)) return icon;
-  return String(job?.backup_type || 'sonstiges').trim().toLowerCase() || 'sonstiges';
+  return 'archive';
 }
 
 function resolveJobIconColor(job) {
@@ -570,7 +570,7 @@ function resolveJobIconColor(job) {
     'green', 'lime', 'violet',
     'amber', 'orange',
     'red', 'rose',
-    'teal', 'cyan', 'gray',
+    'teal', 'cyan', 'gray', 'theme-blue', 'theme-orange', 'theme-purple', 'theme-green',
   ]);
   const color = String(job?.icon_color || '').trim().toLowerCase();
   return allowed.has(color) ? color : '';
@@ -604,7 +604,7 @@ document.addEventListener('click', closeAllJobMenus);
 function _showDeleteJobModalForKey(jobKey) {
   const job = jobsState.jobs.find(j => j.key === jobKey);
   if (!job) return;
-  showDeleteJobModal(jobKey, job.display_name || job.name || job.key, job.backup_type || '', job.location || '');
+  showDeleteJobModal(jobKey, job.display_name || job.name || job.key);
 }
 
 function onJobsGridClick(event) {
@@ -672,7 +672,7 @@ function showStartModal(jobKey) {
   jobsState.pendingJobKey = jobKey;
   jobsState.confirmAction = 'start';
 
-  const titleName = job.name || job.display_name || capitalize(job.backup_type);
+  const titleName = job.name || job.display_name || 'Backup';
   document.getElementById('modal-title').textContent = jobsT('jobs.startTitle', { name: titleName });
   document.getElementById('modal-description').textContent =
     jobsT('jobs.startDescription', { name: job.display_name || job.key });
@@ -781,7 +781,7 @@ function closeModal(options = {}) {
   if (pwPath) pwPath.textContent = '';
 }
 
-async function showDeleteJobModal(jobKey, displayName, typeId, location) {
+async function showDeleteJobModal(jobKey, displayName) {
   jobsState.pendingDeleteJobKey = jobKey;
   jobsState.confirmAction = 'delete';
   document.getElementById('modal-title').textContent = jobsT('jobs.deleteTitle');

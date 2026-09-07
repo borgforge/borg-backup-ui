@@ -186,7 +186,8 @@ class BackupStatus:
     @property
     def key(self) -> str:
         """Use the permanent ID; unresolved history cannot own an active job."""
-        return self.job_id or f"legacy:{self.backup_type}_{self.location}"
+        from job_identity import historical_job_id
+        return historical_job_id(self.job_id)
 
     @property
     def timestamp_dt(self) -> Optional[datetime]:
@@ -210,13 +211,10 @@ class BackupStatus:
         """Schreibt Status als JSON-Datei in status_dir. Gibt den Dateipfad zurück."""
         ensure_status_storage_directory(status_dir)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        if self.job_id:
-            from job_identity import job_file_component
-            identity = job_file_component(self.job_name or self.backup_type, self.location, self.job_id)
-        else:
-            identity = f"{self.backup_type}_{self.location}"
+        from job_identity import job_file_component
+        identity = job_file_component(self.job_name, self.location, self.job_id)
         path = status_dir / f"{timestamp}_{identity}.status"
-        data = {k: v for k, v in asdict(self).items() if k != "source_path"}
+        data = {k: v for k, v in asdict(self).items() if k not in {"source_path", "backup_type"}}
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info("Saved backup status: %s", path)
         return path
@@ -344,7 +342,8 @@ class RestoreTest:
 
     @property
     def key(self) -> str:
-        return self.job_id or f"legacy:{self.backup_type}_{self.location}"
+        from job_identity import historical_job_id
+        return historical_job_id(self.job_id)
 
     @property
     def test_date_dt(self) -> Optional[datetime]:
@@ -439,11 +438,13 @@ class StatusStore:
     def get_latest_per_key(
         self, statuses: Optional[List[BackupStatus]] = None
     ) -> Dict[str, BackupStatus]:
-        """Gibt pro (backup_type_location) den neuesten Status zurück."""
+        """Return the latest status per UUID; unresolved records have no key."""
         data = statuses if statuses is not None else self._statuses
         latest: Dict[str, BackupStatus] = {}
         for st in data:
             key = st.key
+            if not key:
+                continue
             existing = latest.get(key)
             if existing is None:
                 latest[key] = st
@@ -456,11 +457,13 @@ class StatusStore:
     def aggregate_by_key(
         self, statuses: Optional[List[BackupStatus]] = None
     ) -> Dict[str, "_BackupAggregate"]:
-        """Aggregiert Statistiken pro (backup_type_location)."""
+        """Aggregate statistics per UUID."""
         data = statuses if statuses is not None else self._statuses
         result: Dict[str, _BackupAggregate] = {}
         for st in data:
             key = st.key
+            if not key:
+                continue
             if key not in result:
                 result[key] = _BackupAggregate(key=key)
             result[key].add(st)

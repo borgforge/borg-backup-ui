@@ -43,6 +43,8 @@ def migrated(tmp_path):
         for key in ('shared', 'separate')
     ]})
     assert migration.apply(config)['status'] == 'applied'
+    from migrations import job_settings_v1
+    assert job_settings_v1.apply(config)['status'] == 'applied'
     plan = json.loads(migration._journal(config).read_text())
     return config, jobs, plan['assignment'], root
 
@@ -189,7 +191,8 @@ def test_name_and_full_prefix_edit_keeps_every_job_relationship(tmp_path, monkey
     result = save_job(params, root / 'scripts', root, config)
     after = json.loads(meta_path.read_text())
     assert result['job_id'] == result['job_key'] == key
-    for field in ('backup_type', 'icon', 'icon_color', 'cache_subdir', 'check_flag_name',
+    assert 'backup_type' not in after
+    for field in ('icon', 'icon_color', 'cache_subdir', 'check_flag_name',
                   'source_paths', 'retention', 'restore_test_policy', 'extension', 'created_at'):
         assert after[field] == before[field]
     assert after['archive_prefixes'] == ['flash-config', *before['archive_prefixes']]
@@ -257,7 +260,7 @@ def test_prefix_ownership_includes_overlap_and_previous_prefixes(prefix):
     assert validate_archive_prefix('flash-config') == 'flash-config'
 
 
-def test_old_and_new_imports_preserve_identity_and_do_not_duplicate_ownership(tmp_path):
+def test_supported_imports_preserve_identity_and_old_imports_are_rejected(tmp_path):
     config, jobs, ids, root = migrated(tmp_path)
     key = ids[jobs[0]['job_key']]
     bundle = export_jobs_bundle(config, [key])['bundle']
@@ -265,16 +268,16 @@ def test_old_and_new_imports_preserve_identity_and_do_not_duplicate_ownership(tm
     report = import_jobs_bundle(config, bundle, mode='overwrite', dry_run=False)
     assert report['report'][0]['new_job_key'] == key
     assert json.loads((root / 'config/jobs' / (key + '.json')).read_text())['extension'] == jobs[0]['extension']
-    # The saved migration map makes an old export an update of the same job.
+    # An old export is rejected even when the migration journal knows its old key.
     legacy = copy.deepcopy(bundle)
     legacy['jobs'] = [copy.deepcopy(jobs[0])]
     legacy['jobs'][0]['backup_type'] = jobs[0]['backup_type'].upper()
     legacy['schedules'] = {jobs[0]['job_key']: {'cron': '5 9 * * *', 'enabled': True}}
-    report = import_jobs_bundle(config, legacy, mode='overwrite', dry_run=False)
-    assert report['report'][0]['new_job_key'] == key
-    assert get_schedules(config)[key]['cron'] == '5 9 * * *'
-    imported = json.loads((root / 'config/jobs' / (key + '.json')).read_text())
-    assert imported['archive_prefix'] == jobs[0]['backup_type'].lower() + '-backup'
+    before_legacy = {p: p.read_bytes() for p in (root / 'config').rglob('*') if p.is_file()}
+    from settings_transfer_api import ConfigurationExportError
+    with pytest.raises(ConfigurationExportError):
+        import_jobs_bundle(config, legacy, mode='overwrite', dry_run=False)
+    assert {p: p.read_bytes() for p in before_legacy} == before_legacy
     assert import_jobs_bundle(config, bundle, mode='skip', dry_run=False)['imported_count'] == 0
     before = {p.name: p.read_bytes() for p in (root / 'config/jobs').glob('*.json')}
     with pytest.raises(ValueError, match='overlaps'):

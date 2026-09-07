@@ -77,7 +77,7 @@ function restoreTestsJobIcon(job) {
   const icon = resolveJobIcon(job);
   const color = resolveJobIconColor(job);
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
 }
 
 function renderRestoreTestsSidebar() {
