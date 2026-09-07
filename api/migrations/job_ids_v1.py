@@ -7,7 +7,9 @@ import hashlib
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
+from time import monotonic
 
 from inventory_store import atomic_write_bytes, atomic_write_json, inventory_lock
 from job_identity import metadata_job_id, new_job_id, validate_job_id
@@ -18,6 +20,26 @@ from .audit import append_event, config_dir, now, write_pending_state
 MIGRATION_ID = "job_ids_v1"
 INTRODUCED_IN = "2026.09.07.1400"
 RECHECK_AFTER_FINAL = True
+
+
+class _Progress:
+    """Bounded console progress; existing JSONL remains the durable audit."""
+
+    def __init__(self):
+        self.started = monotonic()
+        self.last_report = self.started
+        self.phase = ""
+
+    def report(self, phase: str, done: int | None = None, total: int | None = None):
+        tick = monotonic()
+        if phase == self.phase and done != total and tick - self.last_report < 5:
+            return
+        self.phase = phase
+        self.last_report = tick
+        counter = f" {done}/{total} files" if total is not None else ""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{timestamp}] Migration {MIGRATION_ID}: {phase}{counter}; "
+              f"elapsed={tick - self.started:.1f}s", flush=True)
 
 
 def _read(path: Path):
@@ -93,7 +115,8 @@ def _preconditions(config: dict, paths: dict) -> None:
             raise ValueError("Job ID migration requires absolute configured paths")
 
 
-def _plan(config: dict, paths: dict) -> dict:
+def _plan(config: dict, paths: dict, progress: _Progress) -> dict:
+    progress.report("Inspecting jobs and references")
     rows = _jobs(config)
     assignment = {data["job_key"]: data.get("job_id") or new_job_id() for _, data in rows}
     if len(set(assignment.values())) != len(assignment):
@@ -273,6 +296,7 @@ def _plan(config: dict, paths: dict) -> dict:
 
     # Stage complete originals and proposed bytes before publishing the plan.
     # No affected input is changed until this durable plan owns the UUIDs.
+    progress.report("Saving recovery copies", 0, len(operations))
     snapshot.mkdir(parents=True, mode=0o700)
     entries = []
     for index, (source, target, before, after, atime, mtime) in enumerate(operations):
@@ -287,6 +311,7 @@ def _plan(config: dict, paths: dict) -> dict:
             "after_sha256": hashlib.sha256(after).hexdigest(),
             "atime_ns": atime, "mtime_ns": mtime,
         })
+        progress.report("Saving recovery copies", index + 1, len(operations))
     return {"migration_id": MIGRATION_ID, "status": "pending", "run_id": run_id,
             "timestamp": now(), "assignment": assignment, "operations": entries,
             "unresolved": unresolved, "backup_directory": str(snapshot)}
@@ -320,7 +345,7 @@ def _apply_operation(op: dict) -> None:
             os.close(fd)
 
 
-def apply(config: dict) -> dict:
+def _apply_with_progress(config: dict, progress: _Progress) -> dict:
     with inventory_lock(config_dir(config)):
         paths = _paths(config)
         _preconditions(config, paths)
@@ -331,21 +356,28 @@ def apply(config: dict) -> dict:
                 raise ValueError("Unmigrated job added after migration; use the job import API")
             return {"status": "not_required"}
         if not plan:
-            plan = _plan(config, paths)
+            plan = _plan(config, paths, progress)
             atomic_write_json(journal, plan)
+        else:
+            progress.report("Resuming saved migration")
         write_pending_state(config, migration_id=MIGRATION_ID, introduced_in=INTRODUCED_IN,
                             run_id=plan["run_id"], source_classification="main_job_metadata")
         append_event(config, {"event": "migration_started", "migration_id": MIGRATION_ID,
                               "run_id": plan["run_id"], "backup_directory": plan["backup_directory"]})
         try:
-            for op in plan["operations"]:
+            total = len(plan["operations"])
+            progress.report("Updating job references", 0, total)
+            for index, op in enumerate(plan["operations"], 1):
                 _apply_operation(op)
                 append_event(config, {"event": "migration_file_applied", "migration_id": MIGRATION_ID,
                                       "source": op["source"], "target": op["target"],
                                       "action": "enrich_job_identity"})
-            for op in plan["operations"]:
+                progress.report("Updating job references", index, total)
+            progress.report("Verifying migrated files", 0, total)
+            for index, op in enumerate(plan["operations"], 1):
                 if _digest(Path(op["target"])) != op["after_sha256"]:
                     raise ValueError("Job ID migration verification failed")
+                progress.report("Verifying migrated files", index, total)
             _jobs(config)
             plan.update(status="applied", applied_at=now())
             atomic_write_json(journal, plan)
@@ -359,3 +391,15 @@ def apply(config: dict) -> dict:
                    "actions": ["Preserved originals", "Assigned permanent job IDs", "Updated job references"]}
         append_event(config, {"event": "migration_applied", "migration_id": MIGRATION_ID, **details})
         return {"status": "applied", "details": details}
+
+
+def apply(config: dict) -> dict:
+    progress = _Progress()
+    progress.report("Starting; web server waits for completion")
+    try:
+        result = _apply_with_progress(config, progress)
+    except Exception as exc:
+        progress.report(f"Failed during {progress.phase}: {type(exc).__name__}: {mask_secrets(str(exc))}")
+        raise
+    progress.report("Completed successfully" if result["status"] == "applied" else "Already applied; no changes")
+    return result

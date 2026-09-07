@@ -366,7 +366,12 @@ On Unraid the job-ID migration completed successfully at 14:14:16, following
 startup at 14:10:34. Repository assignments had no errors, schedules were applied,
 and the web server started at 14:14:17. This confirms the live migration step;
 the remaining acceptance checks below are still pending. The 3m42s startup wait
-had no progress messages. A limited start-log progress proposal awaits approval.
+had no progress messages. The maintainer approved a limited start-log addition:
+announce migration before snapshot writes, report phase/file counts approximately
+every five seconds during saving, conversion and verification, then log elapsed
+time and success or a masked failure. Resume uses the existing journal/IDs and
+reports that it is resuming. No additional audit files or browser startup mode
+are introduced; the web server starts after the existing migration gate.
 
 The repository maintenance confirmation still derived its displayed archive
 filter from the UUID. The backend already used the stored full archive prefix.
@@ -375,6 +380,10 @@ current name, sorts retention sources by name, and removes the former type/locat
 fallback for job ownership. Browser-logic tests cover German and English, selected
 source changes and UUID submission. A local browser check confirmed the dialog
 and filter changes without executing maintenance.
+
+Focused progress tests verify that the first message precedes snapshot writes,
+slow writes produce bounded intermediate counters, success follows verification,
+and an interrupted run reports failure before resuming with the original IDs.
 
 ### Maintainer test on Unraid
 

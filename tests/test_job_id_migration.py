@@ -120,7 +120,7 @@ def test_preserves_main_payloads_and_references_and_repeats_without_changes(tmp_
     assert json_files(tmp_path) == after
 
 
-def test_interrupted_write_reuses_saved_ids_and_originals(monkeypatch, tmp_path):
+def test_interrupted_write_reuses_saved_ids_and_originals(monkeypatch, tmp_path, capsys):
     config, _ = main_fixture(tmp_path)
     original = migration._apply_operation
     count = 0
@@ -135,11 +135,47 @@ def test_interrupted_write_reuses_saved_ids_and_originals(monkeypatch, tmp_path)
     monkeypatch.setattr(migration, "_apply_operation", interrupt)
     with pytest.raises(OSError):
         migration.apply(config)
+    failure_log = capsys.readouterr().out
+    assert 'Failed during Updating job references' in failure_log
+    assert 'Completed successfully' not in failure_log
     plan = json.loads(migration._journal(config).read_text())
     assert migration.detect(config)["required"] is True
     monkeypatch.setattr(migration, "_apply_operation", original)
     assert migration.apply(config)["status"] == "applied"
+    retry_log = capsys.readouterr().out
+    assert 'Resuming saved migration' in retry_log
+    assert 'Saving recovery copies' not in retry_log
+    assert 'Completed successfully' in retry_log
     assert json.loads(migration._journal(config).read_text())["assignment"] == plan["assignment"]
+
+
+def test_progress_starts_before_snapshot_and_reports_bounded_file_counts(tmp_path, monkeypatch, capsys):
+    config, _ = main_fixture(tmp_path)
+    tick = [0.0]
+    monkeypatch.setattr(migration, 'monotonic', lambda: tick[0])
+    original = migration.atomic_write_bytes
+    initial_output = []
+
+    def delayed_write(path, content, **kwargs):
+        if not initial_output:
+            initial_output.append(capsys.readouterr().out)
+            assert 'Starting; web server waits for completion' in initial_output[0]
+            assert 'Saving recovery copies 0/' in initial_output[0]
+        original(path, content, **kwargs)
+        tick[0] += 0.5
+
+    monkeypatch.setattr(migration, 'atomic_write_bytes', delayed_write)
+    result = migration.apply(config)
+    output = initial_output[0] + capsys.readouterr().out
+    total = len(result['details']['affected_files'])
+    for phase in ('Saving recovery copies', 'Updating job references', 'Verifying migrated files'):
+        assert f'{phase} 0/{total} files' in output
+        assert f'{phase} {total}/{total} files' in output
+    saving = [line for line in output.splitlines() if 'Saving recovery copies' in line]
+    assert 2 < len(saving) < total  # Progress during slow I/O, without one line per file.
+    assert f'Saving recovery copies 5/{total} files; elapsed=5.0s' in output
+    assert output.index('Verifying migrated files') < output.index('Completed successfully')
+    assert 'elapsed=' in output.splitlines()[-1]
 
 
 def test_refuses_changed_source_on_retry(monkeypatch, tmp_path):
