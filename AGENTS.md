@@ -513,7 +513,35 @@ Die Datei dient ausschließlich lokalen Entwicklungs- und Automatisierungszwecke
 
 ## borg-codex-bot
 
-Der Benutzer `borg-codex-bot` darf für dieses Repository verwendet werden.
+Verbindliche Kontentrennung (#489): Alle GitHub-Schreibzugriffe durch Codex oder
+andere Entwicklungsagenten erfolgen ausschliesslich als `borg-codex-bot`.
+`TheTwist76` bleibt ausschliesslich dem Repository-Maintainer vorbehalten.
+
+Diese Regel gilt insbesondere fuer:
+
+* Erstellen und Bearbeiten von Pull Requests und Issues
+* Kommentare und Reviews auf Pull Requests und Issues
+* Statusaenderungen wie Schliessen, Wiedereroeffnen oder Review-Bereitschaft
+* Sonstige schreibende GitHub-API-Aufrufe und Git-Pushes
+
+Vor JEDEM GitHub-Schreibzugriff:
+
+1. Bot-Zugangsdaten nur fuer den jeweiligen Agentenprozess bereitstellen, zum
+   Beispiel aus `/env/github_borg-backup-ui.env`. `GH_TOKEN` hat bei `gh` Vorrang
+   vor anderen Zugangsdaten und muss deshalb ebenfalls zum Bot gehoeren.
+2. Mit denselben Zugangsdaten `gh api user --jq .login` ausfuehren und den
+   Rueckgabewert pruefen. Er muss exakt `borg-codex-bot` lauten. Eine konfigurierte
+   Variable wie `GITHUB_ACTOR` oder der Git-Commit-Autor ist kein Identitaetsnachweis.
+3. Bei fehlendem Bot-Zugang, fehlgeschlagener Pruefung oder einem anderen Konto
+   den Schreibzugriff unterlassen und die Ursache melden. Niemals automatisch
+   auf `TheTwist76` oder ein anderes Konto zurueckfallen.
+4. Nach dem Erstellen eines PRs, Issues, Kommentars oder Reviews dessen Autor
+   ueber die API kontrollieren; er muss ebenfalls `borg-codex-bot` sein.
+
+Den interaktiven GitHub-Login des Maintainers nicht durch `gh auth switch`,
+`gh auth login` oder globale Konfigurationsaenderungen umstellen. Tokens niemals
+ausgeben, in Kommandoargumente einbetten oder in Dateien im Git-Index aufnehmen.
+Die folgenden Aktionen sind nur unter Einhaltung dieser Kontentrennung erlaubt.
 
 Erlaubt:
 
