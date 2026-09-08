@@ -6,6 +6,13 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #497 - reduce unnecessary idle and navigation writes
+- Keep unchanged notification queues untouched during background checks, including missing/empty queues and retries that are not yet due. Preserve locked claims, enqueueing, delivery results and retry persistence.
+- Inspect inventory-lock permissions before changing them. Existing private locks no longer receive redundant chmod calls; incorrect permissions are still corrected and failed acquisitions close their file descriptor.
+- Make setup-status validation inspect existing data directories, permissions and backing mounts without creating directories or write-test files. Setup and runtime initialization retain their actual write probe; missing or unavailable storage still prevents readiness.
+- Continue on the #486 branch and PR #494 as requested by the maintainer, with a dedicated #497 commit and release-note fragment. Notification/authentication storage locations and login/session behavior remain unchanged.
+- Verify idle writes again on Unraid using the existing five-minute idle and ten-minute UI capture procedure. Local regression checks do not replace measurement on the boot USB device.
+
 ### Issue #495 - explicit job settings and supported export formats
 - Continue with #486 in PR #494 as explicitly approved by the maintainer; #447 remains frozen.
 - Register `job_settings_v1` after `job_ids_v1`. Snapshot original job metadata, materialize effective compression/retention and automatic appearance, preserve other fields, and remove obsolete job type fields in schema 5. Audit and resume interrupted writes without changing explicit values.

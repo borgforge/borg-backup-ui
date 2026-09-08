@@ -5,6 +5,7 @@ from job_fixtures import identified_job, job_id
 import sys
 import threading
 import multiprocessing
+import os
 import time
 from pathlib import Path
 
@@ -93,6 +94,51 @@ def test_inventory_files_keep_restrictive_permissions(tmp_path: Path) -> None:
     write_storage_store(config, {"storages": []})
     assert repositories_file(config).stat().st_mode & 0o777 == 0o600
     assert storages_file(config).stat().st_mode & 0o777 == 0o600
+
+
+def test_inventory_lock_does_not_reapply_existing_private_permissions(tmp_path, monkeypatch):
+    with inventory_store.inventory_lock(tmp_path):
+        pass
+    path = tmp_path / ".inventory.lock"
+    before = path.stat()
+
+    def unexpected_chmod(*_args):
+        pytest.fail("Existing private lock permissions must not be reapplied")
+
+    monkeypatch.setattr(inventory_store.os, "fchmod", unexpected_chmod)
+    for _ in range(10):
+        with inventory_store.inventory_lock(tmp_path):
+            with inventory_store.inventory_lock(tmp_path):
+                assert path.stat().st_mode & 0o7777 == 0o600
+    after = path.stat()
+    assert (after.st_ino, after.st_mtime_ns, after.st_ctime_ns) == (before.st_ino, before.st_mtime_ns, before.st_ctime_ns)
+
+
+@pytest.mark.parametrize("mode", [0o644, 0o700, 0o2600])
+def test_inventory_lock_still_corrects_changed_permissions(tmp_path, mode):
+    path = tmp_path / ".inventory.lock"
+    path.touch()
+    path.chmod(mode)
+    with inventory_store.inventory_lock(tmp_path):
+        assert path.stat().st_mode & 0o7777 == 0o600
+
+
+def test_inventory_lock_closes_descriptor_when_permission_update_fails(tmp_path, monkeypatch):
+    path = tmp_path / ".inventory.lock"
+    path.touch()
+    path.chmod(0o644)
+    descriptors = []
+
+    def fail_chmod(fd, _mode):
+        descriptors.append(fd)
+        raise PermissionError("injected permission failure")
+
+    monkeypatch.setattr(inventory_store.os, "fchmod", fail_chmod)
+    with pytest.raises(inventory_store.InventoryAccessError):
+        with inventory_store.inventory_lock(tmp_path):
+            pytest.fail("The transaction must not start without required permissions")
+    with pytest.raises(OSError):
+        os.fstat(descriptors[0])
 
 
 def test_repository_inventory_cache_avoids_reparse_and_detects_external_change(

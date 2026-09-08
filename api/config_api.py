@@ -1087,7 +1087,12 @@ def _is_required_storage_mount_available(mount_path: Path) -> bool:
             return False
 
 
-def ensure_data_dirs(global_data_dir: str) -> dict:
+def ensure_data_dirs(global_data_dir: str, *, read_only: bool = False) -> dict:
+    """Check storage, with a read-only mode for routine status requests.
+
+    Routine status reads inspect existing directories and access permissions.
+    Setup and runtime writers retain the actual write probe by default.
+    """
     root = (global_data_dir or "").strip()
     if not root:
         raise ValueError("GLOBAL_DATA_DIR is not set")
@@ -1102,8 +1107,16 @@ def ensure_data_dirs(global_data_dir: str) -> dict:
     created = []
     for key in ("base", "logs", "status", "restore_status", "cache", "remotes"):
         p = Path(paths[key])
-        p.mkdir(parents=True, exist_ok=True)
-        created.append(str(p))
+        if read_only:
+            if not p.is_dir():
+                raise RuntimeError(f"Required data directory is missing or not a directory: {p}")
+            if not os.access(p, os.W_OK | os.X_OK):
+                raise RuntimeError(f"Required data directory is not writable or accessible: {p}")
+        else:
+            p.mkdir(parents=True, exist_ok=True)
+            created.append(str(p))
+    if read_only:
+        return {"ok": True, "paths": paths, "created": created}
     # write test in status dir
     probe = Path(paths["status"]) / ".borg-ui-write-test"
     probe.write_text("ok\n", encoding="utf-8")
@@ -1166,7 +1179,7 @@ def validate_runtime_config(ui_config: dict) -> dict:
             })
         else:
             try:
-                ensure_data_dirs(data_dir)
+                ensure_data_dirs(data_dir, read_only=True)
             except Exception as exc:
                 errors.append({
                     "key": "GLOBAL_DATA_DIR",

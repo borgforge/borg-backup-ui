@@ -158,6 +158,7 @@ def test_setup_status_tracks_optional_first_run_milestones_and_dismissal(tmp_pat
     data_dir = tmp_path / "runtime-data"
 
     write_conf(config, {"GLOBAL_DATA_DIR": str(data_dir)})
+    ensure_data_dirs(str(data_dir))
     setup = get_setup_status(config)
 
     assert setup["global_data_dir_set"] is True
@@ -174,3 +175,72 @@ def test_setup_status_tracks_optional_first_run_milestones_and_dismissal(tmp_pat
     setup_after_dismiss = get_setup_status(config)
     assert setup_after_dismiss["setup"]["optional_dismissed"] is True
     assert setup_after_dismiss["setup"]["show_optional_wizard"] is False
+
+
+def test_setup_status_does_not_create_or_probe_data_directories(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    data_dir = tmp_path / "runtime-data"
+    write_conf(config, {"GLOBAL_DATA_DIR": str(data_dir)})
+    ensure_data_dirs(str(data_dir))
+    before = {p: (p.stat().st_mtime_ns, p.stat().st_ctime_ns) for p in [data_dir, *data_dir.iterdir()]}
+    original_mkdir = Path.mkdir
+
+    def guarded_mkdir(path, *args, **kwargs):
+        assert not path.is_relative_to(data_dir), "Status must not create data directories"
+        return original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", guarded_mkdir)
+    for _ in range(10):
+        assert get_setup_status(config)["ready"] is True
+    assert {p: (p.stat().st_mtime_ns, p.stat().st_ctime_ns) for p in before} == before
+    assert not list(data_dir.rglob(".borg-ui-write-test"))
+
+
+@pytest.mark.parametrize("problem", ["missing", "file", "unwritable"])
+def test_setup_status_reports_unusable_directory_without_repairing_it(tmp_path, monkeypatch, problem):
+    import config_api
+
+    config = _config(tmp_path)
+    data_dir = tmp_path / "runtime-data"
+    write_conf(config, {"GLOBAL_DATA_DIR": str(data_dir)})
+    ensure_data_dirs(str(data_dir))
+    status_dir = data_dir / "status"
+    if problem in {"missing", "file"}:
+        status_dir.rmdir()
+        if problem == "file":
+            status_dir.write_text("existing file")
+    else:
+        original_access = config_api.os.access
+        monkeypatch.setattr(config_api.os, "access", lambda path, mode: False if Path(path) == status_dir else original_access(path, mode))
+    result = get_setup_status(config)
+    assert result["ready"] is False
+    assert result["validation"]["errors"][0]["message_code"] == "config_data_dir_unusable"
+    if problem == "missing":
+        assert not status_dir.exists()
+    elif problem == "file":
+        assert status_dir.read_text() == "existing file"
+
+
+@pytest.mark.parametrize("root", ["/mnt/user/borg-backup-ui", "/mnt/datapool2/borg-backup-ui", "/mnt/disks/USB-A/borg-backup-ui"])
+def test_setup_status_still_rejects_unavailable_mounts(tmp_path, monkeypatch, root):
+    import config_api
+
+    config = _config(tmp_path)
+    write_conf(config, {"GLOBAL_DATA_DIR": root})
+    monkeypatch.setattr(config_api, "_is_required_storage_mount_available", lambda _path: False)
+    result = get_setup_status(config)
+    assert result["ready"] is False
+    assert "unavailable" in result["validation"]["errors"][0]["message"]
+
+
+def test_setup_write_probe_still_reports_actual_write_failure(tmp_path, monkeypatch):
+    original_write = Path.write_text
+
+    def fail_probe(path, *args, **kwargs):
+        if path.name == ".borg-ui-write-test":
+            raise OSError("injected read-only filesystem")
+        return original_write(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_probe)
+    with pytest.raises(OSError, match="read-only filesystem"):
+        ensure_data_dirs(str(tmp_path / "runtime-data"))
