@@ -6,6 +6,7 @@ PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
 PIDFILE="/var/run/borg_backup_ui.pid"
 WAIT_PIDFILE="/var/run/borg_backup_ui_start_wait.pid"
 LOGFILE="/var/log/borg_backup_ui.log"
+PYTHON_CACHE_DIR="/run/borg-backup-ui/pycache"
 BORG_BUNDLE_DIR="${PLUGIN_DIR}/runtime/bin/borg"
 BORG_BUNDLE_VERSIONED="${BORG_BUNDLE_DIR}/borg-linux-glibc231-x86_64-1.4.5"
 BORG_BUNDLE_PLAIN="${BORG_BUNDLE_DIR}/borg"
@@ -131,6 +132,14 @@ start() {
     echo "WARNING: bundled Borg binary not found, using system PATH."
   fi
   echo "Starting Borg Backup UI..."
+  # Keep bytecode off the boot USB stick. API-started jobs (including cron
+  # requests) inherit this cache, which survives service restarts until reboot.
+  export PYTHONPYCACHEPREFIX="${PYTHON_CACHE_DIR}"
+  if ! install -d -m 0700 "${PYTHON_CACHE_DIR}"; then
+    # An optional cache must not prevent startup or fall back to USB writes.
+    export PYTHONDONTWRITEBYTECODE=1
+    echo "WARNING: Python RAM cache is unavailable; bytecode writes are disabled for this run." >> "$LOGFILE"
+  fi
   PY_BIN="$(python_runtime_status)"
   if [ -z "$PY_BIN" ]; then
     [ "${BBUI_DEFERRED_START:-0}" = "1" ] && rm -f "$WAIT_PIDFILE"

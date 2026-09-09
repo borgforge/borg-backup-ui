@@ -449,7 +449,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             f"target={tgt} detail={det}"
         )
 
-    def _require_data_dir_ready(self) -> None:
+    def _require_data_dir_ready(self, *, read_only: bool = False) -> None:
         from config_api import read_expanded_conf, ensure_data_dirs
         conf = read_expanded_conf(self.config)
         data_dir = str(conf.get("GLOBAL_DATA_DIR", "")).strip()
@@ -457,7 +457,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise RuntimeError(
                 "GLOBAL_DATA_DIR is not set. Configure a primary data directory in Settings first."
             )
-        ensure_data_dirs(data_dir)
+        ensure_data_dirs(data_dir, read_only=read_only)
 
     def _get_api_token(self) -> str:
         return _load_or_create_api_token(self.config)
@@ -2207,7 +2207,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         }
 
     def _get_restore_archives(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import list_archives_with_context
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
@@ -2217,7 +2217,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return list_archives_with_context(self.config, job_key)
 
     def _get_restore_files(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import list_files
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(qs_str)
@@ -2242,7 +2242,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_report_data(self.config, job_key)
 
     def _get_repo_stats(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import get_repo_stats
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
@@ -2252,7 +2252,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_repo_stats(self.config, job_key)
 
     def _get_restore_target_dirs(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import list_allowed_target_roots, list_target_dirs_with_config
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(qs_str)
@@ -2268,7 +2268,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         }
 
     def _get_restore_state(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import get_restore_state
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
