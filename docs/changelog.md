@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #496 - compatible SSH warning suppression on older Unraid versions
+- Add `IgnoreUnknown=WarnWeakCrypto` before `WarnWeakCrypto=no` in the shared Borg SSH transport. Older clients can ignore this specific unsupported setting; newer clients retain warning suppression.
+- Preserve existing command-line ignore lists and their position when normalizing custom SSH commands. Keep identity selection, keepalives and other transport settings unchanged; do not introduce an Unraid-version branch or a blanket unknown-option exemption.
+- Lower the Community Apps minimum version to Unraid 6.12.5 and align the German/English requirements. Python 3.10 or newer remains required through the separate Python plugin.
+- Include the fix on the existing #486 branch and PR #494 at the maintainer's request. SSH-profile backup verification on older and current Unraid installations remains required before general release.
+
 ### Issue #497 - reduce unnecessary idle and navigation writes
 - Keep unchanged notification queues untouched during background checks, including missing/empty queues and retries that are not yet due. Preserve locked claims, enqueueing, delivery results and retry persistence.
 - Inspect inventory-lock permissions before changing them. Existing private locks no longer receive redundant chmod calls; incorrect permissions are still corrected and failed acquisitions close their file descriptor.

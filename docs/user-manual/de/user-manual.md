@@ -57,7 +57,7 @@ Die Anwendung kennt die Rollen `admin`, `operator` und `viewer`:
 
 ### 1.3 Installation und Erstkonfiguration
 
-Borg Backup UI befindet sich in der **Public Beta** und wird über **Unraid Community Apps** installiert. Voraussetzungen sind **Unraid 7.2.0 oder neuer** sowie **Python 3.10 oder neuer**. Installieren Sie das separate Plugin **Python 3 for Unraid** zuerst über Community Apps. BorgBackup selbst ist im Borg-Backup-UI-Paket enthalten; eine zusätzliche Borg- oder pip-Installation ist nicht erforderlich.
+Borg Backup UI befindet sich in der **Public Beta** und wird über **Unraid Community Apps** installiert. Voraussetzungen sind **Unraid 6.12.5 oder neuer** sowie **Python 3.10 oder neuer**. Installieren Sie das separate Plugin **Python 3 for Unraid** zuerst über Community Apps. BorgBackup selbst ist im Borg-Backup-UI-Paket enthalten; eine zusätzliche Borg- oder pip-Installation ist nicht erforderlich.
 
 1. Öffnen Sie in Unraid **Apps**.
 2. Installieren Sie **Python 3 for Unraid**, falls es noch nicht vorhanden ist.
