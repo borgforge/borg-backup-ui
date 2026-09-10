@@ -28,6 +28,8 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   jobs: [],
   archives: [],
   archiveFilters: [],
+  sourceRequest: 0,
+  filesRequest: 0,
   runs: [],
   history: [],
   historyTotal: 0,
@@ -768,7 +770,48 @@ function _restoreBindTargetAutocomplete() {
   });
 }
 
+function restoreClearFileSelection() {
+  restoreState.filesRequest++;
+  restoreState.files = [];
+  restoreState.path = '';
+  restoreState.selectedPath = '';
+  restoreState.selectedName = '';
+  restoreState.selectedType = '';
+  restoreState.precheck = null;
+  restoreState.autoPrecheckKey = '';
+  const source = document.getElementById('restore-source-path');
+  if (source) source.value = '';
+  const confirm = document.getElementById('restore-confirm-check');
+  if (confirm) confirm.checked = false;
+  const output = document.getElementById('restore-precheck-output');
+  if (output) output.textContent = '';
+  const files = document.getElementById('restore-filelist');
+  if (files) files.innerHTML = '';
+  const breadcrumb = document.getElementById('restore-breadcrumb');
+  if (breadcrumb) breadcrumb.innerHTML = '';
+  renderRestorePrecheck(null);
+  _setRestoreAssistBusy(false);
+  restoreUpdateConfirmState();
+  _restoreRenderSelectedBox();
+}
+
+function restoreClearArchives() {
+  restoreState.archive = '';
+  restoreState.archives = [];
+  restoreState.archiveFilters = [];
+  restoreClearFileSelection();
+  const select = document.getElementById('restore-archive-sel');
+  if (select) select.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
+  renderRestoreArchiveList();
+  renderRestoreSourceContext();
+  _restoreRenderSelectionSummary();
+}
+
 async function restoreInit() {
+  const selectedJob = restoreState.job;
+  const request = ++restoreState.sourceRequest;
+  restoreState.job = '';
+  restoreClearArchives();
   restoreState.completed = false;
   restoreSetLiveMode(false);
   const sel = document.getElementById('restore-job-sel');
@@ -783,6 +826,7 @@ async function restoreInit() {
   _restoreBindTargetAutocomplete();
   const targetInput = document.getElementById('restore-target-path');
   await restoreLoadAllowedTargetRoots();
+  if (request !== restoreState.sourceRequest) return;
   if (targetInput && !targetInput.value.trim()) targetInput.value = `${_restorePrimaryAllowedRoot()}/`;
   _restoreRenderSelectionSummary();
   _restoreRenderSelectedBox();
@@ -792,6 +836,8 @@ async function restoreInit() {
   try {
     const jobsRes = await fetch('/api/jobs', { credentials: 'include' });
     const jobsData = await jobsRes.json();
+    if (request !== restoreState.sourceRequest) return;
+    if (!jobsRes.ok) throw new Error(apiErrorMessage(jobsData, jobsRes.status));
     const jobs = (jobsData.jobs || []).filter(j => !j.is_utility);
     restoreState.jobs = jobs;
 
@@ -807,6 +853,7 @@ async function restoreInit() {
       const checkRes = await fetch('/api/storage/check/jobs', { credentials: 'include' });
       if (checkRes.ok) {
         const checkData = await checkRes.json();
+        if (request !== restoreState.sourceRequest) return;
         for (const job of (checkData.jobs || [])) {
           const opt = document.createElement('option');
           opt.value = job.key;
@@ -816,28 +863,25 @@ async function restoreInit() {
         restoreState.jobs = (checkData.jobs || []).map((job) => ({ ...job, location: job.location || 'local' }));
       }
     }
+    if (restoreState.jobs.some(job => String(job.key) === String(selectedJob))) {
+      sel.value = selectedJob;
+      restoreState.job = selectedJob;
+    }
     renderRestoreJobSidebar();
     renderRestoreSelectedJob();
     renderRestoreSourceContext();
+    if (restoreState.job) await restoreLoadArchives();
   } catch (e) {
+    if (request !== restoreState.sourceRequest) return;
     _restoreMsg(restoreT('loadJobsError', { message: e.message }), true);
   }
 }
 
 async function restoreLoadArchives() {
+  const request = ++restoreState.sourceRequest;
   const jobKey = document.getElementById('restore-job-sel').value;
   restoreState.job = jobKey;
-  restoreState.archive = '';
-  restoreState.path = '';
-  restoreState.selectedPath = '';
-  restoreState.selectedName = '';
-  restoreState.selectedType = '';
-  restoreState.autoPrecheckKey = '';
-  restoreState.archives = [];
-  restoreState.archiveFilters = [];
-  renderRestoreSourceContext();
-  const sel = document.getElementById('restore-archive-sel');
-  if (sel) sel.innerHTML = `<option value="">${restoreT('chooseArchive')}</option>`;
+  restoreClearArchives();
   _restoreMsg('');
 
   if (!jobKey) {
@@ -852,6 +896,7 @@ async function restoreLoadArchives() {
   try {
     const res = await fetch(`/api/restore/archives?job=${encodeURIComponent(jobKey)}`, { credentials: 'include' });
     const data = await res.json();
+    if (request !== restoreState.sourceRequest) return;
     if (!res.ok || data.error) { _restoreMsg(restoreT('error', { message: apiErrorMessage(data, res.status) }), true); return; }
 
     const sel = document.getElementById('restore-archive-sel');
@@ -869,6 +914,7 @@ async function restoreLoadArchives() {
     _restoreRenderSelectionSummary();
     _restoreMsg('');
   } catch (e) {
+    if (request !== restoreState.sourceRequest) return;
     _restoreMsg(restoreT('error', { message: e.message }), true);
   }
 }
@@ -878,6 +924,10 @@ async function restoreBrowse(path) {
   const archive = document.getElementById('restore-archive-sel').value;
   if (!archive) return;
 
+  if (archive !== restoreState.archive) restoreClearFileSelection();
+  const request = ++restoreState.filesRequest;
+  const sourceRequest = restoreState.sourceRequest;
+  const isCurrent = () => request === restoreState.filesRequest && sourceRequest === restoreState.sourceRequest;
   restoreState.archive = archive;
   restoreState.path = path;
   renderRestoreSourceContext();
@@ -899,6 +949,7 @@ async function restoreBrowse(path) {
     const url = `/api/restore/files?job=${encodeURIComponent(jobKey)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
     const res = await fetch(url, { credentials: 'include' });
     const data = await res.json();
+    if (!isCurrent()) return;
     if (!res.ok || data.error) { _restoreMsg(restoreT('error', { message: apiErrorMessage(data, res.status) }), true); return; }
 
     _restoreMsg('');
@@ -906,6 +957,7 @@ async function restoreBrowse(path) {
     restoreState.files = data.files || [];
     _restoreRenderFiles(restoreState.files);
   } catch (e) {
+    if (!isCurrent()) return;
     _restoreMsg(restoreT('error', { message: e.message }), true);
   }
 }
@@ -1162,6 +1214,9 @@ function _setRestoreAssistBusy(busy) {
 }
 
 async function restoreRunPrecheck() {
+  const sourceRequest = restoreState.sourceRequest;
+  const filesRequest = restoreState.filesRequest;
+  const isCurrent = () => sourceRequest === restoreState.sourceRequest && filesRequest === restoreState.filesRequest;
   restoreSetLiveMode(false);
   hideEl('restore-assist-msg');
   const source = restoreState.selectedPath || document.getElementById('restore-source-path')?.value || '';
@@ -1200,6 +1255,7 @@ async function restoreRunPrecheck() {
       }),
     });
     const data = await res.json();
+    if (!isCurrent()) return;
     if (!res.ok) throw new Error(restorePrecheckErrorMessage(data, res.status));
     restoreState.precheck = data;
     renderRestorePrecheck(data);
@@ -1224,13 +1280,16 @@ async function restoreRunPrecheck() {
     if (out) out.textContent = lines.join('\n');
     showMsg('restore-assist-msg', data.ok ? 'success' : 'error', data.ok ? restoreT('precheckSuccess') : restoreT('precheckFailed'));
   } catch (err) {
+    if (!isCurrent()) return;
     restoreState.precheck = null;
     renderRestorePrecheck(null);
     if (out) out.textContent = '';
     showMsg('restore-assist-msg', 'error', restoreT('precheckError', { message: err.message }));
   } finally {
-    _setRestoreAssistBusy(false);
-    restoreUpdateConfirmState();
+    if (isCurrent()) {
+      _setRestoreAssistBusy(false);
+      restoreUpdateConfirmState();
+    }
   }
 }
 
