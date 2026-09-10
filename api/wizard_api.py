@@ -5,6 +5,7 @@ Backup jobs are stored as canonical JSON metadata and executed through the
 scriptless wizard runner.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -659,6 +660,11 @@ def _save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None,
         "created_at": existing.get("created_at", now_iso),
         "updated_at": now_iso,
     }
+    if not existing or str(existing.get("repository_key") or "") != selected_repository_key:
+        # Check results belong to a repository, even when the job ID/cache stays
+        # the same. Preserve legacy markers until the job actually changes repo.
+        repository_digest = hashlib.sha256(selected_repository_key.encode("utf-8")).hexdigest()
+        metadata["check_flag_name"] = f".last_check-{repository_digest}"
     metadata["repository_key"] = selected_repository_key
     metadata.pop("backup_type", None)
     metadata.pop("type_id", None)

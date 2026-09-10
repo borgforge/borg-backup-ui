@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issues #499, #500 and #501 - external Job-ID tester follow-up
+- #499: Refresh the selected job and archive list when returning to Browse & Restore. Discard stale file selections, confirmations and precheck results on source changes; ignore late responses from the previous source.
+- #500: Report a missing Borg archive as an actionable API error with German/English guidance. Clear failed file-list loading states and invalid selections, including network and malformed-response failures, so users can reselect or retry without restarting the service.
+- #501: Use a repository-qualified check marker for new jobs and when an existing job changes repository. Preserve existing markers for unchanged jobs and renames. Keep the cache directory and old markers intact; returning to a legacy repository can require one fresh check before its qualified marker is available.
+- Continue in PR #494 with separate issue-linked commits. No new migration, archive movement, retention change or repository-switch confirmation is introduced. External tester verification remains required before general release.
+
 ### Issue #496 - compatible SSH warning suppression on older Unraid versions
 - Add `IgnoreUnknown=WarnWeakCrypto` before `WarnWeakCrypto=no` in the shared Borg SSH transport. Older clients can ignore this specific unsupported setting; newer clients retain warning suppression.
 - Preserve existing command-line ignore lists and their position when normalizing custom SSH commands. Keep identity selection, keepalives and other transport settings unchanged; do not introduce an Unraid-version branch or a blanket unknown-option exemption.

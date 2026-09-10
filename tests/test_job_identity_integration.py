@@ -362,3 +362,65 @@ def test_delete_optional_artifacts_selects_only_the_requested_id(tmp_path, monke
     assert new_other.read_text() == 'other job log'
     assert other.read_text() == 'retained'
     assert [r['job_key'] for r in list_restore_tests(config)] == [retained]
+
+
+def test_repository_switch_uses_its_own_check_marker_and_status(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from lib import borg_runner
+    from lib.backup_job import BackupJob
+
+    config, jobs, ids, root = migrated(tmp_path)
+    key = ids[jobs[0]['job_key']]
+    monkeypatch.setattr(wizard_runner.os, 'environ', dict(wizard_runner.os.environ))
+    env, _ = wizard_runner._load_env_from_job(key, root / 'scripts', root)
+    legacy_flag = Path(env['BORG_CHECK_FLAG_FILE'])
+    legacy_flag.parent.mkdir(parents=True, exist_ok=True)
+    legacy_flag.write_text('original repository check')
+    legacy_before = (legacy_flag.read_bytes(), legacy_flag.stat().st_mtime_ns)
+    original_cache = env['BORG_CACHE_DIR']
+    calls = []
+    monkeypatch.setattr(borg_runner, '_run_borg', lambda command, *_args: calls.append(command) or 0)
+    flags = {}
+    for repository, expect_check in [('separate', True), ('shared', True), ('separate', False), ('shared', False)]:
+        params = load_job_for_wizard(key, root / 'scripts', config)
+        params.update(existing_job_key=key, repository_key=repository)
+        assert save_job(params, root / 'scripts', root, config)['job_id'] == key
+        env, _ = wizard_runner._load_env_from_job(key, root / 'scripts', root)
+        flag = Path(env['BORG_CHECK_FLAG_FILE'])
+        assert env['BORG_CACHE_DIR'] == original_cache
+        assert flag != legacy_flag
+        if repository in flags:
+            assert flag == flags[repository]
+        flags[repository] = flag
+        runtime = BackupJob.__new__(BackupJob)
+        runtime.config = SimpleNamespace(borg_check_flag_file=flag, borg_check_interval_days=30)
+        if expect_check:
+            assert runtime._get_repo_check_info() == ('unknown', 'unknown', 'unknown')
+        else:
+            assert runtime._get_repo_check_info()[1] == 'ok'
+        before_calls = len(calls)
+        runner = borg_runner.BorgRunner(borg_runner.BorgConfig(
+            repo=env['BORG_REPO'], check_flag_file=flag, check_interval_days=30))
+        assert runner.check() == 0
+        assert len(calls) == before_calls + int(expect_check)
+        if expect_check:
+            assert calls[-1][-1] == env['BORG_REPO']
+        assert runtime._get_repo_check_info()[1] == 'ok'
+        assert (legacy_flag.read_bytes(), legacy_flag.stat().st_mtime_ns) == legacy_before
+    assert flags['shared'] != flags['separate']
+
+
+def test_new_job_reuses_original_repository_check_after_switching_back(tmp_path, monkeypatch):
+    config, jobs, ids, root = migrated(tmp_path)
+    monkeypatch.setattr(wizard_runner.os, 'environ', dict(wizard_runner.os.environ))
+    params = load_job_for_wizard(ids[jobs[0]['job_key']], root / 'scripts', config)
+    params.update(job_id=job_id('new-check-job'), archive_prefix='new-check', repository_key='shared')
+    key = save_job(params, root / 'scripts', root, config)['job_id']
+    env, _ = wizard_runner._load_env_from_job(key, root / 'scripts', root)
+    original_flag = env['BORG_CHECK_FLAG_FILE']
+    for repository in ['separate', 'shared']:
+        params = load_job_for_wizard(key, root / 'scripts', config)
+        params.update(existing_job_key=key, repository_key=repository)
+        save_job(params, root / 'scripts', root, config)
+    env, _ = wizard_runner._load_env_from_job(key, root / 'scripts', root)
+    assert env['BORG_CHECK_FLAG_FILE'] == original_flag
