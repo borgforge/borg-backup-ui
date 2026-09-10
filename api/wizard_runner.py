@@ -639,6 +639,7 @@ def main() -> int:
         BackupJob,
         BackupJobConfig,
         RequiredSourcePathsMissing,
+        UsbMountAccessError,
     )
     from lib.borg_runner import BorgConfig, BorgRunner, parse_borg_stats  # type: ignore
     from lib.notifications import MailConfig  # type: ignore
@@ -803,7 +804,7 @@ def main() -> int:
             job.set_result(exit_code, parse_borg_stats(job_config.log_file))
             result_code = exit_code
             return result_code
-    except RequiredSourcePathsMissing:
+    except (RequiredSourcePathsMissing, UsbMountAccessError):
         result_code = 2
         return 2
     except Exception:

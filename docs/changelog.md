@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #502 - USB mount preflight and access failures
+- Require a real mount point as well as a directory and write access before a USB backup proceeds. An existing unmounted directory now follows the existing USB-not-mounted skip path; missing and non-writable targets keep their skipped outcome.
+- Inspect the path with `stat()` so I/O errors are retained. Report USB access failures as `usb_mount_access_failed`, with the path and OS error in the existing log, status, lifecycle event and failure notification. The scriptless runner exits cleanly with code 2 before Docker/VM changes and Borg create/maintenance.
+- Avoid repository-size and check-state queries during finalization of this USB preflight failure. Keep status persistence and lock cleanup; do not add write probes, automatic mounts, device monitoring or migrations.
+- Add focused tests for missing/unmounted/read-only targets, EIO/ENODEV at each preflight stage, passing mounted targets, failure reporting and runner resource release. Actual Unraid hardware verification remains pending.
+
 ### Issues #499, #500 and #501 - external Job-ID tester follow-up
 - #499: Refresh the selected job and archive list when returning to Browse & Restore. Discard stale file selections, confirmations and precheck results on source changes; ignore late responses from the previous source.
 - #500: Report a missing Borg archive as an actionable API error with German/English guidance. Clear failed file-list loading states and invalid selections, including network and malformed-response failures, so users can reselect or retry without restarting the service.

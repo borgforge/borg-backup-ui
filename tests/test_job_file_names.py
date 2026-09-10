@@ -252,6 +252,7 @@ def test_skipped_runs_keep_readable_log_names_and_status_links(tmp_path, monkeyp
         mount = tmp_path / "usb-mount"
         if reason == "usb_not_writable":
             mount.mkdir()
+            monkeypatch.setattr(Path, "is_mount", lambda path: path == mount)
             monkeypatch.setattr("lib.backup_job.os.access", lambda *args: False)
         check = lambda: job.check_usb_mount(mount)
     with pytest.raises(SystemExit) as stopped:

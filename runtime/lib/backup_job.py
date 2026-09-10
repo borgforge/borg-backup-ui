@@ -29,6 +29,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -49,6 +50,7 @@ _HR = "━" * 80
 REQUIRED_SOURCE_PATHS_MISSING = "required_source_paths_missing"
 RUNTIME_RECOVERY_FAILED = "runtime_recovery_failed"
 USER_CANCELLED = "user_cancelled"
+USB_MOUNT_ACCESS_FAILED = "usb_mount_access_failed"
 
 
 def _path_uses_symlink(path: Path) -> bool:
@@ -99,6 +101,18 @@ class RequiredSourcePathsMissing(RuntimeError):
             "The backup was aborted before Docker, VMs, or Borg were changed. "
             f"Missing path(s): {paths}. "
             "Open the job in the Job Wizard and correct or remove the unavailable source path(s)."
+        )
+
+
+class UsbMountAccessError(RuntimeError):
+    """USB preflight could not inspect the target; Borg must not be started."""
+
+    failure_code = USB_MOUNT_ACCESS_FAILED
+
+    def __init__(self, mount_path: Path, cause: OSError) -> None:
+        super().__init__(
+            f"USB drive is not accessible at {mount_path}: {cause}. "
+            "Backup was not started. Check the USB connection and mount state."
         )
 
 
@@ -352,7 +366,12 @@ class BackupJob:
                         str(path) for path in exc_val.missing_paths
                     ]
                     self._final_msg = str(exc_val)
-                logger.error("Job aborted by exception: %s", exc_val)
+                if isinstance(exc_val, UsbMountAccessError):
+                    self._failure_code = exc_val.failure_code
+                    self._final_msg = str(exc_val)
+                    logger.error("%s", exc_val)
+                else:
+                    logger.error("Job aborted by exception: %s", exc_val)
 
             if not self._skip_finish:
                 _log_section("PHASE 5: CLEANUP & COMPLETION")
@@ -551,18 +570,30 @@ class BackupJob:
 
     def check_usb_mount(self, mount_path: Path) -> None:
         """
-        Prüft ob USB-Laufwerk verfügbar und beschreibbar ist.
+        Prüft Mount, Verzeichnis und Schreibrechte vor dem Backup.
 
-        Sendet Notification und löst SystemExit(0) aus wenn nicht verfügbar.
-        Wird von USB-Backup-Skripten explizit aufgerufen.
+        Fehlende/unbeschreibbare Mounts werden übersprungen; Zugriffsfehler
+        brechen den Lauf mit UsbMountAccessError ab.
         """
-        if not mount_path.is_dir():
+        try:
+            # stat() preserves I/O errors even on Python versions whose is_dir()
+            # and is_mount() turn some filesystem errors into False.
+            try:
+                is_directory = stat.S_ISDIR(mount_path.stat().st_mode)
+            except (FileNotFoundError, NotADirectoryError):
+                is_directory = False
+            mounted = is_directory and mount_path.is_mount()
+            writable = mounted and os.access(mount_path, os.W_OK)
+        except OSError as exc:
+            raise UsbMountAccessError(mount_path, exc) from exc
+
+        if not mounted:
             self._write_mini_log(
                 "USB_NOT_MOUNTED",
                 [
                     f"Borg Backup ({self.config.job_name}) - Skipped because the USB drive is missing",
                     f"Mount path: {mount_path}",
-                    "Status: directory does not exist",
+                    "Status: path is not a mounted directory",
                     "Reason: USB drive is not connected or mounted",
                 ],
             )
@@ -570,7 +601,7 @@ class BackupJob:
             self._persist_skip_status_once()
             raise SystemExit(0)
 
-        if not os.access(mount_path, os.W_OK):
+        if not writable:
             self._write_mini_log(
                 "USB_NOT_WRITABLE",
                 [
@@ -894,7 +925,10 @@ class BackupJob:
                 exit_code,
             )
         else:
-            logger.info("Borg backup failed (exit %d)", exit_code)
+            if self._failure_code == USB_MOUNT_ACCESS_FAILED:
+                logger.info("Backup aborted during USB preflight (exit %d); Borg backup was not started", exit_code)
+            else:
+                logger.info("Borg backup failed (exit %d)", exit_code)
             self._send_notification_event(
                 "backup_failed",
                 "Borg Backup UI: Backup failed",
@@ -1117,7 +1151,7 @@ class BackupJob:
             status_str = "error"
 
         stats = self._borg_stats
-        if self._failure_code == REQUIRED_SOURCE_PATHS_MISSING:
+        if self._failure_code in {REQUIRED_SOURCE_PATHS_MISSING, USB_MOUNT_ACCESS_FAILED}:
             repo_size = 0
             repo_check_date, repo_check_status, repo_next_check = (
                 "unknown",
