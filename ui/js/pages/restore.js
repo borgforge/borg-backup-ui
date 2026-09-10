@@ -950,7 +950,12 @@ async function restoreBrowse(path) {
     const res = await fetch(url, { credentials: 'include' });
     const data = await res.json();
     if (!isCurrent()) return;
-    if (!res.ok || data.error) { _restoreMsg(restoreT('error', { message: apiErrorMessage(data, res.status) }), true); return; }
+    if (!res.ok || data?.error) {
+      const error = new Error(apiErrorMessage(data, res.status));
+      error.archiveUnavailable = data?.code === 'restore_archive_unavailable';
+      throw error;
+    }
+    if (!data || !Array.isArray(data.files)) throw new Error(apiErrorMessage({code: 'internal_error'}));
 
     _restoreMsg('');
     _restoreRenderBreadcrumb(path);
@@ -958,6 +963,10 @@ async function restoreBrowse(path) {
     _restoreRenderFiles(restoreState.files);
   } catch (e) {
     if (!isCurrent()) return;
+    if (e.archiveUnavailable) restoreClearArchives();
+    else restoreClearFileSelection();
+    _restoreRenderSelectionSummary();
+    if (filelist) filelist.innerHTML = `<div class="restore-empty" role="alert">${escHtml(e.message)}</div>`;
     _restoreMsg(restoreT('error', { message: e.message }), true);
   }
 }

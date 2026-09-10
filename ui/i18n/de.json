@@ -197,6 +197,7 @@
       "storage_profile_in_use": "Storage-Profil kann nicht entfernt werden, weil noch Repositorys darauf verweisen: {repositories}",
       "repository_relocated": "Borg kennt dieses Repository noch unter einem früheren Pfad. Bitte das konfigurierte Speicherprofil mounten und die Repository-Aktion erneut ausführen.",
       "repository_busy": "Dieses Repository wird gerade von einer anderen Borg-Aktion verwendet.",
+      "restore_archive_unavailable": "Das ausgewählte Archiv ist im aktuellen Repository nicht mehr verfügbar. Wähle den Job erneut aus, um die Archivliste zu aktualisieren.",
       "repository_key_invalid": "Die ausgewählte Borg-Key-Datei ist leer, zu groß oder hat kein gültiges Borg-Key-Format.",
       "repository_key_mismatch": "Diese Borg-Key-Datei gehört zu einem anderen Repository.",
       "repository_key_unsupported": "Dieses Repository verwendet keinen exportierbaren Borg-Key.",

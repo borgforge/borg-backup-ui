@@ -168,3 +168,30 @@ def test_repository_archive_browser_frontend_is_read_only_and_localized():
     assert '<table' not in browser_renderer
     assert "download" not in browser_renderer.lower()
     assert "restore" not in browser_renderer.lower()
+
+
+def test_missing_archive_returns_actionable_api_error_and_is_not_cached(monkeypatch):
+    from borg_backup_ui import BackupUIHandler
+
+    monkeypatch.setattr(archive_browser.subprocess, 'run', lambda *_args, **_kwargs:
+                        SimpleNamespace(returncode=2, stdout='', stderr='Archive removed does not exist\n'))
+    handler = BackupUIHandler.__new__(BackupUIHandler)
+    handler.path = '/api/restore/files?job=job-id&archive=removed'
+    handler._authorize_api_request = lambda *_args: True
+    replies = []
+    handler._send_api_error = lambda status, code, message, **kwargs: replies.append((status, code, message))
+    handler._handle_api(lambda: archive_browser.list_archive_directory('/repo', 'removed', '', {}))
+    assert replies == [(404, 'restore_archive_unavailable', 'borg list failed: Archive removed does not exist')]
+    assert not archive_browser._CACHE
+    monkeypatch.setattr(archive_browser.subprocess, 'run', lambda *_args, **_kwargs:
+                        SimpleNamespace(returncode=0, stdout='{"path":"file.txt"}', stderr=''))
+    assert archive_browser.list_archive_directory('/repo', 'removed', '', {})[0]['name'] == 'file.txt'
+
+
+@pytest.mark.parametrize('stderr', ['Repository /repo does not exist.', 'Permission denied', 'Archive other does not exist'])
+def test_other_borg_errors_are_not_misreported_as_missing_selection(monkeypatch, stderr):
+    monkeypatch.setattr(archive_browser.subprocess, 'run', lambda *_args, **_kwargs:
+                        SimpleNamespace(returncode=2, stdout='', stderr=stderr))
+    with pytest.raises(RuntimeError, match='borg list failed'):
+        archive_browser.build_archive_index('/repo', 'selected', {})
+    assert not archive_browser._CACHE

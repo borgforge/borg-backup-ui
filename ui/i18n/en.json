@@ -197,6 +197,7 @@
       "storage_profile_in_use": "Storage profile cannot be removed because repositories still reference it: {repositories}",
       "repository_relocated": "Borg still knows this repository from an earlier path. Mount the configured storage profile and retry the repository action.",
       "repository_busy": "This repository is currently used by another Borg operation.",
+      "restore_archive_unavailable": "The selected archive is no longer available in the current repository. Select the job again to refresh the archive list.",
       "repository_key_invalid": "The selected Borg key file is empty, too large, or not a valid Borg key export.",
       "repository_key_mismatch": "This Borg key file belongs to a different repository.",
       "repository_key_unsupported": "This repository does not use an exportable Borg key.",

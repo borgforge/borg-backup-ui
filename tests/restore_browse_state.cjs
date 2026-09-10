@@ -138,3 +138,68 @@ test('a removed job or failed archive refresh leaves no old selectable archive',
   assert.equal(state.archive, '');
   assert.equal(state.archives.length, 0);
 });
+
+for (const language of ['de', 'en']) test(`missing archives stop loading and allow reselection (${language})`, async () => {
+  const {context, get, state, labels} = page(language);
+  state.job = 'job-id'; state.archive = 'missing'; state.archives = [{name: 'missing'}];
+  state.selectedPath = 'stale'; state.precheck = {ok: true};
+  get('restore-archive-sel').value = 'missing';
+  get('restore-source-path').value = 'stale'; get('restore-confirm-check').checked = true;
+  context.fetch = async () => response({code: 'restore_archive_unavailable', error: 'Archive missing does not exist'}, 404);
+  await context.restoreBrowse('');
+  assert.equal(state.archive, '');
+  assert.equal(state.archives.length, 0);
+  assert.equal(state.files.length, 0);
+  assert.equal(state.selectedPath, '');
+  assert.equal(state.precheck, null);
+  assert.equal(get('restore-confirm-check').checked, false);
+  assert.ok(get('restore-filelist').innerHTML.includes(labels.api.errors.restore_archive_unavailable));
+  assert.ok(get('restore-filelist').innerHTML.includes('role="alert"'));
+
+  get('restore-job-sel').value = 'job-id';
+  context.fetch = async () => response({archives: [{name: 'available'}]});
+  await context.restoreLoadArchives();
+  get('restore-archive-sel').value = 'available';
+  context.fetch = async () => response({files: [{name: 'recovered.txt'}]});
+  await context.restoreBrowse('');
+  assert.equal(state.files[0].name, 'recovered.txt');
+  assert.ok(get('restore-filelist').innerHTML.includes('recovered.txt'));
+});
+
+for (const failure of ['server', 'network', 'json', 'invalid-data']) test(`${failure} errors clear loading and allow retry`, async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'archive';
+  state.selectedPath = 'stale'; state.precheck = {ok: true};
+  get('restore-archive-sel').value = 'archive';
+  context.fetch = async () => {
+    if (failure === 'network') throw new Error('Failed to fetch');
+    if (failure === 'json') return {ok: true, json: async () => { throw new Error('Invalid JSON'); }};
+    return failure === 'server' ? response({code: 'internal_error'}, 500) : response(null);
+  };
+  await context.restoreBrowse('');
+  assert.equal(state.selectedPath, '');
+  assert.equal(state.precheck, null);
+  assert.ok(get('restore-filelist').innerHTML.includes('role="alert"'));
+  assert.equal(state.archive, 'archive');
+  context.fetch = async () => response({files: [{name: 'retry.txt'}]});
+  await context.restoreBrowse('');
+  assert.equal(state.files[0].name, 'retry.txt');
+});
+
+test('a late missing-archive error cannot clear a newer successful selection', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id';
+  const old = deferred();
+  get('restore-archive-sel').value = 'old';
+  context.fetch = () => old.promise;
+  const pending = context.restoreBrowse('');
+  get('restore-archive-sel').value = 'new';
+  context.fetch = async () => response({files: [{name: 'current.txt'}]});
+  await context.restoreBrowse('');
+  const messageCount = context.messages.length;
+  old.resolve(response({code: 'restore_archive_unavailable'}, 404));
+  await pending;
+  assert.equal(state.archive, 'new');
+  assert.equal(state.files[0].name, 'current.txt');
+  assert.equal(context.messages.length, messageCount);
+});
