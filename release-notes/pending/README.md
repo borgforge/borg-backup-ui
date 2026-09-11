@@ -7,7 +7,7 @@ Add one Markdown file per user-visible issue, for example `247.md`.
 Use these exact headings for the relevant categories. Empty categories are
 omitted, and each category appears only once in the combined release notes:
 
-- `### Before updating`: required preparation, migration and compatibility notices.
+- `### Migration and compatibility`: automatic migration behavior and compatibility changes.
 - `### Bug Fixes`: corrected behavior and its benefit to the user.
 - `### Security`: actual security fixes, when present.
 - `### Improvements`: new or improved workflows; highlight the main feature.
@@ -15,13 +15,14 @@ omitted, and each category appears only once in the combined release notes:
 Write concise English sentences with an issue reference at the end. Use
 ASCII-safe `-` bullets, blank lines after headings and four spaces for nested
 bullets. Preserve the detail needed for upgrade decisions; keep implementation
-history in `docs/changelog.md`. Do not repeat each entry in a second language.
+history in `docs/changelog.md`. Update safety must not depend on reading these
+notes or completing a manual backup beforehand. Do not repeat each entry in a second language.
 German upgrade guidance belongs in the German manual and publication notice.
 
 Example:
 
 ```markdown
-### Before updating
+### Migration and compatibility
 
 - Create fresh configuration exports after migration. (#247)
 

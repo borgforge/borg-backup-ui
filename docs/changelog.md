@@ -7,7 +7,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ## Unreleased
 
 ### Issue #505 - matching categorized Unraid release notes
-- Group issue fragments under Before updating, Bug Fixes, Security (when needed) and Improvements, preserving Markdown headings, blank lines and nested bullets.
+- Group issue fragments under Migration and compatibility, Bug Fixes, Security (when needed) and Improvements, preserving Markdown headings, blank lines and nested bullets.
 - Rewrite the Job-ID candidate notes as concise English user-facing changes, retain migration/export notices and issue references, and keep technical history here.
 - Distinguish exact version delimiters from Markdown section headings during replacement, stable promotion and provenance verification. Test and stable retain the exact same tested version block.
 

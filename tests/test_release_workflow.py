@@ -153,7 +153,7 @@ def test_release_notes_merge_categories_and_preserve_nested_markdown(tmp_path: P
     (pending / "1.md").write_text(
         "### Improvements\n\n- **Job IDs** (#486)\n"
         "    - Rename a job.\n    - Keep its history.\n\n"
-        "- Another improvement.\n\n### Before updating\n\n- Save a backup.\n"
+        "- Another improvement.\n\n### Migration and compatibility\n\n- Save a backup.\n"
     )
     (pending / "2.md").write_text(
         "### Bug Fixes\n\n- Refresh archives.\n\n"
@@ -163,7 +163,7 @@ def test_release_notes_merge_categories_and_preserve_nested_markdown(tmp_path: P
     notes, metadata, digest = release_workflow.rendered_release_notes(tmp_path)
 
     assert notes == (
-        "### Before updating\n\n- Save a backup.\n\n"
+        "### Migration and compatibility\n\n- Save a backup.\n\n"
         "### Bug Fixes\n\n- Refresh archives.\n\n"
         "### Improvements\n\n- **Job IDs** (#486)\n"
         "    - Rename a job.\n    - Keep its history.\n\n"
@@ -191,7 +191,7 @@ def test_stable_promotion_preserves_complete_categorized_notes(tmp_path: Path, m
     (tmp_path / "borg_backup_ui.py").write_text('APP_VERSION = "old"\n')
     version = "2026.09.12.1234"
     notes = (
-        "### Before updating\n\n- Keep a backup.\n\n"
+        "### Migration and compatibility\n\n- Keep a backup.\n\n"
         "### Bug Fixes\n\n- Correct archive selection.\n\n"
         "### Improvements\n\n- **Permanent IDs**\n"
         "    - Preserve history.\n    - Rename jobs."

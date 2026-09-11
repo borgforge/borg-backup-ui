@@ -23,7 +23,7 @@ DISPLAY_TITLE = "Borg Backup UI"
 PROVENANCE_NAME = "build-provenance.json"
 PROVENANCE_MEMBER = f"boot/config/plugins/{NAME}/{PROVENANCE_NAME}"
 MAX_MANIFEST_CHANGELOG_RELEASES = 3
-RELEASE_NOTE_SECTIONS = ("Before updating", "Bug Fixes", "Security", "Improvements")
+RELEASE_NOTE_SECTIONS = ("Migration and compatibility", "Bug Fixes", "Security", "Improvements")
 EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/borg_backup_ui.py",
     f"boot/config/plugins/{NAME}/LICENSE",
