@@ -22,6 +22,12 @@ package and, after explicit approval, to a stable release.
 
 Internal changes with `release-note::no` do not need a fragment.
 
+Use the categorized Markdown format documented in
+`release-notes/pending/README.md` (#505). The build merges matching categories
+and preserves headings, spacing and nested lists. The version block copied to
+stable is identical to the tested changelog; there is no separate stable text.
+Changing tested notes requires a new committed, verified test candidate.
+
 Do not run `plugin/build.sh` directly. It is an internal builder that accepts
 only an exported and prepared source tree created by the deployment workflow.
 

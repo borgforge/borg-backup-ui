@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #505 - matching categorized Unraid release notes
+- Group issue fragments under Before updating, Bug Fixes, Security (when needed) and Improvements, preserving Markdown headings, blank lines and nested bullets.
+- Rewrite the Job-ID candidate notes as concise English user-facing changes, retain migration/export notices and issue references, and keep technical history here.
+- Distinguish exact version delimiters from Markdown section headings during replacement, stable promotion and provenance verification. Test and stable retain the exact same tested version block.
+
 ### Issue #502 - USB mount preflight and access failures
 - Require a real mount point as well as a directory and write access before a USB backup proceeds. An existing unmounted directory now follows the existing USB-not-mounted skip path; missing and non-writable targets keep their skipped outcome.
 - Inspect the path with `stat()` so I/O errors are retained. Report USB access failures as `usb_mount_access_failed`, with the path and OS error in the existing log, status, lifecycle event and failure notification. The scriptless runner exits cleanly with code 2 before Docker/VM changes and Borg create/maintenance.

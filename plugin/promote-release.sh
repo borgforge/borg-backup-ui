@@ -147,7 +147,7 @@ stable = stable_path.read_text(encoding="utf-8")
 already_promoted = f"###{version}###" in stable
 test = test_manifest.read_text(encoding="utf-8")
 block_match = re.search(
-    rf"###{re.escape(version)}###\n(?:.*?)(?=\n###|\n\]\]>|\Z)",
+    rf"###{re.escape(version)}###\n(?:.*?)(?=\n###[^#\n]+###\n|\n\]\]>|\Z)",
     test,
     re.DOTALL,
 )
@@ -183,7 +183,7 @@ if not remove_handler_re.search(stable):
 stable = remove_handler_re.sub(lambda _match: tested_remove_handler.group(0), stable, count=1)
 
 stable = re.sub(
-    rf"###{re.escape(version)}###\n(?:.*?)(?=\n###|\n\]\]>|\Z)",
+    rf"###{re.escape(version)}###\n(?:.*?)(?=\n###[^#\n]+###\n|\n\]\]>|\Z)",
     "",
     stable,
     flags=re.DOTALL,

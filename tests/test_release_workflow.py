@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -137,12 +139,93 @@ def test_release_note_fragments_are_ordered_and_hashed(tmp_path: Path) -> None:
 
     notes, metadata, digest = release_workflow.rendered_release_notes(root)
 
-    assert notes == "- Add first\n- Fix second"
+    assert notes == "### Improvements\n\n- Add first\n- Fix second"
     assert [item["path"] for item in metadata] == [
         "release-notes/pending/010-feature.md",
         "release-notes/pending/020-fix.md",
     ]
     assert len(digest) == 64
+
+
+def test_release_notes_merge_categories_and_preserve_nested_markdown(tmp_path: Path) -> None:
+    pending = tmp_path / "release-notes" / "pending"
+    pending.mkdir(parents=True)
+    (pending / "1.md").write_text(
+        "### Improvements\n\n- **Job IDs** (#486)\n"
+        "    - Rename a job.\n    - Keep its history.\n\n"
+        "- Another improvement.\n\n### Before updating\n\n- Save a backup.\n"
+    )
+    (pending / "2.md").write_text(
+        "### Bug Fixes\n\n- Refresh archives.\n\n"
+        "### Improvements\n\n- More readable logs.\n"
+    )
+
+    notes, metadata, digest = release_workflow.rendered_release_notes(tmp_path)
+
+    assert notes == (
+        "### Before updating\n\n- Save a backup.\n\n"
+        "### Bug Fixes\n\n- Refresh archives.\n\n"
+        "### Improvements\n\n- **Job IDs** (#486)\n"
+        "    - Rename a job.\n    - Keep its history.\n\n"
+        "- Another improvement.\n- More readable logs."
+    )
+    assert digest == hashlib.sha256(notes.encode()).hexdigest()
+    assert metadata[0]["sha256"] == hashlib.sha256((pending / "1.md").read_bytes()).hexdigest()
+
+
+def test_release_notes_reject_unknown_category(tmp_path: Path) -> None:
+    pending = tmp_path / "release-notes" / "pending"
+    pending.mkdir(parents=True)
+    (pending / "1.md").write_text("### Improvments\n\n- A change.\n")
+    with pytest.raises(RuntimeError, match="Unknown release-note section"):
+        release_workflow.rendered_release_notes(tmp_path)
+
+
+def test_stable_promotion_preserves_complete_categorized_notes(tmp_path: Path, monkeypatch) -> None:
+    # Execute the actual promotion transformation locally; no GitHub or package
+    # publication is involved. Run twice to cover replacement of an existing block.
+    script = (ROOT / "plugin/promote-release.sh").read_text()
+    transform = script.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+    stable_path = tmp_path / "borg-backup-ui.plg"
+    stable_path.write_text((ROOT / "borg-backup-ui.plg").read_text())
+    (tmp_path / "borg_backup_ui.py").write_text('APP_VERSION = "old"\n')
+    version = "2026.09.12.1234"
+    notes = (
+        "### Before updating\n\n- Keep a backup.\n\n"
+        "### Bug Fixes\n\n- Correct archive selection.\n\n"
+        "### Improvements\n\n- **Permanent IDs**\n"
+        "    - Preserve history.\n    - Rename jobs."
+    )
+    releases = tmp_path / "releases"
+    releases.mkdir()
+    package = releases / f"borg-backup-ui-{version}.txz"
+    package.write_bytes(b"fixture package")
+    md5 = release_workflow.file_md5(package)
+    test_path = tmp_path / "test.plg"
+    test_path.write_text(release_workflow.replace_changelog_block(
+        release_workflow.rewrite_package_installer(stable_path.read_text(), md5), version, notes
+    ))
+    provenance = {
+        "version": version,
+        "source_digest": "source",
+        "release_notes_sha256": hashlib.sha256(notes.encode()).hexdigest(),
+    }
+    monkeypatch.setattr(release_workflow, "package_provenance", lambda _path: provenance)
+    monkeypatch.setattr(release_workflow, "source_digest", lambda *_args: "source")
+
+    for _ in range(2):
+        subprocess.run(
+            [sys.executable, "-", str(tmp_path), str(test_path), version, md5, json.dumps(provenance)],
+            input=transform, text=True, capture_output=True, check=True,
+        )
+        stable = stable_path.read_text()
+        assert f"###{version}###\n{notes}\n\n" in stable
+        assert stable.count("### Improvements") == 1
+        assert release_workflow.verify_release_artifacts(tmp_path) == provenance
+
+    stable_path.write_text(stable.replace("    - Rename jobs.", "- Rename jobs."))
+    with pytest.raises(RuntimeError, match="differs from the exactly tested release notes"):
+        release_workflow.verify_release_artifacts(tmp_path)
 
 
 def test_replace_changelog_block_keeps_latest_three_versions() -> None:

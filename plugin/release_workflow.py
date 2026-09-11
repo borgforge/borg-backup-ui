@@ -23,6 +23,7 @@ DISPLAY_TITLE = "Borg Backup UI"
 PROVENANCE_NAME = "build-provenance.json"
 PROVENANCE_MEMBER = f"boot/config/plugins/{NAME}/{PROVENANCE_NAME}"
 MAX_MANIFEST_CHANGELOG_RELEASES = 3
+RELEASE_NOTE_SECTIONS = ("Before updating", "Bug Fixes", "Security", "Improvements")
 EXPECTED_PACKAGE_MEMBERS = (
     f"boot/config/plugins/{NAME}/borg_backup_ui.py",
     f"boot/config/plugins/{NAME}/LICENSE",
@@ -302,32 +303,49 @@ def pending_fragments(root: Path) -> list[Path]:
 
 
 def rendered_release_notes(root: Path) -> tuple[str, list[dict[str, str]], str]:
-    rendered: list[str] = []
+    sections: dict[str, list[str]] = {name: [] for name in RELEASE_NOTE_SECTIONS}
     metadata: list[dict[str, str]] = []
     for path in pending_fragments(root):
         data = path.read_bytes()
         text = data.decode("utf-8").strip()
         if not text:
             continue
+        section = "Improvements"
+        fragment_sections: dict[str, list[str]] = {}
         for line in text.splitlines():
             clean = line.strip()
-            if clean:
-                rendered.append(clean if clean.startswith("-") else f"- {clean}")
+            if clean.startswith("### "):
+                section = clean[4:].strip()
+                if section not in sections:
+                    raise RuntimeError(f"Unknown release-note section in {path.name}: {section}")
+                continue
+            lines = fragment_sections.setdefault(section, [])
+            if not clean or clean.startswith("-") or line[:1].isspace():
+                lines.append(line.rstrip())
+            else:
+                # Existing one-line fragments without a category remain valid.
+                lines.append(f"- {clean}")
+        for section, lines in fragment_sections.items():
+            content = "\n".join(lines).strip()
+            if content:
+                sections[section].append(content)
         metadata.append(
             {
                 "path": str(path.relative_to(root)),
                 "sha256": hashlib.sha256(data).hexdigest(),
             }
         )
-    if not rendered:
-        rendered = ["- Internal maintenance changes only; no user-facing release note."]
-    notes = "\n".join(rendered)
+    rendered = [
+        f"### {section}\n\n" + "\n".join(contents)
+        for section, contents in sections.items() if contents
+    ]
+    notes = "\n\n".join(rendered) or "- Internal maintenance changes only; no user-facing release note."
     return notes, metadata, hashlib.sha256(notes.encode("utf-8")).hexdigest()
 
 
 def replace_changelog_block(manifest: str, version: str, notes: str) -> str:
     manifest = re.sub(
-        rf"###{re.escape(version)}###\n(?:.*?)(?=\n###|\n\]\]>|\Z)",
+        rf"###{re.escape(version)}###\n(?:.*?)(?=\n###[^#\n]+###\n|\n\]\]>|\Z)",
         "",
         manifest,
         flags=re.DOTALL,
@@ -839,7 +857,7 @@ def verify_release_artifacts(repo: Path, main_ref: str = "HEAD") -> dict[str, ob
     if provenance.get("source_digest") != actual_digest:
         raise RuntimeError("Stable source differs from the exact tested package source")
     block_match = re.search(
-        rf"###{re.escape(version)}###\n(.*?)(?=\n###|\n\]\]>|\Z)",
+        rf"###{re.escape(version)}###\n(.*?)(?=\n###[^#\n]+###\n|\n\]\]>|\Z)",
         text,
         re.DOTALL,
     )
