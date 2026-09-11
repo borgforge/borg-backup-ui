@@ -20,7 +20,14 @@ diagnostics.
 [Unraid support thread](https://forums.unraid.net/topic/198728-plugin-borg-backup-ui-web-ui-for-borg-backup-on-unraid/) |
 [Issues](https://github.com/borgforge/borg-backup-ui/issues)
 
-![Borg Backup UI dashboard](docs/assets/readme/dashboard.png)
+## Feature demo
+
+A short walkthrough of backup jobs, archive browsing, file restores and
+restore verification.
+
+*3:42 minutes | English narration | Recorded with the current test version.*
+
+https://github.com/user-attachments/assets/c6aa45c7-2711-4645-a49a-b94f2ceacddb
 
 ## Install
 
