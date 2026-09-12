@@ -1,8 +1,11 @@
 from __future__ import annotations
+import json
+from job_fixtures import identified_job, job_id
 
 import sys
 import threading
 import multiprocessing
+import os
 import time
 from pathlib import Path
 
@@ -91,6 +94,51 @@ def test_inventory_files_keep_restrictive_permissions(tmp_path: Path) -> None:
     write_storage_store(config, {"storages": []})
     assert repositories_file(config).stat().st_mode & 0o777 == 0o600
     assert storages_file(config).stat().st_mode & 0o777 == 0o600
+
+
+def test_inventory_lock_does_not_reapply_existing_private_permissions(tmp_path, monkeypatch):
+    with inventory_store.inventory_lock(tmp_path):
+        pass
+    path = tmp_path / ".inventory.lock"
+    before = path.stat()
+
+    def unexpected_chmod(*_args):
+        pytest.fail("Existing private lock permissions must not be reapplied")
+
+    monkeypatch.setattr(inventory_store.os, "fchmod", unexpected_chmod)
+    for _ in range(10):
+        with inventory_store.inventory_lock(tmp_path):
+            with inventory_store.inventory_lock(tmp_path):
+                assert path.stat().st_mode & 0o7777 == 0o600
+    after = path.stat()
+    assert (after.st_ino, after.st_mtime_ns, after.st_ctime_ns) == (before.st_ino, before.st_mtime_ns, before.st_ctime_ns)
+
+
+@pytest.mark.parametrize("mode", [0o644, 0o700, 0o2600])
+def test_inventory_lock_still_corrects_changed_permissions(tmp_path, mode):
+    path = tmp_path / ".inventory.lock"
+    path.touch()
+    path.chmod(mode)
+    with inventory_store.inventory_lock(tmp_path):
+        assert path.stat().st_mode & 0o7777 == 0o600
+
+
+def test_inventory_lock_closes_descriptor_when_permission_update_fails(tmp_path, monkeypatch):
+    path = tmp_path / ".inventory.lock"
+    path.touch()
+    path.chmod(0o644)
+    descriptors = []
+
+    def fail_chmod(fd, _mode):
+        descriptors.append(fd)
+        raise PermissionError("injected permission failure")
+
+    monkeypatch.setattr(inventory_store.os, "fchmod", fail_chmod)
+    with pytest.raises(inventory_store.InventoryAccessError):
+        with inventory_store.inventory_lock(tmp_path):
+            pytest.fail("The transaction must not start without required permissions")
+    with pytest.raises(OSError):
+        os.fstat(descriptors[0])
 
 
 def test_repository_inventory_cache_avoids_reparse_and_detects_external_change(
@@ -187,7 +235,7 @@ def test_job_link_transaction_rolls_back_when_job_write_fails(
     config = _config(tmp_path)
     repository = _repository("repo_target")
     write_repository_store(config, {"repositories": [repository]})
-    metadata_path = tmp_path / "config" / "jobs" / "appdata_local.json"
+    metadata_path = tmp_path / "config" / "jobs" / (job_id('appdata_local') + ".json")
 
     def fail_job_write(_path, _payload, **_kwargs):
         raise inventory_store.InventoryAccessError("injected job write failure")
@@ -197,9 +245,9 @@ def test_job_link_transaction_rolls_back_when_job_write_fails(
         repositories_api.save_job_repository_transaction(
             config,
             metadata_path,
-            {"job_key": "appdata_local", "repository_key": "repo_target"},
+            {"job_id": job_id('appdata_local'), "archive_prefix": "appdata-backup", "job_key": job_id('appdata_local'), "repository_key": "repo_target"},
             "repo_target",
-            "appdata_local",
+            job_id('appdata_local'),
         )
     assert not metadata_path.exists()
     restored = read_repository_store(config)["repositories"][0]
@@ -323,9 +371,9 @@ def test_job_delete_transaction_rolls_back_when_metadata_delete_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = _config(tmp_path)
-    repository = {**_repository("repo_target"), "used_by": ["appdata_local"], "source_job_keys": ["appdata_local"]}
+    repository = {**_repository("repo_target"), "used_by": [job_id('appdata_local')], "source_job_keys": [job_id('appdata_local')]}
     write_repository_store(config, {"repositories": [repository]})
-    metadata_path = tmp_path / "config" / "jobs" / "appdata_local.json"
+    metadata_path = tmp_path / "config" / "jobs" / (job_id('appdata_local') + ".json")
     metadata_path.parent.mkdir(parents=True)
     metadata_path.write_text('{"job_key":"appdata_local","repository_key":"repo_target"}\n', encoding="utf-8")
     original_unlink = Path.unlink
@@ -337,11 +385,11 @@ def test_job_delete_transaction_rolls_back_when_metadata_delete_fails(
 
     monkeypatch.setattr(Path, "unlink", fail_metadata_unlink)
     with pytest.raises(OSError, match="injected"):
-        repositories_api.delete_job_metadata_transaction(config, [metadata_path], "appdata_local")
+        repositories_api.delete_job_metadata_transaction(config, [metadata_path], job_id('appdata_local'))
     assert metadata_path.exists()
     restored = read_repository_store(config)["repositories"][0]
-    assert restored["used_by"] == ["appdata_local"]
-    assert restored["source_job_keys"] == ["appdata_local"]
+    assert restored["used_by"] == [job_id('appdata_local')]
+    assert restored["source_job_keys"] == [job_id('appdata_local')]
 
 
 def test_repository_usage_is_rebuilt_from_authoritative_job_assignments(tmp_path: Path) -> None:
@@ -359,23 +407,24 @@ def test_repository_usage_is_rebuilt_from_authoritative_job_assignments(tmp_path
         "used_by": ["stale_job"],
         "source_job_keys": ["stale_job"],
     }]})
-    metadata_path = tmp_path / "config" / "jobs" / "appdata_local.json"
+    metadata_path = tmp_path / "config" / "jobs" / (job_id('appdata_local') + ".json")
     metadata_path.parent.mkdir(parents=True)
     metadata_path.write_text(
-        '{"schema_version":2,"job_key":"appdata_local","repository_key":"repo_target"}\n',
+        json.dumps({"schema_version": 4, "job_key": job_id("appdata_local"),
+                    "job_id": job_id("appdata_local"), "repository_key": "repo_target"}),
         encoding="utf-8",
     )
 
     before = repositories_api.repository_assignment_report(config)
     assert before["ok"] is False
-    assert before["usage_mismatches"][0]["expected_job_keys"] == ["appdata_local"]
+    assert before["usage_mismatches"][0]["expected_job_keys"] == [job_id('appdata_local')]
 
     after = repositories_api.reconcile_repository_usage(config)
     assert after["ok"] is True
     assert after["reconciled_repository_keys"] == ["repo_target"]
     repository = read_repository_store(config)["repositories"][0]
-    assert repository["used_by"] == ["appdata_local"]
-    assert repository["source_job_keys"] == ["appdata_local"]
+    assert repository["used_by"] == [job_id('appdata_local')]
+    assert repository["source_job_keys"] == [job_id('appdata_local')]
 
 
 def test_repository_assignment_report_guides_job_wizard_repair(tmp_path: Path) -> None:

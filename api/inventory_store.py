@@ -6,6 +6,7 @@ import copy
 import fcntl
 import json
 import os
+import stat
 import tempfile
 import threading
 from contextlib import contextmanager
@@ -95,11 +96,15 @@ def inventory_lock(config_dir: Path) -> Iterator[None]:
 
     process_lock = _process_lock(lock_path)
     with process_lock:
+        fd = None
         try:
             fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
-            os.fchmod(fd, 0o600)
+            if stat.S_IMODE(os.fstat(fd).st_mode) != 0o600:
+                os.fchmod(fd, 0o600)
             fcntl.flock(fd, fcntl.LOCK_EX)
         except OSError as exc:
+            if fd is not None:
+                os.close(fd)
             raise InventoryAccessError(f"Cannot acquire inventory lock: {lock_path}") from exc
         state[key] = {"depth": 1, "fd": fd}
         try:

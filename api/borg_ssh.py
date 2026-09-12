@@ -25,7 +25,7 @@ _SSH_OPTIONS = (
     ("LogLevel", "ERROR"),
     ("WarnWeakCrypto", "no"),
 )
-_MANAGED_OPTION_NAMES = {name.lower() for name, _ in _SSH_OPTIONS}
+_MANAGED_OPTION_NAMES = {name.lower() for name, _ in _SSH_OPTIONS} | {"ignoreunknown"}
 _SSH_INTERRUPTION_MARKERS = (
     "connection reset by peer",
     "broken pipe",
@@ -38,7 +38,8 @@ _SSH_INTERRUPTION_MARKERS = (
 
 
 def _option_name(value: str) -> str:
-    return str(value or "").split("=", 1)[0].strip().lower()
+    parts = str(value or "").replace("=", " ", 1).split(maxsplit=1)
+    return parts[0].lower() if parts else ""
 
 
 def build_borg_rsh(existing: str = "", identity_file: str = "") -> str:
@@ -52,21 +53,32 @@ def build_borg_rsh(existing: str = "", identity_file: str = "") -> str:
 
     identity = str(identity_file or "").strip()
     cleaned: list[str] = []
+    ignore_unknown_seen = False
     index = 0
     while index < len(tokens):
         token = tokens[index]
+        option = None
+        option_length = 1
         if token == "-o" and index + 1 < len(tokens):
-            value = tokens[index + 1]
-            if _option_name(value) in _MANAGED_OPTION_NAMES:
-                index += 2
-                continue
-            cleaned.extend((token, value))
-            index += 2
+            option = tokens[index + 1]
+            option_length = 2
+        elif token.startswith("-o") and len(token) > 2:
+            option = token[2:]
+        if option is not None:
+            name = _option_name(option)
+            if name == "ignoreunknown" and not ignore_unknown_seen:
+                # SSH uses the first list. Extend it in place so any custom
+                # options following it still have their original exemption.
+                parts = option.replace("=", " ", 1).split(maxsplit=1)
+                patterns = parts[1].split(",") if len(parts) > 1 else []
+                if "warnweakcrypto" not in {pattern.lower() for pattern in patterns}:
+                    patterns.append("WarnWeakCrypto")
+                cleaned.extend(("-o", "IgnoreUnknown=" + ",".join(patterns)))
+                ignore_unknown_seen = True
+            elif name not in _MANAGED_OPTION_NAMES:
+                cleaned.extend(tokens[index:index + option_length])
+            index += option_length
             continue
-        if token.startswith("-o") and len(token) > 2:
-            if _option_name(token[2:]) in _MANAGED_OPTION_NAMES:
-                index += 1
-                continue
         if identity and token == "-i" and index + 1 < len(tokens):
             index += 2
             continue
@@ -76,6 +88,9 @@ def build_borg_rsh(existing: str = "", identity_file: str = "") -> str:
         cleaned.append(token)
         index += 1
 
+    # Older clients must see this exemption before WarnWeakCrypto is parsed.
+    if not ignore_unknown_seen:
+        cleaned.extend(("-o", "IgnoreUnknown=WarnWeakCrypto"))
     if identity:
         cleaned.extend(("-i", identity))
     for name, value in _SSH_OPTIONS:

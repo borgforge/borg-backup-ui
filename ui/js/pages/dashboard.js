@@ -82,6 +82,7 @@ async function refreshStatus() {
       if (!job.is_utility && !knownKeys.has(String(job.key || '').toLowerCase())) {
         statusData.backups.push({
           key:         job.key,
+          archive_prefix: job.archive_prefix,
           backup_type: job.backup_type,
           location:    job.location,
           display_name: job.display_name || job.name || '',
@@ -100,6 +101,7 @@ async function refreshStatus() {
       b.enabled = job.enabled !== false;
       b.display_name = job.display_name || job.name || b.display_name || '';
       b.name = job.name || job.display_name || b.name || '';
+      b.archive_prefix = job.archive_prefix || '';
       b.icon = job.icon || b.icon || '';
       b.icon_color = job.icon_color || b.icon_color || '';
     }
@@ -229,14 +231,13 @@ function renderBackupGrid(backups) {
     return;
   }
 
-  const typeOrder = { flash: 0, appdata: 1, photos: 2, VMs: 3, vms: 3, sonstiges: 4 };
   const visible = backups
     .filter((backup) => dashboardSelectedLocation === 'all' || dashboardLocationKey(backup) === dashboardSelectedLocation)
     .sort((a, b) => {
       const locationDelta = DASHBOARD_LOCATION_ORDER.indexOf(dashboardLocationKey(a))
         - DASHBOARD_LOCATION_ORDER.indexOf(dashboardLocationKey(b));
       if (locationDelta) return locationDelta;
-      return (typeOrder[a.backup_type] ?? 99) - (typeOrder[b.backup_type] ?? 99);
+      return String(a.name || a.display_name || '').localeCompare(String(b.name || b.display_name || ''));
     });
 
   renderDashboardLocationSidebar(backups);
@@ -479,11 +480,11 @@ function renderDashboardInventoryRow(backup) {
   let checkStatus = backup.repository_check_status;
   if (checkStatus === 'ok' && isStaleDate(backup.repository_check_date)) checkStatus = 'overdue';
   const checkLabel = checkStatus ? repoCheckLabel({ ...backup, repository_check_status: checkStatus }) : dashboardT('dashboard.checkUnknown');
-  const type = capitalize(backup.backup_type || '—');
-  const iconKey = typeof resolveJobIcon === 'function' ? resolveJobIcon(backup) : (backup.icon || backup.backup_type);
+  const type = backup.name || backup.display_name || 'Backup';
+  const iconKey = typeof resolveJobIcon === 'function' ? resolveJobIcon(backup) : (backup.icon || 'archive');
   const iconColorKey = typeof resolveJobIconColor === 'function' ? resolveJobIconColor(backup) : '';
   const iconColorClass = iconColorKey ? ` type-icon-color-${iconColorKey}` : '';
-  const identityDetail = backup.archive_name || backup.key || dashboardT('dashboard.neverExecuted');
+  const identityDetail = backup.archive_name || backup.archive_prefix || dashboardT('dashboard.neverExecuted');
   const runTime = dashboardRelativeRunTime(backup.timestamp);
   const runDuration = dashboardRunDuration(backup.duration_seconds);
   const nextRun = dashboardNextRun(backup.key, backup.enabled);
@@ -511,7 +512,7 @@ function renderDashboardInventoryRow(backup) {
 
   return `<tr class="dashboard-inventory-row ${run.cls}">
     <td><div class="dashboard-backup-identity">
-      <span class="type-icon type-icon-${escHtml(String(backup.backup_type || 'sonstiges').toLowerCase())}${iconColorClass}">${typeIcon(iconKey)}</span>
+      <span class="type-icon${iconColorClass}">${typeIcon(iconKey)}</span>
       <span><strong class="dashboard-cell-primary">${escHtml(type)}</strong><span class="dashboard-cell-detail mono" title="${escHtml(identityDetail)}">${escHtml(identityDetail)}</span></span>
     </div></td>
     <td><div class="dashboard-table-badges">

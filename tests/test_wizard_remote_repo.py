@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 from pathlib import Path
 import json
 import subprocess
@@ -19,7 +20,7 @@ from wizard_api import generate_flow_preview, load_job_for_wizard, save_job, val
 
 
 def _storagebox_params() -> dict:
-    return {
+    return {"archive_prefix": 'flash-backup',
         "type_id": "flash",
         "job_name": "Flash",
         "location": "storagebox",
@@ -215,10 +216,10 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
     jobs_dir = data_root / "config" / "jobs"
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "vms_local.json").write_text(
-        json.dumps({
+    (jobs_dir / (job_id('vms_local') + ".json")).write_text(
+        json.dumps(identified_job({
             "schema_version": 3,
-            "job_key": "vms_local",
+            "job_key": job_id('vms_local'),
             "backup_type": "vms",
             "location": "local",
             "name": "VMs",
@@ -227,7 +228,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
             "repository_key": "repo_vms_local_test",
             "source_paths": ["/mnt/user/domains"],
             "archive_prefixes": ["oldvms-backup"],
-        }),
+        })),
         encoding="utf-8",
     )
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
@@ -255,7 +256,7 @@ def test_edit_wizard_resolves_canonical_repository_object(tmp_path: Path, monkey
     )
 
     loaded = load_job_for_wizard(
-        "vms_local",
+        job_id('vms_local'),
         scripts_dir,
         config,
     )
@@ -271,9 +272,9 @@ def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypa
     jobs_dir = data_root / "config" / "jobs"
     scripts_dir.mkdir(parents=True)
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "photos_smb.json").write_text(json.dumps({
+    (jobs_dir / (job_id('photos_smb') + ".json")).write_text(json.dumps(identified_job({
         "schema_version": 3,
-        "job_key": "photos_smb",
+        "job_key": job_id('photos_smb'),
         "backup_type": "photos",
         "location": "smb",
         "name": "Photos",
@@ -281,13 +282,13 @@ def test_edit_wizard_keeps_broken_assignment_repairable(tmp_path: Path, monkeypa
         "runner": "scriptless-wizard-runner",
         "repository_key": "repo_missing",
         "source_paths": ["/mnt/user/photos"],
-    }), encoding="utf-8")
+    })), encoding="utf-8")
     config = {"BACKUP_SCRIPTS_DIR": str(data_root)}
     write_storage_store(config, {"storages": []})
     write_repository_store(config, {"repositories": []})
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _cfg: {})
 
-    loaded = load_job_for_wizard("photos_smb", scripts_dir, config)
+    loaded = load_job_for_wizard(job_id('photos_smb'), scripts_dir, config)
 
     assert loaded["repository_key"] == "repo_missing"
     assert loaded["repo_path"] == ""

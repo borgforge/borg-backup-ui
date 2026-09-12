@@ -289,7 +289,7 @@
     document.getElementById('wizard-next-btn')?.addEventListener('click', wizardNext);
     document.getElementById('wizard-save-btn')?.addEventListener('click', saveWizardJob);
     document.getElementById('wiz-job-name')?.addEventListener('input', () => wizardClearError(1));
-    document.getElementById('wiz-type-id')?.addEventListener('input', () => {
+    document.getElementById('wiz-archive-prefix')?.addEventListener('input', () => {
       wizardAutoFill();
       wizardRenderArchivePrefixSummary();
       wizardClearError(1);

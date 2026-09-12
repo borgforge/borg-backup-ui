@@ -6,6 +6,48 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #505 - matching categorized Unraid release notes
+- Group issue fragments under Migration and compatibility, Bug Fixes, Security (when needed) and Improvements, preserving Markdown headings, blank lines and nested bullets.
+- Rewrite the Job-ID candidate notes as concise English user-facing changes, retain migration/export notices and issue references, and keep technical history here.
+- Distinguish exact version delimiters from Markdown section headings during replacement, stable promotion and provenance verification. Test and stable retain the exact same tested version block.
+
+### Issue #502 - USB mount preflight and access failures
+- Require a real mount point as well as a directory and write access before a USB backup proceeds. An existing unmounted directory now follows the existing USB-not-mounted skip path; missing and non-writable targets keep their skipped outcome.
+- Inspect the path with `stat()` so I/O errors are retained. Report USB access failures as `usb_mount_access_failed`, with the path and OS error in the existing log, status, lifecycle event and failure notification. The scriptless runner exits cleanly with code 2 before Docker/VM changes and Borg create/maintenance.
+- Avoid repository-size and check-state queries during finalization of this USB preflight failure. Keep status persistence and lock cleanup; do not add write probes, automatic mounts, device monitoring or migrations.
+- Add focused tests for missing/unmounted/read-only targets, EIO/ENODEV at each preflight stage, passing mounted targets, failure reporting and runner resource release. Actual Unraid hardware verification remains pending.
+
+### Issues #499, #500 and #501 - external Job-ID tester follow-up
+- #499: Refresh the selected job and archive list when returning to Browse & Restore. Discard stale file selections, confirmations and precheck results on source changes; ignore late responses from the previous source.
+- #500: Report a missing Borg archive as an actionable API error with German/English guidance. Clear failed file-list loading states and invalid selections, including network and malformed-response failures, so users can reselect or retry without restarting the service.
+- #501: Use a repository-qualified check marker for new jobs and when an existing job changes repository. Preserve existing markers for unchanged jobs and renames. Keep the cache directory and old markers intact; returning to a legacy repository can require one fresh check before its qualified marker is available.
+- Continue in PR #494 with separate issue-linked commits. No new migration, archive movement, retention change or repository-switch confirmation is introduced. External tester verification remains required before general release.
+
+### Issue #496 - compatible SSH warning suppression on older Unraid versions
+- Add `IgnoreUnknown=WarnWeakCrypto` before `WarnWeakCrypto=no` in the shared Borg SSH transport. Older clients can ignore this specific unsupported setting; newer clients retain warning suppression.
+- Preserve existing command-line ignore lists and their position when normalizing custom SSH commands. Keep identity selection, keepalives and other transport settings unchanged; do not introduce an Unraid-version branch or a blanket unknown-option exemption.
+- Lower the Community Apps minimum version to Unraid 6.12.5 and align the German/English requirements. Python 3.10 or newer remains required through the separate Python plugin.
+- Include the fix on the existing #486 branch and PR #494 at the maintainer's request. SSH-profile backup verification on older and current Unraid installations remains required before general release.
+
+### Issue #497 - reduce unnecessary idle and navigation writes
+- Keep unchanged notification queues untouched during background checks, including missing/empty queues and retries that are not yet due. Preserve locked claims, enqueueing, delivery results and retry persistence.
+- Inspect inventory-lock permissions before changing them. Existing private locks no longer receive redundant chmod calls; incorrect permissions are still corrected and failed acquisitions close their file descriptor.
+- Make setup-status validation inspect existing data directories, permissions and backing mounts without creating directories or write-test files. Setup and runtime initialization retain their actual write probe; missing or unavailable storage still prevents readiness.
+- Extend the read-only storage check to restore archive/file lists, repository statistics, target-directory browsing and restore-state queries. Backup, restore, check and download actions keep their actual write probe.
+- Route service Python bytecode and inherited child-process caches to the private RAM directory `/run/borg-backup-ui/pycache`. Reuse the cache across service restarts; let Unraid clear it at reboot. If the optional directory cannot be prepared, disable bytecode writes for that run without falling back to USB. No fixed RAM allocation or job-data relocation is introduced.
+- Maintainer captures on 2026-09-09 confirmed zero idle/UI queue replacements and zero redundant inventory chmod events in five-minute/ten-minute measurements. The ten remaining restore probes and ten one-off Python cache writes motivated the focused follow-up above; repeat those checks with the updated candidate.
+- Continue on the #486 branch and PR #494 as requested by the maintainer, with a dedicated #497 commit and release-note fragment. Notification/authentication storage locations and login/session behavior remain unchanged.
+- Verify idle writes again on Unraid using the existing five-minute idle and ten-minute UI capture procedure. Local regression checks do not replace measurement on the boot USB device.
+
+### Issue #495 - explicit job settings and supported export formats
+- Continue with #486 in PR #494 as explicitly approved by the maintainer; #447 remains frozen.
+- Register `job_settings_v1` after `job_ids_v1`. Snapshot original job metadata, materialize effective compression/retention and automatic appearance, preserve other fields, and remove obsolete job type fields in schema 5. Audit and resume interrupted writes without changing explicit values.
+- Read saved settings in the Wizard and runner. Use a neutral archive icon for new jobs without an explicit selection; retain migrated theme colors exactly.
+- Accept job bundle v3, encrypted job bundle v3 and profile export v2. Check inner formats and required job fields before preview/import writes; retain the existing authenticated encryption envelope. Old exports are deliberately not converted during import.
+- Keep unresolved historical files without synthetic job identities, reassignment or cleanup. Current job calculations use only matching UUIDs.
+- Remove the restore-test type rule and its settings input. Use the existing archive-size threshold; sample regular files across the archive, cap the target coverage by the configured file limits, and report file-based coverage. A successful full-archive dry-run reports full file coverage.
+- Document the need for fresh job AND profile exports in German and English, including a forum announcement draft; Borg archives are unaffected.
+
 ### Issue #463 - file activity log performance
 - Capture stdout and stderr directly in a RAM-backed runtime file only for jobs with file activity enabled, avoiding an unbounded API-process line buffer and writes into backed-up log directories during the run.
 - Retain the complete log only after the runner exits, using an independent supervisor that survives a WebUI restart. Preserve cursor identity across the copy, release RAM after successful persistence, and keep a downloadable RAM copy with a visible error if saving fails. History/status references point at the final path.

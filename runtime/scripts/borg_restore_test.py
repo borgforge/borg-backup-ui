@@ -191,9 +191,12 @@ def discover_repos(conf: dict) -> list:
             continue
         if str(raw.get("runner", "")).strip() != "scriptless-wizard-runner":
             continue
-        btype = str(raw.get("backup_type", "")).strip()
-        job_key = str(raw.get("job_key") or jf.stem).strip()
-        if not btype or not job_key:
+        from job_identity import metadata_job_id
+        try:
+            job_key = metadata_job_id(raw)
+        except ValueError:
+            continue
+        if not job_key:
             continue
         try:
             context = resolve_job_repository_context(config, job_key, job=raw, inventory=inventory)
@@ -208,7 +211,8 @@ def discover_repos(conf: dict) -> list:
         seen.add(key)
         repos.append({
             "job_key": job_key,
-            "type": btype,
+            "type": "",
+            "name": str(raw.get("name") or "Backup"),
             "location": location,
             "path": repo_path,
             "encryption": str(context.get("encryption") or "").strip().lower(),
@@ -241,16 +245,14 @@ class RestoreTest:
         self.test_interval   = int(conf.get("RESTORE_TEST_INTERVAL_DAYS", 30))
         self.status_dir      = _resolve_restore_test_dir(conf)
         self.min_coverage    = int(conf.get("RESTORE_TEST_MIN_COVERAGE", 5))
-        self.max_entries     = int(conf.get("RESTORE_TEST_MAX_ENTRIES", 10000))
+        self.max_entries     = int(conf.get("RESTORE_TEST_MAX_ENTRIES", 1000))
         self.sample_size     = int(conf.get("RESTORE_TEST_SAMPLE_SIZE", 5))
         self.borg_timeout    = int(conf.get("RESTORE_TEST_BORG_TIMEOUT", 180))
         self.dryrun_timeout  = int(conf.get("RESTORE_TEST_DRY_RUN_TIMEOUT", 0))  # 0 = no timeout
         self.dryrun_chunk    = int(conf.get("RESTORE_TEST_DRY_RUN_CHUNK_SIZE", 200))
-        self.dryrun_max_files = int(conf.get("RESTORE_TEST_DRY_RUN_MAX_FILES", 1500))
+        self.dryrun_max_files = int(conf.get("RESTORE_TEST_DRY_RUN_MAX_FILES", 1000))
         self.level3_legacy_sampling = str(conf.get("RESTORE_TEST_LEVEL3_LEGACY_SAMPLING", "false")).strip().lower() == "true"
-        force_types_raw = str(conf.get("RESTORE_TEST_FORCE_CHUNK_TYPES", "vms"))
-        self.force_chunk_types = {x.strip().lower() for x in force_types_raw.split(",") if x.strip()}
-        self.full_dryrun_max_archive_gb = int(conf.get("RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB", 200))
+        self.full_dryrun_max_archive_gb = int(conf.get("RESTORE_TEST_FULL_DRYRUN_MAX_ARCHIVE_GB", 500))
         self.log_dir         = Path(conf.get("GLOBAL_LOG_DIR", "/mnt/user/Logs"))
 
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -560,15 +562,14 @@ class RestoreTest:
 
     def test_repo(self, repo: dict) -> int:
         """0=OK, 1=Fehler, 2=übersprungen, 3=unavailable"""
-        btype    = repo["type"]
         location = repo["location"]
         path     = repo["path"]
         encryption = str(repo.get("encryption") or "").strip().lower()
         pp_file  = repo["passphrase_file"]
-        key      = str(repo.get("job_key") or f"{btype}_{location}")
+        key      = str(repo["job_key"])
 
         self.log(f"{'─'*60}")
-        self.log(f"TEST: {btype} ({location})")
+        self.log(f"TEST: {repo.get('name') or key} ({location})")
         self.log(f"  Repository: {path}")
 
         if self.args.dry_run:
@@ -756,52 +757,56 @@ class RestoreTest:
 
             self.log("Level 2: Extract Dry-Run")
             s_probe = time.time()
-            r_count = self._borg(["list", "--short", f"{path}::{last_archive}"], env, timeout=300)
-            full_count = len(r_count.stdout.splitlines()) if r_count.returncode == 0 else 0
-            test_count = max(100, full_count * self.min_coverage // 100) if full_count else 100
-            test_count = min(test_count, self.max_entries)
-            self.log(f"  Testing {test_count} of {full_count} entries")
-
             r_list = self._borg(["list", "--json-lines", f"{path}::{last_archive}"], env, timeout=300)
-            tested_entries: list = []
-            tested_files = tested_folders = 0
-            if r_list.returncode == 0:
-                for line in r_list.stdout.splitlines()[:test_count]:
-                    try:
-                        e = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    etype = e.get("type", "?")
-                    epath = e.get("path", "")
-                    if etype == "d":
-                        tested_entries.append(f"d {epath}")
-                        tested_folders += 1
-                    elif etype == "-":
-                        tested_entries.append(f"- {epath}")
-                        tested_files += 1
-                    else:
-                        tested_entries.append(f"{etype} {epath}")
-            tested_total = len(tested_entries)
+            if r_list.returncode != 0:
+                err = self._analyze_error(r_list.stderr)
+                code = self._failure_code_from_category(err["category"])
+                steps.append({"step_id": "restore_probe", "status": "failed",
+                              "duration_ms": int((time.time() - s_probe) * 1000),
+                              "message": "Could not list archive files for the restore probe",
+                              "command": "borg list --json-lines", "error_code": code})
+                self._mark_not_tested(steps, "restore_probe")
+                self._write(key, repo, "failed", int(time.time()-t0), 0, 0, 0, "unknown",
+                            last_archive, archive_stats, [], exit_code=1, steps=steps,
+                            error_category=err["category"], error_details=err["details"],
+                            failure_code=code, failure_hint=err["details"])
+                return 1
+            file_paths = []
+            for line in r_list.stdout.splitlines():
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("type") == "-" and entry.get("path"):
+                    file_paths.append(entry["path"])
+            full_count = len(file_paths)
+            archive_stats["files_count"] = full_count
+            # Coverage and both existing limits refer to regular files, not directories (#495).
+            target_count = max(1, (full_count * self.min_coverage + 99) // 100)
+            test_count = min(full_count, target_count, max(1, self.max_entries), max(1, self.dryrun_max_files))
+            tested_paths = random.sample(file_paths, test_count)
+            tested_entries = [f"- {path}" for path in tested_paths]
+            tested_files = tested_total = len(tested_paths)
+            tested_folders = 0
 
             archive_size_gb = int(archive_stats.get("original_size", 0)) / (1024**3) if archive_stats else 0
-            force_chunk = btype.strip().lower() in self.force_chunk_types
-            if self.full_dryrun_max_archive_gb > 0 and archive_size_gb >= self.full_dryrun_max_archive_gb:
-                force_chunk = True
+            force_chunk = self.full_dryrun_max_archive_gb > 0 and archive_size_gb >= self.full_dryrun_max_archive_gb
 
-            if force_chunk and tested_entries:
-                reason = f"type rule ({btype})" if btype.strip().lower() in self.force_chunk_types else f"archive size {archive_size_gb:.1f} GB"
-                self.log(f"  Chunk mode enabled ({reason})")
+            if force_chunk and tested_paths:
+                self.log(f"  Chunk mode enabled (archive size {archive_size_gb:.1f} GB)")
+                self.log(f"  Testing {test_count} of {full_count} files (target {self.min_coverage}%, file limits applied)")
                 failed_chunk = None
-                tested_files_only = [e[2:] for e in tested_entries if e.startswith("- ")]
-                random.shuffle(tested_files_only)
-                tested_paths = tested_files_only[:max(1, self.dryrun_max_files)]
+                completed_paths = []
                 for i in range(0, len(tested_paths), max(1, self.dryrun_chunk)):
                     chunk = tested_paths[i:i + max(1, self.dryrun_chunk)]
                     r_chunk = self._borg(["extract", "--dry-run", f"{path}::{last_archive}", *chunk], env, timeout=self.dryrun_timeout)
                     if r_chunk.returncode != 0:
                         failed_chunk = r_chunk
                         break
+                    completed_paths.extend(chunk)
                 if failed_chunk is not None:
+                    tested_files = tested_total = len(completed_paths)
+                    tested_entries = [f"- {path}" for path in completed_paths]
                     err = self._analyze_error(failed_chunk.stderr)
                     code = self._failure_code_from_category(err["category"])
                     steps.append({
@@ -821,6 +826,7 @@ class RestoreTest:
                                 steps=steps, failure_code=code, failure_hint=err["details"])
                     return 1
             else:
+                self.log(f"  Testing the complete archive ({full_count} files)")
                 r_dry = self._borg(["extract", "--dry-run", f"{path}::{last_archive}"], env, timeout=self.dryrun_timeout)
                 if r_dry.returncode != 0 and not (r_dry.returncode == 124 and tested_entries):
                     err = self._analyze_error(r_dry.stderr)
@@ -841,6 +847,8 @@ class RestoreTest:
                                 error_category=err["category"], error_details=err["details"], error_output=r_dry.stderr[:500],
                                 steps=steps, failure_code=code, failure_hint=err["details"])
                     return 1
+                if r_dry.returncode == 0:
+                    tested_files = tested_total = full_count
             steps.append({
                 "step_id": "restore_probe",
                 "status": "passed",
@@ -945,6 +953,8 @@ class RestoreTest:
                l3_details: dict = None, error_category: str = "none",
                error_details: str = "", error_output: str = "", reason: str = "",
                steps: list | None = None, failure_code: str = "", failure_hint: str = "") -> None:
+        from job_identity import validate_job_id
+        key = validate_job_id(key)
         _ensure_status_storage_directory(self.status_dir)
         test_file = self.status_dir / f"{key}.test"
         now = datetime.now()
@@ -955,10 +965,11 @@ class RestoreTest:
         )
 
         data = {
+            "job_id":                   key,
             "report_schema_version":    1,
             "report_id":                f"RT-{now.strftime('%Y%m%d-%H%M%S')}-{key}",
             "repository":              repo["path"],
-            "type":                    repo["type"],
+            "job_name":                repo.get("name") or key,
             "location":                repo["location"],
             "test_level":              self.test_level,
             "test_date":               now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -975,7 +986,7 @@ class RestoreTest:
             "test_coverage":           coverage,
             "test_coverage_percentage": test_coverage_pct,
             "coverage_percent":        test_coverage_pct,
-            "coverage_basis":          f"{tested_total}/{stats.get('files_count', 0) if isinstance(stats, dict) else 0}",
+            "coverage_basis":          f"{tested_files}/{stats.get('files_count', 0) if isinstance(stats, dict) else 0}",
             "tested_archive":          archive,
             "tested_entries":          entries,
             "overall_status":          overall_status,

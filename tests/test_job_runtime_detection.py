@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 import json
 import os
 import sys
@@ -84,13 +85,13 @@ def test_dead_resource_lock_is_not_reported_as_running(tmp_path: Path):
 def test_job_discovery_cache_reuses_metadata_and_detects_atomic_update(tmp_path: Path, monkeypatch):
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
-    metadata = jobs_dir / "flash_local.json"
-    payload = {
-        "job_key": "flash_local",
+    metadata = jobs_dir / (job_id('flash_local') + ".json")
+    payload = identified_job({
+        "job_key": job_id('flash_local'),
         "name": "Flash",
         "backup_type": "flash",
         "location": "local",
-    }
+    })
     metadata.write_text(json.dumps(payload), encoding="utf-8")
     jobs_api.invalidate_job_discovery_cache()
     original = jobs_api._discover_jobs_uncached

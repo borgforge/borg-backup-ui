@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 import os
 from pathlib import Path
 import sys
@@ -23,6 +24,7 @@ def _backup_job_config(tmp_path: Path) -> BackupJobConfig:
         job_name="Flash",
         backup_type="flash",
         backup_location="local",
+        job_id=job_id("flash_local"),
         lock_file=tmp_path / "job.lock",
         log_dir=tmp_path / "logs",
         log_file=tmp_path / "logs" / "backup.log",
@@ -75,7 +77,7 @@ def test_backup_finish_emits_lifecycle_summary(tmp_path: Path, monkeypatch):
     text = log_file.read_text(encoding="utf-8")
     assert "JOB finished" in text
     assert "request_id=req-123" in text
-    assert "job_key=flash_local" in text
+    assert f"job_key={job_id('flash_local')}" in text
     assert "run_id=run-123" in text
     assert "status=success" in text
     assert "exit_code=0" in text
@@ -129,7 +131,7 @@ def test_notification_event_emits_lifecycle_summary(tmp_path: Path, monkeypatch)
             event_type="backup_success",
             title="Backup OK",
             message="done",
-            job_key="flash_local",
+            job_key=job_id("flash_local"),
             status="success",
             duration_seconds=45,
             exit_code=0,
@@ -140,7 +142,7 @@ def test_notification_event_emits_lifecycle_summary(tmp_path: Path, monkeypatch)
     assert result["unraid"] is True
     text = log_file.read_text(encoding="utf-8")
     assert "JOB notification" in text
-    assert "job_key=flash_local" in text
+    assert f"job_key={job_id('flash_local')}" in text
     assert "event=backup_success" in text
     assert "apprise_mode=queued" in text or "apprise_mode=sync" in text
 
@@ -176,6 +178,7 @@ def test_scheduled_backup_run_sets_lifecycle_source_env(tmp_path: Path, monkeypa
     monkeypatch.setattr(jobs_api, "discover_jobs", lambda _scripts, _data: [
         SimpleNamespace(
             key="flash_local",
+            name="Flash configuration",
             enabled=True,
             standard="wizard",
             backup_type="flash",
@@ -190,6 +193,8 @@ def test_scheduled_backup_run_sets_lifecycle_source_env(tmp_path: Path, monkeypa
     assert captured["extra_env"]["BORG_UI_REQUEST_ID"] == "req-scheduled"
     assert captured["extra_env"]["BORG_UI_REQUEST_SOURCE"] == "schedule"
     assert captured["extra_env"]["BORG_UI_REQUEST_ACTOR"] == "scheduler"
+    assert captured["extra_env"]["BORG_UI_JOB_NAME"] == "Flash configuration"
+    assert captured["extra_env"]["BORG_UI_JOB_LOCATION"] == "local"
 
 
 def test_restore_test_script_contains_lifecycle_summary_hooks():

@@ -453,14 +453,10 @@ def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, rest
 
 
 def _archive_filter_rows_for_restore_job(job_key: str, info: dict) -> list[dict]:
+    from archive_prefix import archive_prefix_from_metadata, job_archive_prefixes
     job = info.get("job") if isinstance(info.get("job"), dict) else {}
-    current_prefix = archive_prefix_from_backup_type(job.get("backup_type") if isinstance(job, dict) else "")
-    stored = job.get("archive_prefixes") if isinstance(job.get("archive_prefixes"), list) else []
-    prefixes = normalize_archive_prefixes([
-        current_prefix,
-        *stored,
-        archive_prefix_from_job_key(job_key),
-    ])
+    current_prefix = archive_prefix_from_metadata(job)
+    prefixes = job_archive_prefixes(job)
     return [
         {
             "prefix": prefix,

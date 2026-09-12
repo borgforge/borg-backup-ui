@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import inspect
@@ -63,9 +64,9 @@ def _write_job(
         "relative_path": repo_name,
         "encryption": encryption,
         "passphrase_ref": str(secret),
-        "used_by": [job_key],
+        "used_by": [job_id(job_key)],
     }]})
-    job = {
+    job = identified_job({
         "schema_version": 3,
         "job_key": job_key,
         "name": "Appdata",
@@ -73,8 +74,8 @@ def _write_job(
         "location": location,
         "repository_key": repo_key,
         "source_paths": ["/mnt/user/appdata"],
-    }
-    path = jobs_dir / f"{job_key}.json"
+    })
+    path = jobs_dir / f"{job['job_id']}.json"
     path.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -92,7 +93,7 @@ def test_storage_data_prefers_repository_objects(tmp_path: Path):
     assert rows[0]["repository_name"] == "borg-backup-appdata"
     assert rows[0]["job_name"] == "Appdata"
     assert rows[0]["storage_key"].startswith("storage_local_")
-    assert rows[0]["used_by"] == ["appdata_local"]
+    assert rows[0]["used_by"] == [job_id("appdata_local")]
     assert rows[0]["path_raw"] == "/mnt/backup/borg-backup-appdata"
     assert rows[0]["path_display"] == "/mnt/backup/borg-backup-appdata"
     assert data["storages"][0]["storage_key"] == rows[0]["storage_key"]
@@ -166,7 +167,7 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
         "encryption": "none",
     })
     repo_key = created["repository"]["repository_key"]
-    params = {
+    params = {"archive_prefix": 'photos-backup',
         "type_id": "photos",
         "job_name": "Photos",
         "source_paths": [str(source)],
@@ -178,7 +179,7 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     store = read_repository_store(config)
     assert job["repository_key"] == repo_key
-    assert job["schema_version"] == 3
+    assert job["schema_version"] == 5
     assert job["source_paths"] == [str(source)]
     assert "repo" not in job
     assert "passphrase" not in job
@@ -189,7 +190,7 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
     assert store["repositories"][0]["job_name"] == "Photos"
     assert store["repositories"][0]["storage_key"].startswith("storage_local_")
     assert store["repositories"][0]["relative_path"] == "borg-backup-photos"
-    assert store["repositories"][0]["used_by"] == ["photos_local"]
+    assert store["repositories"][0]["used_by"] == [result["job_id"]]
     assert read_storage_store(config)["storages"][0]["base_path"] == "/mnt/backup"
 
     job["restore_test_policy"] = {
@@ -199,7 +200,7 @@ def test_wizard_save_uses_selected_repository_object(tmp_path: Path, monkeypatch
         "level": 3,
     }
     Path(result["metadata_path"]).write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
-    save_job({**params, "existing_job_key": "photos_local"}, scripts, tmp_path, config)
+    save_job({**params, "existing_job_key": result["job_id"]}, scripts, tmp_path, config)
     updated_job = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
     assert updated_job["restore_test_policy"] == job["restore_test_policy"]
 

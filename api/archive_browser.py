@@ -17,6 +17,13 @@ _CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 _CACHE_LOCK = threading.Lock()
 
 
+class ArchiveNotFoundError(ValueError):
+    """The archive selection no longer exists in the current repository."""
+
+    api_code = "restore_archive_unavailable"
+    api_status = 404
+
+
 def _prune_expired_cache_entries(now: float) -> None:
     expired = [key for key, value in _CACHE.items() if float(value.get("expires", 0)) <= now]
     for key in expired:
@@ -46,6 +53,10 @@ def build_archive_index(repo: str, archive: str, env: dict[str, str]) -> dict[st
     except subprocess.TimeoutExpired as exc:
         raise TimeoutError("borg archive listing timed out") from exc
     if result.returncode != 0:
+        # Borg's C-locale error identifies an absent archive, not an unavailable
+        # repository or another list failure. Keep the original detail for logs.
+        if f"Archive {archive} does not exist" in result.stderr.splitlines():
+            raise ArchiveNotFoundError(f"borg list failed: {result.stderr.strip()}")
         raise RuntimeError(f"borg list failed: {result.stderr.strip()}")
 
     index: dict[str, dict[str, dict[str, Any]]] = {}

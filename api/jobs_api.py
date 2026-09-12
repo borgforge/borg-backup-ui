@@ -210,8 +210,9 @@ def _fallback_runtime_log(config: dict, job_key: str, started_at: str) -> str:
     if not log_dir.is_dir():
         return ""
     try:
+        from job_identity import job_log_paths
         candidates = sorted(
-            log_dir.glob(f"Borg-Backup_{job_key}--*.log"),
+            job_log_paths(log_dir, job_key),
             key=lambda path: path.stat().st_mtime,
             reverse=True,
         )
@@ -364,13 +365,14 @@ class JobInfo:
     restore_test_level: int = 2
     restore_test_max_runtime_minutes: int = 0
     file_activity: bool = False
+    archive_prefix: str = ""
 
     @property
     def display_name(self) -> str:
         loc_label = {"local": "Lokal", "usb": "USB", "smb": "SMB", "storagebox": "Storagebox"}.get(
             self.location, self.location
         )
-        return f"{self.backup_type.capitalize()} – {loc_label}"
+        return f"{self.name or 'Backup'} – {loc_label}"
 
 
 class _JobState:
@@ -449,13 +451,15 @@ class JobManager:
         log_handle = None
         try:
             if env.get("BORG_UI_FILE_ACTIVITY_RUN") == "1":
-                from activity_log import activity_log_path
-                from activity_log_capture import prepare_capture
+                from activity_log_capture import prepare_capture, read_record
 
-                log_file, capture_record_file = prepare_capture(job_key, run_id, Path(env["BORG_UI_ACTIVITY_LOG_DIR"]))
+                log_file, capture_record_file = prepare_capture(
+                    job_key, run_id, Path(env["BORG_UI_ACTIVITY_LOG_DIR"]),
+                    job_name=env.get("BORG_UI_JOB_NAME", ""), location=env.get("BORG_UI_JOB_LOCATION", ""),
+                )
                 log_handle = os.fdopen(os.open(log_file, os.O_WRONLY | os.O_NOFOLLOW), "wb")
                 env["BORG_UI_CAPTURE_LOG"] = str(log_file)
-                env["BORG_UI_RETAINED_LOG"] = str(activity_log_path(Path(env["BORG_UI_ACTIVITY_LOG_DIR"]), job_key, run_id))
+                env["BORG_UI_RETAINED_LOG"] = read_record(capture_record_file)["retained_file"]
                 command = [sys.executable, str(Path(__file__).with_name("activity_log_capture.py")), str(capture_record_file), *command]
                 env["PYTHONUNBUFFERED"] = "1"
                 env["PYTHONIOENCODING"] = "utf-8"
@@ -702,7 +706,6 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
     """
     Finds backup jobs from canonical JSON metadata.
     """
-    utility_types = {"restore_test"}
 
     def _make_job(
         py_file: Optional[Path],
@@ -731,6 +734,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
         docker_control: Optional[dict] = None,
         vm_control: Optional[dict] = None,
         file_activity: bool = False,
+        archive_prefix: str = "",
     ) -> JobInfo:
         desc_file = py_file.with_suffix(".description") if py_file is not None else None
         desc_text = (
@@ -742,34 +746,34 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 else ""
             )
         )
-        bt_lc = backup_type.lower()
         default_docker_control = {
-            "mode": "all" if ((bt_lc == "appdata") if has_docker is None else bool(has_docker)) else "none",
+            "mode": "all" if has_docker else "none",
             "selected": [],
             "ack_appdata_risk": False,
         }
         default_vm_control = {
-            "mode": "all" if ((bt_lc == "vms") if has_vm is None else bool(has_vm)) else "none",
+            "mode": "all" if has_vm else "none",
             "selected": [],
             "ack_domains_risk": False,
         }
         return JobInfo(
-            key=key or f"{bt_lc}_{location}",
+            key=key,
             backup_type=backup_type,
             location=location,
             script_path=py_file,
             name=(name or "").strip(),
-            has_docker=(bt_lc == "appdata") if has_docker is None else bool(has_docker),
-            has_vm=(bt_lc == "vms") if has_vm is None else bool(has_vm),
+            has_docker=bool(has_docker),
+            has_vm=bool(has_vm),
             description=desc_text,
             icon=(icon or "").strip().lower(),
             icon_color=(icon_color or "").strip().lower(),
             # Only explicit utility jobs should be filtered from normal
             # backup selectors. Custom/unknown backup types are still jobs.
-            is_utility=bt_lc in utility_types,
+            is_utility=False,
             standard=standard,
             enabled=bool(enabled),
             file_activity=file_activity,
+            archive_prefix=archive_prefix,
             compression=str(compression or "").strip(),
             retention_daily=str(retention_daily or "").strip(),
             retention_weekly=str(retention_weekly or "").strip(),
@@ -799,14 +803,15 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
 
             # Pflichtfelder V1
             try:
-                key = str(raw["job_key"]).strip()
-                backup_type = str(raw["backup_type"]).strip()
+                from job_identity import metadata_job_id
+                key = metadata_job_id(raw)
+                backup_type = ""
                 location = str(raw["location"]).strip().lower()
                 script_name = str(raw.get("script") or "").strip()
             except (KeyError, TypeError, ValueError):
                 continue
 
-            if not key or not backup_type or not location:
+            if not key or not location:
                 continue
             if location not in {"local", "usb", "smb", "storagebox", "custom"}:
                 continue
@@ -838,6 +843,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 backup_type,
                 location,
                 key=key,
+                archive_prefix=str(raw.get("archive_prefix") or ""),
                 name=str(raw.get("name") or "").strip(),
                 has_docker=has_docker,
                 has_vm=has_vm,
@@ -861,7 +867,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 restore_test_max_runtime_minutes=_safe_int(rt_policy.get("max_runtime_minutes"), 0),
             ))
 
-    return list(jobs_by_key.values())
+    return sorted(jobs_by_key.values(), key=lambda job: (job.name or job.display_name).casefold())
 
 
 def _job_metadata_signature(meta_dir: Path, scripts_dir: Path, *, include_files: bool) -> tuple:
@@ -892,11 +898,6 @@ def discover_jobs(scripts_dir: Path, data_root: Path | None = None) -> List[JobI
     root = data_root if data_root is not None else (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)
     meta_dir = get_jobs_meta_dir(scripts_dir, root)
     cache_key = f"{scripts_dir.resolve()}::{root.resolve()}"
-    with _job_discovery_cache_lock:
-        if cache_key not in _job_metadata_migrations:
-            migrate_jobs_metadata_dir(scripts_dir, root)
-            _job_metadata_migrations.add(cache_key)
-
     now = time.monotonic()
     quick_signature = _job_metadata_signature(meta_dir, scripts_dir, include_files=False)
     with _job_discovery_cache_lock:
@@ -962,6 +963,8 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
         result.append(
             {
                 "key": info.key,
+                "job_id": info.key,
+                "archive_prefix": info.archive_prefix,
                 "backup_type": info.backup_type,
                 "location": info.location,
                 "display_name": info.display_name,

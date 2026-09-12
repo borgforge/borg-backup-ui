@@ -27,16 +27,16 @@ async function berichtInit() {
     const jobsData = jobsResponse.ok ? await jobsResponse.json() : { jobs: [] };
     const configuredJobs = jobsData.jobs || [];
     reportState.jobs = (data.jobs || []).map((job) => {
-      const configured = configuredJobs.find((candidate) => String(candidate.key) === String(job.key))
-        || configuredJobs.find((candidate) => String(candidate.backup_type || '').toLowerCase() === String(job.backup_type || '').toLowerCase()
-          && String(candidate.location || '').toLowerCase() === String(job.location || '').toLowerCase());
+      const configured = configuredJobs.find((candidate) => String(candidate.key) === String(job.key));
       return {
         ...job,
-        display_name: configured?.display_name || configured?.name || job.display_name,
+        display_name: configured?.name || configured?.display_name || job.display_name,
+        archive_prefix: configured?.archive_prefix || '',
         icon: configured?.icon || '',
         icon_color: configured?.icon_color || '',
       };
     });
+    reportState.jobs.sort((a, b) => String(a.display_name || '').localeCompare(String(b.display_name || '')));
     for (const job of reportState.jobs) {
       const opt = document.createElement('option');
       opt.value = job.key;
@@ -105,7 +105,7 @@ function _berichtJobIcon(job) {
   const icon = resolveJobIcon(job);
   const color = resolveJobIconColor(job);
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} report-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon report-job-icon${colorClass}">${typeIcon(icon)}</span>`;
 }
 
 function _berichtRenderJobSidebar() {
@@ -121,7 +121,7 @@ function _berichtRenderJobSidebar() {
   const order = ['local', 'usb', 'smb', 'storagebox'];
   const locations = [...new Set(jobs.map((job) => String(job.location || 'local').toLowerCase()))]
     .sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)));
-  list.innerHTML = locations.map((location) => `<section class="report-job-group"><h3>${escHtml(_berichtLocationLabel(location))}</h3>${jobs.filter((job) => String(job.location || 'local').toLowerCase() === location).map((job) => `<button class="report-job ${String(job.key) === selected ? 'is-active' : ''}" data-report-job="${escHtml(job.key)}" ${String(job.key) === selected ? 'aria-current="page"' : ''}>${_berichtJobIcon(job)}<span><strong>${escHtml(job.display_name || job.key)}</strong><small>${escHtml(job.key)}</small></span><span class="report-job-dot"></span></button>`).join('')}</section>`).join('');
+  list.innerHTML = locations.map((location) => `<section class="report-job-group"><h3>${escHtml(_berichtLocationLabel(location))}</h3>${jobs.filter((job) => String(job.location || 'local').toLowerCase() === location).map((job) => `<button class="report-job ${String(job.key) === selected ? 'is-active' : ''}" data-report-job="${escHtml(job.key)}" ${String(job.key) === selected ? 'aria-current="page"' : ''}>${_berichtJobIcon(job)}<span><strong>${escHtml(job.display_name || job.key)}</strong><small>${escHtml(job.archive_prefix || '')}</small></span><span class="report-job-dot"></span></button>`).join('')}</section>`).join('');
   list.querySelectorAll('[data-report-job]').forEach((button) => button.addEventListener('click', () => {
     const select = document.getElementById('bericht-job-sel');
     if (select) select.value = button.dataset.reportJob || '';

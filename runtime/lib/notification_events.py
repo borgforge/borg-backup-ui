@@ -254,8 +254,11 @@ def drain_notification_queue(config: dict, *, max_items: int = 20) -> dict[str, 
                 due.append(row)
             else:
                 pending.append(row)
-        store["queue"] = pending
-        _write_json(_queue_path(config), store)
+        # Idle checks and retries that are not due must not rewrite the queue
+        # on the boot device. Keep selection and persistence under the lock.
+        if pending != rows:
+            store["queue"] = pending
+            _write_json(_queue_path(config), store)
 
     delivered = 0
     failed = 0

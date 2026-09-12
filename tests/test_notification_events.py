@@ -7,6 +7,8 @@ import os
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "runtime"))
 sys.path.insert(0, str(ROOT / "api"))
@@ -341,6 +343,68 @@ def test_queued_apprise_delivery_retries_without_sleeping(monkeypatch, tmp_path)
     assert status["deliveries"][-1]["status"] == "retrying"
     assert status["deliveries"][-1]["message"] == "provider unavailable"
 
+    queue_path = tmp_path / "config" / "notification-queue.json"
+    before = (queue_path.read_bytes(), queue_path.stat().st_mtime_ns, queue_path.stat().st_ino)
+    assert drain_notification_queue({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["checked"] == 0
+    assert (queue_path.read_bytes(), queue_path.stat().st_mtime_ns, queue_path.stat().st_ino) == before
+
+    monkeypatch.setattr("lib.notification_events.time.time", lambda: queue["queue"][0]["next_attempt_at"] + 1)
+    exhausted = drain_notification_queue({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert exhausted == {"checked": 1, "delivered": 0, "failed": 1, "retrying": 0, "remaining": 0}
+    assert read_notification_delivery_status({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["deliveries"][-1]["status"] == "failed"
+
+
+@pytest.mark.parametrize("rows", [None, [], [{"id": "later", "next_attempt_at": 2000, "attempts_made": 1}]])
+def test_idle_queue_checks_do_not_save_unchanged_or_missing_queue(tmp_path, monkeypatch, rows):
+    from lib import notification_events
+
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    path = tmp_path / "config" / "notification-queue.json"
+    if rows is not None:
+        path.parent.mkdir()
+        path.write_text(json.dumps({"schema_version": 1, "updated_at": "unchanged", "queue": rows}))
+        before = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_ino)
+    monkeypatch.setattr(notification_events.time, "time", lambda: 1000)
+
+    def unexpected_save(*_args):
+        pytest.fail("An idle queue check must not write JSON")
+
+    monkeypatch.setattr(notification_events, "_write_json", unexpected_save)
+    for _ in range(10):
+        assert drain_notification_queue(config) == {
+            "checked": 0, "delivered": 0, "failed": 0, "retrying": 0, "remaining": len(rows or []),
+        }
+    if rows is None:
+        assert not path.exists()
+    else:
+        assert (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_ino) == before
+
+
+def test_queue_claim_preserves_future_and_newly_enqueued_notifications(tmp_path, monkeypatch):
+    from lib import notification_events
+
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
+    monkeypatch.setattr(notification_events.time, "time", lambda: 1000)
+    for name, due in (("first", 0), ("second", 0), ("later", 2000)):
+        notification_events._append_queue_item(config, {"id": name, "next_attempt_at": due})
+    delivered = []
+
+    def deliver(_config, item):
+        # The claim must be persisted before provider I/O. Enqueueing during
+        # delivery must not be lost when this drain completes.
+        remaining = notification_events._read_queue_store(config)["queue"]
+        assert item["id"] not in [row["id"] for row in remaining]
+        if item["id"] == "first":
+            notification_events._append_queue_item(config, {"id": "new", "next_attempt_at": 2000})
+        delivered.append(item["id"])
+        return "delivered"
+
+    monkeypatch.setattr(notification_events, "_deliver_queue_item", deliver)
+    assert drain_notification_queue(config, max_items=1)["remaining"] == 3
+    assert drain_notification_queue(config, max_items=1)["remaining"] == 2
+    assert delivered == ["first", "second"]
+    assert [row["id"] for row in notification_events._read_queue_store(config)["queue"]] == ["later", "new"]
+
 
 def test_apprise_queue_records_dropped_entries_when_full(tmp_path):
     store = tmp_path / "config" / "apprise-profiles.json"
@@ -659,6 +723,7 @@ def test_backup_overdue_uses_type_location_status_when_key_is_missing(monkeypatc
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_usb": {"enabled": True, "cron": "0 10 * * *"}})
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_usb", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "key": "appdata_usb",
         "backup_type": "appdata",
         "location": "usb",
         "timestamp": "2026-07-01 10:04:45",
@@ -716,8 +781,8 @@ def test_backup_overdue_sender_matches_diagnostics_and_sends_only_ready_jobs(mon
         {"key": "sonstiges_usb", "display_name": "Sonstiges - USB", "enabled": True, "repo_path": "/repo/sonstiges"},
     ])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [
-        {"backup_type": "appdata", "location": "usb", "timestamp": "2026-07-02 12:10:27", "status": "success"},
-        {"backup_type": "sonstiges", "location": "usb", "timestamp": "2026-07-01 15:00:01", "status": "success"},
+        {"key": "appdata_usb", "backup_type": "appdata", "location": "usb", "timestamp": "2026-07-02 12:10:27", "status": "success"},
+        {"key": "sonstiges_usb", "backup_type": "sonstiges", "location": "usb", "timestamp": "2026-07-01 15:00:01", "status": "success"},
     ]})
     stale_appdata = "backup_overdue:appdata_usb:2026-07-02 10:00:00"
     mark_reminder_sent({"BACKUP_SCRIPTS_DIR": str(tmp_path)}, stale_appdata, now=datetime(2026, 7, 2, 8, 0, 0).timestamp())
@@ -744,6 +809,7 @@ def test_notification_reminder_diagnostics_reports_backup_overdue_window(monkeyp
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"appdata_usb": {"enabled": True, "cron": "0 10 * * *"}})
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "appdata_usb", "display_name": "Appdata", "enabled": True, "repo_path": "/repo"}])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "key": "appdata_usb",
         "backup_type": "appdata",
         "location": "usb",
         "timestamp": "2026-07-02 10:04:45",
@@ -815,6 +881,7 @@ def test_notification_reminder_diagnostics_distinguishes_missed_and_next_backup_
     monkeypatch.setattr("schedule_api.get_schedules", lambda cfg: {"photos_usb": {"enabled": True, "cron": "0 14 * * 0"}})
     monkeypatch.setattr("jobs_api.list_jobs", lambda cfg, opts: [{"key": "photos_usb", "display_name": "Photos - USB", "enabled": True, "repo_path": "/repo"}])
     monkeypatch.setattr("status_api.get_status_data", lambda cfg: {"backups": [{
+        "key": "photos_usb",
         "backup_type": "photos",
         "location": "usb",
         "timestamp": "2026-07-01 07:58:54",

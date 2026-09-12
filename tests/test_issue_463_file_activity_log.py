@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 import io
 import json
 import logging
@@ -120,7 +121,7 @@ def test_job_metadata_round_trip_and_runner_environment(tmp_path: Path, monkeypa
     scripts_dir = tmp_path / "scripts"
     source = tmp_path / "source"
     source.mkdir()
-    params = {
+    params = {"archive_prefix": 'files-backup',
         "type_id": "files",
         "job_name": "Files",
         "location": "local",
@@ -134,10 +135,10 @@ def test_job_metadata_round_trip_and_runner_environment(tmp_path: Path, monkeypa
     assert metadata["file_activity"] is True
 
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
-    loaded = load_job_for_wizard("files_local", scripts_dir, config)
+    loaded = load_job_for_wizard(result['job_id'], scripts_dir, config)
     assert loaded["file_activity"] is True
 
-    env, _ = wizard_runner._load_env_from_job("files_local", scripts_dir, tmp_path)
+    env, _ = wizard_runner._load_env_from_job(result['job_id'], scripts_dir, tmp_path)
     assert env["BORG_FILE_ACTIVITY"] == "1"
 
 
@@ -146,21 +147,21 @@ def test_missing_job_field_is_disabled_and_preview_exposes_setting(tmp_path: Pat
     scripts_dir = tmp_path / "scripts"
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True, exist_ok=True)
-    (jobs_dir / "files_local.json").write_text(json.dumps({
+    (jobs_dir / (job_id('files_local') + ".json")).write_text(json.dumps(identified_job({
         "schema_version": 3,
-        "job_key": "files_local",
+        "job_key": job_id('files_local'),
         "name": "Files",
         "backup_type": "files",
         "location": "local",
         "repository_key": "repo_files_test",
         "source_paths": [str(tmp_path / "source")],
         "retention": {"daily": "7", "weekly": "4", "monthly": "6", "yearly": "3"},
-    }) + "\n", encoding="utf-8")
+    })) + "\n", encoding="utf-8")
     monkeypatch.setattr("config_api.read_expanded_conf", lambda _config: {})
 
-    loaded = load_job_for_wizard("files_local", scripts_dir, config)
+    loaded = load_job_for_wizard(job_id('files_local'), scripts_dir, config)
     monkeypatch.setenv("BORG_FILE_ACTIVITY", "1")
-    env, _ = wizard_runner._load_env_from_job("files_local", scripts_dir, tmp_path)
+    env, _ = wizard_runner._load_env_from_job(job_id('files_local'), scripts_dir, tmp_path)
     preview = generate_flow_preview({
         "type_id": "files",
         "location": "local",
@@ -196,7 +197,7 @@ def test_wizard_and_manuals_explain_file_activity_and_privacy() -> None:
     assert "white-space: nowrap" in styles
     assert "#wizard-modal .modal-wizard" in styles
     assert "max-height: calc(100vh - 32px)" in styles
-    assert "flex: 1 1 448px" in styles
+    assert "flex: 1 1 480px" in styles
     assert "file_activity: !!document.getElementById('wiz-file-activity').checked" in script
     assert "wizard.previewFileActivity" in script
     assert "Support-Paketen" in de["wizard"]["fileActivityPrivacy"]
@@ -212,15 +213,15 @@ def test_managed_run_preserves_start_time_option_and_capture_path(tmp_path, monk
     _local_repository_config(tmp_path)
     jobs = tmp_path / 'config' / 'jobs'
     jobs.mkdir()
-    meta = {
-        'schema_version': 3, 'job_key': 'files_local', 'backup_type': 'files', 'location': 'local',
+    meta = identified_job({
+        'schema_version': 3, 'job_key': job_id('files_local'), 'backup_type': 'files', 'location': 'local',
         'repository_key': 'repo_files_test', 'source_paths': [str(tmp_path / 'source')],
         'file_activity': not started_enabled,
-    }
-    (jobs / 'files_local.json').write_text(json.dumps(meta))
+    })
+    (jobs / (job_id('files_local') + ".json")).write_text(json.dumps(meta))
     capture = tmp_path / 'logs' / 'Borg-Backup_files_local--activity-test.log'
     monkeypatch.setenv('BORG_UI_FILE_ACTIVITY_RUN', '1' if started_enabled else '0')
     monkeypatch.setenv('BORG_UI_CAPTURE_LOG', str(capture))
-    env, _ = wizard_runner._load_env_from_job('files_local', tmp_path / 'scripts', tmp_path)
+    env, _ = wizard_runner._load_env_from_job(job_id('files_local'), tmp_path / 'scripts', tmp_path)
     assert env['BORG_FILE_ACTIVITY'] == ('1' if started_enabled else '0')
     assert (env['LOG_FILE'] == str(capture)) == started_enabled

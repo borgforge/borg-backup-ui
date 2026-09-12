@@ -49,38 +49,47 @@ def _parse_status_file_stem(stem: str):
 
 def get_report_jobs(config: dict) -> List[dict]:
     """Returns all unique jobs found in status files."""
-    status_dir = Path(config["STATUS_DIR"])
+    from jobs_api import discover_jobs, resolve_scripts_dir, resolve_data_root
+    metadata = {j.key: j for j in discover_jobs(resolve_scripts_dir(config), resolve_data_root(config))} if config.get("BACKUP_SCRIPTS_DIR") else {}
     seen = {}
-    for f in sorted(status_dir.glob("*.status")):
-        backup_type, location = _parse_status_file_stem(f.stem)
-        if not backup_type or not location:
+    for path in sorted(Path(config["STATUS_DIR"]).glob("*.status")):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             continue
-        key = f"{backup_type}_{location}"
-        if key not in seen:
-            seen[key] = {
-                "key": key,
-                "backup_type": backup_type,
-                "location": location,
-                "display_name": f"{backup_type.capitalize()} ({location})",
-            }
-    return list(seen.values())
+        job_id = str(record.get("job_id") or "")
+        backup_type, location = record.get("backup_type", "unknown"), record.get("location", "unknown")
+        key = job_id
+        job = metadata.get(key)
+        if job is None:
+            continue
+        seen[key] = {
+            "key": key, "job_id": job_id,
+            "backup_type": backup_type, "location": location,
+            "display_name": (job.name or job.display_name) if job else f"{backup_type.capitalize()} ({location})",
+        }
+    return sorted(seen.values(), key=lambda row: row["display_name"].casefold())
 
 
 def get_report_data(config: dict, job_key: str) -> dict:
     """Returns full time-series report for a job from its .status files."""
-    backup_type, location = _parse_job_key(job_key)
+    from job_identity import active_job_ids
+    if job_key not in active_job_ids(config):
+        raise ValueError("Job no longer exists")
+    backup_type, location = "", ""
     status_dir = Path(config["STATUS_DIR"])
 
     runs = []
     for f in sorted(status_dir.glob("*.status")):
-        ftype, floc = _parse_status_file_stem(f.stem)
-        if ftype != backup_type or floc != location:
-            continue
         try:
             raw = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
 
+        key = str(raw.get("job_id") or "")
+        if key != job_key:
+            continue
+        backup_type, location = raw.get("backup_type", ""), raw.get("location", "")
         ts = raw.get("timestamp", "")
         runs.append({
             "timestamp": ts,

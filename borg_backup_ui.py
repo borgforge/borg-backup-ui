@@ -449,7 +449,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             f"target={tgt} detail={det}"
         )
 
-    def _require_data_dir_ready(self) -> None:
+    def _require_data_dir_ready(self, *, read_only: bool = False) -> None:
         from config_api import read_expanded_conf, ensure_data_dirs
         conf = read_expanded_conf(self.config)
         data_dir = str(conf.get("GLOBAL_DATA_DIR", "")).strip()
@@ -457,7 +457,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise RuntimeError(
                 "GLOBAL_DATA_DIR is not set. Configure a primary data directory in Settings first."
             )
-        ensure_data_dirs(data_dir)
+        ensure_data_dirs(data_dir, read_only=read_only)
 
     def _get_api_token(self) -> str:
         return _load_or_create_api_token(self.config)
@@ -987,6 +987,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/history/log": lambda: self._get_log_file(parsed.query),
                 "/api/jobs/log/window": lambda: self._get_activity_log(parsed.query),
                 "/api/wizard/job": lambda: self._get_wizard_job(parsed.query),
+                "/api/wizard/new-job-id": self._get_wizard_new_job_id,
                 "/api/wizard/source-dirs": lambda: self._get_wizard_source_dirs(parsed.query),
                 "/api/wizard/runtime-inventory": self._get_wizard_runtime_inventory,
                 "/api/storage/check/jobs": self._get_check_jobs,
@@ -1747,6 +1748,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise RuntimeError("The job is currently running; wait for it to finish")
 
         info = jobs[job_key]
+        passphrase_path = None
+        if body.get("delete_passphrase"):
+            from repository_context import resolve_job_repository_context
+            from repositories_api import read_repository_store
+            context = resolve_job_repository_context(self.config, job_key, require_passphrase_file=False)
+            reference = str(context.get("passphrase_ref") or "")
+            if reference:
+                for repository in read_repository_store(self.config)["repositories"]:
+                    if str(repository.get("passphrase_ref") or "") == reference:
+                        if repository.get("repository_key") != context["repository_key"] or any(
+                            key != job_key for key in repository.get("used_by", [])
+                        ):
+                            raise ValueError("Passphrase is still referenced by another job or repository")
+                passphrase_path = Path(reference)
         conf = read_expanded_conf(self.config)
         status_dir = Path(self.config.get("STATUS_DIR", "/mnt/user/backup-status"))
         log_dir    = Path(conf.get("GLOBAL_LOG_DIR", "/mnt/user/Logs"))
@@ -1777,14 +1792,21 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
         delete_artifacts = bool(body.get("delete_artifacts", False))
 
-        # Status-Dateien: *_{backup_type}_{location}.status
+        # Historical filenames remain unchanged; ownership lives in the payload.
         deleted_status = 0
+        owned_logs = set()
         if delete_artifacts:
-            for f in status_dir.glob(f"*_{info.backup_type}_{info.location}.status"):
+            for f in status_dir.glob("*.status"):
                 try:
+                    record = json.loads(f.read_text(encoding="utf-8"))
+                    if record.get("job_id") != job_key:
+                        continue
+                    log = Path(str(record.get("log_file") or ""))
+                    if log.is_absolute() and log.resolve().parent == log_dir.resolve():
+                        owned_logs.add(log)
                     f.unlink()
                     deleted_status += 1
-                except OSError:
+                except (OSError, ValueError):
                     pass
 
         deleted_restore_test = False
@@ -1797,35 +1819,27 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             except OSError:
                 pass
 
-        # Log-Dateien: Borg-Backup[_-]{backup_type}--*.log
+        # New logs use the ID; old logs are selected through owned status records.
         deleted_logs = 0
         if delete_artifacts:
-            for pattern in (
-                f"Borg-Backup_{info.backup_type}--*.log",
-                f"Borg-Backup-{info.backup_type}--*.log",
-            ):
-                for f in log_dir.glob(pattern):
-                    try:
-                        f.unlink()
-                        deleted_logs += 1
-                    except OSError:
-                        pass
+            from job_identity import job_log_paths
+            owned_logs.update(job_log_paths(log_dir, job_key))
+            for f in owned_logs:
+                try:
+                    f.unlink()
+                    deleted_logs += 1
+                except OSError:
+                    pass
 
         # Passphrase-Datei (optional)
         deleted_passphrase = False
-        if body.get("delete_passphrase"):
-            suffix = f"{info.backup_type}_{info.location}".lower()
-            candidates = [
-                Path(f"/boot/config/borg-backup/secrets/.borg-passphrase-{suffix}"),
-                Path(f"/boot/config/borg-backup/secrets/.borg-passphrase-{info.backup_type}".lower()),
-            ]
-            for p in candidates:
-                try:
-                    if p.is_symlink() or p.exists():
-                        p.unlink()
-                        deleted_passphrase = True
-                except OSError:
-                    pass
+        if passphrase_path is not None:
+            try:
+                if passphrase_path.is_symlink() or passphrase_path.exists():
+                    passphrase_path.unlink()
+                    deleted_passphrase = True
+            except OSError:
+                pass
 
         # Schedule-Eintrag immer mit aufräumen (idempotent),
         # damit keine verwaisten Cron-Trigger für gelöschte Jobs bleiben.
@@ -2127,6 +2141,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from urllib.parse import parse_qs
         qs = parse_qs(query_string)
         filters = {
+            "job_key": (qs.get("job_key") or [""])[0] or None,
             "type": (qs.get("type") or [""])[0].lower() or None,
             "location": (qs.get("location") or [""])[0].lower() or None,
             "status": (qs.get("status") or [""])[0].lower() or None,
@@ -2146,6 +2161,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_rt_running(self) -> dict:
         from jobs_api import JobManager
         return JobManager.get().get_state("restore_test")
+
+    def _get_wizard_new_job_id(self) -> dict:
+        from job_identity import new_job_id
+        from jobs_api import get_jobs_meta_dir, resolve_data_root, resolve_scripts_dir
+        jobs_dir = get_jobs_meta_dir(resolve_scripts_dir(self.config), resolve_data_root(self.config))
+        return {"job_id": new_job_id(jobs_dir)}
 
     def _get_wizard_job(self, qs: str) -> dict:
         from urllib.parse import parse_qs as _pqs
@@ -2186,7 +2207,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         }
 
     def _get_restore_archives(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import list_archives_with_context
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
@@ -2196,7 +2217,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return list_archives_with_context(self.config, job_key)
 
     def _get_restore_files(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import list_files
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(qs_str)
@@ -2221,7 +2242,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_report_data(self.config, job_key)
 
     def _get_repo_stats(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import get_repo_stats
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
@@ -2231,7 +2252,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return get_repo_stats(self.config, job_key)
 
     def _get_restore_target_dirs(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import list_allowed_target_roots, list_target_dirs_with_config
         from urllib.parse import parse_qs, unquote
         qs = parse_qs(qs_str)
@@ -2247,7 +2268,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         }
 
     def _get_restore_state(self, qs_str: str) -> dict:
-        self._require_data_dir_ready()
+        self._require_data_dir_ready(read_only=True)
         from restore_api import get_restore_state
         from urllib.parse import parse_qs
         qs = parse_qs(qs_str)
@@ -3337,6 +3358,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         extra_env = {
             "BORG_UI_BORG_SCRIPTS_DIR": str(borg_scripts_dir),
             "BORG_UI_JOB_KEY": job_key,
+            "BORG_UI_JOB_NAME": info.name or info.display_name,
+            "BORG_UI_JOB_LOCATION": info.location,
             "BORG_UI_APP_VERSION": APP_VERSION,
             "BORG_UI_REQUEST_ID": request_id,
             "BORG_UI_REQUEST_SOURCE": source,
@@ -3818,7 +3841,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export"}
+                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export", "/api/wizard/new-job-id"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)

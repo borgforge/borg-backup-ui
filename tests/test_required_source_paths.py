@@ -1,3 +1,4 @@
+from job_fixtures import job_id
 import json
 import logging
 from pathlib import Path
@@ -22,6 +23,7 @@ from runtime.lib.status import BackupStatus
 def _config(tmp_path: Path, source_paths: list[Path]) -> BackupJobConfig:
     return BackupJobConfig(
         job_name="Required sources",
+        job_id=job_id("data_local"),
         backup_type="data",
         backup_location="local",
         lock_file=tmp_path / "job.lock",

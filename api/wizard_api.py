@@ -5,6 +5,7 @@ Backup jobs are stored as canonical JSON metadata and executed through the
 scriptless wizard runner.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -12,11 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from job_source_paths import JOB_SCHEMA_VERSION, SourcePathValidationError, normalize_source_paths
+from job_source_paths import SourcePathValidationError, normalize_source_paths
 
-
-def _type_upper(type_id: str) -> str:
-    return re.sub(r"[^A-Z0-9]", "_", type_id.upper())
 
 
 _RUNTIME_MODES = {"all", "selected", "none"}
@@ -204,6 +202,15 @@ _RETENTION_DEFAULTS = {
 }
 
 
+class JobNameValidationError(ValueError):
+    api_code = "job_name_too_long"
+
+
+def _validate_job_name_length(name: str) -> None:
+    if len(name.strip()) > 100:
+        raise JobNameValidationError("Job name must not exceed 100 characters")
+
+
 class RetentionValidationError(ValueError):
     """Expose a stable API code for localized wizard retention errors."""
 
@@ -241,13 +248,17 @@ def validate_params(
     require_runtime_ack: bool = True,
 ) -> None:
     """Wirft ValueError bei ungültigen Parametern."""
-    type_id = params.get("type_id", "").strip()
-    if not type_id:
-        raise ValueError("Type ID must not be empty")
-    if not re.fullmatch(r"[a-z0-9_]+", type_id):
-        raise ValueError("Type ID may contain only lowercase letters, digits, and underscores")
+    from archive_prefix import validate_archive_prefix
+    from job_identity import validate_job_id
+    params["archive_prefix"] = validate_archive_prefix(params.get("archive_prefix"))
+    existing_key = str(params.get("existing_job_key") or "").strip()
+    if allow_existing:
+        validate_job_id(existing_key)
+    elif existing_key:
+        raise ValueError("An existing job ID requires edit mode")
     if not params.get("job_name", "").strip():
         raise ValueError("Job name must not be empty")
+    _validate_job_name_length(params["job_name"])
     retention = _retention_from_params(params)
     params["file_activity"] = _bool_value(params.get("file_activity"), default=False)
     for period, value in retention.items():
@@ -303,10 +314,10 @@ def validate_params(
             raise ValueError("VM domain backup risk must be acknowledged when not shutting down all VMs")
 
     from jobs_api import get_jobs_meta_dir
-    job_key = f"{type_id}_{location}"
-    meta_target = get_jobs_meta_dir(scripts_dir, data_root) / f"{job_key}.json"
-    if meta_target.exists() and not allow_existing:
-        raise FileExistsError(f"Job already exists: {type_id}_{location}")
+    if allow_existing:
+        meta_target = get_jobs_meta_dir(scripts_dir, data_root) / f"{existing_key}.json"
+        if not meta_target.is_file():
+            raise ValueError("The job being edited no longer exists")
 
 
 def _repository_from_params(params: dict, ui_config: Optional[dict]) -> Optional[dict]:
@@ -344,9 +355,8 @@ def _repository_encryption(repo: Optional[dict], fallback: str = "repokey-blake2
 
 
 def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dict:
-    from archive_prefix import archive_prefix_from_backup_type, normalize_archive_prefixes
+    from archive_prefix import archive_prefix_from_metadata, job_archive_prefixes
     from jobs_api import discover_jobs, get_jobs_meta_dirs, resolve_data_root
-    from config_api import read_expanded_conf
 
     data_root = resolve_data_root(ui_config)
     jobs = {j.key: j for j in discover_jobs(scripts_dir, data_root)}
@@ -354,19 +364,12 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         raise ValueError(f"Unknown job: {job_key}")
 
     info = jobs[job_key]
-    conf = read_expanded_conf(ui_config)
-    type_id = str(info.backup_type or "").lower()
     location = str(info.location or "local").lower()
 
     # Prefer explicit wizard metadata values if available.
     meta_source_paths: list[str] = []
     meta_exclude_paths: list[str] = []
-    meta_compression = ""
     meta_file_activity = False
-    meta_keep_daily = ""
-    meta_keep_weekly = ""
-    meta_keep_monthly = ""
-    meta_keep_yearly = ""
     meta_repository_key = ""
     meta_mount_before_run = True
     meta_unmount_after_run = True
@@ -396,20 +399,11 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         try:
             meta = candidate
             meta_exclude_paths = _exclude_paths(meta.get("exclude_paths", []))
-            meta_compression = str(meta.get("compression") or "").strip()
             meta_file_activity = _bool_value(meta.get("file_activity"), default=False)
-            meta_ret = meta.get("retention") if isinstance(meta.get("retention"), dict) else {}
-            meta_keep_daily = str(meta_ret.get("daily") or "").strip()
-            meta_keep_weekly = str(meta_ret.get("weekly") or "").strip()
-            meta_keep_monthly = str(meta_ret.get("monthly") or "").strip()
-            meta_keep_yearly = str(meta_ret.get("yearly") or "").strip()
             meta_repository_key = str(meta.get("repository_key") or "").strip()
             meta_mount_before_run = bool(meta.get("mount_before_run", True))
             meta_unmount_after_run = bool(meta.get("unmount_after_run", True))
-            meta_archive_prefixes = normalize_archive_prefixes([
-                archive_prefix_from_backup_type(type_id),
-                *(meta.get("archive_prefixes") if isinstance(meta.get("archive_prefixes"), list) else []),
-            ])
+            meta_archive_prefixes = job_archive_prefixes(meta)
             meta_docker_control = _runtime_control_from_meta(meta, "docker")
             meta_vm_control = _runtime_control_from_meta(meta, "vm")
             break
@@ -432,7 +426,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         repository_context = {}
         repo_path = ""
         assignment_error = str(exc)
-    compression = meta_compression or conf.get(f"COMPRESSION_{_type_upper(type_id)}", "lz4")
+    from job_settings import explicit_job_settings
+    compression, effective_retention = explicit_job_settings(meta)
 
     # Prefer explicit job metadata name (JSON) over display label with location suffix.
     # This keeps edited names stable (e.g. "Flash" stays "Flash", not "Flash - Lokal").
@@ -444,7 +439,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
 
     params = {
         "job_key": job_key,
-        "type_id": type_id,
+        "job_id": job_key,
+        "archive_prefix": archive_prefix_from_metadata(meta),
         "job_name": (info.name or "").strip() or info.display_name or job_key,
         "description": info.description or "",
         "icon": str(getattr(info, "icon", "") or "").strip().lower(),
@@ -465,14 +461,12 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "file_activity": meta_file_activity,
         "encryption": str(repository_context.get("encryption") or ""),
         "passphrase": "",
-        "keep_daily": meta_keep_daily or conf.get(f"RETENTION_{_type_upper(type_id)}_DAILY", "7"),
-        "keep_weekly": meta_keep_weekly or conf.get(f"RETENTION_{_type_upper(type_id)}_WEEKLY", "4"),
-        "keep_monthly": meta_keep_monthly or conf.get(f"RETENTION_{_type_upper(type_id)}_MONTHLY", "6"),
-        "keep_yearly": meta_keep_yearly or conf.get(f"RETENTION_{_type_upper(type_id)}_YEARLY", "3"),
+        "keep_daily": effective_retention["daily"],
+        "keep_weekly": effective_retention["weekly"],
+        "keep_monthly": effective_retention["monthly"],
+        "keep_yearly": effective_retention["yearly"],
         "standard": info.standard,
-        "archive_prefixes": meta_archive_prefixes or normalize_archive_prefixes([
-            archive_prefix_from_backup_type(type_id),
-        ]),
+        "archive_prefixes": meta_archive_prefixes,
         "schedule": {
             "cron": str(schedule.get("cron") or "").strip(),
             "enabled": bool(schedule.get("enabled", True)),
@@ -483,7 +477,6 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
 
 def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, scripts_dir: Optional[Path] = None) -> dict:
     """Erzeugt eine textuelle Backup-Flow-Vorschau fuer den Wizard."""
-    type_id = params["type_id"].strip()
     location = params.get("location", "local")
     source_paths = normalize_source_paths(params.get("source_paths"))
     exclude_paths = _exclude_paths(params.get("exclude_paths", []))
@@ -543,7 +536,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     } if location == "storagebox" else {"checked": False, "exists": False, "needs_init_confirm": False, "message": ""}
     return {
         "runner": "scriptless-wizard-runner",
-        "job_key": f"{type_id}_{location}",
+        "job_key": str(params.get("existing_job_key") or ""),
         "summary": {
             "location": location,
             "repo": repo_path,
@@ -569,10 +562,28 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
 
 
 def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
-    """Speichert Job-eigene Wizard-Metadaten mit kanonischer Repository-Referenz."""
-    from archive_prefix import archive_prefix_from_backup_type, normalize_archive_prefixes
+    """Keep new-job input intact if its proposed ID was taken before saving."""
+    from job_identity import JobIdConflictError, new_job_id
     from jobs_api import get_jobs_meta_dir
-    type_id     = params["type_id"].strip()
+    attempt = dict(params)
+    for _ in range(10):
+        try:
+            return _save_job(attempt, scripts_dir, data_root, ui_config)
+        except JobIdConflictError:
+            if str(attempt.get("existing_job_key") or "").strip():
+                raise
+            # Both conflict checks run before any job or repository writes.
+            attempt["job_id"] = new_job_id(get_jobs_meta_dir(scripts_dir, data_root))
+    raise JobIdConflictError("Could not save with an unused job ID. Please try saving again.")
+
+
+def _save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
+    """Speichert Job-eigene Wizard-Metadaten mit kanonischer Repository-Referenz."""
+    from archive_prefix import job_archive_prefixes, validate_archive_prefix
+    from job_identity import JobIdConflictError, new_job_id, metadata_job_id, validate_job_id
+    from jobs_api import get_jobs_meta_dir
+    _validate_job_name_length(params.get("job_name", ""))
+    archive_prefix = validate_archive_prefix(params.get("archive_prefix"))
     location    = params.get("location", "local")
     description = params.get("description", "").strip()
     icon = str(params.get("icon", "")).strip().lower()
@@ -588,46 +599,46 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
     existing_job_key = str(params.get("existing_job_key", "")).strip()
 
     # ── Wizard-Metadaten schreiben (Phase 2) ─────────────────────────────────
-    job_key = f"{type_id}_{location}"
+    requested_id = validate_job_id(params["job_id"]) if "job_id" in params else ""
+    job_key = validate_job_id(existing_job_key) if existing_job_key else (requested_id or new_job_id(get_jobs_meta_dir(scripts_dir, data_root)))
+    if params.get("job_id") and params["job_id"] != job_key:
+        raise ValueError("The permanent job ID cannot be changed")
     now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     jobs_meta_dir = get_jobs_meta_dir(scripts_dir, data_root)
     jobs_meta_dir.mkdir(parents=True, exist_ok=True)
     meta_path = jobs_meta_dir / f"{job_key}.json"
 
     existing = {}
-    if meta_path.exists():
-        try:
-            existing = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-            existing = {}
-    elif existing_job_key and existing_job_key != job_key:
-        old_meta_path = jobs_meta_dir / f"{existing_job_key}.json"
-        if old_meta_path.exists():
-            try:
-                existing = json.loads(old_meta_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                existing = {}
+    if existing_job_key:
+        existing = json.loads(meta_path.read_text(encoding="utf-8"))
+        if metadata_job_id(existing) != job_key:
+            raise ValueError("The permanent job ID cannot be changed")
+    elif meta_path.exists():
+        raise JobIdConflictError("New job ID already exists")
+    from job_settings import JOB_SETTINGS_SCHEMA, explicit_job_settings
 
     mount_before_run = bool(params.get("mount_before_run", existing.get("mount_before_run", True)))
     unmount_after_run = bool(params.get("unmount_after_run", existing.get("unmount_after_run", True)))
     docker_control = _runtime_control_from_params(params, "docker", existing)
     vm_control = _runtime_control_from_params(params, "vm", existing)
-    archive_prefixes = normalize_archive_prefixes([
-        archive_prefix_from_backup_type(type_id),
-        archive_prefix_from_backup_type(existing.get("backup_type")),
-        *(existing.get("archive_prefixes") if isinstance(existing.get("archive_prefixes"), list) else []),
-    ])
+    archive_prefixes = list(dict.fromkeys([
+        archive_prefix, *(job_archive_prefixes(existing) if existing else []),
+    ]))
 
     metadata = {
-        "schema_version": JOB_SCHEMA_VERSION,
+        **existing,
+        "schema_version": JOB_SETTINGS_SCHEMA,
         "job_key": job_key,
+        "job_id": job_key,
+        "cache_subdir": existing.get("cache_subdir", job_key),
+        "check_flag_name": existing.get("check_flag_name", ".last_check"),
         "name": params.get("job_name", "").strip() or job_key,
         "description": description,
         "icon": icon,
         "icon_color": icon_color,
         "enabled": bool(existing.get("enabled", True)),
         "standard": "wizard",
-        "backup_type": type_id,
+        "archive_prefix": archive_prefix,
         "archive_prefixes": archive_prefixes,
         "location": location,
         "mount_before_run": mount_before_run if location == "smb" else True,
@@ -637,18 +648,27 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         "source_paths": normalize_source_paths(params.get("source_paths")),
         "exclude_paths": _exclude_paths(params.get("exclude_paths", [])),
         "features": {
+            **existing.get("features", {}),
             "docker": docker_control["mode"] != "none",
             "vm": vm_control["mode"] != "none",
         },
-        "docker_control": docker_control,
-        "vm_control": vm_control,
+        "docker_control": {**existing.get("docker_control", {}), **docker_control},
+        "vm_control": {**existing.get("vm_control", {}), **vm_control},
         "compression": str(params.get("compression", "lz4")).strip() or "lz4",
         "file_activity": file_activity,
-        "retention": retention,
+        "retention": {**existing.get("retention", {}), **retention},
         "created_at": existing.get("created_at", now_iso),
         "updated_at": now_iso,
     }
+    if not existing or str(existing.get("repository_key") or "") != selected_repository_key:
+        # Check results belong to a repository, even when the job ID/cache stays
+        # the same. Preserve legacy markers until the job actually changes repo.
+        repository_digest = hashlib.sha256(selected_repository_key.encode("utf-8")).hexdigest()
+        metadata["check_flag_name"] = f".last_check-{repository_digest}"
     metadata["repository_key"] = selected_repository_key
+    metadata.pop("backup_type", None)
+    metadata.pop("type_id", None)
+    explicit_job_settings(metadata)
     if isinstance(existing.get("restore_test_policy"), dict):
         metadata["restore_test_policy"] = dict(existing["restore_test_policy"])
 
@@ -666,9 +686,12 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
         previous_repository_key=str(existing.get("repository_key") or ""),
         previous_job_key=existing_job_key or job_key,
         previous_metadata_path=previous_meta_path,
+        create_only=not bool(existing_job_key),
     )
 
     return {
+        "job_id": job_key,
+        "job_key": job_key,
         "filename": "",
         "path": "",
         "script": "",

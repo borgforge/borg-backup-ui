@@ -222,7 +222,7 @@ def test_user_manuals_cover_current_stable_safety_and_runtime_guidance():
 
     required_shared = (
         "2026.08.31.0907",
-        "Unraid 7.2.0",
+        "Unraid 6.12.5",
         "Python 3 for Unraid",
         "backup.start.priority=1",
         "Borg Server",

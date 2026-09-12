@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 from pathlib import Path
 import json
 import sys
@@ -18,9 +19,9 @@ def _write_usb_reference(tmp_path: Path) -> dict:
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path)}
     jobs_dir = tmp_path / "config" / "jobs"
     jobs_dir.mkdir(parents=True)
-    (jobs_dir / "photos-usb.json").write_text(json.dumps({
+    (jobs_dir / (job_id('photos-usb') + ".json")).write_text(json.dumps({"job_id": job_id('photos-usb'), "archive_prefix": "photos-usb-backup",
         "schema_version": 2,
-        "job_key": "photos-usb",
+        "job_key": job_id('photos-usb'),
         "name": "Photos USB",
         "location": "usb",
         "repository_key": "repo_photos_usb",
@@ -83,7 +84,7 @@ def test_get_usb_profile_job_refs_uses_canonical_storage_reference(tmp_path: Pat
     config = _write_usb_reference(tmp_path)
 
     assert usb_profiles_api.get_usb_profile_job_refs(config) == {
-        "usb-a": ["photos-usb (Photos USB)"]
+        "usb-a": [f"{job_id('photos-usb')} (Photos USB)"]
     }
 
 

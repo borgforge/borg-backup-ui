@@ -7,10 +7,12 @@ one immutable run identity; neither requests nor status polling copy the log.
 from __future__ import annotations
 
 import codecs
+import json
 import os
 import re
 import stat
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 
 WINDOW_BYTES = 65536
@@ -19,9 +21,12 @@ _KEY = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _RUN = re.compile(r"^[A-Za-z0-9_.-]{8,96}$")
 
 
-def activity_log_path(directory: Path, job_key: str, run_id: str) -> Path:
+def activity_log_path(directory: Path, job_key: str, run_id: str, *, job_name: str = "", location: str = "") -> Path:
     if not _KEY.fullmatch(job_key) or not _RUN.fullmatch(run_id):
         raise ValueError("Invalid activity log identity")
+    if job_name or location:
+        from job_identity import job_log_filename, job_run_date_tag
+        return directory / job_log_filename(job_name, location, job_key, job_run_date_tag(run_id))
     return directory / f"Borg-Backup_{job_key}--activity-{run_id}.log"
 
 
@@ -31,6 +36,53 @@ def open_activity_file(path: Path):
         os.close(fd)
         raise ValueError("Activity log is not a regular file")
     return os.fdopen(fd, "rb")
+
+
+def _saved_activity_run(config: dict, job_key: str, run_id: str) -> tuple[Path, dict] | None:
+    """Resolve a saved run by its status metadata after RAM state is gone."""
+    from jobs_api import _runtime_log_dir
+    status_dir = str(config.get("STATUS_DIR") or "")
+    archive_dir = str(config.get("STATUS_ARCHIVE_DIR") or (Path(status_dir) / "archive" if status_dir else ""))
+    try:
+        return _find_saved_activity_run(status_dir, archive_dir, _runtime_log_dir(config), job_key, run_id)
+    except FileNotFoundError:
+        return None
+
+
+@lru_cache(maxsize=128)
+def _find_saved_activity_run(status_dir: str, archive_dir: str, log_dir: Path,
+                             job_key: str, run_id: str) -> tuple[Path, dict]:
+    # Completed run mappings are immutable. Cache only successful lookups so
+    # each bounded log window does not reread all historical status files.
+    matches = {}
+    for directory in {status_dir, archive_dir} - {""}:
+        for status_file in Path(directory).glob(f"*_{job_key}.status"):
+            try:
+                data = json.loads(status_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(data, dict) or data.get("job_id") != job_key or data.get("run_id") != run_id:
+                continue
+            if data.get("file_activity") is not True or not isinstance(data.get("log_file"), str) or not data["log_file"]:
+                continue
+            matches[Path(data["log_file"])] = data
+    if not matches:
+        # A runner can fail before writing status (for example while loading
+        # its job). Its complete retained log must still reopen after reboot.
+        from job_identity import job_log_paths
+        marker = f"INFO File activity run: job_id={job_key} run_id={run_id}\n".encode()
+        for candidate in job_log_paths(log_dir, job_key):
+            try:
+                with open_activity_file(candidate) as handle:
+                    if handle.readline(256) == marker:
+                        matches[candidate] = {}
+            except (OSError, ValueError):
+                continue
+    if len(matches) > 1:
+        raise ValueError("Multiple logs found for this job run")
+    if not matches:
+        raise FileNotFoundError("No saved file-activity log found for this job run")
+    return next(iter(matches.items()))
 
 
 def resolve_activity_run(config: dict, job_key: str, run_id: str = "") -> tuple[Path, dict]:
@@ -53,6 +105,18 @@ def resolve_activity_run(config: dict, job_key: str, run_id: str = "") -> tuple[
         # Exact run filenames allow reconnecting after completion or a UI
         # restart, without accepting arbitrary filesystem paths from clients.
         state = {"running": False, "exit_code": None, "run_id": run_id}
+        from job_identity import job_log_paths
+        matches = [candidate for candidate in job_log_paths(path.parent, job_key)
+                   if candidate.name.endswith(f"--activity-{run_id}.log")]
+        if len(matches) > 1:
+            raise ValueError("Multiple logs found for this job run")
+        if matches:
+            path = matches[0]
+        else:
+            saved = _saved_activity_run(config, job_key, run_id)
+            if saved:
+                path, status = saved
+                state["exit_code"] = status.get("exit_code")
     control = read_control_state(run_id)
     if control.get("job_key") == job_key:
         state["phase"] = control.get("phase", "")

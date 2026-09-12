@@ -28,6 +28,8 @@ def list_restore_tests(config: dict) -> List[dict]:
     if not test_dir.exists():
         return []
 
+    from job_identity import active_job_ids
+    job_ids = active_job_ids(config)
     results = []
     for test_file in sorted(test_dir.glob("*.test")):
         try:
@@ -35,9 +37,10 @@ def list_restore_tests(config: dict) -> List[dict]:
         except (json.JSONDecodeError, OSError):
             continue
 
-        stem = test_file.stem
-        data["job_key"] = stem
-        data["key"] = stem or f"{data.get('type', '?')}_{data.get('location', '?')}"
+        data["job_key"] = str(data.get("job_id") or "")
+        if data["job_key"] not in job_ids:
+            continue
+        data["key"] = data["job_key"]
         data["time_ago"] = _time_ago(data.get("test_date", ""))
         data["duration_formatted"] = _fmt_duration(data.get("test_duration_seconds", 0))
         data["report_schema_version"] = _safe_int(data.get("report_schema_version"), 0)
@@ -123,6 +126,7 @@ def list_restore_test_plan(config: dict) -> dict:
             "location": job.get("location") or "",
             "enabled": bool(job.get("enabled", True)),
             "backup_type": job.get("backup_type") or "",
+            "archive_prefix": job.get("archive_prefix") or "",
             "icon": job.get("icon") or "",
             "icon_color": job.get("icon_color") or "",
             "is_utility": bool(job.get("is_utility", False)),
@@ -137,7 +141,7 @@ def list_restore_test_plan(config: dict) -> dict:
             "job_meta_file": str((data_root / "config" / "jobs" / f"{key}.json")),
         })
 
-    rows.sort(key=lambda r: str(r.get("display_name") or "").lower())
+    rows.sort(key=lambda r: str(r.get("name") or r.get("display_name") or "").casefold())
     return {
         "defaults": {
             "interval_days": interval_default,
@@ -160,7 +164,7 @@ def update_restore_test_policy(config: dict, job_key: str, policy_raw: dict) -> 
     key = str(job_key or "").strip()
     if not key:
         raise ValueError("job_key is missing")
-    if not re.fullmatch(r"[A-Za-z0-9_]+", key):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", key):
         raise ValueError("Invalid job_key")
     if not isinstance(policy_raw, dict):
         raise ValueError("policy must be an object")

@@ -1,3 +1,4 @@
+from job_fixtures import identified_job, job_id
 from pathlib import Path
 import io
 import sys
@@ -88,7 +89,7 @@ def test_restore_overwrite_blocks_symlink_destination_outside_target(tmp_path: P
     with pytest.raises(ValueError, match="outside"):
         restore_api.start_restore(
             cfg,
-            "appdata_local",
+            job_id("appdata_local"),
             "archive-1",
             "foo",
             str(target),

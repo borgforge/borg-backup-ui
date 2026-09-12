@@ -35,7 +35,8 @@ def jobs_dir(config: dict) -> Path:
 
 
 def load_job_metadata(config: dict, job_key: str) -> dict[str, Any]:
-    key = str(job_key or "").strip()
+    from job_identity import validate_job_id, metadata_job_id
+    key = validate_job_id(job_key)
     if not key:
         raise RepositoryContextError("Job key is missing")
     path = jobs_dir(config) / f"{key}.json"
@@ -47,6 +48,8 @@ def load_job_metadata(config: dict, job_key: str) -> dict[str, Any]:
         raise RepositoryContextError(f"Job metadata is not readable: {key}") from exc
     if not isinstance(payload, dict):
         raise RepositoryContextError(f"Job metadata is invalid: {key}")
+    if metadata_job_id(payload) != key:
+        raise RepositoryContextError(f"Job metadata ID does not match filename: {key}")
     return payload
 
 
@@ -152,6 +155,9 @@ def resolve_job_repository_context(
             raise RepositoryContextError(
                 f"Job '{resolved_job_key}' awaits repository migration ({details})"
             )
+        from job_identity import metadata_job_id
+        if metadata_job_id(metadata) != resolved_job_key:
+            raise RepositoryContextError("Job ID does not match repository context")
     repository_key = str(metadata.get("repository_key") or "").strip()
     source = inventory if isinstance(inventory, dict) else load_repository_inventory(config)
     repository = repository_by_key(config, repository_key, inventory=source)

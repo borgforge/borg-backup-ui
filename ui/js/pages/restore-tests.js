@@ -35,6 +35,11 @@ function restoreTestsStatusIcon(status) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[status] || icons.warning}</svg>`;
 }
 
+function restoreTestJobName(result) {
+  const job = (restoreTestsState.jobs || []).find((item) => String(item.key) === String(result.job_key));
+  return job?.name || job?.display_name || result.type || '—';
+}
+
 function restoreTestsLocale() {
   return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
 }
@@ -72,7 +77,7 @@ function restoreTestsJobIcon(job) {
   const icon = resolveJobIcon(job);
   const color = resolveJobIconColor(job);
   const colorClass = color ? ` type-icon-color-${color}` : '';
-  return `<span class="type-icon type-icon-${escHtml(String(job?.backup_type || 'sonstiges').toLowerCase())} rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
+  return `<span class="type-icon rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
 }
 
 function renderRestoreTestsSidebar() {
@@ -96,7 +101,7 @@ function renderRestoreTestsSidebar() {
       const configured = !!planJob && planJob.enabled !== false && String(planJob.policy?.mode || 'off') !== 'off';
       const stateClass = planJob?.is_overdue ? 'warning' : configured ? 'success' : 'disabled';
       const active = restoreTestsState.selectedJob === String(job.key);
-      return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.display_name || job.name || job.key)}</strong><small>${escHtml(job.key)}</small></span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
+      return `<button class="rt-sidebar-job ${active ? 'is-active' : ''}" data-rt-sidebar-job="${escHtml(job.key)}" ${active ? 'aria-current="page"' : ''}>${restoreTestsJobIcon(job)}<span><strong>${escHtml(job.name || job.display_name || job.key)}</strong><small>${escHtml(job.archive_prefix || '')}</small></span><span class="rt-sidebar-state ${stateClass}"></span></button>`;
     }).join('')}</section>`;
   }).join('');
   list.innerHTML = allEntry + groups;
@@ -870,7 +875,7 @@ function renderRTReportRow(t, idx) {
       <td><svg class="history-chevron" id="rtchev-${idx}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></td>
       <td style="white-space:nowrap;color:var(--text-primary)">${escHtml(dt)}</td>
       <td><span class="history-type-badge">RESTORE TEST</span></td>
-      <td style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px">${escHtml(t.job_key || t.type || '-')}</td>
+      <td style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px">${escHtml(restoreTestJobName(t))}</td>
       <td><span class="history-loc-chip ${(t.location || '').toLowerCase()}">${escHtml(restoreTestsLocationLabel(t.location || ''))}</span></td>
       <td>${escHtml(t.duration_formatted || '—')}</td>
       <td>${escHtml(stats.original || '—')}</td>
@@ -883,7 +888,7 @@ function renderRTReportRow(t, idx) {
           <div class="rt-report-card-head rt-report-hero">
             <div>
               <div class="rt-report-kicker">${escHtml(restoreTestsT('report'))}</div>
-              <div class="rt-report-title">${escHtml(t.job_key || t.type || 'Restore Test')}</div>
+              <div class="rt-report-title">${escHtml(restoreTestJobName(t))}</div>
               <div class="rt-report-subtitle">${escHtml(archive || restoreTestsT('noArchive'))}</div>
             </div>
             <div class="rt-report-result ${successful ? 'success' : 'error'}">

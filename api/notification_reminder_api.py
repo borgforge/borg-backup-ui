@@ -491,10 +491,6 @@ def _latest_backup_status_by_key(rows: list) -> dict[str, dict]:
         explicit_key = str(row.get("key") or "").strip()
         if explicit_key:
             keys.append(explicit_key)
-        backup_type = str(row.get("backup_type") or row.get("type") or "").strip().lower()
-        location = str(row.get("location") or "").strip().lower()
-        if backup_type and location:
-            keys.append(f"{backup_type}_{location}")
         for key in keys:
             current = latest.get(key)
             if current is None or _status_is_newer(row, current):

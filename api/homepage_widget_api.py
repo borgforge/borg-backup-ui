@@ -28,12 +28,16 @@ def _read_jobs(config: dict) -> list[dict]:
             continue
         if not isinstance(raw, dict):
             continue
-        key = str(raw.get("job_key") or path.stem).strip()
+        from job_identity import metadata_job_id
+        try:
+            key = metadata_job_id(raw)
+        except ValueError:
+            continue
         if not key:
             continue
         policy = raw.get("restore_test_policy") if isinstance(raw.get("restore_test_policy"), dict) else {}
         location = str(raw.get("location") or "").strip().lower()
-        name = str(raw.get("name") or raw.get("backup_type") or key).strip()
+        name = str(raw.get("name") or "Backup").strip()
         location_label = {
             "local": "Local",
             "usb": "USB",
@@ -49,7 +53,7 @@ def _read_jobs(config: dict) -> list[dict]:
             "is_utility": bool(raw.get("is_utility", False)),
             "restore_test_policy": policy,
         })
-    return rows
+    return sorted(rows, key=lambda row: row["name"].casefold())
 
 
 def _read_latest_backup_rows(config: dict) -> list[dict]:
@@ -57,7 +61,8 @@ def _read_latest_backup_rows(config: dict) -> list[dict]:
 
     status_dir = Path(str(config.get("STATUS_DIR") or "/mnt/user/backup-status"))
     store = StatusStore(status_dir)
-    latest = store.get_latest_per_key(store.load())
+    job_ids = {job["key"] for job in _read_jobs(config)}
+    latest = store.get_latest_per_key([status for status in store.load() if status.key in job_ids])
     rows: list[dict] = []
     for key, status in latest.items():
         rows.append({

@@ -42,22 +42,31 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
         per_page = 20
 
     entries = []
+    from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
+    jobs = {job.key: job for job in discover_jobs(resolve_scripts_dir(config), resolve_data_root(config))} if config.get("BACKUP_SCRIPTS_DIR") else {}
     location_counts = {location: 0 for location in ("storagebox", "usb", "smb", "local")}
     known_types = {"flash", "appdata", "photos", "vms", "sonstiges"}
     for f in sorted(status_dir.glob("*.status"), reverse=True):
         # Filename: YYYY-MM-DD_HH-MM-SS_type_location.status
         stem = f.stem
-        parts = stem.split("_")
-        if len(parts) < 4:
+        parts = stem.split("_", 2)
+        if len(parts) < 3:
             continue
         date_part = parts[0]          # 2026-03-01
         time_part = parts[1]          # 02-15-43
-        backup_type = parts[2]        # flash / appdata / …
-        location = "_".join(parts[3:]) # local / usb / storagebox
 
         try:
             raw = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
+            continue
+
+        backup_type = str(raw.get("backup_type") or "unknown")
+        location = str(raw.get("location") or "unknown")
+        job_id = str(raw.get("job_id") or "")
+        job = jobs.get(job_id)
+        if job is None:
+            continue
+        if filters.get("job_key") and filters["job_key"] != job_id:
             continue
 
         status = raw.get("status", "unknown")
@@ -83,6 +92,9 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
 
         entries.append({
             "entry_kind": "backup_run",
+            "job_id": job_id,
+            "job_key": job_id,
+            "job_name": (job.name or job.display_name) if job else backup_type,
             "filename": f.name,
             "date": date_part,
             "time": time_part.replace("-", ":"),
@@ -129,6 +141,7 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
     end = start + per_page
 
     return {
+        "jobs": [{"job_id": job.key, "name": job.name or job.display_name} for job in jobs.values()],
         "entries": entries[start:end],
         "total": total,
         "page": page,

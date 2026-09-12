@@ -57,7 +57,7 @@ Die Anwendung kennt die Rollen `admin`, `operator` und `viewer`:
 
 ### 1.3 Installation und Erstkonfiguration
 
-Borg Backup UI befindet sich in der **Public Beta** und wird über **Unraid Community Apps** installiert. Voraussetzungen sind **Unraid 7.2.0 oder neuer** sowie **Python 3.10 oder neuer**. Installieren Sie das separate Plugin **Python 3 for Unraid** zuerst über Community Apps. BorgBackup selbst ist im Borg-Backup-UI-Paket enthalten; eine zusätzliche Borg- oder pip-Installation ist nicht erforderlich.
+Borg Backup UI befindet sich in der **Public Beta** und wird über **Unraid Community Apps** installiert. Voraussetzungen sind **Unraid 6.12.5 oder neuer** sowie **Python 3.10 oder neuer**. Installieren Sie das separate Plugin **Python 3 for Unraid** zuerst über Community Apps. BorgBackup selbst ist im Borg-Backup-UI-Paket enthalten; eine zusätzliche Borg- oder pip-Installation ist nicht erforderlich.
 
 1. Öffnen Sie in Unraid **Apps**.
 2. Installieren Sie **Python 3 for Unraid**, falls es noch nicht vorhanden ist.
@@ -700,6 +700,10 @@ Typische Statuswerte:
 - **Fehlgeschlagen**
 - **Nicht verfügbar**
 
+Bei Restore-Tests ab Level 2 entscheidet die eingestellte Archivgröße über den Dry-Run: Unterhalb des Schwellwerts wird das vollständige Archiv geprüft, ab dem Schwellwert eine Dateistichprobe in Gruppen. Standardmäßig beträgt der Schwellwert 500 GB; 0 deaktiviert die Umschaltung. Die frühere Sonderregel für die Typen `photos` und `vms` entfällt.
+
+Die Stichprobe zielt standardmäßig auf 5 % der regulären Dateien, begrenzt durch die eingestellten Dateilimits (standardmäßig 1.000). Verzeichnisse zählen weder als Dateien noch zur Abdeckung. Beispiel: Bei 10.000 Dateien werden 500 geprüft; bei 100.000 Dateien greift die Grenze von 1.000, entsprechend 1 % Abdeckung. Der Bericht zeigt die erreichte Datei-Abdeckung. Die zusätzliche Level-3-Prüfung verwendet weiterhin ihre eigene Stichprobengröße.
+
 ### 8.6 Best Practices
 
 - Planen Sie Restore Tests für wichtige Jobs regelmäßig.
@@ -952,7 +956,9 @@ Importstrategien können je nach Importtyp vorhandene Einträge behalten, ersetz
 
 > **Warnung:** Bewahren Sie Export-Passwörter sicher auf. Ohne passendes Passwort können verschlüsselte Exporte nicht wiederhergestellt werden.
 
-Neue verschlüsselte Exporte verwenden eine versionierte, authentifizierte Hülle. Ein falsches Passwort sowie beschädigte, abgeschnittene oder manipulierte Dateien werden geprüft, bevor Importdaten geschrieben werden. Ältere AES-CBC-Exporte bleiben importierbar, erscheinen in der Vorschau jedoch mit einem Legacy-Hinweis. Erstellen Sie nach einem Legacy-Import einen neuen Export im aktuellen Format.
+Neue verschlüsselte Exporte verwenden eine versionierte, authentifizierte Hülle. Ein falsches Passwort sowie beschädigte, abgeschnittene oder manipulierte Dateien werden geprüft, bevor Importdaten geschrieben werden. Zusätzlich muss das enthaltene Konfigurationsformat unterstützt werden; Dateiname und Exportdatum sind dafür nicht entscheidend.
+
+> **Nach dem Update neue Exporte erstellen:** Job- und Profilexporte im bisherigen Format sind nicht mehr importierbar. Erstellen Sie nach erfolgreicher Migration neue Job- und Profilexporte. Alte Formate werden vor Änderungen an Jobs, Einstellungen oder Secrets abgelehnt. Vorhandene Borg-Backup-Archive bleiben für Wiederherstellungen verwendbar und müssen nicht neu erstellt werden.
 
 ### 9.11 Erweitert
 

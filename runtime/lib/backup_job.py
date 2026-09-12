@@ -29,6 +29,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -49,6 +50,7 @@ _HR = "━" * 80
 REQUIRED_SOURCE_PATHS_MISSING = "required_source_paths_missing"
 RUNTIME_RECOVERY_FAILED = "runtime_recovery_failed"
 USER_CANCELLED = "user_cancelled"
+USB_MOUNT_ACCESS_FAILED = "usb_mount_access_failed"
 
 
 def _path_uses_symlink(path: Path) -> bool:
@@ -102,6 +104,18 @@ class RequiredSourcePathsMissing(RuntimeError):
         )
 
 
+class UsbMountAccessError(RuntimeError):
+    """USB preflight could not inspect the target; Borg must not be started."""
+
+    failure_code = USB_MOUNT_ACCESS_FAILED
+
+    def __init__(self, mount_path: Path, cause: OSError) -> None:
+        super().__init__(
+            f"USB drive is not accessible at {mount_path}: {cause}. "
+            "Backup was not started. Check the USB connection and mount state."
+        )
+
+
 def _log_section(title: str) -> None:
     logger.info(_HR)
     logger.info("  %s", title)
@@ -149,10 +163,13 @@ class BackupJobConfig:
     borg_keep_yearly: int = 3
 
     retained_log_file: Optional[Path] = None
+    job_id: str = ""
 
     @classmethod
     def from_config(cls, env: dict) -> "BackupJobConfig":
         """Liest Konfiguration aus Umgebungsvariablen."""
+        from job_identity import validate_job_id
+        job_id = validate_job_id(env.get("BORG_UI_JOB_KEY"))
         try:
             raw_paths = json.loads(env.get("BACKUP_PATHS_JSON", "") or "")
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
@@ -208,8 +225,9 @@ class BackupJobConfig:
         )
 
         return cls(
+            job_id=job_id,
             job_name=env.get("JOB_NAME", "Borg Backup"),
-            backup_type=env.get("BACKUP_TYPE", "unknown"),
+            backup_type="",
             backup_location=env.get("BACKUP_LOCATION") or env.get("LOCATION", "unknown"),
             lock_file=Path(env.get("LOCK_FILE", "/tmp/borg-backup.lock")),
             log_dir=Path(env.get("LOG_DIR", "/tmp")),
@@ -301,6 +319,8 @@ class BackupJob:
         cfg = self.config
         _log_section("BACKUP START")
         logger.info("Job:   %s", cfg.job_name)
+        if cfg.job_id:
+            logger.info("Job ID: %s", cfg.job_id)
         logger.info("Date: %s", cfg.date_tag)
         logger.info("Log:   %s", cfg.log_file)
         logger.info("")
@@ -346,7 +366,12 @@ class BackupJob:
                         str(path) for path in exc_val.missing_paths
                     ]
                     self._final_msg = str(exc_val)
-                logger.error("Job aborted by exception: %s", exc_val)
+                if isinstance(exc_val, UsbMountAccessError):
+                    self._failure_code = exc_val.failure_code
+                    self._final_msg = str(exc_val)
+                    logger.error("%s", exc_val)
+                else:
+                    logger.error("Job aborted by exception: %s", exc_val)
 
             if not self._skip_finish:
                 _log_section("PHASE 5: CLEANUP & COMPLETION")
@@ -545,18 +570,30 @@ class BackupJob:
 
     def check_usb_mount(self, mount_path: Path) -> None:
         """
-        Prüft ob USB-Laufwerk verfügbar und beschreibbar ist.
+        Prüft Mount, Verzeichnis und Schreibrechte vor dem Backup.
 
-        Sendet Notification und löst SystemExit(0) aus wenn nicht verfügbar.
-        Wird von USB-Backup-Skripten explizit aufgerufen.
+        Fehlende/unbeschreibbare Mounts werden übersprungen; Zugriffsfehler
+        brechen den Lauf mit UsbMountAccessError ab.
         """
-        if not mount_path.is_dir():
+        try:
+            # stat() preserves I/O errors even on Python versions whose is_dir()
+            # and is_mount() turn some filesystem errors into False.
+            try:
+                is_directory = stat.S_ISDIR(mount_path.stat().st_mode)
+            except (FileNotFoundError, NotADirectoryError):
+                is_directory = False
+            mounted = is_directory and mount_path.is_mount()
+            writable = mounted and os.access(mount_path, os.W_OK)
+        except OSError as exc:
+            raise UsbMountAccessError(mount_path, exc) from exc
+
+        if not mounted:
             self._write_mini_log(
                 "USB_NOT_MOUNTED",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because the USB drive is missing",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because the USB drive is missing",
                     f"Mount path: {mount_path}",
-                    "Status: directory does not exist",
+                    "Status: path is not a mounted directory",
                     "Reason: USB drive is not connected or mounted",
                 ],
             )
@@ -564,11 +601,11 @@ class BackupJob:
             self._persist_skip_status_once()
             raise SystemExit(0)
 
-        if not os.access(mount_path, os.W_OK):
+        if not writable:
             self._write_mini_log(
                 "USB_NOT_WRITABLE",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because the USB drive is read-only",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because the USB drive is read-only",
                     f"Mount path: {mount_path}",
                     "Status: not writable",
                     "Reason: USB drive is read-only or lacks write permissions",
@@ -622,7 +659,7 @@ class BackupJob:
             self._write_mini_log(
                 "SKIPPED_PARITY",
                 [
-                    f"Borg Backup ({self.config.backup_type}) - Skipped because a parity operation is running",
+                    f"Borg Backup ({self.config.job_name}) - Skipped because a parity operation is running",
                     f"Operation: {resync_action}",
                     f"Progress: {progress}% ({resync_pos}/{resync_size})",
                     "Reason: Preserve system performance during the parity operation",
@@ -685,8 +722,12 @@ class BackupJob:
             "Removing logs older than %d days...", self.config.log_retention_days
         )
         cutoff = time.time() - (self.config.log_retention_days * 86400)
-        pattern = f"Borg-Backup_{self.config.backup_type}--*.log"
-        for log_path in self.config.log_dir.glob(pattern):
+        if self.config.job_id:
+            from job_identity import job_log_paths
+            paths = job_log_paths(self.config.log_dir, self.config.job_id)
+        else:
+            paths = self.config.log_dir.glob(f"Borg-Backup_{self.config.backup_type}--*.log")
+        for log_path in paths:
             try:
                 if log_path.stat().st_mtime < cutoff:
                     log_path.unlink()
@@ -786,6 +827,7 @@ class BackupJob:
             kind="docker",
             targets=targets,
             job_name=self.config.job_name,
+            job_id=self.config.job_id,
             backup_type=self.config.backup_type,
             backup_location=self.config.backup_location,
             log_file=str(self.config.log_file),
@@ -807,6 +849,7 @@ class BackupJob:
             kind="vm",
             targets=[{"id": name, "name": name} for name in result.stopped_vms],
             job_name=self.config.job_name,
+            job_id=self.config.job_id,
             backup_type=self.config.backup_type,
             backup_location=self.config.backup_location,
             log_file=str(self.config.log_file),
@@ -882,7 +925,10 @@ class BackupJob:
                 exit_code,
             )
         else:
-            logger.info("Borg backup failed (exit %d)", exit_code)
+            if self._failure_code == USB_MOUNT_ACCESS_FAILED:
+                logger.info("Backup aborted during USB preflight (exit %d); Borg backup was not started", exit_code)
+            else:
+                logger.info("Borg backup failed (exit %d)", exit_code)
             self._send_notification_event(
                 "backup_failed",
                 "Borg Backup UI: Backup failed",
@@ -989,6 +1035,10 @@ class BackupJob:
             reason_code = "skipped"
         logger.info("Saving skipped status: %s", reason)
         bs = BackupStatus(
+            job_id=self.config.job_id,
+            job_name=self.config.job_name,
+            run_id=os.environ.get("BORG_UI_RUN_ID", ""),
+            file_activity=bool(self.config.retained_log_file),
             backup_type=self.config.backup_type,
             location=self.config.backup_location,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1070,8 +1120,8 @@ class BackupJob:
                     title=title,
                     message=message,
                     severity=severity,
-                    job_name=f"Borg Backup ({self.config.backup_type})",
-                    job_key=f"{self.config.backup_type}_{self.config.backup_location}",
+                    job_name=self.config.job_name,
+                    job_key=self.config.job_id,
                     status=event_type,
                     duration_seconds=duration,
                     repository=self.config.borg_repo or os.environ.get("BORG_REPO", ""),
@@ -1101,7 +1151,7 @@ class BackupJob:
             status_str = "error"
 
         stats = self._borg_stats
-        if self._failure_code == REQUIRED_SOURCE_PATHS_MISSING:
+        if self._failure_code in {REQUIRED_SOURCE_PATHS_MISSING, USB_MOUNT_ACCESS_FAILED}:
             repo_size = 0
             repo_check_date, repo_check_status, repo_next_check = (
                 "unknown",
@@ -1118,6 +1168,10 @@ class BackupJob:
             transfer_speed = stats.deduplicated_size // duration
 
         bs = BackupStatus(
+            job_id=self.config.job_id,
+            job_name=self.config.job_name,
+            run_id=os.environ.get("BORG_UI_RUN_ID", ""),
+            file_activity=bool(self.config.retained_log_file),
             backup_type=self.config.backup_type,
             location=self.config.backup_location,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1165,7 +1219,7 @@ class BackupJob:
                 request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
                 source=os.environ.get("BORG_UI_REQUEST_SOURCE", "backup_job"),
                 actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
-                job_key=os.environ.get("BORG_UI_JOB_KEY", f"{self.config.backup_type}_{self.config.backup_location}"),
+                job_key=self.config.job_id,
                 run_id=os.environ.get("BORG_UI_RUN_ID", ""),
                 status=status,
                 exit_code=exit_code,
@@ -1255,11 +1309,16 @@ class BackupJob:
         """Schreibt einen kleinen Informations-Log für Skip-Szenarien."""
         try:
             self.config.log_dir.mkdir(parents=True, exist_ok=True)
-            mini_log = (
-                self.config.log_dir
-                / f"Borg-Backup_{self.config.backup_type}--{self.config.date_tag}_{suffix}.log"
-            )
+            if self.config.job_id:
+                from job_identity import job_log_filename
+                filename = job_log_filename(self.config.job_name, self.config.backup_location,
+                                            self.config.job_id, f"{self.config.date_tag}_{suffix}")
+            else:
+                filename = f"Borg-Backup_{self.config.backup_type}--{self.config.date_tag}_{suffix}.log"
+            mini_log = self.config.log_dir / filename
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if self.config.job_id:
+                lines = [f"Job: {self.config.job_name}", f"Job ID: {self.config.job_id}", *lines]
             content = "\n".join(f"[{ts}] {line}" for line in lines) + "\n"
             mini_log.write_text(content, encoding="utf-8")
         except OSError as exc:
@@ -1299,7 +1358,7 @@ if __name__ == "__main__":
 
     if args.command == "info":
         print(f"job_name:            {cfg.job_name}")
-        print(f"backup_type:         {cfg.backup_type}")
+        print(f"job_id:              {cfg.job_id}")
         print(f"backup_location:     {cfg.backup_location}")
         print(f"lock_file:           {cfg.lock_file}")
         print(f"log_dir:             {cfg.log_dir}")
