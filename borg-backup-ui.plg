@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.09.07.0935">
+<!ENTITY version   "2026.09.12.0054">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,34 @@
 
 <CHANGES>
 <![CDATA[
+###2026.09.12.0054###
+### Migration and compatibility
+
+- Existing jobs are migrated automatically on the first start. Recovery copies of affected files are saved before those files are changed. (#486)
+- The first start may take several minutes while migration runs. The web interface starts afterwards; progress is recorded in `/var/log/borg_backup_ui.log`. (#486)
+- **Previous job and profile exports can no longer be imported.** Create fresh exports after successful migration. **Existing Borg backup archives remain usable and do not need to be recreated.** (#495)
+
+### Bug Fixes
+
+- SSH backups work with older clients that do not recognize `WarnWeakCrypto`. Unraid 6.12.5 and later are supported again; Python 3.10 or newer is still required. (#496)
+- Reduce unnecessary writes to the Unraid boot USB stick during idle operation and normal browsing. Unchanged notification data is no longer repeatedly saved, and Python's temporary bytecode cache stays in RAM. (#497)
+- Browse & Restore refreshes the archive list when you return to a job. New backups appear without restarting the plugin, and changing repositories clears the previous selection. (#499)
+- Missing archives and failed file listings show a useful error instead of an internal error or an endless loading indicator. (#500)
+- After a job changes repository, integrity checks use the selected repository's own result. A successful check of the previous repository no longer causes a check to be skipped. (#501)
+- USB backups verify that the target is mounted before starting. Unmounted targets are skipped; access failures stop the job with a clear reason before Borg starts. (#502)
+
+### Improvements
+
+- **Permanent job IDs:** Every job now keeps the same identity throughout the application. (#486)
+    - Rename jobs or change their full archive prefix while keeping schedules, history and restore results associated with the job.
+    - Jobs remain sorted by name. The ID is visible in the Job Wizard and History details.
+    - New log and status filenames include the job name, location and ID for easier identification.
+- The Job Wizard uses a consistent window size. Repository Maintenance shows retention in a table and clearly identifies the current archive filter used by prune. (#486)
+- Current and previous archive prefixes cannot overlap with another job in the same repository. Previous prefixes remain available in Browse & Restore. (#486)
+- Existing job settings, icons and colors are carried over during migration. New jobs start with a neutral archive icon unless you choose another one. (#495)
+- Large-archive restore dry-runs select their sampling mode by archive size. The default sample target is 5% of files, capped at 1,000 files; smaller archives are checked in full. (#495)
+- Historical records that cannot be matched to a job are kept on disk and excluded from current statistics. (#495)
+
 ###2026.09.07.0935###
 - Fix #484: Plugin installation and updates preserve existing permissions and ownership of shared Unraid system directories.
 - Recovery for permissions changed by an older package: a normal reboot restored the original modes with the plugin still installed on Unraid 7.4.0-beta.2. Verify permissions after reboot; see the user manual, section 13.6. Installing the corrected package does not repair previously changed permissions automatically.
@@ -31,10 +59,6 @@
 - Keep the live view filled during small updates and make its controls readable in both light and dark themes (#463).
 - Show completed file-activity runs with Borg exit code 1 as warnings in the log panel (#463).
 - Keep active file-activity logs in RAM and save the complete log after the backup ends, avoiding changing-log warnings when the log directory is backed up. The active log is not part of that backup; a server restart before it is saved loses the volatile log (#463).
-
-###2026.09.05.1319###
-- Added an optional per-job file activity view for live and stored backup logs. When enabled, Borg lists added, modified, and errored entries while unchanged files remain hidden; the wizard includes privacy and files-cache context.
-- Repositories can now browse folders and files inside any archive in a read-only view, including imported archives without a backup-job assignment.
 
 ]]>
 </CHANGES>
@@ -61,7 +85,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="54de28ec4ec396f651825a9d28559fe0"
+EXPECTED_MD5="4c8fedd39220fff802b1156fe4628e23"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
