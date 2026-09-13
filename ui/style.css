@@ -6185,6 +6185,11 @@ body.wizard-modal-open {
   position: relative;
 }
 
+.wizard-path-control > .form-input {
+  width: 100%;
+  min-width: 0;
+}
+
 .wizard-suggest-item {
   width: 100%;
   text-align: left;
