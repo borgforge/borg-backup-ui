@@ -1186,6 +1186,26 @@
   </div>
 </div>
 
+<!-- Individual archive deletion (#507) -->
+<div id="repository-archive-delete-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="repository-archive-delete-title" aria-describedby="repository-archive-delete-description">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="repository-archive-delete-title" data-i18n="storage.archiveDelete">Archiv löschen</h3>
+      <button type="button" class="modal-close" id="repository-archive-delete-close-btn" data-i18n-aria-label="storage.check.close" aria-label="Schließen">×</button>
+    </div>
+    <div class="modal-body">
+      <p id="repository-archive-delete-description" data-i18n="storage.archiveDeleteWarning">Dieses Archiv wird endgültig gelöscht und kann danach nicht mehr wiederhergestellt werden.</p>
+      <div id="repository-archive-delete-info"></div>
+      <p class="storage-archive-delete-note" data-i18n="storage.archiveDeleteCompactHint">Speicherplatz wird erst durch Compact unter Wartung freigegeben. Bisherige Laufprotokolle und History-Einträge bleiben erhalten.</p>
+      <div id="repository-archive-delete-message" class="hidden" role="status" aria-live="polite"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" id="repository-archive-delete-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
+      <button type="button" class="btn-danger" id="repository-archive-delete-confirm-btn" data-i18n="storage.archiveDeleteConfirm">Archiv endgültig löschen</button>
+    </div>
+  </div>
+</div>
+
 <!-- Repository Manager Modal -->
 <div id="repository-manager-modal" class="modal-backdrop hidden">
   <div class="modal modal-wizard repository-manager-wizard">

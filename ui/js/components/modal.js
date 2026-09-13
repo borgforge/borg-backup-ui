@@ -10,6 +10,7 @@
     ['confirm-modal', 'closeConfirmModal'],
     ['settings-dialog-modal', 'closeSettingsDialog'],
     ['storage-deploy-modal', 'closeStorageDeployModal'],
+    ['repository-archive-delete-modal', 'closeRepositoryArchiveDelete'],
     ['repository-lifecycle-modal', 'closeRepositoryLifecycle'],
     ['storage-maintenance-confirm-modal', 'closeStorageMaintenanceConfirm'],
     ['repository-manager-modal', 'closeRepositoryManager'],

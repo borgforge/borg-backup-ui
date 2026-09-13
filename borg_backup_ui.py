@@ -785,6 +785,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             or p.startswith("/api/client-log")
             or p in {"/api/jobs/enabled", "/api/jobs", "/api/schedules", "/api/storages", "/api/repositories", "/api/restore-tests", "/api/restore-tests/policy"}
             or p in {"/api/repositories/key-export", "/api/repositories/key-import"}
+            or p == "/api/repositories/archive"
         ):
             return "admin"
 
@@ -1105,6 +1106,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/restore-tests": self._delete_restore_test,
             "/api/restore/history": self._delete_restore_history,
             "/api/repositories": self._delete_repository,
+            "/api/repositories/archive": self._delete_repository_archive,
             "/api/notification-profiles": self._delete_apprise_profile,
             "/api/auth/users": self._delete_auth_user,
             "/api/settings/homepage-widget-token": self._delete_homepage_widget_token,
@@ -2033,7 +2035,29 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         qs = parse_qs(qs_str)
         repository_key = str((qs.get("repository_key") or [""])[0]).strip()
         limit = int(str((qs.get("limit") or ["100"])[0]) or "100")
-        return get_repository_archives(self.config, repository_key, limit)
+        result = get_repository_archives(self.config, repository_key, limit)
+        session = self._get_current_session_meta() or {}
+        result["can_delete"] = bool(session.get("username") and session.get("role") == "admin")
+        return result
+
+    def _delete_repository_archive(self) -> dict:
+        from repositories_api import RepositoryBusyError, RepositoryLifecycleConflict, delete_repository_archive
+
+        # This destructive action requires a user session, not the automation
+        # token or the implicit admin role of installations without login.
+        session = self._get_current_session_meta() or {}
+        if not session.get("username") or session.get("role") != "admin":
+            raise PermissionError("An authenticated administrator is required")
+        body = self._read_json_body()
+        try:
+            return delete_repository_archive(
+                self.config, body,
+                audit_context=self._repository_audit_context(str(getattr(self, "_current_request_id", "") or "")),
+            )
+        except RepositoryLifecycleConflict as exc:
+            raise ApiConflictError(str(exc), code=exc.code) from exc
+        except RepositoryBusyError as exc:
+            raise ApiConflictError(str(exc), code="repository_busy") from exc
 
     def _get_repository_archive_files(self, qs_str: str) -> dict:
         from repositories_api import RepositoryBusyError, get_repository_archive_files

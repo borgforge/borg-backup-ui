@@ -372,6 +372,8 @@ Automatic Borg-statistics refresh is disabled by default so repositories and dis
 
 The repository header uses the **display name** assigned during creation or import. **Repository directory** is the final directory name, **repository path** is the complete local or remote target path, and **path in storage target** is the relative path below the selected storage target.
 
+Signed-in administrators see a trash icon beside each archive. The confirmation dialog identifies the repository, archive name and creation time. **Permanently delete archive** removes exactly that archive; jobs, run logs and history entries are retained. Deletion is rejected if the selection has changed or the repository is busy. It is also blocked while a restore test is running. The archive list is refreshed afterwards. Disk space is reclaimed by **Compact** under **Maintenance**. An API token alone does not authorize archive deletion.
+
 ### 4.3 Create or Import a Repository
 
 1. Open **Repositories** and select **Add repository**.

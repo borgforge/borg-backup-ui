@@ -1156,6 +1156,35 @@
   overflow: hidden;
 }
 
+.storage-archive-entry {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--ui-color-border);
+}
+.storage-archive-entry:last-child { border-bottom: 0; }
+.storage-archive-entry .storage-archive-row { min-width: 0; flex: 1; border-bottom: 0; }
+.storage-archive-list.can-delete > header { padding-right: 3.5rem; }
+.storage-archive-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 2.5rem;
+  min-height: 2.5rem;
+  margin-right: .25rem;
+  border: 0;
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--ui-color-text-muted);
+  cursor: pointer;
+}
+.storage-archive-delete:hover,
+.storage-archive-delete:focus-visible { color: var(--error); background: var(--ui-color-surface-subtle); }
+.storage-archive-delete-details { margin: 1rem 0; }
+.storage-archive-delete-details > div { margin-bottom: .75rem; }
+.storage-archive-delete-details dt { color: var(--ui-color-text-muted); font-size: var(--ui-font-size-xs); }
+.storage-archive-delete-details dd { margin: .15rem 0 0; overflow-wrap: anywhere; }
+.storage-archive-delete-note { color: var(--ui-color-text-muted); font-size: var(--ui-font-size-sm); }
+
 .storage-archive-list > header,
 .storage-archive-row {
   display: grid;

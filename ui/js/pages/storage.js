@@ -22,6 +22,7 @@ storageState.archiveBrowser = storageState.archiveBrowser || { repositoryKey: ''
 storageState.lifecycleCache = storageState.lifecycleCache || {};
 storageState.maintenanceState = storageState.maintenanceState || { running: false };
 storageState.maintenanceConfirmation = null;
+storageState.archiveDeleteConfirmation = null;
 storageState.lifecycleConfirmation = null;
 storageState.pendingRepositoryKeyImportGuide = !!storageState.pendingRepositoryKeyImportGuide;
 storageState.repositoryManagerCloseSnapshot = '';
@@ -617,16 +618,92 @@ function renderStorageRepositoryArchives(repo) {
   const archives = Array.isArray(cache.data?.archives) ? cache.data.archives : [];
   if (!archives.length) return `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryNoArchives')}</p></div>`;
   const browser = storageState.archiveBrowser.repositoryKey === key ? storageState.archiveBrowser : null;
+  const canDelete = cache.data.can_delete === true && !!cache.data.repository_id;
   return `<div class="storage-archive-toolbar"><strong>${storageCount(cache.data.archive_count || archives.length, 'storage.archiveCountOne', 'storage.archiveCountMany')}</strong><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-archives" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
     <p class="storage-archive-intro">${escHtml(storageT('storage.repositoryArchiveBrowseHint'))}</p>
     <div class="storage-archive-layout ${browser?.archive ? 'has-browser' : ''}">
-      <div class="storage-archive-list"><header><span></span><strong>${storageT('storage.repositoryArchiveName')}</strong><strong>${storageT('storage.repositoryArchiveCreated')}</strong><span></span></header>${archives.map((archive) => {
+      <div class="storage-archive-list ${canDelete ? 'can-delete' : ''}"><header><span></span><strong>${storageT('storage.repositoryArchiveName')}</strong><strong>${storageT('storage.repositoryArchiveCreated')}</strong><span></span></header>${archives.map((archive) => {
         const name = String(archive.name || '');
         const selected = !!browser && name === browser.archive;
-        return `<button type="button" class="storage-archive-row ${selected ? 'is-selected' : ''}" data-storage-action="open-repository-archive" data-repository-key="${escHtml(key)}" data-archive="${escHtml(name)}" ${selected ? 'aria-current="true"' : ''}><span class="storage-archive-dot"></span><span><strong>${escHtml(name || '—')}</strong><small>${escHtml(archive.id || '')}</small></span><time>${escHtml(storageFormatDateTime(archive.start))}</time><span class="storage-archive-open" aria-hidden="true">›</span></button>`;
+        return `<div class="storage-archive-entry"><button type="button" class="storage-archive-row ${selected ? 'is-selected' : ''}" data-storage-action="open-repository-archive" data-repository-key="${escHtml(key)}" data-archive="${escHtml(name)}" ${selected ? 'aria-current="true"' : ''}><span class="storage-archive-dot"></span><span><strong>${escHtml(name || '—')}</strong><small>${escHtml(archive.id || '')}</small></span><time>${escHtml(storageFormatDateTime(archive.start))}</time><span class="storage-archive-open" aria-hidden="true">›</span></button>${canDelete && archive.id ? `<button type="button" class="storage-archive-delete" data-storage-action="delete-repository-archive" data-repository-key="${escHtml(key)}" data-archive="${escHtml(name)}" title="${escHtml(storageT('storage.archiveDelete'))}" aria-label="${escHtml(storageT('storage.archiveDeleteLabel', { name }))}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>` : ''}</div>`;
       }).join('')}</div>
       ${browser?.archive ? renderStorageArchiveBrowser(browser) : ''}
     </div>`;
+}
+
+function openRepositoryArchiveDelete(repositoryKey, name, trigger) {
+  const cache = storageState.archiveCache[repositoryKey]?.data;
+  const archive = cache?.archives?.find(row => row.name === name);
+  if (!cache?.can_delete || !cache.repository_id || !archive?.id || storageState.archiveDeleteConfirmation?.running) return;
+  const repo = storageRepositories(storageState.data).find(row => storageRepositoryKey(row) === repositoryKey);
+  if (!repo) return;
+  const modal = document.getElementById('repository-archive-delete-modal');
+  if (!modal) return;
+  storageState.archiveDeleteConfirmation = {
+    repositoryKey, repositoryId: cache.repository_id, archive: { ...archive }, trigger, running: false,
+  };
+  document.getElementById('repository-archive-delete-info').innerHTML = `<dl class="storage-archive-delete-details">
+    <div><dt>${escHtml(storageT('storage.repositoryDisplayNameLabel'))}</dt><dd>${escHtml(storageRepositoryTitle(repo, storageJobForRepository(repo)))}</dd></div>
+    <div><dt>${escHtml(storageT('storage.repositoryPathLabel'))}</dt><dd>${escHtml(repo.path_display || repo.path_raw || '')}</dd></div>
+    <div><dt>${escHtml(storageT('storage.repositoryArchiveName'))}</dt><dd>${escHtml(archive.name)}</dd></div>
+    <div><dt>${escHtml(storageT('storage.repositoryArchiveCreated'))}</dt><dd>${escHtml(storageFormatDateTime(archive.start))}</dd></div>
+  </dl>`;
+  hideEl('repository-archive-delete-message');
+  document.getElementById('repository-archive-delete-confirm-btn').disabled = false;
+  modal.classList.remove('hidden');
+  document.getElementById('repository-archive-delete-cancel-btn')?.focus();
+}
+
+function closeRepositoryArchiveDelete() {
+  const pending = storageState.archiveDeleteConfirmation;
+  if (pending?.running) return;
+  document.getElementById('repository-archive-delete-modal')?.classList.add('hidden');
+  storageState.archiveDeleteConfirmation = null;
+  if (pending?.trigger?.isConnected) pending.trigger.focus();
+  else document.querySelector('[data-storage-action="refresh-repository-archives"]')?.focus();
+}
+
+async function confirmRepositoryArchiveDelete() {
+  const pending = storageState.archiveDeleteConfirmation;
+  if (!pending || pending.running) return;
+  const modal = document.getElementById('repository-archive-delete-modal');
+  pending.running = true;
+  modal?.setAttribute('aria-busy', 'true');
+  modal?.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  showMsg('repository-archive-delete-message', 'info', storageT('storage.archiveDeleting'));
+  try {
+    const response = await fetch('/api/repositories/archive', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repository_key: pending.repositoryKey,
+        archive: pending.archive.name,
+        expected_archive_id: pending.archive.id,
+        expected_repository_id: pending.repositoryId,
+        confirmed: true,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(result, response.status));
+    pending.running = false;
+    closeRepositoryArchiveDelete();
+    if (storageState.archiveBrowser.repositoryKey === pending.repositoryKey) resetStorageArchiveBrowser();
+    delete storageState.lifecycleCache[pending.repositoryKey];
+    delete storageState.archiveCache[pending.repositoryKey];
+    // Browse & Restore reloads the archive inventory on entry. Clear any previous
+    // selection now as well, so deleted files cannot remain selected there.
+    if (typeof restoreClearArchives === 'function') restoreClearArchives();
+    await refreshStorage();
+    await loadRepositoryArchives(pending.repositoryKey, true);
+    showMsg('storage-message', result.refresh_warning ? 'warning' : 'success',
+      storageT(result.refresh_warning ? 'storage.archiveDeletedRefreshWarning' : 'storage.archiveDeleted'));
+  } catch (error) {
+    showMsg('repository-archive-delete-message', 'error', error.message || storageT('storage.error'));
+  } finally {
+    pending.running = false;
+    modal?.removeAttribute('aria-busy');
+    modal?.querySelectorAll('button').forEach(button => { button.disabled = false; });
+  }
 }
 
 function resetStorageArchiveBrowser() {
@@ -916,6 +993,9 @@ function onStorageContentClick(event) {
   if (action === 'refresh-repository-archives') {
     resetStorageArchiveBrowser();
     return loadRepositoryArchives(el.dataset.repositoryKey || storageState.selectedRepositoryKey, true);
+  }
+  if (action === 'delete-repository-archive') {
+    return openRepositoryArchiveDelete(el.dataset.repositoryKey, el.dataset.archive, el);
   }
   if (action === 'open-repository-archive') {
     return loadRepositoryArchiveFiles(

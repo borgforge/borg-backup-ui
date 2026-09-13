@@ -15,6 +15,15 @@ ARCHIVE_INDEX_CACHE_MAX_ENTRIES = 8
 
 _CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 _CACHE_LOCK = threading.Lock()
+_CACHE_GENERATION = 0
+
+
+def invalidate_archive_index(repo: str, archive: str) -> None:
+    """Invalidate a deleted archive, including index loads already in flight."""
+    global _CACHE_GENERATION
+    with _CACHE_LOCK:
+        _CACHE.pop((str(repo), str(archive)), None)
+        _CACHE_GENERATION += 1
 
 
 class ArchiveNotFoundError(ValueError):
@@ -35,6 +44,7 @@ def build_archive_index(repo: str, archive: str, env: dict[str, str]) -> dict[st
     key = (str(repo), str(archive))
     now = time.monotonic()
     with _CACHE_LOCK:
+        generation = _CACHE_GENERATION
         _prune_expired_cache_entries(now)
         cached = _CACHE.pop(key, None)
         if cached:
@@ -114,6 +124,8 @@ def build_archive_index(repo: str, archive: str, env: dict[str, str]) -> dict[st
             path = parent_path
 
     with _CACHE_LOCK:
+        if generation != _CACHE_GENERATION:
+            return index
         _prune_expired_cache_entries(time.monotonic())
         _CACHE.pop(key, None)
         while len(_CACHE) >= ARCHIVE_INDEX_CACHE_MAX_ENTRIES:

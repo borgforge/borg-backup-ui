@@ -147,6 +147,9 @@
     document.getElementById('storage-maintenance-confirm-info')?.addEventListener('change', (event) => {
       if (event.target?.id === 'storage-maintenance-retention-job') updateStorageMaintenanceRetentionPreview();
     });
+    document.getElementById('repository-archive-delete-close-btn')?.addEventListener('click', closeRepositoryArchiveDelete);
+    document.getElementById('repository-archive-delete-cancel-btn')?.addEventListener('click', closeRepositoryArchiveDelete);
+    document.getElementById('repository-archive-delete-confirm-btn')?.addEventListener('click', confirmRepositoryArchiveDelete);
     document.getElementById('repository-lifecycle-close-btn')?.addEventListener('click', closeRepositoryLifecycle);
     document.getElementById('repository-lifecycle-cancel-btn')?.addEventListener('click', closeRepositoryLifecycle);
     document.getElementById('repository-lifecycle-confirm-btn')?.addEventListener('click', confirmRepositoryLifecycle);
@@ -356,6 +359,7 @@
     m.setAction('closeRepositoryManager', typeof closeRepositoryManager === 'function' ? closeRepositoryManager : null);
     m.setAction('closeStorageDeployModal', typeof closeStorageDeployModal === 'function' ? closeStorageDeployModal : null);
     m.setAction('closeStorageMaintenanceConfirm', typeof closeStorageMaintenanceConfirm === 'function' ? closeStorageMaintenanceConfirm : null);
+    m.setAction('closeRepositoryArchiveDelete', typeof closeRepositoryArchiveDelete === 'function' ? closeRepositoryArchiveDelete : null);
     m.setAction('closeRepositoryLifecycle', typeof closeRepositoryLifecycle === 'function' ? closeRepositoryLifecycle : null);
     m.setAction('closeWizard', typeof closeWizard === 'function' ? closeWizard : null);
     m.setAction('closeSetupWizard', window.BBUI?.setupWizard?.close || null);
