@@ -1671,14 +1671,34 @@ function wizardPolicyHelpContent(topic) {
     const error = _wizardRetentionValidationKey(params);
     const policy = {mode: selected};
     for (const period of ['hourly', 'daily', 'weekly', 'monthly', 'yearly', 'last', 'within']) policy[period] = params[`keep_${period}`];
-    sections.push({title: tr('current'), text: error ? wizardT(error) : wizardRetentionSummary(policy), warning: !!error});
+    sections.push({title: tr('current'), text: error ? wizardT(error) : wizardRetentionSummary(policy),
+      rows: error ? null : wizardRetentionHelpRows(policy), warning: !!error});
   }
   for (const [title, suffix] of [['meaning', 'Meaning'], ['example', 'Example'], ['deletion', 'Deletion']]) {
     sections.push({title: tr(title), text: tr(key + suffix)});
   }
-  if (['tiered', 'last', 'within'].includes(key)) sections.push({title: tr('safety'), text: tr('safetyText')});
-  if (['tiered', 'last', 'all', 'within'].includes(key)) sections.push({text: tr('scope')});
+  if (['tiered', 'last', 'within'].includes(key)) sections.push({text: tr('safetyText'), compact: true});
+  if (['tiered', 'last', 'all', 'within'].includes(key)) sections.push({text: tr('scope'), compact: true});
   return {title: tr(key + 'Title'), sections, retention: !['markers', 'file'].includes(key)};
+}
+
+function wizardRetentionHelpRows(policy) {
+  const tr = name => wizardT(`wizard.policyHelp.${name}`);
+  if (policy.mode === 'all') return [{label: wizardT('wizard.retentionModeAll'), value: '—', meaning: tr('allRule')}];
+  if (policy.mode === 'last') return [{label: wizardT('wizard.retentionModeLast'), value: policy.last, meaning: tr('lastRule')}];
+  const rows = ['hourly', 'daily', 'weekly', 'monthly', 'yearly']
+    .filter(period => Number(policy[period]) > 0)
+    .map(period => ({label: wizardT(`wizard.retention${period[0].toUpperCase()}${period.slice(1)}`),
+      value: policy[period], meaning: tr(`${period}Rule`)}));
+  if (policy.within) rows.unshift({label: tr('withinRuleLabel'), value: wizardRetentionInterval(policy.within), meaning: tr('withinRule')});
+  return rows;
+}
+
+function wizardRetentionHelpTable(rows) {
+  const tr = name => escHtml(wizardT(`wizard.policyHelp.${name}`));
+  return `<div class="wizard-policy-rules"><table><thead><tr><th scope="col">${tr('rule')}</th><th scope="col">${tr('value')}</th><th scope="col">${tr('meaning')}</th></tr></thead><tbody>${rows.map(row =>
+    `<tr><th scope="row">${escHtml(row.label)}</th><td>${escHtml(row.value)}</td><td>${escHtml(row.meaning)}</td></tr>`
+  ).join('')}</tbody></table></div>`;
 }
 
 let wizardPolicyHelpTrigger = null;
@@ -1689,7 +1709,7 @@ function openWizardPolicyHelp(topic, trigger) {
   wizardPolicyHelpTrigger = trigger || document.activeElement;
   document.getElementById('wizard-policy-help-title').textContent = content.title;
   document.getElementById('wizard-policy-help-content').innerHTML = content.sections.map(section =>
-    `<section class="wizard-policy-help-section${section.warning ? ' status-message warning' : ''}">${section.title ? `<h4>${escHtml(section.title)}</h4>` : ''}<p>${escHtml(section.text)}</p></section>`
+    `<section class="wizard-policy-help-section${section.warning ? ' status-message warning' : ''}${section.compact ? ' wizard-policy-help-note' : ''}">${section.title ? `<h4>${escHtml(section.title)}</h4>` : ''}${section.rows ? wizardRetentionHelpTable(section.rows) : `<p>${escHtml(section.text)}</p>`}</section>`
   ).join('');
   document.getElementById('wiz-retention-manual-link')?.classList.toggle('hidden', !content.retention);
   wizardUpdateRetentionManualLink();
@@ -1745,6 +1765,12 @@ function wizardUpdateRetentionMode(mode) {
   wizardClearError(5);
 }
 
+function wizardRetentionInterval(value) {
+  const match = String(value).match(/^([0-9]+)([Hdwmy])$/);
+  const units = {H: 'unitHours', d: 'unitDays', w: 'unitWeeks', m: 'unitMonths', y: 'unitYears'};
+  return match ? `${match[1]} ${wizardT(`wizard.${units[match[2]]}`)}` : value;
+}
+
 function wizardRetentionSummary(policy = {}) {
   if (policy.mode === 'all') return wizardT('wizard.retentionAllSummary');
   if (policy.mode === 'last') return wizardT('wizard.retentionLastSummary', {count: policy.last});
@@ -1752,10 +1778,7 @@ function wizardRetentionSummary(policy = {}) {
     .filter(period => Number(policy[period]) > 0)
     .map(period => `${wizardT(`wizard.retention${period[0].toUpperCase()}${period.slice(1)}`)}: ${policy[period]}`);
   if (policy.within) {
-    const match = String(policy.within).match(/^([0-9]+)([Hdwmy])$/);
-    const units = {H: 'unitHours', d: 'unitDays', w: 'unitWeeks', m: 'unitMonths', y: 'unitYears'};
-    const interval = match ? `${match[1]} ${wizardT(`wizard.${units[match[2]]}`)}` : policy.within;
-    parts.push(wizardT('wizard.retentionWithinSummary', {count: interval}));
+    parts.push(wizardT('wizard.retentionWithinSummary', {count: wizardRetentionInterval(policy.within)}));
   }
   return parts.join(' · ');
 }

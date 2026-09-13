@@ -6703,10 +6703,29 @@ body.wizard-modal-open {
 .wizard-policy-field-label { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
 .wizard-policy-field-label .form-label { margin:0; }
 .wizard-policy-field-label .wizard-help-btn { flex-shrink:0; }
+.wizard-help-btn[data-wiz-policy-help] { width:26px; height:26px; padding:0; border:1.5px solid var(--accent); color:var(--accent); background:var(--bg-surface); }
+.wizard-help-btn[data-wiz-policy-help] svg { display:block; width:18px; height:18px; flex-shrink:0; }
+.wizard-help-btn[data-wiz-policy-help]:hover { background:var(--state-info-dim); }
+.wizard-help-btn[data-wiz-policy-help]:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 #wizard-policy-help-modal { z-index:1200; }
-#wizard-policy-help-modal .wizard-policy-help-dialog { width:640px; max-width:calc(100vw - 32px); max-height:90vh; }
+#wizard-policy-help-modal .wizard-policy-help-dialog { width:720px; max-width:calc(100vw - 32px); max-height:90vh; }
 .wizard-policy-help-section + .wizard-policy-help-section { margin-top:16px; }
 .wizard-policy-help-section h4 { margin:0 0 5px; font-size:13px; color:var(--text-primary); }
 .wizard-policy-help-section p { margin:0; font-size:13px; line-height:1.6; color:var(--text-secondary); }
+.wizard-policy-help-section.wizard-policy-help-note { margin-top:10px; }
+.wizard-policy-help-note p { font-size:12px; color:var(--text-muted); }
+.wizard-policy-rules { margin-top:8px; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
+.wizard-policy-rules table { width:100%; border-collapse:collapse; font-size:13px; }
+.wizard-policy-rules th, .wizard-policy-rules td { padding:8px 10px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border); }
+.wizard-policy-rules thead th { background:var(--bg-surface); color:var(--text-muted); font-size:12px; font-weight:600; }
+.wizard-policy-rules tbody th { font-weight:500; }
+.wizard-policy-rules tbody td:nth-child(2) { font-weight:700; white-space:nowrap; color:var(--accent); }
+.wizard-policy-rules tr:last-child th, .wizard-policy-rules tr:last-child td { border-bottom:0; }
+@media(max-width:480px) { .wizard-policy-rules th, .wizard-policy-rules td { padding:6px; font-size:12px; } .wizard-policy-rules tbody td:nth-child(2) { white-space:normal; } }
 
-.wizard-retention-grid .form-label { display:flex; align-items:center; min-height:22px; }
+.wizard-retention-grid { row-gap:5px; }
+.wizard-retention-grid > .form-group { display:grid; grid-template-rows:subgrid; grid-row:span 3; gap:5px; padding-bottom:10px; }
+.wizard-retention-grid .form-label { display:flex; align-items:center; min-height:26px; }
+.wizard-retention-grid .wizard-policy-field-label { margin:0; min-height:26px; }
+.wizard-retention-grid .form-input, .wizard-retention-grid .form-select { height:36px; box-sizing:border-box; }
+.wizard-retention-grid .form-hint { margin:0; }
