@@ -55,7 +55,7 @@ def _validate_jobs_bundle(bundle: dict) -> None:
     from job_settings import JOB_SETTINGS_SCHEMA, explicit_job_settings
     from archive_prefix import job_archive_prefixes
     from job_source_paths import normalize_source_paths
-    if not isinstance(bundle, dict) or bundle.get("format") != "bbui-job-bundle-v3" or not isinstance(bundle.get("jobs"), list):
+    if not isinstance(bundle, dict) or bundle.get("format") not in {"bbui-job-bundle-v3", "bbui-job-bundle-v4"} or not isinstance(bundle.get("jobs"), list):
         raise ConfigurationExportError()
     for job in bundle["jobs"]:
         if not isinstance(job, dict) or job.get("schema_version") != JOB_SETTINGS_SCHEMA:
@@ -65,6 +65,10 @@ def _validate_jobs_bundle(bundle: dict) -> None:
             explicit_job_settings(job)
             job_archive_prefixes(job)
             normalize_source_paths(job.get("source_paths"))
+            from job_exclusions import marker_names, upload_bytes
+            marker_names(job.get("exclude_if_present"))
+            if job.get("exclude_from") is not None:
+                upload_bytes(job["exclude_from"])
         except (ValueError, TypeError, KeyError) as exc:
             raise ConfigurationExportError() from exc
 
@@ -121,6 +125,9 @@ def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> 
         key = str(raw.get("job_key") or p.stem).strip()
         if selected and key not in selected:
             continue
+        from job_exclusions import exported_file
+        if raw.get("exclude_from"):
+            raw["exclude_from"] = exported_file(raw["exclude_from"], jobs_dir, key)
         jobs.append(raw)
         repository_key = str(raw.get("repository_key") or "").strip()
         if repository_key:
@@ -154,7 +161,12 @@ def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> 
             else:
                 passphrase_meta[repository_key] = {"path": pp_path, "exists": False}
     bundle = {
-        "format": "bbui-job-bundle-v3",
+        "format": "bbui-job-bundle-v4" if any(
+            job.get("exclude_from") or job.get("exclude_if_present")
+            or job.get("retention", {}).get("mode", "tiered") != "tiered"
+            or int(job.get("retention", {}).get("hourly", 0))
+            or job.get("retention", {}).get("within") for job in jobs
+        ) else "bbui-job-bundle-v3",
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "jobs": jobs,
         "repositories": repositories,
@@ -293,7 +305,7 @@ def _resolve_import_key(existing: set[str], desired: str, mode: str) -> Tuple[st
 
 def _canonical_import_jobs(jobs: list, selected: set[str] | None = None) -> list:
     """Read supported jobs without converting old configuration packages."""
-    _validate_jobs_bundle({"format": "bbui-job-bundle-v3", "jobs": jobs})
+    _validate_jobs_bundle({"format": "bbui-job-bundle-v4", "jobs": jobs})
     return [dict(job) for job in jobs]
 
 
@@ -731,7 +743,10 @@ def _import_jobs_bundle_locked(
         from inventory_store import atomic_write_json
         for key, raw in applied_jobs:
             target = jobs_dir / f"{key}.json"
+            from job_exclusions import prepare_file, cleanup_files
+            raw["exclude_from"] = prepare_file(raw.get("exclude_from"), jobs_dir, key)
             atomic_write_json(target, raw)
+            cleanup_files(jobs_dir, key)
         # merge schedules
         merged = get_schedules(config)
         merged.update(schedule_updates)

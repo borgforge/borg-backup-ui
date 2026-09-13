@@ -244,6 +244,14 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
             errors.append(message)
             error_details.append({"code": code, "params": params})
 
+        try:
+            from job_exclusions import marker_names, read_file
+            marker_names(raw.get("exclude_if_present"))
+            if raw.get("exclude_from"):
+                read_file(raw["exclude_from"], jobs_dir, job_key)
+        except ValueError:
+            add_error("exclusion_file_invalid", "Job exclusions are invalid or the managed file is missing/corrupt")
+
         repository_context = None
         if repository_inventory_error:
             add_error("repository_context_invalid", repository_inventory_error)

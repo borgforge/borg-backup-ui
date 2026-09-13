@@ -410,10 +410,15 @@ function renderJobCard(job) {
   const retention = [job.retention_daily, job.retention_weekly, job.retention_monthly, job.retention_yearly]
     .map((v) => String(v || '').trim())
     .filter((v) => v !== '');
+  const policy = job.retention || {};
+  const retentionText = policy.mode === 'all' ? jobsT('wizard.retentionAllSummary')
+    : policy.mode === 'last' ? jobsT('wizard.retentionLastSummary', {count: policy.last})
+    : [Number(policy.hourly) > 0 ? `${jobsT('wizard.retentionHourly')}: ${policy.hourly}` : '', retention.join('/'),
+       policy.within ? jobsT('wizard.retentionWithinSummary', {count: policy.within}) : ''].filter(Boolean).join(' · ');
   const policyHtml = (job.compression || retention.length === 4)
     ? `<div class="job-policy">
          ${job.compression ? `<span>${jobsT('jobs.compressionShort')} <code>${escHtml(job.compression)}</code></span>` : ''}
-         ${retention.length === 4 ? `<span>${jobsT('jobs.retentionShort')} <code>${escHtml(retention.join('/'))}</code></span>` : ''}
+         ${retention.length === 4 ? `<span>${jobsT('jobs.retentionShort')} <code>${escHtml(retentionText)}</code></span>` : ''}
        </div>`
     : '';
   const schedHtml = (job.enabled === false) ? '' : (sched

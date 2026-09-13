@@ -125,19 +125,20 @@ def test_retention_step_explains_periods_and_blocks_all_zero_in_both_languages()
     de = json.loads((ROOT / "ui" / "i18n" / "de.json").read_text(encoding="utf-8"))
     en = json.loads((ROOT / "ui" / "i18n" / "en.json").read_text(encoding="utf-8"))
 
-    assert 'data-i18n="wizard.retentionExplanation"' in index
-    assert 'data-i18n="wizard.retentionExample"' in index
-    assert 'data-i18n="wizard.retentionAutomaticPrune"' in index
+    assert 'id="wizard-policy-help-modal"' in index
+    assert 'data-wiz-policy-help="retention"' in index
+    assert "wizardPolicyHelpContent" in script
     assert 'id="wiz-retention-manual-link"' in index
     assert "github.com/borgforge/borg-backup-ui/blob/main/docs/user-manual/${language}" in script
-    assert index.count('min="0" step="1" id="wiz-keep-') == 4
+    for period in ("hourly", "daily", "weekly", "monthly", "yearly", "last"):
+        assert f'id="wiz-keep-{period}"' in index
 
     assert "function _wizardRetentionValidationKey(params)" in script
-    assert "if (step === 5)" in script
+    assert "if (step === 6)" in script
     assert "wizard.validationRetentionRequired" in script
     assert "wizard.previewRetention" in script
     assert "retention_all_zero" in script
-    assert "wizardClearError(5)" in bindings
+    assert "wizardClearError(6)" in bindings
 
     assert "Zeiträume" in de["wizard"]["retentionExplanation"]
     assert "time periods" in en["wizard"]["retentionExplanation"]
@@ -157,5 +158,5 @@ def test_quick_help_and_manuals_use_the_same_retention_semantics() -> None:
     assert "Retention values count periods" in quick_en
     assert "Backups um 08:00 und 08:30 Uhr" in manual_de
     assert "08:00 and 08:30" in manual_en
-    assert "viermal `0` wird abgelehnt" in manual_de
-    assert "four zero values is rejected" in manual_en
+    assert "Ein Zeitfenster allein wird abgelehnt" in manual_de
+    assert "A time window alone is rejected" in manual_en

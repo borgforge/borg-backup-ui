@@ -19,6 +19,14 @@ logger = logging.getLogger(__name__)
 
 RUNTIME_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_VENDOR_DIR = RUNTIME_DIR / "vendor"
+RETIRED_NOTIFICATIONAPI_CODE = "apprise_notificationapi_retired"
+RETIRED_NOTIFICATIONAPI_MESSAGE = (
+    "NotificationAPI was retired in Apprise 1.13.1. Reconfigure this profile "
+    "for Pingram or another provider. Its saved settings and secret are unchanged."
+)
+_log_lock = threading.Lock()
+_log_users = 0
+_previous_log_level = logging.NOTSET
 
 
 class AppriseAdapterError(RuntimeError):
@@ -29,23 +37,40 @@ class AppriseAdapterError(RuntimeError):
 class AppriseDeliveryResult:
     ok: bool
     message: str
+    message_code: str = ""
+
+
+def retired_notificationapi_url(url: str) -> bool:
+    """Inspect only the scheme; never return or log any part of the secret."""
+    scheme, separator, _ = str(url or "").strip().partition("://")
+    return bool(separator) and scheme.lower() in {"napi", "notificationapi"}
 
 
 def _safe_error(value: BaseException | str) -> str:
-    text = str(value or "").strip()
-    return text[:500] if text else "unknown error"
+    # Provider exceptions can contain URLs, credentials and message bodies.
+    # Only our own timeout text is safe to return verbatim.
+    if isinstance(value, _DiscoveryTimeoutError):
+        return str(value)
+    return type(value).__name__ if isinstance(value, BaseException) else "unknown error"
 
 
 @contextmanager
-def _suppress_apprise_info_logs() -> Iterator[None]:
-    """Keep provider-specific Apprise INFO lines out of backup logs."""
+def _suppress_apprise_logs() -> Iterator[None]:
+    """Provider logs may expose URLs even when validation fails (#269)."""
+    global _log_users, _previous_log_level
     target = logging.getLogger("apprise")
-    previous_level = target.level
-    target.setLevel(logging.WARNING)
+    with _log_lock:
+        if _log_users == 0:
+            _previous_log_level = target.level
+            target.setLevel(logging.CRITICAL + 1)
+        _log_users += 1
     try:
         yield
     finally:
-        target.setLevel(previous_level)
+        with _log_lock:
+            _log_users -= 1
+            if _log_users == 0:
+                target.setLevel(_previous_log_level)
 
 
 class _DiscoveryTimeoutError(TimeoutError):
@@ -242,11 +267,14 @@ def validate_url(
     text = str(url or "").strip()
     if not text:
         return AppriseDeliveryResult(False, "Apprise URL is empty.")
+    if retired_notificationapi_url(text):
+        return AppriseDeliveryResult(False, RETIRED_NOTIFICATIONAPI_MESSAGE, RETIRED_NOTIFICATIONAPI_CODE)
     module = load_bundled_apprise(vendor_dir=vendor_dir, apprise_module=apprise_module)
     try:
-        app = module.Apprise()
-        if not bool(app.add(text)):
-            return AppriseDeliveryResult(False, "Apprise URL was rejected by the bundled runtime.")
+        with _suppress_apprise_logs():
+            app = module.Apprise()
+            if not bool(app.add(text)):
+                return AppriseDeliveryResult(False, "Apprise URL was rejected by the bundled runtime.")
     except Exception as exc:  # noqa: BLE001
         return AppriseDeliveryResult(False, f"Apprise URL validation failed: {_safe_error(exc)}")
     return AppriseDeliveryResult(True, "Apprise URL is valid.")
@@ -293,7 +321,7 @@ def send_notification(
     module = load_bundled_apprise(vendor_dir=vendor_dir, apprise_module=apprise_module)
     try:
         with _operation_timeout(timeout_seconds, "Apprise notification delivery"):
-            with _suppress_apprise_info_logs():
+            with _suppress_apprise_logs():
                 app = module.Apprise()
                 app.add(text)
                 ok = bool(app.notify(title=str(title or "Borg Backup UI"), body=str(body or "")))

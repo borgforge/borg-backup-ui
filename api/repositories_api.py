@@ -2004,7 +2004,11 @@ def get_repository_archives(config: dict, repository_key: str, limit: int = 100)
             "end": str(row.get("end") or ""),
             "duration": row.get("duration"),
         })
-    return {"repository_key": key, "archive_count": len(rows), "archives": archives}
+    live_repository = payload.get("repository") if isinstance(payload.get("repository"), dict) else {}
+    return {
+        "repository_key": key, "repository_id": str(live_repository.get("id") or ""),
+        "archive_count": len(rows), "archives": archives,
+    }
 
 
 def _validate_repository_archive_name(value: Any) -> str:
@@ -2028,6 +2032,81 @@ def _validate_repository_archive_path(value: Any) -> str:
     if any(part in {"", ".", ".."} for part in parts) or posixpath.normpath(path) != path:
         raise ValueError("Archive path is invalid")
     return path
+
+
+def delete_repository_archive(
+    config: dict, payload: dict[str, Any], *, audit_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Delete one explicitly confirmed archive, keeping inventory and history."""
+    from archive_browser import invalidate_archive_index
+    from check_api import CheckManager
+    from jobs_api import JobManager, resolve_resource_lock_dir
+    from wizard_runner import ResourceLockSet
+
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid archive deletion payload")
+    archive = _validate_repository_archive_name(payload.get("archive"))
+    expected_id = str(payload.get("expected_archive_id") or "")
+    expected_repo = str(payload.get("expected_repository_id") or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_id) or not re.fullmatch(r"[0-9a-f]{64}", expected_repo):
+        raise ValueError("Archive and repository identity confirmation is required")
+    if payload.get("confirmed") is not True:
+        raise ValueError("Explicit archive deletion confirmation is required")
+    if payload.get("confirmation_phrase") != "DELETE":
+        raise ValueError("Archive deletion requires the confirmation phrase DELETE")
+    repository = _repository_by_key(config, str(payload.get("repository_key") or ""))
+    key = str(repository["repository_key"])
+    details = {"archive": archive, "archive_id": expected_id}
+    try:
+        maintenance = CheckManager.get().get_state()
+        if (maintenance.get("running") and maintenance.get("target_key") == key) or JobManager.get().get_state("restore_test").get("running"):
+            raise RepositoryBusyError("Repository maintenance or a restore test is currently running.")
+        with _repository_access(config, repository) as (storage, repo_path, passphrase_file):
+            locks = ResourceLockSet(
+                resolve_resource_lock_dir(config), job_key=key, operation="delete_archive",
+                run_id=expected_id,
+            )
+            try:
+                acquired, _reason = locks.acquire([f"repo:{repo_path}"])
+                if not acquired:
+                    raise RepositoryBusyError("Repository is currently in use by another operation.")
+                encryption = str(repository.get("encryption") or "")
+                live = _borg_list(config, storage, repo_path, passphrase_file, encryption)
+                live_repo = live.get("repository") if isinstance(live.get("repository"), dict) else {}
+                selected = [row for row in live.get("archives", []) if isinstance(row, dict) and row.get("name") == archive]
+                if live_repo.get("id") != expected_repo or len(selected) != 1 or selected[0].get("id") != expected_id:
+                    raise RepositoryLifecycleConflict(
+                        "The repository or archive changed. Refresh the archive list and select it again.",
+                        code="repository_archive_changed",
+                    )
+                _write_repository_lifecycle_audit(config, repository, action="delete_archive", status="started", details=details, audit_context=audit_context)
+                # Borg expands placeholders even for delete targets. Escape them
+                # so an existing archive containing braces is addressed literally.
+                target = f"{repo_path}::{archive}".replace("{", "{{").replace("}", "}}")
+                try:
+                    proc = subprocess.run(
+                        ["borg", "delete", "--lock-wait", "1", "--", target],
+                        capture_output=True, text=True, timeout=3600, check=False,
+                        env=_repo_env(storage, passphrase_file, config, encryption=encryption),
+                    )
+                    if proc.returncode != 0:
+                        _raise_borg_command_error((proc.stdout or "") + "\n" + (proc.stderr or ""), f"borg delete failed with exit {proc.returncode}")
+                finally:
+                    # Also discard cached file listings after an uncertain result.
+                    invalidate_archive_index(repo_path, archive)
+            finally:
+                locks.release()
+    except Exception as exc:
+        _write_repository_lifecycle_audit(config, repository, action="delete_archive", status="failed", details={**details, "error": _mask_repo_output(str(exc))[:500]}, audit_context=audit_context)
+        raise
+    _write_repository_lifecycle_audit(config, repository, action="delete_archive", status="success", details=details, audit_context=audit_context)
+    result = {"ok": True, "repository_key": key, "archive": archive, "archive_id": expected_id}
+    try:
+        refresh_repository_info(config, key)
+    except Exception as exc:
+        # A statistics refresh must not turn a completed deletion into a failure.
+        result["refresh_warning"] = _mask_repo_output(str(exc))[:500]
+    return result
 
 
 def get_repository_archive_files(

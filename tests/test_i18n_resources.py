@@ -227,21 +227,21 @@ def test_user_manuals_cover_current_stable_safety_and_runtime_guidance():
         "backup.start.priority=1",
         "Borg Server",
         "borg serve",
-        "Apprise `1.12.0`",
-        "137",
+        "Apprise `1.13.1`",
+        "141",
     )
     for manual in (manual_de, manual_en):
         for term in required_shared:
             assert term in manual
 
     required_de = (
-        "<typ-id>-backup-*",
+        "<aktueller-präfix>-*",
         "Migrationssnapshot",
         "Unraid-Dashboard-Widget",
         "Informations-Popover",
     )
     required_en = (
-        "<type-id>-backup-*",
+        "<current-prefix>-*",
         "migration snapshot",
         "Unraid Dashboard Widget",
         "information popover",

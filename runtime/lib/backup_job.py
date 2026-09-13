@@ -157,6 +157,7 @@ class BackupJobConfig:
     borg_check_flag_file: Optional[Path] = None
     borg_check_interval_days: int = 30
     borg_compression: str = "lz4"
+    retention_policy: Optional[dict] = None
     borg_keep_daily: int = 7
     borg_keep_weekly: int = 4
     borg_keep_monthly: int = 6
@@ -246,6 +247,7 @@ class BackupJobConfig:
                 env.get("BORG_CHECK_INTERVAL_DAYS", "30") or "30"
             ),
             borg_compression=env.get("BORG_COMPRESSION", "lz4") or "lz4",
+            retention_policy=json.loads(env["BORG_RETENTION_JSON"]) if "BORG_RETENTION_JSON" in env else None,
             borg_keep_daily=int(env.get("BORG_KEEP_DAILY", "7") or "7"),
             borg_keep_weekly=int(env.get("BORG_KEEP_WEEKLY", "4") or "4"),
             borg_keep_monthly=int(env.get("BORG_KEEP_MONTHLY", "6") or "6"),
@@ -328,11 +330,11 @@ class BackupJob:
         logger.info("  Repository:  %s", cfg.borg_repo or os.environ.get("BORG_REPO", ""))
         logger.info("  Compression: %s", cfg.borg_compression)
         logger.info("  Exclusions:  %s", ", ".join(str(path) for path in cfg.exclude_paths) or "none")
-        logger.info(
-            "  Retention:   %dd / %dw / %dm / %dy",
-            cfg.borg_keep_daily, cfg.borg_keep_weekly,
-            cfg.borg_keep_monthly, cfg.borg_keep_yearly,
-        )
+        from .retention_policy import retention_description
+        policy = cfg.retention_policy if cfg.retention_policy is not None else {
+            period: getattr(cfg, f"borg_keep_{period}") for period in ("daily", "weekly", "monthly", "yearly")
+        }
+        logger.info("  Retention:   %s", retention_description(policy))
         logger.info("  Log-Dir:     %s (%d days)", cfg.log_dir, cfg.log_retention_days)
         logger.info("  Cache:       %s", cfg.borg_cache_dir)
         if self.mail_config and self.mail_config.recipient:

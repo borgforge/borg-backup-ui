@@ -49,8 +49,8 @@ def test_final_preview_contains_runtime_risk_acknowledgements() -> None:
     assert "function wizardUpdateFinalRiskAcknowledgements()" in script
     assert "function _wizardHasSourcePathComponent(name)" in script
     assert "_wizardHasSourcePathComponent('appdata')" in script
-    assert "if (step === 3) return _wizardRuntimeMode('docker') !== 'none';" in script
-    assert "if (step === 4) return _wizardRuntimeMode('vm') !== 'none';" in script
+    assert "if (step === 4) return _wizardRuntimeMode('docker') !== 'none';" in script
+    assert "if (step === 5) return _wizardRuntimeMode('vm') !== 'none';" in script
     assert "if (step === 9)" in script
     assert "_wizardFocusRuntimeRisk('wiz-final-appdata-risk')" in script
     assert "_wizardSyncRiskAcknowledgement('docker', el.checked)" in script

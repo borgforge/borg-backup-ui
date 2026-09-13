@@ -17,12 +17,12 @@ system only when the bundled version or SHA256 changes.
 
 | Component | Version | License | Notice |
 | --- | --- | --- | --- |
-| apprise | 1.12.0 | BSD-2-Clause | See `runtime/licenses/apprise/LICENSE`. |
-| certifi | 2026.6.17 | MPL-2.0 | Python package dependency of Apprise. |
-| charset-normalizer | 3.4.9 | MIT | Python package dependency of Apprise. |
-| click | 8.4.2 | BSD-3-Clause | Python package dependency of Apprise. |
-| idna | 3.18 | BSD-3-Clause | Python package dependency of Apprise. |
-| Markdown | 3.10.2 | BSD-3-Clause | Python package dependency of Apprise. |
+| apprise | 1.13.1 | BSD-2-Clause | See `runtime/licenses/apprise/LICENSE`. |
+| certifi | 2026.7.22 | MPL-2.0 | Python package dependency of Apprise. |
+| charset-normalizer | 3.5.1 | MIT | Python package dependency of Apprise. |
+| click | 8.5.0 | BSD-3-Clause | Python package dependency of Apprise. |
+| idna | 3.19 | BSD-3-Clause | Python package dependency of Apprise. |
+| Markdown | 3.10.3 | BSD-3-Clause | Python package dependency of Apprise. |
 | oauthlib | 3.3.1 | BSD-3-Clause | Python package dependency of Apprise. |
 | PyYAML | 6.0.3 | MIT | Python package dependency of Apprise. |
 | requests | 2.34.2 | Apache-2.0 | Python package dependency of Apprise. |

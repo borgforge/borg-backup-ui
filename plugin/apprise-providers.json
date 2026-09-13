@@ -1,0 +1,904 @@
+{
+  "version": "1.13.1",
+  "provider_count": 141,
+  "providers": [
+    {
+      "service_name": "46elks",
+      "schemas": [
+        "46elks",
+        "elks"
+      ]
+    },
+    {
+      "service_name": "800.com",
+      "schemas": [
+        "eight00com"
+      ]
+    },
+    {
+      "service_name": "Africas Talking",
+      "schemas": [
+        "atalk"
+      ]
+    },
+    {
+      "service_name": "Amazon Chime",
+      "schemas": [
+        "chime"
+      ]
+    },
+    {
+      "service_name": "Apprise API",
+      "schemas": [
+        "apprise",
+        "apprises"
+      ]
+    },
+    {
+      "service_name": "Aprs",
+      "schemas": [
+        "aprs"
+      ]
+    },
+    {
+      "service_name": "AWS Simple Email Service (SES)",
+      "schemas": [
+        "ses"
+      ]
+    },
+    {
+      "service_name": "AWS Simple Notification Service (SNS)",
+      "schemas": [
+        "sns"
+      ]
+    },
+    {
+      "service_name": "Bark",
+      "schemas": [
+        "bark",
+        "barks"
+      ]
+    },
+    {
+      "service_name": "BlueSky",
+      "schemas": [
+        "bluesky",
+        "bsky"
+      ]
+    },
+    {
+      "service_name": "Brevo",
+      "schemas": [
+        "brevo"
+      ]
+    },
+    {
+      "service_name": "BulkSMS",
+      "schemas": [
+        "bulksms"
+      ]
+    },
+    {
+      "service_name": "BulkVS",
+      "schemas": [
+        "bulkvs"
+      ]
+    },
+    {
+      "service_name": "Burst SMS",
+      "schemas": [
+        "burstsms"
+      ]
+    },
+    {
+      "service_name": "Chanify",
+      "schemas": [
+        "chanify"
+      ]
+    },
+    {
+      "service_name": "Cisco Webex Teams",
+      "schemas": [
+        "webex",
+        "wxteams"
+      ]
+    },
+    {
+      "service_name": "Clickatell",
+      "schemas": [
+        "clickatell"
+      ]
+    },
+    {
+      "service_name": "ClickSend",
+      "schemas": [
+        "clicksend"
+      ]
+    },
+    {
+      "service_name": "D7 Networks",
+      "schemas": [
+        "d7sms"
+      ]
+    },
+    {
+      "service_name": "Dapnet",
+      "schemas": [
+        "dapnet"
+      ]
+    },
+    {
+      "service_name": "DingTalk",
+      "schemas": [
+        "dingtalk"
+      ]
+    },
+    {
+      "service_name": "Discord",
+      "schemas": [
+        "discord"
+      ]
+    },
+    {
+      "service_name": "Dot.",
+      "schemas": [
+        "dot"
+      ]
+    },
+    {
+      "service_name": "E-Mail",
+      "schemas": [
+        "mailto",
+        "mailtos"
+      ]
+    },
+    {
+      "service_name": "Emby",
+      "schemas": [
+        "emby",
+        "embys"
+      ]
+    },
+    {
+      "service_name": "Enigma2",
+      "schemas": [
+        "enigma2",
+        "enigma2s"
+      ]
+    },
+    {
+      "service_name": "Evolution API",
+      "schemas": [
+        "evolution",
+        "evolutions"
+      ]
+    },
+    {
+      "service_name": "Exotel",
+      "schemas": [
+        "exotel"
+      ]
+    },
+    {
+      "service_name": "Feishu",
+      "schemas": [
+        "feishu"
+      ]
+    },
+    {
+      "service_name": "Flock",
+      "schemas": [
+        "flock"
+      ]
+    },
+    {
+      "service_name": "Flowtriq",
+      "schemas": [
+        "flowtriq",
+        "flowtriqs"
+      ]
+    },
+    {
+      "service_name": "Fluxer",
+      "schemas": [
+        "fluxer",
+        "fluxers"
+      ]
+    },
+    {
+      "service_name": "Form",
+      "schemas": [
+        "form",
+        "forms"
+      ]
+    },
+    {
+      "service_name": "Free-Mobile",
+      "schemas": [
+        "freemobile"
+      ]
+    },
+    {
+      "service_name": "Google Chat",
+      "schemas": [
+        "gchat"
+      ]
+    },
+    {
+      "service_name": "Gotify",
+      "schemas": [
+        "gotify",
+        "gotifys"
+      ]
+    },
+    {
+      "service_name": "GroupMe",
+      "schemas": [
+        "groupme"
+      ]
+    },
+    {
+      "service_name": "Guilded",
+      "schemas": [
+        "guilded"
+      ]
+    },
+    {
+      "service_name": "HomeAssistant",
+      "schemas": [
+        "hassio",
+        "hassios"
+      ]
+    },
+    {
+      "service_name": "httpSMS",
+      "schemas": [
+        "httpsms"
+      ]
+    },
+    {
+      "service_name": "HumHub",
+      "schemas": [
+        "humhub",
+        "humhubs"
+      ]
+    },
+    {
+      "service_name": "IFTTT",
+      "schemas": [
+        "ifttt"
+      ]
+    },
+    {
+      "service_name": "IRC",
+      "schemas": [
+        "irc",
+        "ircs"
+      ]
+    },
+    {
+      "service_name": "Jellyfin",
+      "schemas": [
+        "jellyfin",
+        "jellyfins"
+      ]
+    },
+    {
+      "service_name": "Jira",
+      "schemas": [
+        "jira"
+      ]
+    },
+    {
+      "service_name": "Join",
+      "schemas": [
+        "join"
+      ]
+    },
+    {
+      "service_name": "JSON",
+      "schemas": [
+        "json",
+        "jsons"
+      ]
+    },
+    {
+      "service_name": "Kavenegar",
+      "schemas": [
+        "kavenegar"
+      ]
+    },
+    {
+      "service_name": "Kodi/XBMC",
+      "schemas": [
+        "kodi",
+        "kodis",
+        "xbmc",
+        "xbmcs"
+      ]
+    },
+    {
+      "service_name": "Kook",
+      "schemas": [
+        "kook"
+      ]
+    },
+    {
+      "service_name": "Kumulos",
+      "schemas": [
+        "kumulos"
+      ]
+    },
+    {
+      "service_name": "LaMetric",
+      "schemas": [
+        "lametric",
+        "lametrics"
+      ]
+    },
+    {
+      "service_name": "Lark (Feishu)",
+      "schemas": [
+        "lark"
+      ]
+    },
+    {
+      "service_name": "Lauther",
+      "schemas": [
+        "lauther"
+      ]
+    },
+    {
+      "service_name": "Line",
+      "schemas": [
+        "line"
+      ]
+    },
+    {
+      "service_name": "MailerSend",
+      "schemas": [
+        "mailersend"
+      ]
+    },
+    {
+      "service_name": "Mailgun",
+      "schemas": [
+        "mailgun"
+      ]
+    },
+    {
+      "service_name": "Mastodon",
+      "schemas": [
+        "mastodon",
+        "mastodons",
+        "toot",
+        "toots"
+      ]
+    },
+    {
+      "service_name": "Matrix",
+      "schemas": [
+        "matrix",
+        "matrixs"
+      ]
+    },
+    {
+      "service_name": "Mattermost",
+      "schemas": [
+        "mmost",
+        "mmosts"
+      ]
+    },
+    {
+      "service_name": "MessageBird",
+      "schemas": [
+        "msgbird"
+      ]
+    },
+    {
+      "service_name": "Misskey",
+      "schemas": [
+        "misskey",
+        "misskeys"
+      ]
+    },
+    {
+      "service_name": "MSG91",
+      "schemas": [
+        "msg91"
+      ]
+    },
+    {
+      "service_name": "Nextcloud",
+      "schemas": [
+        "ncloud",
+        "nclouds"
+      ]
+    },
+    {
+      "service_name": "Nextcloud Talk",
+      "schemas": [
+        "nctalk",
+        "nctalks"
+      ]
+    },
+    {
+      "service_name": "Notica",
+      "schemas": [
+        "notica",
+        "noticas"
+      ]
+    },
+    {
+      "service_name": "Notifiarr",
+      "schemas": [
+        "notifiarr"
+      ]
+    },
+    {
+      "service_name": "Notifico",
+      "schemas": [
+        "notifico",
+        "notificos"
+      ]
+    },
+    {
+      "service_name": "Notifyre",
+      "schemas": [
+        "notifyre"
+      ]
+    },
+    {
+      "service_name": "ntfy",
+      "schemas": [
+        "ntfy",
+        "ntfys"
+      ]
+    },
+    {
+      "service_name": "Octopush",
+      "schemas": [
+        "octopush"
+      ]
+    },
+    {
+      "service_name": "Office 365",
+      "schemas": [
+        "azure",
+        "o365"
+      ]
+    },
+    {
+      "service_name": "OneSignal",
+      "schemas": [
+        "onesignal"
+      ]
+    },
+    {
+      "service_name": "Opsgenie",
+      "schemas": [
+        "opsgenie"
+      ]
+    },
+    {
+      "service_name": "Pager Duty",
+      "schemas": [
+        "pagerduty"
+      ]
+    },
+    {
+      "service_name": "PagerTree",
+      "schemas": [
+        "pagertree"
+      ]
+    },
+    {
+      "service_name": "Parse Platform",
+      "schemas": [
+        "parsep",
+        "parseps"
+      ]
+    },
+    {
+      "service_name": "Pinglet",
+      "schemas": [
+        "pinglet",
+        "pinglets"
+      ]
+    },
+    {
+      "service_name": "Pingram",
+      "schemas": [
+        "pingram"
+      ]
+    },
+    {
+      "service_name": "Plivo",
+      "schemas": [
+        "plivo"
+      ]
+    },
+    {
+      "service_name": "Postmark",
+      "schemas": [
+        "postmark"
+      ]
+    },
+    {
+      "service_name": "Power Automate / Workflows (for MSTeams)",
+      "schemas": [
+        "workflow",
+        "workflows"
+      ]
+    },
+    {
+      "service_name": "Prowl",
+      "schemas": [
+        "prowl"
+      ]
+    },
+    {
+      "service_name": "Pushbullet",
+      "schemas": [
+        "pbul"
+      ]
+    },
+    {
+      "service_name": "PushDeer",
+      "schemas": [
+        "pushdeer",
+        "pushdeers"
+      ]
+    },
+    {
+      "service_name": "Pushed",
+      "schemas": [
+        "pushed"
+      ]
+    },
+    {
+      "service_name": "Pushjet",
+      "schemas": [
+        "pjet",
+        "pjets"
+      ]
+    },
+    {
+      "service_name": "PushMe",
+      "schemas": [
+        "pushme"
+      ]
+    },
+    {
+      "service_name": "Pushover",
+      "schemas": [
+        "pover"
+      ]
+    },
+    {
+      "service_name": "Pushplus",
+      "schemas": [
+        "pushplus",
+        "wecom"
+      ]
+    },
+    {
+      "service_name": "Pushsafer",
+      "schemas": [
+        "psafer",
+        "psafers"
+      ]
+    },
+    {
+      "service_name": "PushWard",
+      "schemas": [
+        "pushward"
+      ]
+    },
+    {
+      "service_name": "Pushy",
+      "schemas": [
+        "pushy"
+      ]
+    },
+    {
+      "service_name": "QQ Push",
+      "schemas": [
+        "qq"
+      ]
+    },
+    {
+      "service_name": "Reddit",
+      "schemas": [
+        "reddit"
+      ]
+    },
+    {
+      "service_name": "Remote Syslog",
+      "schemas": [
+        "rsyslog"
+      ]
+    },
+    {
+      "service_name": "Resend",
+      "schemas": [
+        "resend"
+      ]
+    },
+    {
+      "service_name": "Revolt",
+      "schemas": [
+        "revolt"
+      ]
+    },
+    {
+      "service_name": "RingCentral",
+      "schemas": [
+        "ringc"
+      ]
+    },
+    {
+      "service_name": "Rocket.Chat",
+      "schemas": [
+        "rocket",
+        "rockets"
+      ]
+    },
+    {
+      "service_name": "Ryver",
+      "schemas": [
+        "ryver"
+      ]
+    },
+    {
+      "service_name": "SendGrid",
+      "schemas": [
+        "sendgrid"
+      ]
+    },
+    {
+      "service_name": "SendPulse",
+      "schemas": [
+        "sendpulse"
+      ]
+    },
+    {
+      "service_name": "ServerChan",
+      "schemas": [
+        "schan"
+      ]
+    },
+    {
+      "service_name": "SerwerSMS",
+      "schemas": [
+        "serwersms"
+      ]
+    },
+    {
+      "service_name": "seven",
+      "schemas": [
+        "seven"
+      ]
+    },
+    {
+      "service_name": "Signal API",
+      "schemas": [
+        "signal",
+        "signals"
+      ]
+    },
+    {
+      "service_name": "Signalgrid",
+      "schemas": [
+        "signalgrid"
+      ]
+    },
+    {
+      "service_name": "SIGNL4",
+      "schemas": [
+        "signl4"
+      ]
+    },
+    {
+      "service_name": "Sinch",
+      "schemas": [
+        "sinch"
+      ]
+    },
+    {
+      "service_name": "Slack",
+      "schemas": [
+        "slack"
+      ]
+    },
+    {
+      "service_name": "SMS Eagle",
+      "schemas": [
+        "smseagle",
+        "smseagles"
+      ]
+    },
+    {
+      "service_name": "SMS Manager",
+      "schemas": [
+        "smsmanager",
+        "smsmgr"
+      ]
+    },
+    {
+      "service_name": "SMSC",
+      "schemas": [
+        "smsc"
+      ]
+    },
+    {
+      "service_name": "SMTP2Go",
+      "schemas": [
+        "smtp2go"
+      ]
+    },
+    {
+      "service_name": "Soci\u00e9t\u00e9 Fran\u00e7aise du Radiot\u00e9l\u00e9phone",
+      "schemas": [
+        "sfr"
+      ]
+    },
+    {
+      "service_name": "SparkPost",
+      "schemas": [
+        "sparkpost"
+      ]
+    },
+    {
+      "service_name": "Spike.sh",
+      "schemas": [
+        "spike"
+      ]
+    },
+    {
+      "service_name": "Splunk On-Call",
+      "schemas": [
+        "splunk",
+        "victorops"
+      ]
+    },
+    {
+      "service_name": "SpugPush",
+      "schemas": [
+        "spugpush"
+      ]
+    },
+    {
+      "service_name": "Stackfield",
+      "schemas": [
+        "stackfield"
+      ]
+    },
+    {
+      "service_name": "Streamlabs",
+      "schemas": [
+        "strmlabs"
+      ]
+    },
+    {
+      "service_name": "Synology Chat",
+      "schemas": [
+        "synology",
+        "synologys"
+      ]
+    },
+    {
+      "service_name": "Syslog",
+      "schemas": [
+        "syslog"
+      ]
+    },
+    {
+      "service_name": "Techulus Push",
+      "schemas": [
+        "push"
+      ]
+    },
+    {
+      "service_name": "Telegram",
+      "schemas": [
+        "tgram"
+      ]
+    },
+    {
+      "service_name": "Threema Gateway",
+      "schemas": [
+        "threema"
+      ]
+    },
+    {
+      "service_name": "Trigv",
+      "schemas": [
+        "trigv",
+        "trigvs"
+      ]
+    },
+    {
+      "service_name": "Twilio",
+      "schemas": [
+        "twilio"
+      ]
+    },
+    {
+      "service_name": "Twist",
+      "schemas": [
+        "twist"
+      ]
+    },
+    {
+      "service_name": "Twitter",
+      "schemas": [
+        "tweet",
+        "twitter",
+        "x"
+      ]
+    },
+    {
+      "service_name": "Viber",
+      "schemas": [
+        "viber"
+      ]
+    },
+    {
+      "service_name": "VoIPms",
+      "schemas": [
+        "voipms"
+      ]
+    },
+    {
+      "service_name": "Vonage",
+      "schemas": [
+        "nexmo",
+        "vonage"
+      ]
+    },
+    {
+      "service_name": "WeChat (WeCom)",
+      "schemas": [
+        "wechat"
+      ]
+    },
+    {
+      "service_name": "WeCom Bot",
+      "schemas": [
+        "wecombot"
+      ]
+    },
+    {
+      "service_name": "WhatsApp",
+      "schemas": [
+        "whatsapp"
+      ]
+    },
+    {
+      "service_name": "WxPusher",
+      "schemas": [
+        "wxpusher"
+      ]
+    },
+    {
+      "service_name": "XML",
+      "schemas": [
+        "xml",
+        "xmls"
+      ]
+    },
+    {
+      "service_name": "Zoom",
+      "schemas": [
+        "zoom"
+      ]
+    },
+    {
+      "service_name": "Zulip",
+      "schemas": [
+        "zulip"
+      ]
+    }
+  ]
+}

@@ -148,8 +148,8 @@ def test_borg_prune_scopes_retention_to_archive_prefix(monkeypatch, tmp_path: Pa
     assert index < command.index("--keep-daily")
     assert command[-1] == str(tmp_path / "repo")
     assert (
-        "Borg prune: applying retention only to archives matching nas-backup-* "
-        "(keep: 7d/4w/6m/2y)"
+        "Borg prune: archive filter nas-backup-*; "
+        "--keep-daily 7 --keep-weekly 4 --keep-monthly 6 --keep-yearly 2"
     ) in caplog.text
 
 
@@ -168,6 +168,6 @@ def test_borg_prune_logs_unfiltered_fallback(monkeypatch, tmp_path: Path, caplog
 
     assert runner.prune() == 0
     assert (
-        "Borg prune: applying retention to all repository archives "
-        "(keep: 7d/4w/6m/2y)"
+        "Borg prune: archive filter all; "
+        "--keep-daily 7 --keep-weekly 4 --keep-monthly 6 --keep-yearly 2"
     ) in caplog.text

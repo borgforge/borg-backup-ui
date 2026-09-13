@@ -33,7 +33,7 @@ BORG_TMP_BIN = Path("/tmp/borg")
 def _ensure_runtime_import_paths(backup_scripts_dir: Path) -> None:
     """Prefer the installed plugin runtime while keeping data-root fallbacks."""
     plugin_runtime = ROOT_DIR / "runtime"
-    for path in (backup_scripts_dir, plugin_runtime, plugin_runtime / "lib"):
+    for path in (backup_scripts_dir, ROOT_DIR, plugin_runtime, plugin_runtime / "lib"):
         raw = str(path)
         while raw in sys.path:
             sys.path.remove(raw)
@@ -339,7 +339,13 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
             break
     if meta_path is None:
         raise FileNotFoundError(f"Job metadata file not found: {job_key}")
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    from inventory_store import inventory_lock
+    from job_exclusions import marker_names, read_file
+    with inventory_lock(meta_path.parent.parent):
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta["exclude_if_present"] = marker_names(meta.get("exclude_if_present"))
+        if meta.get("exclude_from"):
+            meta["_exclude_file_bytes"] = read_file(meta["exclude_from"], meta_path.parent, job_key)
 
     from repository_context import resolve_job_repository_context
     repository_context = resolve_job_repository_context(
@@ -427,6 +433,7 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     env["BORG_CACHE_DIR"] = cache_dir
     env.setdefault("BORG_CHECK_INTERVAL_DAYS", env.get("GLOBAL_BORG_CHECK_INTERVAL_DAYS", "30"))
     env["BORG_CHECK_FLAG_FILE"] = f"{cache_dir}/{check_flag_name}"
+    env["BORG_RETENTION_JSON"] = json.dumps(meta_ret)
     env["BORG_KEEP_DAILY"] = meta_keep_daily
     env["BORG_KEEP_WEEKLY"] = meta_keep_weekly
     env["BORG_KEEP_MONTHLY"] = meta_keep_monthly
@@ -709,6 +716,7 @@ def main() -> int:
 
     smb_session = SmbMountSession()
     result_code = 2
+    exclusion_temp = None
     try:
         set_phase("mounting")
         smb_session = _ensure_smb_mount(env, meta)
@@ -733,6 +741,15 @@ def main() -> int:
             phase_callback=set_phase,
         ) as job:
             set_phase("preparing")
+            borg_config.exclude_if_present = meta.get("exclude_if_present", [])
+            if meta.get("exclude_from"):
+                import tempfile
+                exclusion_temp = tempfile.TemporaryDirectory(prefix="bbui-exclusions-")
+                pattern_file = Path(exclusion_temp.name) / "exclude.txt"
+                pattern_file.write_bytes(meta["_exclude_file_bytes"])
+                pattern_file.chmod(0o600)
+                borg_config.exclude_from = str(pattern_file)
+                logging.info("Exclusion file: %s; SHA-256 %s", meta["exclude_from"]["original_name"], meta["exclude_from"]["sha256"])
             if control.is_cancel_requested():
                 job.set_cancelled()
                 result_code = 130
@@ -813,6 +830,11 @@ def main() -> int:
         result_code = 2
         raise
     finally:
+        if exclusion_temp is not None:
+            try:
+                exclusion_temp.cleanup()
+            except OSError:
+                logging.getLogger(__name__).warning("Could not remove the temporary exclusion file")
         set_phase("unmounting")
         try:
             smb_session.cleanup()

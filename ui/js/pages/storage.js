@@ -22,6 +22,7 @@ storageState.archiveBrowser = storageState.archiveBrowser || { repositoryKey: ''
 storageState.lifecycleCache = storageState.lifecycleCache || {};
 storageState.maintenanceState = storageState.maintenanceState || { running: false };
 storageState.maintenanceConfirmation = null;
+storageState.archiveDeleteConfirmation = null;
 storageState.lifecycleConfirmation = null;
 storageState.pendingRepositoryKeyImportGuide = !!storageState.pendingRepositoryKeyImportGuide;
 storageState.repositoryManagerCloseSnapshot = '';
@@ -175,6 +176,10 @@ function storageArchiveFilterFromJob(job) {
 function storageRetentionFromJob(job) {
   const raw = job?.retention && typeof job.retention === 'object' ? job.retention : {};
   return {
+    mode: raw.mode || 'tiered',
+    last: raw.last || '0',
+    hourly: raw.hourly || '0',
+    within: raw.within || '',
     daily: String(job?.retention_daily ?? raw.daily ?? '').trim(),
     weekly: String(job?.retention_weekly ?? raw.weekly ?? '').trim(),
     monthly: String(job?.retention_monthly ?? raw.monthly ?? '').trim(),
@@ -184,12 +189,14 @@ function storageRetentionFromJob(job) {
 
 function storageRetentionTableHtml(job) {
   const retention = storageRetentionFromJob(job);
-  const rows = ['Daily', 'Weekly', 'Monthly', 'Yearly'].map((period) => {
+  if (retention.mode === 'all') return `<p class="status-message warning">${escHtml(storageT('wizard.retentionAllSummary'))}</p>`;
+  if (retention.mode === 'last') return `<p>${escHtml(storageT('wizard.retentionLastSummary', {count: retention.last}))}</p>`;
+  const rows = ['Hourly', 'Daily', 'Weekly', 'Monthly', 'Yearly'].map((period) => {
     const value = storageT(`storage.repositoryRetention${period}`, { count: retention[period.toLowerCase()] || '0' });
     const limit = storageT(`storage.repositoryRetention${period}Limit`);
     return `<tr><td>${escHtml(value)}</td><td>${escHtml(limit)}</td></tr>`;
   }).join('');
-  return `<table class="retention-table storage-maintenance-retention-table">
+  return `${retention.within ? `<p>${escHtml(storageT('wizard.retentionWithinSummary', {count: retention.within}))}</p>` : ''}<table class="retention-table storage-maintenance-retention-table">
     <caption>${escHtml(storageT('storage.repositoryMaintenanceRetention'))}</caption>
     <thead><tr><th scope="col">${escHtml(storageT('storage.repositoryRetentionPoints'))}</th><th scope="col">${escHtml(storageT('storage.repositoryRetentionMaximum'))}</th></tr></thead>
     <tbody>${rows}</tbody>
@@ -215,6 +222,8 @@ function updateStorageMaintenanceRetentionPreview() {
   pending.selectedJobKey = String(job?.key || selectedJobKey || '').trim();
   const preview = document.getElementById('storage-maintenance-retention-preview');
   if (preview) preview.innerHTML = storageMaintenancePruneDetailsHtml(pending.repo || {}, job);
+  const start = document.getElementById('storage-maintenance-confirm-start-btn');
+  if (start) start.disabled = !job || storageRetentionFromJob(job).mode === 'all';
 }
 
 function storageName(repo) {
@@ -283,6 +292,9 @@ async function refreshStorage() {
     storageState.maintenanceState = maintenanceRes.ok ? await maintenanceRes.json() : { running: false };
     storageState.loaded = true;
     renderStorage(storageState.data);
+    if (storageState.selectedTab === 'archives' && storageState.selectedRepositoryKey) {
+      await loadRepositoryArchives(storageState.selectedRepositoryKey, true);
+    }
     if (storageState.selectedTab === 'management' && storageState.selectedRepositoryKey) {
       await loadRepositoryLifecycle(storageState.selectedRepositoryKey, true);
     }
@@ -316,6 +328,16 @@ function renderStorage(data) {
 
 function storageRepositoryKey(repo) {
   return String(repo?.repository_key || repo?.conf_key || repo?.path_raw || '').trim();
+}
+
+function storageRepositoryArchiveCount(repo) {
+  const inventory = storageState.archiveCache[storageRepositoryKey(repo)]?.data;
+  const rawCount = inventory
+    ? (inventory.archive_count ?? (Array.isArray(inventory.archives) ? inventory.archives.length : null))
+    : repo?.repository_stats?.archives_count;
+  if (rawCount === null || rawCount === undefined || rawCount === '') return null;
+  const count = Number(rawCount);
+  return Number.isSafeInteger(count) && count >= 0 ? count : null;
 }
 
 function storageRepositoryStatus(repo) {
@@ -561,7 +583,7 @@ function renderStorageMaintenanceCard(repo, key, { withAction = false, job = nul
   const repositoryKey = storageRepositoryKey(repo);
   const action = key === 'verify_data' ? 'check' : key;
   const mode = key === 'verify_data' ? 'verify_data' : 'quick';
-  const disabled = key === 'prune' && !job ? ' disabled' : '';
+  const disabled = key === 'prune' && (!job || (storageRetentionFromJob(job).mode === 'all' && !storageJobsForRepository(repo).some(j => storageRetentionFromJob(j).mode !== 'all'))) ? ' disabled' : '';
   const details = Array.isArray(result?.details) ? result.details : [];
   const deletedArchives = Array.isArray(result?.deleted_archives) ? result.deleted_archives : [];
   const userHint = result?.failure_code === 'borg_ssh_connection_interrupted'
@@ -617,16 +639,105 @@ function renderStorageRepositoryArchives(repo) {
   const archives = Array.isArray(cache.data?.archives) ? cache.data.archives : [];
   if (!archives.length) return `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryNoArchives')}</p></div>`;
   const browser = storageState.archiveBrowser.repositoryKey === key ? storageState.archiveBrowser : null;
-  return `<div class="storage-archive-toolbar"><strong>${storageCount(cache.data.archive_count || archives.length, 'storage.archiveCountOne', 'storage.archiveCountMany')}</strong><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-archives" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
+  const canDelete = cache.data.can_delete === true && !!cache.data.repository_id;
+  return `<div class="storage-archive-toolbar"><strong>${storageCount(storageRepositoryArchiveCount(repo) ?? archives.length, 'storage.archiveCountOne', 'storage.archiveCountMany')}</strong><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-archives" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
     <p class="storage-archive-intro">${escHtml(storageT('storage.repositoryArchiveBrowseHint'))}</p>
     <div class="storage-archive-layout ${browser?.archive ? 'has-browser' : ''}">
-      <div class="storage-archive-list"><header><span></span><strong>${storageT('storage.repositoryArchiveName')}</strong><strong>${storageT('storage.repositoryArchiveCreated')}</strong><span></span></header>${archives.map((archive) => {
+      <div class="storage-archive-list ${canDelete ? 'can-delete' : ''}"><header><span></span><strong>${storageT('storage.repositoryArchiveName')}</strong><strong>${storageT('storage.repositoryArchiveCreated')}</strong><span></span></header>${archives.map((archive) => {
         const name = String(archive.name || '');
         const selected = !!browser && name === browser.archive;
-        return `<button type="button" class="storage-archive-row ${selected ? 'is-selected' : ''}" data-storage-action="open-repository-archive" data-repository-key="${escHtml(key)}" data-archive="${escHtml(name)}" ${selected ? 'aria-current="true"' : ''}><span class="storage-archive-dot"></span><span><strong>${escHtml(name || '—')}</strong><small>${escHtml(archive.id || '')}</small></span><time>${escHtml(storageFormatDateTime(archive.start))}</time><span class="storage-archive-open" aria-hidden="true">›</span></button>`;
+        return `<div class="storage-archive-entry"><button type="button" class="storage-archive-row ${selected ? 'is-selected' : ''}" data-storage-action="open-repository-archive" data-repository-key="${escHtml(key)}" data-archive="${escHtml(name)}" ${selected ? 'aria-current="true"' : ''}><span class="storage-archive-dot"></span><span><strong>${escHtml(name || '—')}</strong><small>${escHtml(archive.id || '')}</small></span><time>${escHtml(storageFormatDateTime(archive.start))}</time><span class="storage-archive-open" aria-hidden="true">›</span></button>${canDelete && archive.id ? `<button type="button" class="storage-archive-delete" data-storage-action="delete-repository-archive" data-repository-key="${escHtml(key)}" data-archive="${escHtml(name)}" title="${escHtml(storageT('storage.archiveDelete'))}" aria-label="${escHtml(storageT('storage.archiveDeleteLabel', { name }))}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>` : ''}</div>`;
       }).join('')}</div>
       ${browser?.archive ? renderStorageArchiveBrowser(browser) : ''}
     </div>`;
+}
+
+function openRepositoryArchiveDelete(repositoryKey, name, trigger) {
+  const cache = storageState.archiveCache[repositoryKey]?.data;
+  const archive = cache?.archives?.find(row => row.name === name);
+  if (!cache?.can_delete || !cache.repository_id || !archive?.id || storageState.archiveDeleteConfirmation?.running) return;
+  const repo = storageRepositories(storageState.data).find(row => storageRepositoryKey(row) === repositoryKey);
+  if (!repo) return;
+  const modal = document.getElementById('repository-archive-delete-modal');
+  if (!modal) return;
+  storageState.archiveDeleteConfirmation = {
+    repositoryKey, repositoryId: cache.repository_id, archive: { ...archive }, trigger, running: false,
+  };
+  document.getElementById('repository-archive-delete-info').innerHTML = `<dl class="storage-archive-delete-details">
+    <div><dt>${escHtml(storageT('storage.repository'))}</dt><dd><strong>${escHtml(storageRepositoryTitle(repo, storageJobForRepository(repo)))}</strong></dd></div>
+    <div><dt>${escHtml(storageT('storage.repositoryPathLabel'))}</dt><dd class="storage-archive-delete-path">${escHtml(repo.path_display || repo.path_raw || '')}</dd></div>
+    <div><dt>${escHtml(storageT('storage.repositoryArchiveName'))}</dt><dd><strong>${escHtml(archive.name)}</strong></dd></div>
+    <div><dt>${escHtml(storageT('storage.repositoryArchiveCreated'))}</dt><dd>${escHtml(storageFormatDateTime(archive.start))}</dd></div>
+  </dl>`;
+  hideEl('repository-archive-delete-message');
+  document.getElementById('repository-archive-delete-phrase-input').value = '';
+  updateRepositoryArchiveDeleteConfirmation();
+  modal.classList.remove('hidden');
+  document.getElementById('repository-archive-delete-cancel-btn')?.focus();
+}
+
+function updateRepositoryArchiveDeleteConfirmation() {
+  const pending = storageState.archiveDeleteConfirmation;
+  const phrase = document.getElementById('repository-archive-delete-phrase-input')?.value;
+  const button = document.getElementById('repository-archive-delete-confirm-btn');
+  if (button) button.disabled = !pending || pending.running || phrase !== 'DELETE';
+}
+
+function closeRepositoryArchiveDelete() {
+  const pending = storageState.archiveDeleteConfirmation;
+  if (pending?.running) return;
+  document.getElementById('repository-archive-delete-modal')?.classList.add('hidden');
+  storageState.archiveDeleteConfirmation = null;
+  document.getElementById('repository-archive-delete-phrase-input').value = '';
+  updateRepositoryArchiveDeleteConfirmation();
+  if (pending?.trigger?.isConnected) pending.trigger.focus();
+  else document.querySelector('[data-storage-action="refresh-repository-archives"]')?.focus();
+}
+
+async function confirmRepositoryArchiveDelete() {
+  const pending = storageState.archiveDeleteConfirmation;
+  const phrase = document.getElementById('repository-archive-delete-phrase-input')?.value;
+  if (!pending || pending.running || phrase !== 'DELETE') return;
+  const modal = document.getElementById('repository-archive-delete-modal');
+  pending.running = true;
+  modal?.setAttribute('aria-busy', 'true');
+  modal?.querySelectorAll('button, input').forEach(control => { control.disabled = true; });
+  showMsg('repository-archive-delete-message', 'info', storageT('storage.archiveDeleting'));
+  try {
+    const response = await fetch('/api/repositories/archive', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repository_key: pending.repositoryKey,
+        archive: pending.archive.name,
+        expected_archive_id: pending.archive.id,
+        expected_repository_id: pending.repositoryId,
+        confirmed: true,
+        confirmation_phrase: phrase,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(result, response.status));
+    pending.running = false;
+    closeRepositoryArchiveDelete();
+    if (storageState.archiveBrowser.repositoryKey === pending.repositoryKey) resetStorageArchiveBrowser();
+    delete storageState.lifecycleCache[pending.repositoryKey];
+    delete storageState.archiveCache[pending.repositoryKey];
+    // Browse & Restore reloads the archive inventory on entry. Clear any previous
+    // selection now as well, so deleted files cannot remain selected there.
+    if (typeof restoreClearArchives === 'function') restoreClearArchives();
+    await refreshStorage();
+    await loadRepositoryArchives(pending.repositoryKey);
+    showMsg('storage-message', result.refresh_warning ? 'warning' : 'success',
+      storageT(result.refresh_warning ? 'storage.archiveDeletedRefreshWarning' : 'storage.archiveDeleted'));
+  } catch (error) {
+    showMsg('repository-archive-delete-message', 'error', error.message || storageT('storage.error'));
+  } finally {
+    pending.running = false;
+    modal?.removeAttribute('aria-busy');
+    modal?.querySelectorAll('button, input').forEach(control => { control.disabled = false; });
+    updateRepositoryArchiveDeleteConfirmation();
+  }
 }
 
 function resetStorageArchiveBrowser() {
@@ -780,10 +891,10 @@ function renderStorageRepositoryWorkspace(repo, job) {
     ? storageState.selectedTab
     : 'overview';
   storageState.selectedTab = selected;
-  const archiveCount = Number(repo?.repository_stats?.archives_count || 0);
+  const archiveCount = storageRepositoryArchiveCount(repo);
   const tabs = [
     ['overview', storageT('storage.repositoryTabOverview')],
-    ['archives', `${storageT('storage.repositoryTabArchives')} ${archiveCount ? `<b>${archiveCount}</b>` : ''}`],
+    ['archives', `${storageT('storage.repositoryTabArchives')} ${archiveCount !== null ? `<b>${archiveCount}</b>` : ''}`],
     ['maintenance', storageT('storage.repositoryTabMaintenance')],
     ['management', storageT('storage.repositoryTabManagement')],
   ];
@@ -802,18 +913,22 @@ function renderStorageRepositoryWorkspace(repo, job) {
 
 async function loadRepositoryArchives(repositoryKey, force = false) {
   const key = String(repositoryKey || '').trim();
-  if (!key || (!force && storageState.archiveCache[key])) return;
-  storageState.archiveCache[key] = { loading: true };
+  const previous = storageState.archiveCache[key];
+  if (!key || (!force && (previous?.loading || (previous?.data && !previous.error)))) return;
+  const request = { loading: true, data: previous?.data };
+  storageState.archiveCache[key] = request;
   if (storageState.data && storageState.selectedRepositoryKey === key) renderStorage(storageState.data);
   try {
     const response = await fetch(`/api/repositories/archives?repository_key=${encodeURIComponent(key)}&limit=100`);
     const data = await response.json();
     if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    if (storageState.archiveCache[key] !== request) return;
     storageState.archiveCache[key] = { loading: false, data };
   } catch (error) {
-    storageState.archiveCache[key] = { loading: false, error: error.message || storageT('storage.error') };
+    if (storageState.archiveCache[key] !== request) return;
+    storageState.archiveCache[key] = { loading: false, data: previous?.data, error: error.message || storageT('storage.error') };
   }
-  if (storageState.data && storageState.selectedRepositoryKey === key && storageState.selectedTab === 'archives') renderStorage(storageState.data);
+  if (storageState.data && storageState.selectedRepositoryKey === key) renderStorage(storageState.data);
 }
 
 async function loadRepositoryLifecycle(repositoryKey, force = false) {
@@ -867,7 +982,7 @@ function renderRepositoryStats(repo) {
     ${storageDetailItem('storage.repositoryCompressedSize', storageFormatBytes(stats.total_csize))}
     ${storageDetailItem('storage.repositoryDeduplicatedSize', storageFormatBytes(unique))}
     ${storageDetailItem('storage.repositorySaving', saving)}
-    ${storageDetailItem('storage.repositoryArchiveCount', String(stats.archives_count ?? '—'))}
+    ${storageDetailItem('storage.repositoryArchiveCount', String(storageRepositoryArchiveCount(repo) ?? '—'))}
   </div>`;
 }
 
@@ -916,6 +1031,9 @@ function onStorageContentClick(event) {
   if (action === 'refresh-repository-archives') {
     resetStorageArchiveBrowser();
     return loadRepositoryArchives(el.dataset.repositoryKey || storageState.selectedRepositoryKey, true);
+  }
+  if (action === 'delete-repository-archive') {
+    return openRepositoryArchiveDelete(el.dataset.repositoryKey, el.dataset.archive, el);
   }
   if (action === 'open-repository-archive') {
     return loadRepositoryArchiveFiles(
@@ -1089,6 +1207,7 @@ async function refreshRepositoryInfo(repositoryKey, button) {
       }
       throw new Error(apiErrorMessage(data, response.status));
     }
+    delete storageState.archiveCache[repositoryKey];
     await refreshStorage();
     showMsg('storage-message', 'success', storageT('storage.repositoryInfoUpdated'));
   } catch (error) {
@@ -1602,7 +1721,7 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
     const repo = storageRepositories(storageState.data || {})
       .find((row) => storageRepositoryKey(row) === String(repositoryKey || ''));
     const jobs = action === 'prune' && repo ? storageJobsForRepository(repo) : [];
-    const job = repo ? (jobs[0] || storageJobForRepository(repo)) : null;
+    const job = repo ? (jobs.find(j => storageRetentionFromJob(j).mode !== 'all') || jobs[0] || storageJobForRepository(repo)) : null;
     const resultKey = action === 'check' && mode === 'verify_data' ? 'verify_data' : action;
     const confirmKey = action === 'prune'
       ? 'storage.repositoryPruneConfirm'
@@ -1616,7 +1735,7 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
       ? `<div id="storage-maintenance-retention-preview">${storageMaintenancePruneDetailsHtml(repo || {}, job)}</div>`
       : '';
     const selector = action === 'prune' && jobs.length > 1
-      ? `<label class="ui-field storage-maintenance-retention-source"><span>${escHtml(storageT('storage.repositoryMaintenanceSelectRetentionSource'))}</span><select id="storage-maintenance-retention-job" class="form-select">${jobs.map((item) => `<option value="${escHtml(String(item.key || ''))}">${escHtml(storageJobName(repo || {}, item) || String(item.key || ''))} - ${escHtml(storageArchiveFilterFromJob(item) || '-')}</option>`).join('')}</select><small>${escHtml(storageT('storage.repositoryMaintenanceMultipleJobsHint'))}</small></label>`
+      ? `<label class="ui-field storage-maintenance-retention-source"><span>${escHtml(storageT('storage.repositoryMaintenanceSelectRetentionSource'))}</span><select id="storage-maintenance-retention-job" class="form-select">${jobs.map((item) => `<option value="${escHtml(String(item.key || ''))}"${storageRetentionFromJob(item).mode === 'all' ? ' disabled' : ''}${item.key === job?.key ? ' selected' : ''}>${escHtml(storageJobName(repo || {}, item) || String(item.key || ''))} - ${escHtml(storageArchiveFilterFromJob(item) || '-')}</option>`).join('')}</select><small>${escHtml(storageT('storage.repositoryMaintenanceMultipleJobsHint'))}</small></label>`
       : '';
     if (info) info.innerHTML = `<div class="modal-info-item warning"><div class="modal-info-text"><strong>${escHtml(storageRepositoryTitle(repo || {}, job))}</strong><br>${escHtml(storageT('storage.repositoryMaintenanceConfirmAction', { action: storageMaintenanceTitle(resultKey) }))}${pruneDetails}${selector}</div></div>`;
     storageState.maintenanceConfirmation = {
@@ -1626,6 +1745,8 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
       repo: repo || {},
       jobs,
     };
+    const start = document.getElementById('storage-maintenance-confirm-start-btn');
+    if (start) start.disabled = action === 'prune' && (!job || storageRetentionFromJob(job).mode === 'all');
     modal.classList.remove('hidden');
     storageState.maintenanceCloseSnapshot = storageModalSnapshot('storage-maintenance-confirm-modal');
   });
@@ -1815,12 +1936,14 @@ async function checkRun(repositoryKey, action = 'check', mode = 'quick') {
 
   es.addEventListener('done', async () => {
     es.close(); checkState.es = null;
+    delete storageState.archiveCache[repositoryKey];
     await refreshStorage();
   });
 
   es.addEventListener('error', async (e) => {
     if (e.data) showMsg('storage-message', 'error', storageT('storage.check.logError', { message: e.data }));
     es.close(); checkState.es = null;
+    delete storageState.archiveCache[repositoryKey];
     await refreshStorage();
   });
 }

@@ -253,3 +253,57 @@ def test_apprise_profile_http_routes_are_wired() -> None:
     ):
         assert route in source
     assert "p.startswith(\"/api/notification-profiles\")" in source
+
+
+@pytest.mark.parametrize("scheme", ["napi", "notificationapi", "NaPi"])
+def test_retired_profile_warning_preserves_metadata_and_secret(tmp_path, monkeypatch, scheme):
+    # Model an existing profile written with 1.12.0, including generic profiles.
+    original_validate = apprise_profiles_api.validate_url
+    _ok_validation(monkeypatch)
+    config = _cfg(tmp_path)
+    apprise_profiles_api.create_profile(config, {
+        "id": "old-alerts", "name": "Alerts", "provider": "apprise",
+        "apprise_url": f"{scheme}://fake-client:fake-secret@example.test",
+    })
+    monkeypatch.setattr(apprise_profiles_api, "validate_url", original_validate)
+    paths = [apprise_profiles_api.profile_store_path(config),
+             apprise_profiles_api.profile_secret_path(config, "old-alerts")]
+    before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+
+    for _ in range(2):
+        profile = apprise_profiles_api.list_profiles(config)["profiles"][0]
+        assert profile["warning_code"] == "apprise_notificationapi_retired"
+        assert profile["url_set"] and profile["enabled"]
+        assert "fake-secret" not in json.dumps(profile)
+        for operation in (apprise_profiles_api.validate_profile_payload, apprise_profiles_api.test_profile):
+            result = operation(config, {"profile_id": "old-alerts"})
+            assert not result["success"]
+            assert result["message_code"] == "apprise_notificationapi_retired"
+            assert "fake-secret" not in json.dumps(result)
+    assert [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths] == before
+
+    # Only an explicit edit replaces the URL; the compatibility warning clears.
+    _ok_validation(monkeypatch)
+    updated = apprise_profiles_api.update_profile(config, "old-alerts", {
+        "provider": "ntfy", "apprise_url": "ntfy://example.test/bbui",
+    })
+    assert "warning_code" not in updated["profile"]
+
+
+def test_unreadable_secret_does_not_hide_other_profiles(tmp_path, monkeypatch):
+    _ok_validation(monkeypatch)
+    config = _cfg(tmp_path)
+    for pid in ("first-alerts", "second-alerts"):
+        apprise_profiles_api.create_profile(config, {"id": pid, "apprise_url": "ntfy://example.test/bbui"})
+    read_secret = apprise_profiles_api._read_secret
+
+    def read(config, pid):
+        if pid == "first-alerts":
+            raise apprise_profiles_api.InventoryAccessError("unreadable")
+        return read_secret(config, pid)
+
+    monkeypatch.setattr(apprise_profiles_api, "_read_secret", read)
+    profiles = apprise_profiles_api.list_profiles(config)["profiles"]
+    assert len(profiles) == 2
+    assert profiles[0]["warning_code"] == "apprise_secret_unreadable"
+    assert "warning_code" not in profiles[1]

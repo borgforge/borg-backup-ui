@@ -6,6 +6,24 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #512 - consistent repository archive counts
+- Use the archive-list total for the repository tab, overview and list, including zero and limited lists. Keep stored repository info as the initial fallback without modifying its timestamps, metrics or persistent data.
+- Reload the visible archive list when refreshing Repositories. Invalidate its cached inventory after repository-info refresh and maintenance, avoid a duplicate reload after archive deletion, and reject superseded archive responses. Failed refreshes retain the last known count and remain retryable.
+
+### Issues #459, #469 and #470 - job retention and exclusions
+- Give exclusions their own third wizard step after sources and target. Show path, marker and managed-file controls together without an accordion, retain the shared modal size across nine steps, and route validation and runtime-step skipping to the updated positions.
+- Make policy information buttons legible with one high-contrast circle and a distinct information glyph. Align retention labels, inputs and hints across columns, including the interval field. Present active rules in a table and explain backup-day counts, additive time windows, last-X and keep-all with concrete German/English examples.
+- Use one normalized retention policy for wizard saves, imports, backup execution and manual repository prune. Add tiered hourly/within rules, last-X and keep-all modes. Inactive modes do not supply Borg options. Reject empty policies and time-window-only policies; require an explicit count rule without silently inserting a fallback.
+- Explain the current mode and deletion consequences in German/English info dialogs. Keep wizard height and entered values unchanged. Maintenance logs show the current-prefix filter and effective prune arguments together once, without a duplicate policy line; keep-all logs why prune is disabled while preserving compact and due checks.
+- Store validated case-sensitive marker names and a bounded UTF-8 exclusion file owned by the job. Hold the inventory lock during changes and loading; run with a private temporary snapshot, validate digests, clean unreferenced copies and exclude uploaded contents from support bundles.
+- Include managed exclusion bytes in job transfers. Use bundle v4 when extended rules are present, preserving imports of supported v3 UUID bundles. No job migration or stable artifacts are introduced.
+
+### Issue #269 - bundled Apprise 1.13.1
+- Update the complete hash-pinned base dependency lock and license versions. Runtime installation on Unraid remains offline, with unchanged-bundle extraction skipped.
+- Preserve the agreed base-package scope: 141 available providers, up from 137. Add Pinglet, Trigv, Pingram, Signalgrid and Lauther; upstream retired NotificationAPI. Optional provider dependencies and release tracking remain separate follow-up work in #269.
+- Detect retired NotificationAPI schemes at read/validation/delivery time, show German/English reconfiguration guidance, and preserve profile metadata and secret files. No migration or automatic credential conversion is performed.
+- Keep provider URL/exception details out of logs and API failures. Check the real vendor runtime, complete available-provider metadata, mocked HTTP/SMTP delivery, timeouts, profile preservation and queue isolation. Exercise the generated installer for upgrade, reinstall and corrupt-bundle rejection.
+
 ### Issue #505 - matching categorized Unraid release notes
 - Group issue fragments under Migration and compatibility, Bug Fixes, Security (when needed) and Improvements, preserving Markdown headings, blank lines and nested bullets.
 - Rewrite the Job-ID candidate notes as concise English user-facing changes, retain migration/export notices and issue references, and keep technical history here.

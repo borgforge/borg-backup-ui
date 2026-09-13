@@ -204,11 +204,11 @@ Wichtige Felder:
 - **Docker vor dem Backup stoppen:** Aktiviert Docker-Steuerung.
 - **VMs vor dem Backup herunterfahren:** Aktiviert VM-Steuerung.
 
-Die Typ-ID bildet zusammen mit dem Standort den technischen Job-Schlüssel, beispielsweise `appdata_local`. Außerdem entsteht daraus das Archivmuster `<typ-id>-backup-*`. Wenn Sie die Typ-ID eines vorhandenen Jobs ändern, erhalten nur zukünftige Archive das neue Präfix. Borg Backup UI speichert die bisherigen Archivpräfixe im Job und zeigt sie im Informations-Popover des Editors; vorhandene Archive werden weder umbenannt noch verschoben.
+Die Typ-ID bildet zusammen mit dem Standort den technischen Job-Schlüssel, beispielsweise `appdata_local`. Außerdem entsteht daraus das Archivmuster `<aktueller-präfix>-*`. Wenn Sie die Typ-ID eines vorhandenen Jobs ändern, erhalten nur zukünftige Archive das neue Präfix. Borg Backup UI speichert die bisherigen Archivpräfixe im Job und zeigt sie im Informations-Popover des Editors; vorhandene Archive werden weder umbenannt noch verschoben.
 
 #### Schritt 2: Quellen & Ziel
 
-Die kompakte Ansicht zeigt links **Zu sichernde Ordner** und **Ausschlüsse** und rechts das **Backup-Ziel**. Links legen Sie fest, welche Ordner oder Dateien in das Backup aufgenommen werden und welche Unterordner oder Dateien ausgelassen werden sollen. Rechts werden Speichertyp, konkretes Speicherziel, ein vorhandenes Repository und die Job-Kompression gewählt. Die Repository-Liste zeigt ausschließlich Repositorys, die zum ausgewählten Speicherziel gehören. Repository-Pfade werden im Job nicht mehr frei eingegeben.
+Die kompakte Ansicht zeigt links **Zu sichernde Ordner** und rechts das **Backup-Ziel**. Links legen Sie fest, welche Ordner oder Dateien in das Backup aufgenommen werden. Ausschlüsse werden im nächsten Schritt festgelegt. Rechts werden Speichertyp, konkretes Speicherziel, ein vorhandenes Repository und die Job-Kompression gewählt. Die Repository-Liste zeigt ausschließlich Repositorys, die zum ausgewählten Speicherziel gehören. Repository-Pfade werden im Job nicht mehr frei eingegeben.
 
 Typische Ordner, die gesichert werden:
 
@@ -221,9 +221,22 @@ Typische Ordner, die gesichert werden:
 
 Eine vollständig eingegebene, gültige Quelle kann mit **Enter** übernommen werden, auch wenn die Autovervollständigung weitere Unterordner anzeigt. Share-Wurzeln wie `/mnt/user/appdata` sind erlaubt, sofern sie existieren. Ist die gewählte Quelle selbst ein Symlink oder liegt ein Teil ihres Pfads hinter einem Symlink, löst Borg Backup UI sie erst zur Laufzeit zum tatsächlichen Ziel auf und passt zugehörige Ausschlüsse entsprechend an. Im Job bleibt der vom Benutzer gewählte, verständliche Pfad gespeichert; die Auflösung wird im Laufprotokoll vermerkt.
 
+Beim Bearbeiten eines Jobs kann ein anderes vorhandenes Repository gewählt werden. Diese Änderung gilt nur für zukünftige Backups. Bestehende Archive werden nicht verschoben und sind danach über diesen Job in **Browse & Restore** nicht mehr erreichbar; der Wizard verlangt dafür eine ausdrückliche Bestätigung.
+
+#### Schritt 3: Ausschlüsse
+
+Der eigene Schritt **Ausschlüsse** zeigt Ausschlusspfade, Markerdateien und die Ausschlussdatei immer sichtbar an. Alle neun Wizard-Schritte behalten dieselbe Fenstergröße; Docker und VMs werden bei ausgeschalteter Steuerung übersprungen. Auf kleinen Bildschirmen oder bei langen Listen bleibt Scrollen möglich.
+
 Ausschlüsse sind konkrete Dateien oder Verzeichnisse unterhalb eines ausgewählten Backup-Ordners. Sie werden nicht in das Borg-Archiv aufgenommen. Bei vielen Einträgen scrollen nur die Pfadlisten innerhalb ihres Bereichs.
 
-Beim Bearbeiten eines Jobs kann ein anderes vorhandenes Repository gewählt werden. Diese Änderung gilt nur für zukünftige Backups. Bestehende Archive werden nicht verschoben und sind danach über diesen Job in **Browse & Restore** nicht mehr erreichbar; der Wizard verlangt dafür eine ausdrückliche Bestätigung.
+Die erweiterten Regeln ergänzen die Ausschlusspfade und verändern keine Quelldateien oder vorhandenen Archive.
+
+- **Markerdateien (#469):** Ein Dateiname pro Zeile, Groß-/Kleinschreibung beachten. Wird z. B. `.nobackup` eingetragen und im Ordner `/mnt/user/data/cache` eine Datei dieses Namens angelegt, überspringt Borg diesen Ordner vollständig, einschließlich Unterordnern und Marker. Der Dateiinhalt ist unwichtig. Es werden höchstens 32 verschiedene Namen akzeptiert; keine Pfade.
+- **Ausschlussdatei (#470):** Eine UTF-8-Textdatei ohne BOM hochladen, maximal 64 KiB. Borg-Muster bleiben unverändert, etwa `fm:*.tmp`; Leerzeilen und mit `#` beginnende Kommentarzeilen werden ignoriert. Eine eigene Kopie wird beim Job gespeichert. Änderungen an der ursprünglichen Datei wirken erst nach erneutem Hochladen und Speichern. Herunterladen, Ersetzen und Entfernen sind möglich.
+
+Der Lauf verwendet eine private temporäre Kopie der hochgeladenen Datei. Wird die Job-Konfiguration währenddessen bearbeitet, verändert dies den laufenden Backup-Filter nicht. Eine fehlende oder beschädigte verwaltete Datei blockiert den Lauf, bevor das Backup startet. Der Systemzustand meldet den Fehler. Prüfen Sie nach Änderungen mit einem Testjob den tatsächlichen Archivinhalt.
+
+Neue Job-Exporte enthalten die verwaltete Ausschlussdatei. Bei erweiterten Regeln wird das Exportformat `bbui-job-bundle-v4` verwendet, damit ältere Versionen diese Einstellungen nicht stillschweigend ignorieren. Exporte im bisherigen UUID-Jobformat v3 bleiben importierbar. Bei einer manuellen Konfigurationssicherung das gesamte `config/jobs`-Verzeichnis einschließlich `exclusions` sichern. Die hochgeladenen Dateiinhalte werden nicht in Support-Pakete aufgenommen.
 
 #### Docker- und VM-Schritte
 
@@ -274,20 +287,29 @@ Beispiel: Setzen Sie PostgreSQL oder MariaDB auf Priorität `1` und die davon ab
 
 #### Retention, Kompression und Beschreibung
 
-Der Wizard setzt jobbezogene Borg-Optionen wie Kompression und Aufbewahrung. Verschlüsselung und Passphrase gehören zum Repository und werden ausschließlich beim Erstellen oder Importieren des Repositorys festgelegt.
+Der Wizard setzt jobbezogene Borg-Optionen wie Kompression und Aufbewahrung. Verschlüsselung und Passphrase gehören zum Repository.
 
-Die Retention-Werte zählen Zeiträume und nicht die Anzahl der Archive innerhalb eines Zeitraums:
+Wählen Sie genau eine Aufbewahrungsstrategie:
 
-- **Täglich:** höchstens ein passendes Archiv pro Tag für die angegebene Anzahl täglicher Wiederherstellungspunkte.
-- **Wöchentlich:** höchstens ein passendes Archiv pro Woche.
-- **Monatlich:** höchstens ein passendes Archiv pro Monat.
-- **Jährlich:** höchstens ein passendes Archiv pro Jahr.
+| Strategie | Wirkung |
+| --- | --- |
+| **Gestaffelt** | Stunden-, Tages-, Wochen-, Monats- und Jahresregeln gemeinsam verwenden. Optional alle Archive eines jüngeren Zeitfensters zusätzlich behalten. |
+| **Letzte X Archive** | Die neuesten X passenden Archive behalten, unabhängig vom Tag. Alle anderen Zeitregeln sind in diesem Modus ausgeschaltet. |
+| **Alle behalten** | Prune für diesen Job ausschalten, auch in der Repository-Wartung. Compact und fällige Repository-Checks bleiben aktiv. |
 
-Borg verwendet normalerweise das neueste passende Archiv eines Zeitraums. Werden beispielsweise an einem Tag Backups um 08:00 und 08:30 Uhr erstellt, behält die tägliche Regel nur einen Wiederherstellungspunkt für diesen Tag – normalerweise das neuere Archiv von 08:30 Uhr. **Täglich: 20** bedeutet daher nicht, dass 20 Archive desselben Tages erhalten bleiben. Ein Archiv bleibt erhalten, wenn mindestens eine der konfigurierten Regeln es auswählt.
+Die Retention-Werte zählen Zeiträume mit Backups und nicht die Anzahl der Archive innerhalb eines Zeitraums. **Täglich: 7** wählt höchstens einen passenden Stand für jeden der letzten sieben Tage mit Backups. Tage ohne Backup zählen nicht mit. Die weiteren aktiven Regeln wählen zusätzliche Stände aus; die Werte sind keine feste Gesamtzahl aller Archive.
 
-Nach jedem erfolgreich erstellten Backup wendet Borg Backup UI die festgelegten Aufbewahrungsregeln an. Dabei führt das Plugin Prune und anschließend Compact sowie den gegebenenfalls fälligen Repository-Check aus. Archive, die von keiner Aufbewahrungsregel ausgewählt werden, werden durch Prune gelöscht.
+Werden Backups um 08:00 und 08:30 Uhr am selben Tag erstellt, wählt die Tagesregel normalerweise das neuere Archiv von 08:30 Uhr. Das frühere Archiv kann trotzdem durch eine Stundenregel oder das Zeitfenster erhalten bleiben. **Täglich: 20** bedeutet nicht 20 Archive desselben Tages. Ein Archiv bleibt erhalten, wenn mindestens eine aktive Regel es schützt.
 
-Der Wert `0` deaktiviert nur die jeweilige Aufbewahrungsstufe und bedeutet nicht „unbegrenzt“. Bei viermal `0` würde Prune kein passendes Archiv zur Aufbewahrung auswählen und damit alle Archive des Jobs löschen können. Deshalb muss mindestens einer der vier Werte größer als `0` sein; eine Konfiguration mit viermal `0` wird abgelehnt. Eine zukünftige Option zum dauerhaften Behalten aller Archive muss stattdessen Prune für den Job ausdrücklich deaktivieren.
+**Alle Archive der letzten … behalten:** Bei **7 Tagen** bleiben alle passenden Archive der vergangenen 7 × 24 Stunden erhalten, auch mehrere pro Tag. Das Zeitfenster wird beim Prune vom aktuellen Zeitpunkt zurückgerechnet. Weitere Zählregeln können zusätzlich ältere Archive erhalten. Für diese Option entspricht ein Monat 31 Tagen und ein Jahr 365 Tagen.
+
+**Schutz vor vollständiger Löschung:** `0` deaktiviert eine Regel. In „Gestaffelt“ muss mindestens eine Zählregel größer als `0` sein. Ein Zeitfenster allein wird abgelehnt: Nach einer längeren Backup-Pause könnte es sonst alle vorhandenen Archive zur Löschung freigeben. Beispiel: **7 Tage Zeitfenster + 1 Tagesstand**. Es wird keine zusätzliche Regel automatisch eingesetzt. „Letzte X“ verlangt mindestens `1`. „Alle behalten“ überspringt Prune ausdrücklich. Dieselbe Validierung gilt beim Speichern, Importieren sowie für automatisches und manuelles Prune.
+
+**Eine große Löschmenge kann trotzdem erlaubt sein:** Bei „letzte 3 Archive“ und 100 passenden Archiven dürfen 97 ältere Archive entfernt werden. Mit dem Wert `1` bleibt nur der neueste Stand. Die Anwendung bewertet die Regeln; sie berechnet im Wizard keine tatsächliche Löschliste aus dem Repository.
+
+Nach einem erfolgreich erstellten Backup wird die gespeicherte Aufbewahrung angewendet. Der aktuelle Archivpräfix begrenzt Prune. Archive mit früheren Präfixen bleiben zusätzlich erhalten und zählen nicht zu X. Prune entfernt die nicht geschützten Archive; Compact gibt anschließend bereits ungenutzten Speicher frei. Das Lauf-Log nennt den Archivfilter und die tatsächlich verwendeten Borg-Aufbewahrungsparameter. Bei „Alle behalten“ protokolliert es das Überspringen von Prune.
+
+Das **Info-i** öffnet für jeden Modus und das Zeitfenster einen eigenen Dialog mit aktuellen Regeln, Erklärung, Beispiel und Löschwirkung. Die Wizard-Seite wird dadurch nicht höher. Schließen oder Escape führt ohne Verlust der Eingaben zurück.
 
 #### Optionale Dateiaktivität im Live-Log
 
@@ -372,6 +394,8 @@ Die automatische Aktualisierung der Borg-Kennzahlen ist standardmäßig deaktivi
 
 Der Repository-Kopf verwendet den beim Erstellen oder Importieren vergebenen **Anzeigenamen**. Das **Repository-Verzeichnis** ist der letzte Verzeichnisname, der **Repository-Pfad** ist der vollständige lokale oder entfernte Zielpfad und **Pfad im Speicherziel** ist der relative Pfad innerhalb des ausgewählten Speicherziels.
 
+Angemeldete Administratoren sehen neben jedem Archiv einen Papierkorb. Der Bestätigungsdialog zeigt Repository, Pfad, Archivname und Erstellungszeit in einer Übersicht. Gib zur zusätzlichen Bestätigung exakt `DELETE` ein, um den Löschbutton freizuschalten. **Archiv endgültig löschen** entfernt genau dieses Archiv; Jobs, Laufprotokolle und History-Einträge bleiben erhalten. Bei einer geänderten Archivauswahl oder einem belegten Repository wird die Löschung abgelehnt. Während eines laufenden Restore-Tests ist sie ebenfalls gesperrt. Die Archivliste wird anschließend aktualisiert. Speicherplatz wird erst durch **Compact** unter **Wartung** freigegeben. Ein API-Token allein berechtigt nicht zur Archivlöschung.
+
 ### 4.3 Repository erstellen oder importieren
 
 1. Öffnen Sie **Repositories** und klicken Sie **Repository hinzufügen**.
@@ -425,7 +449,7 @@ Repository aus der Anwendung entfernen oder endgültig löschen:
 
 ### 4.5 Hinweise
 
-> **Hinweis:** Prune nutzt die Retention eines verknüpften Jobs und beschränkt die Aktion auf dessen Archivmuster `<typ-id>-backup-*`. Verwenden mehrere Jobs dasselbe Repository, muss bei einem manuellen Prune der Job als Retention-Quelle ausdrücklich gewählt werden. Der Bestätigungsdialog zeigt Job, Archivfilter und die periodischen Wiederherstellungspunkte; Archive der anderen Jobs bleiben unberührt. Ohne passende Job-Zuordnung bleibt Prune deaktiviert.
+> **Hinweis:** Prune nutzt die Retention eines verknüpften Jobs und beschränkt die Aktion auf dessen Archivmuster `<aktueller-präfix>-*`. Verwenden mehrere Jobs dasselbe Repository, muss bei einem manuellen Prune der Job als Retention-Quelle ausdrücklich gewählt werden. Der Bestätigungsdialog zeigt Job, Archivfilter und die periodischen Wiederherstellungspunkte; Archive der anderen Jobs bleiben unberührt. Ohne passende Job-Zuordnung bleibt Prune deaktiviert.
 
 > **Hinweis:** Prune listet entfernte Archive im Ergebnis. Compact zeigt den freigegebenen Speicherplatz nur dann numerisch an, wenn Borg diesen Wert ausgibt.
 
@@ -741,7 +765,9 @@ Borg Backup UI verwaltet Benachrichtigungskanäle in **Einstellungen > Benachric
 - E-Mail/SMTP
 - Apprise-Benachrichtigungsprofile
 
-Apprise-Profile können angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Stable `2026.08.31.0907` bündelt Apprise `1.12.0`; Borg Backup UI bietet die 137 von dieser Version erkannten Provider an. Dazu gehören beispielsweise ntfy, Rocket.Chat, Discord und E-Mail-fähige Apprise-Dienste. Provider-URL-Formate werden aus Apprise-Metadaten erzeugt, und gespeicherte Apprise-URLs werden als Secret gespeichert und nie zurück in die Seite gerendert. Eine spätere Apprise-Version kann Zahl, Namen oder Parameter der Provider ändern.
+Apprise-Profile können angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Das Plugin bündelt Apprise `1.13.1` mit 141 verfügbaren Anbietern (bisher 137). Neu sind Pinglet, Trigv, Pingram, Signalgrid und Lauther. Die URL-Formulare entstehen aus Apprise-Metadaten; gespeicherte URLs bleiben ausschließlich schreibbare Secrets. Die [Anbieterliste](../apprise-providers.md) enthält alle im Paket verfügbaren Anbieter. Optionale Anbieter mit zusätzlichen Paketabhängigkeiten, etwa MQTT und XMPP, bleiben außerhalb des bisherigen Paketumfangs.
+
+**NotificationAPI-Profile:** Apprise unterstützt `napi://` und `notificationapi://` nicht mehr. Betroffene Profile erhalten unter Einstellungen > Benachrichtigungen einen Hinweis; Validierung und Versand schlagen mit einem Hinweis zur Neueinrichtung fehl. Einstellungen und Secret-Dateien bleiben erhalten. Bearbeite das Profil und richte Pingram mit dessen neuen Zugangsdaten oder einen anderen Anbieter ein; nur das URL-Schema zu ändern reicht nicht aus. Andere Profile, Unraid-Benachrichtigungen und native E-Mail funktionieren unabhängig davon weiter. Es gibt keine Konfigurationsmigration oder automatische Umwandlung von Zugangsdaten. Fehlerhafte URLs werden abgelehnt, ohne die Anwendung zu unterbrechen.
 
 Für direkte E-Mail-Benachrichtigungen wird die gespeicherte globale Empfängeradresse verwendet; ist sie leer, dient der Empfänger des Wochenberichts als Rückfall. Speichern Sie geänderte SMTP- und E-Mail-Felder vor einer Testmail. Port `465` verwendet implizites TLS, während TLS auf Port `587` per STARTTLS aufgebaut wird.
 

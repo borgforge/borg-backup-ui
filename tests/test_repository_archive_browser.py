@@ -1,4 +1,6 @@
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +18,13 @@ import jobs_api  # noqa: E402
 import repositories_api  # noqa: E402
 from repositories_api import RepositoryBusyError, get_repository_archive_files, write_repository_store  # noqa: E402
 from storage_objects_api import write_storage_store  # noqa: E402
+
+
+def test_repository_archive_count_ui():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for repository archive-count UI tests")
+    subprocess.run([node, "tests/repository_archive_count_ui.cjs"], cwd=ROOT, check=True)
 
 
 @pytest.fixture(autouse=True)

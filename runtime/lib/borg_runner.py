@@ -18,6 +18,7 @@ Nur Python Standard-Library: subprocess, logging, re, os, time, dataclasses, pat
 from __future__ import annotations
 
 import logging
+import json
 import os
 import re
 import subprocess
@@ -26,6 +27,11 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
+
+try:
+    from .retention_policy import normalize_retention, prune_arguments, retention_description, RetentionError
+except ImportError:  # Direct CLI invocation.
+    from retention_policy import normalize_retention, prune_arguments, retention_description, RetentionError
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +84,9 @@ class BorgConfig:
         runner = BorgRunner(borg_cfg)
     """
 
+    exclude_if_present: List[str] = field(default_factory=list)
+    exclude_from: str = ""
+    retention_policy: Optional[dict] = None
     keep_daily: int = 7
     keep_weekly: int = 4
     keep_monthly: int = 6
@@ -117,6 +126,7 @@ class BorgConfig:
 
         flag_raw = config.get("BORG_CHECK_FLAG_FILE", "/tmp/borg_last_check")
         return cls(
+            retention_policy=normalize_retention(json.loads(config["BORG_RETENTION_JSON"])) if "BORG_RETENTION_JSON" in config else None,
             keep_daily=_non_negative_int("BORG_KEEP_DAILY", 7),
             keep_weekly=_non_negative_int("BORG_KEEP_WEEKLY", 4),
             keep_monthly=_non_negative_int("BORG_KEEP_MONTHLY", 6),
@@ -179,6 +189,12 @@ class BorgRunner:
         self.process_controller = process_controller
         self.phase_callback = phase_callback
 
+    def retention(self):
+        return normalize_retention(self.config.retention_policy if self.config.retention_policy is not None else {
+            period: getattr(self.config, f"keep_{period}")
+            for period in ("daily", "weekly", "monthly", "yearly")
+        })
+
     def prune(self, archive_prefix: str = "") -> int:
         """
         Löscht alte Backups nach der konfigurierten Retention Policy.
@@ -195,48 +211,17 @@ class BorgRunner:
         """
         if self.phase_callback:
             self.phase_callback("borg_prune")
-        retention_counts = (
-            self.config.keep_daily,
-            self.config.keep_weekly,
-            self.config.keep_monthly,
-            self.config.keep_yearly,
-        )
-        if not any(count > 0 for count in retention_counts):
-            logger.error(
-                "Borg prune blocked: at least one retention value must be greater than zero"
-            )
+        try:
+            args = prune_arguments(self.retention())
+        except RetentionError as exc:
+            logger.error("Borg prune blocked: %s", str(exc).lower())
             return BORG_EXIT_ERROR
         archive_prefix = str(archive_prefix or "").strip()
-        if archive_prefix:
-            logger.info(
-                "Borg prune: applying retention only to archives matching %s-* "
-                "(keep: %dd/%dw/%dm/%dy)",
-                archive_prefix,
-                self.config.keep_daily,
-                self.config.keep_weekly,
-                self.config.keep_monthly,
-                self.config.keep_yearly,
-            )
-        else:
-            logger.info(
-                "Borg prune: applying retention to all repository archives "
-                "(keep: %dd/%dw/%dm/%dy)",
-                self.config.keep_daily,
-                self.config.keep_weekly,
-                self.config.keep_monthly,
-                self.config.keep_yearly,
-            )
-
+        logger.info("Borg prune: archive filter %s; %s", f"{archive_prefix}-*" if archive_prefix else "all", " ".join(args))
         cmd = [
-            "borg", "prune",
-            "--verbose",
-            "--list",
-            "--show-rc",
+            "borg", "prune", "--verbose", "--list", "--show-rc",
             *(["--glob-archives", f"{archive_prefix}-*"] if archive_prefix else []),
-            "--keep-daily",   str(self.config.keep_daily),
-            "--keep-weekly",  str(self.config.keep_weekly),
-            "--keep-monthly", str(self.config.keep_monthly),
-            "--keep-yearly",  str(self.config.keep_yearly),
+            *args,
         ]
         if self.config.repo:
             cmd.append(self.config.repo)
@@ -370,6 +355,10 @@ class BorgRunner:
         if self.config.file_activity:
             cmd.extend(["--list", "--filter=AME"])
         cmd.extend(exclude_args)
+        for marker in self.config.exclude_if_present:
+            cmd.extend([f"--exclude-if-present={marker}"] if marker.startswith("-") else ["--exclude-if-present", marker])
+        if self.config.exclude_from:
+            cmd.extend(["--exclude-from", self.config.exclude_from])
         cmd.append(archive)
         cmd.extend(str(path) for path in paths)
 
@@ -377,6 +366,7 @@ class BorgRunner:
         logger.info("Repository: %s", repo)
         logger.info("Backup paths: %s", " ".join(str(p) for p in paths))
         logger.info("Excluded paths: %s", ", ".join(str(p) for p in exclusions) or "none")
+        logger.info("Exclusion markers: %s", ", ".join(self.config.exclude_if_present) or "none")
         logger.info("Performance: Compression=%s", self.config.compression)
         logger.info(
             "File activity output: %s",
@@ -463,8 +453,11 @@ class BorgRunner:
         _log_section("PHASE 4: BORG MAINTENANCE (Prune, Compact, Check)")
         worst = BORG_EXIT_OK
 
+        policy = self.retention()
+        if policy.get("mode") == "all":
+            logger.info("Retention: %s", retention_description(policy))
         steps = [
-            ("prune",   lambda: self.prune(archive_prefix)),
+            *([] if policy.get("mode") == "all" else [("prune", lambda: self.prune(archive_prefix))]),
             ("compact", self.compact),
             ("check",   self.check),
         ]
@@ -790,22 +783,13 @@ def _cli_info(repo: str) -> int:
 
 def _cli_prune_dry(config: BorgConfig) -> int:
     """Simuliert prune mit --dry-run (löscht nichts)."""
-    logger.info(
-        "DRY-RUN prune (keep: %dd/%dw/%dm/%dy); nothing will be deleted",
-        config.keep_daily, config.keep_weekly,
-        config.keep_monthly, config.keep_yearly,
-    )
-    cmd = [
-        "borg", "prune",
-        "--dry-run",
-        "--verbose",
-        "--list",
-        "--show-rc",
-        "--keep-daily",   str(config.keep_daily),
-        "--keep-weekly",  str(config.keep_weekly),
-        "--keep-monthly", str(config.keep_monthly),
-        "--keep-yearly",  str(config.keep_yearly),
-    ]
+    try:
+        args = prune_arguments(BorgRunner(config).retention())
+    except RetentionError as exc:
+        logger.error("Borg prune blocked: %s", exc)
+        return BORG_EXIT_ERROR
+    logger.info("DRY-RUN prune: %s; nothing will be deleted", " ".join(args))
+    cmd = ["borg", "prune", "--dry-run", "--verbose", "--list", "--show-rc", *args]
     if config.repo:
         cmd.append(config.repo)
     return _run_borg(cmd)

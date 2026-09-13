@@ -147,6 +147,10 @@
     document.getElementById('storage-maintenance-confirm-info')?.addEventListener('change', (event) => {
       if (event.target?.id === 'storage-maintenance-retention-job') updateStorageMaintenanceRetentionPreview();
     });
+    document.getElementById('repository-archive-delete-close-btn')?.addEventListener('click', closeRepositoryArchiveDelete);
+    document.getElementById('repository-archive-delete-cancel-btn')?.addEventListener('click', closeRepositoryArchiveDelete);
+    document.getElementById('repository-archive-delete-confirm-btn')?.addEventListener('click', confirmRepositoryArchiveDelete);
+    document.getElementById('repository-archive-delete-phrase-input')?.addEventListener('input', updateRepositoryArchiveDeleteConfirmation);
     document.getElementById('repository-lifecycle-close-btn')?.addEventListener('click', closeRepositoryLifecycle);
     document.getElementById('repository-lifecycle-cancel-btn')?.addEventListener('click', closeRepositoryLifecycle);
     document.getElementById('repository-lifecycle-confirm-btn')?.addEventListener('click', confirmRepositoryLifecycle);
@@ -308,8 +312,14 @@
     document.getElementById('wiz-exclude-path-input')?.addEventListener('keydown', wizardExcludePathKeydown);
     document.getElementById('wiz-exclude-path-list')?.addEventListener('click', wizardExcludePathsClick);
     document.getElementById('wiz-exclude-path-suggest')?.addEventListener('click', wizardExcludePathsClick);
-    ['daily', 'weekly', 'monthly', 'yearly'].forEach((period) => {
-      document.getElementById(`wiz-keep-${period}`)?.addEventListener('input', () => wizardClearError(5));
+    document.querySelectorAll('[name="wiz-retention-choice"]').forEach(radio => radio.addEventListener('change', () => wizardUpdateRetentionMode(radio.value)));
+    document.getElementById('wiz-exclude-markers')?.addEventListener('input', wizardRenderExclusions);
+    document.getElementById('wiz-exclude-file')?.addEventListener('change', wizardUploadExclusionFile);
+    document.getElementById('wiz-exclude-file-download')?.addEventListener('click', wizardDownloadExclusionFile);
+    document.getElementById('wiz-exclude-file-remove')?.addEventListener('click', wizardRemoveExclusionFile);
+    bindWizardPolicyHelp();
+    ['hourly', 'daily', 'weekly', 'monthly', 'yearly', 'last', 'within-count', 'within-unit'].forEach((period) => {
+      document.getElementById(`wiz-keep-${period}`)?.addEventListener('input', () => wizardClearError(6));
     });
     document.getElementById('wiz-description-help-btn')?.addEventListener('click', openWizardDescriptionHelp);
     document.getElementById('wizard-help-close-btn')?.addEventListener('click', closeWizardDescriptionHelp);
@@ -352,10 +362,12 @@
     m.setAction('confirmPrimaryAction', typeof confirmModalPrimaryAction === 'function' ? confirmModalPrimaryAction : null);
     m.setAction('confirmInputChanged', typeof checkDeleteConfirmInput === 'function' ? checkDeleteConfirmInput : null);
     m.setAction('closeScheduleModal', typeof closeScheduleModal === 'function' ? closeScheduleModal : null);
+    m.setAction('closeWizardPolicyHelp', typeof closeWizardPolicyHelp === 'function' ? closeWizardPolicyHelp : null);
     m.setAction('closeWizardHelpModal', typeof closeWizardDescriptionHelp === 'function' ? closeWizardDescriptionHelp : null);
     m.setAction('closeRepositoryManager', typeof closeRepositoryManager === 'function' ? closeRepositoryManager : null);
     m.setAction('closeStorageDeployModal', typeof closeStorageDeployModal === 'function' ? closeStorageDeployModal : null);
     m.setAction('closeStorageMaintenanceConfirm', typeof closeStorageMaintenanceConfirm === 'function' ? closeStorageMaintenanceConfirm : null);
+    m.setAction('closeRepositoryArchiveDelete', typeof closeRepositoryArchiveDelete === 'function' ? closeRepositoryArchiveDelete : null);
     m.setAction('closeRepositoryLifecycle', typeof closeRepositoryLifecycle === 'function' ? closeRepositoryLifecycle : null);
     m.setAction('closeWizard', typeof closeWizard === 'function' ? closeWizard : null);
     m.setAction('closeSetupWizard', window.BBUI?.setupWizard?.close || null);

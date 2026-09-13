@@ -58,7 +58,7 @@ def sanitize_data(value: Any) -> Any:
         out: Dict[str, Any] = {}
         for key, raw in value.items():
             key_s = str(key)
-            if SECRET_KEY_RE.search(key_s):
+            if key_s == "content_b64" or SECRET_KEY_RE.search(key_s):
                 out[key_s] = "[MASKED]"
             elif PRIVACY_KEY_RE.search(key_s):
                 out[key_s] = "[MASKED]"
