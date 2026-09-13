@@ -235,13 +235,13 @@ def test_user_manuals_cover_current_stable_safety_and_runtime_guidance():
             assert term in manual
 
     required_de = (
-        "<typ-id>-backup-*",
+        "<aktueller-präfix>-*",
         "Migrationssnapshot",
         "Unraid-Dashboard-Widget",
         "Informations-Popover",
     )
     required_en = (
-        "<type-id>-backup-*",
+        "<current-prefix>-*",
         "migration snapshot",
         "Unraid Dashboard Widget",
         "information popover",

@@ -142,26 +142,26 @@ def test_new_wizard_saves_displayed_id_after_failed_write_without_overwriting(tm
 def test_simultaneous_creates_with_the_same_displayed_id_cannot_overwrite(tmp_path, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
-    import repositories_api
+    import base64
+    from job_exclusions import read_file
     from job_identity import new_job_id
     config, jobs, ids, root = migrated(tmp_path)
     params = load_job_for_wizard(ids[jobs[0]['job_key']], root / 'scripts', config)
     displayed = new_job_id()
     params.update(job_id=displayed, repository_key='separate')
-    transaction = repositories_api.save_job_repository_transaction
     barrier = Barrier(2)
 
-    def concurrent_transaction(*args, **kwargs):
-        # Both requests have passed the existence check outside the inventory lock.
-        if args[4] == displayed:
-            barrier.wait(timeout=10)
-        return transaction(*args, **kwargs)
-
-    monkeypatch.setattr(repositories_api, 'save_job_repository_transaction', concurrent_transaction)
-
     def create(name):
-        result = save_job({**params, 'job_name': name, 'archive_prefix': name.replace(' ', '-')},
-                          root / 'scripts', root, config)
+        # Start both requests before the lock. Saves now also protect owned files.
+        barrier.wait(timeout=10)
+        payload = {
+            **params, 'job_name': name, 'archive_prefix': name.replace(' ', '-'),
+            'exclude_from': {
+                'original_name': 'exclude.txt',
+                'content_b64': base64.b64encode(('# ' + name + '\nfm:*.tmp\n').encode()).decode(),
+            },
+        }
+        result = save_job(payload, root / 'scripts', root, config)
         return name, result['job_id']
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -172,6 +172,7 @@ def test_simultaneous_creates_with_the_same_displayed_id_cannot_overwrite(tmp_pa
     for name, saved_id in results:
         stored = json.loads((root / 'config/jobs' / (saved_id + '.json')).read_text())
         assert stored['name'] == name
+        assert read_file(stored['exclude_from'], root / 'config/jobs', saved_id) == ('# ' + name + '\nfm:*.tmp\n').encode()
     repository = next(row for row in read_repository_store(config)['repositories'] if row['repository_key'] == 'separate')
     assert set(repository['used_by']) == created_ids
 
@@ -193,13 +194,18 @@ def test_name_and_full_prefix_edit_keeps_every_job_relationship(tmp_path, monkey
     assert result['job_id'] == result['job_key'] == key
     assert 'backup_type' not in after
     for field in ('icon', 'icon_color', 'cache_subdir', 'check_flag_name',
-                  'source_paths', 'retention', 'restore_test_policy', 'extension', 'created_at'):
+                  'source_paths', 'restore_test_policy', 'extension', 'created_at'):
         assert after[field] == before[field]
+    assert {period: after['retention'][period] for period in before['retention']} == before['retention']
+    assert {field: after['retention'][field] for field in ('mode', 'hourly', 'within', 'last')} == {
+        'mode': 'tiered', 'hourly': '0', 'within': '', 'last': '0',
+    }
     assert after['archive_prefixes'] == ['flash-config', *before['archive_prefixes']]
     assert get_schedules(config) == schedules
     assert list_restore_tests(config) == results
     env_after, _ = wizard_runner._load_env_from_job(key, root / 'scripts', root)
-    for field in ('BORG_UI_JOB_KEY', 'BORG_CACHE_DIR', 'BORG_CHECK_FLAG_FILE', 'BORG_REPO'):
+    for field in ('BORG_UI_JOB_KEY', 'BORG_CACHE_DIR', 'BORG_CHECK_FLAG_FILE', 'BORG_REPO',
+                  'BORG_KEEP_DAILY', 'BORG_KEEP_WEEKLY', 'BORG_KEEP_MONTHLY', 'BORG_KEEP_YEARLY'):
         assert env_after[field] == env_before[field]
     statuses = get_status_data(config)['backups']
     row = next(r for r in statuses if r['key'] == key)
