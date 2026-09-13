@@ -2,6 +2,7 @@ from job_fixtures import identified_job, job_id
 from pathlib import Path
 import json
 import shlex
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +13,31 @@ if str(API_ROOT) not in sys.path:
 import wizard_runner  # noqa: E402
 from repositories_api import write_repository_store  # noqa: E402
 from storage_objects_api import write_storage_store  # noqa: E402
+
+
+def test_standalone_runner_loads_shared_retention_from_any_directory(tmp_path: Path):
+    script = """
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root / 'api'))
+import wizard_runner
+wizard_runner._ensure_runtime_import_paths(Path.cwd())
+from job_settings import explicit_job_settings
+from lib.borg_runner import BorgConfig, BorgRunner
+import json
+compression, policy = explicit_job_settings({
+    'compression': 'lz4', 'retention': {'mode': 'last', 'last': '3'},
+})
+runner = BorgRunner(BorgConfig.from_config({'BORG_RETENTION_JSON': json.dumps(policy)}))
+assert runner.retention()['last'] == '3'
+assert runner.retention()['mode'] == 'last'
+"""
+    result = subprocess.run(
+        [sys.executable, '-I', '-c', script, str(ROOT)],
+        cwd=tmp_path, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_wizard_runner_prefers_plugin_runtime_before_data_root(tmp_path: Path):
