@@ -8,7 +8,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ### Issues #459, #469 and #470 - job retention and exclusions
 - Use one normalized retention policy for wizard saves, imports, backup execution and manual repository prune. Add tiered hourly/within rules, last-X and keep-all modes. Inactive modes do not supply Borg options. Reject empty policies and time-window-only policies; require an explicit count rule without silently inserting a fallback.
-- Explain the current mode and deletion consequences in German/English info dialogs. Keep wizard height and entered values unchanged. Run logs show the current-prefix filter and effective prune arguments; keep-all skips prune while preserving compact and due checks.
+- Explain the current mode and deletion consequences in German/English info dialogs. Keep wizard height and entered values unchanged. Maintenance logs show the current-prefix filter and effective prune arguments together once, without a duplicate policy line; keep-all logs why prune is disabled while preserving compact and due checks.
 - Store validated case-sensitive marker names and a bounded UTF-8 exclusion file owned by the job. Hold the inventory lock during changes and loading; run with a private temporary snapshot, validate digests, clean unreferenced copies and exclude uploaded contents from support bundles.
 - Include managed exclusion bytes in job transfers. Use bundle v4 when extended rules are present, preserving imports of supported v3 UUID bundles. No job migration or stable artifacts are introduced.
 

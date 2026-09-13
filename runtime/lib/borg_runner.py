@@ -454,7 +454,8 @@ class BorgRunner:
         worst = BORG_EXIT_OK
 
         policy = self.retention()
-        logger.info("Retention: %s", retention_description(policy))
+        if policy.get("mode") == "all":
+            logger.info("Retention: %s", retention_description(policy))
         steps = [
             *([] if policy.get("mode") == "all" else [("prune", lambda: self.prune(archive_prefix))]),
             ("compact", self.compact),
