@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.09.12.0054">
+<!ENTITY version   "2026.09.13.1711">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,25 @@
 
 <CHANGES>
 <![CDATA[
+###2026.09.13.1711###
+### Migration and compatibility
+
+- NotificationAPI is no longer supported by Apprise. Affected profiles show a reconfiguration notice; saved settings and secrets are preserved. Configure Pingram with new credentials or select another provider. (#269)
+- Job exports with extended retention or exclusions use a new bundle format that older versions reject. Existing UUID job bundles remain importable. (#470)
+
+### Bug Fixes
+
+- Repository archive counts now follow the loaded archive list in the tab and overview. Refreshing the page reloads the visible archive list, and delayed responses cannot restore an older count. (#512)
+
+### Improvements
+
+- Update Apprise to 1.13.1 with 141 notification providers, including Pinglet, Trigv, Pingram, Signalgrid and Lauther. (#269)
+- Choose tiered retention with hourly rules and a recent time window, keep the last X archives, or keep all. Clearly visible info buttons open an overview of active rules with examples of what is kept or deleted. Input fields are aligned across columns. Empty and time-window-only policies are blocked in the wizard and both prune paths. Maintenance logs show the archive filter and applied rules together without duplicate policy lines. (#459)
+- Exclude entire folders using case-sensitive marker filenames configured per job. These rules supplement existing path exclusions. A dedicated Exclusions step shows path, marker and file rules together without expanding the wizard. (#469)
+- Upload one exclusion-pattern file per job, with a managed copy that can be downloaded, replaced or removed and travels with job exports. Missing or corrupt copies block backup instead of silently omitting the exclusions. (#470)
+- Administrators can delete individual archives from the Repositories archive list. The confirmation shows the repository and archive details and requires entering DELETE. Existing jobs and run history are retained; use Compact to reclaim disk space afterwards. (#507)
+- Source-folder and exclusion-path inputs in the job wizard now use the full panel width, making long directory paths easier to read. (#511)
+
 ###2026.09.12.0054###
 ### Migration and compatibility
 
@@ -52,14 +71,6 @@
 - Fix #484: Plugin installation and updates preserve existing permissions and ownership of shared Unraid system directories.
 - Recovery for permissions changed by an older package: a normal reboot restored the original modes with the plugin still installed on Unraid 7.4.0-beta.2. Verify permissions after reboot; see the user manual, section 13.6. Installing the corrected package does not repair previously changed permissions automatically.
 
-###2026.09.06.0112###
-- Keep the live log responsive for large backups when optional file activity is enabled, while retaining every emitted log entry (#463).
-- Browse earlier log sections and download the full log directly from the file-activity view. Jobs without file activity keep their existing live-log behavior (#463).
-- Follow new output through the final line even while catching up or refreshing job cards; pause only when browsing back and clarify previous/next section navigation (#463).
-- Keep the live view filled during small updates and make its controls readable in both light and dark themes (#463).
-- Show completed file-activity runs with Borg exit code 1 as warnings in the log panel (#463).
-- Keep active file-activity logs in RAM and save the complete log after the backup ends, avoiding changing-log warnings when the log directory is backed up. The active log is not part of that backup; a server restart before it is saved loses the volatile log (#463).
-
 ]]>
 </CHANGES>
 
@@ -85,7 +96,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="4c8fedd39220fff802b1156fe4628e23"
+EXPECTED_MD5="75d9e5ed66955e8bbb352a61dfca9355"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
