@@ -354,6 +354,49 @@ def test_queued_apprise_delivery_retries_without_sleeping(monkeypatch, tmp_path)
     assert read_notification_delivery_status({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["deliveries"][-1]["status"] == "failed"
 
 
+def test_retired_profile_does_not_block_other_channels_or_queued_profiles(monkeypatch, tmp_path, caplog):
+    from lib import apprise_adapter as adapter
+
+    store = tmp_path / "config" / "apprise-profiles.json"
+    store.parent.mkdir()
+    secrets = tmp_path / "secrets"
+    secrets.mkdir()
+    rows = []
+    for pid, url in (("retired", "napi://fake-id:fake-secret@example.test"),
+                     ("working", "json://example.test/notify")):
+        rows.append({"id": pid, "enabled": True, "selected_events": ["backup_success"],
+                     "retry_policy": {"attempts": 1, "backoff_seconds": 0}})
+        (secrets / f".apprise-profile-{pid}.url").write_text(url)
+    store.write_text(json.dumps({"schema_version": 1, "profiles": rows}))
+
+    class WorkingApprise:
+        def add(self, url):
+            assert not adapter.retired_notificationapi_url(url)
+            return True
+
+        def notify(self, **kwargs):
+            return True
+
+    monkeypatch.setattr("lib.notification_events.send_notification", lambda url, **kw: adapter.send_notification(
+        url, apprise_module=SimpleNamespace(Apprise=WorkingApprise), **kw,
+    ))
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kw: True)
+    monkeypatch.setattr("lib.notification_events.send_mail", lambda *args, **kw: True)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "NOTIFY_APPRISE_IMMEDIATE_KICK": "false",
+              "NOTIFY_UNRAID_EVENTS": "backup_success", "NOTIFY_EMAIL_EVENTS": "backup_success"}
+    result = send_event(config, NotificationEvent(event_type="backup_success", title="OK", message="done"),
+                        mail_config=MailConfig(recipient="admin@example.test"))
+    assert result == {"unraid": True, "email": True, "apprise": True}
+    # A fresh config object reads the persisted queue, as after a service restart.
+    drained = drain_notification_queue({"BACKUP_SCRIPTS_DIR": str(tmp_path)})
+    assert drained == {"checked": 2, "delivered": 1, "failed": 1, "retrying": 0, "remaining": 0}
+    status = read_notification_delivery_status(config)
+    assert {row["profile_id"]: row["status"] for row in status["deliveries"]} == {
+        "retired": "failed", "working": "delivered",
+    }
+    assert "fake-secret" not in json.dumps(status) + caplog.text
+
+
 @pytest.mark.parametrize("rows", [None, [], [{"id": "later", "next_attempt_at": 2000, "attempts_made": 1}]])
 def test_idle_queue_checks_do_not_save_unchanged_or_missing_queue(tmp_path, monkeypatch, rows):
     from lib import notification_events

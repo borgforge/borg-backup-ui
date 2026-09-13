@@ -4859,6 +4859,7 @@ function _appriseDraftFromProfile(profile, duplicate = false) {
     default: !!source.default,
     url_template: String(source.url_template || ''),
     url_set: !!source.url_set,
+    warning_code: String(source.warning_code || ''),
     url_fields: source.url_fields && typeof source.url_fields === 'object' ? { ...source.url_fields } : {},
     apprise_url: '',
   };
@@ -5291,6 +5292,7 @@ function renderSettingsAppriseProfiles() {
       profile.enabled === false ? settingsT('apprise.disabled') : settingsT('apprise.enabled'),
       profile.default ? settingsT('apprise.defaultProfile') : '',
       profile.url_set ? settingsT('apprise.secretSet') : settingsT('apprise.secretMissing'),
+      profile.warning_code ? settingsT('apprise.needsAttention') : '',
     ].filter(Boolean);
     return `<button type="button" class="settings-profile-list-item ${active ? 'active' : ''}" data-settings-action="apprise-profile-select" data-apprise-profile-id="${escAttr(profile.id)}">
       <span class="settings-profile-symbol notifications">${settingsMenuIcon('notifications')}</span>
@@ -5318,6 +5320,7 @@ function renderSettingsAppriseProfiles() {
         </header>
         <div class="settings-profile-editor-body">
           <div id="apprise-profiles-msg" class="status-message hidden"></div>
+          ${current.warning_code ? `<div class="status-message warning" role="status">${escHtml(apiMessage({ message_code: current.warning_code }, settingsT('apprise.needsAttention')))}</div>` : ''}
           ${editing ? `<div class="settings-body two-col">
             <div class="form-group">
               <label class="form-label form-label-required" for="apprise-profile-name">${formLabelHtml(settingsT('apprise.profileName'), true)}</label>

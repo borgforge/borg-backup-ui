@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #269 - bundled Apprise 1.13.1
+- Update the complete hash-pinned base dependency lock and license versions. Runtime installation on Unraid remains offline, with unchanged-bundle extraction skipped.
+- Preserve the agreed base-package scope: 141 available providers, up from 137. Add Pinglet, Trigv, Pingram, Signalgrid and Lauther; upstream retired NotificationAPI. Optional provider dependencies and release tracking remain separate follow-up work in #269.
+- Detect retired NotificationAPI schemes at read/validation/delivery time, show German/English reconfiguration guidance, and preserve profile metadata and secret files. No migration or automatic credential conversion is performed.
+- Keep provider URL/exception details out of logs and API failures. Check the real vendor runtime, complete available-provider metadata, mocked HTTP/SMTP delivery, timeouts, profile preservation and queue isolation. Exercise the generated installer for upgrade, reinstall and corrupt-bundle rejection.
+
 ### Issue #505 - matching categorized Unraid release notes
 - Group issue fragments under Migration and compatibility, Bug Fixes, Security (when needed) and Improvements, preserving Markdown headings, blank lines and nested bullets.
 - Rewrite the Job-ID candidate notes as concise English user-facing changes, retain migration/export notices and issue references, and keep technical history here.

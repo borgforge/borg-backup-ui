@@ -102,6 +102,7 @@ if not version:
 print(version)
 PY
 )"
+  PYTHONDONTWRITEBYTECODE=1 python3 -S "${SCRIPT_DIR}/check_apprise_runtime.py" "${APPRISE_VENDOR_DIR}"
   find "${APPRISE_VENDOR_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   echo "==> Apprise Runtime: ${APPRISE_VENDOR_VERSION}"
 }

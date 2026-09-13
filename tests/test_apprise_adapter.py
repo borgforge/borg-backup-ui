@@ -205,3 +205,35 @@ def test_failed_bundled_import_restores_existing_module(tmp_path: Path) -> None:
             sys.modules["apprise"] = previous
         else:
             sys.modules.pop("apprise", None)
+
+
+def test_provider_validation_errors_and_logs_do_not_expose_secrets(caplog):
+    secret = "fake-secret-and-recipient"
+
+    class FailingApprise(_FakeApprise):
+        def add(self, url):
+            logging.getLogger("apprise").warning("Rejected %s", url)
+            raise ValueError(url)
+
+    with caplog.at_level(logging.DEBUG):
+        result = apprise_adapter.validate_url(
+            f"json://{secret}@example.test", apprise_module=SimpleNamespace(Apprise=FailingApprise),
+        )
+    assert not result.ok and "ValueError" in result.message
+    assert secret not in result.message + caplog.text
+
+
+def test_provider_delivery_exception_does_not_expose_message_or_secret(caplog):
+    class FailingApprise(_FakeApprise):
+        def notify(self, **kwargs):
+            logging.getLogger("apprise").error("fake-secret %s", kwargs["body"])
+            raise RuntimeError("fake-secret " + kwargs["body"])
+
+    with caplog.at_level(logging.DEBUG):
+        result = apprise_adapter.send_notification(
+            "json://fake-secret@example.test", title="Title", body="private body",
+            apprise_module=SimpleNamespace(Apprise=FailingApprise),
+        )
+    assert not result.ok and "RuntimeError" in result.message
+    assert "fake-secret" not in result.message + caplog.text
+    assert "private body" not in result.message + caplog.text

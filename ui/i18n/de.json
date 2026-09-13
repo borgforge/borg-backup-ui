@@ -238,6 +238,8 @@
       "smtp_recipient_missing": "Es ist kein E-Mail-Empfänger konfiguriert.",
       "smtp_sender_missing": "Es ist kein E-Mail-Absender konfiguriert.",
       "smtp_test_sent": "Test-E-Mail wurde an {recipient} gesendet.",
+      "apprise_notificationapi_retired": "NotificationAPI wurde in Apprise 1.13.1 eingestellt. Richte dieses Profil für Pingram oder einen anderen Anbieter neu ein. Die gespeicherten Einstellungen und das Secret bleiben erhalten.",
+      "apprise_secret_unreadable": "Die gespeicherte Apprise-URL kann nicht gelesen werden. Prüfe die Zugriffsrechte der Secret-Datei dieses Profils.",
       "apprise_url_valid": "Die Apprise-URL ist gültig.",
       "apprise_url_invalid": "Die Apprise-URL ist ungültig.",
       "apprise_test_sent": "Die Apprise-Testnachricht wurde gesendet.",
@@ -2428,6 +2430,7 @@
       "credentialsRemoved": "SMB-Credentials entfernt: {paths}"
     },
     "apprise": {
+      "needsAttention": "Prüfung erforderlich",
       "title": "Benachrichtigungsprofile (Apprise)",
       "savedProfiles": "Apprise-Profile",
       "addProfile": "Profil hinzufügen",

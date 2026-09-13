@@ -17,6 +17,8 @@ if str(_RUNTIME_LIB) not in sys.path:
 
 from apprise_adapter import (  # type: ignore  # noqa: E402
     AppriseAdapterError,
+    RETIRED_NOTIFICATIONAPI_CODE,
+    retired_notificationapi_url,
     send_test_notification,
     supported_providers,
     validate_url,
@@ -227,6 +229,12 @@ def _sanitize_profile(row: dict[str, Any], config: dict[str, Any]) -> dict[str, 
 def _public_profile(row: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     clean = _sanitize_profile(row, config)
     clean["url_set"] = profile_secret_path(config, clean["id"]).is_file()
+    try:
+        if retired_notificationapi_url(_read_secret(config, clean["id"])):
+            clean["warning_code"] = RETIRED_NOTIFICATIONAPI_CODE
+    except InventoryAccessError:
+        # A single unreadable secret must not hide the remaining profiles.
+        clean["warning_code"] = "apprise_secret_unreadable"
     return clean
 
 
@@ -398,7 +406,7 @@ def validate_profile_url(apprise_url: str) -> dict[str, Any]:
     return {
         "success": bool(result.ok),
         "message": result.message,
-        "message_code": "apprise_url_valid" if result.ok else "apprise_url_invalid",
+        "message_code": getattr(result, "message_code", "") or ("apprise_url_valid" if result.ok else "apprise_url_invalid"),
     }
 
 
@@ -439,7 +447,7 @@ def test_profile(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, A
     return {
         "success": bool(result.ok),
         "message": result.message,
-        "message_code": "apprise_test_sent" if result.ok else "apprise_test_failed",
+        "message_code": getattr(result, "message_code", "") or ("apprise_test_sent" if result.ok else "apprise_test_failed"),
         "timeout_seconds": timeout,
     }
 

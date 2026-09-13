@@ -743,7 +743,9 @@ Borg Backup UI manages notification channels under **Settings > Notifications**.
 - email/SMTP
 - Apprise notification profiles
 
-Apprise profiles can be created, edited, duplicated, enabled/disabled, tested, and removed. Stable `2026.08.31.0907` bundles Apprise `1.12.0`; Borg Backup UI offers the 137 providers detected by that version. Examples include ntfy, Rocket.Chat, Discord, and email-capable Apprise services. Provider URL formats are generated from Apprise metadata, and saved Apprise URLs are stored as secrets that are never rendered back into the page. A later Apprise release may change the number, names, or parameters of providers.
+Apprise profiles can be created, edited, duplicated, enabled/disabled, tested, and removed. The plugin bundles Apprise `1.13.1` with 141 available providers (previously 137). New providers are Pinglet, Trigv, Pingram, Signalgrid, and Lauther. Provider URL forms come from Apprise metadata; saved URLs remain write-only secrets. The [provider inventory](../apprise-providers.md) lists the complete set available in this package. Optional providers requiring additional packages, such as MQTT and XMPP, remain outside the existing package scope.
+
+**NotificationAPI profiles:** Apprise no longer supports `napi://` and `notificationapi://`. Affected profiles show a warning in Settings > Notifications and fail validation/delivery with reconfiguration guidance. Their settings and secret files are preserved. Edit the profile and configure Pingram with its new credentials, or choose another provider; changing only the URL scheme is not sufficient. Other profiles, Unraid notifications and native email continue independently. No configuration migration or automatic credential conversion runs. Malformed URLs are rejected without interrupting the application.
 
 Direct email notifications use the saved global recipient; when it is empty, the weekly-report recipient is used as the fallback. Save changed SMTP and email fields before sending a test message. Port `465` uses implicit TLS, while TLS on port `587` is established with STARTTLS.
 
