@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -220,7 +221,13 @@ def test_stable_promotion_preserves_complete_categorized_notes(tmp_path: Path, m
         )
         stable = stable_path.read_text()
         assert f"###{version}###\n{notes}\n\n" in stable
-        assert stable.count("### Improvements") == 1
+        assert stable.count(f"###{version}###") == 1
+        # Retained releases may use the same category headings (#508).
+        promoted = re.search(
+            rf"###{re.escape(version)}###\n(.*?)(?=\n###[^#\n]+###\n|\n\]\]>)",
+            stable, re.DOTALL,
+        )
+        assert promoted and promoted.group(1).count("### Improvements") == 1
         assert release_workflow.verify_release_artifacts(tmp_path) == provenance
 
     stable_path.write_text(stable.replace("    - Rename jobs.", "- Rename jobs."))
