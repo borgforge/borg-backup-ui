@@ -15,6 +15,7 @@
     ['storage-maintenance-confirm-modal', 'closeStorageMaintenanceConfirm'],
     ['repository-manager-modal', 'closeRepositoryManager'],
     ['schedule-modal', 'closeScheduleModal'],
+    ['wizard-policy-help-modal', 'closeWizardPolicyHelp'],
     ['wizard-help-modal', 'closeWizardHelpModal'],
     ['wizard-modal', 'closeWizard'],
     ['setup-wizard-modal', 'closeSetupWizard'],

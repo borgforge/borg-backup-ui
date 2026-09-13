@@ -353,6 +353,7 @@ class JobInfo:
     standard: str = "wizard"
     enabled: bool = True
     compression: str = ""
+    retention: dict = None
     retention_daily: str = ""
     retention_weekly: str = ""
     retention_monthly: str = ""
@@ -722,6 +723,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
         standard: str = "wizard",
         enabled: bool = True,
         compression: str = "",
+        retention: Optional[dict] = None,
         retention_daily: str = "",
         retention_weekly: str = "",
         retention_monthly: str = "",
@@ -775,6 +777,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             file_activity=file_activity,
             archive_prefix=archive_prefix,
             compression=str(compression or "").strip(),
+            retention=retention,
             retention_daily=str(retention_daily or "").strip(),
             retention_weekly=str(retention_weekly or "").strip(),
             retention_monthly=str(retention_monthly or "").strip(),
@@ -854,6 +857,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 enabled=bool(raw.get("enabled", True)),
                 file_activity=str(raw.get("file_activity", False)).strip().lower() in {"1", "true", "yes", "on"},
                 compression=str(raw.get("compression") or "").strip(),
+                retention=retention,
                 retention_daily=str(retention.get("daily") or "").strip(),
                 retention_weekly=str(retention.get("weekly") or "").strip(),
                 retention_monthly=str(retention.get("monthly") or "").strip(),
@@ -980,6 +984,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "standard": info.standard,
                 "enabled": info.enabled,
                 "compression": info.compression,
+                "retention": info.retention,
                 "retention_daily": info.retention_daily,
                 "retention_weekly": info.retention_weekly,
                 "retention_monthly": info.retention_monthly,

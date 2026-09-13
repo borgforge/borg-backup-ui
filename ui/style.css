@@ -5873,27 +5873,6 @@ body.wizard-modal-open {
   gap: 14px;
 }
 
-.wizard-retention-explainer {
-  padding: 13px 15px;
-  border: 1px solid rgba(56, 139, 253, 0.32);
-  border-radius: var(--radius-sm);
-  background: rgba(56, 139, 253, 0.08);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.wizard-retention-explainer > strong {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.wizard-retention-explainer p {
-  margin: 4px 0;
-}
-
 .wizard-retention-help-link {
   display: inline-flex;
   margin-top: 5px;
@@ -6688,3 +6667,46 @@ body.wizard-modal-open {
   text-align: center;
   line-height: 1.4;
 }
+
+/* Job retention modes and optional managed exclusions (#459, #469, #470). */
+.wizard-retention-mode-group { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.wizard-retention-mode-group legend { font-weight: 600; margin-bottom: 10px; }
+.wizard-retention-mode-card { display: flex; align-items: flex-start; gap: 9px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.wizard-retention-mode-card:has(input:checked) { border-color: var(--accent); background: rgba(56,139,253,.07); }
+.wizard-retention-mode-card input { margin-top: 3px; accent-color: var(--accent); }
+.wizard-retention-mode-card strong, .wizard-retention-mode-card small { display: block; }
+.wizard-retention-mode-card small { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.wizard-retention-grid, .wizard-exclusions-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 18px; }
+.wizard-retention-grid .form-group, .wizard-exclusions-grid .form-group { margin: 0; min-width: 0; }
+.wizard-retention-grid .form-input, .wizard-exclusions-grid .form-input { width: 100%; min-width: 0; }
+.wizard-within-inputs { display: grid; grid-template-columns: minmax(55px,1fr) minmax(100px,1.5fr); gap: 8px; }
+.wizard-within-inputs .form-select { width:100%; min-width:0; }
+.wizard-policy-intro { margin: 0 0 12px; font-size:12px; color:var(--text-secondary); }
+.wizard-retention-panel > p, #wiz-retention-all-fields p { font-size:12px; line-height:1.5; }
+.wizard-retention-panel .wizard-retention-zero-hint { margin-top:12px; }
+.wizard-policy-scope { margin:0; font-size:11px; color:var(--text-muted); line-height:1.5; }
+.wizard-last-input { max-width:340px; }
+.wizard-advanced-exclusions { grid-column: 1 / -1; border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; min-width:0; }
+.wizard-advanced-exclusions > summary { cursor:pointer; font-weight:600; }
+.wizard-advanced-exclusions > summary small { font-weight:400; color:var(--text-muted); margin-left:12px; }
+.wizard-advanced-exclusions[open] > summary { margin-bottom:12px; }
+.wizard-exclude-file-info { margin:8px 0; font-size:12px; overflow-wrap:anywhere; }
+.wizard-exclude-file-info code { font-size:10px; }
+.wizard-exclude-file-actions { display:flex; gap:8px; margin-bottom:8px; }
+.wizard-exclusions-warning { margin:12px 0 0; padding:8px 10px; border-radius:var(--radius-sm); background:rgba(255,170,0,.08); color:var(--text-secondary); font-size:11px; line-height:1.5; }
+@media(max-width:600px) { .wizard-retention-mode-group, .wizard-retention-grid, .wizard-exclusions-grid { grid-template-columns:1fr; } }
+@media(min-width:801px) { .wizard-retention-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+.wizard-retention-grid .form-hint, .wizard-exclusions-grid .form-hint { display:block; color:var(--text-muted); font-size:11px; line-height:1.4; margin-top:5px; }
+
+.wizard-retention-mode-group legend { width:100%; }
+.wizard-retention-mode-group legend .wizard-help-btn { float:right; }
+.wizard-policy-field-label { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.wizard-policy-field-label .form-label { margin:0; }
+.wizard-policy-field-label .wizard-help-btn { flex-shrink:0; }
+#wizard-policy-help-modal { z-index:1200; }
+#wizard-policy-help-modal .wizard-policy-help-dialog { width:640px; max-width:calc(100vw - 32px); max-height:90vh; }
+.wizard-policy-help-section + .wizard-policy-help-section { margin-top:16px; }
+.wizard-policy-help-section h4 { margin:0 0 5px; font-size:13px; color:var(--text-primary); }
+.wizard-policy-help-section p { margin:0; font-size:13px; line-height:1.6; color:var(--text-secondary); }
+
+.wizard-retention-grid .form-label { display:flex; align-items:center; min-height:22px; }

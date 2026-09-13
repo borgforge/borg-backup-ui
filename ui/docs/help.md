@@ -113,12 +113,12 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 2. **Quellen & Ziel:** Zu sichernde Ordner oder Dateien, Ausschlüsse, Speichertyp, Speicherziel, Repository und Kompression.
 3. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten.
 4. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
-5. **Retention:** tägliche, wöchentliche, monatliche und jährliche Wiederherstellungspunkte.
+5. **Retention:** gestaffelt mit optionalem Zeitfenster, letzte X Archive oder alle behalten.
 6. **Beschreibung:** verständliche Beschreibung mit optionalem Markdown.
 7. **Zeitplan:** einfache Planung oder Cron-Ausdruck.
 8. **Flow-Vorschau:** endgültige Prüfung des geplanten Ablaufs.
 
-> [!IMPORTANT] Retention-Werte zählen Zeiträume, nicht Archive pro Zeitraum. **Täglich: 20** bedeutet höchstens einen Tagesstand für 20 tägliche Zeiträume und nicht 20 Archive pro Tag. Nach jedem erfolgreich erstellten Backup wendet Borg Backup UI die Aufbewahrungsregeln automatisch an. `0` deaktiviert nur die jeweilige Stufe und bedeutet nicht „unbegrenzt“. Viermal `0` wird abgelehnt, weil Prune sonst kein Archiv behalten würde.
+> [!IMPORTANT] Retention-Werte zählen Zeiträume mit Backups. Wählen Sie „Gestaffelt“, „Letzte X Archive“ oder „Alle behalten“. Ein Zeitfenster wie „alle Archive der letzten 7 Tage“ ergänzt Zählregeln und darf nicht allein aktiv sein. `0` deaktiviert eine Regel. Leere Regeln und „letzte 0“ sind gesperrt. Eine kleine Anzahl kann viele ältere Archive zur Löschung freigeben. Das Info-i erklärt jede Strategie und ihre Löschwirkung, ohne den Wizard zu verlängern.
 
 Beispiel: Werden an einem Tag Backups um 08:00 und 08:30 Uhr erstellt, behält die tägliche Regel nur einen Wiederherstellungspunkt für diesen Tag – normalerweise das neuere Archiv von 08:30 Uhr. Details und weitere Beispiele enthält das vollständige Handbuch unter **Backup-Jobs > Retention, Kompression und Beschreibung**.
 

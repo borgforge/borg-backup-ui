@@ -221,21 +221,17 @@ class RetentionValidationError(ValueError):
 
 def _retention_from_params(params: dict) -> dict[str, str]:
     """Return normalized Borg retention counts and reject unsafe policies."""
-    retention: dict[str, str] = {}
-    for period, default in _RETENTION_DEFAULTS.items():
-        raw = str(params.get(f"keep_{period}", default)).strip() or default
-        if not re.fullmatch(r"\d+", raw):
-            raise RetentionValidationError(
-                "retention_invalid",
-                "Retention values must be non-negative whole numbers",
-            )
-        retention[period] = str(int(raw))
-    if not any(int(value) > 0 for value in retention.values()):
-        raise RetentionValidationError(
-            "retention_all_zero",
-            "At least one retention rule must be greater than zero; otherwise prune would delete every archive belonging to this job",
-        )
-    return retention
+    from runtime.lib.retention_policy import normalize_retention, RetentionError
+    source = {period: str(params.get(f"keep_{period}", default)).strip() or default
+              for period, default in _RETENTION_DEFAULTS.items()}
+    for field, param in (("mode", "retention_mode"), ("hourly", "keep_hourly"),
+                         ("within", "keep_within"), ("last", "keep_last")):
+        if param in params:
+            source[field] = params[param]
+    try:
+        return normalize_retention(source)
+    except RetentionError as exc:
+        raise RetentionValidationError(exc.api_code, str(exc)) from exc
 
 
 def validate_params(
@@ -260,6 +256,10 @@ def validate_params(
         raise ValueError("Job name must not be empty")
     _validate_job_name_length(params["job_name"])
     retention = _retention_from_params(params)
+    from job_exclusions import marker_names, upload_bytes
+    markers = marker_names(params.get("exclude_if_present"))
+    if isinstance(params.get("exclude_from"), dict) and "content_b64" in params["exclude_from"]:
+        upload_bytes(params["exclude_from"])
     params["file_activity"] = _bool_value(params.get("file_activity"), default=False)
     for period, value in retention.items():
         params[f"keep_{period}"] = value
@@ -428,6 +428,16 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         assignment_error = str(exc)
     from job_settings import explicit_job_settings
     compression, effective_retention = explicit_job_settings(meta)
+    from job_exclusions import exported_file
+    from jobs_api import get_jobs_meta_dir
+    file_copy = None
+    file_error = False
+    if meta.get("exclude_from"):
+        try:
+            file_copy = exported_file(meta["exclude_from"], get_jobs_meta_dir(scripts_dir, data_root), job_key)
+        except ValueError:
+            file_copy = meta["exclude_from"]
+            file_error = True
 
     # Prefer explicit job metadata name (JSON) over display label with location suffix.
     # This keeps edited names stable (e.g. "Flash" stays "Flash", not "Flash - Lokal").
@@ -452,6 +462,9 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "vm_control": meta_vm_control,
         "source_paths": meta_source_paths,
         "exclude_paths": meta_exclude_paths,
+        "exclude_if_present": meta.get("exclude_if_present", []),
+        "exclude_from": file_copy,
+        "exclude_from_error": file_error,
         "repo_path": repo_path or "",
         "repository_key": meta_repository_key,
         "repository_assignment_error": assignment_error,
@@ -461,6 +474,10 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "file_activity": meta_file_activity,
         "encryption": str(repository_context.get("encryption") or ""),
         "passphrase": "",
+        "retention_mode": effective_retention.get("mode", "tiered"),
+        "keep_hourly": effective_retention.get("hourly", "0"),
+        "keep_within": effective_retention.get("within", ""),
+        "keep_last": effective_retention.get("last", "0"),
         "keep_daily": effective_retention["daily"],
         "keep_weekly": effective_retention["weekly"],
         "keep_monthly": effective_retention["monthly"],
@@ -486,6 +503,10 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     docker_control = _runtime_control_from_params(params, "docker")
     vm_control = _runtime_control_from_params(params, "vm")
     retention = _retention_from_params(params)
+    from job_exclusions import marker_names, upload_bytes
+    markers = marker_names(params.get("exclude_if_present"))
+    if isinstance(params.get("exclude_from"), dict) and "content_b64" in params["exclude_from"]:
+        upload_bytes(params["exclude_from"])
     file_activity = _bool_value(params.get("file_activity"), default=False)
     use_docker = docker_control["mode"] != "none"
     use_vm = vm_control["mode"] != "none"
@@ -520,7 +541,10 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
         count=len(source_paths),
         exclusions=len(exclude_paths),
     )
-    add_step("borgMaintenance", "Borg maintenance (prune -> compact -> check)")
+    if retention.get("mode") == "all":
+        add_step("borgMaintenanceKeepAll", "Borg maintenance (compact -> check; prune disabled)")
+    else:
+        add_step("borgMaintenance", "Borg maintenance (prune -> compact -> check)")
     add_step("statusNotification", "Write status and notification")
     if use_vm:
         add_step("vmStart", "Start VMs stopped by this job")
@@ -546,6 +570,8 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "sources_count": len(source_paths),
             "exclusions_count": len(exclude_paths),
             "exclude_paths": exclude_paths,
+            "exclude_if_present": markers,
+            "exclude_from": {k: v for k, v in (params.get("exclude_from") or {}).items() if k != "content_b64"},
             "docker": use_docker,
             "vm": use_vm,
             "docker_mode": docker_control["mode"],
@@ -578,6 +604,14 @@ def save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, 
 
 
 def _save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
+    from inventory_store import inventory_lock
+    from jobs_api import get_jobs_meta_dir
+    jobs_dir = get_jobs_meta_dir(scripts_dir, data_root)
+    with inventory_lock(jobs_dir.parent):
+        return _save_job_locked(params, scripts_dir, data_root, ui_config)
+
+
+def _save_job_locked(params: dict, scripts_dir: Path, data_root: Optional[Path] = None, ui_config: Optional[dict] = None) -> dict:
     """Speichert Job-eigene Wizard-Metadaten mit kanonischer Repository-Referenz."""
     from archive_prefix import job_archive_prefixes, validate_archive_prefix
     from job_identity import JobIdConflictError, new_job_id, metadata_job_id, validate_job_id
@@ -589,6 +623,10 @@ def _save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None,
     icon = str(params.get("icon", "")).strip().lower()
     icon_color = str(params.get("icon_color", "")).strip().lower()
     retention = _retention_from_params(params)
+    from job_exclusions import marker_names, upload_bytes
+    markers = marker_names(params.get("exclude_if_present"))
+    if isinstance(params.get("exclude_from"), dict) and "content_b64" in params["exclude_from"]:
+        upload_bytes(params["exclude_from"])
     file_activity = _bool_value(params.get("file_activity"), default=False)
     selected_repo = _repository_from_params(params, ui_config)
     if not selected_repo:
@@ -647,6 +685,7 @@ def _save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None,
         "runner": "scriptless-wizard-runner",
         "source_paths": normalize_source_paths(params.get("source_paths")),
         "exclude_paths": _exclude_paths(params.get("exclude_paths", [])),
+        "exclude_if_present": marker_names(params.get("exclude_if_present", existing.get("exclude_if_present"))),
         "features": {
             **existing.get("features", {}),
             "docker": docker_control["mode"] != "none",
@@ -656,7 +695,7 @@ def _save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None,
         "vm_control": {**existing.get("vm_control", {}), **vm_control},
         "compression": str(params.get("compression", "lz4")).strip() or "lz4",
         "file_activity": file_activity,
-        "retention": {**existing.get("retention", {}), **retention},
+        "retention": retention,
         "created_at": existing.get("created_at", now_iso),
         "updated_at": now_iso,
     }
@@ -677,18 +716,23 @@ def _save_job(params: dict, scripts_dir: Path, data_root: Optional[Path] = None,
     }
     from repositories_api import save_job_repository_transaction
     previous_meta_path = jobs_meta_dir / f"{existing_job_key}.json" if existing_job_key else None
-    save_job_repository_transaction(
-        repo_config,
-        meta_path,
-        metadata,
-        selected_repository_key,
-        job_key,
-        previous_repository_key=str(existing.get("repository_key") or ""),
-        previous_job_key=existing_job_key or job_key,
-        previous_metadata_path=previous_meta_path,
-        create_only=not bool(existing_job_key),
-    )
-
+    from job_exclusions import prepare_file, cleanup_files
+    metadata["exclude_from"] = prepare_file(params.get("exclude_from", existing.get("exclude_from")), jobs_meta_dir, job_key)
+    try:
+        save_job_repository_transaction(
+            repo_config,
+            meta_path,
+            metadata,
+            selected_repository_key,
+            job_key,
+            previous_repository_key=str(existing.get("repository_key") or ""),
+            previous_job_key=existing_job_key or job_key,
+            previous_metadata_path=previous_meta_path,
+            create_only=not bool(existing_job_key),
+        )
+    finally:
+        # Keep only the copy referenced by the committed (or restored) metadata.
+        cleanup_files(jobs_meta_dir, job_key)
     return {
         "job_id": job_key,
         "job_key": job_key,

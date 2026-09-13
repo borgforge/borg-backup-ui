@@ -45,11 +45,13 @@ function wizardT(key, params = {}) {
 
 function wizardApiErrorMessage(payload, status = 0) {
   const data = payload && typeof payload === 'object' ? payload : {};
+  if (data.code === 'job_exclusions_invalid') return wizardT('wizard.exclusionInvalid');
   if (data.code === 'job_settings_invalid') return apiErrorMessage(data, status);
   if (data.code === 'job_name_too_long') return wizardT('wizard.validationJobNameLength');
   if (data.code === 'job_id_exists') return wizardT('wizard.jobIdExists');
   if (data.code === 'retention_invalid') return wizardT('wizard.validationRetentionInvalid');
   if (data.code === 'retention_all_zero') return wizardT('wizard.validationRetentionRequired');
+  if (data.code === 'retention_within_only') return wizardT('wizard.validationRetentionWithinOnly');
   for (const key of ['details', 'message', 'error']) {
     const value = String(data[key] || '').trim();
     if (value && value !== String(data.code || '').trim()) return value;
@@ -67,6 +69,7 @@ function _wizardCloseSnapshotPayload() {
     form: _wizardModalHelpers().formSnapshot?.(modal) || '',
     sourcePaths: wizardState.sourcePaths || [],
     excludePaths: wizardState.excludePaths || [],
+    excludeFile: wizardState.excludeFile || null,
     dockerSelected: wizardState.selectedDockerContainers || [],
     vmSelected: wizardState.selectedVms || [],
     scheduleFrequency: wizardSchedState?.frequency || '',
@@ -598,6 +601,17 @@ function openWizard(existingJobKey = '') {
   wizardRenderExcludePaths();
   document.getElementById('wiz-compression').value = 'lz4';
   document.getElementById('wiz-file-activity').checked = false;
+  wizardState.excludeFile = null;
+  wizardState.excludeFileError = false;
+  document.getElementById('wiz-exclude-markers').value = '';
+  document.getElementById('wiz-exclude-file').value = '';
+  document.getElementById('wiz-advanced-exclusions').open = false;
+  wizardRenderExclusions();
+  document.getElementById('wiz-keep-hourly').value = '0';
+  document.getElementById('wiz-keep-last').value = '3';
+  document.getElementById('wiz-keep-within-count').value = '0';
+  document.getElementById('wiz-keep-within-unit').value = 'd';
+  wizardUpdateRetentionMode('tiered');
   document.getElementById('wiz-keep-daily').value = '7';
   document.getElementById('wiz-keep-weekly').value = '4';
   document.getElementById('wiz-keep-monthly').value = '6';
@@ -673,10 +687,22 @@ function _wizardFillFromJob(job) {
   wizardState.selectedStorageKey = String(selectedRepo?.storage_key || job.storage_key || '').trim();
   document.getElementById('wiz-compression').value = job.compression || 'lz4';
   document.getElementById('wiz-file-activity').checked = !!job.file_activity;
-  document.getElementById('wiz-keep-daily').value = job.keep_daily || '7';
-  document.getElementById('wiz-keep-weekly').value = job.keep_weekly || '4';
-  document.getElementById('wiz-keep-monthly').value = job.keep_monthly || '6';
-  document.getElementById('wiz-keep-yearly').value = job.keep_yearly || '3';
+  wizardState.excludeFile = job.exclude_from || null;
+  wizardState.excludeFileError = !!job.exclude_from_error;
+  document.getElementById('wiz-exclude-markers').value = (job.exclude_if_present || []).join('\n');
+  document.getElementById('wiz-advanced-exclusions').open = !!(job.exclude_from || job.exclude_if_present?.length);
+  wizardRenderExclusions();
+  if (wizardState.excludeFileError) _wizardShowError(2, wizardT('wizard.exclusionInvalid'));
+  document.getElementById('wiz-keep-hourly').value = job.keep_hourly || '0';
+  document.getElementById('wiz-keep-last').value = Number(job.keep_last) > 0 ? job.keep_last : '3';
+  const within = String(job.keep_within || '').match(/^([1-9][0-9]*)([Hdwmy])$/);
+  document.getElementById('wiz-keep-within-count').value = within?.[1] || '0';
+  document.getElementById('wiz-keep-within-unit').value = within?.[2] || 'd';
+  wizardUpdateRetentionMode(job.retention_mode || 'tiered');
+  document.getElementById('wiz-keep-daily').value = job.keep_daily ?? '7';
+  document.getElementById('wiz-keep-weekly').value = job.keep_weekly ?? '4';
+  document.getElementById('wiz-keep-monthly').value = job.keep_monthly ?? '6';
+  document.getElementById('wiz-keep-yearly').value = job.keep_yearly ?? '3';
   _wizardApplySchedule(job.schedule);
   wizardUpdateIconPreview();
   wizardRenderArchivePrefixSummary();
@@ -749,6 +775,7 @@ function wizardNeedsScriptRegeneration(params) {
 
 function closeWizard(options = {}) {
   if (!options?.force && !_wizardConfirmDiscard()) return false;
+  closeWizardPolicyHelp();
   document.getElementById('wizard-modal').classList.add('hidden');
   document.body.classList.remove('wizard-modal-open');
   wizardState.jobIdRequest++;
@@ -876,14 +903,18 @@ function wizardUpdateRetentionManualLink() {
 }
 
 function _wizardRetentionValidationKey(params) {
-  const defaults = { daily: '7', weekly: '4', monthly: '6', yearly: '3' };
-  const values = [];
-  for (const period of Object.keys(defaults)) {
-    const raw = String(params?.[`keep_${period}`] ?? '').trim() || defaults[period];
-    if (!/^\d+$/.test(raw)) return 'wizard.validationRetentionInvalid';
-    values.push(Number(raw));
-  }
-  return values.some(value => value > 0) ? '' : 'wizard.validationRetentionRequired';
+  const mode = params.retention_mode || 'tiered';
+  const valid = value => /^[0-9]{1,7}$/.test(String(value)) && Number(value) <= 1000000;
+  if (mode === 'all') return '';
+  if (mode === 'last') return valid(params.keep_last) && Number(params.keep_last) > 0 ? '' : 'wizard.validationRetentionInvalid';
+  if (mode !== 'tiered') return 'wizard.validationRetentionInvalid';
+  const defaults = {hourly: '0', daily: '7', weekly: '4', monthly: '6', yearly: '3'};
+  const values = Object.keys(defaults).map(period => params[`keep_${period}`] ?? defaults[period]);
+  if (values.some(value => !valid(value))) return 'wizard.validationRetentionInvalid';
+  const within = String(params.keep_within || '');
+  if (within && !/^[1-9][0-9]{0,5}[Hdwmy]$/.test(within)) return 'wizard.validationRetentionInvalid';
+  if (values.some(value => Number(value) > 0)) return '';
+  return within ? 'wizard.validationRetentionWithinOnly' : 'wizard.validationRetentionRequired';
 }
 
 function _wizardFocusRuntimeRisk(id) {
@@ -922,15 +953,14 @@ function _wizardCollectParams() {
     },
     source_paths: rawPaths,
     exclude_paths: _wizardUniqueList(wizardState.excludePaths || []),
+    exclude_if_present: wizardMarkerNames(),
+    exclude_from: wizardFilePayload(),
     repository_key: (document.getElementById('wiz-repository-key')?.value || wizardState.selectedRepositoryKey || '').trim(),
     compression:  document.getElementById('wiz-compression').value,
     file_activity: !!document.getElementById('wiz-file-activity').checked,
     encryption: String(repository?.encryption || '').trim(),
     passphrase: '',
-    keep_daily:   document.getElementById('wiz-keep-daily').value,
-    keep_weekly:  document.getElementById('wiz-keep-weekly').value,
-    keep_monthly: document.getElementById('wiz-keep-monthly').value,
-    keep_yearly:  document.getElementById('wiz-keep-yearly').value,
+    ...wizardRetentionParams(),
     _wizard_mode: wizardState.mode || 'create',
     existing_job_key: wizardState.existingJobKey || '',
   };
@@ -1389,12 +1419,9 @@ async function _wizardPreview() {
       value: Array.isArray(summary.exclude_paths) && summary.exclude_paths.length ? summary.exclude_paths.join(', ') : wizardT('wizard.none'),
     }));
     const retention = summary.retention && typeof summary.retention === 'object' ? summary.retention : {};
-    lines.push(wizardT('wizard.previewRetention', {
-      daily: retention.daily ?? '-',
-      weekly: retention.weekly ?? '-',
-      monthly: retention.monthly ?? '-',
-      yearly: retention.yearly ?? '-',
-    }));
+    lines.push(wizardT('wizard.previewMarkers', {value: (summary.exclude_if_present || []).join(', ') || wizardT('wizard.none')}));
+    lines.push(wizardT('wizard.previewExcludeFile', {value: summary.exclude_from?.original_name || wizardT('wizard.none')}));
+    lines.push(wizardT('wizard.previewRetentionPolicy', {value: wizardRetentionSummary(retention)}));
     lines.push(wizardT('wizard.previewFileActivity', {
       value: wizardT(summary.file_activity ? 'wizard.yes' : 'wizard.no'),
     }));
@@ -1619,4 +1646,174 @@ function openWizardDescriptionHelp() {
 
 function closeWizardDescriptionHelp() {
   document.getElementById('wizard-help-modal')?.classList.add('hidden');
+}
+
+// Contextual explanations stay outside the wizard so its height and input state do not change.
+function wizardRetentionParams() {
+  const read = id => document.getElementById(id)?.value ?? '';
+  const withinCount = read('wiz-keep-within-count');
+  const params = {retention_mode: read('wiz-retention-mode') || 'tiered',
+    keep_within: withinCount && Number(withinCount) !== 0 ? withinCount + read('wiz-keep-within-unit') : ''};
+  for (const period of ['hourly', 'daily', 'weekly', 'monthly', 'yearly', 'last']) {
+    params[`keep_${period}`] = read(`wiz-keep-${period}`);
+  }
+  return params;
+}
+
+function wizardPolicyHelpContent(topic) {
+  const params = wizardRetentionParams();
+  const selected = ['tiered', 'last', 'all'].includes(params.retention_mode) ? params.retention_mode : 'tiered';
+  const key = topic === 'retention' ? selected : topic;
+  if (!['tiered', 'last', 'all', 'within', 'markers', 'file'].includes(key)) return null;
+  const tr = name => wizardT(`wizard.policyHelp.${name}`);
+  const sections = [];
+  if (['tiered', 'last', 'all', 'within'].includes(key)) {
+    const error = _wizardRetentionValidationKey(params);
+    const policy = {mode: selected};
+    for (const period of ['hourly', 'daily', 'weekly', 'monthly', 'yearly', 'last', 'within']) policy[period] = params[`keep_${period}`];
+    sections.push({title: tr('current'), text: error ? wizardT(error) : wizardRetentionSummary(policy), warning: !!error});
+  }
+  for (const [title, suffix] of [['meaning', 'Meaning'], ['example', 'Example'], ['deletion', 'Deletion']]) {
+    sections.push({title: tr(title), text: tr(key + suffix)});
+  }
+  if (['tiered', 'last', 'within'].includes(key)) sections.push({title: tr('safety'), text: tr('safetyText')});
+  if (['tiered', 'last', 'all', 'within'].includes(key)) sections.push({text: tr('scope')});
+  return {title: tr(key + 'Title'), sections, retention: !['markers', 'file'].includes(key)};
+}
+
+let wizardPolicyHelpTrigger = null;
+function openWizardPolicyHelp(topic, trigger) {
+  const modal = document.getElementById('wizard-policy-help-modal');
+  const content = wizardPolicyHelpContent(topic);
+  if (!modal || !content) return;
+  wizardPolicyHelpTrigger = trigger || document.activeElement;
+  document.getElementById('wizard-policy-help-title').textContent = content.title;
+  document.getElementById('wizard-policy-help-content').innerHTML = content.sections.map(section =>
+    `<section class="wizard-policy-help-section${section.warning ? ' status-message warning' : ''}">${section.title ? `<h4>${escHtml(section.title)}</h4>` : ''}<p>${escHtml(section.text)}</p></section>`
+  ).join('');
+  document.getElementById('wiz-retention-manual-link')?.classList.toggle('hidden', !content.retention);
+  wizardUpdateRetentionManualLink();
+  modal.classList.remove('hidden');
+  document.getElementById('wizard-modal').inert = true;
+  modal.querySelector('.modal-body').scrollTop = 0;
+  document.getElementById('wizard-policy-help-close-btn').focus({preventScroll: true});
+}
+
+function closeWizardPolicyHelp() {
+  const modal = document.getElementById('wizard-policy-help-modal');
+  if (!modal || modal.classList.contains('hidden')) return;
+  modal.classList.add('hidden');
+  document.getElementById('wizard-modal').inert = false;
+  wizardPolicyHelpTrigger?.focus?.({preventScroll: true});
+  wizardPolicyHelpTrigger = null;
+}
+
+function bindWizardPolicyHelp() {
+  document.querySelectorAll('[data-wiz-policy-help]').forEach(button => {
+    button.addEventListener('click', () => openWizardPolicyHelp(button.dataset.wizPolicyHelp, button));
+  });
+  for (const id of ['wizard-policy-help-close-btn', 'wizard-policy-help-ok-btn']) {
+    document.getElementById(id)?.addEventListener('click', closeWizardPolicyHelp);
+  }
+  const modal = document.getElementById('wizard-policy-help-modal');
+  modal?.addEventListener('click', event => { if (event.target === modal) closeWizardPolicyHelp(); });
+  modal?.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeWizardPolicyHelp();
+    } else if (event.key === 'Tab') {
+      const controls = [...modal.querySelectorAll('button, a[href]')].filter(el => !el.classList.contains('hidden'));
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  });
+}
+
+function wizardUpdateRetentionMode(mode) {
+  const input = document.getElementById('wiz-retention-mode');
+  if (mode) input.value = mode;
+  const selected = input?.value || 'tiered';
+  for (const value of ['tiered', 'last', 'all']) {
+    const radio = document.getElementById(`wiz-retention-${value}`);
+    if (radio) radio.checked = value === selected;
+    const panel = document.getElementById(`wiz-retention-${value}-fields`);
+    panel?.classList.toggle('hidden', value !== selected);
+    panel?.querySelectorAll('input, select').forEach(el => { el.disabled = value !== selected; });
+  }
+  wizardClearError(5);
+}
+
+function wizardRetentionSummary(policy = {}) {
+  if (policy.mode === 'all') return wizardT('wizard.retentionAllSummary');
+  if (policy.mode === 'last') return wizardT('wizard.retentionLastSummary', {count: policy.last});
+  const parts = ['hourly', 'daily', 'weekly', 'monthly', 'yearly']
+    .filter(period => Number(policy[period]) > 0)
+    .map(period => `${wizardT(`wizard.retention${period[0].toUpperCase()}${period.slice(1)}`)}: ${policy[period]}`);
+  if (policy.within) {
+    const match = String(policy.within).match(/^([0-9]+)([Hdwmy])$/);
+    const units = {H: 'unitHours', d: 'unitDays', w: 'unitWeeks', m: 'unitMonths', y: 'unitYears'};
+    const interval = match ? `${match[1]} ${wizardT(`wizard.${units[match[2]]}`)}` : policy.within;
+    parts.push(wizardT('wizard.retentionWithinSummary', {count: interval}));
+  }
+  return parts.join(' · ');
+}
+
+function wizardMarkerNames() {
+  return [...new Set((document.getElementById('wiz-exclude-markers')?.value || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean))];
+}
+
+function wizardFilePayload() {
+  if (!wizardState.excludeFile) return null;
+  const {pending, ...file} = wizardState.excludeFile;
+  if (!pending) delete file.content_b64;
+  return file;
+}
+
+function wizardRenderExclusions() {
+  const file = wizardState.excludeFile;
+  const count = wizardMarkerNames().length;
+  const summary = document.getElementById('wiz-exclusions-summary');
+  if (summary) summary.textContent = file || count ? wizardT('wizard.exclusionSummary', {markers: count, files: file ? 1 : 0}) : wizardT('wizard.exclusionNone');
+  const info = document.getElementById('wiz-exclude-file-info');
+  if (info) info.innerHTML = file ? `<strong>${escHtml(file.original_name)}</strong><br>${escHtml(`${file.size || 0} Bytes`)} · ${escHtml(file.pending ? wizardT('wizard.exclusionFilePending') : wizardT('wizard.exclusionFileSaved', {date: file.imported_at ? new Date(file.imported_at).toLocaleString() : '—'}))}${file.sha256 ? `<br><code>SHA-256: ${escHtml(file.sha256)}</code>` : ''}` : '';
+  document.getElementById('wiz-exclude-file-download')?.classList.toggle('hidden', !file?.content_b64);
+  document.getElementById('wiz-exclude-file-remove')?.classList.toggle('hidden', !file);
+}
+
+async function wizardUploadExclusionFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    if (!file.size || file.size > 65536) throw new Error('size');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const text = new TextDecoder('utf-8', {fatal: true, ignoreBOM: true}).decode(bytes);
+    if (text.startsWith('\ufeff') || text.includes('\0') || text.split(/\r?\n/).some(line => new TextEncoder().encode(line).length > 4096)) throw new Error('encoding');
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    wizardState.excludeFile = {original_name: file.name, size: bytes.length, content_b64: btoa(binary), pending: true};
+    wizardState.excludeFileError = false;
+    wizardRenderExclusions();
+    wizardClearError(2);
+  } catch (_) {
+    _wizardShowError(2, wizardT('wizard.exclusionInvalid'));
+  } finally { event.target.value = ''; }
+}
+
+function wizardDownloadExclusionFile() {
+  const file = wizardState.excludeFile;
+  if (!file?.content_b64) return;
+  const bytes = Uint8Array.from(atob(file.content_b64), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], {type: 'text/plain;charset=utf-8'}));
+  const link = document.createElement('a'); link.href = url; link.download = file.original_name;
+  link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function wizardRemoveExclusionFile() {
+  if (!wizardState.excludeFile || !window.confirm(wizardT('wizard.confirmRemoveExclusionFile'))) return;
+  wizardState.excludeFile = null;
+  wizardState.excludeFileError = false;
+  wizardRenderExclusions();
+  wizardClearError(2);
 }

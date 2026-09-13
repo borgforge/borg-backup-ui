@@ -312,7 +312,13 @@
     document.getElementById('wiz-exclude-path-input')?.addEventListener('keydown', wizardExcludePathKeydown);
     document.getElementById('wiz-exclude-path-list')?.addEventListener('click', wizardExcludePathsClick);
     document.getElementById('wiz-exclude-path-suggest')?.addEventListener('click', wizardExcludePathsClick);
-    ['daily', 'weekly', 'monthly', 'yearly'].forEach((period) => {
+    document.querySelectorAll('[name="wiz-retention-choice"]').forEach(radio => radio.addEventListener('change', () => wizardUpdateRetentionMode(radio.value)));
+    document.getElementById('wiz-exclude-markers')?.addEventListener('input', wizardRenderExclusions);
+    document.getElementById('wiz-exclude-file')?.addEventListener('change', wizardUploadExclusionFile);
+    document.getElementById('wiz-exclude-file-download')?.addEventListener('click', wizardDownloadExclusionFile);
+    document.getElementById('wiz-exclude-file-remove')?.addEventListener('click', wizardRemoveExclusionFile);
+    bindWizardPolicyHelp();
+    ['hourly', 'daily', 'weekly', 'monthly', 'yearly', 'last', 'within-count', 'within-unit'].forEach((period) => {
       document.getElementById(`wiz-keep-${period}`)?.addEventListener('input', () => wizardClearError(5));
     });
     document.getElementById('wiz-description-help-btn')?.addEventListener('click', openWizardDescriptionHelp);
@@ -356,6 +362,7 @@
     m.setAction('confirmPrimaryAction', typeof confirmModalPrimaryAction === 'function' ? confirmModalPrimaryAction : null);
     m.setAction('confirmInputChanged', typeof checkDeleteConfirmInput === 'function' ? checkDeleteConfirmInput : null);
     m.setAction('closeScheduleModal', typeof closeScheduleModal === 'function' ? closeScheduleModal : null);
+    m.setAction('closeWizardPolicyHelp', typeof closeWizardPolicyHelp === 'function' ? closeWizardPolicyHelp : null);
     m.setAction('closeWizardHelpModal', typeof closeWizardDescriptionHelp === 'function' ? closeWizardDescriptionHelp : null);
     m.setAction('closeRepositoryManager', typeof closeRepositoryManager === 'function' ? closeRepositoryManager : null);
     m.setAction('closeStorageDeployModal', typeof closeStorageDeployModal === 'function' ? closeStorageDeployModal : null);

@@ -6,6 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issues #459, #469 and #470 - job retention and exclusions
+- Use one normalized retention policy for wizard saves, imports, backup execution and manual repository prune. Add tiered hourly/within rules, last-X and keep-all modes. Inactive modes do not supply Borg options. Reject empty policies and time-window-only policies; require an explicit count rule without silently inserting a fallback.
+- Explain the current mode and deletion consequences in German/English info dialogs. Keep wizard height and entered values unchanged. Run logs show the current-prefix filter and effective prune arguments; keep-all skips prune while preserving compact and due checks.
+- Store validated case-sensitive marker names and a bounded UTF-8 exclusion file owned by the job. Hold the inventory lock during changes and loading; run with a private temporary snapshot, validate digests, clean unreferenced copies and exclude uploaded contents from support bundles.
+- Include managed exclusion bytes in job transfers. Use bundle v4 when extended rules are present, preserving imports of supported v3 UUID bundles. No job migration or stable artifacts are introduced.
+
 ### Issue #269 - bundled Apprise 1.13.1
 - Update the complete hash-pinned base dependency lock and license versions. Runtime installation on Unraid remains offline, with unchanged-bundle extraction skipped.
 - Preserve the agreed base-package scope: 141 available providers, up from 137. Add Pinglet, Trigv, Pingram, Signalgrid and Lauther; upstream retired NotificationAPI. Optional provider dependencies and release tracking remain separate follow-up work in #269.

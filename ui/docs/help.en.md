@@ -113,12 +113,12 @@ A job connects sources to exactly one existing repository. Encryption belongs to
 2. **Sources & Target:** Folders or files to back up, exclusions, storage type, storage target, repository, and compression.
 3. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards.
 4. **VMs:** Shut down all running or selected VMs and restart them afterwards.
-5. **Retention:** Daily, weekly, monthly, and yearly restore points.
+5. **Retention:** Tiered with an optional time window, last X archives, or keep all.
 6. **Description:** Clear description with optional Markdown.
 7. **Schedule:** Simple schedule or cron expression.
 8. **Flow Preview:** Final review of the planned workflow.
 
-> [!IMPORTANT] Retention values count periods, not archives per period. **Daily: 20** means up to one daily state for 20 daily periods, not 20 archives per day. After each successfully created backup, Borg Backup UI automatically applies the retention rules. `0` disables only that tier and does not mean unlimited. Four zero values are rejected because prune would otherwise keep no archives.
+> [!IMPORTANT] Retention values count periods containing backups. Choose “Tiered”, “Last X archives” or “Keep all”. A time window such as “all archives from the last 7 days” supplements count rules and cannot be used alone. `0` disables a rule. Empty policies and “last 0” are blocked. A small count can permit deletion of many older archives. The info button explains each strategy and its deletion effect without expanding the wizard.
 
 Example: If backups are created at 08:00 and 08:30 on the same day, the daily rule keeps only one restore point for that day—normally the newer 08:30 archive. See the full manual under **Backup Jobs > Retention, Compression, and Description** for details and additional examples.
 

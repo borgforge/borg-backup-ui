@@ -204,7 +204,7 @@ Important fields:
 - **Stop Docker before backup:** Enables Docker control.
 - **Shut down VMs before backup:** Enables VM control.
 
-Together with the location, the type ID forms the technical job key, for example `appdata_local`. It also produces the archive pattern `<type-id>-backup-*`. If the type ID of an existing job is changed, only future archives use the new prefix. Borg Backup UI stores the previous archive prefixes in the job and displays them in the editor's information popover; existing archives are neither renamed nor moved.
+Together with the location, the type ID forms the technical job key, for example `appdata_local`. It also produces the archive pattern `<current-prefix>-*`. If the type ID of an existing job is changed, only future archives use the new prefix. Borg Backup UI stores the previous archive prefixes in the job and displays them in the editor's information popover; existing archives are neither renamed nor moved.
 
 #### Step 2: Sources & Target
 
@@ -274,20 +274,40 @@ Example: assign PostgreSQL or MariaDB priority `1` and its dependent application
 
 #### Retention, Compression, and Description
 
-The wizard configures job-specific Borg options such as compression and retention. Encryption and passphrase belong to the repository and are only set when that repository is created or imported.
+The wizard stores per-job Borg options such as compression and retention. Encryption and the passphrase belong to the repository.
 
-Retention values count time periods, not the number of archives within a period:
+Choose exactly one retention strategy:
 
-- **Daily:** up to one qualifying archive per day for the configured number of daily restore points.
-- **Weekly:** up to one qualifying archive per week.
-- **Monthly:** up to one qualifying archive per month.
-- **Yearly:** up to one qualifying archive per year.
+| Strategy | Effect |
+| --- | --- |
+| **Tiered** | Combine hourly, daily, weekly, monthly and yearly rules. Optionally also keep every archive in a recent time window. |
+| **Last X archives** | Keep the newest X matching archives regardless of day. Other time rules are disabled in this mode. |
+| **Keep all** | Disable prune for this job, including repository maintenance. Compact and due repository checks remain active. |
 
-Borg normally uses the newest qualifying archive from a period. For example, if backups are created at 08:00 and 08:30 on the same day, the daily rule keeps only one restore point for that day—normally the newer 08:30 archive. **Daily: 20** therefore does not keep 20 archives from the same day. An archive survives when at least one configured rule selects it.
+Retention values count time periods containing backups, not archives within a period. **Daily: 7** selects at most one matching recovery point for each of the last seven days with backups. Days without backups do not count. Other active rules select additional points; these values are not a fixed total archive count.
 
-After each successfully created backup, Borg Backup UI applies the configured retention rules. The plugin runs prune, followed by compact and the repository check when it is due. Prune deletes archives that are not selected by any retention rule.
+If backups are created at 08:00 and 08:30 on the same day, the daily rule normally selects the newer 08:30 archive. An hourly rule or time window may still preserve the earlier archive. **Daily: 20** does not mean 20 archives from the same day. An archive remains if at least one active rule protects it.
 
-A value of `0` disables only that retention tier and does not mean unlimited. With four zero values, prune would select no matching archive for retention and could therefore delete all archives belonging to the job. At least one of the four values must consequently be greater than `0`; a configuration containing four zero values is rejected. A future option to keep every archive must instead explicitly disable prune for the job.
+**Keep all archives from the last …:** With **7 days**, every matching archive from the past 7 × 24 hours remains, including multiple backups on the same day. The window is calculated backwards from the time prune runs. Other count rules may preserve additional older archives. For this option a month means 31 days and a year means 365 days.
+
+**Protection against deleting every archive:** `0` disables a rule. In “Tiered”, at least one count rule must be greater than `0`. A time window alone is rejected because it could permit deletion of every archive after a long backup gap. Example: **7-day window + 1 daily recovery point**. No extra rule is silently added. “Last X” requires at least `1`. “Keep all” explicitly skips prune. The same validation applies when saving and importing jobs, and to automatic and manual prune.
+
+**Large deletions can still be permitted:** With “last 3 archives” and 100 matching archives, 97 older archives may be deleted. A value of `1` keeps only the newest recovery point. The wizard evaluates the rules; it does not calculate an actual deletion list from the repository.
+
+After a backup has been created successfully, the saved retention policy is applied. Prune is restricted to the current archive prefix. Archives with previous prefixes remain in addition and do not count towards X. Prune removes unprotected archives; compact then reclaims space that is already unused. The run log records the archive filter and the actual Borg retention arguments. With “Keep all”, it records that prune is skipped.
+
+The **info button** opens a separate dialog for each mode and for the time window, showing current rules, an explanation, an example and the deletion effect. It does not increase the wizard page height. Close or Escape returns without losing input.
+
+#### Advanced Exclusions
+
+**Sources & Target > Advanced exclusions** offers two additional options. Both supplement the existing excluded paths without modifying source files or existing archives.
+
+- **Marker files (#469):** One case-sensitive filename per line. If you enter `.nobackup` and create that file inside `/mnt/user/data/cache`, Borg skips the whole folder, its subfolders and the marker. File contents do not matter. Up to 32 distinct names are allowed; paths are not.
+- **Exclusion file (#470):** Upload one UTF-8 text file without a BOM, up to 64 KiB. Borg patterns remain unchanged, for example `fm:*.tmp`; blank lines and comment lines starting with `#` are ignored. The job stores its own copy. Changes to the original file take effect only after uploading it again and saving. Downloading, replacing and removing the copy are supported.
+
+A running backup uses a private temporary copy of the uploaded file. Editing the job during a run does not change that run's filter. A missing or corrupt managed file blocks the run before backup starts and is reported in system health. After changes, use a test job to inspect the actual archive contents.
+
+New job exports include the managed exclusion file. Jobs using extended rules use export format `bbui-job-bundle-v4`, so older versions cannot silently ignore these settings. Previous UUID job bundles in v3 format remain importable. For manual configuration backups, include the entire `config/jobs` directory, including `exclusions`. Uploaded file contents are not included in support bundles.
 
 #### Optional File Activity in the Live Log
 
@@ -427,7 +447,7 @@ Remove a repository from the application or delete it permanently:
 
 ### 4.5 Notes
 
-> **Note:** Prune uses a linked job's retention policy and limits the action to its archive pattern `<type-id>-backup-*`. If several jobs use the same repository, a manual prune requires an explicit job as the retention source. The confirmation shows the job, archive filter, and periodic restore points; archives belonging to other jobs remain untouched. Prune remains disabled without a matching job link.
+> **Note:** Prune uses a linked job's retention policy and limits the action to its archive pattern `<current-prefix>-*`. If several jobs use the same repository, a manual prune requires an explicit job as the retention source. The confirmation shows the job, archive filter, and periodic restore points; archives belonging to other jobs remain untouched. Prune remains disabled without a matching job link.
 
 > **Note:** Prune lists deleted archives in its result. Compact only shows a numeric reclaimed-space value when Borg reports it.
 

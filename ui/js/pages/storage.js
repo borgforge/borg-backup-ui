@@ -176,6 +176,10 @@ function storageArchiveFilterFromJob(job) {
 function storageRetentionFromJob(job) {
   const raw = job?.retention && typeof job.retention === 'object' ? job.retention : {};
   return {
+    mode: raw.mode || 'tiered',
+    last: raw.last || '0',
+    hourly: raw.hourly || '0',
+    within: raw.within || '',
     daily: String(job?.retention_daily ?? raw.daily ?? '').trim(),
     weekly: String(job?.retention_weekly ?? raw.weekly ?? '').trim(),
     monthly: String(job?.retention_monthly ?? raw.monthly ?? '').trim(),
@@ -185,12 +189,14 @@ function storageRetentionFromJob(job) {
 
 function storageRetentionTableHtml(job) {
   const retention = storageRetentionFromJob(job);
-  const rows = ['Daily', 'Weekly', 'Monthly', 'Yearly'].map((period) => {
+  if (retention.mode === 'all') return `<p class="status-message warning">${escHtml(storageT('wizard.retentionAllSummary'))}</p>`;
+  if (retention.mode === 'last') return `<p>${escHtml(storageT('wizard.retentionLastSummary', {count: retention.last}))}</p>`;
+  const rows = ['Hourly', 'Daily', 'Weekly', 'Monthly', 'Yearly'].map((period) => {
     const value = storageT(`storage.repositoryRetention${period}`, { count: retention[period.toLowerCase()] || '0' });
     const limit = storageT(`storage.repositoryRetention${period}Limit`);
     return `<tr><td>${escHtml(value)}</td><td>${escHtml(limit)}</td></tr>`;
   }).join('');
-  return `<table class="retention-table storage-maintenance-retention-table">
+  return `${retention.within ? `<p>${escHtml(storageT('wizard.retentionWithinSummary', {count: retention.within}))}</p>` : ''}<table class="retention-table storage-maintenance-retention-table">
     <caption>${escHtml(storageT('storage.repositoryMaintenanceRetention'))}</caption>
     <thead><tr><th scope="col">${escHtml(storageT('storage.repositoryRetentionPoints'))}</th><th scope="col">${escHtml(storageT('storage.repositoryRetentionMaximum'))}</th></tr></thead>
     <tbody>${rows}</tbody>
@@ -216,6 +222,8 @@ function updateStorageMaintenanceRetentionPreview() {
   pending.selectedJobKey = String(job?.key || selectedJobKey || '').trim();
   const preview = document.getElementById('storage-maintenance-retention-preview');
   if (preview) preview.innerHTML = storageMaintenancePruneDetailsHtml(pending.repo || {}, job);
+  const start = document.getElementById('storage-maintenance-confirm-start-btn');
+  if (start) start.disabled = !job || storageRetentionFromJob(job).mode === 'all';
 }
 
 function storageName(repo) {
@@ -562,7 +570,7 @@ function renderStorageMaintenanceCard(repo, key, { withAction = false, job = nul
   const repositoryKey = storageRepositoryKey(repo);
   const action = key === 'verify_data' ? 'check' : key;
   const mode = key === 'verify_data' ? 'verify_data' : 'quick';
-  const disabled = key === 'prune' && !job ? ' disabled' : '';
+  const disabled = key === 'prune' && (!job || (storageRetentionFromJob(job).mode === 'all' && !storageJobsForRepository(repo).some(j => storageRetentionFromJob(j).mode !== 'all'))) ? ' disabled' : '';
   const details = Array.isArray(result?.details) ? result.details : [];
   const deletedArchives = Array.isArray(result?.deleted_archives) ? result.deleted_archives : [];
   const userHint = result?.failure_code === 'borg_ssh_connection_interrupted'
@@ -1695,7 +1703,7 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
     const repo = storageRepositories(storageState.data || {})
       .find((row) => storageRepositoryKey(row) === String(repositoryKey || ''));
     const jobs = action === 'prune' && repo ? storageJobsForRepository(repo) : [];
-    const job = repo ? (jobs[0] || storageJobForRepository(repo)) : null;
+    const job = repo ? (jobs.find(j => storageRetentionFromJob(j).mode !== 'all') || jobs[0] || storageJobForRepository(repo)) : null;
     const resultKey = action === 'check' && mode === 'verify_data' ? 'verify_data' : action;
     const confirmKey = action === 'prune'
       ? 'storage.repositoryPruneConfirm'
@@ -1709,7 +1717,7 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
       ? `<div id="storage-maintenance-retention-preview">${storageMaintenancePruneDetailsHtml(repo || {}, job)}</div>`
       : '';
     const selector = action === 'prune' && jobs.length > 1
-      ? `<label class="ui-field storage-maintenance-retention-source"><span>${escHtml(storageT('storage.repositoryMaintenanceSelectRetentionSource'))}</span><select id="storage-maintenance-retention-job" class="form-select">${jobs.map((item) => `<option value="${escHtml(String(item.key || ''))}">${escHtml(storageJobName(repo || {}, item) || String(item.key || ''))} - ${escHtml(storageArchiveFilterFromJob(item) || '-')}</option>`).join('')}</select><small>${escHtml(storageT('storage.repositoryMaintenanceMultipleJobsHint'))}</small></label>`
+      ? `<label class="ui-field storage-maintenance-retention-source"><span>${escHtml(storageT('storage.repositoryMaintenanceSelectRetentionSource'))}</span><select id="storage-maintenance-retention-job" class="form-select">${jobs.map((item) => `<option value="${escHtml(String(item.key || ''))}"${storageRetentionFromJob(item).mode === 'all' ? ' disabled' : ''}${item.key === job?.key ? ' selected' : ''}>${escHtml(storageJobName(repo || {}, item) || String(item.key || ''))} - ${escHtml(storageArchiveFilterFromJob(item) || '-')}</option>`).join('')}</select><small>${escHtml(storageT('storage.repositoryMaintenanceMultipleJobsHint'))}</small></label>`
       : '';
     if (info) info.innerHTML = `<div class="modal-info-item warning"><div class="modal-info-text"><strong>${escHtml(storageRepositoryTitle(repo || {}, job))}</strong><br>${escHtml(storageT('storage.repositoryMaintenanceConfirmAction', { action: storageMaintenanceTitle(resultKey) }))}${pruneDetails}${selector}</div></div>`;
     storageState.maintenanceConfirmation = {
@@ -1719,6 +1727,8 @@ function openStorageMaintenanceConfirm(repositoryKey, action, mode) {
       repo: repo || {},
       jobs,
     };
+    const start = document.getElementById('storage-maintenance-confirm-start-btn');
+    if (start) start.disabled = action === 'prune' && (!job || storageRetentionFromJob(job).mode === 'all');
     modal.classList.remove('hidden');
     storageState.maintenanceCloseSnapshot = storageModalSnapshot('storage-maintenance-confirm-modal');
   });

@@ -1792,6 +1792,12 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from repositories_api import delete_job_metadata_transaction
         deleted_metadata = bool(delete_job_metadata_transaction(self.config, metadata_paths, job_key))
 
+        from inventory_store import inventory_lock
+        from job_exclusions import cleanup_files
+        for jobs_dir in jobs_meta_dirs:
+            with inventory_lock(jobs_dir.parent):
+                cleanup_files(jobs_dir, job_key)
+
         delete_artifacts = bool(body.get("delete_artifacts", False))
 
         # Historical filenames remain unchanged; ownership lives in the payload.

@@ -19,12 +19,5 @@ def explicit_job_settings(meta: dict) -> tuple[str, dict[str, str]]:
     source = meta.get("retention")
     if not isinstance(source, dict):
         raise JobSettingsError("Job retention is missing. Edit and save the job settings.")
-    retention = {}
-    for period in DEFAULT_RETENTION:
-        value = str(source.get(period, "")).strip()
-        if not re.fullmatch(r"\d+", value):
-            raise JobSettingsError(f"Job retention for {period} must be a non-negative whole number.")
-        retention[period] = value
-    if not any(int(value) for value in retention.values()):
-        raise JobSettingsError("At least one job retention rule must be greater than zero.")
-    return compression, retention
+    from runtime.lib.retention_policy import normalize_retention
+    return compression, normalize_retention(source)
