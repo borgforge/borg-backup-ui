@@ -6,6 +6,10 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #512 - consistent repository archive counts
+- Use the archive-list total for the repository tab, overview and list, including zero and limited lists. Keep stored repository info as the initial fallback without modifying its timestamps, metrics or persistent data.
+- Reload the visible archive list when refreshing Repositories. Invalidate its cached inventory after repository-info refresh and maintenance, avoid a duplicate reload after archive deletion, and reject superseded archive responses. Failed refreshes retain the last known count and remain retryable.
+
 ### Issues #459, #469 and #470 - job retention and exclusions
 - Use one normalized retention policy for wizard saves, imports, backup execution and manual repository prune. Add tiered hourly/within rules, last-X and keep-all modes. Inactive modes do not supply Borg options. Reject empty policies and time-window-only policies; require an explicit count rule without silently inserting a fallback.
 - Explain the current mode and deletion consequences in German/English info dialogs. Keep wizard height and entered values unchanged. Maintenance logs show the current-prefix filter and effective prune arguments together once, without a duplicate policy line; keep-all logs why prune is disabled while preserving compact and due checks.

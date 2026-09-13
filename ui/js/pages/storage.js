@@ -292,6 +292,9 @@ async function refreshStorage() {
     storageState.maintenanceState = maintenanceRes.ok ? await maintenanceRes.json() : { running: false };
     storageState.loaded = true;
     renderStorage(storageState.data);
+    if (storageState.selectedTab === 'archives' && storageState.selectedRepositoryKey) {
+      await loadRepositoryArchives(storageState.selectedRepositoryKey, true);
+    }
     if (storageState.selectedTab === 'management' && storageState.selectedRepositoryKey) {
       await loadRepositoryLifecycle(storageState.selectedRepositoryKey, true);
     }
@@ -325,6 +328,16 @@ function renderStorage(data) {
 
 function storageRepositoryKey(repo) {
   return String(repo?.repository_key || repo?.conf_key || repo?.path_raw || '').trim();
+}
+
+function storageRepositoryArchiveCount(repo) {
+  const inventory = storageState.archiveCache[storageRepositoryKey(repo)]?.data;
+  const rawCount = inventory
+    ? (inventory.archive_count ?? (Array.isArray(inventory.archives) ? inventory.archives.length : null))
+    : repo?.repository_stats?.archives_count;
+  if (rawCount === null || rawCount === undefined || rawCount === '') return null;
+  const count = Number(rawCount);
+  return Number.isSafeInteger(count) && count >= 0 ? count : null;
 }
 
 function storageRepositoryStatus(repo) {
@@ -627,7 +640,7 @@ function renderStorageRepositoryArchives(repo) {
   if (!archives.length) return `<div class="storage-repository-empty-state"><p>${storageT('storage.repositoryNoArchives')}</p></div>`;
   const browser = storageState.archiveBrowser.repositoryKey === key ? storageState.archiveBrowser : null;
   const canDelete = cache.data.can_delete === true && !!cache.data.repository_id;
-  return `<div class="storage-archive-toolbar"><strong>${storageCount(cache.data.archive_count || archives.length, 'storage.archiveCountOne', 'storage.archiveCountMany')}</strong><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-archives" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
+  return `<div class="storage-archive-toolbar"><strong>${storageCount(storageRepositoryArchiveCount(repo) ?? archives.length, 'storage.archiveCountOne', 'storage.archiveCountMany')}</strong><button class="btn btn-secondary btn-sm" data-storage-action="refresh-repository-archives" data-repository-key="${escHtml(key)}">${storageT('storage.refresh')}</button></div>
     <p class="storage-archive-intro">${escHtml(storageT('storage.repositoryArchiveBrowseHint'))}</p>
     <div class="storage-archive-layout ${browser?.archive ? 'has-browser' : ''}">
       <div class="storage-archive-list ${canDelete ? 'can-delete' : ''}"><header><span></span><strong>${storageT('storage.repositoryArchiveName')}</strong><strong>${storageT('storage.repositoryArchiveCreated')}</strong><span></span></header>${archives.map((archive) => {
@@ -714,7 +727,7 @@ async function confirmRepositoryArchiveDelete() {
     // selection now as well, so deleted files cannot remain selected there.
     if (typeof restoreClearArchives === 'function') restoreClearArchives();
     await refreshStorage();
-    await loadRepositoryArchives(pending.repositoryKey, true);
+    await loadRepositoryArchives(pending.repositoryKey);
     showMsg('storage-message', result.refresh_warning ? 'warning' : 'success',
       storageT(result.refresh_warning ? 'storage.archiveDeletedRefreshWarning' : 'storage.archiveDeleted'));
   } catch (error) {
@@ -878,10 +891,10 @@ function renderStorageRepositoryWorkspace(repo, job) {
     ? storageState.selectedTab
     : 'overview';
   storageState.selectedTab = selected;
-  const archiveCount = Number(repo?.repository_stats?.archives_count || 0);
+  const archiveCount = storageRepositoryArchiveCount(repo);
   const tabs = [
     ['overview', storageT('storage.repositoryTabOverview')],
-    ['archives', `${storageT('storage.repositoryTabArchives')} ${archiveCount ? `<b>${archiveCount}</b>` : ''}`],
+    ['archives', `${storageT('storage.repositoryTabArchives')} ${archiveCount !== null ? `<b>${archiveCount}</b>` : ''}`],
     ['maintenance', storageT('storage.repositoryTabMaintenance')],
     ['management', storageT('storage.repositoryTabManagement')],
   ];
@@ -900,18 +913,22 @@ function renderStorageRepositoryWorkspace(repo, job) {
 
 async function loadRepositoryArchives(repositoryKey, force = false) {
   const key = String(repositoryKey || '').trim();
-  if (!key || (!force && storageState.archiveCache[key])) return;
-  storageState.archiveCache[key] = { loading: true };
+  const previous = storageState.archiveCache[key];
+  if (!key || (!force && (previous?.loading || (previous?.data && !previous.error)))) return;
+  const request = { loading: true, data: previous?.data };
+  storageState.archiveCache[key] = request;
   if (storageState.data && storageState.selectedRepositoryKey === key) renderStorage(storageState.data);
   try {
     const response = await fetch(`/api/repositories/archives?repository_key=${encodeURIComponent(key)}&limit=100`);
     const data = await response.json();
     if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    if (storageState.archiveCache[key] !== request) return;
     storageState.archiveCache[key] = { loading: false, data };
   } catch (error) {
-    storageState.archiveCache[key] = { loading: false, error: error.message || storageT('storage.error') };
+    if (storageState.archiveCache[key] !== request) return;
+    storageState.archiveCache[key] = { loading: false, data: previous?.data, error: error.message || storageT('storage.error') };
   }
-  if (storageState.data && storageState.selectedRepositoryKey === key && storageState.selectedTab === 'archives') renderStorage(storageState.data);
+  if (storageState.data && storageState.selectedRepositoryKey === key) renderStorage(storageState.data);
 }
 
 async function loadRepositoryLifecycle(repositoryKey, force = false) {
@@ -965,7 +982,7 @@ function renderRepositoryStats(repo) {
     ${storageDetailItem('storage.repositoryCompressedSize', storageFormatBytes(stats.total_csize))}
     ${storageDetailItem('storage.repositoryDeduplicatedSize', storageFormatBytes(unique))}
     ${storageDetailItem('storage.repositorySaving', saving)}
-    ${storageDetailItem('storage.repositoryArchiveCount', String(stats.archives_count ?? '—'))}
+    ${storageDetailItem('storage.repositoryArchiveCount', String(storageRepositoryArchiveCount(repo) ?? '—'))}
   </div>`;
 }
 
@@ -1190,6 +1207,7 @@ async function refreshRepositoryInfo(repositoryKey, button) {
       }
       throw new Error(apiErrorMessage(data, response.status));
     }
+    delete storageState.archiveCache[repositoryKey];
     await refreshStorage();
     showMsg('storage-message', 'success', storageT('storage.repositoryInfoUpdated'));
   } catch (error) {
@@ -1918,12 +1936,14 @@ async function checkRun(repositoryKey, action = 'check', mode = 'quick') {
 
   es.addEventListener('done', async () => {
     es.close(); checkState.es = null;
+    delete storageState.archiveCache[repositoryKey];
     await refreshStorage();
   });
 
   es.addEventListener('error', async (e) => {
     if (e.data) showMsg('storage-message', 'error', storageT('storage.check.logError', { message: e.data }));
     es.close(); checkState.es = null;
+    delete storageState.archiveCache[repositoryKey];
     await refreshStorage();
   });
 }
