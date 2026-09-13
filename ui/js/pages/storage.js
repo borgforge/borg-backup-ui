@@ -643,15 +643,23 @@ function openRepositoryArchiveDelete(repositoryKey, name, trigger) {
     repositoryKey, repositoryId: cache.repository_id, archive: { ...archive }, trigger, running: false,
   };
   document.getElementById('repository-archive-delete-info').innerHTML = `<dl class="storage-archive-delete-details">
-    <div><dt>${escHtml(storageT('storage.repositoryDisplayNameLabel'))}</dt><dd>${escHtml(storageRepositoryTitle(repo, storageJobForRepository(repo)))}</dd></div>
-    <div><dt>${escHtml(storageT('storage.repositoryPathLabel'))}</dt><dd>${escHtml(repo.path_display || repo.path_raw || '')}</dd></div>
-    <div><dt>${escHtml(storageT('storage.repositoryArchiveName'))}</dt><dd>${escHtml(archive.name)}</dd></div>
+    <div><dt>${escHtml(storageT('storage.repository'))}</dt><dd><strong>${escHtml(storageRepositoryTitle(repo, storageJobForRepository(repo)))}</strong></dd></div>
+    <div><dt>${escHtml(storageT('storage.repositoryPathLabel'))}</dt><dd class="storage-archive-delete-path">${escHtml(repo.path_display || repo.path_raw || '')}</dd></div>
+    <div><dt>${escHtml(storageT('storage.repositoryArchiveName'))}</dt><dd><strong>${escHtml(archive.name)}</strong></dd></div>
     <div><dt>${escHtml(storageT('storage.repositoryArchiveCreated'))}</dt><dd>${escHtml(storageFormatDateTime(archive.start))}</dd></div>
   </dl>`;
   hideEl('repository-archive-delete-message');
-  document.getElementById('repository-archive-delete-confirm-btn').disabled = false;
+  document.getElementById('repository-archive-delete-phrase-input').value = '';
+  updateRepositoryArchiveDeleteConfirmation();
   modal.classList.remove('hidden');
   document.getElementById('repository-archive-delete-cancel-btn')?.focus();
+}
+
+function updateRepositoryArchiveDeleteConfirmation() {
+  const pending = storageState.archiveDeleteConfirmation;
+  const phrase = document.getElementById('repository-archive-delete-phrase-input')?.value;
+  const button = document.getElementById('repository-archive-delete-confirm-btn');
+  if (button) button.disabled = !pending || pending.running || phrase !== 'DELETE';
 }
 
 function closeRepositoryArchiveDelete() {
@@ -659,17 +667,20 @@ function closeRepositoryArchiveDelete() {
   if (pending?.running) return;
   document.getElementById('repository-archive-delete-modal')?.classList.add('hidden');
   storageState.archiveDeleteConfirmation = null;
+  document.getElementById('repository-archive-delete-phrase-input').value = '';
+  updateRepositoryArchiveDeleteConfirmation();
   if (pending?.trigger?.isConnected) pending.trigger.focus();
   else document.querySelector('[data-storage-action="refresh-repository-archives"]')?.focus();
 }
 
 async function confirmRepositoryArchiveDelete() {
   const pending = storageState.archiveDeleteConfirmation;
-  if (!pending || pending.running) return;
+  const phrase = document.getElementById('repository-archive-delete-phrase-input')?.value;
+  if (!pending || pending.running || phrase !== 'DELETE') return;
   const modal = document.getElementById('repository-archive-delete-modal');
   pending.running = true;
   modal?.setAttribute('aria-busy', 'true');
-  modal?.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  modal?.querySelectorAll('button, input').forEach(control => { control.disabled = true; });
   showMsg('repository-archive-delete-message', 'info', storageT('storage.archiveDeleting'));
   try {
     const response = await fetch('/api/repositories/archive', {
@@ -681,6 +692,7 @@ async function confirmRepositoryArchiveDelete() {
         expected_archive_id: pending.archive.id,
         expected_repository_id: pending.repositoryId,
         confirmed: true,
+        confirmation_phrase: phrase,
       }),
     });
     const result = await response.json();
@@ -702,7 +714,8 @@ async function confirmRepositoryArchiveDelete() {
   } finally {
     pending.running = false;
     modal?.removeAttribute('aria-busy');
-    modal?.querySelectorAll('button').forEach(button => { button.disabled = false; });
+    modal?.querySelectorAll('button, input').forEach(control => { control.disabled = false; });
+    updateRepositoryArchiveDeleteConfirmation();
   }
 }
 

@@ -1194,14 +1194,18 @@
       <button type="button" class="modal-close" id="repository-archive-delete-close-btn" data-i18n-aria-label="storage.check.close" aria-label="Schließen">×</button>
     </div>
     <div class="modal-body">
-      <p id="repository-archive-delete-description" data-i18n="storage.archiveDeleteWarning">Dieses Archiv wird endgültig gelöscht und kann danach nicht mehr wiederhergestellt werden.</p>
+      <p id="repository-archive-delete-description" class="status-message error" data-i18n="storage.archiveDeleteWarning">Dieses Archiv wird endgültig gelöscht und kann danach nicht mehr wiederhergestellt werden.</p>
       <div id="repository-archive-delete-info"></div>
       <p class="storage-archive-delete-note" data-i18n="storage.archiveDeleteCompactHint">Speicherplatz wird erst durch Compact unter Wartung freigegeben. Bisherige Laufprotokolle und History-Einträge bleiben erhalten.</p>
+      <div class="form-group storage-archive-delete-confirmation">
+        <label class="form-label" for="repository-archive-delete-phrase-input" data-i18n="storage.repositoryConfirmDeletePhrase">Zur Bestätigung DELETE eingeben</label>
+        <input class="form-input mono" type="text" id="repository-archive-delete-phrase-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
       <div id="repository-archive-delete-message" class="hidden" role="status" aria-live="polite"></div>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-secondary" id="repository-archive-delete-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
-      <button type="button" class="btn-danger" id="repository-archive-delete-confirm-btn" data-i18n="storage.archiveDeleteConfirm">Archiv endgültig löschen</button>
+      <button type="button" class="btn-danger" id="repository-archive-delete-confirm-btn" data-i18n="storage.archiveDeleteConfirm" disabled>Archiv endgültig löschen</button>
     </div>
   </div>
 </div>

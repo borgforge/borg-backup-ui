@@ -150,6 +150,7 @@
     document.getElementById('repository-archive-delete-close-btn')?.addEventListener('click', closeRepositoryArchiveDelete);
     document.getElementById('repository-archive-delete-cancel-btn')?.addEventListener('click', closeRepositoryArchiveDelete);
     document.getElementById('repository-archive-delete-confirm-btn')?.addEventListener('click', confirmRepositoryArchiveDelete);
+    document.getElementById('repository-archive-delete-phrase-input')?.addEventListener('input', updateRepositoryArchiveDeleteConfirmation);
     document.getElementById('repository-lifecycle-close-btn')?.addEventListener('click', closeRepositoryLifecycle);
     document.getElementById('repository-lifecycle-cancel-btn')?.addEventListener('click', closeRepositoryLifecycle);
     document.getElementById('repository-lifecycle-confirm-btn')?.addEventListener('click', confirmRepositoryLifecycle);

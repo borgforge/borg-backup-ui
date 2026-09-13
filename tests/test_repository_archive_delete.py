@@ -26,9 +26,16 @@ REPO_ID = 'b' * 64
 ACTOR = {'actor': 'admin-user', 'actor_role': 'admin', 'auth_method': 'session'}
 
 
+def test_archive_delete_ui_confirmation():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node.js is required for archive deletion UI tests')
+    subprocess.run([node, 'tests/repository_archive_delete_ui.cjs'], cwd=ROOT, check=True)
+
+
 def _payload(name='backup-one'):
     return {'repository_key': 'repo_test', 'archive': name, 'expected_archive_id': ARCHIVE_ID,
-            'expected_repository_id': REPO_ID, 'confirmed': True}
+            'expected_repository_id': REPO_ID, 'confirmed': True, 'confirmation_phrase': 'DELETE'}
 
 
 @pytest.fixture
@@ -74,12 +81,23 @@ def test_exact_archive_deleted_under_resource_lock_and_audited(context, tmp_path
 @pytest.mark.parametrize('change', [
     {'archive': ''}, {'archive': 'bad::name'}, {'archive': 'bad\nname'},
     {'expected_archive_id': ''}, {'expected_repository_id': ''}, {'confirmed': False}, {'confirmed': 'true'},
+    {'confirmation_phrase': None}, {'confirmation_phrase': ''}, {'confirmation_phrase': 'delete'},
+    {'confirmation_phrase': ' DELETE '}, {'confirmation_phrase': True},
 ])
 def test_incomplete_confirmation_never_runs_borg(context, monkeypatch, change):
     config, _ = context
     monkeypatch.setattr(repos.subprocess, 'run', lambda *_a, **_k: pytest.fail('Borg must not run'))
     with pytest.raises(ValueError):
         repos.delete_repository_archive(config, {**_payload(), **change})
+
+
+def test_missing_confirmation_phrase_never_accesses_repository(context, monkeypatch):
+    config, _ = context
+    payload = _payload()
+    del payload['confirmation_phrase']
+    monkeypatch.setattr(repos, '_repository_access', lambda *_a, **_k: pytest.fail('Repository must not be accessed'))
+    with pytest.raises(ValueError, match='confirmation phrase DELETE'):
+        repos.delete_repository_archive(config, payload)
 
 
 @pytest.mark.parametrize('change', [

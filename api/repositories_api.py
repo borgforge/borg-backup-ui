@@ -2052,6 +2052,8 @@ def delete_repository_archive(
         raise ValueError("Archive and repository identity confirmation is required")
     if payload.get("confirmed") is not True:
         raise ValueError("Explicit archive deletion confirmation is required")
+    if payload.get("confirmation_phrase") != "DELETE":
+        raise ValueError("Archive deletion requires the confirmation phrase DELETE")
     repository = _repository_by_key(config, str(payload.get("repository_key") or ""))
     key = str(repository["repository_key"])
     details = {"archive": archive, "archive_id": expected_id}
