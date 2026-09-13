@@ -319,7 +319,7 @@
     document.getElementById('wiz-exclude-file-remove')?.addEventListener('click', wizardRemoveExclusionFile);
     bindWizardPolicyHelp();
     ['hourly', 'daily', 'weekly', 'monthly', 'yearly', 'last', 'within-count', 'within-unit'].forEach((period) => {
-      document.getElementById(`wiz-keep-${period}`)?.addEventListener('input', () => wizardClearError(5));
+      document.getElementById(`wiz-keep-${period}`)?.addEventListener('input', () => wizardClearError(6));
     });
     document.getElementById('wiz-description-help-btn')?.addEventListener('click', openWizardDescriptionHelp);
     document.getElementById('wizard-help-close-btn')?.addEventListener('click', closeWizardDescriptionHelp);

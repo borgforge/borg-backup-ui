@@ -758,6 +758,7 @@
     "loadFailed": "Could not load wizard: {message}",
     "stepBasics": "Basics",
     "stepSourcesTarget": "Sources & target",
+    "stepExclusions": "Exclusions",
     "stepRuntime": "Runtime",
     "stepDocker": "Docker",
     "stepVms": "VMs",

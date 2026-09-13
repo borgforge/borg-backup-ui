@@ -217,8 +217,8 @@ function wizardRenderRuntimeControls() {
   const dockerEnabled = !!document.getElementById('wiz-use-docker')?.checked;
   const vmEnabled = !!document.getElementById('wiz-use-vm')?.checked;
   _wizardPruneMissingDockerSelections();
-  document.getElementById('wstep-dot-3')?.classList.toggle('wizard-step-skipped', !dockerEnabled);
-  document.getElementById('wstep-dot-4')?.classList.toggle('wizard-step-skipped', !vmEnabled);
+  document.getElementById('wstep-dot-4')?.classList.toggle('wizard-step-skipped', !dockerEnabled);
+  document.getElementById('wstep-dot-5')?.classList.toggle('wizard-step-skipped', !vmEnabled);
   _wizardRenderRuntimeSelection('docker');
   _wizardRenderRuntimeSelection('vm');
   _wizardUpdateRuntimeCount('docker');
@@ -605,7 +605,6 @@ function openWizard(existingJobKey = '') {
   wizardState.excludeFileError = false;
   document.getElementById('wiz-exclude-markers').value = '';
   document.getElementById('wiz-exclude-file').value = '';
-  document.getElementById('wiz-advanced-exclusions').open = false;
   wizardRenderExclusions();
   document.getElementById('wiz-keep-hourly').value = '0';
   document.getElementById('wiz-keep-last').value = '3';
@@ -690,9 +689,8 @@ function _wizardFillFromJob(job) {
   wizardState.excludeFile = job.exclude_from || null;
   wizardState.excludeFileError = !!job.exclude_from_error;
   document.getElementById('wiz-exclude-markers').value = (job.exclude_if_present || []).join('\n');
-  document.getElementById('wiz-advanced-exclusions').open = !!(job.exclude_from || job.exclude_if_present?.length);
   wizardRenderExclusions();
-  if (wizardState.excludeFileError) _wizardShowError(2, wizardT('wizard.exclusionInvalid'));
+  if (wizardState.excludeFileError) _wizardShowError(3, wizardT('wizard.exclusionInvalid'));
   document.getElementById('wiz-keep-hourly').value = job.keep_hourly || '0';
   document.getElementById('wiz-keep-last').value = Number(job.keep_last) > 0 ? job.keep_last : '3';
   const within = String(job.keep_within || '').match(/^([1-9][0-9]*)([Hdwmy])$/);
@@ -810,7 +808,7 @@ function _renderWizardStep(n) {
 
 function _wizardUpdateStepNavigation() {
   document.getElementById('wizard-next-btn').disabled = !wizardState.jobId;
-  [1,2,3,4,5,7,8,9].forEach((step) => {
+  [1,2,3,4,5,6,7,8,9].forEach((step) => {
     const dot = document.getElementById(`wstep-dot-${step}`);
     if (!dot) return;
     const skipped = !_wizardStepEnabled(step);
@@ -822,9 +820,8 @@ function _wizardUpdateStepNavigation() {
 }
 
 function _wizardStepEnabled(step) {
-  if (step === 3) return _wizardRuntimeMode('docker') !== 'none';
-  if (step === 4) return _wizardRuntimeMode('vm') !== 'none';
-  if (step === 6) return false;
+  if (step === 4) return _wizardRuntimeMode('docker') !== 'none';
+  if (step === 5) return _wizardRuntimeMode('vm') !== 'none';
   return true;
 }
 
@@ -1060,14 +1057,14 @@ function wizardExcludeBelowSource(path) {
 function wizardAddExcludePath(value) {
   const path = String(value || '').trim().replace(/\/+$/, '');
   if (!path || !wizardIsAllowedSourcePath(path)) {
-    _wizardShowError(2, wizardT('wizard.validationExcludeAbsolute'));
+    _wizardShowError(3, wizardT('wizard.validationExcludeAbsolute'));
     return false;
   }
   if (!wizardExcludeBelowSource(path)) {
-    _wizardShowError(2, wizardT('wizard.validationExcludeBelowSource'));
+    _wizardShowError(3, wizardT('wizard.validationExcludeBelowSource'));
     return false;
   }
-  wizardClearError(2);
+  wizardClearError(3);
   if (!(wizardState.excludePaths || []).includes(path)) wizardState.excludePaths.push(path);
   document.getElementById('wiz-exclude-path-input').value = '';
   wizardCancelExcludeSuggestRequest();
@@ -1282,22 +1279,26 @@ function _wizardValidate(step) {
     if (!p.storage_key) { _wizardShowError(2, wizardT('wizard.validationStorageTarget')); return false; }
     if (!p.repository_key) { _wizardShowError(2, wizardT('wizard.validationRepositorySelect')); return false; }
   }
-  if (step === 3) {
-    if (['selected', 'except_selected'].includes(p.docker_control.mode) && !p.docker_control.selected.length) {
-      _wizardShowError(3, wizardT('wizard.validationDockerSelection'));
-      return false;
-    }
+  if (step === 3 && wizardState.excludeFileError) {
+    _wizardShowError(3, wizardT('wizard.exclusionInvalid'));
+    return false;
   }
   if (step === 4) {
-    if (p.vm_control.mode === 'selected' && !p.vm_control.selected.length) {
-      _wizardShowError(4, wizardT('wizard.validationVmSelection'));
+    if (['selected', 'except_selected'].includes(p.docker_control.mode) && !p.docker_control.selected.length) {
+      _wizardShowError(4, wizardT('wizard.validationDockerSelection'));
       return false;
     }
   }
   if (step === 5) {
+    if (p.vm_control.mode === 'selected' && !p.vm_control.selected.length) {
+      _wizardShowError(5, wizardT('wizard.validationVmSelection'));
+      return false;
+    }
+  }
+  if (step === 6) {
     const retentionError = _wizardRetentionValidationKey(p);
     if (retentionError) {
-      _wizardShowError(5, wizardT(retentionError));
+      _wizardShowError(6, wizardT(retentionError));
       return false;
     }
   }
@@ -1762,7 +1763,7 @@ function wizardUpdateRetentionMode(mode) {
     panel?.classList.toggle('hidden', value !== selected);
     panel?.querySelectorAll('input, select').forEach(el => { el.disabled = value !== selected; });
   }
-  wizardClearError(5);
+  wizardClearError(6);
 }
 
 function wizardRetentionInterval(value) {
@@ -1818,9 +1819,9 @@ async function wizardUploadExclusionFile(event) {
     wizardState.excludeFile = {original_name: file.name, size: bytes.length, content_b64: btoa(binary), pending: true};
     wizardState.excludeFileError = false;
     wizardRenderExclusions();
-    wizardClearError(2);
+    wizardClearError(3);
   } catch (_) {
-    _wizardShowError(2, wizardT('wizard.exclusionInvalid'));
+    _wizardShowError(3, wizardT('wizard.exclusionInvalid'));
   } finally { event.target.value = ''; }
 }
 
@@ -1838,5 +1839,5 @@ function wizardRemoveExclusionFile() {
   wizardState.excludeFile = null;
   wizardState.excludeFileError = false;
   wizardRenderExclusions();
-  wizardClearError(2);
+  wizardClearError(3);
 }

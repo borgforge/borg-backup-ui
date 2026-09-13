@@ -758,6 +758,7 @@
     "loadFailed": "Wizard laden fehlgeschlagen: {message}",
     "stepBasics": "Grunddaten",
     "stepSourcesTarget": "Quellen & Ziel",
+    "stepExclusions": "Ausschlüsse",
     "stepRuntime": "Laufzeit",
     "stepDocker": "Docker",
     "stepVms": "VMs",

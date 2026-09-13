@@ -208,7 +208,7 @@ Die Typ-ID bildet zusammen mit dem Standort den technischen Job-Schlüssel, beis
 
 #### Schritt 2: Quellen & Ziel
 
-Die kompakte Ansicht zeigt links **Zu sichernde Ordner** und **Ausschlüsse** und rechts das **Backup-Ziel**. Links legen Sie fest, welche Ordner oder Dateien in das Backup aufgenommen werden und welche Unterordner oder Dateien ausgelassen werden sollen. Rechts werden Speichertyp, konkretes Speicherziel, ein vorhandenes Repository und die Job-Kompression gewählt. Die Repository-Liste zeigt ausschließlich Repositorys, die zum ausgewählten Speicherziel gehören. Repository-Pfade werden im Job nicht mehr frei eingegeben.
+Die kompakte Ansicht zeigt links **Zu sichernde Ordner** und rechts das **Backup-Ziel**. Links legen Sie fest, welche Ordner oder Dateien in das Backup aufgenommen werden. Ausschlüsse werden im nächsten Schritt festgelegt. Rechts werden Speichertyp, konkretes Speicherziel, ein vorhandenes Repository und die Job-Kompression gewählt. Die Repository-Liste zeigt ausschließlich Repositorys, die zum ausgewählten Speicherziel gehören. Repository-Pfade werden im Job nicht mehr frei eingegeben.
 
 Typische Ordner, die gesichert werden:
 
@@ -221,9 +221,22 @@ Typische Ordner, die gesichert werden:
 
 Eine vollständig eingegebene, gültige Quelle kann mit **Enter** übernommen werden, auch wenn die Autovervollständigung weitere Unterordner anzeigt. Share-Wurzeln wie `/mnt/user/appdata` sind erlaubt, sofern sie existieren. Ist die gewählte Quelle selbst ein Symlink oder liegt ein Teil ihres Pfads hinter einem Symlink, löst Borg Backup UI sie erst zur Laufzeit zum tatsächlichen Ziel auf und passt zugehörige Ausschlüsse entsprechend an. Im Job bleibt der vom Benutzer gewählte, verständliche Pfad gespeichert; die Auflösung wird im Laufprotokoll vermerkt.
 
+Beim Bearbeiten eines Jobs kann ein anderes vorhandenes Repository gewählt werden. Diese Änderung gilt nur für zukünftige Backups. Bestehende Archive werden nicht verschoben und sind danach über diesen Job in **Browse & Restore** nicht mehr erreichbar; der Wizard verlangt dafür eine ausdrückliche Bestätigung.
+
+#### Schritt 3: Ausschlüsse
+
+Der eigene Schritt **Ausschlüsse** zeigt Ausschlusspfade, Markerdateien und die Ausschlussdatei immer sichtbar an. Alle neun Wizard-Schritte behalten dieselbe Fenstergröße; Docker und VMs werden bei ausgeschalteter Steuerung übersprungen. Auf kleinen Bildschirmen oder bei langen Listen bleibt Scrollen möglich.
+
 Ausschlüsse sind konkrete Dateien oder Verzeichnisse unterhalb eines ausgewählten Backup-Ordners. Sie werden nicht in das Borg-Archiv aufgenommen. Bei vielen Einträgen scrollen nur die Pfadlisten innerhalb ihres Bereichs.
 
-Beim Bearbeiten eines Jobs kann ein anderes vorhandenes Repository gewählt werden. Diese Änderung gilt nur für zukünftige Backups. Bestehende Archive werden nicht verschoben und sind danach über diesen Job in **Browse & Restore** nicht mehr erreichbar; der Wizard verlangt dafür eine ausdrückliche Bestätigung.
+Die erweiterten Regeln ergänzen die Ausschlusspfade und verändern keine Quelldateien oder vorhandenen Archive.
+
+- **Markerdateien (#469):** Ein Dateiname pro Zeile, Groß-/Kleinschreibung beachten. Wird z. B. `.nobackup` eingetragen und im Ordner `/mnt/user/data/cache` eine Datei dieses Namens angelegt, überspringt Borg diesen Ordner vollständig, einschließlich Unterordnern und Marker. Der Dateiinhalt ist unwichtig. Es werden höchstens 32 verschiedene Namen akzeptiert; keine Pfade.
+- **Ausschlussdatei (#470):** Eine UTF-8-Textdatei ohne BOM hochladen, maximal 64 KiB. Borg-Muster bleiben unverändert, etwa `fm:*.tmp`; Leerzeilen und mit `#` beginnende Kommentarzeilen werden ignoriert. Eine eigene Kopie wird beim Job gespeichert. Änderungen an der ursprünglichen Datei wirken erst nach erneutem Hochladen und Speichern. Herunterladen, Ersetzen und Entfernen sind möglich.
+
+Der Lauf verwendet eine private temporäre Kopie der hochgeladenen Datei. Wird die Job-Konfiguration währenddessen bearbeitet, verändert dies den laufenden Backup-Filter nicht. Eine fehlende oder beschädigte verwaltete Datei blockiert den Lauf, bevor das Backup startet. Der Systemzustand meldet den Fehler. Prüfen Sie nach Änderungen mit einem Testjob den tatsächlichen Archivinhalt.
+
+Neue Job-Exporte enthalten die verwaltete Ausschlussdatei. Bei erweiterten Regeln wird das Exportformat `bbui-job-bundle-v4` verwendet, damit ältere Versionen diese Einstellungen nicht stillschweigend ignorieren. Exporte im bisherigen UUID-Jobformat v3 bleiben importierbar. Bei einer manuellen Konfigurationssicherung das gesamte `config/jobs`-Verzeichnis einschließlich `exclusions` sichern. Die hochgeladenen Dateiinhalte werden nicht in Support-Pakete aufgenommen.
 
 #### Docker- und VM-Schritte
 
@@ -297,17 +310,6 @@ Werden Backups um 08:00 und 08:30 Uhr am selben Tag erstellt, wählt die Tagesre
 Nach einem erfolgreich erstellten Backup wird die gespeicherte Aufbewahrung angewendet. Der aktuelle Archivpräfix begrenzt Prune. Archive mit früheren Präfixen bleiben zusätzlich erhalten und zählen nicht zu X. Prune entfernt die nicht geschützten Archive; Compact gibt anschließend bereits ungenutzten Speicher frei. Das Lauf-Log nennt den Archivfilter und die tatsächlich verwendeten Borg-Aufbewahrungsparameter. Bei „Alle behalten“ protokolliert es das Überspringen von Prune.
 
 Das **Info-i** öffnet für jeden Modus und das Zeitfenster einen eigenen Dialog mit aktuellen Regeln, Erklärung, Beispiel und Löschwirkung. Die Wizard-Seite wird dadurch nicht höher. Schließen oder Escape führt ohne Verlust der Eingaben zurück.
-
-#### Erweiterte Ausschlüsse
-
-Unter **Quellen & Ziel > Erweiterte Ausschlüsse** stehen zwei zusätzliche Optionen. Beide ergänzen die bisherigen Ausschlusspfade und verändern keine Quelldateien oder vorhandenen Archive.
-
-- **Markerdateien (#469):** Ein Dateiname pro Zeile, Groß-/Kleinschreibung beachten. Wird z. B. `.nobackup` eingetragen und im Ordner `/mnt/user/data/cache` eine Datei dieses Namens angelegt, überspringt Borg diesen Ordner vollständig, einschließlich Unterordnern und Marker. Der Dateiinhalt ist unwichtig. Es werden höchstens 32 verschiedene Namen akzeptiert; keine Pfade.
-- **Ausschlussdatei (#470):** Eine UTF-8-Textdatei ohne BOM hochladen, maximal 64 KiB. Borg-Muster bleiben unverändert, etwa `fm:*.tmp`; Leerzeilen und mit `#` beginnende Kommentarzeilen werden ignoriert. Eine eigene Kopie wird beim Job gespeichert. Änderungen an der ursprünglichen Datei wirken erst nach erneutem Hochladen und Speichern. Herunterladen, Ersetzen und Entfernen sind möglich.
-
-Der Lauf verwendet eine private temporäre Kopie der hochgeladenen Datei. Wird die Job-Konfiguration währenddessen bearbeitet, verändert dies den laufenden Backup-Filter nicht. Eine fehlende oder beschädigte verwaltete Datei blockiert den Lauf, bevor das Backup startet. Der Systemzustand meldet den Fehler. Prüfen Sie nach Änderungen mit einem Testjob den tatsächlichen Archivinhalt.
-
-Neue Job-Exporte enthalten die verwaltete Ausschlussdatei. Bei erweiterten Regeln wird das Exportformat `bbui-job-bundle-v4` verwendet, damit ältere Versionen diese Einstellungen nicht stillschweigend ignorieren. Exporte im bisherigen UUID-Jobformat v3 bleiben importierbar. Bei einer manuellen Konfigurationssicherung das gesamte `config/jobs`-Verzeichnis einschließlich `exclusions` sichern. Die hochgeladenen Dateiinhalte werden nicht in Support-Pakete aufgenommen.
 
 #### Optionale Dateiaktivität im Live-Log
 

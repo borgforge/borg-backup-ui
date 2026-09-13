@@ -208,7 +208,7 @@ Together with the location, the type ID forms the technical job key, for example
 
 #### Step 2: Sources & Target
 
-The compact view shows **Folders to back up** and **Exclusions** on the left and the **Backup target** on the right. The left side defines which folders or files are included in the backup and which child folders or files are skipped. The right side selects storage type, the exact storage target, an existing repository, and job compression. The repository list only shows repositories belonging to the selected storage target. Repository paths are no longer entered freely in a job.
+The compact view shows **Folders to back up** on the left and the **Backup target** on the right. The left side defines which folders or files are included in the backup. Exclusions are configured in the next step. The right side selects storage type, the exact storage target, an existing repository, and job compression. The repository list only shows repositories belonging to the selected storage target. Repository paths are no longer entered freely in a job.
 
 Typical folders to back up:
 
@@ -221,9 +221,22 @@ Typical folders to back up:
 
 A complete and valid source can be accepted with **Enter** even while autocomplete shows child-directory suggestions. Share roots such as `/mnt/user/appdata` are allowed when they exist. If the selected source itself is a symlink, or a parent path passes through a symlink, Borg Backup UI resolves it to the real target only at run time and remaps related exclusions. The readable path selected by the user remains stored in the job; the resolution is recorded in the run log.
 
+When editing a job, a different existing repository can be selected. The change affects future backups only. Existing archives are not moved and are no longer reachable through this job in **Browse & Restore**; the wizard requires explicit confirmation.
+
+#### Step 3: Exclusions
+
+The dedicated **Exclusions** step always shows excluded paths, marker filenames and the exclusion file. All nine wizard steps keep the same window size; Docker and VMs are skipped when their controls are disabled. Small screens or long lists can still require scrolling.
+
 Exclusions are concrete files or directories below a selected backup folder. They are omitted from the Borg archive. With many entries, only the path lists scroll inside their section.
 
-When editing a job, a different existing repository can be selected. The change affects future backups only. Existing archives are not moved and are no longer reachable through this job in **Browse & Restore**; the wizard requires explicit confirmation.
+The advanced rules supplement the excluded paths without modifying source files or existing archives.
+
+- **Marker files (#469):** One case-sensitive filename per line. If you enter `.nobackup` and create that file inside `/mnt/user/data/cache`, Borg skips the whole folder, its subfolders and the marker. File contents do not matter. Up to 32 distinct names are allowed; paths are not.
+- **Exclusion file (#470):** Upload one UTF-8 text file without a BOM, up to 64 KiB. Borg patterns remain unchanged, for example `fm:*.tmp`; blank lines and comment lines starting with `#` are ignored. The job stores its own copy. Changes to the original file take effect only after uploading it again and saving. Downloading, replacing and removing the copy are supported.
+
+A running backup uses a private temporary copy of the uploaded file. Editing the job during a run does not change that run's filter. A missing or corrupt managed file blocks the run before backup starts and is reported in system health. After changes, use a test job to inspect the actual archive contents.
+
+New job exports include the managed exclusion file. Jobs using extended rules use export format `bbui-job-bundle-v4`, so older versions cannot silently ignore these settings. Previous UUID job bundles in v3 format remain importable. For manual configuration backups, include the entire `config/jobs` directory, including `exclusions`. Uploaded file contents are not included in support bundles.
 
 #### Docker and VM Steps
 
@@ -297,17 +310,6 @@ If backups are created at 08:00 and 08:30 on the same day, the daily rule normal
 After a backup has been created successfully, the saved retention policy is applied. Prune is restricted to the current archive prefix. Archives with previous prefixes remain in addition and do not count towards X. Prune removes unprotected archives; compact then reclaims space that is already unused. The run log records the archive filter and the actual Borg retention arguments. With “Keep all”, it records that prune is skipped.
 
 The **info button** opens a separate dialog for each mode and for the time window, showing current rules, an explanation, an example and the deletion effect. It does not increase the wizard page height. Close or Escape returns without losing input.
-
-#### Advanced Exclusions
-
-**Sources & Target > Advanced exclusions** offers two additional options. Both supplement the existing excluded paths without modifying source files or existing archives.
-
-- **Marker files (#469):** One case-sensitive filename per line. If you enter `.nobackup` and create that file inside `/mnt/user/data/cache`, Borg skips the whole folder, its subfolders and the marker. File contents do not matter. Up to 32 distinct names are allowed; paths are not.
-- **Exclusion file (#470):** Upload one UTF-8 text file without a BOM, up to 64 KiB. Borg patterns remain unchanged, for example `fm:*.tmp`; blank lines and comment lines starting with `#` are ignored. The job stores its own copy. Changes to the original file take effect only after uploading it again and saving. Downloading, replacing and removing the copy are supported.
-
-A running backup uses a private temporary copy of the uploaded file. Editing the job during a run does not change that run's filter. A missing or corrupt managed file blocks the run before backup starts and is reported in system health. After changes, use a test job to inspect the actual archive contents.
-
-New job exports include the managed exclusion file. Jobs using extended rules use export format `bbui-job-bundle-v4`, so older versions cannot silently ignore these settings. Previous UUID job bundles in v3 format remain importable. For manual configuration backups, include the entire `config/jobs` directory, including `exclusions`. Uploaded file contents are not included in support bundles.
 
 #### Optional File Activity in the Live Log
 

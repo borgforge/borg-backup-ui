@@ -110,13 +110,14 @@ A job connects sources to exactly one existing repository. Encryption belongs to
 ### Job Wizard
 
 1. **Basics:** Name, technical type, icon, and optional Docker/VM control.
-2. **Sources & Target:** Folders or files to back up, exclusions, storage type, storage target, repository, and compression.
-3. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards.
-4. **VMs:** Shut down all running or selected VMs and restart them afterwards.
-5. **Retention:** Tiered with an optional time window, last X archives, or keep all.
-6. **Description:** Clear description with optional Markdown.
-7. **Schedule:** Simple schedule or cron expression.
-8. **Flow Preview:** Final review of the planned workflow.
+2. **Sources & Target:** Folders or files to back up, storage type, storage target, repository, and compression.
+3. **Exclusions:** Paths, marker filenames and one uploaded exclusion file, shown together in a dedicated step.
+4. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards.
+5. **VMs:** Shut down all running or selected VMs and restart them afterwards.
+6. **Retention:** Tiered with an optional time window, last X archives, or keep all.
+7. **Description:** Clear description with optional Markdown.
+8. **Schedule:** Simple schedule or cron expression.
+9. **Flow Preview:** Final review of the planned workflow.
 
 > [!IMPORTANT] Retention values count periods containing backups. Choose “Tiered”, “Last X archives” or “Keep all”. A time window such as “all archives from the last 7 days” supplements count rules and cannot be used alone. `0` disables a rule. Empty policies and “last 0” are blocked. A small count can permit deletion of many older archives. The info button explains each strategy and its deletion effect without expanding the wizard.
 

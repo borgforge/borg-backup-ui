@@ -134,11 +134,11 @@ def test_retention_step_explains_periods_and_blocks_all_zero_in_both_languages()
         assert f'id="wiz-keep-{period}"' in index
 
     assert "function _wizardRetentionValidationKey(params)" in script
-    assert "if (step === 5)" in script
+    assert "if (step === 6)" in script
     assert "wizard.validationRetentionRequired" in script
     assert "wizard.previewRetention" in script
     assert "retention_all_zero" in script
-    assert "wizardClearError(5)" in bindings
+    assert "wizardClearError(6)" in bindings
 
     assert "Zeiträume" in de["wizard"]["retentionExplanation"]
     assert "time periods" in en["wizard"]["retentionExplanation"]

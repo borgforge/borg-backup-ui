@@ -27,6 +27,13 @@ def upload(data=b'# comment\r\nfm:*.tmp\r\n', name='exclude.txt'):
     return {'original_name': name, 'content_b64': base64.b64encode(data).decode()}
 
 
+def test_wizard_exclusions_step_navigation():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node unavailable')
+    subprocess.run([node, 'tests/wizard_exclusions_step_ui.cjs'], cwd=ROOT, check=True)
+
+
 def test_modes_disable_inactive_counts_and_keep_old_defaults():
     original = {'daily':'7','weekly':'4','monthly':'6','yearly':'3'}
     assert normalize_retention(original) == original

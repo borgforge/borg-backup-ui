@@ -110,13 +110,14 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 ### Job-Wizard
 
 1. **Grunddaten:** Name, technischer Typ, Icon und optionale Docker-/VM-Steuerung.
-2. **Quellen & Ziel:** Zu sichernde Ordner oder Dateien, Ausschlüsse, Speichertyp, Speicherziel, Repository und Kompression.
-3. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten.
-4. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
-5. **Retention:** gestaffelt mit optionalem Zeitfenster, letzte X Archive oder alle behalten.
-6. **Beschreibung:** verständliche Beschreibung mit optionalem Markdown.
-7. **Zeitplan:** einfache Planung oder Cron-Ausdruck.
-8. **Flow-Vorschau:** endgültige Prüfung des geplanten Ablaufs.
+2. **Quellen & Ziel:** Zu sichernde Ordner oder Dateien, Speichertyp, Speicherziel, Repository und Kompression.
+3. **Ausschlüsse:** Pfade, Markerdateien und eine hochgeladene Ausschlussdatei, gemeinsam sichtbar in einem eigenen Schritt.
+4. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten.
+5. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
+6. **Retention:** gestaffelt mit optionalem Zeitfenster, letzte X Archive oder alle behalten.
+7. **Beschreibung:** verständliche Beschreibung mit optionalem Markdown.
+8. **Zeitplan:** einfache Planung oder Cron-Ausdruck.
+9. **Flow-Vorschau:** endgültige Prüfung des geplanten Ablaufs.
 
 > [!IMPORTANT] Retention-Werte zählen Zeiträume mit Backups. Wählen Sie „Gestaffelt“, „Letzte X Archive“ oder „Alle behalten“. Ein Zeitfenster wie „alle Archive der letzten 7 Tage“ ergänzt Zählregeln und darf nicht allein aktiv sein. `0` deaktiviert eine Regel. Leere Regeln und „letzte 0“ sind gesperrt. Eine kleine Anzahl kann viele ältere Archive zur Löschung freigeben. Das Info-i erklärt jede Strategie und ihre Löschwirkung, ohne den Wizard zu verlängern.
 
