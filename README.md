@@ -22,12 +22,12 @@ diagnostics.
 
 ## Feature demo
 
-A short walkthrough of backup jobs, archive browsing, file restores and
-restore verification.
+A short walkthrough of backup jobs, exclusion rules, retention settings,
+archive browsing, file restores and restore verification.
 
-*3:42 minutes | English narration | Recorded with the current test version.*
+*4:48 minutes | English narration | Recorded with release 2026.09.13.1711.*
 
-https://github.com/user-attachments/assets/c6aa45c7-2711-4645-a49a-b94f2ceacddb
+https://github.com/user-attachments/assets/4cf24bb8-de2d-46b3-aa6c-34810e6b335d
 
 ## Install
 
