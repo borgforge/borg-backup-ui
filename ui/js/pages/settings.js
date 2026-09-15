@@ -1809,7 +1809,7 @@ function _renderMigrationRegistryOverview(summary, actionItems, migrationBackupC
         ${cleanupSkipped ? `<br>${escHtml(settingsT('health.migrationBackupCleanupSkipped', { count: cleanupSkipped }))}` : ''}
         ${backupDir ? `<br><span class="migration-registry-id">${escHtml(backupDir)}</span>` : ''}
       </div>
-      ${cleanupDelete || cleanupSkipped ? cleanupDetails : ''}
+      ${cleanupDetails}
       ${cleanupDelete ? `
         <button type="button" class="btn btn-secondary btn-sm migration-action-button" data-settings-action="migration-backups-cleanup">
           ${settingsT('health.migrationBackupCleanupButton')}
@@ -1833,6 +1833,10 @@ function _migrationBackupCleanupReasonLabel(reason) {
     unrecognized_name: 'health.migrationBackupCleanupReasonUnrecognized',
     unknown_migration_id: 'health.migrationBackupCleanupReasonUnknown',
     latest_active_snapshot: 'health.migrationBackupCleanupReasonKept',
+    missing_journal: 'health.migrationBackupCleanupReasonMissingJournal',
+    invalid_journal: 'health.migrationBackupCleanupReasonInvalidJournal',
+    journal_mismatch: 'health.migrationBackupCleanupReasonJournalMismatch',
+    unsafe_snapshot_path: 'health.migrationBackupCleanupReasonUnsafePath',
   };
   return settingsT(map[normalized] || 'health.migrationBackupCleanupReasonOther', { reason: normalized || 'unknown' });
 }
@@ -1904,12 +1908,14 @@ function _renderMigrationBackupCleanupTable(title, rows, tone) {
 
 function _renderMigrationBackupCleanupDetails(cleanup) {
   const deleteRows = Array.isArray(cleanup?.delete) ? cleanup.delete : [];
+  const keepRows = Array.isArray(cleanup?.keep) ? cleanup.keep : [];
   const skippedRows = Array.isArray(cleanup?.skipped) ? cleanup.skipped : [];
-  if (!deleteRows.length && !skippedRows.length) return '';
+  if (!deleteRows.length && !keepRows.length && !skippedRows.length) return '';
   return `
     <details class="migration-backup-cleanup-details">
       <summary>${escHtml(settingsT('health.migrationBackupCleanupDetails'))}</summary>
       ${_renderMigrationBackupCleanupTable(settingsT('health.migrationBackupCleanupDeleteDetails'), deleteRows, 'delete')}
+      ${_renderMigrationBackupCleanupTable(settingsT('health.migrationBackupCleanupKeptDetails'), keepRows, 'keep')}
       ${_renderMigrationBackupCleanupTable(settingsT('health.migrationBackupCleanupSkippedDetails'), skippedRows, 'skipped')}
     </details>
   `;
