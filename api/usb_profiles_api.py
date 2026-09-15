@@ -4,7 +4,6 @@ api/usb_profiles_api.py - USB-Profilverwaltung und Statuschecks.
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -64,7 +63,15 @@ def validate_usb_profile_usage_before_save(ui_config: dict, next_rows: List[Dict
 
 
 def test_usb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Prueft USB-Profilpfade auf Existenz, Verzeichnis und Mount-Zustand."""
+    """Use the same read-only USB storage preflight as backup startup."""
+    from dataclasses import asdict
+    from lib.usb_storage import inspect_usb_storage
+
+    messages = {
+        "ok": "OK", "not_found": "Path not found", "not_directory": "Path is not a directory",
+        "invalid_path": "Path must be absolute", "not_mounted": "USB drive is not mounted",
+        "outside_mount": "Path resolves outside its storage mount", "not_writable": "USB storage is not writable",
+    }
     results: List[Dict[str, Any]] = []
     for row in profiles or []:
         name = str((row or {}).get("name", "")).strip()
@@ -78,55 +85,19 @@ def test_usb_profiles_status(profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
             "exists": False,
             "is_dir": False,
             "is_mounted": False,
+            "writable": False,
+            "detected_mount": "",
+            "code": "invalid_path",
             "message": "",
         }
         if not mount_path:
             item["message"] = "Path is missing"
             results.append(item)
             continue
-        p = Path(mount_path)
-        item["exists"] = p.exists()
-        item["is_dir"] = p.is_dir()
-        if not item["exists"]:
-            item["message"] = "Path not found"
-            results.append(item)
-            continue
-        if not item["is_dir"]:
-            item["message"] = "Path is not a directory"
-            results.append(item)
-            continue
-        mounted = False
         try:
-            proc = subprocess.run(
-                ["findmnt", "-T", mount_path, "-n", "-o", "TARGET"],
-                capture_output=True,
-                text=True,
-                timeout=4,
-                check=False,
-            )
-            mounted = proc.returncode == 0 and bool((proc.stdout or "").strip())
-        except Exception:
-            mounted = False
-        if not mounted:
-            try:
-                mounts = Path("/proc/mounts").read_text(encoding="utf-8", errors="ignore").splitlines()
-                mp_norm = mount_path.rstrip("/")
-                for line in mounts:
-                    cols = line.split()
-                    if len(cols) < 2:
-                        continue
-                    tgt = cols[1].rstrip("/")
-                    if tgt == mp_norm:
-                        mounted = True
-                        break
-            except Exception:
-                mounted = False
-        item["is_mounted"] = mounted
-        if not mounted:
-            item["message"] = "Path is not mounted"
-            results.append(item)
-            continue
-        item["ok"] = True
-        item["message"] = "OK"
+            status = inspect_usb_storage(Path(mount_path))
+            item.update(asdict(status), ok=status.ok, message=messages[status.code])
+        except OSError as exc:
+            item.update(code="access_error", message=f"USB storage check failed: {exc}")
         results.append(item)
     return {"results": results}

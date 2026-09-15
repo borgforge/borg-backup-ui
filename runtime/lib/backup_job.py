@@ -29,7 +29,6 @@ import logging
 import os
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import time
@@ -577,33 +576,31 @@ class BackupJob:
         Fehlende/unbeschreibbare Mounts werden übersprungen; Zugriffsfehler
         brechen den Lauf mit UsbMountAccessError ab.
         """
+        from lib.usb_storage import inspect_usb_storage
+
         try:
-            # stat() preserves I/O errors even on Python versions whose is_dir()
-            # and is_mount() turn some filesystem errors into False.
-            try:
-                is_directory = stat.S_ISDIR(mount_path.stat().st_mode)
-            except (FileNotFoundError, NotADirectoryError):
-                is_directory = False
-            mounted = is_directory and mount_path.is_mount()
-            writable = mounted and os.access(mount_path, os.W_OK)
+            storage = inspect_usb_storage(mount_path)
         except OSError as exc:
             raise UsbMountAccessError(mount_path, exc) from exc
 
-        if not mounted:
+        logger.info("USB storage check: path=%s; mount=%s; result=%s",
+                    mount_path, storage.detected_mount or "none", storage.code)
+        if not storage.is_mounted:
             self._write_mini_log(
                 "USB_NOT_MOUNTED",
                 [
                     f"Borg Backup ({self.config.job_name}) - Skipped because the USB drive is missing",
-                    f"Mount path: {mount_path}",
-                    "Status: path is not a mounted directory",
-                    "Reason: USB drive is not connected or mounted",
+                    f"Storage path: {mount_path}",
+                    f"Detected mount: {storage.detected_mount or 'none'}",
+                    f"Status: {storage.code}",
+                    "Reason: USB drive or configured storage directory is unavailable",
                 ],
             )
             self._skip_reason = f"USB is not mounted: {mount_path}"
             self._persist_skip_status_once()
             raise SystemExit(0)
 
-        if not writable:
+        if not storage.writable:
             self._write_mini_log(
                 "USB_NOT_WRITABLE",
                 [

@@ -894,9 +894,13 @@ Functions:
 Important fields:
 
 - profile name
-- mount path
+- storage path on the USB drive: the mount point or an existing subfolder, for example `/mnt/disks/USBHDD/borg-backup`
 
-> **Note:** A USB profile does not automatically make a device available. The target must be mounted on Unraid when a backup runs.
+The profile status check and backup startup use the same validation. They check the backing mount and whether the storage folder exists and is readable, searchable and writable. The detected mount point is shown in the status result and backup log. A directory left behind on the system filesystem after unmounting is not accepted as an available drive.
+
+Existing profile and repository paths remain unchanged; no reimport or file move is required.
+
+> **Note:** A USB profile does not automatically mount a device. The drive must be mounted on Unraid when a backup runs. A successful check cannot prevent a drive from being disconnected later during a backup.
 
 ### 9.8 SMB Profiles
 
@@ -1185,7 +1189,7 @@ A lock normally means that another Borg process is using the repository or that 
 
 ### 13.3 Storage Target Is Unavailable
 
-- **USB:** Confirm that the configured mount path is actually mounted.
+- **USB:** Use the profile status check to confirm that the drive is mounted and the configured storage folder is accessible and writable. The storage path may be a subfolder on the drive.
 - **SMB:** Test port 445, share, user, password, and SMB 2/3 compatibility in the profile check.
 - **SSH/Storagebox:** Check host, port, public key, and base path.
 - **Local:** Verify that the pool or disk is online and writable.

@@ -29,6 +29,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Rewrite the Job-ID candidate notes as concise English user-facing changes, retain migration/export notices and issue references, and keep technical history here.
 - Distinguish exact version delimiters from Markdown section headings during replacement, stable promotion and provenance verification. Test and stable retain the exact same tested version block.
 
+### Issue #516 - Consistent USB storage checks for mount roots and subdirectories
+- Share one read-only kernel mount-table and directory-access check between USB profile status and backup startup. Accept mount roots and existing nested directories without rewriting profiles, repository paths or job identities.
+- Reject system/RAM filesystem fallbacks, path-prefix collisions, symlink escapes, missing directories and non-writable storage. Preserve explicit access failures before Docker/VM changes or Borg access; do not create write probes.
+- Clarify the USB storage-path label in German and English. Include the configured path, detected mount and result in backup logs and show the detected mount or a specific failure in profile status.
+- Cover both callers, mount-table parsing, common USB filesystems, missing/read-only storage and EIO/ENODEV/EACCES with regression tests. Unraid hardware verification is required before stable promotion.
+
 ### Issue #502 - USB mount preflight and access failures
 - Require a real mount point as well as a directory and write access before a USB backup proceeds. An existing unmounted directory now follows the existing USB-not-mounted skip path; missing and non-writable targets keep their skipped outcome.
 - Inspect the path with `stat()` so I/O errors are retained. Report USB access failures as `usb_mount_access_failed`, with the path and OS error in the existing log, status, lifecycle event and failure notification. The scriptless runner exits cleanly with code 2 before Docker/VM changes and Borg create/maintenance.

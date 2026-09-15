@@ -1882,7 +1882,7 @@
       "invalidLocalPath": "Ungültiger lokaler Speicherpfad: {path}. Verwende ein eigenes Verzeichnis unter /mnt ohne leere, .- oder ..-Segmente.",
       "addLocal": "Lokales Profil hinzufügen",
       "usbTitle": "USB-Profile",
-      "usbDescription": "Definiert auswählbare USB-Speicherziele. Repositorys werden separat angelegt und im Job-Wizard ausgewählt.",
+      "usbDescription": "Wähle den USB-Einhängepunkt oder einen vorhandenen Ordner darauf, zum Beispiel /mnt/disks/USBHDD/borg-backup. Repositorys werden separat ausgewählt. Das Laufwerk muss eingehängt und der Speicherordner zugänglich und beschreibbar sein.",
       "addUsb": "USB-Profil hinzufügen",
       "noUsb": "Noch kein USB-Profil vorhanden. USB-Location im Wizard bleibt gesperrt, bis mindestens ein Profil angelegt ist.",
       "storageTitle": "SSH-Storage-Profile",
@@ -1948,7 +1948,18 @@
       "profileInUseResourcesDialog": "Dieses Profil wird noch verwendet: {jobs} Job(s), {repositories} Repository(s).{refs}",
       "removeSmbHtml": "<div class=\"modal-info-item warning\" style=\"margin-top:8px\">SMB-Profil wird aus der UI entfernt. Repository-Daten bleiben erhalten. Wenn noch Repositorys dieses Profil verwenden, wird das Entfernen blockiert.</div><label class=\"form-checkbox-row\" style=\"margin-top:10px\"><input type=\"checkbox\" id=\"smb-remove-unmount-first\" checked> Wenn gemountet zuerst unmounten</label><label class=\"form-checkbox-row\" style=\"margin-top:8px\"><input type=\"checkbox\" id=\"smb-remove-mountpoint-cleanup\"> Mountpunkt löschen (nur wenn leer und nicht gemountet)</label><label class=\"form-checkbox-row\" style=\"margin-top:8px\"><input type=\"checkbox\" id=\"smb-remove-secret-cleanup\"> Credentials-Datei löschen (.smb-&lt;key&gt;.cred)</label>",
       "confirmProfile": "Zur Bestätigung \"{name}\" eingeben:",
-      "unmountRemoveFailed": "Unmount vor Entfernen fehlgeschlagen: {message}"
+      "unmountRemoveFailed": "Unmount vor Entfernen fehlgeschlagen: {message}",
+      "usbStoragePath": "Speicherpfad auf dem USB-Laufwerk",
+      "usbMountOk": "OK - Einhängepunkt: {path}",
+      "usbStatus": {
+        "not_found": "Speicherordner nicht gefunden. Laufwerk und eingetragenen Pfad prüfen.",
+        "not_directory": "Der Speicherpfad ist kein Verzeichnis.",
+        "invalid_path": "Bitte einen absoluten Speicherpfad eingeben.",
+        "not_mounted": "Das USB-Laufwerk ist am eingetragenen Ort nicht eingehängt.",
+        "outside_mount": "Der Speicherpfad verweist außerhalb seines eingehängten Laufwerks.",
+        "not_writable": "Der USB-Speicher ist schreibgeschützt oder die Schreibberechtigung fehlt.",
+        "access_error": "Der USB-Speicher konnte nicht geprüft werden. Verbindung und Zugriffsrechte prüfen."
+      }
     },
     "general": {
       "title": "Allgemein",

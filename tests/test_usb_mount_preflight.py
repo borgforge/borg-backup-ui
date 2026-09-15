@@ -15,6 +15,7 @@ for folder in (ROOT, ROOT / 'api', ROOT / 'runtime', ROOT / 'runtime/lib'):
 
 from job_fixtures import job_id
 from lib import backup_job
+from lib import usb_storage
 from lib.backup_job import BackupJob, BackupJobConfig, UsbMountAccessError, USB_MOUNT_ACCESS_FAILED
 
 
@@ -30,6 +31,7 @@ def job(tmp_path, monkeypatch):
     cfg.backup_paths[0].mkdir()
     cfg.borg_check_flag_file.touch()
     instance = BackupJob(cfg)
+    monkeypatch.setattr(usb_storage, '_read_mounts', lambda: [usb_storage.Mount(Path('/'), 'rootfs', False)])
     instance.notifications = []
     instance.events = []
     monkeypatch.setattr(instance, '_send_notification_event', lambda *args: instance.notifications.append(args))
@@ -60,9 +62,9 @@ def test_unmounted_or_readonly_usb_is_skipped_without_target_writes(job, tmp_pat
     elif kind == 'file':
         mount.write_text('not a mount')
     if kind == 'readonly':
-        monkeypatch.setattr(Path, 'is_mount', lambda path: path == mount)
+        monkeypatch.setattr(usb_storage, '_read_mounts', lambda: [usb_storage.Mount(mount, 'xfs', False)])
         access = backup_job.os.access
-        monkeypatch.setattr(backup_job.os, 'access', lambda path, mode: False if path == mount else access(path, mode))
+        monkeypatch.setattr(backup_job.os, 'access', lambda path, mode: False if path == mount and mode == backup_job.os.W_OK else access(path, mode))
     _reject_borg(monkeypatch)
     with pytest.raises(SystemExit) as stopped:
         with job:
@@ -90,17 +92,17 @@ def test_mount_access_errors_have_specific_failure_and_never_query_borg(
         if path == mount and stage == 'stat':
             raise OSError(error_number, 'simulated USB access failure', str(mount))
         return original_stat(path, *args, **kwargs)
-    def mounted(path):
-        if path == mount and stage == 'mount':
+    def mounts():
+        if stage == 'mount':
             raise OSError(error_number, 'simulated USB access failure', str(mount))
-        return path == mount
+        return [usb_storage.Mount(mount, 'xfs', False)]
     original_access = backup_job.os.access
     def access(path, mode):
         if path == mount and stage == 'access':
             raise OSError(error_number, 'simulated USB access failure', str(mount))
         return original_access(path, mode)
     monkeypatch.setattr(Path, 'stat', failing_stat)
-    monkeypatch.setattr(Path, 'is_mount', mounted)
+    monkeypatch.setattr(usb_storage, '_read_mounts', mounts)
     monkeypatch.setattr(backup_job.os, 'access', access)
     _reject_borg(monkeypatch)
     with caplog.at_level(logging.INFO), pytest.raises(UsbMountAccessError):
@@ -126,7 +128,7 @@ def test_mount_access_errors_have_specific_failure_and_never_query_borg(
 def test_mounted_accessible_usb_passes_without_creating_probe_files(job, tmp_path, monkeypatch):
     mount = tmp_path / 'drive'
     mount.mkdir()
-    monkeypatch.setattr(Path, 'is_mount', lambda path: path == mount)
+    monkeypatch.setattr(usb_storage, '_read_mounts', lambda: [usb_storage.Mount(mount, 'xfs', False)])
     _reject_borg(monkeypatch)
     assert job.check_usb_mount(mount) is None
     assert not job.config.status_dir.exists()

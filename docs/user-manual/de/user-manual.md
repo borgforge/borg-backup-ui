@@ -895,9 +895,13 @@ Funktionen:
 Wichtige Felder:
 
 - Profilname
-- Mount-Pfad
+- Speicherpfad auf dem USB-Laufwerk: der Einhängepunkt oder ein vorhandener Unterordner, beispielsweise `/mnt/disks/USBHDD/borg-backup`
 
-> **Hinweis:** Ein USB-Profil macht ein Gerät nicht automatisch verfügbar. Das Ziel muss auf Unraid gemountet sein, wenn ein Backup läuft.
+Profilstatus und Backup-Start verwenden dieselbe Prüfung. Sie kontrollieren den Einhängepunkt und ob der Speicherordner vorhanden, lesbar, durchsuchbar und beschreibbar ist. Der erkannte Einhängepunkt erscheint im Prüfergebnis und im Backup-Log. Ein nach dem Aushängen verbliebener Ordner auf dem Systemdateisystem gilt nicht als verfügbares Laufwerk.
+
+Bestehende Profil- und Repository-Pfade bleiben unverändert; ein erneuter Import oder Verschieben von Dateien ist nicht erforderlich.
+
+> **Hinweis:** Ein USB-Profil hängt ein Gerät nicht automatisch ein. Das Laufwerk muss beim Backup auf Unraid eingehängt sein. Eine erfolgreiche Prüfung kann nicht verhindern, dass ein Laufwerk später während des Backups getrennt wird.
 
 ### 9.8 SMB-Profile
 
@@ -1187,7 +1191,7 @@ Bei `Connection reset by peer` oder `Broken pipe` wurde die SSH-Verbindung unter
 
 ### 13.3 Speicherziel ist nicht verfügbar
 
-- **USB:** Kontrollieren Sie, ob der konfigurierte Mount-Pfad tatsächlich eingehängt ist.
+- **USB:** Prüfen Sie über den Profilstatus, ob das Laufwerk eingehängt und der konfigurierte Speicherordner zugänglich und beschreibbar ist. Der Speicherpfad darf ein Unterordner auf dem Laufwerk sein.
 - **SMB:** Prüfen Sie Port 445, Share, Benutzer, Passwort und SMB-2/3-Kompatibilität im Profiltest.
 - **SSH/Storagebox:** Prüfen Sie Host, Port, Public Key und Basispfad.
 - **Lokal:** Prüfen Sie, ob Pool oder Laufwerk gestartet und beschreibbar ist.
