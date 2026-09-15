@@ -261,3 +261,135 @@ test('a pending folder response does not overwrite a path being entered', async 
   await pending;
   assert.equal(get('restore-archive-path').value, '/Backup/Test1');
 });
+
+function directory(path) { return {name: path.split('/').pop(), path, type: 'd'}; }
+function file(path) { return {name: path.split('/').pop(), path, type: '-'}; }
+function treePage(listings) {
+  const result = page();
+  result.state.job = 'job-id';
+  result.get('restore-archive-sel').value = 'archive';
+  result.calls = [];
+  result.context.fetch = async url => {
+    const path = new URL(url, 'http://localhost').searchParams.get('path');
+    result.calls.push(path);
+    assert.ok(Object.hasOwn(listings, path), `Unexpected folder request: ${path}`);
+    return response({files: listings[path]});
+  };
+  return result;
+}
+
+test('first archive opening reaches the first useful folder without selecting anything', async () => {
+  const {context, state, get, calls} = treePage({
+    '': [directory('mnt')], mnt: [directory('mnt/user')],
+    'mnt/user': [directory('mnt/user/Documents')],
+    'mnt/user/Documents': [directory('mnt/user/Documents/Backup'), file('mnt/user/Documents/Welcome.txt')],
+  });
+  await context.restoreBrowse('');
+  assert.equal(state.path, 'mnt/user/Documents');
+  assert.equal(get('restore-archive-path').value, '/mnt/user/Documents');
+  assert.equal(state.selections.length, 0);
+  assert.deepEqual(calls, ['', 'mnt', 'mnt/user', 'mnt/user/Documents']);
+  assert.ok(state.folderTree.expanded.has('mnt/user'));
+  assert.match(get('restore-folder-tree').innerHTML, /aria-current="location"[^>]*title="\/mnt\/user\/Documents"/);
+  assert.match(get('restore-folder-tree').innerHTML, /Backup/);
+  assert.doesNotMatch(get('restore-folder-tree').innerHTML, /Welcome.txt/);
+  // Choosing the archive root later must really display its contents.
+  await context.restoreBrowse('');
+  assert.equal(state.path, '');
+  assert.equal(calls.length, 5);
+});
+
+for (const contents of [[], [file('readme.txt')], [directory('A'), directory('B')]]) {
+  test(`initial auto-navigation stops at empty, file or branching folder: ${JSON.stringify(contents)}`, async () => {
+    const {context, state, calls} = treePage({'': contents});
+    await context.restoreBrowse('');
+    assert.equal(state.path, '');
+    assert.deepEqual(calls, ['']);
+  });
+}
+
+test('expanding a branch keeps the file view and selection, and reuses known folders', async () => {
+  const {context, state, get, calls} = treePage({
+    '': [directory('A'), directory('B')], A: [directory('A/Documents')],
+    'A/Documents': [directory('A/Documents/One'), directory('A/Documents/Two')],
+  });
+  await context.restoreBrowse('');
+  context.restorePrepare('B', 'B', 'd');
+  const filesHtml = get('restore-filelist').innerHTML;
+  await context.restoreToggleFolder('A');
+  assert.deepEqual(calls, ['', 'A', 'A/Documents']);
+  assert.equal(state.path, '');
+  assert.equal(get('restore-filelist').innerHTML, filesHtml);
+  assert.deepEqual(Array.from(state.selections, item => item.path), ['B']);
+  assert.match(get('restore-folder-tree').innerHTML, /One/);
+  await context.restoreToggleFolder('A');
+  assert.doesNotMatch(get('restore-folder-tree').innerHTML, />Documents</);
+  await context.restoreToggleFolder('A');
+  assert.equal(calls.length, 3);
+  assert.match(get('restore-folder-tree').innerHTML, />Documents</);
+});
+
+test('a pending expansion cannot reopen a collapsed folder', async () => {
+  const {context, state} = treePage({'': [directory('A'), directory('B')]});
+  await context.restoreBrowse('');
+  const first = deferred();
+  context.fetch = () => first.promise;
+  const pending = context.restoreToggleFolder('A');
+  await context.restoreToggleFolder('A');
+  first.resolve(response({files: [directory('A/Child')]}));
+  await pending;
+  assert.equal(state.folderTree.expanded.has('A'), false);
+  assert.equal(state.folderTree.expanded.has('A/Child'), false);
+});
+
+test('tree load failure stays retryable, and source changes discard pending branches', async () => {
+  const {context, state, get} = treePage({'': [directory('A'), directory('B')]});
+  await context.restoreBrowse('');
+  context.fetch = async () => response({code: 'internal_error'}, 500);
+  await context.restoreToggleFolder('A');
+  assert.match(get('restore-folder-tree').innerHTML, /data-restore-action="tree-retry"/);
+  context.fetch = async () => response({files: [file('A/ok.txt')]});
+  await context.restoreToggleFolder('A', true);
+  assert.doesNotMatch(get('restore-folder-tree').innerHTML, /tree-retry/);
+  const old = deferred();
+  context.fetch = () => old.promise;
+  const pending = context.restoreToggleFolder('B');
+  get('restore-archive-sel').value = 'new';
+  context.fetch = async () => response({files: [file('current.txt')]});
+  await context.restoreBrowse('');
+  old.resolve(response({code: 'restore_archive_unavailable'}, 404));
+  await pending;
+  assert.equal(state.archive, 'new');
+  assert.equal(state.folderTree.nodes.has('B'), false);
+  assert.equal(state.files[0].name, 'current.txt');
+});
+
+test('direct path entry reveals ancestors and opens their complete listing on demand', async () => {
+  const {context, state, get, calls} = treePage({
+    'A/Documents': [file('A/Documents/file.txt')],
+    A: [directory('A/Documents'), directory('A/Other')],
+  });
+  await context.restoreBrowse('A/Documents');
+  assert.equal(state.path, 'A/Documents');
+  assert.equal(state.folderTree.nodes.get('A').loaded, false);
+  assert.match(get('restore-folder-tree').innerHTML, /Documents/);
+  await context.restoreToggleFolder('A');
+  await context.restoreToggleFolder('A');
+  assert.deepEqual(calls, ['A/Documents', 'A']);
+  assert.match(get('restore-folder-tree').innerHTML, /Other/);
+});
+
+test('clicking a folder while its expansion loads shares one request', async () => {
+  const {context, state} = treePage({'': [directory('A'), directory('B')]});
+  await context.restoreBrowse('');
+  const listing = deferred();
+  let calls = 0;
+  context.fetch = () => { calls++; return listing.promise; };
+  const expand = context.restoreToggleFolder('A');
+  const browse = context.restoreBrowse('A');
+  listing.resolve(response({files: [file('A/current.txt')]}));
+  await Promise.all([expand, browse]);
+  assert.equal(calls, 1);
+  assert.equal(state.path, 'A');
+  assert.equal(state.files[0].name, 'current.txt');
+});

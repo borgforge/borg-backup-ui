@@ -661,10 +661,21 @@
                 <label for="restore-archive-path" data-i18n="restore.archiveFolder">Ordner im Archiv</label>
                 <div class="restore-path-entry"><input id="restore-archive-path" type="text" class="form-input mono" value="/" autocomplete="off" spellcheck="false"><button type="button" id="restore-open-path" class="btn btn-secondary" data-i18n="restore.openFolder">Öffnen</button></div>
                 <div class="restore-breadcrumb" id="restore-breadcrumb"></div>
-                <label for="restore-folder-filter" data-i18n="restore.filterFolder">Namen in diesem Ordner filtern</label>
-                <input id="restore-folder-filter" type="search" class="form-input" autocomplete="off">
               </div>
-              <div id="restore-filelist"></div>
+              <div class="restore-explorer">
+                <nav class="restore-folder-navigation" aria-label="Archivordner" data-i18n-aria-label="restore.folderTree">
+                  <h3 data-i18n="restore.folderTree">Verzeichnisbaum</h3>
+                  <p data-i18n="restore.folderTreeHint">Pfeil klappt auf, Ordnername zeigt den Inhalt.</p>
+                  <div id="restore-folder-tree" class="restore-folder-tree"></div>
+                </nav>
+                <div class="restore-folder-content">
+                  <div class="restore-folder-filter">
+                    <label for="restore-folder-filter" data-i18n="restore.filterFolder">Namen in diesem Ordner filtern</label>
+                    <input id="restore-folder-filter" type="search" class="form-input" autocomplete="off">
+                  </div>
+                  <div id="restore-filelist"></div>
+                </div>
+              </div>
             </div>
             <aside class="restore-selection-panel">
               <header><span data-i18n="restore.currentSelection">Aktuelle Auswahl</span><strong id="restore-selection-name">—</strong></header>

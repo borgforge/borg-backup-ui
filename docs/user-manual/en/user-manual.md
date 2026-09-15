@@ -577,7 +577,9 @@ If no archives are visible, check repository access, passphrase, storage status,
 
 #### Step 3: Selection
 
-Paste an archive folder path and select **Open**, or use the breadcrumbs and folder names. The name filter applies only to the open folder; it does not search the entire archive.
+Use the **Folder tree** on the left: the arrow expands or collapses a branch; clicking a folder name shows its contents on the right. When first opening an archive, the view automatically follows folders with only one subfolder until it reaches files or several subfolders. This avoids clicking through every level of paths such as `mnt/user/demo/source/Documents`. Further branches load only when opened, and expanded folders stay open while you select entries.
+
+You can also use the breadcrumbs or enter a known archive path and select **Open**. The name filter on the right applies only to the open folder; it does not search the entire archive.
 
 Use the checkboxes to select up to 256 files or folders from the same archive. The selection list stays visible while you browse other folders. Remove individual entries using the adjacent button. A selected folder includes all its contents; selecting both a folder and one of its children restores that child only once. Changing jobs or archives clears the selection.
 

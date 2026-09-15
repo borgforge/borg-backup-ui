@@ -577,7 +577,9 @@ Wenn keine Archive sichtbar sind, prüfen Sie Repository-Zugriff, Passphrase, St
 
 #### Schritt 3: Auswahl
 
-Fügen Sie einen Ordnerpfad aus dem Archiv ein und wählen Sie **Öffnen**, oder navigieren Sie über die Pfadleiste und Ordnernamen. Der Namensfilter gilt nur für den geöffneten Ordner; er durchsucht nicht das gesamte Archiv.
+Nutzen Sie links den **Verzeichnisbaum**: Der Pfeil klappt einen Zweig auf oder zu, ein Klick auf den Ordnernamen zeigt rechts dessen Inhalt. Beim ersten Öffnen des Archivs führt die Ansicht automatisch durch Ordner mit jeweils nur einem Unterordner, bis Dateien oder mehrere Unterordner erscheinen. So müssen Sie sich beispielsweise nicht einzeln durch `mnt/user/demo/source/Documents` klicken. Weitere Zweige werden erst beim Öffnen geladen; aufgeklappte Ordner bleiben während der Auswahl geöffnet.
+
+Sie können auch über die Pfadleiste navigieren oder einen bekannten Archivpfad eingeben und **Öffnen** wählen. Der Namensfilter rechts gilt nur für den geöffneten Ordner; er durchsucht nicht das gesamte Archiv.
 
 Wählen Sie über die Kontrollkästchen bis zu 256 Dateien oder Ordner aus demselben Archiv. Die Auswahlliste bleibt beim Wechsel zwischen Ordnern erhalten. Einzelne Einträge lassen sich über die zugehörige Schaltfläche entfernen. Ein ausgewählter Ordner enthält seinen gesamten Inhalt; zusätzlich ausgewählte Unterordner oder Dateien werden nur einmal wiederhergestellt. Ein Wechsel des Jobs oder Archivs leert die Auswahl.
 

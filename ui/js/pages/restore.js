@@ -13,6 +13,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   selectedPath: '',
   selections: [],
   folderFilter: '',
+  folderTree: null,
   selectedName: '',
   selectedType: '',
   precheck: null,
@@ -795,6 +796,9 @@ function _restoreBindTargetAutocomplete() {
 }
 
 function restoreClearFileSelection() {
+  restoreState.folderTree = null;
+  const tree = document.getElementById('restore-folder-tree');
+  if (tree) tree.innerHTML = '';
   restoreState.filesRequest++;
   restoreState.files = [];
   restoreState.path = '';
@@ -944,6 +948,133 @@ async function restoreLoadArchives() {
   }
 }
 
+function _restoreGetFolderTree() {
+  if (!restoreState.folderTree) {
+    restoreState.folderTree = { nodes: new Map(), expanded: new Set(['']), requests: new Map() };
+  }
+  return restoreState.folderTree;
+}
+
+function _restoreTreeNode(tree, path) {
+  if (!tree.nodes.has(path)) {
+    tree.nodes.set(path, { path, name: path.split('/').pop(), children: [], loaded: false, error: '' });
+  }
+  return tree.nodes.get(path);
+}
+
+function _restoreRememberTreeDirectory(tree, path, files) {
+  // Direct path entry must also reveal its ancestors. Unloaded parents keep
+  // these known children until expanded, when their complete listing is loaded.
+  const parts = path ? path.split('/') : [];
+  let parent = '';
+  _restoreTreeNode(tree, parent);
+  for (let index = 0; index < parts.length; index++) {
+    const child = parts.slice(0, index + 1).join('/');
+    const parentNode = _restoreTreeNode(tree, parent);
+    if (!parentNode.children.includes(child)) parentNode.children.push(child);
+    _restoreTreeNode(tree, child);
+    parent = child;
+  }
+  const node = _restoreTreeNode(tree, path);
+  node.children = files.filter(file => file.type === 'd' && typeof file.path === 'string')
+    .map(file => { _restoreTreeNode(tree, file.path); return file.path; });
+  node.loaded = true;
+  node.error = '';
+}
+
+function _restoreOpenTreeAncestors(tree, path) {
+  const parts = path ? path.split('/') : [];
+  tree.expanded.add('');
+  for (let i = 1; i < parts.length; i++) tree.expanded.add(parts.slice(0, i).join('/'));
+}
+
+function _restoreRenderFolderTree() {
+  const element = document.getElementById('restore-folder-tree');
+  if (!element) return;
+  const tree = restoreState.folderTree;
+  const focused = document.activeElement;
+  const focusKey = focused && element.contains?.(focused) ? {path: focused.dataset.path, action: focused.dataset.restoreAction} : null;
+  if (!tree) { element.innerHTML = ''; return; }
+  const render = (path, depth = 0) => {
+    const node = tree.nodes.get(path);
+    if (!node || depth > 64) return '';
+    const expanded = tree.expanded.has(path);
+    const busy = tree.requests.has(path);
+    const branch = !node.loaded || node.children.length > 0;
+    const name = path ? node.name : restoreT('archiveRoot');
+    const active = path === restoreState.path;
+    return `<li><div class="restore-tree-row${active ? ' is-current' : ''}">
+      ${branch ? `<button type="button" class="restore-tree-toggle" data-restore-action="tree-toggle" data-path="${escHtml(path)}" aria-expanded="${expanded}" aria-label="${escHtml(restoreT(expanded ? 'collapseFolder' : 'expandFolder', { name }))}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>` : '<span class="restore-tree-spacer"></span>'}
+      <button type="button" class="restore-tree-name" data-restore-action="browse" data-path="${escHtml(path)}" ${active ? 'aria-current="location"' : ''} title="${escHtml('/' + path)}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 5h6l2 2h8v10H2z"/></svg><span>${escHtml(name)}</span></button>
+    </div>${expanded && busy ? `<small class="restore-tree-note" role="status">${escHtml(restoreT('loadingFolders'))}</small>` : ''}
+    ${expanded && node.error ? `<div class="restore-tree-note" role="alert">${escHtml(node.error)} <button type="button" class="btn btn-secondary btn-sm" data-restore-action="tree-retry" data-path="${escHtml(path)}">${escHtml(restoreT('retryFolders'))}</button></div>` : ''}
+    ${expanded && node.children.length ? `<ul>${node.children.map(child => render(child, depth + 1)).join('')}</ul>` : ''}</li>`;
+  };
+  element.innerHTML = `<ul>${render('')}</ul>`;
+  if (focusKey) {
+    const buttons = Array.from(element.querySelectorAll('button'));
+    const button = buttons.find(item => item.dataset.path === focusKey.path && item.dataset.restoreAction === focusKey.action)
+      || buttons.find(item => item.dataset.path === focusKey.path && item.dataset.restoreAction === 'browse');
+    button?.focus({preventScroll: true});
+  }
+}
+
+async function _restoreFetchDirectory(tree, path, jobKey, archive) {
+  if (tree.requests.has(path)) return tree.requests.get(path);
+  const pending = (async () => {
+    const url = `/api/restore/files?job=${encodeURIComponent(jobKey)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
+    const res = await fetch(url, { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || data?.error) {
+      const error = new Error(apiErrorMessage(data, res.status));
+      error.archiveUnavailable = data?.code === 'restore_archive_unavailable';
+      throw error;
+    }
+    if (!data || !Array.isArray(data.files)) throw new Error(apiErrorMessage({code: 'internal_error'}));
+    if (restoreState.folderTree === tree) _restoreRememberTreeDirectory(tree, path, data.files);
+    return data.files;
+  })();
+  tree.requests.set(path, pending);
+  _restoreTreeNode(tree, path);
+  _restoreRenderFolderTree();
+  try { return await pending; }
+  finally {
+    tree.requests.delete(path);
+    if (restoreState.folderTree === tree) _restoreRenderFolderTree();
+  }
+}
+
+async function restoreToggleFolder(path, retry = false) {
+  const tree = _restoreGetFolderTree();
+  if (!retry && tree.expanded.has(path)) {
+    tree.expanded.delete(path);
+    _restoreRenderFolderTree();
+    return;
+  }
+  tree.expanded.add(path);
+  const node = _restoreTreeNode(tree, path);
+  node.error = '';
+  _restoreRenderFolderTree();
+  if (node.loaded && !retry) return;
+  try {
+    const jobKey = restoreState.job;
+    const archive = restoreState.archive;
+    let current = path;
+    for (let depth = 0; depth < 64; depth++) {
+      const files = await _restoreFetchDirectory(tree, current, jobKey, archive);
+      if (restoreState.folderTree !== tree || !tree.expanded.has(path)) return;
+      if (files.length !== 1 || files[0].type !== 'd' || typeof files[0].path !== 'string' || !files[0].path.startsWith(current ? current + '/' : '') || files[0].path === current) break;
+      current = files[0].path;
+      tree.expanded.add(current);
+    }
+  } catch (error) {
+    if (restoreState.folderTree !== tree) return;
+    if (error.archiveUnavailable) restoreClearArchives();
+    else node.error = error.message;
+  }
+  _restoreRenderFolderTree();
+}
+
 async function restoreBrowse(path) {
   const jobKey = restoreState.job;
   const pathInput = document.getElementById('restore-archive-path');
@@ -951,11 +1082,13 @@ async function restoreBrowse(path) {
   const archive = document.getElementById('restore-archive-sel').value;
   if (!archive) return;
 
+  const firstOpen = archive !== restoreState.archive && !path;
   if (archive !== restoreState.archive) restoreClearFileSelection();
   const request = ++restoreState.filesRequest;
   const sourceRequest = restoreState.sourceRequest;
   const isCurrent = () => request === restoreState.filesRequest && sourceRequest === restoreState.sourceRequest;
   restoreState.archive = archive;
+  const tree = _restoreGetFolderTree();
   const previousPath = restoreState.path;
   renderRestoreSourceContext();
   _restoreRenderSelectionSummary();
@@ -973,17 +1106,22 @@ async function restoreBrowse(path) {
   }
 
   try {
-    const url = `/api/restore/files?job=${encodeURIComponent(jobKey)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
-    const res = await fetch(url, { credentials: 'include' });
-    const data = await res.json();
+    let files = await _restoreFetchDirectory(tree, path, jobKey, archive);
     if (!isCurrent()) return;
-    if (!res.ok || data?.error) {
-      const error = new Error(apiErrorMessage(data, res.status));
-      error.archiveUnavailable = data?.code === 'restore_archive_unavailable';
-      throw error;
+    // Skip repeated clicks through structural parents. Stop at the first folder
+    // containing files, several subfolders, or nothing; never select anything.
+    if (firstOpen) {
+      for (let depth = 0; depth < 64 && files.length === 1 && files[0].type === 'd'; depth++) {
+        const child = files[0].path;
+        if (typeof child !== 'string' || child === path || !child.startsWith(path ? path + '/' : '')) break;
+        tree.expanded.add(path);
+        path = child;
+        files = await _restoreFetchDirectory(tree, path, jobKey, archive);
+        if (!isCurrent()) return;
+      }
+      tree.expanded.add(path);
     }
-    if (!data || !Array.isArray(data.files)) throw new Error(apiErrorMessage({code: 'internal_error'}));
-
+    _restoreOpenTreeAncestors(tree, path);
     _restoreMsg('');
     restoreState.path = path;
     restoreState.folderFilter = '';
@@ -991,8 +1129,9 @@ async function restoreBrowse(path) {
     if (filter) filter.value = '';
     if (pathInput && pathInput.value === enteredPath) pathInput.value = '/' + path;
     _restoreRenderBreadcrumb(path);
-    restoreState.files = data.files || [];
+    restoreState.files = files;
     _restoreRenderFiles(restoreState.files);
+    _restoreRenderFolderTree();
   } catch (e) {
     if (!isCurrent()) return;
     if (e.archiveUnavailable) restoreClearArchives();
@@ -1073,6 +1212,8 @@ function onRestoreBrowserClick(event) {
   const path = (el.dataset.path || '').replace(/^\/$/, '');
   const name = el.dataset.name || '';
   const type = el.dataset.type || '';
+  if (action === 'tree-toggle') return restoreToggleFolder(path);
+  if (action === 'tree-retry') return restoreToggleFolder(path, true);
   if (action === 'browse') return restoreBrowse(path);
   if (action === 'download') return restoreDownload(path);
   if (action === 'select') return restorePrepare(path, name, type);
@@ -1600,6 +1741,7 @@ function restorePrecheckInputsChanged() {
 }
 
 window.addEventListener?.('bbui:language-changed', () => {
+  _restoreRenderFolderTree();
   _restoreRenderSelectionSummary();
   _restoreRenderSelectedBox();
   if (Array.isArray(restoreState.files) && restoreState.files.length) {
