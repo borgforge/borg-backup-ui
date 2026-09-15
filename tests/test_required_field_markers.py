@@ -53,14 +53,17 @@ def test_restore_job_and_repository_wizards_mark_required_fields() -> None:
     ):
         _assert_required_i18n_label(html, key)
 
+    # Direct archive navigation is optional; selected sources are summarized in
+    # the target step rather than presented as another editable required field.
     archive_path_label = re.search(
-        r'<label[^>]*>[^<]*(?:(?!</label>).)*data-i18n="restore.sourcePath"(?:(?!</label>).)*</label>',
+        r'<label[^>]*for="restore-archive-path"[^>]*data-i18n="restore.archiveFolder"[^>]*>.*?</label>',
         html,
         re.S,
     )
     assert archive_path_label
     assert "form-label-required" not in archive_path_label.group(0)
     assert "form-required-marker" not in archive_path_label.group(0)
+    assert re.search(r'<textarea[^>]*id="restore-source-path"[^>]*hidden[^>]*readonly', html)
 
     exclude_label = re.search(
         r'<label[^>]*>[^<]*(?:(?!</label>).)*data-i18n="wizard.excludePaths"(?:(?!</label>).)*</label>',
