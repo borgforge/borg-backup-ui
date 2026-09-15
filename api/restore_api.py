@@ -821,6 +821,23 @@ def _selection_plan(repo, archive, source_path, source_paths, target, mode, env)
     return destination_plan(entries, target, mode)
 
 
+def _restore_target_mountpoint(target: Path) -> str:
+    """Resolve the containing mount, including bind mounts; unknown is not '/'."""
+    try:
+        result = subprocess.run(
+            ["findmnt", "--json", "--target", str(target), "--output", "TARGET"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            mounts = json.loads(result.stdout).get("filesystems", [])
+            mountpoint = mounts[0].get("target") if mounts else None
+            if isinstance(mountpoint, str) and mountpoint.startswith("/"):
+                return mountpoint
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, AttributeError, KeyError):
+        pass
+    return ""
+
+
 def restore_precheck(
     config: dict,
     job_key: str,
@@ -843,7 +860,7 @@ def restore_precheck(
         if conflict_mode not in {"skip", "overwrite", "rename"}:
             raise ValueError("Invalid conflict mode")
 
-        mountpoint = str(target.anchor or "/")
+        mountpoint = _restore_target_mountpoint(target)
         free = shutil.disk_usage(target).free
         plan = _selection_plan(info["repo"], archive, source_path, source_paths, target, conflict_mode, env)
         items = plan["items"]

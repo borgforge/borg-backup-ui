@@ -438,3 +438,50 @@ test('single matching folder shows the timestamped child destination for rename 
   assert.match(get('restore-destination-map').innerHTML, /class="restore-mapping-target"><span class="mono">\/target\/Test1<\/span>/);
   assert.ok(!get('restore-destination-map').innerHTML.includes(labels.restore.mappingTimestamp));
 });
+
+for (const language of ['de', 'en']) for (const simulation of [false, true]) {
+  test(`technical precheck lists every selection and the requested operation (${language}, simulation=${simulation})`, async () => {
+    const {context, get, state, labels} = page(language);
+    state.job = 'job-id'; state.archive = 'archive';
+    get('restore-target-path').value = '/mnt/user/test';
+    get('restore-dry-run').checked = simulation;
+    context.restorePrepare('Backup/Test1', 'Test1', 'd');
+    context.restorePrepare('Backup/Test2', 'Test2', 'd');
+    const data = {ok: true, archive: 'archive', source_path: 'Backup/Test1',
+      target_dir: '/mnt/user/test', conflict_mode: 'skip', target_mountpoint: '/mnt/user',
+      target_free_bytes: 1024, dry_run: false, dry_run_exit_code: 0,
+      dry_run_stdout: 'Precheck is metadata-only (no extraction).', items: [
+        {path: 'Backup/Test1', type: 'd', destination_path: '/mnt/user/test/Test1', destination_exists: true, skipped: true},
+        {path: 'Backup/Test2', type: 'd', destination_path: '/mnt/user/test/Test2', destination_exists: false, skipped: false},
+      ]};
+    context.fetch = async (_, request) => {
+      const body = JSON.parse(request.body);
+      assert.deepEqual(body.source_paths, ['Backup/Test1', 'Backup/Test2']);
+      assert.equal(body.dry_run, simulation);
+      return response(data);
+    };
+    await context.restoreRunPrecheck();
+    const output = get('restore-precheck-output').textContent;
+    assert.ok(output.includes(labels.restore.metadataPrecheckDetail));
+    assert.ok(output.includes(labels.restore.metadataPrecheckScope));
+    assert.ok(output.includes(labels.restore[simulation ? 'plannedSimulation' : 'plannedRestore']));
+    for (const item of data.items) {
+      assert.ok(output.includes(item.path));
+      assert.ok(output.includes(item.destination_path));
+    }
+    assert.ok(output.includes(labels.restore.mappingSkip));
+    assert.ok(output.includes(labels.restore[simulation ? 'mappingSimulate' : 'mappingRestore']));
+    assert.ok(!output.includes('(Exit 0)'));
+    assert.ok(!output.includes(labels.restore.dryRunOutput));
+    assert.equal(get('restore-confirm-check').checked, false);
+
+    get('restore-conflict-mode').value = 'rename';
+    data.conflict_mode = 'rename';
+    data.target_mountpoint = '';
+    data.items = [{path: 'Backup/Test1', type: 'd', destination_path: '/mnt/user/test/Test1', direct_contents: true}];
+    await context.restoreRunPrecheck();
+    assert.ok(get('restore-precheck-output').textContent.includes('/mnt/user/test/Test1/Test1'));
+    assert.ok(get('restore-precheck-output').textContent.includes(labels.restore.mappingTimestamp));
+    assert.ok(get('restore-precheck-output').textContent.includes(labels.restore.mountpointUnknown));
+  });
+}

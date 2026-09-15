@@ -1458,24 +1458,26 @@ async function restoreRunPrecheck() {
     restoreState.precheck = data;
     restoreState.autoPrecheckKey = requestKey;
     renderRestorePrecheck(data);
-    const combinedDryRun = [data.dry_run_stdout || '', data.dry_run_stderr || '']
-      .filter(Boolean)
-      .join('\n')
-      .trim();
     const lines = [
+      restoreT('metadataPrecheckDetail'),
       restoreT('archiveValue', { value: data.archive }),
-      restoreT('source', { value: data.source_path }),
       restoreT('targetPath', { value: data.target_dir }),
       restoreT('conflictMode', { value: data.conflict_mode }),
-      restoreT('dryRunResult', { value: data.dry_run ? restoreT('yes') : restoreT('no'), exit: data.dry_run_exit_code }),
-      restoreT('destination', { value: data.destination_path }),
-      restoreT('alreadyExists', { value: data.destination_exists ? restoreT('yes') : restoreT('no') }),
-      restoreT('mountpoint', { value: data.target_mountpoint }),
+      restoreT('plannedRun', { value: restoreT(dryRun ? 'plannedSimulation' : 'plannedRestore') }),
+      restoreT('mountpoint', { value: data.target_mountpoint || restoreT('mountpointUnknown') }),
       restoreT('freeSpace', { value: _restoreFmtSize(data.target_free_bytes || 0) }),
-      '',
-      restoreT('dryRunOutput'),
-      combinedDryRun || restoreT('empty'),
+      restoreT('checkedSelectionCount', { count: data.items.length }),
+      restoreT('metadataPrecheckScope'),
     ];
+    data.items.forEach((item, index) => {
+      const {type, action, destination} = _restorePlannedItem(data, item, dryRun);
+      lines.push('', restoreT('precheckItem', { index: index + 1, count: data.items.length, type: restoreT(type) }),
+        restoreT('source', { value: item.path }),
+        `${restoreT('mappingWhere')}: ${destination}`,
+        restoreT('alreadyExists', { value: item.destination_exists ? restoreT('yes') : restoreT('no') }),
+        `${restoreT('mappingHow')}: ${restoreT(action)}`);
+      if (data.conflict_mode === 'rename' && !item.skipped) lines.push(restoreT('mappingTimestamp'));
+    });
     if (out) out.textContent = lines.join('\n');
     showMsg('restore-assist-msg', data.ok ? 'success' : 'error', data.ok ? restoreT('precheckSuccess') : restoreT('precheckFailed'));
   } catch (err) {
@@ -1492,27 +1494,31 @@ async function restoreRunPrecheck() {
   }
 }
 
+function _restorePlannedItem(data, item, simulation) {
+  const directory = item.type === 'd';
+  const type = directory ? 'mappingFolder' : (item.type === 'l' ? 'mappingLink' : 'mappingFile');
+  let action = 'mappingRestore';
+  if (item.skipped) action = 'mappingSkip';
+  else if (simulation) action = 'mappingSimulate';
+  else if (data.conflict_mode === 'rename') action = 'mappingRename';
+  else if (data.conflict_mode === 'overwrite' && item.destination_exists) action = directory ? 'mappingMerge' : 'mappingReplace';
+  // A matching single-directory target receives a timestamped child in rename mode.
+  const destination = data.conflict_mode === 'rename' && item.direct_contents
+    ? String(item.destination_path).replace(/\/$/, '') + '/' + String(item.path).split('/').pop()
+    : item.destination_path;
+  return {type, action, destination};
+}
+
 function _restoreRenderDestinationMap(data) {
   const mapping = document.getElementById('restore-destination-map');
   if (!mapping) return;
   if (!data?.items?.length) { mapping.innerHTML = ''; return; }
   const simulation = !!document.getElementById('restore-dry-run')?.checked;
   const rows = data.items.map(item => {
-    const directory = item.type === 'd';
-    const type = directory ? 'mappingFolder' : (item.type === 'l' ? 'mappingLink' : 'mappingFile');
-    let action = 'mappingRestore';
-    if (item.skipped) action = 'mappingSkip';
-    else if (simulation) action = 'mappingSimulate';
-    else if (data.conflict_mode === 'rename') action = 'mappingRename';
-    else if (data.conflict_mode === 'overwrite' && item.destination_exists) action = directory ? 'mappingMerge' : 'mappingReplace';
+    const {type, action, destination} = _restorePlannedItem(data, item, simulation);
     const stateClass = item.skipped ? 'is-skipped' : (simulation ? 'is-simulation' : '');
     const source = String(item.path || '');
     const name = source.split('/').pop();
-    // With a matching single-directory target, rename creates a timestamped
-    // child inside that target instead of appending to the target's own name.
-    const destination = data.conflict_mode === 'rename' && item.direct_contents
-      ? String(item.destination_path).replace(/\/$/, '') + '/' + name
-      : item.destination_path;
     return `<tr>
       <td class="restore-mapping-source"><strong>${escHtml(name)}</strong><small>${escHtml(restoreT(type))}</small><span class="mono">${escHtml(source)}</span></td>
       <td class="restore-mapping-action"><span class="restore-mapping-action-label ${stateClass}">${escHtml(restoreT(action))}</span>${simulation && !item.skipped ? `<small>${escHtml(restoreT('mappingNoChanges'))}</small>` : ''}</td>
@@ -1543,10 +1549,10 @@ function renderRestorePrecheck(data) {
   verdict.classList.toggle('error', !ok);
   verdict.innerHTML = `<span class="restore-precheck-verdict-mark">${restoreStatusIcon(ok ? 'success' : 'error')}</span><span><strong>${escHtml(restoreT(ok ? 'precheckVerdictOk' : 'precheckVerdictFailed'))}</strong><small>${escHtml(restoreT(ok ? 'precheckVerdictOkDetail' : 'precheckVerdictFailedDetail'))}</small></span>`;
   facts.innerHTML = [
-    [restoreT('mountpointLabel'), data.target_mountpoint || '—'],
+    [restoreT('mountpointLabel'), data.target_mountpoint || restoreT('mountpointUnknown')],
     [restoreT('freeSpaceLabel'), _restoreFmtSize(data.target_free_bytes || 0)],
-    [restoreT('destinationExistsLabel'), data.destination_exists ? restoreT('yes') : restoreT('no')],
-    [restoreT('dryRunExitLabel'), data.dry_run_exit_code ?? '—'],
+    [restoreT('checkedSelectionsLabel'), data.items.length],
+    [restoreT('existingDestinationsLabel'), data.items.filter(item => item.destination_exists).length],
   ].map(([label, value]) => `<div><small>${escHtml(label)}</small><strong>${escHtml(String(value))}</strong></div>`).join('');
   if (badge) {
     badge.textContent = restoreT(ok ? 'precheckSuccessful' : 'precheckFailedShort');

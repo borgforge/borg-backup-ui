@@ -109,8 +109,42 @@ def test_precheck_reports_each_destination_without_writing(archive):
                                        source_paths=["Backup/Test1", "Backup/Test2"])
     assert data["ok"]
     assert data["common_parent"] == "Backup"
+    assert data["source_paths"] == ["Backup/Test1", "Backup/Test2"]
+    assert [i["destination_path"] for i in data["items"]] == [str(target / "Test1"), str(target / "Test2")]
     assert data["items"][0]["skipped"] and not data["items"][1]["skipped"]
     assert list(target.iterdir()) == [target / "Test1"]
+
+
+def test_precheck_rejects_missing_second_selection(archive):
+    target, _ = archive
+    with pytest.raises(ValueError, match="missing"):
+        restore_api.restore_precheck({}, "test-job", "test", "Backup/Test1", str(target), "skip",
+                                     source_paths=["Backup/Test1", "Backup/missing"])
+    assert not list(target.iterdir())
+
+
+def test_precheck_detects_containing_mount_including_spaces(monkeypatch):
+    def findmnt(command, **kwargs):
+        assert command == ["findmnt", "--json", "--target", "/mnt/restore pool/output", "--output", "TARGET"]
+        assert kwargs["timeout"] == 5
+        return SimpleNamespace(returncode=0, stdout='{"filesystems":[{"target":"/mnt/restore pool"}]}')
+    monkeypatch.setattr(restore_api.subprocess, "run", findmnt)
+    assert restore_api._restore_target_mountpoint(Path("/mnt/restore pool/output")) == "/mnt/restore pool"
+
+
+@pytest.mark.parametrize("output", ['{}', '[]', '{"filesystems":[]}', 'not json',
+                                    '{"filesystems":[{"target":"relative"}]}'])
+def test_precheck_does_not_invent_mountpoint_for_unknown_result(monkeypatch, output):
+    monkeypatch.setattr(restore_api.subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0, stdout=output))
+    assert restore_api._restore_target_mountpoint(Path("/mnt/user/restore")) == ""
+
+
+@pytest.mark.parametrize("error", [FileNotFoundError(), subprocess.TimeoutExpired("findmnt", 5)])
+def test_precheck_mount_lookup_failure_does_not_block_restore(monkeypatch, error):
+    def failed(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(restore_api.subprocess, "run", failed)
+    assert restore_api._restore_target_mountpoint(Path("/mnt/user/restore")) == ""
 
 
 def test_symlink_parent_is_rejected_before_writes(archive, tmp_path):
