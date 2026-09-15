@@ -39,6 +39,11 @@
 #restore-tests-plan-content > .history-table { min-width: 1100px; }
 #restore-tests-content > .history-table { min-width: 1000px; }
 
+/* Keep actions stable across locales, busy states and save feedback (#523). */
+.rt-plan-actions { display: grid; grid-template-columns: repeat(2, 6.75rem); gap: var(--ui-space-2); }
+.rt-plan-actions .btn { justify-content: center; width: 100%; min-height: 2rem; margin: 0; padding: var(--ui-space-1) var(--ui-space-2); white-space: nowrap; }
+.rt-plan-actions .btn[aria-busy="true"] { cursor: progress; }
+
 .rt-plan-summary { margin: 0; overflow: hidden; border-bottom: 1px solid var(--ui-color-border); background: var(--ui-color-surface); }
 #restore-tests-plan-summary { margin: 0 !important; }
 .rt-plan-summary > header { padding: var(--ui-space-2) var(--ui-space-3); border-bottom: 1px solid var(--ui-color-border); background: var(--ui-color-surface-subtle); }

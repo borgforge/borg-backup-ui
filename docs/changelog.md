@@ -7,6 +7,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ## Unreleased
 
 ### Issue #523 - stable page layout for action feedback
+- Keep Restore Tests plan actions in a fixed two-column button group in both languages. Show busy state only on the requested action, disable both actions while pending, and use the shared feedback with the job display name instead of inserting timestamps or errors into table rows.
 - Route page action feedback through the shared message helper, including dashboard, jobs, reports, restore and settings subpages. Render a fixed, dismissible panel with localized severity and accessible announcements; preserve line breaks and bound long message height.
 - Keep one current page message. Automatically dismiss information/success after at least 5 seconds and warnings after at least 12 seconds, extending long texts to at most 30 seconds. Pause the remaining time during hover, keyboard focus or a hidden browser tab. Errors have no timer. Cancel stale timers/listeners on dismissal, replacement and navigation; ignore late hidden-page results. Keep modal validation and contextual empty/system states inline. Move restore action feedback outside individual steps so errors from browsing and history remain visible.
 
