@@ -11,6 +11,8 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   archive: '',
   path: '',
   selectedPath: '',
+  selections: [],
+  folderFilter: '',
   selectedName: '',
   selectedType: '',
   precheck: null,
@@ -314,6 +316,7 @@ function restoreReloadWizard() {
   restoreState.precheck = null;
   restoreState.autoPrecheckKey = '';
   restoreState.selectedPath = '';
+  restoreState.selections = [];
   restoreState.selectedName = '';
   restoreState.selectedType = '';
   restoreState.archive = '';
@@ -336,7 +339,7 @@ function _restoreRenderSelectionSummary() {
   const jobSel = document.getElementById('restore-job-sel');
   const jobText = jobSel?.selectedOptions?.[0]?.textContent?.trim() || '—';
   const archive = restoreState.archive || '—';
-  const selectedCount = restoreState.selectedPath ? 1 : 0;
+  const selectedCount = _restoreSelections().length;
   const target = document.getElementById('restore-target-path')?.value?.trim() || '—';
   const jobEl = document.getElementById('restore-summary-job');
   const archEl = document.getElementById('restore-summary-archive');
@@ -352,24 +355,40 @@ function _restoreRenderSelectionSummary() {
   const dryRun = document.getElementById('restore-dry-run')?.checked;
   if (modeEl) modeEl.textContent = mode;
   if (dryRunEl) dryRunEl.textContent = dryRun ? restoreT('yes') : restoreT('no');
+  const modeBadge = document.getElementById('restore-mode-badge');
+  if (modeBadge) modeBadge.textContent = restoreT(dryRun ? 'dryRunActive' : 'restoreActive');
   const browserContext = document.getElementById('restore-browser-context');
   if (browserContext) browserContext.textContent = restoreState.archive || '';
 }
 
-function _restoreRenderSelectedBox() {
-  const typeEl = document.getElementById('restore-selected-type');
-  const pathEl = document.getElementById('restore-selected-path');
-  const hintEl = document.getElementById('restore-selected-hint');
-  const type = restoreState.selectedType === 'd' ? restoreT('directory') : (restoreState.selectedType === 'f' ? restoreT('file') : '—');
-  const hint = restoreState.selectedType === 'd'
-    ? restoreT('directoryHint')
-    : (restoreState.selectedType === 'f' ? restoreT('fileHint') : restoreT('nothingSelected'));
-  if (typeEl) typeEl.textContent = type;
-  if (pathEl) pathEl.textContent = restoreState.selectedPath || '—';
-  if (hintEl) hintEl.textContent = hint;
-  const nameEl = document.getElementById('restore-selection-name');
-  if (nameEl) nameEl.textContent = restoreState.selectedName || '—';
+function _restoreSelections() {
+  return restoreState.selections?.length ? restoreState.selections : (restoreState.selectedPath
+    ? [{ path: restoreState.selectedPath, name: restoreState.selectedName, type: restoreState.selectedType }] : []);
 }
+
+function _restoreRenderSelectedBox() {
+  const selections = _restoreSelections();
+  const list = document.getElementById('restore-selected-list');
+  const count = document.getElementById('restore-selection-name');
+  if (count) count.textContent = restoreT('selectedCount', { count: selections.length });
+  if (list) list.innerHTML = selections.length ? selections.map(item => `
+    <li><div><strong>${escHtml(item.name)}</strong><small>${escHtml(item.path)}</small></div>
+    <button type="button" class="restore-icon-btn" data-restore-action="select" data-path="${escHtml(item.path)}"
+      aria-label="${escHtml(restoreT('removeItem', { name: item.name }))}" title="${escHtml(restoreT('removeItem', { name: item.name }))}">×</button></li>`).join('')
+    : `<li class="text-muted">${escHtml(restoreT('nothingSelected'))}</li>`;
+}
+
+function restoreOpenPath() {
+  const input = document.getElementById('restore-archive-path');
+  const path = String(input?.value || '').replace(/^\/+|\/+$/g, '');
+  return restoreBrowse(path);
+}
+
+function restoreFilterFolder() {
+  restoreState.folderFilter = document.getElementById('restore-folder-filter')?.value || '';
+  _restoreRenderFiles(restoreState.files);
+}
+
 
 function _stopRestorePolling() {
   if (restoreState.restorePollTimer) {
@@ -440,7 +459,7 @@ function renderRestoreRuns(runs) {
       <div class="restore-run-main">
         <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
         <strong>${escHtml(run.job_name || restoreJobName(run.job_key))}</strong>
-        <small>${escHtml(run.archive || '—')}</small>
+        <small>${escHtml(run.archive || '—')}${run.dry_run ? ' · ' + escHtml(restoreT('simulation')) : ''}</small>
       </div>
       <div class="restore-run-meta">
         <span>${escHtml(restoreT('targetDirectory'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
@@ -491,7 +510,7 @@ function renderRestoreHistory(payload) {
     return `<article class="restore-history-card ${selected ? 'is-selected' : ''}" data-restore-history-id="${escHtml(id)}">
       <div class="restore-run-main">
         <strong>${escHtml(run.job_name || restoreJobName(run.job_key))}</strong>
-        <small>${escHtml(run.archive || '—')}</small>
+        <small>${escHtml(run.archive || '—')}${run.dry_run ? ' · ' + escHtml(restoreT('simulation')) : ''}</small>
       </div>
       <div class="restore-run-meta">
         <dl>
@@ -585,12 +604,14 @@ function renderRestoreHistoryDetail(detail) {
   target.innerHTML = `<div class="restore-history-detail-grid">
     <div><small>${escHtml(restoreT('historyRestoreId'))}</small><strong>${escHtml(id)}</strong></div>
     <div><small>${escHtml(restoreT('runStatus'))}</small><strong><span class="ui-badge ${restoreRunStateClass(detail.state)}">${escHtml(restoreRunStateLabel(detail.state))}</span></strong></div>
-    <div><small>${escHtml(restoreT('sourcePath'))}</small><strong>${escHtml(detail.source_path || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('sourcePath'))}</small><strong>${escHtml((detail.source_paths || [detail.source_path]).filter(Boolean).join(' · ') || '—')}</strong></div>
     <div><small>${escHtml(restoreT('targetDirectory'))}</small><strong>${escHtml(detail.target_dir || '—')}</strong></div>
     <div><small>${escHtml(restoreT('destinationLabel'))}</small><strong>${escHtml(detail.destination_path || '—')}</strong></div>
     <div><small>${escHtml(restoreT('conflictStrategy'))}</small><strong>${escHtml(restoreConflictModeLabel(detail.conflict_mode))}</strong></div>
+    <div><small>${escHtml(restoreT('simulation'))}</small><strong>${escHtml(detail.dry_run ? restoreT('yes') : restoreT('no'))}</strong></div>
     <div><small>${escHtml(restoreT('preserveOwnerShort'))}</small><strong>${escHtml(detail.preserve_owner ? restoreT('yes') : restoreT('no'))}</strong></div>
   </div>
+  ${detail.items?.length ? `<ul class="restore-history-items">${detail.items.map(item => `<li>${escHtml(item.path)} → ${escHtml(item.destination_path)}${item.skipped ? ' (' + escHtml(restoreT('mappingSkip')) + ')' : ''}</li>`).join('')}</ul>` : ''}
   ${error ? `<div class="restore-history-error">${escHtml(error)}</div>` : ''}
   <details class="restore-history-log"><summary>${escHtml(restoreT('historyLog'))}</summary><pre>${escHtml(lines.join('\n') || restoreT('empty'))}</pre></details>`;
 }
@@ -687,6 +708,9 @@ async function _pollRestoreState(restoreId) {
           target_unreadable: 'targetUnreadable',
         }[data.skip_reason_code] || 'targetExists';
         showMsg('restore-assist-msg', 'warning', restoreT('skipped', { reason: restoreT(reasonKey) }));
+      } else if (data.dry_run) {
+        setRestoreHeaderStatus('simulation');
+        showMsg('restore-assist-msg', 'success', restoreT('simulationSuccess'));
       } else {
         setRestoreHeaderStatus('success');
         showMsg('restore-assist-msg', 'success', restoreT('success', { path: data.destination_path || '' }));
@@ -775,6 +799,7 @@ function restoreClearFileSelection() {
   restoreState.files = [];
   restoreState.path = '';
   restoreState.selectedPath = '';
+  restoreState.selections = [];
   restoreState.selectedName = '';
   restoreState.selectedType = '';
   restoreState.precheck = null;
@@ -921,6 +946,8 @@ async function restoreLoadArchives() {
 
 async function restoreBrowse(path) {
   const jobKey = restoreState.job;
+  const pathInput = document.getElementById('restore-archive-path');
+  const enteredPath = pathInput?.value;
   const archive = document.getElementById('restore-archive-sel').value;
   if (!archive) return;
 
@@ -929,7 +956,7 @@ async function restoreBrowse(path) {
   const sourceRequest = restoreState.sourceRequest;
   const isCurrent = () => request === restoreState.filesRequest && sourceRequest === restoreState.sourceRequest;
   restoreState.archive = archive;
-  restoreState.path = path;
+  const previousPath = restoreState.path;
   renderRestoreSourceContext();
   _restoreRenderSelectionSummary();
   renderRestoreArchiveList();
@@ -958,13 +985,23 @@ async function restoreBrowse(path) {
     if (!data || !Array.isArray(data.files)) throw new Error(apiErrorMessage({code: 'internal_error'}));
 
     _restoreMsg('');
+    restoreState.path = path;
+    restoreState.folderFilter = '';
+    const filter = document.getElementById('restore-folder-filter');
+    if (filter) filter.value = '';
+    if (pathInput && pathInput.value === enteredPath) pathInput.value = '/' + path;
     _restoreRenderBreadcrumb(path);
     restoreState.files = data.files || [];
     _restoreRenderFiles(restoreState.files);
   } catch (e) {
     if (!isCurrent()) return;
     if (e.archiveUnavailable) restoreClearArchives();
-    else restoreClearFileSelection();
+    else {
+      restoreState.path = previousPath;
+      restoreState.precheck = null;
+      restoreState.autoPrecheckKey = '';
+      restoreUpdateConfirmState();
+    }
     _restoreRenderSelectionSummary();
     if (filelist) filelist.innerHTML = `<div class="restore-empty" role="alert">${escHtml(e.message)}</div>`;
     _restoreMsg(restoreT('error', { message: e.message }), true);
@@ -973,18 +1010,21 @@ async function restoreBrowse(path) {
 
 function _restoreRenderBreadcrumb(path) {
   const parts = path ? path.split('/') : [];
-  let html = `<span class="bc-link" data-restore-action="browse" data-path="/">/</span>`;
+  let html = `<button type="button" class="bc-link" data-restore-action="browse" data-path="/">/</button>`;
   let cum = '';
   for (let i = 0; i < parts.length; i++) {
     cum = parts.slice(0, i + 1).join('/');
     const p = cum;
-    html += ` / <span class="${i === parts.length - 1 ? 'bc-current' : 'bc-link'}" data-restore-action="browse" data-path="${escHtml(p)}">${escHtml(parts[i])}</span>`;
+    html += ` / <button type="button" class="${i === parts.length - 1 ? 'bc-current' : 'bc-link'}" data-restore-action="browse" data-path="${escHtml(p)}">${escHtml(parts[i])}</button>`;
   }
   document.getElementById('restore-breadcrumb').innerHTML = html;
 }
 
 function _restoreRenderFiles(files) {
   const el = document.getElementById('restore-filelist');
+  if (!el) return;
+  const filter = String(restoreState.folderFilter || '').toLocaleLowerCase();
+  files = files.filter(f => String(f.name).toLocaleLowerCase().includes(filter));
   if (!files.length) {
     el.innerHTML = `<div class="restore-empty">${restoreT('noFiles')}</div>`;
     return;
@@ -992,15 +1032,18 @@ function _restoreRenderFiles(files) {
 
   let rows = '';
   for (const f of files) {
-    const isSelected = String(f.path || '') === String(restoreState.selectedPath || '');
+    const isSelected = _restoreSelections().some(item => item.path === f.path);
+    const included = _restoreSelections().some(item => item.type === 'd' && f.path.startsWith(item.path + '/'));
     const icon = f.type === 'd' ? '📁' : (f.type === 'l' ? '🔗' : '📄');
     const size = f.type === 'd' ? '—' : _restoreFmtSize(f.size);
     const mtime = f.mtime ? f.mtime.substring(0, 19).replace('T', ' ') : '';
     const nameCell = f.type === 'd'
-      ? `<span class="restore-dir-link" data-restore-action="browse" data-path="${escHtml(f.path)}">${icon} ${escHtml(f.name)}</span>`
+      ? `<button type="button" class="restore-dir-link" data-restore-action="browse" data-path="${escHtml(f.path)}">${icon} ${escHtml(f.name)}</button>`
       : `<span>${icon} ${escHtml(f.name)}</span>`;
 
     rows += `<tr class="${isSelected ? 'restore-row-selected' : ''}">
+      <td class="restore-col-select"><input type="checkbox" data-restore-action="select" data-path="${escHtml(f.path)}" data-name="${escHtml(f.name)}" data-type="${escHtml(f.type || '')}"
+        ${isSelected || included ? 'checked' : ''} ${included ? 'disabled' : ''} aria-label="${escHtml(restoreT(included ? 'includedByParent' : 'selectItem', { name: f.name }))}" title="${escHtml(restoreT(included ? 'includedByParent' : 'selectItem', { name: f.name }))}"></td>
       <td class="restore-col-name">${nameCell}</td>
       <td class="restore-col-size">${size}</td>
       <td class="restore-col-date">${mtime}</td>
@@ -1010,18 +1053,14 @@ function _restoreRenderFiles(files) {
             <path d="M12 4v10m0 0l-4-4m4 4l4-4M5 20h14"/>
           </svg>
         </button>
-        <button class="restore-icon-btn ${isSelected ? 'restore-icon-btn-selected' : ''}" data-restore-action="select" data-path="${escHtml(f.path)}" data-name="${escHtml(f.name)}" data-type="${escHtml(f.type || '')}" title="${isSelected ? restoreT('selected') : restoreT('select')}" aria-label="${isSelected ? restoreT('selected') : restoreT('select')}">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20 6 9 17l-5-5"/>
-          </svg>
-        </button>
+
       </td>
     </tr>`;
   }
 
   el.innerHTML = `<table class="restore-table">
     <thead><tr>
-      <th>${restoreT('name')}</th><th>${restoreT('size')}</th><th>${restoreT('date')}</th><th></th>
+      <th class="restore-col-select" aria-label="${escHtml(restoreT('currentSelection'))}"></th><th>${restoreT('name')}</th><th class="restore-col-size">${restoreT('size')}</th><th class="restore-col-date">${restoreT('date')}</th><th></th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
@@ -1036,7 +1075,6 @@ function onRestoreBrowserClick(event) {
   const type = el.dataset.type || '';
   if (action === 'browse') return restoreBrowse(path);
   if (action === 'download') return restoreDownload(path);
-  if (action === 'select' && path && path === restoreState.selectedPath) return restoreClearSelection();
   if (action === 'select') return restorePrepare(path, name, type);
 }
 
@@ -1086,9 +1124,19 @@ async function restoreDownload(path) {
 }
 
 function restorePrepare(path, name, type) {
-  restoreState.selectedPath = path || '';
-  restoreState.selectedName = name || '';
-  restoreState.selectedType = type === 'd' ? 'd' : 'f';
+  let selections = _restoreSelections();
+  if (selections.some(item => item.path === path)) {
+    selections = selections.filter(item => item.path !== path);
+  } else {
+    if (selections.some(item => item.type === 'd' && path.startsWith(item.path + '/'))) return;
+    selections = selections.filter(item => !(type === 'd' && item.path.startsWith(path + '/')));
+    if (selections.length >= 256) return _restoreMsg(restoreT('selectionLimit'), true);
+    selections.push({ path, name, type });
+  }
+  restoreState.selections = selections;
+  restoreState.selectedPath = selections[0]?.path || '';
+  restoreState.selectedName = selections[0]?.name || '';
+  restoreState.selectedType = selections[0]?.type || '';
   restoreState.precheck = null;
   restoreState.autoPrecheckKey = '';
   restoreState.completed = false;
@@ -1097,22 +1145,25 @@ function restorePrepare(path, name, type) {
   const target = document.getElementById('restore-target-path');
   const startBtn = document.getElementById('restore-start-btn');
   const confirmCheck = document.getElementById('restore-confirm-check');
-  if (src) src.value = path || '';
+  if (src) src.value = selections.map(item => item.path).join('\n');
   renderRestoreSourceContext();
   if (out) out.textContent = '';
   if (startBtn) startBtn.disabled = true;
   if (confirmCheck) confirmCheck.checked = false;
   hideEl('restore-assist-msg');
+  _setRestoreAssistBusy(false);
   _restoreRenderSelectedBox();
   // Auswahl bleibt in Schritt 3 sichtbar; Wechsel nach Schritt 4 erfolgt über "Weiter".
   restoreSetStep(Math.max(3, restoreState.step));
   _restoreRenderSelectionSummary();
   restoreUpdateConfirmState();
-  _restoreMsg(restoreT('elementSelected'), false);
+  _restoreRenderFiles(restoreState.files);
+  _restoreMsg(restoreT('selectedCount', { count: selections.length }), false);
 }
 
 function restoreClearSelection() {
   restoreState.selectedPath = '';
+  restoreState.selections = [];
   restoreState.selectedName = '';
   restoreState.selectedType = '';
   restoreState.precheck = null;
@@ -1122,19 +1173,11 @@ function restoreClearSelection() {
   const src = document.getElementById('restore-source-path');
   const out = document.getElementById('restore-precheck-output');
   const confirmCheck = document.getElementById('restore-confirm-check');
-  const targetInput = document.getElementById('restore-target-path');
-  const modeSel = document.getElementById('restore-conflict-mode');
-  const dryRun = document.getElementById('restore-dry-run');
-  const preserveOwner = document.getElementById('restore-preserve-owner');
   const startBtn = document.getElementById('restore-start-btn');
   if (src) src.value = '';
   renderRestoreSourceContext();
   if (out) out.textContent = '';
   if (confirmCheck) confirmCheck.checked = false;
-  if (targetInput) targetInput.value = '/mnt/user/';
-  if (modeSel) modeSel.value = 'skip';
-  if (dryRun) dryRun.checked = true;
-  if (preserveOwner) preserveOwner.checked = false;
   if (startBtn) startBtn.disabled = true;
   _stopRestorePolling();
   hideEl('restore-assist-msg');
@@ -1152,7 +1195,10 @@ function restoreUpdateConfirmState() {
   const startBtn = document.getElementById('restore-start-btn');
   const confirmCheck = document.getElementById('restore-confirm-check');
   const enabled = !!(_restoreSelectionReady() && restoreState.precheck && restoreState.precheck.ok && confirmCheck?.checked);
-  if (startBtn) startBtn.disabled = !enabled;
+  if (startBtn) {
+    startBtn.disabled = !enabled;
+    startBtn.textContent = restoreT(document.getElementById('restore-dry-run')?.checked ? 'startSimulation' : 'startRestore');
+  }
 }
 
 function _isAllowedRestoreTarget(target) {
@@ -1225,7 +1271,8 @@ function _setRestoreAssistBusy(busy) {
 async function restoreRunPrecheck() {
   const sourceRequest = restoreState.sourceRequest;
   const filesRequest = restoreState.filesRequest;
-  const isCurrent = () => sourceRequest === restoreState.sourceRequest && filesRequest === restoreState.filesRequest;
+  const requestKey = _currentPrecheckKey();
+  const isCurrent = () => sourceRequest === restoreState.sourceRequest && filesRequest === restoreState.filesRequest && requestKey === _currentPrecheckKey();
   restoreSetLiveMode(false);
   hideEl('restore-assist-msg');
   const source = restoreState.selectedPath || document.getElementById('restore-source-path')?.value || '';
@@ -1258,6 +1305,7 @@ async function restoreRunPrecheck() {
         job_key: restoreState.job,
         archive: restoreState.archive,
         source_path: source,
+        source_paths: _restoreSelections().map(item => item.path),
         target_dir: target,
         conflict_mode: mode,
         dry_run: dryRun,
@@ -1267,6 +1315,7 @@ async function restoreRunPrecheck() {
     if (!isCurrent()) return;
     if (!res.ok) throw new Error(restorePrecheckErrorMessage(data, res.status));
     restoreState.precheck = data;
+    restoreState.autoPrecheckKey = requestKey;
     renderRestorePrecheck(data);
     const combinedDryRun = [data.dry_run_stdout || '', data.dry_run_stderr || '']
       .filter(Boolean)
@@ -1303,6 +1352,8 @@ async function restoreRunPrecheck() {
 }
 
 function renderRestorePrecheck(data) {
+  const mapping = document.getElementById('restore-destination-map');
+  if (mapping) mapping.innerHTML = data?.items?.length ? `<h3>${escHtml(restoreT('destinationMapping'))}</h3><p class="text-muted">${escHtml(restoreT(data.conflict_mode === 'rename' ? 'mappingRenameHint' : 'mappingHint'))}</p><ul>${data.items.map(item => `<li><span>${escHtml(item.path)}</span><span>→ ${escHtml(item.destination_path)}</span><small>${escHtml(restoreT(item.skipped ? 'mappingSkip' : (document.getElementById('restore-dry-run')?.checked ? 'mappingSimulate' : 'mappingRestore')))}</small></li>`).join('')}</ul>` : '';
   const verdict = document.getElementById('restore-precheck-verdict');
   const badge = document.getElementById('restore-precheck-badge');
   const facts = document.getElementById('restore-system-check-facts');
@@ -1338,13 +1389,14 @@ function setRestoreHeaderStatus(state) {
   if (!badge) return;
   const key = {
     success: 'restoreSuccessfulShort',
+    simulation: 'simulationSuccessShort',
     skipped: 'restoreSkippedShort',
     failed: 'restoreFailedShort',
     running: 'restoreRunningShort',
   }[state] || 'precheckSuccessful';
   badge.textContent = restoreT(key);
   badge.classList.remove('success', 'warning', 'error');
-  if (state === 'success') badge.classList.add('success');
+  if (state === 'success' || state === 'simulation') badge.classList.add('success');
   if (state === 'skipped') badge.classList.add('warning');
   if (state === 'failed') badge.classList.add('error');
   if (state === 'running') badge.classList.add('warning');
@@ -1355,7 +1407,7 @@ function _currentPrecheckKey() {
   const target = document.getElementById('restore-target-path')?.value?.trim() || '';
   const mode = document.getElementById('restore-conflict-mode')?.value || 'skip';
   const dryRun = !!document.getElementById('restore-dry-run')?.checked;
-  return JSON.stringify([restoreState.job, restoreState.archive, source, target, mode, dryRun]);
+  return JSON.stringify([restoreState.job, restoreState.archive, _restoreSelections().map(item => item.path), target, mode, dryRun]);
 }
 
 function restoreEnsureAutoPrecheck() {
@@ -1379,7 +1431,8 @@ async function restoreStart() {
   const mode = document.getElementById('restore-conflict-mode')?.value || 'skip';
   const preserveOwner = !!document.getElementById('restore-preserve-owner')?.checked;
   const confirmCheck = !!document.getElementById('restore-confirm-check')?.checked;
-  if (!confirmCheck || !restoreState.precheck?.ok) {
+  const requestKey = _currentPrecheckKey();
+  if (!confirmCheck || !restoreState.precheck?.ok || restoreState.autoPrecheckKey !== requestKey) {
     showMsg('restore-assist-msg', 'error', restoreT('confirmPrecheckFirst'));
     return;
   }
@@ -1388,14 +1441,15 @@ async function restoreStart() {
     return;
   }
   const summary = [
+    restoreT('dryRun') + ': ' + restoreT(document.getElementById('restore-dry-run')?.checked ? 'yes' : 'no'),
     restoreT('archiveValue', { value: restoreState.archive }),
-    restoreT('source', { value: source }),
+    restoreT('source', { value: _restoreSelections().map(item => item.path).join('\n') }),
     restoreT('targetPath', { value: target }),
     restoreT('conflictMode', { value: mode }),
     restoreT('ownerGroup', { value: preserveOwner ? restoreT('ownerFromBackup') : restoreT('ownerFromTarget') }),
   ].join('\n');
   const confirmed = await openRestoreConfirmModal(summary);
-  if (!confirmed) return;
+  if (!confirmed || requestKey !== _currentPrecheckKey()) return;
   restoreSetLiveMode(true);
   const out = document.getElementById('restore-precheck-output');
   if (out) {
@@ -1424,9 +1478,11 @@ async function restoreStart() {
         job_key: restoreState.job,
         archive: restoreState.archive,
         source_path: source,
+        source_paths: _restoreSelections().map(item => item.path),
         target_dir: target,
         conflict_mode: mode,
         preserve_owner: preserveOwner,
+        dry_run: !!document.getElementById('restore-dry-run')?.checked,
       }),
     });
     const data = await res.json();

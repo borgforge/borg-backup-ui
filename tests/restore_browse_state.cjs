@@ -177,7 +177,7 @@ for (const failure of ['server', 'network', 'json', 'invalid-data']) test(`${fai
     return failure === 'server' ? response({code: 'internal_error'}, 500) : response(null);
   };
   await context.restoreBrowse('');
-  assert.equal(state.selectedPath, '');
+  assert.equal(state.selectedPath, 'stale'); // Navigation failures keep the selection, but invalidate precheck.
   assert.equal(state.precheck, null);
   assert.ok(get('restore-filelist').innerHTML.includes('role="alert"'));
   assert.equal(state.archive, 'archive');
@@ -202,4 +202,62 @@ test('a late missing-archive error cannot clear a newer successful selection', a
   assert.equal(state.archive, 'new');
   assert.equal(state.files[0].name, 'current.txt');
   assert.equal(context.messages.length, messageCount);
+});
+
+test('multi-selection persists across directories and removes overlapping children', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'archive';
+  get('restore-archive-sel').value = 'archive';
+  context.restorePrepare('Backup/Test1/file.txt', 'file.txt', '-');
+  context.restorePrepare('Backup/Test2', 'Test2', 'd');
+  context.restorePrepare('Backup/Test1', 'Test1', 'd');
+  assert.deepEqual(Array.from(state.selections, item => item.path), ['Backup/Test2', 'Backup/Test1']);
+  context.fetch = async () => response({files: []});
+  await context.restoreBrowse('Other');
+  assert.equal(state.selections.length, 2);
+  context.restorePrepare('Backup/Test1', 'Test1', 'd');
+  assert.deepEqual(Array.from(state.selections, item => item.path), ['Backup/Test2']);
+  assert.equal(get('restore-source-path').value, 'Backup/Test2');
+});
+
+test('changing only the second selected item invalidates an in-flight precheck', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'archive';
+  get('restore-target-path').value = '/mnt/user/test';
+  context.restorePrepare('Backup/Test1', 'Test1', 'd');
+  context.restorePrepare('Backup/Test2', 'Test2', 'd');
+  const check = deferred();
+  let body;
+  context.fetch = (url, options) => { body = JSON.parse(options.body); return check.promise; };
+  const pending = context.restoreRunPrecheck();
+  assert.deepEqual(body.source_paths, ['Backup/Test1', 'Backup/Test2']);
+  context.restorePrepare('Backup/Test2', 'Test2', 'd');
+  check.resolve(response({ok: true}));
+  await pending;
+  assert.equal(state.precheck, null);
+});
+
+test('archive changes reset all selected paths', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'old';
+  context.restorePrepare('Backup/Test1', 'Test1', 'd');
+  context.restorePrepare('Backup/Test2', 'Test2', 'd');
+  get('restore-archive-sel').value = 'new';
+  context.fetch = async () => response({files: []});
+  await context.restoreBrowse('');
+  assert.equal(state.selections.length, 0);
+});
+
+test('a pending folder response does not overwrite a path being entered', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'archive';
+  get('restore-archive-sel').value = 'archive';
+  get('restore-archive-path').value = '/';
+  const files = deferred();
+  context.fetch = () => files.promise;
+  const pending = context.restoreBrowse('');
+  get('restore-archive-path').value = '/Backup/Test1';
+  files.resolve(response({files: []}));
+  await pending;
+  assert.equal(get('restore-archive-path').value, '/Backup/Test1');
 });

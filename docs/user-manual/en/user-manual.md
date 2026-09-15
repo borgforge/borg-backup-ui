@@ -577,7 +577,11 @@ If no archives are visible, check repository access, passphrase, storage status,
 
 #### Step 3: Selection
 
-Browse the archive and select files or directories. The selection determines what will be restored.
+Paste an archive folder path and select **Open**, or use the breadcrumbs and folder names. The name filter applies only to the open folder; it does not search the entire archive.
+
+Use the checkboxes to select up to 256 files or folders from the same archive. The selection list stays visible while you browse other folders. Remove individual entries using the adjacent button. A selected folder includes all its contents; selecting both a folder and one of its children restores that child only once. Changing jobs or archives clears the selection.
+
+Multiple selections keep the structure below their common parent. For example, selecting `Backup/Test1` and `Backup/Test2` restores `Target/Test1` and `Target/Test2`. Selecting `Backup/Test1` and `Other/Test1` preserves both parent folders below the target. A single selected directory keeps the previous behavior: if the target already has the same name, its contents are restored directly there.
 
 #### Step 4: Target & Mode
 
@@ -585,9 +589,13 @@ Review the read-only **Archive path**, then set the target directory and conflic
 
 Conflict strategies:
 
-- **Do not overwrite:** Existing files are kept.
-- **Replace:** Existing files are replaced.
-- **Rename:** Restored files are renamed if conflicts occur.
+- **Do not overwrite:** An already existing selected target is skipped entirely, including an existing selected folder. Other selected entries can still be restored.
+- **Replace:** Conflicting files are replaced. Unrelated files inside existing directories are kept.
+- **Rename:** Each selected entry receives a timestamp suffix, even if the original destination does not exist. Existing entries are kept.
+
+With **Dry run (no changes)** enabled, starting the operation checks the selected data using Borg without writing restored files. Disable it for an actual restore. Simulation is identified in the live result and history.
+
+The final precheck shows each source and destination and marks entries that will be skipped. Extraction is staged on the target filesystem before publication, so sufficient free space for all selected data is required. An extraction failure leaves existing target files untouched. A later failure while moving files to their destinations can leave a partial restore; the log records which selections completed.
 
 The target path is checked against allowed restore target roots.
 

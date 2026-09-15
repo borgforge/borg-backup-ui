@@ -577,7 +577,11 @@ Wenn keine Archive sichtbar sind, prüfen Sie Repository-Zugriff, Passphrase, St
 
 #### Schritt 3: Auswahl
 
-Durchsuchen Sie das Archiv und wählen Sie Dateien oder Verzeichnisse aus. Die Auswahl bestimmt, was wiederhergestellt wird.
+Fügen Sie einen Ordnerpfad aus dem Archiv ein und wählen Sie **Öffnen**, oder navigieren Sie über die Pfadleiste und Ordnernamen. Der Namensfilter gilt nur für den geöffneten Ordner; er durchsucht nicht das gesamte Archiv.
+
+Wählen Sie über die Kontrollkästchen bis zu 256 Dateien oder Ordner aus demselben Archiv. Die Auswahlliste bleibt beim Wechsel zwischen Ordnern erhalten. Einzelne Einträge lassen sich über die zugehörige Schaltfläche entfernen. Ein ausgewählter Ordner enthält seinen gesamten Inhalt; zusätzlich ausgewählte Unterordner oder Dateien werden nur einmal wiederhergestellt. Ein Wechsel des Jobs oder Archivs leert die Auswahl.
+
+Bei mehreren Einträgen bleibt die Struktur ab dem gemeinsamen Elternordner erhalten. `Backup/Test1` und `Backup/Test2` werden beispielsweise zu `Ziel/Test1` und `Ziel/Test2`. Bei `Backup/Test1` und `Other/Test1` bleiben beide Elternordner unter dem Ziel erhalten. Bei einem einzelnen Ordner gilt das bisherige Verhalten: Hat der Zielordner bereits denselben Namen, wird der Inhalt direkt dort wiederhergestellt.
 
 #### Schritt 4: Ziel & Modus
 
@@ -585,9 +589,13 @@ Prüfen Sie den schreibgeschützten **Archiv-Pfad** und legen Sie Zielordner sow
 
 Konfliktstrategien:
 
-- **Nicht überschreiben:** Existierende Dateien bleiben erhalten.
-- **Ersetzen:** Existierende Dateien werden ersetzt.
-- **Umbenennen:** Wiederhergestellte Dateien werden umbenannt, wenn Konflikte auftreten.
+- **Nicht überschreiben:** Ein bereits vorhandenes ausgewähltes Ziel wird vollständig übersprungen, auch ein vorhandener ausgewählter Ordner. Die übrigen Einträge können weiterhin wiederhergestellt werden.
+- **Ersetzen:** Dateien mit gleichem Zielpfad werden ersetzt. Andere Dateien in vorhandenen Ordnern bleiben erhalten.
+- **Umbenennen:** Jeder ausgewählte Eintrag erhält einen Zeitstempel am Namen, auch wenn das ursprüngliche Ziel noch nicht existiert. Vorhandene Einträge bleiben erhalten.
+
+Ist **Testlauf (keine Änderungen)** aktiviert, prüft Borg beim Start die ausgewählten Daten, ohne Dateien wiederherzustellen. Deaktivieren Sie die Option für einen echten Restore. Live-Ergebnis und Historie kennzeichnen den Testlauf.
+
+Die abschließende Vorprüfung zeigt für jeden Eintrag Quelle und Ziel sowie geplante Überspringungen. Die Daten werden zunächst auf dem Zieldateisystem zwischengespeichert; dafür muss ausreichend Platz für die gesamte Auswahl vorhanden sein. Ein Fehler beim Entpacken lässt vorhandene Zieldateien unverändert. Ein späterer Fehler beim Verschieben an die Zielpfade kann eine teilweise Wiederherstellung hinterlassen; das Log nennt die bereits abgeschlossenen Einträge.
 
 Der Zielpfad wird gegen erlaubte Restore-Zielbereiche geprüft.
 

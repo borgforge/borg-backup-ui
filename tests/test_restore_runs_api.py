@@ -126,3 +126,31 @@ def test_restore_history_delete_removes_index_and_detail(tmp_path: Path):
     assert result["detail_deleted"] is True
     assert history["total"] == 0
     assert not (runs_dir / "delete-me.json").exists()
+
+
+def test_multi_selection_simulation_survives_async_state_and_history(tmp_path, monkeypatch):
+    restore_api._RESTORE_RUNS_LOADED = True
+    restore_api._RESTORE_RUNS.clear()
+    config = {'BACKUP_SCRIPTS_DIR': str(tmp_path)}
+    paths = ['Backup/Test1', 'Backup/Test2']
+    items = [{'path': p, 'destination_path': '/mnt/user/restore/' + p.split('/')[-1], 'skipped': False} for p in paths]
+    def simulate(*args, **kwargs):
+        assert kwargs['source_paths'] == paths
+        assert kwargs['dry_run'] is True
+        return {'dry_run': True, 'items': items, 'destination_path': '/mnt/user/restore'}
+    class ImmediateThread:
+        def __init__(self, target, **kwargs): self.target = target
+        def start(self): self.target()
+    monkeypatch.setattr(restore_api, 'start_restore', simulate)
+    monkeypatch.setattr(restore_api.threading, 'Thread', ImmediateThread)
+    result = restore_api.start_restore_async(config, 'job-id', 'archive', '', '/mnt/user/restore', 'skip',
+                                            source_paths=paths, dry_run=True)
+    state = restore_api.get_restore_state(config, result['restore_id'])
+    assert state['state'] == 'done'
+    assert state['dry_run'] is True
+    assert state['source_paths'] == paths
+    assert state['items'] == items
+    detail = restore_api.get_restore_history_detail(config, result['restore_id'])
+    assert detail['dry_run'] is True
+    assert detail['source_paths'] == paths
+    assert detail['items'] == items

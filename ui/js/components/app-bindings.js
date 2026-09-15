@@ -166,6 +166,12 @@
     document.getElementById('restore-wizard')?.addEventListener('click', onRestoreRedesignClick);
     document.getElementById('restore-sidebar-search')?.addEventListener('input', renderRestoreJobSidebar);
     document.getElementById('restore-browser')?.addEventListener('click', onRestoreBrowserClick);
+    document.getElementById('restore-selected-list')?.addEventListener('click', onRestoreBrowserClick);
+    document.getElementById('restore-open-path')?.addEventListener('click', restoreOpenPath);
+    document.getElementById('restore-archive-path')?.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); restoreOpenPath(); }
+    });
+    document.getElementById('restore-folder-filter')?.addEventListener('input', restoreFilterFolder);
     document.getElementById('restore-start-btn')?.addEventListener('click', restoreStart);
     document.getElementById('restore-runs-refresh-btn')?.addEventListener('click', restoreLoadRuns);
     document.getElementById('restore-runs-content')?.addEventListener('click', onRestoreRunsClick);

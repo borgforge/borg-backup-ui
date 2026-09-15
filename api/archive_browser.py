@@ -33,6 +33,11 @@ class ArchiveNotFoundError(ValueError):
     api_status = 404
 
 
+class ArchiveDirectoryNotFoundError(ValueError):
+    api_code = "restore_directory_unavailable"
+    api_status = 404
+
+
 def _prune_expired_cache_entries(now: float) -> None:
     expired = [key for key, value in _CACHE.items() if float(value.get("expires", 0)) <= now]
     for key in expired:
@@ -145,10 +150,18 @@ def list_archive_directory(
     archive: str,
     path: str,
     env: dict[str, str],
+    *,
+    strict: bool = False,
 ) -> list[dict[str, Any]]:
     """Return the direct children of one directory in a Borg archive."""
     index = build_archive_index(repo, archive, env)
     current = str(path or "").rstrip("/")
+    if strict and current:
+        p = Path(current)
+        parent = str(p.parent) if str(p.parent) != "." else ""
+        entry = index.get(parent, {}).get(p.name)
+        if not entry or entry["type"] != "d":
+            raise ArchiveDirectoryNotFoundError("Folder not found in the selected archive")
     children = list(index.get(current, {}).values())
     children.sort(key=lambda item: (0 if item["type"] == "d" else 1, str(item["name"]).lower()))
     return children

@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #521 - Browse & Restore selection
+- Add direct archive-folder navigation, a current-folder name filter and persistent checkbox selection across folders, with source-to-target mapping before confirmation.
+- Normalize overlapping selections, preserve paths below the common parent and extract literal file/folder paths in one Borg invocation under the existing repository lock. Stage output on the target filesystem; retain per-selection conflict handling and single-directory behavior.
+- Persist selected paths and destinations in restore history. Honor the existing simulation control during extraction and label simulations explicitly. Keep old single-path API callers and history readable without migration.
+
 ### Issue #519 - recognize UUID migration recovery snapshots
 - Associate existing job-ID and job-settings snapshots with their exact journal run, directory, timestamp and completion state. Read the same configuration directory as the migration writers, including configurations ending in scripts.
 - Keep the existing retention policy, protect missing or conflicting journals and incomplete runs, and skip symbolic snapshot directories. Display retained snapshots separately from deletion candidates and protected snapshots in German and English.

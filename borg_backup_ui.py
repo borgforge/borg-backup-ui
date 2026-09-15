@@ -2801,6 +2801,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             str(body.get("target_dir", "")).strip(),
             str(body.get("conflict_mode", "skip")).strip(),
             bool(body.get("dry_run", True)),
+            **({"source_paths": body["source_paths"]} if "source_paths" in body else {}),
         )
 
     def _post_restore_start(self) -> dict:
@@ -2818,6 +2819,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             str(body.get("target_dir", "")).strip(),
             str(body.get("conflict_mode", "skip")).strip(),
             bool(body.get("preserve_owner", False)),
+            dry_run=bool(body.get("dry_run", False)),
+            **({"source_paths": body["source_paths"]} if "source_paths" in body else {}),
         )
 
     def _get_restore_runs(self, query: str) -> dict:
