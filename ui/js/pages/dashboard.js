@@ -621,10 +621,7 @@ function repoCheckLabel(b) {
 }
 
 function showError(msg) {
-  const el = document.getElementById('status-message');
-  if (!el) return;
-  el.className = 'status-message error-state';
-  el.textContent = msg;
+  showMsg('status-message', 'error', msg);
 }
 
 function showEmpty(html) {
@@ -635,8 +632,7 @@ function showEmpty(html) {
 }
 
 function hideMessage() {
-  const el = document.getElementById('status-message');
-  if (el) el.className = 'status-message hidden';
+  hideEl('status-message');
 }
 
 window.addEventListener?.('bbui:language-changed', () => {

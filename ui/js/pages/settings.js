@@ -362,6 +362,7 @@ function activateSettingsTab(tabKey) {
   const active = tabs.find((tab) => tab.key === tabKey) || tabs[0];
   if (!active) return;
   const previousTab = settingsState.activeTab;
+  if (previousTab !== active.key) window.BBUI?.utils?.dom?.clearPageFeedback?.();
   settingsState.activeTab = active.key;
   settingsState.profileEditing = '';
 

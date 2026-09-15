@@ -1446,10 +1446,7 @@ window.addEventListener?.('bbui:language-changed', () => {
 // ── Jobs-Meldungen ────────────────────────────────────────────────────────────
 
 function showJobsError(msg) {
-  const el = document.getElementById('jobs-message');
-  if (!el) return;
-  el.className = 'status-message error-state';
-  el.textContent = msg;
+  showMsg('jobs-message', 'error', msg);
 }
 
 function showJobsEmpty(html) {
@@ -1460,6 +1457,5 @@ function showJobsEmpty(html) {
 }
 
 function hideJobsMessage() {
-  const el = document.getElementById('jobs-message');
-  if (el) el.className = 'status-message hidden';
+  hideEl('jobs-message');
 }

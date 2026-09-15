@@ -35,6 +35,7 @@ function page(language = 'en') {
     apiErrorMessage: data => labels.api.errors[data.code] || data.message || 'API error',
   });
   vm.runInContext(fs.readFileSync('ui/js/pages/restore.js', 'utf8'), context);
+  const renderers = {selection: context._restoreRenderSelectedBox, summary: context._restoreRenderSelectionSummary};
   for (const name of ['restoreSetLiveMode', 'restoreSwitchView', 'restoreSetStep',
     '_restoreBindTargetAutocomplete', '_restoreRenderSelectionSummary', '_restoreRenderSelectedBox',
     'restoreLoadRuns', 'restoreLoadHistory', 'renderRestoreJobSidebar', 'renderRestoreSelectedJob',
@@ -45,7 +46,7 @@ function page(language = 'en') {
   context._isAllowedRestoreTarget = () => true;
   context._restoreMsg = (message, error) => context.messages.push({message, error});
   context._restoreRenderFiles = files => { get('restore-filelist').innerHTML = JSON.stringify(files); };
-  return {context, get, state: context.window.BBUI.restoreState, labels};
+  return {context, get, state: context.window.BBUI.restoreState, labels, renderers};
 }
 
 test('returning after backups, repository switches and rename refreshes the same job', async () => {
@@ -412,7 +413,7 @@ for (const language of ['de', 'en']) test(`restore plan table distinguishes acti
   context._restoreRenderDestinationMap(data);
   html = get('restore-destination-map').innerHTML;
   assert.ok(html.includes(labels.restore.mappingRename));
-  assert.ok(html.includes(labels.restore.mappingTimestamp));
+  assert.ok(html.includes(labels.restore.mappingRenameHint));
   get('restore-dry-run').checked = true;
   data.conflict_mode = 'skip'; data.items[0].skipped = true;
   context._restoreRenderDestinationMap(data);
@@ -432,11 +433,11 @@ test('single matching folder shows the timestamped child destination for rename 
   ]};
   context._restoreRenderDestinationMap(data);
   assert.match(get('restore-destination-map').innerHTML, /class="restore-mapping-target"><span class="mono">\/target\/Test1\/Test1<\/span>/);
-  assert.ok(get('restore-destination-map').innerHTML.includes(labels.restore.mappingTimestamp));
+  assert.ok(get('restore-destination-map').innerHTML.includes(labels.restore.mappingRenameHint));
   data.conflict_mode = 'overwrite';
   context._restoreRenderDestinationMap(data);
   assert.match(get('restore-destination-map').innerHTML, /class="restore-mapping-target"><span class="mono">\/target\/Test1<\/span>/);
-  assert.ok(!get('restore-destination-map').innerHTML.includes(labels.restore.mappingTimestamp));
+  assert.ok(!get('restore-destination-map').innerHTML.includes(labels.restore.mappingRenameHint));
 });
 
 for (const language of ['de', 'en']) for (const simulation of [false, true]) {
@@ -485,3 +486,52 @@ for (const language of ['de', 'en']) for (const simulation of [false, true]) {
     assert.ok(get('restore-precheck-output').textContent.includes(labels.restore.mountpointUnknown));
   });
 }
+
+for (const language of ['de', 'en']) test(`searching a large selection preserves hidden items (${language})`, () => {
+  const {context, get, state, labels, renderers} = page(language);
+  context._restoreRenderSelectedBox = renderers.selection;
+  state.job = 'job-id'; state.archive = 'archive';
+  state.selections = Array.from({length: 180}, (_, index) => ({path: `Documents/Folder-${index}/notes.txt`, name: 'notes.txt', type: '-'}));
+  state.selectedPath = state.selections[0].path;
+  get('restore-selection-filter').value = 'folder-179';
+  renderers.selection();
+  assert.equal((get('restore-selected-list').innerHTML.match(/<tr>/g) || []).length, 1);
+  assert.match(get('restore-selected-list').innerHTML, /Folder-179/);
+  assert.equal(state.selections.length, 180);
+  assert.match(get('restore-selection-name').textContent, /180/);
+  assert.equal(get('restore-clear-selection-btn').disabled, false);
+  // Removing the visible match leaves the other 179 selections intact.
+  context.restorePrepare('Documents/Folder-179/notes.txt', 'notes.txt', '-');
+  assert.equal(state.selections.length, 179);
+  assert.ok(get('restore-selected-list').innerHTML.includes(labels.restore.selectionNoMatches));
+  get('restore-selection-filter').value = '';
+  renderers.selection();
+  assert.equal((get('restore-selected-list').innerHTML.match(/<tr>/g) || []).length, 179);
+  // Archive changes clear both the selection and its filter/expanded view.
+  get('restore-selection-details').open = true;
+  get('restore-selection-filter').value = 'old';
+  context.restoreClearFileSelection();
+  assert.equal(get('restore-selection-filter').value, '');
+  assert.equal(get('restore-selection-details').open, false);
+  assert.equal(get('restore-clear-selection-btn').disabled, true);
+});
+
+test('target summary describes planned operation, conflict behavior and configured roots', () => {
+  const {get, state, labels, renderers} = page('de');
+  state.selections = [{path: 'Backup/Test1', name: 'Test1', type: 'd'}, {path: 'Backup/file', name: 'file', type: '-'}];
+  state.allowedTargetRoots = ['/mnt/cache/restore'];
+  get('restore-dry-run').checked = true;
+  for (const mode of ['skip', 'overwrite', 'rename']) {
+    get('restore-conflict-mode').value = mode;
+    renderers.summary();
+    assert.equal(get('restore-conflict-help').textContent, labels.restore[`${mode}Help`]);
+    assert.match(get('restore-target-roots-hint').textContent, /\/mnt\/cache\/restore/);
+    assert.ok(!get('restore-target-roots-hint').textContent.includes('{roots}'));
+    assert.equal(get('restore-mode-badge').textContent, labels.restore.dryRunActive);
+    assert.equal(get('restore-summary-dry-run').textContent, labels.restore.plannedSimulation);
+  }
+  get('restore-dry-run').checked = false;
+  renderers.summary();
+  assert.equal(get('restore-mode-badge').textContent, labels.restore.restoreActive);
+  assert.equal(get('restore-summary-dry-run').textContent, labels.restore.plannedRestore);
+});

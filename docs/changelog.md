@@ -6,7 +6,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #523 - stable page layout for action feedback
+- Route page action feedback through the shared message helper, including dashboard, jobs, reports, restore and settings subpages. Render a fixed, dismissible panel with localized severity and accessible announcements; preserve line breaks and bound long message height.
+- Keep one current page message until dismissed, explicitly cleared, replaced by new feedback or navigation. Keep modal validation and contextual empty/system states inline. Move restore action feedback outside individual steps so errors from browsing and history remain visible.
+
 ### Issue #521 - Browse & Restore selection
+- Simplify steps 3-5: keep direct path entry optional, replace selection cards with a collapsible searchable table, summarize selection in the target step and explain conflict behavior. Compact the review and confirmation area, refresh dynamic language text, and keep keyboard focus after selection changes.
 - Add an expandable directory tree with lazy loading and automatic navigation through single-directory chains on first archive opening. Keep expanded branches and discard stale tree responses after source changes.
 - Add direct archive-folder navigation, a current-folder name filter and persistent checkbox selection across folders, with source-to-target mapping before confirmation.
 - List every verified selection, destination and planned action in the technical precheck. Separate metadata validation from the subsequently confirmed dry run or restore; show selection counts instead of a synthetic extraction exit code. Resolve the actual destination mount with findmnt and show an unknown value when lookup fails.

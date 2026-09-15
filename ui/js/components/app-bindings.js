@@ -167,6 +167,7 @@
     document.getElementById('restore-sidebar-search')?.addEventListener('input', renderRestoreJobSidebar);
     document.getElementById('restore-browser')?.addEventListener('click', onRestoreBrowserClick);
     document.getElementById('restore-selected-list')?.addEventListener('click', onRestoreBrowserClick);
+    document.getElementById('restore-selection-filter')?.addEventListener('input', _restoreRenderSelectedBox);
     document.getElementById('restore-open-path')?.addEventListener('click', restoreOpenPath);
     document.getElementById('restore-archive-path')?.addEventListener('keydown', event => {
       if (event.key === 'Enter') { event.preventDefault(); restoreOpenPath(); }

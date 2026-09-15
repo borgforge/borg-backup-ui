@@ -67,6 +67,7 @@ function restoreStatusIcon(status) {
 function restoreSetStep(step) {
   const next = Math.max(1, Math.min(5, Number(step) || 1));
   restoreState.step = next;
+  document.getElementById('restore-wizard')?.classList.toggle('restore-selection-steps', next >= 3);
   for (let i = 1; i <= 5; i++) {
     const panel = document.getElementById(`restore-step-panel-${i}`);
     if (panel) panel.style.display = i === next ? '' : 'none';
@@ -98,6 +99,7 @@ function restoreSetStep(step) {
   }
   const status = document.getElementById('restore-step-status');
   if (status) status.textContent = restoreT('stepStatus', { step: next, total: 5 });
+  _restoreRenderSelectionSummary();
 }
 
 function restoreSetLiveMode(enabled) {
@@ -119,6 +121,7 @@ function restoreSetLiveMode(enabled) {
 
 function restoreSwitchView(view) {
   const next = view === 'history' ? 'history' : 'wizard';
+  if (restoreState.view !== next) window.BBUI?.utils?.dom?.clearPageFeedback?.();
   restoreState.view = next;
   const wizardBtn = document.getElementById('restore-view-wizard-btn');
   const historyBtn = document.getElementById('restore-view-history-btn');
@@ -355,11 +358,17 @@ function _restoreRenderSelectionSummary() {
   const mode = document.getElementById('restore-conflict-mode')?.selectedOptions?.[0]?.textContent || '—';
   const dryRun = document.getElementById('restore-dry-run')?.checked;
   if (modeEl) modeEl.textContent = mode;
-  if (dryRunEl) dryRunEl.textContent = dryRun ? restoreT('yes') : restoreT('no');
+  if (dryRunEl) dryRunEl.textContent = restoreT(dryRun ? 'plannedSimulation' : 'plannedRestore');
   const modeBadge = document.getElementById('restore-mode-badge');
   if (modeBadge) modeBadge.textContent = restoreT(dryRun ? 'dryRunActive' : 'restoreActive');
   const browserContext = document.getElementById('restore-browser-context');
   if (browserContext) browserContext.textContent = restoreState.archive || '';
+  const selection = document.getElementById('restore-target-selection-info');
+  if (selection) selection.textContent = restoreT('selectedCount', { count: selectedCount }) + ' · ' + _restoreSelectionTypes();
+  const conflictHelp = document.getElementById('restore-conflict-help');
+  const conflictMode = document.getElementById('restore-conflict-mode')?.value || 'skip';
+  if (conflictHelp) conflictHelp.textContent = restoreT({skip: 'skipHelp', overwrite: 'overwriteHelp', rename: 'renameHelp'}[conflictMode]);
+  _restoreRenderTargetHints();
 }
 
 function _restoreSelections() {
@@ -367,16 +376,40 @@ function _restoreSelections() {
     ? [{ path: restoreState.selectedPath, name: restoreState.selectedName, type: restoreState.selectedType }] : []);
 }
 
+function _restoreSelectionTypes() {
+  const selections = _restoreSelections();
+  const folders = selections.filter(item => item.type === 'd').length;
+  return restoreT('selectionTypes', {folders, files: selections.length - folders});
+}
+
+function restoreEntryIcon(type) {
+  const shape = type === 'd' ? '<path d="M2 5h6l2 2h8v10H2z"/>'
+    : type === 'l' ? '<path d="m8 12 4-4m-5 6H5a3 3 0 0 1-2-5l3-3a3 3 0 0 1 4 0m0 8a3 3 0 0 0 4 0l3-3a3 3 0 0 0-2-5h-2"/>'
+    : '<path d="M4 2h8l4 4v12H4zM12 2v5h4M7 11h6M7 14h6"/>';
+  return `<svg class="restore-entry-icon" viewBox="0 0 20 20" aria-hidden="true">${shape}</svg>`;
+}
+
 function _restoreRenderSelectedBox() {
   const selections = _restoreSelections();
   const list = document.getElementById('restore-selected-list');
   const count = document.getElementById('restore-selection-name');
   if (count) count.textContent = restoreT('selectedCount', { count: selections.length });
-  if (list) list.innerHTML = selections.length ? selections.map(item => `
-    <li><div><strong>${escHtml(item.name)}</strong><small>${escHtml(item.path)}</small></div>
-    <button type="button" class="restore-icon-btn" data-restore-action="select" data-path="${escHtml(item.path)}"
-      aria-label="${escHtml(restoreT('removeItem', { name: item.name }))}" title="${escHtml(restoreT('removeItem', { name: item.name }))}">×</button></li>`).join('')
-    : `<li class="text-muted">${escHtml(restoreT('nothingSelected'))}</li>`;
+  const types = document.getElementById('restore-selection-types');
+  if (types) types.textContent = selections.length ? _restoreSelectionTypes() : '';
+  const input = document.getElementById('restore-selection-filter');
+  if (input && !selections.length) input.value = '';
+  const filter = String(input?.value || '').trim().toLocaleLowerCase();
+  const filtered = selections.filter(item => String(item.path).toLocaleLowerCase().includes(filter));
+  const resultCount = document.getElementById('restore-selection-filter-count');
+  if (resultCount) resultCount.textContent = filter ? restoreT('selectionFilterCount', {count: filtered.length, total: selections.length}) : '';
+  const clear = document.getElementById('restore-clear-selection-btn');
+  if (clear) clear.disabled = !selections.length;
+  if (list) list.innerHTML = filtered.length ? filtered.map(item => `
+    <tr><td><span class="restore-entry-name">${restoreEntryIcon(item.type)}<strong>${escHtml(item.name || item.path.split('/').pop())}</strong></span></td>
+    <td class="mono">${escHtml('/' + item.path.split('/').slice(0, -1).join('/'))}</td>
+    <td><button type="button" class="restore-icon-btn" data-restore-action="select" data-path="${escHtml(item.path)}"
+      aria-label="${escHtml(restoreT('removeItem', { name: item.name }))}" title="${escHtml(item.path)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></td></tr>`).join('')
+    : `<tr><td colspan="3" class="text-muted">${escHtml(restoreT(selections.length ? 'selectionNoMatches' : 'nothingSelected'))}</td></tr>`;
 }
 
 function restoreOpenPath() {
@@ -796,6 +829,10 @@ function _restoreBindTargetAutocomplete() {
 }
 
 function restoreClearFileSelection() {
+  const selectionDetails = document.getElementById('restore-selection-details');
+  if (selectionDetails) selectionDetails.open = false;
+  const pathDetails = document.getElementById('restore-path-details');
+  if (pathDetails) pathDetails.open = false;
   restoreState.folderTree = null;
   const tree = document.getElementById('restore-folder-tree');
   if (tree) tree.innerHTML = '';
@@ -1149,12 +1186,14 @@ async function restoreBrowse(path) {
 
 function _restoreRenderBreadcrumb(path) {
   const parts = path ? path.split('/') : [];
-  let html = `<button type="button" class="bc-link" data-restore-action="browse" data-path="/">/</button>`;
+  let html = `<button type="button" class="bc-link" data-restore-action="browse" data-path="/">${escHtml(restoreT('archiveRoot'))}</button>`;
   let cum = '';
   for (let i = 0; i < parts.length; i++) {
     cum = parts.slice(0, i + 1).join('/');
     const p = cum;
-    html += ` / <button type="button" class="${i === parts.length - 1 ? 'bc-current' : 'bc-link'}" data-restore-action="browse" data-path="${escHtml(p)}">${escHtml(parts[i])}</button>`;
+    html += ' <span aria-hidden="true">/</span> ' + (i === parts.length - 1
+      ? `<span class="bc-current" aria-current="location">${escHtml(parts[i])}</span>`
+      : `<button type="button" class="bc-link" data-restore-action="browse" data-path="${escHtml(p)}">${escHtml(parts[i])}</button>`);
   }
   document.getElementById('restore-breadcrumb').innerHTML = html;
 }
@@ -1173,12 +1212,12 @@ function _restoreRenderFiles(files) {
   for (const f of files) {
     const isSelected = _restoreSelections().some(item => item.path === f.path);
     const included = _restoreSelections().some(item => item.type === 'd' && f.path.startsWith(item.path + '/'));
-    const icon = f.type === 'd' ? '📁' : (f.type === 'l' ? '🔗' : '📄');
+    const icon = restoreEntryIcon(f.type);
     const size = f.type === 'd' ? '—' : _restoreFmtSize(f.size);
     const mtime = f.mtime ? f.mtime.substring(0, 19).replace('T', ' ') : '';
     const nameCell = f.type === 'd'
-      ? `<button type="button" class="restore-dir-link" data-restore-action="browse" data-path="${escHtml(f.path)}">${icon} ${escHtml(f.name)}</button>`
-      : `<span>${icon} ${escHtml(f.name)}</span>`;
+      ? `<button type="button" class="restore-dir-link restore-entry-name" data-restore-action="browse" data-path="${escHtml(f.path)}">${icon}<span>${escHtml(f.name)}</span></button>`
+      : `<span class="restore-entry-name">${icon}<span>${escHtml(f.name)}</span></span>`;
 
     rows += `<tr class="${isSelected ? 'restore-row-selected' : ''}">
       <td class="restore-col-select"><input type="checkbox" data-restore-action="select" data-path="${escHtml(f.path)}" data-name="${escHtml(f.name)}" data-type="${escHtml(f.type || '')}"
@@ -1216,7 +1255,17 @@ function onRestoreBrowserClick(event) {
   if (action === 'tree-retry') return restoreToggleFolder(path, true);
   if (action === 'browse') return restoreBrowse(path);
   if (action === 'download') return restoreDownload(path);
-  if (action === 'select') return restorePrepare(path, name, type);
+  if (action === 'select') {
+    const selectionList = el.closest('#restore-selected-list');
+    const index = selectionList ? Array.from(selectionList.querySelectorAll('button')).indexOf(el) : -1;
+    restorePrepare(path, name, type);
+    if (selectionList) {
+      const buttons = selectionList.querySelectorAll('button');
+      (buttons[Math.min(index, buttons.length - 1)] || document.getElementById('restore-selection-filter'))?.focus();
+    } else {
+      Array.from(document.querySelectorAll('#restore-filelist input[data-path]')).find(input => input.dataset.path === path)?.focus();
+    }
+  }
 }
 
 async function restoreDownload(path) {
@@ -1299,7 +1348,6 @@ function restorePrepare(path, name, type) {
   _restoreRenderSelectionSummary();
   restoreUpdateConfirmState();
   _restoreRenderFiles(restoreState.files);
-  _restoreMsg(restoreT('selectedCount', { count: selections.length }), false);
 }
 
 function restoreClearSelection() {
@@ -1378,10 +1426,12 @@ function _restoreSetAllowedTargetRoots(roots) {
   restoreState.allowedTargetRoots = (Array.isArray(roots) && roots.length ? roots : ['/mnt/user'])
     .map(_restoreNormalizePath)
     .filter((root) => root && root.startsWith('/'));
-  const hint = document.querySelector('[data-i18n="restore.targetRestrictionHint"]');
+  _restoreRenderTargetHints();
+}
+
+function _restoreRenderTargetHints() {
+  const hint = document.getElementById('restore-target-roots-hint');
   if (hint) hint.textContent = restoreT('targetRestrictionHint', { roots: _restoreAllowedRootsText() });
-  const suggestion = document.querySelector('[data-i18n="restore.targetSuggestion"]');
-  if (suggestion) suggestion.textContent = restoreT('targetSuggestion', { root: _restorePrimaryAllowedRoot() });
 }
 
 async function restoreLoadAllowedTargetRoots() {
@@ -1458,28 +1508,8 @@ async function restoreRunPrecheck() {
     restoreState.precheck = data;
     restoreState.autoPrecheckKey = requestKey;
     renderRestorePrecheck(data);
-    const lines = [
-      restoreT('metadataPrecheckDetail'),
-      restoreT('archiveValue', { value: data.archive }),
-      restoreT('targetPath', { value: data.target_dir }),
-      restoreT('conflictMode', { value: data.conflict_mode }),
-      restoreT('plannedRun', { value: restoreT(dryRun ? 'plannedSimulation' : 'plannedRestore') }),
-      restoreT('mountpoint', { value: data.target_mountpoint || restoreT('mountpointUnknown') }),
-      restoreT('freeSpace', { value: _restoreFmtSize(data.target_free_bytes || 0) }),
-      restoreT('checkedSelectionCount', { count: data.items.length }),
-      restoreT('metadataPrecheckScope'),
-    ];
-    data.items.forEach((item, index) => {
-      const {type, action, destination} = _restorePlannedItem(data, item, dryRun);
-      lines.push('', restoreT('precheckItem', { index: index + 1, count: data.items.length, type: restoreT(type) }),
-        restoreT('source', { value: item.path }),
-        `${restoreT('mappingWhere')}: ${destination}`,
-        restoreT('alreadyExists', { value: item.destination_exists ? restoreT('yes') : restoreT('no') }),
-        `${restoreT('mappingHow')}: ${restoreT(action)}`);
-      if (data.conflict_mode === 'rename' && !item.skipped) lines.push(restoreT('mappingTimestamp'));
-    });
-    if (out) out.textContent = lines.join('\n');
-    showMsg('restore-assist-msg', data.ok ? 'success' : 'error', data.ok ? restoreT('precheckSuccess') : restoreT('precheckFailed'));
+    if (out) out.textContent = _restoreTechnicalPrecheckText(data, dryRun);
+    if (!data.ok) showMsg('restore-assist-msg', 'error', restoreT('precheckFailed'));
   } catch (err) {
     if (!isCurrent()) return;
     restoreState.precheck = null;
@@ -1492,6 +1522,30 @@ async function restoreRunPrecheck() {
       restoreUpdateConfirmState();
     }
   }
+}
+
+function _restoreTechnicalPrecheckText(data, dryRun) {
+  const lines = [
+    restoreT('metadataPrecheckDetail'),
+    restoreT('archiveValue', { value: data.archive }),
+    restoreT('targetPath', { value: data.target_dir }),
+    restoreT('conflictMode', { value: data.conflict_mode }),
+    restoreT('plannedRun', { value: restoreT(dryRun ? 'plannedSimulation' : 'plannedRestore') }),
+    restoreT('mountpoint', { value: data.target_mountpoint || restoreT('mountpointUnknown') }),
+    restoreT('freeSpace', { value: _restoreFmtSize(data.target_free_bytes || 0) }),
+    restoreT('checkedSelectionCount', { count: data.items.length }),
+    restoreT('metadataPrecheckScope'),
+  ];
+  data.items.forEach((item, index) => {
+    const {type, action, destination} = _restorePlannedItem(data, item, dryRun);
+    lines.push('', restoreT('precheckItem', { index: index + 1, count: data.items.length, type: restoreT(type) }),
+      restoreT('source', { value: item.path }),
+      `${restoreT('mappingWhere')}: ${destination}`,
+      restoreT('alreadyExists', { value: item.destination_exists ? restoreT('yes') : restoreT('no') }),
+      `${restoreT('mappingHow')}: ${restoreT(action)}`);
+    if (data.conflict_mode === 'rename' && !item.skipped) lines.push(restoreT('mappingTimestamp'));
+  });
+  return lines.join('\n');
 }
 
 function _restorePlannedItem(data, item, simulation) {
@@ -1521,11 +1575,11 @@ function _restoreRenderDestinationMap(data) {
     const name = source.split('/').pop();
     return `<tr>
       <td class="restore-mapping-source"><strong>${escHtml(name)}</strong><small>${escHtml(restoreT(type))}</small><span class="mono">${escHtml(source)}</span></td>
-      <td class="restore-mapping-action"><span class="restore-mapping-action-label ${stateClass}">${escHtml(restoreT(action))}</span>${simulation && !item.skipped ? `<small>${escHtml(restoreT('mappingNoChanges'))}</small>` : ''}</td>
-      <td class="restore-mapping-target"><span class="mono">${escHtml(destination)}</span>${data.conflict_mode === 'rename' && !item.skipped ? `<small>${escHtml(restoreT('mappingTimestamp'))}</small>` : ''}</td>
+      <td class="restore-mapping-action"><span class="restore-mapping-action-label ${stateClass}">${escHtml(restoreT(action))}</span></td>
+      <td class="restore-mapping-target"><span class="mono">${escHtml(destination)}</span></td>
     </tr>`;
   }).join('');
-  mapping.innerHTML = `<header><h3 id="restore-mapping-title">${escHtml(restoreT('destinationMapping'))}</h3><p>${escHtml(restoreT(data.conflict_mode === 'rename' ? 'mappingRenameHint' : 'mappingHint'))}</p></header>
+  mapping.innerHTML = `<header><h3 id="restore-mapping-title">${escHtml(restoreT('destinationMapping'))}</h3><p>${escHtml(restoreT(data.conflict_mode === 'rename' ? 'mappingRenameHint' : 'mappingHint'))}${simulation ? ' ' + escHtml(restoreT('mappingNoChanges')) : ''}</p></header>
     <div class="restore-mapping-scroll"><table aria-labelledby="restore-mapping-title"><thead><tr><th scope="col">${escHtml(restoreT('mappingWhat'))}</th><th scope="col">${escHtml(restoreT('mappingHow'))}</th><th scope="col">${escHtml(restoreT('mappingWhere'))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -1741,20 +1795,8 @@ function _restoreFmtSize(bytes) {
 }
 
 function _restoreMsg(msg, level = 'info') {
-  const el = document.getElementById('restore-msg');
-  if (!msg) {
-    el.classList.add('hidden');
-    el.classList.remove('restore-msg-error', 'restore-msg-warn', 'restore-msg-info');
-    el.textContent = '';
-    return;
-  }
-  el.classList.remove('hidden');
-  el.classList.remove('restore-msg-error', 'restore-msg-warn', 'restore-msg-info');
   const resolved = (level === true) ? 'error' : (level === false ? 'info' : String(level || 'info'));
-  if (resolved === 'error') el.classList.add('restore-msg-error');
-  else if (resolved === 'warn') el.classList.add('restore-msg-warn');
-  else el.classList.add('restore-msg-info');
-  el.textContent = msg;
+  showMsg('restore-msg', resolved, msg);
 }
 
 function restoreTargetInputChanged() {
@@ -1787,6 +1829,12 @@ window.addEventListener?.('bbui:language-changed', () => {
   renderRestoreSelectedJob();
   renderRestoreArchiveList();
   renderRestorePrecheck(restoreState.precheck);
+  _restoreRenderBreadcrumb(restoreState.path);
+  if (restoreState.precheck && !restoreState.liveMode) {
+    const output = document.getElementById('restore-precheck-output');
+    if (output) output.textContent = _restoreTechnicalPrecheckText(restoreState.precheck, !!document.getElementById('restore-dry-run')?.checked);
+  }
+  restoreUpdateConfirmState();
   renderRestoreHistory({ runs: restoreState.history, total: restoreState.historyTotal || restoreState.history.length });
   const backBtn = document.getElementById('restore-step-back-btn');
   const nextBtn = document.getElementById('restore-step-next-btn');
