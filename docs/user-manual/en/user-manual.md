@@ -626,6 +626,8 @@ Allowed examples when deliberately configured:
 
 #### Step 5: Review & Start
 
+Below the three summary cards in **Step 5**, the **Restore plan** lists the archive source, planned action and destination path for every entry. Skipped destinations and simulations are explicitly identified; timestamp renaming is noted alongside the destination.
+
 The final step shows summary and system check. Depending on the selection, the technical precheck output can be expanded. Validation errors state the concrete reason, such as a missing or unwritable target, a target outside the allowed restore roots, or a missing archive selection. **Cancel** closes the start dialog without restoring; after explicit confirmation, the restore starts.
 
 Before starting, Borg Backup UI checks the repository lock. A backup, another restore, a restore test, or maintenance running on the same repository blocks the new restore instead of risking concurrent read or write operations.

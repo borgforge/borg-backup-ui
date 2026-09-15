@@ -131,11 +131,25 @@
 .restore-selected-list li > div { min-width: 0; flex: 1; }
 .restore-selected-list strong, .restore-selected-list small { display: block; overflow-wrap: anywhere; }
 .restore-selected-list small { margin-top: .25rem; color: var(--ui-color-text-subtle); }
-.restore-destination-map { margin-bottom: 1rem; }
-.restore-destination-map ul { list-style: none; padding: 0; margin: 0; }
-.restore-destination-map li { display: grid; gap: .3rem; padding: .75rem; border-bottom: 1px solid var(--ui-color-border); overflow-wrap: anywhere; }
-.restore-destination-map li span:first-child { font-weight: 600; }
-.restore-destination-map small { color: var(--ui-color-text-subtle); }
+.restore-destination-map { margin-top: var(--ui-space-3); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); overflow: hidden; }
+.restore-destination-map:empty { display: none; }
+.restore-destination-map > header { padding: var(--ui-space-3); }
+.restore-destination-map h3 { margin: 0; font-size: var(--ui-font-size-md); }
+.restore-destination-map p { margin: .35rem 0 0; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-mapping-scroll { max-height: 30rem; overflow: auto; }
+.restore-destination-map table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.restore-destination-map th, .restore-destination-map td { padding: .75rem; border-top: 1px solid var(--ui-color-border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.restore-destination-map th { position: sticky; top: 0; z-index: 1; background: var(--ui-color-surface-subtle); font-size: var(--ui-font-size-xs); }
+.restore-destination-map th:nth-child(1) { width: 36%; }
+.restore-destination-map th:nth-child(2) { width: 27%; }
+.restore-destination-map th:nth-child(3) { width: 37%; }
+.restore-destination-map td { font-size: var(--ui-font-size-sm); }
+.restore-destination-map td strong, .restore-destination-map td small, .restore-destination-map td .mono { display: block; }
+.restore-destination-map td small { margin-top: .25rem; color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-xs); }
+.restore-mapping-source .mono { margin-top: .5rem; font-size: var(--ui-font-size-xs); }
+.restore-mapping-action-label { display: inline-block; padding: .3rem .5rem; border-radius: var(--ui-radius-sm); background: var(--ui-color-surface-subtle); }
+.restore-mapping-action-label.is-simulation { background: var(--ui-state-info-bg); color: var(--ui-state-info-fg); }
+.restore-mapping-action-label.is-skipped { background: var(--ui-state-warning-bg); color: var(--ui-state-warning-fg); }
 .restore-file-browser, .restore-selection-panel, .restore-form-section, .restore-review-grid > section { overflow: hidden; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
 .restore-file-browser { min-width: 0; overflow-x: auto; }
 .restore-file-browser .restore-breadcrumb { margin: 0; border: 0; border-bottom: 1px solid var(--ui-color-border); border-radius: 0; background: var(--ui-color-surface-subtle); }
@@ -179,6 +193,7 @@
 .restore-precheck-output summary { padding: var(--ui-space-3); color: var(--ui-color-text-subtle); cursor: pointer; }
 .restore-precheck-output pre { box-sizing: border-box; display: block; width: 100%; max-width: 100%; min-width: 0; overflow: auto; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 #restore-step-panel-5.restore-live-mode .restore-review-grid,
+#restore-step-panel-5.restore-live-mode .restore-destination-map,
 #restore-step-panel-5.restore-live-mode #restore-precheck-verdict,
 #restore-step-panel-5.restore-live-mode .restore-confirm-row,
 #restore-step-panel-5.restore-live-mode .restore-start-actions { display: none; }
@@ -209,4 +224,9 @@
   .restore-folder-tree { max-height: 14rem; }
   .restore-file-browser .restore-col-date { display: none; }
   .restore-file-browser .restore-col-size { width: auto; }
+}
+
+@media (max-width: 550px) {
+  .restore-destination-map th, .restore-destination-map td { padding: .5rem; }
+  .restore-destination-map th:nth-child(1), .restore-destination-map th:nth-child(2), .restore-destination-map th:nth-child(3) { width: auto; }
 }

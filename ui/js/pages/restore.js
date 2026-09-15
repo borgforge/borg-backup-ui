@@ -1492,9 +1492,33 @@ async function restoreRunPrecheck() {
   }
 }
 
-function renderRestorePrecheck(data) {
+function _restoreRenderDestinationMap(data) {
   const mapping = document.getElementById('restore-destination-map');
-  if (mapping) mapping.innerHTML = data?.items?.length ? `<h3>${escHtml(restoreT('destinationMapping'))}</h3><p class="text-muted">${escHtml(restoreT(data.conflict_mode === 'rename' ? 'mappingRenameHint' : 'mappingHint'))}</p><ul>${data.items.map(item => `<li><span>${escHtml(item.path)}</span><span>→ ${escHtml(item.destination_path)}</span><small>${escHtml(restoreT(item.skipped ? 'mappingSkip' : (document.getElementById('restore-dry-run')?.checked ? 'mappingSimulate' : 'mappingRestore')))}</small></li>`).join('')}</ul>` : '';
+  if (!mapping) return;
+  if (!data?.items?.length) { mapping.innerHTML = ''; return; }
+  const simulation = !!document.getElementById('restore-dry-run')?.checked;
+  const rows = data.items.map(item => {
+    const directory = item.type === 'd';
+    const type = directory ? 'mappingFolder' : (item.type === 'l' ? 'mappingLink' : 'mappingFile');
+    let action = 'mappingRestore';
+    if (item.skipped) action = 'mappingSkip';
+    else if (simulation) action = 'mappingSimulate';
+    else if (data.conflict_mode === 'rename') action = 'mappingRename';
+    else if (data.conflict_mode === 'overwrite' && item.destination_exists) action = directory ? 'mappingMerge' : 'mappingReplace';
+    const stateClass = item.skipped ? 'is-skipped' : (simulation ? 'is-simulation' : '');
+    const source = String(item.path || '');
+    return `<tr>
+      <td class="restore-mapping-source"><strong>${escHtml(source.split('/').pop())}</strong><small>${escHtml(restoreT(type))}</small><span class="mono">${escHtml(source)}</span></td>
+      <td class="restore-mapping-action"><span class="restore-mapping-action-label ${stateClass}">${escHtml(restoreT(action))}</span>${simulation && !item.skipped ? `<small>${escHtml(restoreT('mappingNoChanges'))}</small>` : ''}</td>
+      <td class="restore-mapping-target"><span class="mono">${escHtml(item.destination_path)}</span>${data.conflict_mode === 'rename' && !item.skipped ? `<small>${escHtml(restoreT('mappingTimestamp'))}</small>` : ''}</td>
+    </tr>`;
+  }).join('');
+  mapping.innerHTML = `<header><h3 id="restore-mapping-title">${escHtml(restoreT('destinationMapping'))}</h3><p>${escHtml(restoreT(data.conflict_mode === 'rename' ? 'mappingRenameHint' : 'mappingHint'))}</p></header>
+    <div class="restore-mapping-scroll"><table aria-labelledby="restore-mapping-title"><thead><tr><th scope="col">${escHtml(restoreT('mappingWhat'))}</th><th scope="col">${escHtml(restoreT('mappingHow'))}</th><th scope="col">${escHtml(restoreT('mappingWhere'))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderRestorePrecheck(data) {
+  _restoreRenderDestinationMap(data);
   const verdict = document.getElementById('restore-precheck-verdict');
   const badge = document.getElementById('restore-precheck-badge');
   const facts = document.getElementById('restore-system-check-facts');

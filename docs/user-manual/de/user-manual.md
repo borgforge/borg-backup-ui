@@ -626,6 +626,8 @@ Erlaubte Beispiele, wenn bewusst konfiguriert:
 
 #### Schritt 5: Prüfen & Start
 
+Unter den drei Übersichtskarten in **Schritt 5** zeigt der **Wiederherstellungsplan** für jeden Eintrag die Quelle im Archiv, die geplante Aktion und den Zielpfad. Übersprungene Ziele und reine Testläufe sind ausdrücklich gekennzeichnet; bei Umbenennung weist die Tabelle auf den zusätzlichen Zeitstempel hin.
+
 Der letzte Schritt zeigt Zusammenfassung und Systemprüfung. Je nach Auswahl kann die technische Precheck-Ausgabe aufgeklappt werden. Validierungsfehler nennen den konkreten Grund, beispielsweise ein fehlendes oder nicht beschreibbares Ziel, ein Ziel außerhalb der erlaubten Restore-Wurzeln oder eine fehlende Archivauswahl. Mit **Abbrechen** wird der Startdialog ohne Restore geschlossen; nach der ausdrücklichen Bestätigung startet der Restore.
 
 Vor dem Start prüft Borg Backup UI den Repository-Lock. Ein gleichzeitig laufendes Backup, ein anderer Restore, Restore-Test oder eine Wartungsaktion auf demselben Repository blockiert den neuen Restore, statt parallele Schreib- oder Lesevorgänge zu riskieren.

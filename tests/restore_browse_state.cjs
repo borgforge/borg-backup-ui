@@ -393,3 +393,34 @@ test('clicking a folder while its expansion loads shares one request', async () 
   assert.equal(state.path, 'A');
   assert.equal(state.files[0].name, 'current.txt');
 });
+
+for (const language of ['de', 'en']) test(`restore plan table distinguishes actions and simulation (${language})`, () => {
+  const {context, get, labels} = page(language);
+  const data = {conflict_mode: 'overwrite', items: [
+    {path: 'Backup/Folder', type: 'd', destination_path: '/target/Folder', destination_exists: true},
+    {path: 'Backup/file.txt', type: '-', destination_path: '/target/file.txt', destination_exists: true},
+    {path: 'Backup/new.txt', type: '-', destination_path: '/target/new.txt', destination_exists: false},
+  ]};
+  context._restoreRenderDestinationMap(data);
+  let html = get('restore-destination-map').innerHTML;
+  assert.match(html, /<table aria-labelledby="restore-mapping-title">/);
+  assert.equal((html.match(/<th scope="col">/g) || []).length, 3);
+  for (const key of ['mappingWhat', 'mappingHow', 'mappingWhere', 'mappingMerge', 'mappingReplace', 'mappingRestore']) assert.ok(html.includes(labels.restore[key]));
+  assert.match(html, /\/target\/Folder/);
+  assert.match(html, /Backup\/Folder/);
+  data.conflict_mode = 'rename';
+  context._restoreRenderDestinationMap(data);
+  html = get('restore-destination-map').innerHTML;
+  assert.ok(html.includes(labels.restore.mappingRename));
+  assert.ok(html.includes(labels.restore.mappingTimestamp));
+  get('restore-dry-run').checked = true;
+  data.conflict_mode = 'skip'; data.items[0].skipped = true;
+  context._restoreRenderDestinationMap(data);
+  html = get('restore-destination-map').innerHTML;
+  assert.ok(html.includes(labels.restore.mappingSkip));
+  assert.ok(html.includes(labels.restore.mappingSimulate));
+  assert.ok(html.includes(labels.restore.mappingNoChanges));
+  assert.ok(!html.includes(labels.restore.mappingReplace));
+  context._restoreRenderDestinationMap(null);
+  assert.equal(get('restore-destination-map').innerHTML, '');
+});

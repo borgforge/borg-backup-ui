@@ -9,6 +9,7 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 ### Issue #521 - Browse & Restore selection
 - Add an expandable directory tree with lazy loading and automatic navigation through single-directory chains on first archive opening. Keep expanded branches and discard stale tree responses after source changes.
 - Add direct archive-folder navigation, a current-folder name filter and persistent checkbox selection across folders, with source-to-target mapping before confirmation.
+- Show a restore-plan table below the three review cards, with archive source, planned action and destination path. Distinguish skipped entries, timestamp renaming, replacement, directory merging and simulation.
 - Normalize overlapping selections, preserve paths below the common parent and extract literal file/folder paths in one Borg invocation under the existing repository lock. Stage output on the target filesystem; retain per-selection conflict handling and single-directory behavior.
 - Persist selected paths and destinations in restore history. Honor the existing simulation control during extraction and label simulations explicitly. Keep old single-path API callers and history readable without migration.
 
