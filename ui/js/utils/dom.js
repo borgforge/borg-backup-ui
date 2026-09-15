@@ -10,6 +10,8 @@ function showMsg(elementId, type, text) {
   if (!String(text || '').trim()) { hideEl(elementId); return; }
   const severity = type === 'warn' ? 'warning' : (['error', 'success', 'warning'].includes(type) ? type : 'info');
   const inline = !!el.closest('.modal-backdrop, [role="dialog"]');
+  // Late results from a hidden page/panel must not clear current feedback.
+  if (!inline && el.parentElement?.getClientRects().length === 0) return;
   // Keep form validation inside its dialog. Page action feedback must not move
   // the controls the user is currently interacting with (#523).
   if (!inline) clearPageFeedback();

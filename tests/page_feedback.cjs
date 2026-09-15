@@ -84,3 +84,16 @@ test('navigation clearing does not remove contextual empty states or dialog vali
   assert.equal(empty.textContent, 'No jobs');
   assert.equal(dialog.textContent, 'Invalid form');
 });
+
+
+test('late feedback from a hidden page or panel cannot dismiss the current error', () => {
+  const {context, element} = setup();
+  const current = element('current-message');
+  const previous = element('previous-message');
+  previous.parentElement = {getClientRects: () => []};
+  context.showMsg(current.id, 'error', 'Current error');
+  context.showMsg(previous.id, 'success', 'Previous page finished');
+  assert.match(current.className, /page-feedback/);
+  assert.equal(current.children[2].textContent, 'Current error');
+  assert.doesNotMatch(previous.className, /page-feedback/);
+});
