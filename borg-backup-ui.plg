@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.09.13.1711">
+<!ENTITY version   "2026.09.15.1019">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.09.15.1019###
+### Bug Fixes
+
+- USB backups now accept an existing subfolder on a mounted drive, matching the profile status check. Existing storage and repository paths remain unchanged. Missing drives, read-only targets and access errors still prevent backup startup. (#516)
+
 ###2026.09.13.1711###
 ### Migration and compatibility
 
@@ -67,10 +72,6 @@
 - Large-archive restore dry-runs select their sampling mode by archive size. The default sample target is 5% of files, capped at 1,000 files; smaller archives are checked in full. (#495)
 - Historical records that cannot be matched to a job are kept on disk and excluded from current statistics. (#495)
 
-###2026.09.07.0935###
-- Fix #484: Plugin installation and updates preserve existing permissions and ownership of shared Unraid system directories.
-- Recovery for permissions changed by an older package: a normal reboot restored the original modes with the plugin still installed on Unraid 7.4.0-beta.2. Verify permissions after reboot; see the user manual, section 13.6. Installing the corrected package does not repair previously changed permissions automatically.
-
 ]]>
 </CHANGES>
 
@@ -96,7 +97,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="75d9e5ed66955e8bbb352a61dfca9355"
+EXPECTED_MD5="6a900a7ce417ad4834b7db2353a5943b"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
