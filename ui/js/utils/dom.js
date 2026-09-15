@@ -4,6 +4,52 @@ window.BBUI = window.BBUI || {};
 window.BBUI.utils = window.BBUI.utils || {};
 window.BBUI.utils.dom = window.BBUI.utils.dom || {};
 
+let pageFeedbackDismissal = null;
+
+function schedulePageFeedbackDismissal(el, severity, text) {
+  if (severity === 'error') return;
+  // Give longer messages reading time (20 characters/second), up to 30 seconds.
+  let remaining = Math.max(severity === 'warning' ? 12000 : 5000,
+    Math.min(30000, String(text).length * 50));
+  let timer = null;
+  let started = 0;
+  let hovered = el.matches(':hover');
+  let focused = el.contains(document.activeElement);
+  const state = {element: el, cancel: null};
+
+  function pause() {
+    if (timer === null) return;
+    clearTimeout(timer);
+    timer = null;
+    remaining = Math.max(0, remaining - (performance.now() - started));
+  }
+  function resume() {
+    if (hovered || focused || document.hidden || timer !== null) return;
+    started = performance.now();
+    timer = setTimeout(() => {
+      if (pageFeedbackDismissal === state) hideEl(el.id);
+    }, remaining);
+  }
+  const enter = () => { hovered = true; pause(); };
+  const leave = () => { hovered = false; resume(); };
+  const focusIn = () => { focused = true; pause(); };
+  const focusOut = event => {
+    focused = el.contains(event.relatedTarget);
+    if (!focused) resume();
+  };
+  const visibility = () => { if (document.hidden) pause(); else resume(); };
+  const listeners = {mouseenter: enter, mouseleave: leave, focusin: focusIn, focusout: focusOut};
+  Object.entries(listeners).forEach(([name, callback]) => el.addEventListener(name, callback));
+  document.addEventListener('visibilitychange', visibility);
+  state.cancel = () => {
+    if (timer !== null) clearTimeout(timer);
+    Object.entries(listeners).forEach(([name, callback]) => el.removeEventListener(name, callback));
+    document.removeEventListener('visibilitychange', visibility);
+  };
+  pageFeedbackDismissal = state;
+  resume();
+}
+
 function showMsg(elementId, type, text) {
   const el = document.getElementById(elementId);
   if (!el) return;
@@ -41,9 +87,14 @@ function showMsg(elementId, type, text) {
     }
   });
   el.replaceChildren(title, close, message);
+  schedulePageFeedbackDismissal(el, severity, text);
 }
 
 function hideEl(elementId) {
+  if (pageFeedbackDismissal?.element.id === elementId) {
+    pageFeedbackDismissal.cancel();
+    pageFeedbackDismissal = null;
+  }
   const el = document.getElementById(elementId);
   if (el) {
     el.className = 'status-message hidden';
@@ -52,6 +103,10 @@ function hideEl(elementId) {
 }
 
 function clearPageFeedback() {
+  if (pageFeedbackDismissal) {
+    pageFeedbackDismissal.cancel();
+    pageFeedbackDismissal = null;
+  }
   document.querySelectorAll('.page-feedback').forEach(el => hideEl(el.id));
 }
 
