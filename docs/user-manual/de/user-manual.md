@@ -1037,6 +1037,15 @@ wurde. Über **Audit-Details** lassen sich protokollierte Aktionen, geänderte
 Schlüssel, betroffene Dateien und vorhandene Migrationssicherungen lesbar
 einsehen.
 
+**Migrationssicherungen bereinigen** zeigt in den Details getrennt, welche
+Sicherungen gelöscht, behalten oder aus Sicherheitsgründen übersprungen werden.
+Für aktive Migrationen bleiben die neuesten fünf geeigneten Sicherungen erhalten.
+Die UUID-Sicherungen von `job_ids_v1` und `job_settings_v1` werden anhand des
+zugehörigen Migrationsjournals erkannt. Fehlt das Journal, passt es nicht zur
+Sicherung oder ist der Lauf nicht abgeschlossen, bleibt die Sicherung geschützt.
+Die Anzeige verändert keine Sicherungen und startet keine Migration erneut.
+Gelöscht wird erst nach dem ausdrücklich bestätigten Bereinigungsaufruf.
+
 Bei älteren Installationen kann der historische Ausführungszeitpunkt fehlen,
 wenn frühere Versionen ihn nicht getrennt protokolliert haben und kein
 erfolgreicher Audit-Eintrag vorhanden ist. Die Anwendung weist dann darauf hin,

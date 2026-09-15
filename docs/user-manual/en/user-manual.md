@@ -1035,6 +1035,13 @@ time therefore does not mean that the migration ran again. **Audit details**
 provide a readable view of recorded actions, changed keys, affected files, and
 available migration backups.
 
+**Clean up migration backups** lists separately which copies will be deleted,
+kept or skipped for safety. Active migrations retain their five newest eligible
+copies. UUID snapshots from `job_ids_v1` and `job_settings_v1` are identified
+using their matching migration journal. A missing or mismatched journal, or an
+incomplete run, keeps the snapshot protected. Viewing the list does not modify
+snapshots or rerun a migration. Deletion requires an explicitly confirmed cleanup.
+
 For older installations, the historical application time may be unavailable
 when earlier versions did not store it separately and no successful audit
 event can prove it. The application reports that limitation instead of showing

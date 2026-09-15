@@ -27,7 +27,8 @@ def _items_by_id(registry: dict) -> dict:
 
 
 def _migration_backup_dir(cfg: dict) -> Path:
-    return Path(cfg["BACKUP_SCRIPTS_DIR"]) / "config" / "migration-backups"
+    from migrations.audit import config_dir
+    return config_dir(cfg) / "migration-backups"
 
 
 def _write_migration_snapshot(cfg: dict, name: str, status: str = "") -> Path:

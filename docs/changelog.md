@@ -6,6 +6,11 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #519 - recognize UUID migration recovery snapshots
+- Associate existing job-ID and job-settings snapshots with their exact journal run, directory, timestamp and completion state. Read the same configuration directory as the migration writers, including configurations ending in scripts.
+- Keep the existing retention policy, protect missing or conflicting journals and incomplete runs, and skip symbolic snapshot directories. Display retained snapshots separately from deletion candidates and protected snapshots in German and English.
+- No migration, snapshot rename, journal rewrite or automatic cleanup is introduced; original recovery files remain unchanged until an explicit cleanup removes an eligible old snapshot.
+
 ### Issue #512 - consistent repository archive counts
 - Use the archive-list total for the repository tab, overview and list, including zero and limited lists. Keep stored repository info as the initial fallback without modifying its timestamps, metrics or persistent data.
 - Reload the visible archive list when refreshing Repositories. Invalidate its cached inventory after repository-info refresh and maintenance, avoid a duplicate reload after archive deletion, and reject superseded archive responses. Failed refreshes retain the last known count and remain retryable.

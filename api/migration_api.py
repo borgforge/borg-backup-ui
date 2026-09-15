@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -129,6 +130,13 @@ MIGRATION_BACKUP_KEEP_PER_ACTIVE_ID = 5
 _MIGRATION_BACKUP_NAME_RE = re.compile(
     r"^(?P<migration_id>[A-Za-z0-9_]+)-(?P<stamp>\d{8}T\d{6}(?:\d{6})?Z)(?:-[A-Za-z0-9]+)?$"
 )
+_MIGRATION_UUID_BACKUP_NAME_RE = re.compile(
+    r"^(?P<migration_id>[A-Za-z0-9_]+)-(?P<run_id>[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$"
+)
+_SNAPSHOT_JOURNALS = {
+    "job_ids_v1": "job-id-migration.json",
+    "job_settings_v1": "job-settings-migration.json",
+}
 
 
 def _is_actionable_migration_status(status: str) -> bool:
@@ -144,11 +152,49 @@ def _active_migration_ids() -> set[str]:
 
 
 def _migration_backups_dir(ui_config: dict) -> Path:
-    return _config_dir(ui_config) / "migration-backups"
+    from migrations.audit import config_dir
+
+    return config_dir(ui_config) / "migration-backups"
 
 
 def _timestamp_sort_key(stamp: str) -> str:
-    return str(stamp or "").strip()
+    return str(stamp or "").strip().removesuffix("Z").ljust(21, "0")
+
+
+def _uuid_snapshot_metadata(path: Path, migration_id: str, run_id: str) -> dict[str, Any]:
+    """Only a journal for this exact run can establish a UUID snapshot's age/state."""
+    journal_name = _SNAPSHOT_JOURNALS.get(migration_id)
+    if not journal_name:
+        return {"metadata_error": "unknown_migration_id"}
+    journal = path.parent.parent / journal_name
+    try:
+        if journal.is_symlink():
+            return {"metadata_error": "invalid_journal"}
+        data = json.loads(journal.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"metadata_error": "missing_journal"}
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {"metadata_error": "invalid_journal"}
+    if not isinstance(data, dict):
+        return {"metadata_error": "invalid_journal"}
+    if data.get("migration_id") != migration_id or data.get("run_id") != run_id:
+        return {"metadata_error": "journal_mismatch"}
+    try:
+        directory = Path(data["backup_directory"])
+        if not directory.is_absolute() or directory.resolve(strict=True) != path.resolve(strict=True):
+            return {"metadata_error": "journal_mismatch"}
+        timestamp = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+        if timestamp.tzinfo is None:
+            return {"metadata_error": "invalid_journal"}
+        stamp = timestamp.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    except (KeyError, TypeError, ValueError, AttributeError, OSError, RuntimeError, OverflowError):
+        return {"metadata_error": "invalid_journal"}
+    # The writers only mark fully verified runs as applied. Every other state
+    # remains protected, including missing or future status values.
+    status = data.get("status")
+    if status not in ("applied", "pending", "failed", "blocked"):
+        status = "unknown"
+    return {"timestamp": stamp, "status": status}
 
 
 def _safe_snapshot_status(path: Path) -> str:
@@ -166,6 +212,16 @@ def _safe_snapshot_status(path: Path) -> str:
 
 def _migration_backup_row(path: Path) -> dict[str, Any]:
     match = _MIGRATION_BACKUP_NAME_RE.match(path.name)
+    uuid_match = _MIGRATION_UUID_BACKUP_NAME_RE.fullmatch(path.name)
+    if uuid_match:
+        migration_id = uuid_match.group("migration_id")
+        row = {
+            "name": path.name, "path": str(path), "migration_id": migration_id,
+            "timestamp": "", "recognized": True, "status": "unknown",
+            "size_bytes": _directory_size(path),
+        }
+        row.update(_uuid_snapshot_metadata(path, migration_id, uuid_match.group("run_id")))
+        return row
     if not match:
         return {
             "name": path.name,
@@ -207,7 +263,7 @@ def _directory_size(path: Path) -> int:
 def plan_migration_backup_cleanup(ui_config: dict, *, keep_per_active_id: int = MIGRATION_BACKUP_KEEP_PER_ACTIVE_ID) -> dict[str, Any]:
     backup_dir = _migration_backups_dir(ui_config)
     active_ids = _active_migration_ids()
-    state = _read_migration_state(_config_dir(ui_config))
+    state = _read_migration_state(backup_dir.parent)
     state_migrations = state.get("migrations") if isinstance(state.get("migrations"), dict) else {}
     recorded_ids = {str(key) for key in state_migrations.keys()}
     keep_count = max(1, int(keep_per_active_id or MIGRATION_BACKUP_KEEP_PER_ACTIVE_ID))
@@ -215,17 +271,30 @@ def plan_migration_backup_cleanup(ui_config: dict, *, keep_per_active_id: int = 
     if backup_dir.is_dir():
         for path in sorted(backup_dir.iterdir(), key=lambda p: p.name):
             if path.is_dir():
-                rows.append(_migration_backup_row(path))
+                if path.is_symlink():
+                    rows.append({"name": path.name, "path": str(path), "migration_id": "",
+                                 "timestamp": "", "recognized": False, "status": "unknown",
+                                 "size_bytes": 0, "metadata_error": "unsafe_snapshot_path"})
+                else:
+                    rows.append(_migration_backup_row(path))
 
     by_active_id: dict[str, list[dict[str, Any]]] = {}
     delete: list[dict[str, Any]] = []
     keep: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    protected_states = {"failed", "pending", "blocked", "unknown"}
 
     for row in rows:
         migration_id = str(row.get("migration_id") or "")
+        if row.get("metadata_error"):
+            skipped.append({**row, "reason": row["metadata_error"]})
+            continue
         if not row.get("recognized"):
             skipped.append({**row, "reason": "unrecognized_name"})
+            continue
+        status = str(row.get("status") or "").strip().lower()
+        if status in protected_states:
+            skipped.append({**row, "reason": f"protected_status:{status}"})
             continue
         if migration_id in REMOVED_PRE_BETA_MIGRATION_IDS or (migration_id in recorded_ids and migration_id not in active_ids):
             delete.append({**row, "reason": "inactive_migration"})
@@ -235,15 +304,10 @@ def plan_migration_backup_cleanup(ui_config: dict, *, keep_per_active_id: int = 
             continue
         by_active_id.setdefault(migration_id, []).append(row)
 
-    protected_states = {"failed", "pending", "blocked", "unknown"}
     for migration_id, candidates in sorted(by_active_id.items()):
         candidates.sort(key=lambda row: _timestamp_sort_key(str(row.get("timestamp") or "")), reverse=True)
         retained = 0
         for row in candidates:
-            status = str(row.get("status") or "").strip().lower()
-            if status in protected_states:
-                skipped.append({**row, "reason": f"protected_status:{status}"})
-                continue
             if retained < keep_count:
                 retained += 1
                 keep.append({**row, "reason": "latest_active_snapshot"})
