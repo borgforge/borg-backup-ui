@@ -424,3 +424,17 @@ for (const language of ['de', 'en']) test(`restore plan table distinguishes acti
   context._restoreRenderDestinationMap(null);
   assert.equal(get('restore-destination-map').innerHTML, '');
 });
+
+test('single matching folder shows the timestamped child destination for rename only', () => {
+  const {context, get, labels} = page();
+  const data = {conflict_mode: 'rename', items: [
+    {path: 'Backup/Test1', type: 'd', destination_path: '/target/Test1', direct_contents: true},
+  ]};
+  context._restoreRenderDestinationMap(data);
+  assert.match(get('restore-destination-map').innerHTML, /class="restore-mapping-target"><span class="mono">\/target\/Test1\/Test1<\/span>/);
+  assert.ok(get('restore-destination-map').innerHTML.includes(labels.restore.mappingTimestamp));
+  data.conflict_mode = 'overwrite';
+  context._restoreRenderDestinationMap(data);
+  assert.match(get('restore-destination-map').innerHTML, /class="restore-mapping-target"><span class="mono">\/target\/Test1<\/span>/);
+  assert.ok(!get('restore-destination-map').innerHTML.includes(labels.restore.mappingTimestamp));
+});

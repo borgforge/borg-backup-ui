@@ -1507,10 +1507,16 @@ function _restoreRenderDestinationMap(data) {
     else if (data.conflict_mode === 'overwrite' && item.destination_exists) action = directory ? 'mappingMerge' : 'mappingReplace';
     const stateClass = item.skipped ? 'is-skipped' : (simulation ? 'is-simulation' : '');
     const source = String(item.path || '');
+    const name = source.split('/').pop();
+    // With a matching single-directory target, rename creates a timestamped
+    // child inside that target instead of appending to the target's own name.
+    const destination = data.conflict_mode === 'rename' && item.direct_contents
+      ? String(item.destination_path).replace(/\/$/, '') + '/' + name
+      : item.destination_path;
     return `<tr>
-      <td class="restore-mapping-source"><strong>${escHtml(source.split('/').pop())}</strong><small>${escHtml(restoreT(type))}</small><span class="mono">${escHtml(source)}</span></td>
+      <td class="restore-mapping-source"><strong>${escHtml(name)}</strong><small>${escHtml(restoreT(type))}</small><span class="mono">${escHtml(source)}</span></td>
       <td class="restore-mapping-action"><span class="restore-mapping-action-label ${stateClass}">${escHtml(restoreT(action))}</span>${simulation && !item.skipped ? `<small>${escHtml(restoreT('mappingNoChanges'))}</small>` : ''}</td>
-      <td class="restore-mapping-target"><span class="mono">${escHtml(item.destination_path)}</span>${data.conflict_mode === 'rename' && !item.skipped ? `<small>${escHtml(restoreT('mappingTimestamp'))}</small>` : ''}</td>
+      <td class="restore-mapping-target"><span class="mono">${escHtml(destination)}</span>${data.conflict_mode === 'rename' && !item.skipped ? `<small>${escHtml(restoreT('mappingTimestamp'))}</small>` : ''}</td>
     </tr>`;
   }).join('');
   mapping.innerHTML = `<header><h3 id="restore-mapping-title">${escHtml(restoreT('destinationMapping'))}</h3><p>${escHtml(restoreT(data.conflict_mode === 'rename' ? 'mappingRenameHint' : 'mappingHint'))}</p></header>
