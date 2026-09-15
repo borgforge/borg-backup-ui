@@ -693,6 +693,55 @@
   color: var(--ui-state-neutral-fg);
 }
 
+/* Action feedback stays outside the page flow; dialogs keep inline validation. */
+.status-message.page-feedback {
+  position: fixed;
+  z-index: 900;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  width: min(30rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: .35rem .75rem;
+  padding: .85rem 1rem;
+  margin: 0 !important;
+  border-radius: var(--ui-radius-md);
+  border-left-width: 4px;
+  box-shadow: var(--ui-shadow-raised);
+  text-align: left;
+  font-size: var(--ui-font-size-sm);
+  line-height: 1.5;
+  white-space: normal;
+}
+.page-feedback-title { align-self: center; }
+.page-feedback-text {
+  grid-column: 1 / -1;
+  max-height: min(35vh, 18rem);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  color: var(--ui-color-text);
+}
+.page-feedback-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: .25rem;
+  border: 1px solid currentColor;
+  border-radius: var(--ui-radius-sm);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.page-feedback-close svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2; }
+.page-feedback-close:hover { background: var(--ui-color-surface-hover); }
+.page-feedback-close:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
 /* Compact desktop */
 @media (max-width: 1279px) {
   :root { --ui-context-width: 14rem; }

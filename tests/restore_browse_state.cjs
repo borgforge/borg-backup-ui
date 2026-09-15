@@ -35,6 +35,7 @@ function page(language = 'en') {
     apiErrorMessage: data => labels.api.errors[data.code] || data.message || 'API error',
   });
   vm.runInContext(fs.readFileSync('ui/js/pages/restore.js', 'utf8'), context);
+  const renderers = {selection: context._restoreRenderSelectedBox, summary: context._restoreRenderSelectionSummary};
   for (const name of ['restoreSetLiveMode', 'restoreSwitchView', 'restoreSetStep',
     '_restoreBindTargetAutocomplete', '_restoreRenderSelectionSummary', '_restoreRenderSelectedBox',
     'restoreLoadRuns', 'restoreLoadHistory', 'renderRestoreJobSidebar', 'renderRestoreSelectedJob',
@@ -45,7 +46,7 @@ function page(language = 'en') {
   context._isAllowedRestoreTarget = () => true;
   context._restoreMsg = (message, error) => context.messages.push({message, error});
   context._restoreRenderFiles = files => { get('restore-filelist').innerHTML = JSON.stringify(files); };
-  return {context, get, state: context.window.BBUI.restoreState, labels};
+  return {context, get, state: context.window.BBUI.restoreState, labels, renderers};
 }
 
 test('returning after backups, repository switches and rename refreshes the same job', async () => {
@@ -177,7 +178,7 @@ for (const failure of ['server', 'network', 'json', 'invalid-data']) test(`${fai
     return failure === 'server' ? response({code: 'internal_error'}, 500) : response(null);
   };
   await context.restoreBrowse('');
-  assert.equal(state.selectedPath, '');
+  assert.equal(state.selectedPath, 'stale'); // Navigation failures keep the selection, but invalidate precheck.
   assert.equal(state.precheck, null);
   assert.ok(get('restore-filelist').innerHTML.includes('role="alert"'));
   assert.equal(state.archive, 'archive');
@@ -202,4 +203,335 @@ test('a late missing-archive error cannot clear a newer successful selection', a
   assert.equal(state.archive, 'new');
   assert.equal(state.files[0].name, 'current.txt');
   assert.equal(context.messages.length, messageCount);
+});
+
+test('multi-selection persists across directories and removes overlapping children', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'archive';
+  get('restore-archive-sel').value = 'archive';
+  context.restorePrepare('Backup/Test1/file.txt', 'file.txt', '-');
+  context.restorePrepare('Backup/Test2', 'Test2', 'd');
+  context.restorePrepare('Backup/Test1', 'Test1', 'd');
+  assert.deepEqual(Array.from(state.selections, item => item.path), ['Backup/Test2', 'Backup/Test1']);
+  context.fetch = async () => response({files: []});
+  await context.restoreBrowse('Other');
+  assert.equal(state.selections.length, 2);
+  context.restorePrepare('Backup/Test1', 'Test1', 'd');
+  assert.deepEqual(Array.from(state.selections, item => item.path), ['Backup/Test2']);
+  assert.equal(get('restore-source-path').value, 'Backup/Test2');
+});
+
+test('changing only the second selected item invalidates an in-flight precheck', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'archive';
+  get('restore-target-path').value = '/mnt/user/test';
+  context.restorePrepare('Backup/Test1', 'Test1', 'd');
+  context.restorePrepare('Backup/Test2', 'Test2', 'd');
+  const check = deferred();
+  let body;
+  context.fetch = (url, options) => { body = JSON.parse(options.body); return check.promise; };
+  const pending = context.restoreRunPrecheck();
+  assert.deepEqual(body.source_paths, ['Backup/Test1', 'Backup/Test2']);
+  context.restorePrepare('Backup/Test2', 'Test2', 'd');
+  check.resolve(response({ok: true}));
+  await pending;
+  assert.equal(state.precheck, null);
+});
+
+test('archive changes reset all selected paths', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'old';
+  context.restorePrepare('Backup/Test1', 'Test1', 'd');
+  context.restorePrepare('Backup/Test2', 'Test2', 'd');
+  get('restore-archive-sel').value = 'new';
+  context.fetch = async () => response({files: []});
+  await context.restoreBrowse('');
+  assert.equal(state.selections.length, 0);
+});
+
+test('a pending folder response does not overwrite a path being entered', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; state.archive = 'archive';
+  get('restore-archive-sel').value = 'archive';
+  get('restore-archive-path').value = '/';
+  const files = deferred();
+  context.fetch = () => files.promise;
+  const pending = context.restoreBrowse('');
+  get('restore-archive-path').value = '/Backup/Test1';
+  files.resolve(response({files: []}));
+  await pending;
+  assert.equal(get('restore-archive-path').value, '/Backup/Test1');
+});
+
+function directory(path) { return {name: path.split('/').pop(), path, type: 'd'}; }
+function file(path) { return {name: path.split('/').pop(), path, type: '-'}; }
+function treePage(listings) {
+  const result = page();
+  result.state.job = 'job-id';
+  result.get('restore-archive-sel').value = 'archive';
+  result.calls = [];
+  result.context.fetch = async url => {
+    const path = new URL(url, 'http://localhost').searchParams.get('path');
+    result.calls.push(path);
+    assert.ok(Object.hasOwn(listings, path), `Unexpected folder request: ${path}`);
+    return response({files: listings[path]});
+  };
+  return result;
+}
+
+test('first archive opening reaches the first useful folder without selecting anything', async () => {
+  const {context, state, get, calls} = treePage({
+    '': [directory('mnt')], mnt: [directory('mnt/user')],
+    'mnt/user': [directory('mnt/user/Documents')],
+    'mnt/user/Documents': [directory('mnt/user/Documents/Backup'), file('mnt/user/Documents/Welcome.txt')],
+  });
+  await context.restoreBrowse('');
+  assert.equal(state.path, 'mnt/user/Documents');
+  assert.equal(get('restore-archive-path').value, '/mnt/user/Documents');
+  assert.equal(state.selections.length, 0);
+  assert.deepEqual(calls, ['', 'mnt', 'mnt/user', 'mnt/user/Documents']);
+  assert.ok(state.folderTree.expanded.has('mnt/user'));
+  assert.match(get('restore-folder-tree').innerHTML, /aria-current="location"[^>]*title="\/mnt\/user\/Documents"/);
+  assert.match(get('restore-folder-tree').innerHTML, /Backup/);
+  assert.doesNotMatch(get('restore-folder-tree').innerHTML, /Welcome.txt/);
+  // Choosing the archive root later must really display its contents.
+  await context.restoreBrowse('');
+  assert.equal(state.path, '');
+  assert.equal(calls.length, 5);
+});
+
+for (const contents of [[], [file('readme.txt')], [directory('A'), directory('B')]]) {
+  test(`initial auto-navigation stops at empty, file or branching folder: ${JSON.stringify(contents)}`, async () => {
+    const {context, state, calls} = treePage({'': contents});
+    await context.restoreBrowse('');
+    assert.equal(state.path, '');
+    assert.deepEqual(calls, ['']);
+  });
+}
+
+test('expanding a branch keeps the file view and selection, and reuses known folders', async () => {
+  const {context, state, get, calls} = treePage({
+    '': [directory('A'), directory('B')], A: [directory('A/Documents')],
+    'A/Documents': [directory('A/Documents/One'), directory('A/Documents/Two')],
+  });
+  await context.restoreBrowse('');
+  context.restorePrepare('B', 'B', 'd');
+  const filesHtml = get('restore-filelist').innerHTML;
+  await context.restoreToggleFolder('A');
+  assert.deepEqual(calls, ['', 'A', 'A/Documents']);
+  assert.equal(state.path, '');
+  assert.equal(get('restore-filelist').innerHTML, filesHtml);
+  assert.deepEqual(Array.from(state.selections, item => item.path), ['B']);
+  assert.match(get('restore-folder-tree').innerHTML, /One/);
+  await context.restoreToggleFolder('A');
+  assert.doesNotMatch(get('restore-folder-tree').innerHTML, />Documents</);
+  await context.restoreToggleFolder('A');
+  assert.equal(calls.length, 3);
+  assert.match(get('restore-folder-tree').innerHTML, />Documents</);
+});
+
+test('a pending expansion cannot reopen a collapsed folder', async () => {
+  const {context, state} = treePage({'': [directory('A'), directory('B')]});
+  await context.restoreBrowse('');
+  const first = deferred();
+  context.fetch = () => first.promise;
+  const pending = context.restoreToggleFolder('A');
+  await context.restoreToggleFolder('A');
+  first.resolve(response({files: [directory('A/Child')]}));
+  await pending;
+  assert.equal(state.folderTree.expanded.has('A'), false);
+  assert.equal(state.folderTree.expanded.has('A/Child'), false);
+});
+
+test('tree load failure stays retryable, and source changes discard pending branches', async () => {
+  const {context, state, get} = treePage({'': [directory('A'), directory('B')]});
+  await context.restoreBrowse('');
+  context.fetch = async () => response({code: 'internal_error'}, 500);
+  await context.restoreToggleFolder('A');
+  assert.match(get('restore-folder-tree').innerHTML, /data-restore-action="tree-retry"/);
+  context.fetch = async () => response({files: [file('A/ok.txt')]});
+  await context.restoreToggleFolder('A', true);
+  assert.doesNotMatch(get('restore-folder-tree').innerHTML, /tree-retry/);
+  const old = deferred();
+  context.fetch = () => old.promise;
+  const pending = context.restoreToggleFolder('B');
+  get('restore-archive-sel').value = 'new';
+  context.fetch = async () => response({files: [file('current.txt')]});
+  await context.restoreBrowse('');
+  old.resolve(response({code: 'restore_archive_unavailable'}, 404));
+  await pending;
+  assert.equal(state.archive, 'new');
+  assert.equal(state.folderTree.nodes.has('B'), false);
+  assert.equal(state.files[0].name, 'current.txt');
+});
+
+test('direct path entry reveals ancestors and opens their complete listing on demand', async () => {
+  const {context, state, get, calls} = treePage({
+    'A/Documents': [file('A/Documents/file.txt')],
+    A: [directory('A/Documents'), directory('A/Other')],
+  });
+  await context.restoreBrowse('A/Documents');
+  assert.equal(state.path, 'A/Documents');
+  assert.equal(state.folderTree.nodes.get('A').loaded, false);
+  assert.match(get('restore-folder-tree').innerHTML, /Documents/);
+  await context.restoreToggleFolder('A');
+  await context.restoreToggleFolder('A');
+  assert.deepEqual(calls, ['A/Documents', 'A']);
+  assert.match(get('restore-folder-tree').innerHTML, /Other/);
+});
+
+test('clicking a folder while its expansion loads shares one request', async () => {
+  const {context, state} = treePage({'': [directory('A'), directory('B')]});
+  await context.restoreBrowse('');
+  const listing = deferred();
+  let calls = 0;
+  context.fetch = () => { calls++; return listing.promise; };
+  const expand = context.restoreToggleFolder('A');
+  const browse = context.restoreBrowse('A');
+  listing.resolve(response({files: [file('A/current.txt')]}));
+  await Promise.all([expand, browse]);
+  assert.equal(calls, 1);
+  assert.equal(state.path, 'A');
+  assert.equal(state.files[0].name, 'current.txt');
+});
+
+for (const language of ['de', 'en']) test(`restore plan table distinguishes actions and simulation (${language})`, () => {
+  const {context, get, labels} = page(language);
+  const data = {conflict_mode: 'overwrite', items: [
+    {path: 'Backup/Folder', type: 'd', destination_path: '/target/Folder', destination_exists: true},
+    {path: 'Backup/file.txt', type: '-', destination_path: '/target/file.txt', destination_exists: true},
+    {path: 'Backup/new.txt', type: '-', destination_path: '/target/new.txt', destination_exists: false},
+  ]};
+  context._restoreRenderDestinationMap(data);
+  let html = get('restore-destination-map').innerHTML;
+  assert.match(html, /<table aria-labelledby="restore-mapping-title">/);
+  assert.equal((html.match(/<th scope="col">/g) || []).length, 3);
+  for (const key of ['mappingWhat', 'mappingHow', 'mappingWhere', 'mappingMerge', 'mappingReplace', 'mappingRestore']) assert.ok(html.includes(labels.restore[key]));
+  assert.match(html, /\/target\/Folder/);
+  assert.match(html, /Backup\/Folder/);
+  data.conflict_mode = 'rename';
+  context._restoreRenderDestinationMap(data);
+  html = get('restore-destination-map').innerHTML;
+  assert.ok(html.includes(labels.restore.mappingRename));
+  assert.ok(html.includes(labels.restore.mappingRenameHint));
+  get('restore-dry-run').checked = true;
+  data.conflict_mode = 'skip'; data.items[0].skipped = true;
+  context._restoreRenderDestinationMap(data);
+  html = get('restore-destination-map').innerHTML;
+  assert.ok(html.includes(labels.restore.mappingSkip));
+  assert.ok(html.includes(labels.restore.mappingSimulate));
+  assert.ok(html.includes(labels.restore.mappingNoChanges));
+  assert.ok(!html.includes(labels.restore.mappingReplace));
+  context._restoreRenderDestinationMap(null);
+  assert.equal(get('restore-destination-map').innerHTML, '');
+});
+
+test('single matching folder shows the timestamped child destination for rename only', () => {
+  const {context, get, labels} = page();
+  const data = {conflict_mode: 'rename', items: [
+    {path: 'Backup/Test1', type: 'd', destination_path: '/target/Test1', direct_contents: true},
+  ]};
+  context._restoreRenderDestinationMap(data);
+  assert.match(get('restore-destination-map').innerHTML, /class="restore-mapping-target"><span class="mono">\/target\/Test1\/Test1<\/span>/);
+  assert.ok(get('restore-destination-map').innerHTML.includes(labels.restore.mappingRenameHint));
+  data.conflict_mode = 'overwrite';
+  context._restoreRenderDestinationMap(data);
+  assert.match(get('restore-destination-map').innerHTML, /class="restore-mapping-target"><span class="mono">\/target\/Test1<\/span>/);
+  assert.ok(!get('restore-destination-map').innerHTML.includes(labels.restore.mappingRenameHint));
+});
+
+for (const language of ['de', 'en']) for (const simulation of [false, true]) {
+  test(`technical precheck lists every selection and the requested operation (${language}, simulation=${simulation})`, async () => {
+    const {context, get, state, labels} = page(language);
+    state.job = 'job-id'; state.archive = 'archive';
+    get('restore-target-path').value = '/mnt/user/test';
+    get('restore-dry-run').checked = simulation;
+    context.restorePrepare('Backup/Test1', 'Test1', 'd');
+    context.restorePrepare('Backup/Test2', 'Test2', 'd');
+    const data = {ok: true, archive: 'archive', source_path: 'Backup/Test1',
+      target_dir: '/mnt/user/test', conflict_mode: 'skip', target_mountpoint: '/mnt/user',
+      target_free_bytes: 1024, dry_run: false, dry_run_exit_code: 0,
+      dry_run_stdout: 'Precheck is metadata-only (no extraction).', items: [
+        {path: 'Backup/Test1', type: 'd', destination_path: '/mnt/user/test/Test1', destination_exists: true, skipped: true},
+        {path: 'Backup/Test2', type: 'd', destination_path: '/mnt/user/test/Test2', destination_exists: false, skipped: false},
+      ]};
+    context.fetch = async (_, request) => {
+      const body = JSON.parse(request.body);
+      assert.deepEqual(body.source_paths, ['Backup/Test1', 'Backup/Test2']);
+      assert.equal(body.dry_run, simulation);
+      return response(data);
+    };
+    await context.restoreRunPrecheck();
+    const output = get('restore-precheck-output').textContent;
+    assert.ok(output.includes(labels.restore.metadataPrecheckDetail));
+    assert.ok(output.includes(labels.restore.metadataPrecheckScope));
+    assert.ok(output.includes(labels.restore[simulation ? 'plannedSimulation' : 'plannedRestore']));
+    for (const item of data.items) {
+      assert.ok(output.includes(item.path));
+      assert.ok(output.includes(item.destination_path));
+    }
+    assert.ok(output.includes(labels.restore.mappingSkip));
+    assert.ok(output.includes(labels.restore[simulation ? 'mappingSimulate' : 'mappingRestore']));
+    assert.ok(!output.includes('(Exit 0)'));
+    assert.ok(!output.includes(labels.restore.dryRunOutput));
+    assert.equal(get('restore-confirm-check').checked, false);
+
+    get('restore-conflict-mode').value = 'rename';
+    data.conflict_mode = 'rename';
+    data.target_mountpoint = '';
+    data.items = [{path: 'Backup/Test1', type: 'd', destination_path: '/mnt/user/test/Test1', direct_contents: true}];
+    await context.restoreRunPrecheck();
+    assert.ok(get('restore-precheck-output').textContent.includes('/mnt/user/test/Test1/Test1'));
+    assert.ok(get('restore-precheck-output').textContent.includes(labels.restore.mappingTimestamp));
+    assert.ok(get('restore-precheck-output').textContent.includes(labels.restore.mountpointUnknown));
+  });
+}
+
+for (const language of ['de', 'en']) test(`searching a large selection preserves hidden items (${language})`, () => {
+  const {context, get, state, labels, renderers} = page(language);
+  context._restoreRenderSelectedBox = renderers.selection;
+  state.job = 'job-id'; state.archive = 'archive';
+  state.selections = Array.from({length: 180}, (_, index) => ({path: `Documents/Folder-${index}/notes.txt`, name: 'notes.txt', type: '-'}));
+  state.selectedPath = state.selections[0].path;
+  get('restore-selection-filter').value = 'folder-179';
+  renderers.selection();
+  assert.equal((get('restore-selected-list').innerHTML.match(/<tr>/g) || []).length, 1);
+  assert.match(get('restore-selected-list').innerHTML, /Folder-179/);
+  assert.equal(state.selections.length, 180);
+  assert.match(get('restore-selection-name').textContent, /180/);
+  assert.equal(get('restore-clear-selection-btn').disabled, false);
+  // Removing the visible match leaves the other 179 selections intact.
+  context.restorePrepare('Documents/Folder-179/notes.txt', 'notes.txt', '-');
+  assert.equal(state.selections.length, 179);
+  assert.ok(get('restore-selected-list').innerHTML.includes(labels.restore.selectionNoMatches));
+  get('restore-selection-filter').value = '';
+  renderers.selection();
+  assert.equal((get('restore-selected-list').innerHTML.match(/<tr>/g) || []).length, 179);
+  // Archive changes clear both the selection and its filter/expanded view.
+  get('restore-selection-details').open = true;
+  get('restore-selection-filter').value = 'old';
+  context.restoreClearFileSelection();
+  assert.equal(get('restore-selection-filter').value, '');
+  assert.equal(get('restore-selection-details').open, false);
+  assert.equal(get('restore-clear-selection-btn').disabled, true);
+});
+
+test('target summary describes planned operation, conflict behavior and configured roots', () => {
+  const {get, state, labels, renderers} = page('de');
+  state.selections = [{path: 'Backup/Test1', name: 'Test1', type: 'd'}, {path: 'Backup/file', name: 'file', type: '-'}];
+  state.allowedTargetRoots = ['/mnt/cache/restore'];
+  get('restore-dry-run').checked = true;
+  for (const mode of ['skip', 'overwrite', 'rename']) {
+    get('restore-conflict-mode').value = mode;
+    renderers.summary();
+    assert.equal(get('restore-conflict-help').textContent, labels.restore[`${mode}Help`]);
+    assert.match(get('restore-target-roots-hint').textContent, /\/mnt\/cache\/restore/);
+    assert.ok(!get('restore-target-roots-hint').textContent.includes('{roots}'));
+    assert.equal(get('restore-mode-badge').textContent, labels.restore.dryRunActive);
+    assert.equal(get('restore-summary-dry-run').textContent, labels.restore.plannedSimulation);
+  }
+  get('restore-dry-run').checked = false;
+  renderers.summary();
+  assert.equal(get('restore-mode-badge').textContent, labels.restore.restoreActive);
+  assert.equal(get('restore-summary-dry-run').textContent, labels.restore.plannedRestore);
 });

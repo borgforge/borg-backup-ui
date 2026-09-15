@@ -100,6 +100,7 @@ function navigate(page) {
     page = 'settings';
   }
 
+  window.BBUI?.utils?.dom?.clearPageFeedback?.();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 

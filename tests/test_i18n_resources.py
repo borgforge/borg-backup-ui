@@ -358,7 +358,6 @@ def test_restore_pages_use_localization_helpers_for_dynamic_content():
     assert "bbui:language-changed" in restore_tests
     assert "restoreT('confirmStart')" in restore
     assert "restoreTestsT('confirmTitle')" in restore_tests
-    assert "toLocaleTimeString(restoreTestsLocale())" in restore_tests
 
     for text in (
         "Plan nicht verfügbar.",

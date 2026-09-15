@@ -6,6 +6,20 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 
 ## Unreleased
 
+### Issue #523 - stable page layout for action feedback
+- Keep Restore Tests plan actions in a fixed two-column button group in both languages. Show busy state only on the requested action, disable both actions while pending, and use the shared feedback with the job display name instead of inserting timestamps or errors into table rows.
+- Route page action feedback through the shared message helper, including dashboard, jobs, reports, restore and settings subpages. Render a fixed, dismissible panel with localized severity and accessible announcements; preserve line breaks and bound long message height.
+- Keep one current page message. Automatically dismiss information/success after at least 5 seconds and warnings after at least 12 seconds, extending long texts to at most 30 seconds. Pause the remaining time during hover, keyboard focus or a hidden browser tab. Errors have no timer. Cancel stale timers/listeners on dismissal, replacement and navigation; ignore late hidden-page results. Keep modal validation and contextual empty/system states inline. Move restore action feedback outside individual steps so errors from browsing and history remain visible.
+
+### Issue #521 - Browse & Restore selection
+- Simplify steps 3-5: keep direct path entry optional, replace selection cards with a collapsible searchable table, summarize selection in the target step and explain conflict behavior. Compact the review and confirmation area, refresh dynamic language text, and keep keyboard focus after selection changes.
+- Add an expandable directory tree with lazy loading and automatic navigation through single-directory chains on first archive opening. Keep expanded branches and discard stale tree responses after source changes.
+- Add direct archive-folder navigation, a current-folder name filter and persistent checkbox selection across folders, with source-to-target mapping before confirmation.
+- List every verified selection, destination and planned action in the technical precheck. Separate metadata validation from the subsequently confirmed dry run or restore; show selection counts instead of a synthetic extraction exit code. Resolve the actual destination mount with findmnt and show an unknown value when lookup fails.
+- Show a restore-plan table below the three review cards, with archive source, planned action and destination path. Distinguish skipped entries, timestamp renaming, replacement, directory merging and simulation.
+- Normalize overlapping selections, preserve paths below the common parent and extract literal file/folder paths in one Borg invocation under the existing repository lock. Stage output on the target filesystem; retain per-selection conflict handling and single-directory behavior.
+- Persist selected paths and destinations in restore history. Honor the existing simulation control during extraction and label simulations explicitly. Keep old single-path API callers and history readable without migration.
+
 ### Issue #519 - recognize UUID migration recovery snapshots
 - Associate existing job-ID and job-settings snapshots with their exact journal run, directory, timestamp and completion state. Read the same configuration directory as the migration writers, including configurations ending in scripts.
 - Keep the existing retention policy, protect missing or conflicting journals and incomplete runs, and skip symbolic snapshot directories. Display retained snapshots separately from deletion candidates and protected snapshots in German and English.

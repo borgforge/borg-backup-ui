@@ -13,7 +13,6 @@ window.BBUI.restoreTestsState = window.BBUI.restoreTestsState || {
   jobs: [],
   defaultsInitialized: false,
   rowBusy: {},
-  rowNote: {},
   subtab: 'plan',
   filteredReports: [],
   logState: null,
@@ -513,8 +512,7 @@ function renderRestorePlan(plan) {
     const schedState = mode !== 'scheduled'
       ? restoreTestsT('no')
       : (j.is_overdue ? restoreTestsT('yesDue') : restoreTestsT('yesWaiting'));
-    const busy = !!restoreTestsState.rowBusy[j.job_key];
-    const note = restoreTestsState.rowNote[j.job_key] || '';
+    const busy = restoreTestsState.rowBusy[j.job_key];
     return `<tr>
       <td>${escHtml(j.display_name || j.job_key || '-')}</td>
       <td><span class="history-loc-chip ${(j.location || '').toLowerCase()}">${escHtml(restoreTestsLocationLabel(j.location || ''))}</span></td>
@@ -537,10 +535,9 @@ function renderRestorePlan(plan) {
       <td>${escHtml(due)}</td>
       <td>${escHtml(schedState)}</td>
       <td>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button type="button" class="btn btn-secondary btn-sm ${busy ? 'loading' : ''}" data-rt-plan-action="save" data-job-key="${escHtml(j.job_key)}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT('save'))}</button>
-          <button type="button" class="btn btn-primary btn-sm ${busy ? 'loading' : ''}" data-rt-plan-action="run" data-job-key="${escHtml(j.job_key)}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT('testNow'))}</button>
-          ${note ? `<span class="muted" style="font-size:11px">${escHtml(note)}</span>` : ''}
+        <div class="rt-plan-actions">
+          <button type="button" class="btn btn-secondary btn-sm" data-rt-plan-action="save" data-job-key="${escHtml(j.job_key)}" aria-busy="${busy === 'save'}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT(busy === 'save' ? 'saving' : 'save'))}</button>
+          <button type="button" class="btn btn-primary btn-sm" data-rt-plan-action="run" data-job-key="${escHtml(j.job_key)}" aria-busy="${busy === 'run'}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT(busy === 'run' ? 'startingTest' : 'testNow'))}</button>
         </div>
       </td>
     </tr>`;
@@ -571,8 +568,7 @@ async function saveRestorePlanPolicy(jobKey) {
     showMsg('restore-tests-message', 'error', restoreTestsT('invalidLevel', { job: jobKey }));
     return;
   }
-  restoreTestsState.rowBusy[jobKey] = true;
-  restoreTestsState.rowNote[jobKey] = restoreTestsT('saving');
+  restoreTestsState.rowBusy[jobKey] = 'save';
   renderRestorePlan(restoreTestsState.plan);
   try {
     const res = await fetch('/api/restore-tests/policy', {
@@ -589,12 +585,10 @@ async function saveRestorePlanPolicy(jobKey) {
       if (handleRestoreTestAlreadyRunning(data)) return;
       throw new Error(apiErrorMessage(data, res.status));
     }
-    const stamp = new Date().toLocaleTimeString(restoreTestsLocale());
-    restoreTestsState.rowNote[jobKey] = restoreTestsT('savedAt', { time: stamp });
-    showMsg('restore-tests-message', 'success', restoreTestsT('policySaved', { job: jobKey }));
+    const jobLabel = restoreTestsState.plan?.jobs?.find(job => job.job_key === jobKey)?.display_name || jobKey;
+    showMsg('restore-tests-message', 'success', restoreTestsT('policySaved', { job: jobLabel }));
     await refreshRestorePlanOnly();
   } catch (err) {
-    restoreTestsState.rowNote[jobKey] = restoreTestsT('errorValue', { message: err.message });
     showMsg('restore-tests-message', 'error', restoreTestsT('policySaveFailed', { message: err.message }));
   } finally {
     restoreTestsState.rowBusy[jobKey] = false;
@@ -603,8 +597,7 @@ async function saveRestorePlanPolicy(jobKey) {
 }
 
 async function runRestorePlanJob(jobKey) {
-  restoreTestsState.rowBusy[jobKey] = true;
-  restoreTestsState.rowNote[jobKey] = restoreTestsT('startingTest');
+  restoreTestsState.rowBusy[jobKey] = 'run';
   renderRestorePlan(restoreTestsState.plan);
   try {
     const res = await fetch('/api/restore-tests/run-job', {
@@ -615,14 +608,12 @@ async function runRestorePlanJob(jobKey) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
-    const stamp = new Date().toLocaleTimeString(restoreTestsLocale());
-    restoreTestsState.rowNote[jobKey] = restoreTestsT('startedAt', { time: stamp });
-    showMsg('restore-tests-message', 'success', restoreTestsT('testStarted', { job: jobKey }));
+    const jobLabel = restoreTestsState.plan?.jobs?.find(job => job.job_key === jobKey)?.display_name || jobKey;
+    showMsg('restore-tests-message', 'success', restoreTestsT('testStarted', { job: jobLabel }));
     _openRTLogPanel();
     startRTPolling();
     await refreshRestorePlanOnly();
   } catch (err) {
-    restoreTestsState.rowNote[jobKey] = restoreTestsT('errorValue', { message: err.message });
     showMsg('restore-tests-message', 'error', restoreTestsT('startFailed', { message: err.message }));
   } finally {
     restoreTestsState.rowBusy[jobKey] = false;

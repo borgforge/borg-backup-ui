@@ -543,12 +543,7 @@ function _fmtDuration(secs) {
 }
 
 function _berichtMsg(msg, isError) {
-  const el = document.getElementById('bericht-msg');
-  if (!el) return;
-  if (!msg) { el.classList.add('hidden'); el.textContent = ''; return; }
-  el.classList.remove('hidden');
-  el.textContent = msg;
-  el.style.color = isError ? 'var(--danger)' : 'var(--text-muted)';
+  showMsg('bericht-msg', isError ? 'error' : 'info', msg);
 }
 
 function _berichtRestoreFailureReason(job) {
@@ -656,10 +651,5 @@ window.addEventListener?.('bbui:language-changed', () => {
 });
 
 function _berichtBorgInfoMsg(msg, isError) {
-  const el = document.getElementById('bericht-borginfo-msg');
-  if (!el) return;
-  if (!msg) { el.classList.add('hidden'); el.textContent = ''; return; }
-  el.classList.remove('hidden');
-  el.textContent = msg;
-  el.style.color = isError ? 'var(--danger)' : 'var(--text-muted)';
+  showMsg('bericht-borginfo-msg', isError ? 'error' : 'info', msg);
 }

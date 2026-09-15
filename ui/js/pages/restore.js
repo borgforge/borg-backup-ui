@@ -11,6 +11,9 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   archive: '',
   path: '',
   selectedPath: '',
+  selections: [],
+  folderFilter: '',
+  folderTree: null,
   selectedName: '',
   selectedType: '',
   precheck: null,
@@ -64,6 +67,7 @@ function restoreStatusIcon(status) {
 function restoreSetStep(step) {
   const next = Math.max(1, Math.min(5, Number(step) || 1));
   restoreState.step = next;
+  document.getElementById('restore-wizard')?.classList.toggle('restore-selection-steps', next >= 3);
   for (let i = 1; i <= 5; i++) {
     const panel = document.getElementById(`restore-step-panel-${i}`);
     if (panel) panel.style.display = i === next ? '' : 'none';
@@ -95,6 +99,7 @@ function restoreSetStep(step) {
   }
   const status = document.getElementById('restore-step-status');
   if (status) status.textContent = restoreT('stepStatus', { step: next, total: 5 });
+  _restoreRenderSelectionSummary();
 }
 
 function restoreSetLiveMode(enabled) {
@@ -116,6 +121,7 @@ function restoreSetLiveMode(enabled) {
 
 function restoreSwitchView(view) {
   const next = view === 'history' ? 'history' : 'wizard';
+  if (restoreState.view !== next) window.BBUI?.utils?.dom?.clearPageFeedback?.();
   restoreState.view = next;
   const wizardBtn = document.getElementById('restore-view-wizard-btn');
   const historyBtn = document.getElementById('restore-view-history-btn');
@@ -314,6 +320,7 @@ function restoreReloadWizard() {
   restoreState.precheck = null;
   restoreState.autoPrecheckKey = '';
   restoreState.selectedPath = '';
+  restoreState.selections = [];
   restoreState.selectedName = '';
   restoreState.selectedType = '';
   restoreState.archive = '';
@@ -336,7 +343,7 @@ function _restoreRenderSelectionSummary() {
   const jobSel = document.getElementById('restore-job-sel');
   const jobText = jobSel?.selectedOptions?.[0]?.textContent?.trim() || '—';
   const archive = restoreState.archive || '—';
-  const selectedCount = restoreState.selectedPath ? 1 : 0;
+  const selectedCount = _restoreSelections().length;
   const target = document.getElementById('restore-target-path')?.value?.trim() || '—';
   const jobEl = document.getElementById('restore-summary-job');
   const archEl = document.getElementById('restore-summary-archive');
@@ -351,25 +358,71 @@ function _restoreRenderSelectionSummary() {
   const mode = document.getElementById('restore-conflict-mode')?.selectedOptions?.[0]?.textContent || '—';
   const dryRun = document.getElementById('restore-dry-run')?.checked;
   if (modeEl) modeEl.textContent = mode;
-  if (dryRunEl) dryRunEl.textContent = dryRun ? restoreT('yes') : restoreT('no');
+  if (dryRunEl) dryRunEl.textContent = restoreT(dryRun ? 'plannedSimulation' : 'plannedRestore');
+  const modeBadge = document.getElementById('restore-mode-badge');
+  if (modeBadge) modeBadge.textContent = restoreT(dryRun ? 'dryRunActive' : 'restoreActive');
   const browserContext = document.getElementById('restore-browser-context');
   if (browserContext) browserContext.textContent = restoreState.archive || '';
+  const selection = document.getElementById('restore-target-selection-info');
+  if (selection) selection.textContent = restoreT('selectedCount', { count: selectedCount }) + ' · ' + _restoreSelectionTypes();
+  const conflictHelp = document.getElementById('restore-conflict-help');
+  const conflictMode = document.getElementById('restore-conflict-mode')?.value || 'skip';
+  if (conflictHelp) conflictHelp.textContent = restoreT({skip: 'skipHelp', overwrite: 'overwriteHelp', rename: 'renameHelp'}[conflictMode]);
+  _restoreRenderTargetHints();
+}
+
+function _restoreSelections() {
+  return restoreState.selections?.length ? restoreState.selections : (restoreState.selectedPath
+    ? [{ path: restoreState.selectedPath, name: restoreState.selectedName, type: restoreState.selectedType }] : []);
+}
+
+function _restoreSelectionTypes() {
+  const selections = _restoreSelections();
+  const folders = selections.filter(item => item.type === 'd').length;
+  return restoreT('selectionTypes', {folders, files: selections.length - folders});
+}
+
+function restoreEntryIcon(type) {
+  const shape = type === 'd' ? '<path d="M2 5h6l2 2h8v10H2z"/>'
+    : type === 'l' ? '<path d="m8 12 4-4m-5 6H5a3 3 0 0 1-2-5l3-3a3 3 0 0 1 4 0m0 8a3 3 0 0 0 4 0l3-3a3 3 0 0 0-2-5h-2"/>'
+    : '<path d="M4 2h8l4 4v12H4zM12 2v5h4M7 11h6M7 14h6"/>';
+  return `<svg class="restore-entry-icon" viewBox="0 0 20 20" aria-hidden="true">${shape}</svg>`;
 }
 
 function _restoreRenderSelectedBox() {
-  const typeEl = document.getElementById('restore-selected-type');
-  const pathEl = document.getElementById('restore-selected-path');
-  const hintEl = document.getElementById('restore-selected-hint');
-  const type = restoreState.selectedType === 'd' ? restoreT('directory') : (restoreState.selectedType === 'f' ? restoreT('file') : '—');
-  const hint = restoreState.selectedType === 'd'
-    ? restoreT('directoryHint')
-    : (restoreState.selectedType === 'f' ? restoreT('fileHint') : restoreT('nothingSelected'));
-  if (typeEl) typeEl.textContent = type;
-  if (pathEl) pathEl.textContent = restoreState.selectedPath || '—';
-  if (hintEl) hintEl.textContent = hint;
-  const nameEl = document.getElementById('restore-selection-name');
-  if (nameEl) nameEl.textContent = restoreState.selectedName || '—';
+  const selections = _restoreSelections();
+  const list = document.getElementById('restore-selected-list');
+  const count = document.getElementById('restore-selection-name');
+  if (count) count.textContent = restoreT('selectedCount', { count: selections.length });
+  const types = document.getElementById('restore-selection-types');
+  if (types) types.textContent = selections.length ? _restoreSelectionTypes() : '';
+  const input = document.getElementById('restore-selection-filter');
+  if (input && !selections.length) input.value = '';
+  const filter = String(input?.value || '').trim().toLocaleLowerCase();
+  const filtered = selections.filter(item => String(item.path).toLocaleLowerCase().includes(filter));
+  const resultCount = document.getElementById('restore-selection-filter-count');
+  if (resultCount) resultCount.textContent = filter ? restoreT('selectionFilterCount', {count: filtered.length, total: selections.length}) : '';
+  const clear = document.getElementById('restore-clear-selection-btn');
+  if (clear) clear.disabled = !selections.length;
+  if (list) list.innerHTML = filtered.length ? filtered.map(item => `
+    <tr><td><span class="restore-entry-name">${restoreEntryIcon(item.type)}<strong>${escHtml(item.name || item.path.split('/').pop())}</strong></span></td>
+    <td class="mono">${escHtml('/' + item.path.split('/').slice(0, -1).join('/'))}</td>
+    <td><button type="button" class="restore-icon-btn" data-restore-action="select" data-path="${escHtml(item.path)}"
+      aria-label="${escHtml(restoreT('removeItem', { name: item.name }))}" title="${escHtml(item.path)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></td></tr>`).join('')
+    : `<tr><td colspan="3" class="text-muted">${escHtml(restoreT(selections.length ? 'selectionNoMatches' : 'nothingSelected'))}</td></tr>`;
 }
+
+function restoreOpenPath() {
+  const input = document.getElementById('restore-archive-path');
+  const path = String(input?.value || '').replace(/^\/+|\/+$/g, '');
+  return restoreBrowse(path);
+}
+
+function restoreFilterFolder() {
+  restoreState.folderFilter = document.getElementById('restore-folder-filter')?.value || '';
+  _restoreRenderFiles(restoreState.files);
+}
+
 
 function _stopRestorePolling() {
   if (restoreState.restorePollTimer) {
@@ -440,7 +493,7 @@ function renderRestoreRuns(runs) {
       <div class="restore-run-main">
         <span class="ui-badge ${restoreRunStateClass(state)}">${escHtml(restoreRunStateLabel(state))}</span>
         <strong>${escHtml(run.job_name || restoreJobName(run.job_key))}</strong>
-        <small>${escHtml(run.archive || '—')}</small>
+        <small>${escHtml(run.archive || '—')}${run.dry_run ? ' · ' + escHtml(restoreT('simulation')) : ''}</small>
       </div>
       <div class="restore-run-meta">
         <span>${escHtml(restoreT('targetDirectory'))}: <b>${escHtml(run.destination_path || run.target_dir || '—')}</b></span>
@@ -491,7 +544,7 @@ function renderRestoreHistory(payload) {
     return `<article class="restore-history-card ${selected ? 'is-selected' : ''}" data-restore-history-id="${escHtml(id)}">
       <div class="restore-run-main">
         <strong>${escHtml(run.job_name || restoreJobName(run.job_key))}</strong>
-        <small>${escHtml(run.archive || '—')}</small>
+        <small>${escHtml(run.archive || '—')}${run.dry_run ? ' · ' + escHtml(restoreT('simulation')) : ''}</small>
       </div>
       <div class="restore-run-meta">
         <dl>
@@ -585,12 +638,14 @@ function renderRestoreHistoryDetail(detail) {
   target.innerHTML = `<div class="restore-history-detail-grid">
     <div><small>${escHtml(restoreT('historyRestoreId'))}</small><strong>${escHtml(id)}</strong></div>
     <div><small>${escHtml(restoreT('runStatus'))}</small><strong><span class="ui-badge ${restoreRunStateClass(detail.state)}">${escHtml(restoreRunStateLabel(detail.state))}</span></strong></div>
-    <div><small>${escHtml(restoreT('sourcePath'))}</small><strong>${escHtml(detail.source_path || '—')}</strong></div>
+    <div><small>${escHtml(restoreT('sourcePath'))}</small><strong>${escHtml((detail.source_paths || [detail.source_path]).filter(Boolean).join(' · ') || '—')}</strong></div>
     <div><small>${escHtml(restoreT('targetDirectory'))}</small><strong>${escHtml(detail.target_dir || '—')}</strong></div>
     <div><small>${escHtml(restoreT('destinationLabel'))}</small><strong>${escHtml(detail.destination_path || '—')}</strong></div>
     <div><small>${escHtml(restoreT('conflictStrategy'))}</small><strong>${escHtml(restoreConflictModeLabel(detail.conflict_mode))}</strong></div>
+    <div><small>${escHtml(restoreT('simulation'))}</small><strong>${escHtml(detail.dry_run ? restoreT('yes') : restoreT('no'))}</strong></div>
     <div><small>${escHtml(restoreT('preserveOwnerShort'))}</small><strong>${escHtml(detail.preserve_owner ? restoreT('yes') : restoreT('no'))}</strong></div>
   </div>
+  ${detail.items?.length ? `<ul class="restore-history-items">${detail.items.map(item => `<li>${escHtml(item.path)} → ${escHtml(item.destination_path)}${item.skipped ? ' (' + escHtml(restoreT('mappingSkip')) + ')' : ''}</li>`).join('')}</ul>` : ''}
   ${error ? `<div class="restore-history-error">${escHtml(error)}</div>` : ''}
   <details class="restore-history-log"><summary>${escHtml(restoreT('historyLog'))}</summary><pre>${escHtml(lines.join('\n') || restoreT('empty'))}</pre></details>`;
 }
@@ -687,6 +742,9 @@ async function _pollRestoreState(restoreId) {
           target_unreadable: 'targetUnreadable',
         }[data.skip_reason_code] || 'targetExists';
         showMsg('restore-assist-msg', 'warning', restoreT('skipped', { reason: restoreT(reasonKey) }));
+      } else if (data.dry_run) {
+        setRestoreHeaderStatus('simulation');
+        showMsg('restore-assist-msg', 'success', restoreT('simulationSuccess'));
       } else {
         setRestoreHeaderStatus('success');
         showMsg('restore-assist-msg', 'success', restoreT('success', { path: data.destination_path || '' }));
@@ -771,10 +829,18 @@ function _restoreBindTargetAutocomplete() {
 }
 
 function restoreClearFileSelection() {
+  const selectionDetails = document.getElementById('restore-selection-details');
+  if (selectionDetails) selectionDetails.open = false;
+  const pathDetails = document.getElementById('restore-path-details');
+  if (pathDetails) pathDetails.open = false;
+  restoreState.folderTree = null;
+  const tree = document.getElementById('restore-folder-tree');
+  if (tree) tree.innerHTML = '';
   restoreState.filesRequest++;
   restoreState.files = [];
   restoreState.path = '';
   restoreState.selectedPath = '';
+  restoreState.selections = [];
   restoreState.selectedName = '';
   restoreState.selectedType = '';
   restoreState.precheck = null;
@@ -919,17 +985,148 @@ async function restoreLoadArchives() {
   }
 }
 
+function _restoreGetFolderTree() {
+  if (!restoreState.folderTree) {
+    restoreState.folderTree = { nodes: new Map(), expanded: new Set(['']), requests: new Map() };
+  }
+  return restoreState.folderTree;
+}
+
+function _restoreTreeNode(tree, path) {
+  if (!tree.nodes.has(path)) {
+    tree.nodes.set(path, { path, name: path.split('/').pop(), children: [], loaded: false, error: '' });
+  }
+  return tree.nodes.get(path);
+}
+
+function _restoreRememberTreeDirectory(tree, path, files) {
+  // Direct path entry must also reveal its ancestors. Unloaded parents keep
+  // these known children until expanded, when their complete listing is loaded.
+  const parts = path ? path.split('/') : [];
+  let parent = '';
+  _restoreTreeNode(tree, parent);
+  for (let index = 0; index < parts.length; index++) {
+    const child = parts.slice(0, index + 1).join('/');
+    const parentNode = _restoreTreeNode(tree, parent);
+    if (!parentNode.children.includes(child)) parentNode.children.push(child);
+    _restoreTreeNode(tree, child);
+    parent = child;
+  }
+  const node = _restoreTreeNode(tree, path);
+  node.children = files.filter(file => file.type === 'd' && typeof file.path === 'string')
+    .map(file => { _restoreTreeNode(tree, file.path); return file.path; });
+  node.loaded = true;
+  node.error = '';
+}
+
+function _restoreOpenTreeAncestors(tree, path) {
+  const parts = path ? path.split('/') : [];
+  tree.expanded.add('');
+  for (let i = 1; i < parts.length; i++) tree.expanded.add(parts.slice(0, i).join('/'));
+}
+
+function _restoreRenderFolderTree() {
+  const element = document.getElementById('restore-folder-tree');
+  if (!element) return;
+  const tree = restoreState.folderTree;
+  const focused = document.activeElement;
+  const focusKey = focused && element.contains?.(focused) ? {path: focused.dataset.path, action: focused.dataset.restoreAction} : null;
+  if (!tree) { element.innerHTML = ''; return; }
+  const render = (path, depth = 0) => {
+    const node = tree.nodes.get(path);
+    if (!node || depth > 64) return '';
+    const expanded = tree.expanded.has(path);
+    const busy = tree.requests.has(path);
+    const branch = !node.loaded || node.children.length > 0;
+    const name = path ? node.name : restoreT('archiveRoot');
+    const active = path === restoreState.path;
+    return `<li><div class="restore-tree-row${active ? ' is-current' : ''}">
+      ${branch ? `<button type="button" class="restore-tree-toggle" data-restore-action="tree-toggle" data-path="${escHtml(path)}" aria-expanded="${expanded}" aria-label="${escHtml(restoreT(expanded ? 'collapseFolder' : 'expandFolder', { name }))}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>` : '<span class="restore-tree-spacer"></span>'}
+      <button type="button" class="restore-tree-name" data-restore-action="browse" data-path="${escHtml(path)}" ${active ? 'aria-current="location"' : ''} title="${escHtml('/' + path)}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 5h6l2 2h8v10H2z"/></svg><span>${escHtml(name)}</span></button>
+    </div>${expanded && busy ? `<small class="restore-tree-note" role="status">${escHtml(restoreT('loadingFolders'))}</small>` : ''}
+    ${expanded && node.error ? `<div class="restore-tree-note" role="alert">${escHtml(node.error)} <button type="button" class="btn btn-secondary btn-sm" data-restore-action="tree-retry" data-path="${escHtml(path)}">${escHtml(restoreT('retryFolders'))}</button></div>` : ''}
+    ${expanded && node.children.length ? `<ul>${node.children.map(child => render(child, depth + 1)).join('')}</ul>` : ''}</li>`;
+  };
+  element.innerHTML = `<ul>${render('')}</ul>`;
+  if (focusKey) {
+    const buttons = Array.from(element.querySelectorAll('button'));
+    const button = buttons.find(item => item.dataset.path === focusKey.path && item.dataset.restoreAction === focusKey.action)
+      || buttons.find(item => item.dataset.path === focusKey.path && item.dataset.restoreAction === 'browse');
+    button?.focus({preventScroll: true});
+  }
+}
+
+async function _restoreFetchDirectory(tree, path, jobKey, archive) {
+  if (tree.requests.has(path)) return tree.requests.get(path);
+  const pending = (async () => {
+    const url = `/api/restore/files?job=${encodeURIComponent(jobKey)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
+    const res = await fetch(url, { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || data?.error) {
+      const error = new Error(apiErrorMessage(data, res.status));
+      error.archiveUnavailable = data?.code === 'restore_archive_unavailable';
+      throw error;
+    }
+    if (!data || !Array.isArray(data.files)) throw new Error(apiErrorMessage({code: 'internal_error'}));
+    if (restoreState.folderTree === tree) _restoreRememberTreeDirectory(tree, path, data.files);
+    return data.files;
+  })();
+  tree.requests.set(path, pending);
+  _restoreTreeNode(tree, path);
+  _restoreRenderFolderTree();
+  try { return await pending; }
+  finally {
+    tree.requests.delete(path);
+    if (restoreState.folderTree === tree) _restoreRenderFolderTree();
+  }
+}
+
+async function restoreToggleFolder(path, retry = false) {
+  const tree = _restoreGetFolderTree();
+  if (!retry && tree.expanded.has(path)) {
+    tree.expanded.delete(path);
+    _restoreRenderFolderTree();
+    return;
+  }
+  tree.expanded.add(path);
+  const node = _restoreTreeNode(tree, path);
+  node.error = '';
+  _restoreRenderFolderTree();
+  if (node.loaded && !retry) return;
+  try {
+    const jobKey = restoreState.job;
+    const archive = restoreState.archive;
+    let current = path;
+    for (let depth = 0; depth < 64; depth++) {
+      const files = await _restoreFetchDirectory(tree, current, jobKey, archive);
+      if (restoreState.folderTree !== tree || !tree.expanded.has(path)) return;
+      if (files.length !== 1 || files[0].type !== 'd' || typeof files[0].path !== 'string' || !files[0].path.startsWith(current ? current + '/' : '') || files[0].path === current) break;
+      current = files[0].path;
+      tree.expanded.add(current);
+    }
+  } catch (error) {
+    if (restoreState.folderTree !== tree) return;
+    if (error.archiveUnavailable) restoreClearArchives();
+    else node.error = error.message;
+  }
+  _restoreRenderFolderTree();
+}
+
 async function restoreBrowse(path) {
   const jobKey = restoreState.job;
+  const pathInput = document.getElementById('restore-archive-path');
+  const enteredPath = pathInput?.value;
   const archive = document.getElementById('restore-archive-sel').value;
   if (!archive) return;
 
+  const firstOpen = archive !== restoreState.archive && !path;
   if (archive !== restoreState.archive) restoreClearFileSelection();
   const request = ++restoreState.filesRequest;
   const sourceRequest = restoreState.sourceRequest;
   const isCurrent = () => request === restoreState.filesRequest && sourceRequest === restoreState.sourceRequest;
   restoreState.archive = archive;
-  restoreState.path = path;
+  const tree = _restoreGetFolderTree();
+  const previousPath = restoreState.path;
   renderRestoreSourceContext();
   _restoreRenderSelectionSummary();
   renderRestoreArchiveList();
@@ -946,25 +1143,41 @@ async function restoreBrowse(path) {
   }
 
   try {
-    const url = `/api/restore/files?job=${encodeURIComponent(jobKey)}&archive=${encodeURIComponent(archive)}&path=${encodeURIComponent(path)}`;
-    const res = await fetch(url, { credentials: 'include' });
-    const data = await res.json();
+    let files = await _restoreFetchDirectory(tree, path, jobKey, archive);
     if (!isCurrent()) return;
-    if (!res.ok || data?.error) {
-      const error = new Error(apiErrorMessage(data, res.status));
-      error.archiveUnavailable = data?.code === 'restore_archive_unavailable';
-      throw error;
+    // Skip repeated clicks through structural parents. Stop at the first folder
+    // containing files, several subfolders, or nothing; never select anything.
+    if (firstOpen) {
+      for (let depth = 0; depth < 64 && files.length === 1 && files[0].type === 'd'; depth++) {
+        const child = files[0].path;
+        if (typeof child !== 'string' || child === path || !child.startsWith(path ? path + '/' : '')) break;
+        tree.expanded.add(path);
+        path = child;
+        files = await _restoreFetchDirectory(tree, path, jobKey, archive);
+        if (!isCurrent()) return;
+      }
+      tree.expanded.add(path);
     }
-    if (!data || !Array.isArray(data.files)) throw new Error(apiErrorMessage({code: 'internal_error'}));
-
+    _restoreOpenTreeAncestors(tree, path);
     _restoreMsg('');
+    restoreState.path = path;
+    restoreState.folderFilter = '';
+    const filter = document.getElementById('restore-folder-filter');
+    if (filter) filter.value = '';
+    if (pathInput && pathInput.value === enteredPath) pathInput.value = '/' + path;
     _restoreRenderBreadcrumb(path);
-    restoreState.files = data.files || [];
+    restoreState.files = files;
     _restoreRenderFiles(restoreState.files);
+    _restoreRenderFolderTree();
   } catch (e) {
     if (!isCurrent()) return;
     if (e.archiveUnavailable) restoreClearArchives();
-    else restoreClearFileSelection();
+    else {
+      restoreState.path = previousPath;
+      restoreState.precheck = null;
+      restoreState.autoPrecheckKey = '';
+      restoreUpdateConfirmState();
+    }
     _restoreRenderSelectionSummary();
     if (filelist) filelist.innerHTML = `<div class="restore-empty" role="alert">${escHtml(e.message)}</div>`;
     _restoreMsg(restoreT('error', { message: e.message }), true);
@@ -973,18 +1186,23 @@ async function restoreBrowse(path) {
 
 function _restoreRenderBreadcrumb(path) {
   const parts = path ? path.split('/') : [];
-  let html = `<span class="bc-link" data-restore-action="browse" data-path="/">/</span>`;
+  let html = `<button type="button" class="bc-link" data-restore-action="browse" data-path="/">${escHtml(restoreT('archiveRoot'))}</button>`;
   let cum = '';
   for (let i = 0; i < parts.length; i++) {
     cum = parts.slice(0, i + 1).join('/');
     const p = cum;
-    html += ` / <span class="${i === parts.length - 1 ? 'bc-current' : 'bc-link'}" data-restore-action="browse" data-path="${escHtml(p)}">${escHtml(parts[i])}</span>`;
+    html += ' <span aria-hidden="true">/</span> ' + (i === parts.length - 1
+      ? `<span class="bc-current" aria-current="location">${escHtml(parts[i])}</span>`
+      : `<button type="button" class="bc-link" data-restore-action="browse" data-path="${escHtml(p)}">${escHtml(parts[i])}</button>`);
   }
   document.getElementById('restore-breadcrumb').innerHTML = html;
 }
 
 function _restoreRenderFiles(files) {
   const el = document.getElementById('restore-filelist');
+  if (!el) return;
+  const filter = String(restoreState.folderFilter || '').toLocaleLowerCase();
+  files = files.filter(f => String(f.name).toLocaleLowerCase().includes(filter));
   if (!files.length) {
     el.innerHTML = `<div class="restore-empty">${restoreT('noFiles')}</div>`;
     return;
@@ -992,15 +1210,18 @@ function _restoreRenderFiles(files) {
 
   let rows = '';
   for (const f of files) {
-    const isSelected = String(f.path || '') === String(restoreState.selectedPath || '');
-    const icon = f.type === 'd' ? '📁' : (f.type === 'l' ? '🔗' : '📄');
+    const isSelected = _restoreSelections().some(item => item.path === f.path);
+    const included = _restoreSelections().some(item => item.type === 'd' && f.path.startsWith(item.path + '/'));
+    const icon = restoreEntryIcon(f.type);
     const size = f.type === 'd' ? '—' : _restoreFmtSize(f.size);
     const mtime = f.mtime ? f.mtime.substring(0, 19).replace('T', ' ') : '';
     const nameCell = f.type === 'd'
-      ? `<span class="restore-dir-link" data-restore-action="browse" data-path="${escHtml(f.path)}">${icon} ${escHtml(f.name)}</span>`
-      : `<span>${icon} ${escHtml(f.name)}</span>`;
+      ? `<button type="button" class="restore-dir-link restore-entry-name" data-restore-action="browse" data-path="${escHtml(f.path)}">${icon}<span>${escHtml(f.name)}</span></button>`
+      : `<span class="restore-entry-name">${icon}<span>${escHtml(f.name)}</span></span>`;
 
     rows += `<tr class="${isSelected ? 'restore-row-selected' : ''}">
+      <td class="restore-col-select"><input type="checkbox" data-restore-action="select" data-path="${escHtml(f.path)}" data-name="${escHtml(f.name)}" data-type="${escHtml(f.type || '')}"
+        ${isSelected || included ? 'checked' : ''} ${included ? 'disabled' : ''} aria-label="${escHtml(restoreT(included ? 'includedByParent' : 'selectItem', { name: f.name }))}" title="${escHtml(restoreT(included ? 'includedByParent' : 'selectItem', { name: f.name }))}"></td>
       <td class="restore-col-name">${nameCell}</td>
       <td class="restore-col-size">${size}</td>
       <td class="restore-col-date">${mtime}</td>
@@ -1010,18 +1231,14 @@ function _restoreRenderFiles(files) {
             <path d="M12 4v10m0 0l-4-4m4 4l4-4M5 20h14"/>
           </svg>
         </button>
-        <button class="restore-icon-btn ${isSelected ? 'restore-icon-btn-selected' : ''}" data-restore-action="select" data-path="${escHtml(f.path)}" data-name="${escHtml(f.name)}" data-type="${escHtml(f.type || '')}" title="${isSelected ? restoreT('selected') : restoreT('select')}" aria-label="${isSelected ? restoreT('selected') : restoreT('select')}">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20 6 9 17l-5-5"/>
-          </svg>
-        </button>
+
       </td>
     </tr>`;
   }
 
   el.innerHTML = `<table class="restore-table">
     <thead><tr>
-      <th>${restoreT('name')}</th><th>${restoreT('size')}</th><th>${restoreT('date')}</th><th></th>
+      <th class="restore-col-select" aria-label="${escHtml(restoreT('currentSelection'))}"></th><th>${restoreT('name')}</th><th class="restore-col-size">${restoreT('size')}</th><th class="restore-col-date">${restoreT('date')}</th><th></th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
@@ -1034,10 +1251,21 @@ function onRestoreBrowserClick(event) {
   const path = (el.dataset.path || '').replace(/^\/$/, '');
   const name = el.dataset.name || '';
   const type = el.dataset.type || '';
+  if (action === 'tree-toggle') return restoreToggleFolder(path);
+  if (action === 'tree-retry') return restoreToggleFolder(path, true);
   if (action === 'browse') return restoreBrowse(path);
   if (action === 'download') return restoreDownload(path);
-  if (action === 'select' && path && path === restoreState.selectedPath) return restoreClearSelection();
-  if (action === 'select') return restorePrepare(path, name, type);
+  if (action === 'select') {
+    const selectionList = el.closest('#restore-selected-list');
+    const index = selectionList ? Array.from(selectionList.querySelectorAll('button')).indexOf(el) : -1;
+    restorePrepare(path, name, type);
+    if (selectionList) {
+      const buttons = selectionList.querySelectorAll('button');
+      (buttons[Math.min(index, buttons.length - 1)] || document.getElementById('restore-selection-filter'))?.focus();
+    } else {
+      Array.from(document.querySelectorAll('#restore-filelist input[data-path]')).find(input => input.dataset.path === path)?.focus();
+    }
+  }
 }
 
 async function restoreDownload(path) {
@@ -1086,9 +1314,19 @@ async function restoreDownload(path) {
 }
 
 function restorePrepare(path, name, type) {
-  restoreState.selectedPath = path || '';
-  restoreState.selectedName = name || '';
-  restoreState.selectedType = type === 'd' ? 'd' : 'f';
+  let selections = _restoreSelections();
+  if (selections.some(item => item.path === path)) {
+    selections = selections.filter(item => item.path !== path);
+  } else {
+    if (selections.some(item => item.type === 'd' && path.startsWith(item.path + '/'))) return;
+    selections = selections.filter(item => !(type === 'd' && item.path.startsWith(path + '/')));
+    if (selections.length >= 256) return _restoreMsg(restoreT('selectionLimit'), true);
+    selections.push({ path, name, type });
+  }
+  restoreState.selections = selections;
+  restoreState.selectedPath = selections[0]?.path || '';
+  restoreState.selectedName = selections[0]?.name || '';
+  restoreState.selectedType = selections[0]?.type || '';
   restoreState.precheck = null;
   restoreState.autoPrecheckKey = '';
   restoreState.completed = false;
@@ -1097,22 +1335,24 @@ function restorePrepare(path, name, type) {
   const target = document.getElementById('restore-target-path');
   const startBtn = document.getElementById('restore-start-btn');
   const confirmCheck = document.getElementById('restore-confirm-check');
-  if (src) src.value = path || '';
+  if (src) src.value = selections.map(item => item.path).join('\n');
   renderRestoreSourceContext();
   if (out) out.textContent = '';
   if (startBtn) startBtn.disabled = true;
   if (confirmCheck) confirmCheck.checked = false;
   hideEl('restore-assist-msg');
+  _setRestoreAssistBusy(false);
   _restoreRenderSelectedBox();
   // Auswahl bleibt in Schritt 3 sichtbar; Wechsel nach Schritt 4 erfolgt über "Weiter".
   restoreSetStep(Math.max(3, restoreState.step));
   _restoreRenderSelectionSummary();
   restoreUpdateConfirmState();
-  _restoreMsg(restoreT('elementSelected'), false);
+  _restoreRenderFiles(restoreState.files);
 }
 
 function restoreClearSelection() {
   restoreState.selectedPath = '';
+  restoreState.selections = [];
   restoreState.selectedName = '';
   restoreState.selectedType = '';
   restoreState.precheck = null;
@@ -1122,19 +1362,11 @@ function restoreClearSelection() {
   const src = document.getElementById('restore-source-path');
   const out = document.getElementById('restore-precheck-output');
   const confirmCheck = document.getElementById('restore-confirm-check');
-  const targetInput = document.getElementById('restore-target-path');
-  const modeSel = document.getElementById('restore-conflict-mode');
-  const dryRun = document.getElementById('restore-dry-run');
-  const preserveOwner = document.getElementById('restore-preserve-owner');
   const startBtn = document.getElementById('restore-start-btn');
   if (src) src.value = '';
   renderRestoreSourceContext();
   if (out) out.textContent = '';
   if (confirmCheck) confirmCheck.checked = false;
-  if (targetInput) targetInput.value = '/mnt/user/';
-  if (modeSel) modeSel.value = 'skip';
-  if (dryRun) dryRun.checked = true;
-  if (preserveOwner) preserveOwner.checked = false;
   if (startBtn) startBtn.disabled = true;
   _stopRestorePolling();
   hideEl('restore-assist-msg');
@@ -1152,7 +1384,10 @@ function restoreUpdateConfirmState() {
   const startBtn = document.getElementById('restore-start-btn');
   const confirmCheck = document.getElementById('restore-confirm-check');
   const enabled = !!(_restoreSelectionReady() && restoreState.precheck && restoreState.precheck.ok && confirmCheck?.checked);
-  if (startBtn) startBtn.disabled = !enabled;
+  if (startBtn) {
+    startBtn.disabled = !enabled;
+    startBtn.textContent = restoreT(document.getElementById('restore-dry-run')?.checked ? 'startSimulation' : 'startRestore');
+  }
 }
 
 function _isAllowedRestoreTarget(target) {
@@ -1191,10 +1426,12 @@ function _restoreSetAllowedTargetRoots(roots) {
   restoreState.allowedTargetRoots = (Array.isArray(roots) && roots.length ? roots : ['/mnt/user'])
     .map(_restoreNormalizePath)
     .filter((root) => root && root.startsWith('/'));
-  const hint = document.querySelector('[data-i18n="restore.targetRestrictionHint"]');
+  _restoreRenderTargetHints();
+}
+
+function _restoreRenderTargetHints() {
+  const hint = document.getElementById('restore-target-roots-hint');
   if (hint) hint.textContent = restoreT('targetRestrictionHint', { roots: _restoreAllowedRootsText() });
-  const suggestion = document.querySelector('[data-i18n="restore.targetSuggestion"]');
-  if (suggestion) suggestion.textContent = restoreT('targetSuggestion', { root: _restorePrimaryAllowedRoot() });
 }
 
 async function restoreLoadAllowedTargetRoots() {
@@ -1225,7 +1462,8 @@ function _setRestoreAssistBusy(busy) {
 async function restoreRunPrecheck() {
   const sourceRequest = restoreState.sourceRequest;
   const filesRequest = restoreState.filesRequest;
-  const isCurrent = () => sourceRequest === restoreState.sourceRequest && filesRequest === restoreState.filesRequest;
+  const requestKey = _currentPrecheckKey();
+  const isCurrent = () => sourceRequest === restoreState.sourceRequest && filesRequest === restoreState.filesRequest && requestKey === _currentPrecheckKey();
   restoreSetLiveMode(false);
   hideEl('restore-assist-msg');
   const source = restoreState.selectedPath || document.getElementById('restore-source-path')?.value || '';
@@ -1258,6 +1496,7 @@ async function restoreRunPrecheck() {
         job_key: restoreState.job,
         archive: restoreState.archive,
         source_path: source,
+        source_paths: _restoreSelections().map(item => item.path),
         target_dir: target,
         conflict_mode: mode,
         dry_run: dryRun,
@@ -1267,27 +1506,10 @@ async function restoreRunPrecheck() {
     if (!isCurrent()) return;
     if (!res.ok) throw new Error(restorePrecheckErrorMessage(data, res.status));
     restoreState.precheck = data;
+    restoreState.autoPrecheckKey = requestKey;
     renderRestorePrecheck(data);
-    const combinedDryRun = [data.dry_run_stdout || '', data.dry_run_stderr || '']
-      .filter(Boolean)
-      .join('\n')
-      .trim();
-    const lines = [
-      restoreT('archiveValue', { value: data.archive }),
-      restoreT('source', { value: data.source_path }),
-      restoreT('targetPath', { value: data.target_dir }),
-      restoreT('conflictMode', { value: data.conflict_mode }),
-      restoreT('dryRunResult', { value: data.dry_run ? restoreT('yes') : restoreT('no'), exit: data.dry_run_exit_code }),
-      restoreT('destination', { value: data.destination_path }),
-      restoreT('alreadyExists', { value: data.destination_exists ? restoreT('yes') : restoreT('no') }),
-      restoreT('mountpoint', { value: data.target_mountpoint }),
-      restoreT('freeSpace', { value: _restoreFmtSize(data.target_free_bytes || 0) }),
-      '',
-      restoreT('dryRunOutput'),
-      combinedDryRun || restoreT('empty'),
-    ];
-    if (out) out.textContent = lines.join('\n');
-    showMsg('restore-assist-msg', data.ok ? 'success' : 'error', data.ok ? restoreT('precheckSuccess') : restoreT('precheckFailed'));
+    if (out) out.textContent = _restoreTechnicalPrecheckText(data, dryRun);
+    if (!data.ok) showMsg('restore-assist-msg', 'error', restoreT('precheckFailed'));
   } catch (err) {
     if (!isCurrent()) return;
     restoreState.precheck = null;
@@ -1302,7 +1524,67 @@ async function restoreRunPrecheck() {
   }
 }
 
+function _restoreTechnicalPrecheckText(data, dryRun) {
+  const lines = [
+    restoreT('metadataPrecheckDetail'),
+    restoreT('archiveValue', { value: data.archive }),
+    restoreT('targetPath', { value: data.target_dir }),
+    restoreT('conflictMode', { value: data.conflict_mode }),
+    restoreT('plannedRun', { value: restoreT(dryRun ? 'plannedSimulation' : 'plannedRestore') }),
+    restoreT('mountpoint', { value: data.target_mountpoint || restoreT('mountpointUnknown') }),
+    restoreT('freeSpace', { value: _restoreFmtSize(data.target_free_bytes || 0) }),
+    restoreT('checkedSelectionCount', { count: data.items.length }),
+    restoreT('metadataPrecheckScope'),
+  ];
+  data.items.forEach((item, index) => {
+    const {type, action, destination} = _restorePlannedItem(data, item, dryRun);
+    lines.push('', restoreT('precheckItem', { index: index + 1, count: data.items.length, type: restoreT(type) }),
+      restoreT('source', { value: item.path }),
+      `${restoreT('mappingWhere')}: ${destination}`,
+      restoreT('alreadyExists', { value: item.destination_exists ? restoreT('yes') : restoreT('no') }),
+      `${restoreT('mappingHow')}: ${restoreT(action)}`);
+    if (data.conflict_mode === 'rename' && !item.skipped) lines.push(restoreT('mappingTimestamp'));
+  });
+  return lines.join('\n');
+}
+
+function _restorePlannedItem(data, item, simulation) {
+  const directory = item.type === 'd';
+  const type = directory ? 'mappingFolder' : (item.type === 'l' ? 'mappingLink' : 'mappingFile');
+  let action = 'mappingRestore';
+  if (item.skipped) action = 'mappingSkip';
+  else if (simulation) action = 'mappingSimulate';
+  else if (data.conflict_mode === 'rename') action = 'mappingRename';
+  else if (data.conflict_mode === 'overwrite' && item.destination_exists) action = directory ? 'mappingMerge' : 'mappingReplace';
+  // A matching single-directory target receives a timestamped child in rename mode.
+  const destination = data.conflict_mode === 'rename' && item.direct_contents
+    ? String(item.destination_path).replace(/\/$/, '') + '/' + String(item.path).split('/').pop()
+    : item.destination_path;
+  return {type, action, destination};
+}
+
+function _restoreRenderDestinationMap(data) {
+  const mapping = document.getElementById('restore-destination-map');
+  if (!mapping) return;
+  if (!data?.items?.length) { mapping.innerHTML = ''; return; }
+  const simulation = !!document.getElementById('restore-dry-run')?.checked;
+  const rows = data.items.map(item => {
+    const {type, action, destination} = _restorePlannedItem(data, item, simulation);
+    const stateClass = item.skipped ? 'is-skipped' : (simulation ? 'is-simulation' : '');
+    const source = String(item.path || '');
+    const name = source.split('/').pop();
+    return `<tr>
+      <td class="restore-mapping-source"><strong>${escHtml(name)}</strong><small>${escHtml(restoreT(type))}</small><span class="mono">${escHtml(source)}</span></td>
+      <td class="restore-mapping-action"><span class="restore-mapping-action-label ${stateClass}">${escHtml(restoreT(action))}</span></td>
+      <td class="restore-mapping-target"><span class="mono">${escHtml(destination)}</span></td>
+    </tr>`;
+  }).join('');
+  mapping.innerHTML = `<header><h3 id="restore-mapping-title">${escHtml(restoreT('destinationMapping'))}</h3><p>${escHtml(restoreT(data.conflict_mode === 'rename' ? 'mappingRenameHint' : 'mappingHint'))}${simulation ? ' ' + escHtml(restoreT('mappingNoChanges')) : ''}</p></header>
+    <div class="restore-mapping-scroll"><table aria-labelledby="restore-mapping-title"><thead><tr><th scope="col">${escHtml(restoreT('mappingWhat'))}</th><th scope="col">${escHtml(restoreT('mappingHow'))}</th><th scope="col">${escHtml(restoreT('mappingWhere'))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 function renderRestorePrecheck(data) {
+  _restoreRenderDestinationMap(data);
   const verdict = document.getElementById('restore-precheck-verdict');
   const badge = document.getElementById('restore-precheck-badge');
   const facts = document.getElementById('restore-system-check-facts');
@@ -1321,10 +1603,10 @@ function renderRestorePrecheck(data) {
   verdict.classList.toggle('error', !ok);
   verdict.innerHTML = `<span class="restore-precheck-verdict-mark">${restoreStatusIcon(ok ? 'success' : 'error')}</span><span><strong>${escHtml(restoreT(ok ? 'precheckVerdictOk' : 'precheckVerdictFailed'))}</strong><small>${escHtml(restoreT(ok ? 'precheckVerdictOkDetail' : 'precheckVerdictFailedDetail'))}</small></span>`;
   facts.innerHTML = [
-    [restoreT('mountpointLabel'), data.target_mountpoint || '—'],
+    [restoreT('mountpointLabel'), data.target_mountpoint || restoreT('mountpointUnknown')],
     [restoreT('freeSpaceLabel'), _restoreFmtSize(data.target_free_bytes || 0)],
-    [restoreT('destinationExistsLabel'), data.destination_exists ? restoreT('yes') : restoreT('no')],
-    [restoreT('dryRunExitLabel'), data.dry_run_exit_code ?? '—'],
+    [restoreT('checkedSelectionsLabel'), data.items.length],
+    [restoreT('existingDestinationsLabel'), data.items.filter(item => item.destination_exists).length],
   ].map(([label, value]) => `<div><small>${escHtml(label)}</small><strong>${escHtml(String(value))}</strong></div>`).join('');
   if (badge) {
     badge.textContent = restoreT(ok ? 'precheckSuccessful' : 'precheckFailedShort');
@@ -1338,13 +1620,14 @@ function setRestoreHeaderStatus(state) {
   if (!badge) return;
   const key = {
     success: 'restoreSuccessfulShort',
+    simulation: 'simulationSuccessShort',
     skipped: 'restoreSkippedShort',
     failed: 'restoreFailedShort',
     running: 'restoreRunningShort',
   }[state] || 'precheckSuccessful';
   badge.textContent = restoreT(key);
   badge.classList.remove('success', 'warning', 'error');
-  if (state === 'success') badge.classList.add('success');
+  if (state === 'success' || state === 'simulation') badge.classList.add('success');
   if (state === 'skipped') badge.classList.add('warning');
   if (state === 'failed') badge.classList.add('error');
   if (state === 'running') badge.classList.add('warning');
@@ -1355,7 +1638,7 @@ function _currentPrecheckKey() {
   const target = document.getElementById('restore-target-path')?.value?.trim() || '';
   const mode = document.getElementById('restore-conflict-mode')?.value || 'skip';
   const dryRun = !!document.getElementById('restore-dry-run')?.checked;
-  return JSON.stringify([restoreState.job, restoreState.archive, source, target, mode, dryRun]);
+  return JSON.stringify([restoreState.job, restoreState.archive, _restoreSelections().map(item => item.path), target, mode, dryRun]);
 }
 
 function restoreEnsureAutoPrecheck() {
@@ -1379,7 +1662,8 @@ async function restoreStart() {
   const mode = document.getElementById('restore-conflict-mode')?.value || 'skip';
   const preserveOwner = !!document.getElementById('restore-preserve-owner')?.checked;
   const confirmCheck = !!document.getElementById('restore-confirm-check')?.checked;
-  if (!confirmCheck || !restoreState.precheck?.ok) {
+  const requestKey = _currentPrecheckKey();
+  if (!confirmCheck || !restoreState.precheck?.ok || restoreState.autoPrecheckKey !== requestKey) {
     showMsg('restore-assist-msg', 'error', restoreT('confirmPrecheckFirst'));
     return;
   }
@@ -1388,14 +1672,15 @@ async function restoreStart() {
     return;
   }
   const summary = [
+    restoreT('dryRun') + ': ' + restoreT(document.getElementById('restore-dry-run')?.checked ? 'yes' : 'no'),
     restoreT('archiveValue', { value: restoreState.archive }),
-    restoreT('source', { value: source }),
+    restoreT('source', { value: _restoreSelections().map(item => item.path).join('\n') }),
     restoreT('targetPath', { value: target }),
     restoreT('conflictMode', { value: mode }),
     restoreT('ownerGroup', { value: preserveOwner ? restoreT('ownerFromBackup') : restoreT('ownerFromTarget') }),
   ].join('\n');
   const confirmed = await openRestoreConfirmModal(summary);
-  if (!confirmed) return;
+  if (!confirmed || requestKey !== _currentPrecheckKey()) return;
   restoreSetLiveMode(true);
   const out = document.getElementById('restore-precheck-output');
   if (out) {
@@ -1424,9 +1709,11 @@ async function restoreStart() {
         job_key: restoreState.job,
         archive: restoreState.archive,
         source_path: source,
+        source_paths: _restoreSelections().map(item => item.path),
         target_dir: target,
         conflict_mode: mode,
         preserve_owner: preserveOwner,
+        dry_run: !!document.getElementById('restore-dry-run')?.checked,
       }),
     });
     const data = await res.json();
@@ -1508,20 +1795,8 @@ function _restoreFmtSize(bytes) {
 }
 
 function _restoreMsg(msg, level = 'info') {
-  const el = document.getElementById('restore-msg');
-  if (!msg) {
-    el.classList.add('hidden');
-    el.classList.remove('restore-msg-error', 'restore-msg-warn', 'restore-msg-info');
-    el.textContent = '';
-    return;
-  }
-  el.classList.remove('hidden');
-  el.classList.remove('restore-msg-error', 'restore-msg-warn', 'restore-msg-info');
   const resolved = (level === true) ? 'error' : (level === false ? 'info' : String(level || 'info'));
-  if (resolved === 'error') el.classList.add('restore-msg-error');
-  else if (resolved === 'warn') el.classList.add('restore-msg-warn');
-  else el.classList.add('restore-msg-info');
-  el.textContent = msg;
+  showMsg('restore-msg', resolved, msg);
 }
 
 function restoreTargetInputChanged() {
@@ -1544,6 +1819,7 @@ function restorePrecheckInputsChanged() {
 }
 
 window.addEventListener?.('bbui:language-changed', () => {
+  _restoreRenderFolderTree();
   _restoreRenderSelectionSummary();
   _restoreRenderSelectedBox();
   if (Array.isArray(restoreState.files) && restoreState.files.length) {
@@ -1553,6 +1829,12 @@ window.addEventListener?.('bbui:language-changed', () => {
   renderRestoreSelectedJob();
   renderRestoreArchiveList();
   renderRestorePrecheck(restoreState.precheck);
+  _restoreRenderBreadcrumb(restoreState.path);
+  if (restoreState.precheck && !restoreState.liveMode) {
+    const output = document.getElementById('restore-precheck-output');
+    if (output) output.textContent = _restoreTechnicalPrecheckText(restoreState.precheck, !!document.getElementById('restore-dry-run')?.checked);
+  }
+  restoreUpdateConfirmState();
   renderRestoreHistory({ runs: restoreState.history, total: restoreState.historyTotal || restoreState.history.length });
   const backBtn = document.getElementById('restore-step-back-btn');
   const nextBtn = document.getElementById('restore-step-next-btn');

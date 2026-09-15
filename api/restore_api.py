@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
+from restore_selection import normalize_paths, selected_entries, destination_plan
+
 from archive_prefix import (
     archive_prefix_from_backup_type,
     archive_prefix_from_job_key,
@@ -241,10 +243,13 @@ def _history_summary_from_run(run: dict) -> dict:
         "job_key": run.get("job_key") or "",
         "archive": run.get("archive") or "",
         "source_path": run.get("source_path") or "",
+        "source_paths": run.get("source_paths") or [run.get("source_path") or ""],
+        "items": run.get("items") or [],
         "target_dir": run.get("target_dir") or "",
         "destination_path": run.get("destination_path") or "",
         "conflict_mode": run.get("conflict_mode") or "",
         "preserve_owner": bool(run.get("preserve_owner", False)),
+        "dry_run": bool(run.get("dry_run", False)),
         "error": run.get("error") or "",
         "skipped": bool(run.get("skipped", False)),
         "skip_reason_code": run.get("skip_reason_code") or "",
@@ -563,7 +568,7 @@ def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict
 
         from archive_browser import list_archive_directory
 
-        return list_archive_directory(info["repo"], archive, path, env)
+        return list_archive_directory(info["repo"], archive, path, env, strict=True)
     finally:
         guard.cleanup()
 
@@ -748,7 +753,7 @@ def _validate_target_dir(target_dir: str, config: dict | None = None) -> Path:
 
 
 def _precheck_metadata(repo: str, archive: str, source_path: str, env: dict) -> dict:
-    source_clean = str(source_path or "").strip().strip("/")
+    source_clean = normalize_paths(source_path)[0]
     if not source_clean:
         raise ValueError("source_path is missing")
     parts = [x for x in source_clean.split("/") if x]
@@ -774,7 +779,7 @@ def _precheck_metadata(repo: str, archive: str, source_path: str, env: dict) -> 
 
     # Verify source path exists in archive and detect source type.
     proc = subprocess.run(
-        ["borg", "list", "--json-lines", repo_archive, source_clean],
+        ["borg", "list", "--json-lines", repo_archive, "pp:" + source_clean],
         capture_output=True,
         text=True,
         env=env,
@@ -789,19 +794,48 @@ def _precheck_metadata(repo: str, archive: str, source_path: str, env: dict) -> 
                 if p == source_clean:
                     source_type = str(item.get("type", "") or "")
                     break
-                if not source_type:
-                    source_type = str(item.get("type", "") or "")
+                if not source_type and p.startswith(source_clean + "/"):
+                    source_type = "d"
         except Exception:
             source_type = ""
     return {
-        "ok": proc.returncode == 0,
+        "ok": proc.returncode == 0 and bool(source_type),
         "exit_code": proc.returncode,
         "stdout": (proc.stdout or "").strip(),
-        "stderr": (proc.stderr or "").strip(),
+        "stderr": (proc.stderr or "").strip() or ("Selected path is missing from the archive" if not source_type else ""),
         "basename": parts[-1],
         "source_clean": source_clean,
         "source_type": source_type,
     }
+
+
+def _selection_plan(repo, archive, source_path, source_paths, target, mode, env):
+    paths = normalize_paths(source_path, source_paths)
+    if source_paths is None:
+        meta = _precheck_metadata(repo, archive, paths[0], env)
+        if not meta.get("ok"):
+            raise ValueError(meta.get("stderr") or "Archive source could not be verified")
+        entries = [{"path": paths[0], "type": meta.get("source_type", "-")}]
+    else:
+        entries = selected_entries(repo, archive, env, paths)
+    return destination_plan(entries, target, mode)
+
+
+def _restore_target_mountpoint(target: Path) -> str:
+    """Resolve the containing mount, including bind mounts; unknown is not '/'."""
+    try:
+        result = subprocess.run(
+            ["findmnt", "--json", "--target", str(target), "--output", "TARGET"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            mounts = json.loads(result.stdout).get("filesystems", [])
+            mountpoint = mounts[0].get("target") if mounts else None
+            if isinstance(mountpoint, str) and mountpoint.startswith("/"):
+                return mountpoint
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, AttributeError, KeyError):
+        pass
+    return ""
 
 
 def restore_precheck(
@@ -812,6 +846,7 @@ def restore_precheck(
     target_dir: str,
     conflict_mode: str,
     dry_run: bool = True,
+    source_paths=None,
 ) -> dict:
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
@@ -825,36 +860,24 @@ def restore_precheck(
         if conflict_mode not in {"skip", "overwrite", "rename"}:
             raise ValueError("Invalid conflict mode")
 
-        mountpoint = str(target.anchor or "/")
+        mountpoint = _restore_target_mountpoint(target)
         free = shutil.disk_usage(target).free
-        meta = _precheck_metadata(info["repo"], archive, source_path, env)
-        source_type = str(meta.get("source_type", "")).strip()
-        source_basename = str(meta.get("basename", "")).strip()
-        same_name_target = bool(source_type == "d" and source_basename and target.name == source_basename)
-        dest = target if same_name_target else (target / source_basename)
-        exists = dest.exists()
-
+        plan = _selection_plan(info["repo"], archive, source_path, source_paths, target, conflict_mode, env)
+        items = plan["items"]
         return {
-            "ok": bool(meta["ok"]),
-            "job_key": job_key,
-            "archive": archive,
-            "repo": info["repo"],
-            "source_path": source_path,
-            "target_dir": str(target),
-            "conflict_mode": conflict_mode,
-            "dry_run": False,
-            "dry_run_exit_code": meta["exit_code"],
-            "dry_run_stdout": (
-                "Precheck is metadata-only (no extraction).\n"
-                + (meta["stdout"] or "")
-            )[-8000:],
-            "dry_run_stderr": (meta["stderr"] or "")[-8000:],
-            "destination_path": str(dest),
-            "destination_exists": exists,
-            "target_writable": True,
-            "target_mountpoint": mountpoint,
+            "ok": True, "job_key": job_key, "archive": archive, "repo": info["repo"],
+            "source_path": items[0]["path"], "source_paths": [i["path"] for i in items],
+            "items": items, "common_parent": plan["common_parent"],
+            "target_dir": str(target), "conflict_mode": conflict_mode,
+            "dry_run": False, "dry_run_exit_code": 0,
+            "dry_run_stdout": "Precheck is metadata-only (no extraction).",
+            "dry_run_stderr": "",
+            "destination_path": items[0]["destination_path"] if len(items) == 1 else str(target),
+            "destination_exists": any(i["destination_exists"] for i in items),
+            "target_writable": True, "target_mountpoint": mountpoint,
             "target_free_bytes": int(free),
         }
+
     finally:
         guard.cleanup()
 
@@ -869,6 +892,8 @@ def start_restore(
     preserve_owner: bool = False,
     progress_cb=None,
     restore_id: str = "",
+    source_paths=None,
+    dry_run: bool = False,
 ) -> dict:
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
@@ -876,6 +901,7 @@ def start_restore(
 
     guard = ensure_smb_mount_for_job(config, job_key)
     lock_set = None
+    cleanup_extract_dir = None
     try:
         info = _get_job_repo_info(config, job_key)
         lock_set = acquire_restore_repository_lock(
@@ -889,15 +915,15 @@ def start_restore(
         if conflict_mode not in {"skip", "overwrite", "rename"}:
             raise ValueError("Invalid conflict mode")
 
-        source_clean = str(source_path or "").strip().strip("/")
-        parts = [x for x in source_clean.split("/") if x]
-        if not parts:
-            raise ValueError("source_path is missing")
-        basename = parts[-1]
-        source_meta = _precheck_metadata(info["repo"], archive, source_clean, env)
-        source_type = str(source_meta.get("source_type", "")).strip()
-        same_name_target = bool(source_type == "d" and basename and target.name == basename)
-        restore_dir_contents_directly = same_name_target
+        plan = _selection_plan(info["repo"], archive, source_path, source_paths, target, conflict_mode, env)
+        items = plan["items"]
+        pending = [item for item in items if not item["skipped"]]
+        for item in items:
+            if progress_cb:
+                progress_cb(f"{'Skip existing' if item['skipped'] else 'Restore'}: {item['path']} -> {item['destination_path']}")
+        if not pending:
+            return {"started": False, "skipped": True, "reason": "All selected targets already exist",
+                    "skip_reason_code": "target_exists", "destination_path": str(target), "items": items}
         target_stat = target.stat()
         target_uid = int(target_stat.st_uid)
         target_gid = int(target_stat.st_gid)
@@ -939,7 +965,9 @@ def start_restore(
             """
             _ensure_restore_path_inside(src, target, allow_missing=False)
             _ensure_restore_path_inside(dst, target)
-            if src.is_dir():
+            if dst.is_symlink():
+                raise ValueError("Restore destination contains a symbolic link; choose another target directory")
+            if src.is_dir() and not src.is_symlink():
                 if dst.exists() and not dst.is_dir():
                     _ensure_restore_path_inside(dst, target, allow_missing=False)
                     dst.unlink()
@@ -965,50 +993,15 @@ def start_restore(
             shutil.move(str(src), str(dst))
             _ensure_restore_path_inside(dst, target, allow_missing=False)
 
-        # Restore directly on target filesystem (no /tmp usage), so large files do not consume RAM/tmpfs.
-        dest = target if restore_dir_contents_directly else (target / basename)
-        final_dest = dest
-        extract_cwd = target
-        cleanup_extract_dir = None
-        _ensure_restore_path_inside(dest, target)
-        _ensure_restore_path_inside(final_dest, target)
-        if dest.exists() and not (restore_dir_contents_directly and conflict_mode != "rename"):
-            if conflict_mode == "skip":
-                return {"started": False, "skipped": True, "reason": "Target file exists", "skip_reason_code": "target_exists", "destination_path": str(dest)}
-            if conflict_mode == "overwrite":
-                extract_cwd = _make_restore_stage_dir(target)
-                cleanup_extract_dir = extract_cwd
-            elif conflict_mode == "rename":
-                final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-                _ensure_restore_path_inside(final_dest, target)
-                extract_cwd = _make_restore_stage_dir(target)
-                cleanup_extract_dir = extract_cwd
-        elif conflict_mode == "rename":
-            # Keep consistent behavior for rename mode even when destination does not yet exist.
-            final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-            _ensure_restore_path_inside(final_dest, target)
-            extract_cwd = _make_restore_stage_dir(target)
-            cleanup_extract_dir = extract_cwd
-
-        if restore_dir_contents_directly:
-            if conflict_mode == "skip":
-                try:
-                    if any(target.iterdir()):
-                        return {"started": False, "skipped": True, "reason": "Target directory already contains data", "skip_reason_code": "target_not_empty", "destination_path": str(target)}
-                except OSError:
-                    return {"started": False, "skipped": True, "reason": "Target directory is not readable", "skip_reason_code": "target_unreadable", "destination_path": str(target)}
-            if conflict_mode == "overwrite":
-                extract_cwd = _make_restore_stage_dir(target)
-                cleanup_extract_dir = extract_cwd
-            elif conflict_mode == "rename":
-                final_dest = target / f"{basename}.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-                _ensure_restore_path_inside(final_dest, target)
-                final_dest.mkdir(parents=False, exist_ok=False)
-                extract_cwd = final_dest
-
-        strip_components = max(len(parts), 0) if restore_dir_contents_directly else max(len(parts) - 1, 0)
-        repo_archive = f"{info['repo']}::{archive}"
-        cmd = ["borg", "extract", repo_archive, source_clean, "--strip-components", str(strip_components), "--list"]
+        # Stage on the target filesystem. Extraction failure does not overwrite
+        # existing destination files. One extract preserves multi-selection layout.
+        extract_cwd = target if dry_run else _make_restore_stage_dir(target)
+        cleanup_extract_dir = None if dry_run else extract_cwd
+        patterns = [("pp:" if item["type"] == "d" else "pf:") + item["path"] for item in pending]
+        cmd = ["borg", "extract", f"{info['repo']}::{archive}", *patterns,
+               "--strip-components", str(plan["strip_components"]), "--list"]
+        if dry_run:
+            cmd.append("--dry-run")
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -1059,39 +1052,76 @@ def start_restore(
                 shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
             raise RuntimeError(tail or f"borg extract failed (exit {ret})")
 
-        src_temp = extract_cwd if restore_dir_contents_directly else (extract_cwd / basename)
-        if not src_temp.exists():
-            if cleanup_extract_dir and cleanup_extract_dir.exists():
-                _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
-                shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
-            raise RuntimeError("Extract succeeded, but the source file was not found in the target")
+        if dry_run:
+            if progress_cb:
+                progress_cb("Simulation completed: no files were restored or replaced.")
+            return {"started": True, "dry_run": True, "items": items,
+                    "destination_path": str(target), "stdout": "\n".join(out_lines)[-4000:]}
 
-        _ensure_restore_path_inside(src_temp, target, allow_missing=False)
-        _ensure_restore_path_inside(final_dest, target)
-        if restore_dir_contents_directly and conflict_mode == "overwrite":
-            for child in src_temp.iterdir():
-                _merge_replace(child, final_dest / child.name)
-        elif conflict_mode == "overwrite" and final_dest.exists() and src_temp != final_dest:
-            _merge_replace(src_temp, final_dest)
-        elif src_temp != final_dest:
-            _ensure_restore_path_inside(src_temp, target, allow_missing=False)
-            _ensure_restore_path_inside(final_dest.parent, target, allow_missing=False)
-            shutil.move(str(src_temp), str(final_dest))
-            _ensure_restore_path_inside(final_dest, target, allow_missing=False)
-        if cleanup_extract_dir and cleanup_extract_dir.exists() and cleanup_extract_dir != final_dest:
-            _ensure_restore_path_inside(cleanup_extract_dir, target, allow_missing=False)
-            shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
-        if not preserve_owner:
-            _apply_target_owner(final_dest)
+        # Check every extracted path before publishing any selected entry.
+        for root, dirs, files in os.walk(extract_cwd):
+            for name in dirs + files:
+                _ensure_restore_path_inside(Path(root) / name, extract_cwd, allow_missing=False)
+        for item in pending:
+            src = extract_cwd / item["relative_path"]
+            if not src.exists() and not src.is_symlink():
+                raise RuntimeError(f"Extract succeeded, but selected path is missing: {item['path']}")
+        for item in pending:
+            src = extract_cwd / item["relative_path"]
+            dest = Path(item["destination_path"])
+            if conflict_mode == "rename":
+                name = Path(item["path"]).name if item["direct_contents"] else dest.name
+                parent = target if item["direct_contents"] else dest.parent
+                suffix = datetime.now().strftime('%Y%m%d-%H%M%S')
+                dest = parent / f"{name}.{suffix}"
+                counter = 1
+                while dest.exists() or dest.is_symlink():
+                    dest = parent / f"{name}.{suffix}-{counter}"
+                    counter += 1
+            # Parent directories may be absent for selections from different folders.
+            for parent in reversed([dest.parent, *dest.parent.parents]):
+                if parent == target or target in parent.parents:
+                    _ensure_restore_path_inside(parent, target)
+                    parent.mkdir(exist_ok=True)
+            _ensure_restore_path_inside(dest, target)
+            if dest.is_symlink():
+                raise ValueError("Restore destination contains a symbolic link; choose another target directory")
+            if conflict_mode == "skip" and not item["direct_contents"] and dest.exists():
+                item["skipped"] = True
+                if progress_cb:
+                    progress_cb(f"Skip target created during extraction: {dest}")
+                continue
+            if item["direct_contents"]:
+                if conflict_mode == "skip" and any(p != extract_cwd for p in target.iterdir()):
+                    item["skipped"] = True
+                    continue
+                dest.mkdir(exist_ok=True)
+                for child in list(src.iterdir()):
+                    _merge_replace(child, dest / child.name)
+            elif conflict_mode == "overwrite" and dest.exists():
+                _merge_replace(src, dest)
+            else:
+                shutil.move(str(src), str(dest))
+            item["destination_path"] = str(dest)
+            item["restored"] = True
+            if not preserve_owner:
+                _apply_target_owner(dest)
+            if progress_cb:
+                progress_cb(f"Restored: {item['path']} -> {dest}")
+        skipped = all(item["skipped"] for item in items)
         return {
-            "started": True,
-            "destination_path": str(final_dest),
+            "started": not skipped, "skipped": skipped,
+            "skip_reason_code": "target_exists" if skipped else "",
+            "items": items,
+            "destination_path": items[0]["destination_path"] if len(items) == 1 else str(target),
             "conflict_mode": conflict_mode,
             "owner_mode": "preserve_backup" if preserve_owner else "target_directory",
-            "stdout": "\n".join(out_lines)[-4000:],
-            "stderr": "",
+            "stdout": "\n".join(out_lines)[-4000:], "stderr": "",
         }
+
     finally:
+        if cleanup_extract_dir and cleanup_extract_dir.exists():
+            shutil.rmtree(cleanup_extract_dir, ignore_errors=True)
         if lock_set is not None:
             lock_set.release()
         guard.cleanup()
@@ -1118,9 +1148,12 @@ def start_restore_async(
     target_dir: str,
     conflict_mode: str,
     preserve_owner: bool = False,
+    source_paths=None,
+    dry_run: bool = False,
 ) -> dict:
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
+    paths = normalize_paths(source_path, source_paths)
     _ensure_restore_runs_loaded(config)
     restore_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8]
     state = {
@@ -1131,11 +1164,13 @@ def start_restore_async(
         "finished_at": "",
         "job_key": job_key,
         "archive": archive,
-        "source_path": source_path,
+        "source_path": paths[0],
+        "source_paths": paths,
         "target_dir": target_dir,
         "destination_path": "",
         "conflict_mode": conflict_mode,
         "preserve_owner": bool(preserve_owner),
+        "dry_run": bool(dry_run),
         "error": "",
         "skipped": False,
         "skip_reason_code": "",
@@ -1182,6 +1217,7 @@ def start_restore_async(
             s["phase"] = "done"
             s["finished_at"] = datetime.now().isoformat(timespec="seconds")
             s["destination_path"] = str(result.get("destination_path", "") or "")
+            s["items"] = result.get("items", [])
             s["skipped"] = bool(result.get("skipped", False))
             s["skip_reason_code"] = str(result.get("skip_reason_code", "") or "")
             try:
@@ -1227,9 +1263,13 @@ def start_restore_async(
                 preserve_owner,
                 progress_cb=_append,
                 restore_id=restore_id,
+                **({"dry_run": True} if dry_run else {}),
+                **({"source_paths": paths} if source_paths is not None else {}),
             )
             if result.get("skipped"):
                 _append(f"Skipped: {result.get('reason', 'unknown')}")
+            elif dry_run:
+                _append("Simulation completed successfully; target files unchanged.")
             else:
                 _append(f"Restore completed successfully: {result.get('destination_path', '')}")
             _finish_done(result)
@@ -1265,6 +1305,9 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
                 "job_key": run.get("job_key"),
                 "archive": run.get("archive"),
                 "source_path": run.get("source_path"),
+                "source_paths": run.get("source_paths") or [run.get("source_path") or ""],
+                "items": run.get("items") or [],
+                "dry_run": bool(run.get("dry_run", False)),
                 "target_dir": run.get("target_dir"),
                 "destination_path": run.get("destination_path"),
                 "error": run.get("error"),
@@ -1366,6 +1409,9 @@ def get_restore_state(config: dict, restore_id: str) -> dict:
             "archive": s.get("archive"),
             "source_path": s.get("source_path"),
             "target_dir": s.get("target_dir"),
+            "source_paths": s.get("source_paths") or [s.get("source_path") or ""],
+            "items": s.get("items") or [],
+            "dry_run": bool(s.get("dry_run", False)),
             "destination_path": s.get("destination_path"),
             "error": s.get("error"),
             "skipped": bool(s.get("skipped", False)),

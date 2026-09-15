@@ -607,6 +607,7 @@
       </section>
 
       <div id="restore-msg" class="restore-msg hidden"></div>
+      <div id="restore-assist-msg" class="status-message hidden"></div>
 
       <div id="restore-empty" class="page-empty-state">
         <svg class="page-empty-state-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
@@ -654,66 +655,91 @@
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-3">
-            <header class="restore-workspace-header"><div><small data-i18n="restore.stepThree">Schritt 3</small><h2 data-i18n="restore.selectElement">Element auswählen</h2><p id="restore-browser-context"></p></div><span class="ui-badge" data-i18n="restore.singleSelection">Maximal eine Auswahl</span></header>
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepThree">Schritt 3</small><h2 data-i18n="restore.selectElement">Dateien und Ordner auswählen</h2><p id="restore-browser-context"></p></div><span class="ui-badge" data-i18n="restore.multipleSelection">Dateien und Ordner kombinieren</span></header>
             <div class="restore-browser-layout">
             <div id="restore-browser" class="restore-file-browser">
-              <div class="restore-breadcrumb" id="restore-breadcrumb"></div>
-              <div id="restore-filelist"></div>
-            </div>
-            <aside class="restore-selection-panel">
-              <header><span data-i18n="restore.currentSelection">Aktuelle Auswahl</span><strong id="restore-selection-name">—</strong></header>
-              <div class="restore-selection-facts">
-                <div><small data-i18n="restore.type">Typ</small><strong id="restore-selected-type">—</strong></div>
-                <div><small data-i18n="restore.path">Pfad</small><strong id="restore-selected-path">—</strong></div>
-                <div><small data-i18n="restore.hint">Hinweis</small><strong id="restore-selected-hint">—</strong></div>
+              <div class="restore-navigation">
+                <nav class="restore-breadcrumb" id="restore-breadcrumb" aria-label="Aktueller Archivordner" data-i18n-aria-label="restore.currentArchiveFolder"></nav>
+                <details id="restore-path-details" class="restore-path-details">
+                  <summary data-i18n="restore.enterArchivePath">Pfad eingeben</summary>
+                  <label for="restore-archive-path" data-i18n="restore.archiveFolder">Ordner im Archiv</label>
+                  <div class="restore-path-entry"><input id="restore-archive-path" type="text" class="form-input mono" value="/" autocomplete="off" spellcheck="false"><button type="button" id="restore-open-path" class="btn btn-secondary" data-i18n="restore.openFolder">Öffnen</button></div>
+                </details>
               </div>
-              <button class="btn btn-secondary btn-sm" id="restore-clear-selection-btn" data-i18n="restore.removeSelection">Auswahl entfernen</button>
-            </aside>
+              <div class="restore-explorer">
+                <nav class="restore-folder-navigation" aria-label="Archivordner" data-i18n-aria-label="restore.folderTree">
+                  <h3 data-i18n="restore.folderTree">Verzeichnisbaum</h3>
+                  <p data-i18n="restore.folderTreeHint">Pfeil klappt auf, Ordnername zeigt den Inhalt.</p>
+                  <div id="restore-folder-tree" class="restore-folder-tree"></div>
+                </nav>
+                <div class="restore-folder-content">
+                  <div class="restore-folder-filter">
+                    <label for="restore-folder-filter" data-i18n="restore.filterFolder">Namen in diesem Ordner filtern</label>
+                    <input id="restore-folder-filter" type="search" class="form-input" autocomplete="off">
+                  </div>
+                  <div id="restore-filelist"></div>
+                </div>
+              </div>
+            </div>
+            <details id="restore-selection-details" class="restore-selection-panel">
+              <summary><span data-i18n="restore.reviewSelection">Auswahl prüfen</span> <strong id="restore-selection-name" aria-live="polite">—</strong> <small id="restore-selection-types"></small></summary>
+              <div class="restore-selection-toolbar">
+                <label for="restore-selection-filter" data-i18n="restore.filterSelection">Auswahl durchsuchen</label>
+                <input id="restore-selection-filter" type="search" class="form-input" autocomplete="off" aria-describedby="restore-selection-filter-count">
+                <span id="restore-selection-filter-count" aria-live="polite"></span>
+                <button class="btn btn-secondary btn-sm" id="restore-clear-selection-btn" data-i18n="restore.clearEntireSelection">Gesamte Auswahl leeren</button>
+              </div>
+              <div class="restore-selected-scroll"><table class="restore-selected-table" aria-label="Aktuelle Auswahl" data-i18n-aria-label="restore.currentSelection">
+                <thead><tr><th scope="col" data-i18n="restore.name">Name</th><th scope="col" data-i18n="restore.parentArchiveFolder">Ordner im Archiv</th><th scope="col" aria-label="Auswahl entfernen" data-i18n-aria-label="restore.removeSelection"></th></tr></thead>
+                <tbody id="restore-selected-list"></tbody>
+              </table></div>
+            </details>
             </div>
             <div class="restore-browser-hint" data-i18n="restore.selectionHelp">
-              Hinweis: Symbol <strong>⬇</strong> lädt eine Datei sofort herunter. Symbol <strong>✓</strong> wählt Datei oder Verzeichnis für die Wiederherstellung aus. Es ist immer nur <strong>eine</strong> Auswahl gleichzeitig möglich.
+              Wähle Dateien und Ordner über die Kontrollkästchen. Die Auswahl bleibt beim Navigieren erhalten. Ausgewählte Ordner enthalten alle Unterordner und Dateien. Der Download-Pfeil lädt einen einzelnen Eintrag sofort herunter.
             </div>
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-4">
-            <header class="restore-workspace-header"><div><small data-i18n="restore.stepFour">Schritt 4</small><h2 data-i18n="restore.targetModeTitle">Ziel und Wiederherstellungsmodus</h2><p data-i18n="restore.targetModeSubtitle">Archiv-Auswahl prüfen und Ziel vor der Vorprüfung festlegen.</p></div><span class="ui-badge" data-i18n="restore.dryRunActive">Testlauf aktiv</span></header>
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepFour">Schritt 4</small><h2 data-i18n="restore.targetModeTitle">Ziel und Wiederherstellungsmodus</h2><p data-i18n="restore.targetModeSubtitle">Archiv-Auswahl prüfen und Ziel vor der Vorprüfung festlegen.</p></div><span id="restore-mode-badge" class="ui-badge" data-i18n="restore.dryRunActive">Testlauf aktiv</span></header>
             <div class="restore-target-grid">
-            <section class="restore-form-section"><header data-i18n="restore.sourceTarget">Archiv- und Zielpfad</header>
+            <section class="restore-form-section"><header data-i18n="restore.restoreDestination">Wiederherstellungsziel</header>
             <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label"><span data-i18n="restore.sourcePath">Archiv-Pfad</span></label>
-              <input id="restore-source-path" class="form-input mono" type="text" readonly value="">
+              <textarea id="restore-source-path" hidden readonly></textarea>
+              <div class="restore-selection-overview"><strong id="restore-target-selection-info"></strong><button type="button" class="btn btn-secondary btn-sm" data-restore-step="3" data-i18n="restore.editSelection">Auswahl ändern</button></div>
               <div class="restore-source-context">
                 <span><span data-i18n="restore.sourceRepository">Repository:</span> <strong id="restore-source-repository">—</strong></span>
                 <span><span data-i18n="restore.sourceArchive">Archiv:</span> <strong id="restore-source-archive">—</strong></span>
               </div>
             </div>
             <div class="form-group" style="grid-column:1/-1">
-              <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.targetDirectory">Zielordner</span></label>
-              <input id="restore-target-path" class="form-input mono" type="text" placeholder="/mnt/user/" list="restore-target-suggestions" autocomplete="off">
+              <label for="restore-target-path" class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.targetDirectory">Zielordner</span></label>
+              <input id="restore-target-path" class="form-input mono" type="text" placeholder="/mnt/user/" list="restore-target-suggestions" autocomplete="off" aria-describedby="restore-target-hint">
               <datalist id="restore-target-suggestions"></datalist>
-              <div class="text-muted" style="font-size:12px;margin-top:6px" data-i18n="restore.targetSuggestion">Vorschlag: /mnt/user/restore</div>
+              <p id="restore-target-hint" class="restore-field-help" data-i18n="restore.targetHelp">Wähle einen vorhandenen, beschreibbaren Zielordner. Im nächsten Schritt siehst du die vollständigen Zielpfade.</p>
+              <p id="restore-target-roots-hint" class="restore-field-help"></p>
             </div>
             </section>
             <section class="restore-form-section"><header data-i18n="restore.targetBehavior">Verhalten am Ziel</header>
             <div class="form-group">
-              <label class="form-label" data-i18n="restore.conflictStrategy">Konfliktstrategie</label>
-              <select id="restore-conflict-mode" class="form-input">
+              <label for="restore-conflict-mode" class="form-label" data-i18n="restore.conflictStrategy">Konfliktstrategie</label>
+              <select id="restore-conflict-mode" class="form-input" aria-describedby="restore-conflict-help">
                 <option value="skip" data-i18n="restore.skip">Nicht überschreiben</option>
                 <option value="overwrite" data-i18n="restore.overwrite">Ersetzen</option>
                 <option value="rename" data-i18n="restore.rename">Umbenennen (Zeitstempel)</option>
               </select>
+              <p id="restore-conflict-help" class="restore-field-help"></p>
             </div>
             <label class="form-checkbox-row" style="align-self:end; margin-bottom:8px">
               <input id="restore-dry-run" type="checkbox" checked>
-              <span data-i18n="restore.dryRun">Testlauf (keine Änderungen)</span>
+              <span><span data-i18n="restore.dryRun">Testlauf (keine Änderungen)</span><small class="restore-field-help" data-i18n="restore.simulationHelp">Prüft die ausgewählten Daten mit Borg, ohne Dateien am Ziel zu schreiben.</small></span>
             </label>
             <label class="form-checkbox-row" style="grid-column:1/-1">
               <input id="restore-preserve-owner" type="checkbox">
-              <span data-i18n="restore.preserveOwner">Original Owner/Group beibehalten</span>
+              <span><span data-i18n="restore.preserveOwner">Original Owner/Group beibehalten</span><small class="restore-field-help" data-i18n="restore.ownerHelp">Ohne diese Option werden Eigentümer und Gruppe vom Zielordner übernommen.</small></span>
             </label>
             </section>
             </div>
-            <div class="restore-safety-note" data-i18n="restore.targetRestrictionHint">Der Zielpfad wird serverseitig geprüft. Eine Wiederherstellung außerhalb von /mnt/user ist nicht zulässig.</div>
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-5">
@@ -723,30 +749,27 @@
             <section><header data-i18n="restore.restoreSection">Wiederherstellung</header><div class="restore-review-facts">
               <div><small data-i18n="restore.job">Job</small><strong id="restore-summary-job">—</strong></div>
               <div><small data-i18n="restore.archive">Archiv</small><strong id="restore-summary-archive">—</strong></div>
-              <div><small data-i18n="restore.element">Element</small><strong id="restore-summary-count">0</strong></div>
+              <div><small data-i18n="restore.selectionLabel">Auswahl</small><strong id="restore-summary-count">0</strong></div>
             </div></section>
             <section><header data-i18n="restore.targetModeSection">Ziel und Modus</header><div class="restore-review-facts">
               <div><small data-i18n="restore.target">Zielordner</small><strong id="restore-summary-target">—</strong></div>
               <div><small data-i18n="restore.conflictStrategy">Konfliktstrategie</small><strong id="restore-summary-mode">—</strong></div>
-              <div><small data-i18n="restore.dryRun">Testlauf</small><strong id="restore-summary-dry-run">—</strong></div>
+              <div><small data-i18n="restore.executionMode">Ausführung</small><strong id="restore-summary-dry-run">—</strong></div>
             </div></section>
             <section><header data-i18n="restore.systemCheck">Systemprüfung</header><div id="restore-system-check-facts" class="restore-review-facts"></div></section>
             </div>
-            <div class="status-message restore-legacy-summary">
-              <strong data-i18n="restore.currentSelection">Aktuelle Auswahl</strong><br>
-              <span data-i18n="restore.selectionReady">Auswahl ist für die Vorprüfung vorbereitet.</span>
-            </div>
+            <div id="restore-destination-map" class="restore-destination-map"></div>
+            <div class="restore-confirm-actions">
             <label class="form-checkbox-row restore-confirm-row">
               <input id="restore-confirm-check" type="checkbox">
               <span>
                 <strong data-i18n="restore.confirmSummary">Ich habe die Zusammenfassung geprüft und möchte die Wiederherstellung starten.</strong>
-                <small data-i18n="restore.confirmSummaryHint">Dieses Häkchen gibt den Startbutton frei.</small>
               </span>
             </label>
             <div class="restore-start-actions">
               <button class="btn btn-primary" id="restore-start-btn" disabled data-i18n="restore.start">Wiederherstellen starten</button>
             </div>
-            <div id="restore-assist-msg" class="status-message hidden"></div>
+            </div>
             <details class="restore-precheck-output"><summary data-i18n="restore.showTechnicalPrecheck">Technische Precheck-Ausgabe anzeigen</summary><pre id="restore-precheck-output" class="log-output" style="max-height:260px; min-height:100px"></pre></details>
           </div>
         </div>
