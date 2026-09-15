@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 API_ROOT = ROOT / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
+sys.path.insert(0, str(ROOT / "runtime"))
 
 import usb_profiles_api
 from repositories_api import write_repository_store
@@ -70,14 +71,17 @@ def test_usb_profile_status_reports_missing_path():
     assert result["results"][0]["message"] == "Path not found"
 
 
-def test_usb_profile_status_reports_directory_state(tmp_path: Path):
+def test_usb_profile_status_rejects_directory_on_system_filesystem(tmp_path: Path, monkeypatch):
+    from lib import usb_storage
+    monkeypatch.setattr(usb_storage, '_read_mounts', lambda: [usb_storage.Mount(Path('/'), 'rootfs', False)])
     result = usb_profiles_api.test_usb_profiles_status([
         {"key": "usb-a", "name": "USB A", "mount_path": str(tmp_path)},
     ])
 
     assert result["results"][0]["exists"] is True
     assert result["results"][0]["is_dir"] is True
-    assert result["results"][0]["message"] in {"OK", "Pfad ist nicht gemountet"}
+    assert result["results"][0]["ok"] is False
+    assert result["results"][0]["code"] == 'not_mounted'
 
 
 def test_get_usb_profile_job_refs_uses_canonical_storage_reference(tmp_path: Path):

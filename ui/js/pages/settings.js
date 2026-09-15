@@ -407,7 +407,7 @@ const SETTINGS_PROFILE_CONFIG = {
     icon: locationIcon('usb'),
     fields: [
       ['[data-usb-profile-name]', 'profiles.name', { required: true }],
-      ['[data-usb-profile-path]', 'profiles.mountPath', { required: true }],
+      ['[data-usb-profile-path]', 'profiles.usbStoragePath', { required: true }],
     ],
   },
   smb: {
@@ -6428,10 +6428,11 @@ async function checkUsbProfilesStatus() {
         return;
       }
       if (r.ok) {
-        stateEl.textContent = 'OK';
+        stateEl.textContent = settingsT('profiles.usbMountOk', { path: r.detected_mount });
         stateEl.className = 'usb-profile-state text-success';
       } else {
-        stateEl.textContent = settingsT('profiles.checkErrorMessage', { message: settingsT('common.error') });
+        const code = ['not_found', 'not_directory', 'invalid_path', 'not_mounted', 'outside_mount', 'not_writable'].includes(r.code) ? r.code : 'access_error';
+        stateEl.textContent = settingsT(`profiles.usbStatus.${code}`);
         stateEl.className = 'usb-profile-state text-danger';
       }
     });

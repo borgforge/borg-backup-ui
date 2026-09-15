@@ -1882,7 +1882,7 @@
       "invalidLocalPath": "Invalid local storage path: {path}. Use a dedicated directory below /mnt without empty, . or .. segments.",
       "addLocal": "Add local profile",
       "usbTitle": "USB profiles",
-      "usbDescription": "Defines selectable USB storage targets. Repositories are created separately and selected in the job wizard.",
+      "usbDescription": "Select the USB mount point or an existing folder on that drive, for example /mnt/disks/USBHDD/borg-backup. Repositories are selected separately. The drive must be mounted and the storage folder accessible and writable.",
       "addUsb": "Add USB profile",
       "noUsb": "No USB profile exists yet. The USB location remains disabled in the wizard until at least one profile is created.",
       "storageTitle": "SSH storage profiles",
@@ -1948,7 +1948,18 @@
       "profileInUseResourcesDialog": "This profile is still used: {jobs} job(s), {repositories} repository/repositories.{refs}",
       "removeSmbHtml": "<div class=\"modal-info-item warning\" style=\"margin-top:8px\">The SMB profile will be removed from the UI. Repository data remains intact. Removal is blocked while repositories still use this profile.</div><label class=\"form-checkbox-row\" style=\"margin-top:10px\"><input type=\"checkbox\" id=\"smb-remove-unmount-first\" checked> Unmount first when mounted</label><label class=\"form-checkbox-row\" style=\"margin-top:8px\"><input type=\"checkbox\" id=\"smb-remove-mountpoint-cleanup\"> Delete mount point (only when empty and unmounted)</label><label class=\"form-checkbox-row\" style=\"margin-top:8px\"><input type=\"checkbox\" id=\"smb-remove-secret-cleanup\"> Delete credentials file (.smb-&lt;key&gt;.cred)</label>",
       "confirmProfile": "Enter \"{name}\" to confirm:",
-      "unmountRemoveFailed": "Unmount before removal failed: {message}"
+      "unmountRemoveFailed": "Unmount before removal failed: {message}",
+      "usbStoragePath": "Storage path on the USB drive",
+      "usbMountOk": "OK - Mount point: {path}",
+      "usbStatus": {
+        "not_found": "Storage folder not found. Check the drive and configured path.",
+        "not_directory": "The storage path is not a directory.",
+        "invalid_path": "Enter an absolute storage path.",
+        "not_mounted": "USB drive is not mounted at the configured location.",
+        "outside_mount": "The storage path points outside its mounted drive.",
+        "not_writable": "USB storage is read-only or write permission is missing.",
+        "access_error": "USB storage could not be checked. Check the connection and access permissions."
+      }
     },
     "general": {
       "title": "General",
