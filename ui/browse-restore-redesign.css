@@ -67,6 +67,7 @@
 .restore-stepper button.is-active { background: var(--ui-color-surface-raised); box-shadow: inset 0 -3px var(--ui-color-accent); color: var(--ui-color-text); }
 .restore-stepper button.is-active span { border-color: var(--ui-color-accent); color: var(--ui-color-accent); }
 .restore-stepper button.is-done span { border-color: var(--ui-state-success-border); color: var(--ui-state-success-fg); }
+.restore-stepper button.is-active.is-done { box-shadow: inset 0 -3px var(--ui-state-success-fg); }
 .restore-redesign-workspace > .settings-body { display: block; padding: 0 !important; }
 .restore-workspace-header { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); min-height: 4rem; margin-bottom: var(--ui-space-3); padding: var(--ui-space-3) var(--ui-space-4); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface); }
 .restore-workspace-header small, .restore-workspace-header h2, .restore-workspace-header p { display: block; margin: 0; }

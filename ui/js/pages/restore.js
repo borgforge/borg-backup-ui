@@ -74,11 +74,13 @@ function restoreSetStep(step) {
     if (panel) panel.style.display = i === next ? '' : 'none';
     const badge = document.getElementById(`restore-step-badge-${i}`);
     if (badge) {
+      const done = i < next || (i === 5 && next === 5 && restoreState.completed
+        && restoreState.runSnapshot?.state === 'done' && !restoreState.runSnapshot.skipped);
       badge.classList.toggle('is-active', i === next);
-      badge.classList.toggle('is-done', i < next);
+      badge.classList.toggle('is-done', done);
       badge.setAttribute('aria-current', i === next ? 'step' : 'false');
       const number = badge.querySelector('span');
-      if (number) number.textContent = i < next ? '✓' : String(i);
+      if (number) number.textContent = done ? '✓' : String(i);
     }
   }
   _restoreMsg('');
@@ -715,7 +717,7 @@ function restoreCountSummary(data) {
   if (data.counts.symlinks) fields.push(['symlinks', 'restoredLinks']);
   if (data.counts.other) fields.push(['other', 'restoredOther']);
   return `<div class="restore-result-counts">${fields.map(([key, label]) =>
-    `<div><strong>${escHtml(data.counts[key] || 0)}</strong><span>${escHtml(restoreT(label))}</span></div>`).join('')}</div>`;
+    `<div><strong>${escHtml(String(data.counts[key] ?? 0))}</strong><span>${escHtml(restoreT(label))}</span></div>`).join('')}</div>`;
 }
 
 function renderRestoreRunStatus(data, connected = true) {
@@ -1630,7 +1632,7 @@ function renderRestorePrecheck(data) {
     facts.innerHTML = '';
     if (badge) {
       badge.textContent = restoreT('precheckPending');
-      badge.classList.remove('success', 'warning', 'error');
+      delete badge.dataset.state;
     }
     return;
   }
@@ -1646,8 +1648,7 @@ function renderRestorePrecheck(data) {
   ].map(([label, value]) => `<div><small>${escHtml(label)}</small><strong>${escHtml(String(value))}</strong></div>`).join('');
   if (badge) {
     badge.textContent = restoreT(ok ? 'precheckSuccessful' : 'precheckFailedShort');
-    badge.classList.remove('success', 'warning', 'error');
-    badge.classList.add(ok ? 'success' : 'error');
+    badge.dataset.state = ok ? 'success' : 'error';
   }
 }
 
@@ -1663,11 +1664,8 @@ function setRestoreHeaderStatus(state) {
     unreachable: 'connectionWaiting',
   }[state] || 'precheckSuccessful';
   badge.textContent = restoreT(key);
-  badge.classList.remove('success', 'warning', 'error');
-  if (state === 'success' || state === 'simulation') badge.classList.add('success');
-  if (state === 'skipped') badge.classList.add('warning');
-  if (state === 'failed') badge.classList.add('error');
-  if (state === 'running' || state === 'unreachable') badge.classList.add('warning');
+  badge.dataset.state = {success: 'success', simulation: 'success', skipped: 'warning',
+    failed: 'error', running: 'running', unreachable: 'warning'}[state] || 'info';
 }
 
 function _currentPrecheckKey() {

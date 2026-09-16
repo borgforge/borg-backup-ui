@@ -16,12 +16,19 @@ function page(language = 'en') {
   const elements = new Map();
   const get = id => {
     if (!elements.has(id)) {
+      const classes = new Set();
+      const stepNumber = id.startsWith('restore-step-badge-') ? {textContent: ''} : null;
       elements.set(id, {
         value: '', checked: false, disabled: false, textContent: '', style: {}, html: '', dataset: {},
-        setAttribute() {}, querySelector() { return null; },
+        setAttribute() {}, querySelector(selector) { return selector === 'span' ? stepNumber : null; },
         get innerHTML() { return this.html; },
         set innerHTML(value) { this.html = value; if (id.endsWith('-sel')) this.value = ''; },
-        appendChild() {}, classList: {add() {}, remove() {}, toggle() {}},
+        appendChild() {}, classList: {
+          add(...names) { names.forEach(name => classes.add(name)); },
+          remove(...names) { names.forEach(name => classes.delete(name)); },
+          toggle(name, force = !classes.has(name)) { if (force) classes.add(name); else classes.delete(name); },
+          contains(name) { return classes.has(name); },
+        },
       });
     }
     return elements.get(id);
@@ -33,11 +40,13 @@ function page(language = 'en') {
     }}}}, addEventListener() {}},
     document: {getElementById: get, createElement: () => ({})},
     setTimeout() { return 1; }, clearTimeout() {},
-    messages: [], hideEl() {}, showMsg() {}, escHtml: value => String(value),
+    messages: [], hideEl() {}, showMsg() {},
     apiErrorMessage: data => labels.api.errors[data.code] || data.message || 'API error',
   });
+  vm.runInContext(fs.readFileSync('ui/js/utils/format.js', 'utf8'), context);
   vm.runInContext(fs.readFileSync('ui/js/pages/restore.js', 'utf8'), context);
-  const renderers = {selection: context._restoreRenderSelectedBox, summary: context._restoreRenderSelectionSummary};
+  const renderers = {selection: context._restoreRenderSelectedBox, summary: context._restoreRenderSelectionSummary,
+    step: context.restoreSetStep, precheck: context.renderRestorePrecheck};
   for (const name of ['restoreSetLiveMode', 'restoreSwitchView', 'restoreSetStep',
     '_restoreBindTargetAutocomplete', '_restoreRenderSelectionSummary', '_restoreRenderSelectedBox',
     'restoreLoadRuns', 'restoreLoadHistory', 'renderRestoreJobSidebar', 'renderRestoreSelectedJob',
@@ -540,6 +549,15 @@ test('target summary describes planned operation, conflict behavior and configur
 
 
 for (const language of ['de', 'en']) {
+  test(`restore counts preserve visible zeros with the real HTML formatter in ${language}`, () => {
+    const {context, labels} = page(language);
+    for (const counts of [{files: 1, directories: 0}, {files: 0, directories: 1}, {files: 0, directories: 0}]) {
+      const html = context.restoreCountSummary({state: 'done', counts_complete: true, counts});
+      assert.ok(html.includes(`<strong>${counts.files}</strong><span>${labels.restore.restoredFiles}</span>`));
+      assert.ok(html.includes(`<strong>${counts.directories}</strong><span>${labels.restore.restoredDirectories}</span>`));
+    }
+  });
+
   test(`compact restore status and accurate results in ${language}`, () => {
     const {context, get, labels} = page(language);
     const run = {state: 'running', phase: 'extract', archive: 'demo', source_paths: ['Backup/Test1'],
@@ -594,6 +612,48 @@ test('successful polling updates the header and completion controls', async () =
   assert.equal(state.completed, true);
   assert.equal(get('restore-precheck-badge').textContent, labels.restore.restoreSuccessfulShort);
   assert.ok(get('restore-run-status').innerHTML.includes(labels.restore.runCompleted));
+});
+
+test('step five and header distinguish completion, simulation, failure, skipping and a new run', async () => {
+  const {context, state, get, renderers} = page();
+  context.restoreSetStep = renderers.step;
+  state.activeRestoreId = 'run';
+  state.liveMode = true;
+  const header = get('restore-precheck-badge');
+  const step = get('restore-step-badge-5');
+  for (const [result, finished, color] of [
+    [{state: 'done'}, true, 'success'],
+    [{state: 'done', dry_run: true}, true, 'success'],
+    [{state: 'error', error: 'Destination full'}, false, 'error'],
+    [{state: 'aborted'}, false, 'error'],
+    [{state: 'done', skipped: true}, false, 'warning'],
+  ]) {
+    context.fetch = async () => response(result);
+    await context._pollRestoreState('run');
+    assert.equal(step.classList.contains('is-done'), finished);
+    assert.equal(step.querySelector('span').textContent, finished ? '✓' : '5');
+    assert.equal(header.dataset.state, color);
+  }
+  state.completed = false;
+  context.renderRestoreRunStatus({state: 'running'});
+  context.restoreSetStep(5);
+  assert.equal(step.classList.contains('is-done'), false);
+  assert.equal(step.querySelector('span').textContent, '5');
+  assert.equal(header.dataset.state, 'running');
+  context.renderRestoreRunStatus({state: 'running'}, false);
+  assert.equal(header.dataset.state, 'warning');
+});
+
+test('precheck clears a previous status color and uses shared badge states', () => {
+  const {context, get, renderers} = page();
+  context._restoreRenderDestinationMap = () => {};
+  context.setRestoreHeaderStatus('success');
+  renderers.precheck(null);
+  assert.equal(get('restore-precheck-badge').dataset.state, undefined);
+  for (const ok of [true, false]) {
+    renderers.precheck({ok, items: []});
+    assert.equal(get('restore-precheck-badge').dataset.state, ok ? 'success' : 'error');
+  }
 });
 
 
