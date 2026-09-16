@@ -101,6 +101,8 @@ def _is_safe_restore_root_text(raw: str) -> bool:
         return False
     if path == "/mnt/user" or path.startswith("/mnt/user/"):
         return True
+    if path == "/mnt/cache" or path.startswith("/mnt/cache/"):
+        return True
     if path == "/mnt/data" or path.startswith("/mnt/data/"):
         return True
     if re.fullmatch(r"/mnt/disk[0-9]+(?:/.*)?", path):

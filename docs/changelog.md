@@ -1,5 +1,9 @@
 # Changelog
 
+## Pending - Cache pool restore destinations (#527)
+
+- Accept explicitly configured /mnt/cache roots and subfolders consistently in settings, configuration validation and restore runtime. Keep the default and existing target roots unchanged, retain destination access and containment checks, and document cache-pool setup in both manuals.
+
 ## Pending - Restore status and write reduction (#525)
 
 - Replace per-file Browse & Restore live output with phase, elapsed time, destination and mode details, including the staging directory and reconnect status.

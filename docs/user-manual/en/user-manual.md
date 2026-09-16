@@ -617,6 +617,7 @@ Blocked examples:
 Allowed examples when deliberately configured:
 
 - `/mnt/user`
+- `/mnt/cache` (including subfolders such as `/mnt/cache/appdata`)
 - `/mnt/data`
 - `/mnt/disk1`
 - `/mnt/disks/<name>`
@@ -877,6 +878,8 @@ This area manages defaults for restore tests, such as default test level, interv
 #### Browse & Restore
 
 This area manages allowed restore target roots. By default, only `/mnt/user` is allowed. Additional root paths must be added deliberately.
+
+To restore directly to the cache pool, add `/mnt/cache` using **Add target root** and save the settings. Alternatively, restrict access to a subfolder such as `/mnt/cache/appdata`. The destination selected for the restore must exist and be writable.
 
 > **Warning:** Do not add overly broad paths such as `/`, `/mnt`, `/mnt/disks`, or `/mnt/remotes`. Use concrete targets such as `/mnt/disks/<name>` or `/mnt/remotes/<name>`.
 

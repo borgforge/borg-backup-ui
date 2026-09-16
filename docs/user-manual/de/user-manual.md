@@ -617,6 +617,7 @@ Nicht erlaubte Beispiele:
 Erlaubte Beispiele, wenn bewusst konfiguriert:
 
 - `/mnt/user`
+- `/mnt/cache` (auch Unterordner wie `/mnt/cache/appdata`)
 - `/mnt/data`
 - `/mnt/disk1`
 - `/mnt/disks/<name>`
@@ -878,6 +879,8 @@ Hier werden Standardwerte für Restore Tests gepflegt, z. B. Standard-Testlevel,
 #### Browse & Restore
 
 Hier werden erlaubte Restore-Zielbereiche verwaltet. Standardmäßig ist nur `/mnt/user` erlaubt. Zusätzliche Root-Pfade müssen bewusst hinzugefügt werden.
+
+Für eine Wiederherstellung direkt auf den Cache-Pool fügen Sie `/mnt/cache` über **Zielbereich hinzufügen** hinzu und speichern die Einstellungen. Alternativ können Sie die Freigabe auf einen Unterordner wie `/mnt/cache/appdata` begrenzen. Der im Restore gewählte Zielordner muss vorhanden und beschreibbar sein.
 
 > **Warnung:** Tragen Sie keine zu breiten Pfade wie `/`, `/mnt`, `/mnt/disks` oder `/mnt/remotes` ein. Verwenden Sie konkrete Ziele wie `/mnt/disks/<name>` oder `/mnt/remotes/<name>`.
 
