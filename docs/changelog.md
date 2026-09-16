@@ -1,5 +1,17 @@
 # Changelog
 
+## Pending - Cache pool restore destinations (#527)
+
+- Accept explicitly configured /mnt/cache roots and subfolders consistently in settings, configuration validation and restore runtime. Keep the default and existing target roots unchanged, retain destination access and containment checks, and document cache-pool setup in both manuals.
+
+## Pending - Restore status and write reduction (#525)
+
+- Keep zero file/folder counts visible, use shared badge state colors and mark step 5 complete after a successful restore or simulation. Reset completion styling for new runs and keep failures/skips distinct.
+- Replace per-file Browse & Restore live output with phase, elapsed time, destination and mode details, including the staging directory and reconnect status.
+- Run Borg extract without --list and keep bounded diagnostics in memory; persist lifecycle transitions instead of rewriting restore-runs.json for each line.
+- Count published files, directories, links and other entries during the existing stage validation walk. Preserve counts in history, exclude skipped selections and synthetic parents, and avoid claiming complete counts for failed or simulated restores.
+- Treat a terminal restore error payload as a completed poll result instead of repeatedly retrying it as a transport error.
+
 Historische Release- und Entwicklungsnotizen fuer borg-backup-ui.
 
 Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrelevante Zusammenfassung des aktuellen Stands.

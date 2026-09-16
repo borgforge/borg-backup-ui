@@ -743,7 +743,8 @@
           </div>
 
           <div style="grid-column:1/-1; display:none" id="restore-step-panel-5">
-            <header class="restore-workspace-header"><div><small data-i18n="restore.stepFive">Schritt 5</small><h2 data-i18n="restore.checkStartTitle">Prüfen und starten</h2><p data-i18n="restore.checkStartSubtitle">Automatische Vorprüfung und ausdrückliche Bestätigung.</p></div><span id="restore-precheck-badge" class="ui-badge"></span></header>
+            <header class="restore-workspace-header"><div><small data-i18n="restore.stepFive">Schritt 5</small><h2 id="restore-run-heading" data-i18n="restore.checkStartTitle">Prüfen und starten</h2><p id="restore-run-subtitle" data-i18n="restore.checkStartSubtitle">Automatische Vorprüfung und ausdrückliche Bestätigung.</p></div><span id="restore-precheck-badge" class="ui-badge"></span></header>
+            <section id="restore-run-status" class="restore-run-status hidden" aria-label="Restore status" data-i18n-aria-label="restore.runHeading"></section>
             <div id="restore-precheck-verdict" class="restore-precheck-verdict hidden"></div>
             <div class="restore-review-grid">
             <section><header data-i18n="restore.restoreSection">Wiederherstellung</header><div class="restore-review-facts">

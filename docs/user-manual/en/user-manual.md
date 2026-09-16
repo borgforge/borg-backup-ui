@@ -551,7 +551,7 @@ The page allows users to:
 - select individual files or directories
 - define target directory and conflict strategy
 - start a dry run or real restore
-- resume a live log for an active restore
+- reopen the status view for an active restore
 - inspect completed restore runs
 
 ### 7.2 Views
@@ -617,6 +617,7 @@ Blocked examples:
 Allowed examples when deliberately configured:
 
 - `/mnt/user`
+- `/mnt/cache` (including subfolders such as `/mnt/cache/appdata`)
 - `/mnt/data`
 - `/mnt/disk1`
 - `/mnt/disks/<name>`
@@ -634,7 +635,13 @@ Before starting, Borg Backup UI checks the repository lock. A backup, another re
 
 ### 7.4 Active Restore Runs
 
-If a restore is still running or the browser session was interrupted, the page shows an active restore banner. **Continue live log** reopens the running output.
+If a restore is still running or the browser session was interrupted, the page shows an active restore banner. **Open status** reopens its status view.
+
+The compact view shows the archive, selection, destinations, conflict strategy and ownership setting. While running, it displays the phase and elapsed time, without an estimated percentage or a scrolling list of individual files. A connection failure explicitly marks the displayed information as the last known status.
+
+Extraction first writes into the displayed hidden `.bbui-restore-stage-…` folder inside the destination. After extraction and path validation, entries are moved to their final paths. Existing destination files remain untouched during extraction.
+
+Successful completion shows the number of restored files and folders; links and other entries are counted separately. Counts exclude unchanged destination files and synthetic parent folders needed only to build the destination path. Skipped selections are listed separately. Simulations write no files and do not display restored counts. Failures have no complete final count; completed selections and technical error details remain available.
 
 ### 7.5 Restore History
 
@@ -871,6 +878,8 @@ This area manages defaults for restore tests, such as default test level, interv
 #### Browse & Restore
 
 This area manages allowed restore target roots. By default, only `/mnt/user` is allowed. Additional root paths must be added deliberately.
+
+To restore directly to the cache pool, add `/mnt/cache` using **Add target root** and save the settings. Alternatively, restrict access to a subfolder such as `/mnt/cache/appdata`. The destination selected for the restore must exist and be writable.
 
 > **Warning:** Do not add overly broad paths such as `/`, `/mnt`, `/mnt/disks`, or `/mnt/remotes`. Use concrete targets such as `/mnt/disks/<name>` or `/mnt/remotes/<name>`.
 
@@ -1123,7 +1132,7 @@ The help page provides quick orientation directly in the UI. It is shorter than 
 5. Select target directory and conflict strategy.
 6. Review the summary.
 7. Start the restore.
-8. Watch the live log.
+8. Watch the restore status and check the completion summary.
 9. Check the entry in **Restore History**.
 
 ### 11.4 Schedule a Restore Test

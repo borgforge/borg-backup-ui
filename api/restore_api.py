@@ -1,10 +1,12 @@
 """api/restore_api.py – Browse & Restore: Borg Archive Browser"""
 
+import copy
 import json
 import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import threading
 import traceback
@@ -99,6 +101,8 @@ def _is_safe_restore_root_text(raw: str) -> bool:
         return False
     if path == "/mnt/user" or path.startswith("/mnt/user/"):
         return True
+    if path == "/mnt/cache" or path.startswith("/mnt/cache/"):
+        return True
     if path == "/mnt/data" or path.startswith("/mnt/data/"):
         return True
     if re.fullmatch(r"/mnt/disk[0-9]+(?:/.*)?", path):
@@ -174,6 +178,38 @@ def _make_restore_stage_dir(target: Path) -> Path:
     raise RuntimeError("Could not create an exclusive restore staging directory")
 
 
+def _empty_restore_counts() -> dict:
+    return {"files": 0, "directories": 0, "symlinks": 0, "other": 0}
+
+
+def _validate_and_count_restore_stage(stage: Path, items: list[dict]) -> dict:
+    """Reuse the safety walk to count selected entries, excluding synthetic parents."""
+    counts = {item["relative_path"]: _empty_restore_counts() for item in items}
+
+    def owner(relative: str):
+        while relative not in counts:
+            if not relative:
+                return None
+            relative = relative.rpartition("/")[0]
+        return relative
+
+    def walk_error(error):
+        raise error
+
+    for root, dirs, files in os.walk(stage, onerror=walk_error):
+        for name in dirs + files:
+            path = Path(root) / name
+            _ensure_restore_path_inside(path, stage, allow_missing=False)
+            key = owner(path.relative_to(stage).as_posix())
+            if key is None:
+                continue
+            mode = path.lstat().st_mode
+            kind = ("symlinks" if stat.S_ISLNK(mode) else "directories" if stat.S_ISDIR(mode)
+                    else "files" if stat.S_ISREG(mode) else "other")
+            counts[key][kind] += 1
+    return counts
+
+
 def _restore_runs_file(config: dict) -> Path:
     base = Path(str(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")).strip() or "/boot/config/borg-backup")
     return base / "config" / "restore-runs.json"
@@ -221,10 +257,10 @@ def _restore_run_duration_seconds(run: dict) -> int:
     try:
         started_raw = str(run.get("started_at") or "").strip()
         finished_raw = str(run.get("finished_at") or "").strip()
-        if not started_raw or not finished_raw:
+        if not started_raw:
             return 0
         started = datetime.fromisoformat(started_raw)
-        finished = datetime.fromisoformat(finished_raw)
+        finished = datetime.fromisoformat(finished_raw) if finished_raw else datetime.now(tz=started.tzinfo)
         return max(0, int((finished - started).total_seconds()))
     except Exception:
         return 0
@@ -245,6 +281,8 @@ def _history_summary_from_run(run: dict) -> dict:
         "source_path": run.get("source_path") or "",
         "source_paths": run.get("source_paths") or [run.get("source_path") or ""],
         "items": run.get("items") or [],
+        "counts": run.get("counts"),
+        "counts_complete": bool(run.get("counts_complete", False)),
         "target_dir": run.get("target_dir") or "",
         "destination_path": run.get("destination_path") or "",
         "conflict_mode": run.get("conflict_mode") or "",
@@ -894,6 +932,7 @@ def start_restore(
     restore_id: str = "",
     source_paths=None,
     dry_run: bool = False,
+    status_cb=None,
 ) -> dict:
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
@@ -918,12 +957,16 @@ def start_restore(
         plan = _selection_plan(info["repo"], archive, source_path, source_paths, target, conflict_mode, env)
         items = plan["items"]
         pending = [item for item in items if not item["skipped"]]
+        counts = _empty_restore_counts()
+        if status_cb:
+            status_cb({"phase": "preparing", "items": items, "counts": counts})
         for item in items:
             if progress_cb:
                 progress_cb(f"{'Skip existing' if item['skipped'] else 'Restore'}: {item['path']} -> {item['destination_path']}")
         if not pending:
             return {"started": False, "skipped": True, "reason": "All selected targets already exist",
-                    "skip_reason_code": "target_exists", "destination_path": str(target), "items": items}
+                    "skip_reason_code": "target_exists", "destination_path": str(target), "items": items,
+                    "counts": counts, "counts_complete": True}
         target_stat = target.stat()
         target_uid = int(target_stat.st_uid)
         target_gid = int(target_stat.st_gid)
@@ -997,9 +1040,11 @@ def start_restore(
         # existing destination files. One extract preserves multi-selection layout.
         extract_cwd = target if dry_run else _make_restore_stage_dir(target)
         cleanup_extract_dir = None if dry_run else extract_cwd
+        if status_cb:
+            status_cb({"phase": "extract", "staging_path": "" if dry_run else str(extract_cwd)})
         patterns = [("pp:" if item["type"] == "d" else "pf:") + item["path"] for item in pending]
         cmd = ["borg", "extract", f"{info['repo']}::{archive}", *patterns,
-               "--strip-components", str(plan["strip_components"]), "--list"]
+               "--strip-components", str(plan["strip_components"])]
         if dry_run:
             cmd.append("--dry-run")
         proc = subprocess.Popen(
@@ -1028,7 +1073,7 @@ def start_restore(
         if proc.stdout is not None:
             try:
                 for line in proc.stdout:
-                    line = line.rstrip("\n")
+                    line = line.rstrip("\n")[:4096]
                     if line:
                         out_lines.append(line)
                         if len(out_lines) > 400:
@@ -1056,16 +1101,19 @@ def start_restore(
             if progress_cb:
                 progress_cb("Simulation completed: no files were restored or replaced.")
             return {"started": True, "dry_run": True, "items": items,
-                    "destination_path": str(target), "stdout": "\n".join(out_lines)[-4000:]}
+                    "destination_path": str(target), "counts": counts, "counts_complete": True,
+                    "stdout": "\n".join(out_lines)[-4000:]}
 
         # Check every extracted path before publishing any selected entry.
-        for root, dirs, files in os.walk(extract_cwd):
-            for name in dirs + files:
-                _ensure_restore_path_inside(Path(root) / name, extract_cwd, allow_missing=False)
+        if status_cb:
+            status_cb({"phase": "validate"})
+        item_counts = _validate_and_count_restore_stage(extract_cwd, pending)
         for item in pending:
             src = extract_cwd / item["relative_path"]
             if not src.exists() and not src.is_symlink():
                 raise RuntimeError(f"Extract succeeded, but selected path is missing: {item['path']}")
+        if status_cb:
+            status_cb({"phase": "publish"})
         for item in pending:
             src = extract_cwd / item["relative_path"]
             dest = Path(item["destination_path"])
@@ -1104,6 +1152,11 @@ def start_restore(
                 shutil.move(str(src), str(dest))
             item["destination_path"] = str(dest)
             item["restored"] = True
+            item["counts"] = item_counts[item["relative_path"]]
+            for kind, count in item["counts"].items():
+                counts[kind] += count
+            if status_cb:
+                status_cb({"items": items, "counts": counts})
             if not preserve_owner:
                 _apply_target_owner(dest)
             if progress_cb:
@@ -1113,6 +1166,8 @@ def start_restore(
             "started": not skipped, "skipped": skipped,
             "skip_reason_code": "target_exists" if skipped else "",
             "items": items,
+            "counts": counts,
+            "counts_complete": True,
             "destination_path": items[0]["destination_path"] if len(items) == 1 else str(target),
             "conflict_mode": conflict_mode,
             "owner_mode": "preserve_backup" if preserve_owner else "target_directory",
@@ -1175,6 +1230,9 @@ def start_restore_async(
         "skipped": False,
         "skip_reason_code": "",
         "lines": [],
+        "counts": None,
+        "counts_complete": False,
+        "staging_path": "",
     }
     with _RESTORE_LOCK:
         _RESTORE_RUNS[restore_id] = state
@@ -1190,23 +1248,22 @@ def start_restore_async(
             if not s:
                 return
             lines = s.setdefault("lines", [])
-            lines.append(str(line))
+            lines.append(str(line)[:4096])
             if len(lines) > 200:
                 del lines[:-200]
-            try:
-                _persist_restore_runs(config)
-            except Exception:
-                pass
 
-    def _set_phase(phase: str) -> None:
+    def _status(update: dict) -> None:
         with _RESTORE_LOCK:
             s = _RESTORE_RUNS.get(restore_id)
             if s:
-                s["phase"] = phase
-                try:
-                    _persist_restore_runs(config)
-                except Exception:
-                    pass
+                phase_changed = update.get("phase", s["phase"]) != s["phase"]
+                s.update(copy.deepcopy(update))
+                # No per-file writes. Checkpoint lifecycle transitions only.
+                if phase_changed:
+                    try:
+                        _persist_restore_runs(config)
+                    except Exception:
+                        pass
 
     def _finish_done(result: dict) -> None:
         with _RESTORE_LOCK:
@@ -1218,6 +1275,9 @@ def start_restore_async(
             s["finished_at"] = datetime.now().isoformat(timespec="seconds")
             s["destination_path"] = str(result.get("destination_path", "") or "")
             s["items"] = result.get("items", [])
+            s["counts"] = result.get("counts")
+            s["counts_complete"] = bool(result.get("counts_complete", False))
+            s["staging_path"] = ""
             s["skipped"] = bool(result.get("skipped", False))
             s["skip_reason_code"] = str(result.get("skip_reason_code", "") or "")
             try:
@@ -1251,7 +1311,7 @@ def start_restore_async(
 
     def _worker() -> None:
         try:
-            _set_phase("extract")
+            _status({"phase": "preparing"})
             _append("Starting restore extract ...")
             result = start_restore(
                 config,
@@ -1263,6 +1323,7 @@ def start_restore_async(
                 preserve_owner,
                 progress_cb=_append,
                 restore_id=restore_id,
+                status_cb=_status,
                 **({"dry_run": True} if dry_run else {}),
                 **({"source_paths": paths} if source_paths is not None else {}),
             )
@@ -1403,6 +1464,12 @@ def get_restore_state(config: dict, restore_id: str) -> dict:
             "restore_id": s.get("restore_id"),
             "state": s.get("state"),
             "phase": s.get("phase"),
+            "duration_seconds": _restore_run_duration_seconds(s),
+            "staging_path": s.get("staging_path", ""),
+            "conflict_mode": s.get("conflict_mode", "skip"),
+            "preserve_owner": bool(s.get("preserve_owner", False)),
+            "counts": copy.deepcopy(s.get("counts")),
+            "counts_complete": bool(s.get("counts_complete", False)),
             "started_at": s.get("started_at"),
             "finished_at": s.get("finished_at"),
             "job_key": s.get("job_key"),

@@ -39,6 +39,7 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   historyDetailId: '',
   view: 'wizard',
   liveMode: false,
+  runSnapshot: null,
   allowedTargetRoots: ['/mnt/user'],
 };
 const restoreState = window.BBUI.restoreState;
@@ -73,11 +74,13 @@ function restoreSetStep(step) {
     if (panel) panel.style.display = i === next ? '' : 'none';
     const badge = document.getElementById(`restore-step-badge-${i}`);
     if (badge) {
+      const done = i < next || (i === 5 && next === 5 && restoreState.completed
+        && restoreState.runSnapshot?.state === 'done' && !restoreState.runSnapshot.skipped);
       badge.classList.toggle('is-active', i === next);
-      badge.classList.toggle('is-done', i < next);
+      badge.classList.toggle('is-done', done);
       badge.setAttribute('aria-current', i === next ? 'step' : 'false');
       const number = badge.querySelector('span');
-      if (number) number.textContent = i < next ? '✓' : String(i);
+      if (number) number.textContent = done ? '✓' : String(i);
     }
   }
   _restoreMsg('');
@@ -106,12 +109,13 @@ function restoreSetLiveMode(enabled) {
   restoreState.liveMode = !!enabled;
   const panel = document.getElementById('restore-step-panel-5');
   if (panel) panel.classList.toggle('restore-live-mode', restoreState.liveMode);
-  const out = document.getElementById('restore-precheck-output');
-  const details = out?.closest('details');
-  if (details) {
-    details.open = restoreState.liveMode || details.open;
-    const summary = details.querySelector('summary');
-    if (summary) summary.textContent = restoreT(restoreState.liveMode ? 'liveLog' : 'showTechnicalPrecheck');
+  document.getElementById('restore-run-status')?.classList.toggle('hidden', !restoreState.liveMode);
+  for (const [id, key] of [
+    ['restore-run-heading', restoreState.liveMode ? 'runHeading' : 'checkStartTitle'],
+    ['restore-run-subtitle', restoreState.liveMode ? 'runSubtitle' : 'checkStartSubtitle'],
+  ]) {
+    const el = document.getElementById(id);
+    if (el) { el.dataset.i18n = `restore.${key}`; el.textContent = restoreT(key); }
   }
   if (restoreState.liveMode) {
     renderRestorePrecheck(null);
@@ -645,6 +649,7 @@ function renderRestoreHistoryDetail(detail) {
     <div><small>${escHtml(restoreT('simulation'))}</small><strong>${escHtml(detail.dry_run ? restoreT('yes') : restoreT('no'))}</strong></div>
     <div><small>${escHtml(restoreT('preserveOwnerShort'))}</small><strong>${escHtml(detail.preserve_owner ? restoreT('yes') : restoreT('no'))}</strong></div>
   </div>
+  ${restoreCountSummary(detail)}
   ${detail.items?.length ? `<ul class="restore-history-items">${detail.items.map(item => `<li>${escHtml(item.path)} → ${escHtml(item.destination_path)}${item.skipped ? ' (' + escHtml(restoreT('mappingSkip')) + ')' : ''}</li>`).join('')}</ul>` : ''}
   ${error ? `<div class="restore-history-error">${escHtml(error)}</div>` : ''}
   <details class="restore-history-log"><summary>${escHtml(restoreT('historyLog'))}</summary><pre>${escHtml(lines.join('\n') || restoreT('empty'))}</pre></details>`;
@@ -662,7 +667,7 @@ async function restoreLoadHistoryDetail(restoreId) {
   try {
     const res = await fetch(`/api/restore/history/detail?restore_id=${encodeURIComponent(id)}`, { credentials: 'include' });
     const data = await res.json();
-    if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status, data.error || ''));
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status, data.error || ''));
     renderRestoreHistory({ runs: restoreState.history, total: restoreState.historyTotal || restoreState.history.length });
     restoreState.historyDetailId = id;
     renderRestoreHistoryDetail(data);
@@ -697,36 +702,92 @@ async function restoreOpenRun(restoreId) {
   _stopRestorePolling();
   restoreState.activeRestoreId = restoreId;
   restoreState.completed = false;
+  restoreState.runSnapshot = null;
   restoreSetLiveMode(true);
+  renderRestoreRunStatus({state: 'running', phase: 'starting'});
   hideEl('restore-assist-msg');
   restoreSetStep(5);
   _setRestoreAssistBusy(true);
   await _pollRestoreState(restoreId);
 }
 
+function restoreCountSummary(data) {
+  if (data.dry_run || !data.counts_complete || !data.counts) return '';
+  const fields = [['files', 'restoredFiles'], ['directories', 'restoredDirectories']];
+  if (data.counts.symlinks) fields.push(['symlinks', 'restoredLinks']);
+  if (data.counts.other) fields.push(['other', 'restoredOther']);
+  return `<div class="restore-result-counts">${fields.map(([key, label]) =>
+    `<div><strong>${escHtml(String(data.counts[key] ?? 0))}</strong><span>${escHtml(restoreT(label))}</span></div>`).join('')}</div>`;
+}
+
+function renderRestoreRunStatus(data, connected = true) {
+  restoreState.runSnapshot = data;
+  const panel = document.getElementById('restore-run-status');
+  if (!panel) return;
+  const running = !['done', 'error', 'aborted'].includes(data.state);
+  const failed = ['error', 'aborted'].includes(data.state);
+  setRestoreHeaderStatus(!connected ? 'unreachable' : running ? 'running' : failed ? 'failed'
+    : data.skipped ? 'skipped' : data.dry_run ? 'simulation' : 'success');
+  // Do not replace focused controls or announce the whole card on every poll.
+  const signature = JSON.stringify({...data, duration_seconds: 0, lines: failed ? data.lines : [],
+    connected, language: restoreT('runHeading')});
+  if (panel.dataset.signature === signature) {
+    const duration = panel.querySelector('.restore-run-duration strong');
+    if (duration) duration.textContent = restoreFmtDuration(data.duration_seconds || 0);
+    return;
+  }
+  panel.dataset.signature = signature;
+  panel.setAttribute('aria-label', restoreT('runHeading'));
+  const phase = {starting: 'phasePreparing', preparing: 'phasePreparing', extract: data.dry_run ? 'phaseSimulation' : 'phaseExtract',
+    validate: 'phaseValidate', publish: 'phasePublish'}[data.phase] || 'phasePreparing';
+  const title = !connected ? 'connectionWaiting' : running ? phase : failed ? 'runFailed'
+    : data.skipped ? 'runSkipped' : data.dry_run ? 'simulationSuccess' : 'runCompleted';
+  const description = !connected ? 'connectionWaitingHelp' : running
+    ? ({validate: 'validateHelp', publish: 'publishHelp'}[data.phase] || (data.dry_run ? 'runSimulationHelp' : 'runningHelp'))
+    : failed ? 'runFailureHelp' : data.dry_run ? 'simulationNoWrites' : data.skipped ? 'runSkippedHelp' : 'runCompletedHelp';
+  const selections = data.items?.length ? data.items : (data.source_paths || [data.source_path]).filter(Boolean).map(path => ({path}));
+  const skipped = selections.filter(item => item.skipped).length;
+  const opened = id => panel.querySelector(`#${id}`)?.open;
+  const selectionOpen = opened('restore-run-selection') ?? selections.length <= 3;
+  const diagnosticsOpen = opened('restore-run-diagnostics') || false;
+  const statusClass = !connected ? 'waiting' : running ? 'running' : failed ? 'error' : data.skipped ? 'waiting' : 'success';
+  const facts = [
+    ['archive', data.archive], ['targetDirectory', data.target_dir],
+    ['conflictStrategy', restoreConflictModeLabel(data.conflict_mode)],
+    ['ownerGroupLabel', restoreT(data.preserve_owner ? 'ownerFromBackup' : 'ownerFromTarget')],
+    ['executionMode', restoreT(data.dry_run ? 'plannedSimulation' : 'plannedRestore')],
+    ['selectionLabel', restoreT('selectedCount', {count: selections.length})],
+  ];
+  const error = failed ? restoreFailureMessage(data) : '';
+  panel.innerHTML = `<div class="restore-run-banner ${statusClass}">
+    <span class="restore-run-indicator" aria-hidden="true">${running && connected ? '' : restoreStatusIcon(failed ? 'error' : statusClass === 'success' ? 'success' : 'warning')}</span>
+    <div class="restore-run-message"><h3 role="status">${escHtml(restoreT(title))}</h3><p>${escHtml(restoreT(description))}</p></div>
+    <div class="restore-run-duration"><small>${escHtml(restoreT('elapsedTime'))}</small><strong>${escHtml(restoreFmtDuration(data.duration_seconds || 0))}</strong></div>
+  </div>
+  ${restoreCountSummary(data)}
+  <div class="restore-run-facts">${facts.map(([key, value]) => `<div><small>${escHtml(restoreT(key))}</small><strong>${escHtml(value || '—')}</strong></div>`).join('')}</div>
+  ${running && data.staging_path ? `<div class="restore-run-stage"><strong>${escHtml(restoreT('stagingDirectory'))}</strong><code>${escHtml(data.staging_path)}</code><p>${escHtml(restoreT('stagingHelp'))}</p></div>` : ''}
+  ${skipped ? `<p class="restore-run-note">${escHtml(restoreT('skippedSelections', {count: skipped}))}</p>` : ''}
+  <details id="restore-run-selection" class="restore-run-selection" ${selectionOpen ? 'open' : ''}>
+    <summary>${escHtml(restoreT('runSelectionDetails'))} (${selections.length})</summary>
+    <div class="restore-run-selection-list">${selections.map(item => `<div><strong>${escHtml(item.path)}</strong>
+      ${item.destination_path ? `<span>→ ${escHtml(item.destination_path)}</span>` : ''}
+      ${item.skipped ? `<small>${escHtml(restoreT('mappingSkip'))}</small>` : item.restored ? `<small>${escHtml(restoreT('entryRestored'))}</small>` : ''}</div>`).join('')}</div>
+  </details>
+  ${failed ? `<div class="restore-history-error" role="alert">${escHtml(error || restoreT('unknownError'))}</div>` : ''}
+  ${failed && data.lines?.length ? `<details id="restore-run-diagnostics" class="restore-history-log" ${diagnosticsOpen ? 'open' : ''}><summary>${escHtml(restoreT('errorDetails'))}</summary><pre>${escHtml(data.lines.join('\n'))}</pre></details>` : ''}`;
+}
+
 async function _pollRestoreState(restoreId) {
-  const out = document.getElementById('restore-precheck-output');
   if (!restoreId) return;
   try {
     const res = await fetch(`/api/restore/state?restore_id=${encodeURIComponent(restoreId)}`, { credentials: 'include' });
     const data = await res.json();
-    if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
     if (restoreState.activeRestoreId !== restoreId) return;
+    renderRestoreRunStatus(data);
 
-    const lines = Array.isArray(data.lines) ? data.lines : [];
-    const phase = data.phase || 'running';
-    if (out) {
-      out.textContent = [
-        restoreT('restoreId', { value: restoreId }),
-        restoreT('status', { value: data.state || restoreT('running') }),
-        restoreT('phase', { value: phase }),
-        '',
-        ...lines,
-      ].join('\n');
-      out.scrollTop = out.scrollHeight;
-    }
-
-    if (data.state === 'done') {
+    if (['done', 'error', 'aborted'].includes(data.state)) {
       _stopRestorePolling();
       _setRestoreAssistBusy(false);
       restoreState.completed = true;
@@ -734,36 +795,13 @@ async function _pollRestoreState(restoreId) {
       restoreSetStep(5);
       restoreLoadRuns();
       restoreLoadHistory();
-      if (data.skipped) {
-        setRestoreHeaderStatus('skipped');
-        const reasonKey = {
-          target_exists: 'targetExists',
-          target_not_empty: 'targetNotEmpty',
-          target_unreadable: 'targetUnreadable',
-        }[data.skip_reason_code] || 'targetExists';
-        showMsg('restore-assist-msg', 'warning', restoreT('skipped', { reason: restoreT(reasonKey) }));
-      } else if (data.dry_run) {
-        setRestoreHeaderStatus('simulation');
-        showMsg('restore-assist-msg', 'success', restoreT('simulationSuccess'));
-      } else {
-        setRestoreHeaderStatus('success');
-        showMsg('restore-assist-msg', 'success', restoreT('success', { path: data.destination_path || '' }));
-      }
+      setRestoreHeaderStatus(data.state !== 'done' ? 'failed' : data.skipped ? 'skipped' : data.dry_run ? 'simulation' : 'success');
       return;
     }
-    if (data.state === 'error' || data.state === 'aborted') {
-      _stopRestorePolling();
-      _setRestoreAssistBusy(false);
-      restoreUpdateConfirmState();
-      setRestoreHeaderStatus('failed');
-      restoreLoadRuns();
-      restoreLoadHistory();
-      showMsg('restore-assist-msg', 'error', restoreT('failed', { message: data.error || restoreT('unknownError') }));
-      return;
-    }
-
     restoreState.restorePollTimer = setTimeout(() => _pollRestoreState(restoreId), 1500);
   } catch (err) {
+    if (restoreState.activeRestoreId !== restoreId) return;
+    renderRestoreRunStatus(restoreState.runSnapshot || {state: 'running'}, false);
     restoreState.restorePollTimer = setTimeout(() => _pollRestoreState(restoreId), 2000);
   }
 }
@@ -1594,7 +1632,7 @@ function renderRestorePrecheck(data) {
     facts.innerHTML = '';
     if (badge) {
       badge.textContent = restoreT('precheckPending');
-      badge.classList.remove('success', 'warning', 'error');
+      delete badge.dataset.state;
     }
     return;
   }
@@ -1610,8 +1648,7 @@ function renderRestorePrecheck(data) {
   ].map(([label, value]) => `<div><small>${escHtml(label)}</small><strong>${escHtml(String(value))}</strong></div>`).join('');
   if (badge) {
     badge.textContent = restoreT(ok ? 'precheckSuccessful' : 'precheckFailedShort');
-    badge.classList.remove('success', 'warning', 'error');
-    badge.classList.add(ok ? 'success' : 'error');
+    badge.dataset.state = ok ? 'success' : 'error';
   }
 }
 
@@ -1624,13 +1661,11 @@ function setRestoreHeaderStatus(state) {
     skipped: 'restoreSkippedShort',
     failed: 'restoreFailedShort',
     running: 'restoreRunningShort',
+    unreachable: 'connectionWaiting',
   }[state] || 'precheckSuccessful';
   badge.textContent = restoreT(key);
-  badge.classList.remove('success', 'warning', 'error');
-  if (state === 'success' || state === 'simulation') badge.classList.add('success');
-  if (state === 'skipped') badge.classList.add('warning');
-  if (state === 'failed') badge.classList.add('error');
-  if (state === 'running') badge.classList.add('warning');
+  badge.dataset.state = {success: 'success', simulation: 'success', skipped: 'warning',
+    failed: 'error', running: 'running', unreachable: 'warning'}[state] || 'info';
 }
 
 function _currentPrecheckKey() {
@@ -1682,20 +1717,10 @@ async function restoreStart() {
   const confirmed = await openRestoreConfirmModal(summary);
   if (!confirmed || requestKey !== _currentPrecheckKey()) return;
   restoreSetLiveMode(true);
-  const out = document.getElementById('restore-precheck-output');
-  if (out) {
-    out.textContent = [
-      restoreT('restoreRunning'),
-      restoreT('archiveValue', { value: restoreState.archive }),
-      restoreT('sourceShort', { value: source }),
-      restoreT('targetShort', { value: target }),
-      restoreT('mode', { value: mode }),
-      restoreT('ownerGroup', { value: preserveOwner ? restoreT('ownerFromBackup') : restoreT('ownerFromTarget') }),
-      '',
-      restoreT('wait')
-    ].join('\n');
-  }
-  showMsg('restore-assist-msg', 'warning', restoreT('restoreRunningShort'));
+  renderRestoreRunStatus({state: 'running', phase: 'starting', archive: restoreState.archive,
+    source_paths: _restoreSelections().map(item => item.path), items: restoreState.precheck?.items || [],
+    target_dir: target, conflict_mode: mode, preserve_owner: preserveOwner,
+    dry_run: !!document.getElementById('restore-dry-run')?.checked, duration_seconds: 0});
   _setRestoreAssistBusy(true);
   _stopRestorePolling();
   restoreState.activeRestoreId = '';
@@ -1724,9 +1749,6 @@ async function restoreStart() {
     }
     restoreState.activeRestoreId = restoreId;
     restoreState.completed = false;
-    if (out) {
-      out.textContent += `\n\n${restoreT('restoreId', { value: restoreId })}\n${restoreT('status', { value: restoreT('started') })}`;
-    }
     _pollRestoreState(restoreId);
   } catch (err) {
     _stopRestorePolling();
@@ -1734,7 +1756,9 @@ async function restoreStart() {
     _setRestoreAssistBusy(false);
     restoreUpdateConfirmState();
     showMsg('restore-assist-msg', 'error', restoreT('failed', { message: err.message }));
-    if (out) out.textContent += `\n\n${restoreT('resultError')}\n${err.message}`;
+    restoreState.completed = true;
+    renderRestoreRunStatus({...restoreState.runSnapshot, state: 'error', error: err.message});
+    restoreSetStep(5);
   }
 }
 
@@ -1829,6 +1853,9 @@ window.addEventListener?.('bbui:language-changed', () => {
   renderRestoreSelectedJob();
   renderRestoreArchiveList();
   renderRestorePrecheck(restoreState.precheck);
+  if (restoreState.liveMode && restoreState.runSnapshot) renderRestoreRunStatus(restoreState.runSnapshot);
+  const stepLabel = document.getElementById('restore-step-status');
+  if (stepLabel) stepLabel.textContent = restoreT('stepStatus', {step: restoreState.step, total: 5});
   _restoreRenderBreadcrumb(restoreState.path);
   if (restoreState.precheck && !restoreState.liveMode) {
     const output = document.getElementById('restore-precheck-output');

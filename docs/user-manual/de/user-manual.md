@@ -551,7 +551,7 @@ Die Seite ermöglicht:
 - Auswahl einzelner Dateien oder Verzeichnisse
 - Festlegen von Zielordner und Konfliktstrategie
 - Starten eines Testlaufs oder echten Restores
-- Fortsetzen eines Live-Logs bei aktivem Restore
+- Erneutes Öffnen der Statusansicht bei aktivem Restore
 - Einsicht in abgeschlossene Restore-Läufe
 
 ### 7.2 Ansichten
@@ -617,6 +617,7 @@ Nicht erlaubte Beispiele:
 Erlaubte Beispiele, wenn bewusst konfiguriert:
 
 - `/mnt/user`
+- `/mnt/cache` (auch Unterordner wie `/mnt/cache/appdata`)
 - `/mnt/data`
 - `/mnt/disk1`
 - `/mnt/disks/<name>`
@@ -634,7 +635,13 @@ Vor dem Start prüft Borg Backup UI den Repository-Lock. Ein gleichzeitig laufen
 
 ### 7.4 Aktive Restore-Läufe
 
-Wenn ein Restore noch läuft oder die Browser-Sitzung unterbrochen wurde, zeigt die Seite einen aktiven Restore-Banner. Über **Live-Log fortsetzen** kann die laufende Ausgabe wieder angezeigt werden.
+Wenn ein Restore noch läuft oder die Browser-Sitzung unterbrochen wurde, zeigt die Seite einen aktiven Restore-Banner. Über **Status öffnen** kann die Statusansicht wieder geöffnet werden.
+
+Die kompakte Ansicht zeigt Archiv, Auswahl, Zielpfade, Konfliktstrategie und Eigentümer-Einstellung. Während des Laufs werden Phase und Laufzeit angezeigt. Es gibt keine geschätzte Prozentanzeige und keine fortlaufende Liste einzelner Dateien. Bei einem Verbindungsfehler wird der letzte bekannte Stand als solcher gekennzeichnet.
+
+Beim Entpacken liegen die Daten zunächst im angezeigten versteckten Zwischenordner `.bbui-restore-stage-…` innerhalb des Ziels. Nach dem Entpacken und der Pfadprüfung werden sie an ihre endgültigen Zielpfade verschoben. Vorhandene Zieldateien bleiben während des Entpackens unberührt.
+
+Nach erfolgreichem Abschluss zeigt die Ansicht die Anzahl der übernommenen Dateien und Ordner; Verknüpfungen und sonstige Einträge werden getrennt gezählt. Gezählt werden die wiederhergestellten Einträge, nicht bereits vorhandene, unveränderte Zieldateien oder nur für den Pfadaufbau benötigte Elternordner. Übersprungene Auswahleinträge werden separat genannt. Testläufe schreiben keine Dateien und zeigen deshalb keine Wiederherstellungszählung. Bei Fehlern steht keine vollständige Abschlusszählung zur Verfügung; bereits bereitgestellte Auswahleinträge und technische Fehlerdetails bleiben nachvollziehbar.
 
 ### 7.5 Restore History
 
@@ -872,6 +879,8 @@ Hier werden Standardwerte für Restore Tests gepflegt, z. B. Standard-Testlevel,
 #### Browse & Restore
 
 Hier werden erlaubte Restore-Zielbereiche verwaltet. Standardmäßig ist nur `/mnt/user` erlaubt. Zusätzliche Root-Pfade müssen bewusst hinzugefügt werden.
+
+Für eine Wiederherstellung direkt auf den Cache-Pool fügen Sie `/mnt/cache` über **Zielbereich hinzufügen** hinzu und speichern die Einstellungen. Alternativ können Sie die Freigabe auf einen Unterordner wie `/mnt/cache/appdata` begrenzen. Der im Restore gewählte Zielordner muss vorhanden und beschreibbar sein.
 
 > **Warnung:** Tragen Sie keine zu breiten Pfade wie `/`, `/mnt`, `/mnt/disks` oder `/mnt/remotes` ein. Verwenden Sie konkrete Ziele wie `/mnt/disks/<name>` oder `/mnt/remotes/<name>`.
 
@@ -1127,7 +1136,7 @@ Die Hilfe liefert schnelle Orientierung direkt in der UI. Sie ist kürzer als di
 5. Wählen Sie Zielordner und Konfliktstrategie.
 6. Prüfen Sie die Zusammenfassung.
 7. Starten Sie den Restore.
-8. Beobachten Sie das Live-Log.
+8. Beobachten Sie den Restore-Status und prüfen Sie anschließend die Abschlussübersicht.
 9. Prüfen Sie den Eintrag in **Restore History**.
 
 ### 11.4 Restore-Test planen

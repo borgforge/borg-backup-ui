@@ -5807,6 +5807,7 @@ function isSafeRestoreRoot(value) {
   if (!path || !path.startsWith('/')) return false;
   if (['/', '/mnt', '/mnt/disks', '/mnt/remotes', '/boot', '/etc', '/usr', '/var'].includes(path)) return false;
   if (path === '/mnt/user' || path.startsWith('/mnt/user/')) return true;
+  if (path === '/mnt/cache' || path.startsWith('/mnt/cache/')) return true;
   if (path === '/mnt/data' || path.startsWith('/mnt/data/')) return true;
   if (/^\/mnt\/disk[0-9]+(?:\/.*)?$/.test(path)) return true;
   if (/^\/mnt\/disks\/[^/]+(?:\/.*)?$/.test(path)) return true;
@@ -5846,6 +5847,7 @@ function renderSettingsBrowseRestore(browse) {
           <div class="settings-help-grid">
             <div><strong>${settingsT('forms.restoreAllowedRootsAllowed')}</strong><ul>
               <li>/mnt/user</li>
+              <li>/mnt/cache</li>
               <li>/mnt/data</li>
               <li>/mnt/disk1, /mnt/disk2, ...</li>
               <li>/mnt/disks/&lt;name&gt;</li>
