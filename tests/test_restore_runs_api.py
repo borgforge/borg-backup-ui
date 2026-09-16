@@ -154,3 +154,64 @@ def test_multi_selection_simulation_survives_async_state_and_history(tmp_path, m
     assert detail['dry_run'] is True
     assert detail['source_paths'] == paths
     assert detail['items'] == items
+
+
+def test_restore_diagnostics_do_not_write_state_per_line(tmp_path, monkeypatch):
+    restore_api._RESTORE_RUNS_LOADED = True
+    restore_api._RESTORE_RUNS.clear()
+    config = {'BACKUP_SCRIPTS_DIR': str(tmp_path)}
+    writes = []
+    real_persist = restore_api._persist_restore_runs
+    def persist(config):
+        writes.append(1)
+        real_persist(config)
+    def restore(*args, progress_cb, status_cb, **kwargs):
+        status_cb({'phase': 'extract', 'staging_path': '/destination/.bbui-restore-stage-example'})
+        for index in range(5000):
+            progress_cb(f'diagnostic {index}')
+        status_cb({'phase': 'validate'})
+        status_cb({'phase': 'publish'})
+        return {'counts': {'files': 5000, 'directories': 2, 'symlinks': 0, 'other': 0},
+                'counts_complete': True, 'destination_path': '/destination'}
+    class ImmediateThread:
+        def __init__(self, target, **kwargs): self.target = target
+        def start(self): self.target()
+    monkeypatch.setattr(restore_api, '_persist_restore_runs', persist)
+    monkeypatch.setattr(restore_api, 'start_restore', restore)
+    monkeypatch.setattr(restore_api.threading, 'Thread', ImmediateThread)
+    result = restore_api.start_restore_async(config, 'job-id', 'archive', 'folder', '/destination', 'skip')
+    state = restore_api.get_restore_state(config, result['restore_id'])
+    assert state['state'] == 'done'
+    assert state['counts']['files'] == 5000
+    assert state['staging_path'] == ''
+    assert state['counts_complete']
+    assert len(state['lines']) <= 80
+    assert len(writes) == 6  # start, prepare, extract, validate, publish, finish
+    history = restore_api.get_restore_history_detail(config, result['restore_id'])
+    assert history['counts'] == state['counts']
+    assert history['counts_complete']
+    assert len(history['lines']) <= 200
+
+
+def test_failed_restore_keeps_diagnostics_without_claiming_final_counts(tmp_path, monkeypatch):
+    restore_api._RESTORE_RUNS_LOADED = True
+    restore_api._RESTORE_RUNS.clear()
+    config = {'BACKUP_SCRIPTS_DIR': str(tmp_path)}
+    def restore(*args, status_cb, **kwargs):
+        status_cb({'phase': 'publish', 'counts': {'files': 1, 'directories': 0},
+                   'items': [{'path': 'one', 'restored': True}]})
+        raise OSError('Destination is full')
+    class ImmediateThread:
+        def __init__(self, target, **kwargs): self.target = target
+        def start(self): self.target()
+    monkeypatch.setattr(restore_api, 'start_restore', restore)
+    monkeypatch.setattr(restore_api.threading, 'Thread', ImmediateThread)
+    result = restore_api.start_restore_async(config, 'job-id', 'archive', 'folder', '/destination', 'skip')
+    state = restore_api.get_restore_state(config, result['restore_id'])
+    assert state['state'] == 'error'
+    assert state['counts_complete'] is False
+    assert state['items'][0]['restored']
+    assert state['error'] == 'Destination is full'
+    detail = restore_api.get_restore_history_detail(config, result['restore_id'])
+    assert detail['counts_complete'] is False
+    assert 'Destination is full' in '\n'.join(detail['lines'])

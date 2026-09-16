@@ -1,5 +1,12 @@
 # Changelog
 
+## Pending - Restore status and write reduction (#525)
+
+- Replace per-file Browse & Restore live output with phase, elapsed time, destination and mode details, including the staging directory and reconnect status.
+- Run Borg extract without --list and keep bounded diagnostics in memory; persist lifecycle transitions instead of rewriting restore-runs.json for each line.
+- Count published files, directories, links and other entries during the existing stage validation walk. Preserve counts in history, exclude skipped selections and synthetic parents, and avoid claiming complete counts for failed or simulated restores.
+- Treat a terminal restore error payload as a completed poll result instead of repeatedly retrying it as a transport error.
+
 Historische Release- und Entwicklungsnotizen fuer borg-backup-ui.
 
 Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrelevante Zusammenfassung des aktuellen Stands.

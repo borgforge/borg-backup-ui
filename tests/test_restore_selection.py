@@ -32,6 +32,8 @@ def archive(tmp_path, monkeypatch):
         p = source / path
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(data)
+    (source / "Backup/Empty").mkdir()
+    (source / "Backup/link.txt").symlink_to("space name.txt")
     def borg(*args):
         return subprocess.run(["borg", *args], cwd=source, env=env, check=True, capture_output=True, text=True)
     borg("init", "--encryption=none", str(repo))
@@ -171,6 +173,7 @@ def test_simulation_never_restores_or_overwrites_files(archive):
     result = restore_api.start_restore({}, 'test-job', 'test', '', str(target), 'overwrite',
                                       source_paths=['Backup/Test1', 'Backup/Test2'], dry_run=True)
     assert result['dry_run'] is True
+    assert result['counts'] == {'files': 0, 'directories': 0, 'symlinks': 0, 'other': 0}
     assert existing.read_text() == 'existing'
     assert not (target / 'Test2').exists()
     assert not list(target.glob('.bbui-restore-stage-*'))
@@ -203,3 +206,45 @@ def test_extraction_error_leaves_destination_untouched_and_cleans_stage(archive,
     with pytest.raises(RuntimeError, match='simulated extract error'):
         run(['Backup/Test1'])
     assert not list(target.iterdir())
+
+
+def test_counts_exclude_synthetic_parents_and_preserved_target_files(archive):
+    target, run = archive
+    (target / 'Backup/Test1').mkdir(parents=True)
+    (target / 'Backup/Test1/unrelated').write_text('keep')
+    result = run(['Backup/Test1', 'Other/Test1'], 'overwrite')
+    assert result['counts'] == {'files': 2, 'directories': 2, 'symlinks': 0, 'other': 0}
+    assert result['counts_complete']
+    assert (target / 'Backup/Test1/unrelated').read_text() == 'keep'
+
+
+def test_counts_distinguish_empty_folders_links_and_skipped_entries(archive):
+    target, run = archive
+    (target / 'Test1').mkdir()
+    result = run(['Backup/Test1', 'Backup/Empty', 'Backup/space name.txt', 'Backup/link.txt'])
+    assert result['counts'] == {'files': 1, 'directories': 1, 'symlinks': 1, 'other': 0}
+    assert result['items'][0]['skipped']
+    assert (target / 'link.txt').is_symlink()
+    assert (target / 'Empty').is_dir()
+
+
+def test_quiet_extract_reports_phases_and_actual_staging_path(archive, monkeypatch):
+    target, _ = archive
+    phases, messages, commands = [], [], []
+    real_popen = restore_api.subprocess.Popen
+    def popen(command, **kwargs):
+        commands.append(command)
+        return real_popen(command, **kwargs)
+    monkeypatch.setattr(restore_api.subprocess, 'Popen', popen)
+    def status(update):
+        phases.append(update.get('phase'))
+        if update.get('phase') == 'extract':
+            stage = Path(update['staging_path'])
+            assert stage.is_dir() and stage.parent == target
+    result = restore_api.start_restore({}, 'test-job', 'test', '', str(target), 'skip',
+        source_paths=['Backup/Test1'], progress_cb=messages.append, status_cb=status)
+    assert result['counts']['files'] == 1
+    assert [phase for phase in phases if phase] == ['preparing', 'extract', 'validate', 'publish']
+    extract = next(command for command in commands if command[1] == 'extract')
+    assert '--list' not in extract and '--progress' not in extract
+    assert not any(line == 'Test1/file.txt' for line in messages)
