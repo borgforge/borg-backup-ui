@@ -1,4 +1,8 @@
 from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -6,6 +10,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def test_history_job_filter_behavior() -> None:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for History UI tests")
+    subprocess.run([node, "tests/history_job_filter.cjs"], cwd=ROOT, check=True)
 
 
 def test_history_reports_styles_load_after_foundation() -> None:

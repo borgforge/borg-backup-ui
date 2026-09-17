@@ -1,5 +1,9 @@
 # Changelog
 
+## Pending - History job filter locations (#529)
+
+- Include job locations in History filter metadata and display localized name/location labels. Preserve UUID-based filtering and selection during refresh and language changes.
+
 ## Pending - Cache pool restore destinations (#527)
 
 - Accept explicitly configured /mnt/cache roots and subfolders consistently in settings, configuration validation and restore runtime. Keep the default and existing target roots unchanged, retain destination access and containment checks, and document cache-pool setup in both manuals.
