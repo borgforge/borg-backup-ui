@@ -321,6 +321,8 @@ def test_calendar_overdue_reminder_survives_skip_is_throttled_and_stops_after_su
     diagnostic = notification_reminder_api.get_notification_reminder_diagnostics(cfg)["restore_test_overdue"]["items"][0]
     assert diagnostic["next_due_at"] == (last + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
     assert diagnostic["state"] == "overdue_waiting"
+    assert diagnostic["next_run_at"] == restore_tests_api.list_restore_test_plan(cfg)["jobs"][0]["next_run_at"]
+    assert diagnostic["next_run_at"] != diagnostic["next_due_at"]
     assert notification_reminder_api.run_due_notification_reminders(cfg)["sent"] == 0
     report.write_text(json.dumps({"test_result": "success", "test_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}))
     assert notification_reminder_api.run_due_notification_reminders(cfg)["checked"] == 0

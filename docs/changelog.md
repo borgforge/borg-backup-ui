@@ -6,6 +6,9 @@
 - Align calendar reminder due dates, plan overdue flags and report freshness with evidence validity. Preserve reminder throttling, failed-test eligibility and prior evidence after a skipped run.
 - Use configured levels/intervals in legacy scheduled batches and bypass interval gating for calendar runs. Track individual restore tests separately so independent repositories can run concurrently.
 - Hold the shared repository/SMB locks throughout testing and cleanup; serialize lock acquisition/recovery to close simultaneous-start races. Preserve verification evidence on a busy skip, record a separate skip report, and persist backup resource conflicts in normal history.
+- Clarify that global restore-test base settings belong to existing batch/interval tests, while fixed schedules and verification settings belong to each job; localize the all-locations option.
+- Show the next planned restore test separately from the evidence deadline in notification-reminder diagnostics; retain deadline-based reminder eligibility.
+- Localize native planning-dialog validation in the selected plugin language, including missing/invalid time, month day and evidence validity; clear custom errors when the user edits a field.
 - Add a bilingual planning dialog and document calendar, conflict and upgrade behavior. Use compact German/English table labels and keep schedule, status, location and timestamp cells on one line; narrower views scroll horizontally.
 
 ## Pending - Persistent Borg security state (#498)

@@ -869,7 +869,7 @@ The **Restore** section contains two subsections:
 
 #### Restore Tests
 
-This area manages defaults for restore tests, such as default test level, interval, runtime limits, and verification parameters.
+The **Existing batch and interval tests** section contains global defaults for test level, interval and location filtering. Saved job settings take precedence. Configure fixed times, test level and evidence validity per job under **Restore Tests → Edit plan**. The remaining settings still control global runtime limits, sampling and verification parameters.
 
 #### Browse & Restore
 
@@ -1017,7 +1017,7 @@ Subsections:
 - **Notification reminders:** Diagnostics for backup and restore test overdue notifications.
 - **Per-repository passphrases:** Overview of repository-specific passphrase assignments.
 
-Reminder diagnostics show when a run was expected, when it becomes overdue, when it was last sent, and when the next reminder is allowed. This view does not send notifications; it is diagnostic only.
+Reminder diagnostics show when a run was expected, when it becomes overdue, when it was last sent, and when the next reminder is allowed. For restore tests, **Next test** (cron time) and **Overdue after** (evidence deadline) are shown separately. Without a saved schedule, the next-test field reads **No schedule**. This view does not send notifications; it is diagnostic only.
 
 ### 9.12 Factory Reset
 

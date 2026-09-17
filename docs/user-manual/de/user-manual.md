@@ -870,7 +870,7 @@ Der Bereich **Restore** enthält zwei Unterbereiche:
 
 #### Restore Tests
 
-Hier werden Standardwerte für Restore Tests gepflegt, z. B. Standard-Testlevel, Intervall, Laufzeitgrenzen und Prüfparameter.
+Der Abschnitt **Bisherige Sammel- und Intervalltests** enthält die globalen Vorgaben für Testlevel, Intervall und Standortfilter. Gespeicherte Jobwerte haben Vorrang. Feste Uhrzeiten, Testlevel und Nachweisgültigkeit werden pro Job unter **Restore Tests → Plan bearbeiten** festgelegt. Die weiteren Einstellungen steuern weiterhin globale Laufzeitgrenzen, Stichproben und Prüfparameter.
 
 #### Browse & Restore
 
@@ -1018,7 +1018,7 @@ Unterbereiche:
 - **Notification Reminder:** Diagnose für Backup- und Restore-Test-Überfälligkeitsmeldungen.
 - **Per-Repo Passphrasen:** Übersicht über repository-spezifische Passphrase-Zuordnungen.
 
-Die Reminder-Diagnose zeigt, wann ein Lauf erwartet wurde, ab wann er als überfällig gilt, wann zuletzt gesendet wurde und wann der nächste Reminder möglich ist. Diese Ansicht sendet keine Benachrichtigungen; sie ist rein diagnostisch.
+Die Reminder-Diagnose zeigt, wann ein Lauf erwartet wurde, ab wann er als überfällig gilt, wann zuletzt gesendet wurde und wann der nächste Reminder möglich ist. Bei Restore-Tests werden **Nächster Test** (Cron-Termin) und **Überfällig ab** (Nachweisfrist) getrennt angezeigt. Ohne gespeicherten Zeitplan steht dort **Kein Zeitplan**. Diese Ansicht sendet keine Benachrichtigungen; sie ist rein diagnostisch.
 
 ### 9.12 Werkseinstellungen
 

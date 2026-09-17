@@ -570,7 +570,7 @@ function editRestorePlan(jobKey) {
         <label>${escHtml(restoreTestsT('frequency'))}<select name="frequency" class="form-select">${options(row.legacy_cron && !p.cron ? ['legacy', 'daily', 'weekly', 'monthly'] : ['daily', 'weekly', 'monthly'], frequency)}</select></label>
         <label>${escHtml(restoreTestsT('time'))}<input name="time" type="time" class="form-input" required value="${p.cron ? `${parts[1].padStart(2,'0')}:${parts[0].padStart(2,'0')}` : ''}"></label>
         <label data-weekday>${escHtml(restoreTestsT('weekday'))}<select name="weekday" class="form-select">${options([1,2,3,4,5,6,0], p.cron ? parts[4] : 0, 'weekdays.')}</select></label>
-        <label data-monthday>${escHtml(restoreTestsT('monthday'))}<input name="monthday" type="number" class="form-input" min="1" max="28" value="${frequency === 'monthly' ? parts[2] : 1}"></label>
+        <label data-monthday>${escHtml(restoreTestsT('monthday'))}<input name="monthday" type="number" class="form-input" min="1" max="28" required value="${frequency === 'monthly' ? parts[2] : 1}"></label>
         <label>${escHtml(restoreTestsT('validityDays'))}<input name="validity" type="number" class="form-input" min="1" required value="${Number(p.validity_days || 30)}"></label>
       </div>
       <p class="rt-plan-help">${escHtml(restoreTestsT('scheduleHelp'))}</p>
@@ -591,7 +591,16 @@ function editRestorePlan(jobKey) {
     dialog.querySelector('[data-weekday]').hidden = freq !== 'weekly';
     dialog.querySelector('[data-monthday]').hidden = freq !== 'monthly';
   };
-  form.addEventListener('change', update);
+  // Native constraint validation runs before submit and otherwise uses the browser language.
+  form.addEventListener('invalid', event => {
+    const key = { time: 'validationTime', monthday: 'validationMonthday', validity: 'validationValidity' }[event.target.name];
+    if (key) event.target.setCustomValidity(restoreTestsT(key));
+  }, true);
+  form.addEventListener('input', event => event.target.setCustomValidity?.(''));
+  form.addEventListener('change', event => {
+    event.target.setCustomValidity?.('');
+    update();
+  });
   form.addEventListener('submit', event => { event.preventDefault(); saveRestorePlanPolicy(jobKey); });
   dialog.querySelectorAll('[data-close]').forEach(button => button.onclick = () => dialog.close());
   dialog.addEventListener('close', () => dialog.remove());

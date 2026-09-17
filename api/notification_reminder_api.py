@@ -447,6 +447,7 @@ def _restore_test_overdue_diagnostics(plan: dict, sent: dict, now: datetime, int
             "state": state,
             "reason": reason,
             "next_due_at": due_marker,
+            "next_run_at": str(row.get("next_run_at") or ""),
             "last_test_date": str(row.get("last_test_date") or ""),
             "level": int(policy.get("level") or 0),
             "interval_days": int(policy.get("interval_days") or 0),
