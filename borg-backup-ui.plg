@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.09.16.1126">
+<!ENTITY version   "2026.09.17.1618">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,16 @@
 
 <CHANGES>
 <![CDATA[
+###2026.09.17.1618###
+### Migration and compatibility
+
+- Adopt existing Borg security records once into `borg-security` below the plugin configuration root (normally `/boot/config/borg-backup/borg-security`). Preserve a migration snapshot and the original records; conflicting copies stop migration with a logged error. Previously lost state is initialized on the next access to an explicitly unencrypted managed repository. Existing Borg key storage and backup archives remain unchanged. (#498)
+
+### Bug Fixes
+
+- Keep Borg repository security state across Unraid reboots so unencrypted backups no longer require a manual repository information refresh. Use the same persistent state for backup, maintenance and restore operations. (#498)
+- Show the storage location next to each job in the History filter so jobs with the same name can be distinguished. Keep the selected job when refreshing or changing language. (#529)
+
 ###2026.09.16.1126###
 ### Bug Fixes
 
@@ -46,11 +56,6 @@
     - The technical precheck lists every selected entry and its destination, and clearly distinguishes metadata validation from the actual dry run or restore.
     - The existing dry-run option now performs a Borg simulation without restoring or replacing files, with a clear result in the live view and history.
 
-###2026.09.15.1019###
-### Bug Fixes
-
-- USB backups now accept an existing subfolder on a mounted drive, matching the profile status check. Existing storage and repository paths remain unchanged. Missing drives, read-only targets and access errors still prevent backup startup. (#516)
-
 ]]>
 </CHANGES>
 
@@ -76,7 +81,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="08674a7204f9a3b6f5a51bb2b81ee768"
+EXPECTED_MD5="bc2b6818085a85202df1099e23ee8605"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
