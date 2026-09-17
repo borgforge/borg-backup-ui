@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.09.17.1618">
+<!ENTITY version   "2026.09.17.2204">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,25 @@
 
 <CHANGES>
 <![CDATA[
+###2026.09.17.2204###
+### Migration and compatibility
+
+- Existing interval schedules and reports are preserved. Jobs that previously only had a scheduled policy without a cron trigger now show "No schedule"; choose an execution time under Restore Tests. Missed or busy runs are not automatically retried. (#493)
+
+### Bug Fixes
+
+- Prevent backups and restore tests from using the same repository concurrently. The later operation is skipped with a recorded reason; skipped tests preserve the previous verification result. Scheduled tests use the job's test level without being blocked by the former global interval. (#493)
+
+- Keep overdue reminders aligned with the configured evidence validity for calendar schedules, independently of the former interval. (#493)
+
+- Show planning-dialog validation messages in the selected plugin language, independently of the browser language. Clarify the role of global settings for existing batch and interval tests. (#493)
+
+- Distinguish the next scheduled restore test from the evidence deadline in notification-reminder diagnostics. (#493)
+
+### Improvements
+
+- Schedule restore tests per job at a daily, weekly or monthly time. Saving a plan installs its cron trigger; the planning page shows whether cron is active and the next scheduled start. Test evidence validity is configured separately. (#493)
+
 ###2026.09.17.1618###
 ### Migration and compatibility
 
@@ -39,22 +58,6 @@
 ### Improvements
 
 - Browse & Restore now shows a compact status with source, destination, restore mode, elapsed time and processing phase. The temporary extraction folder is explained, and completed restores show file and folder counts, including zero. Successful runs are marked in green. Simulations, skipped selections and failures remain clearly distinguished. (#525)
-
-###2026.09.15.1531###
-### Bug Fixes
-
-- Migration backup cleanup now recognizes existing job-ID and job-settings recovery copies and shows which backups will be kept. Copies with missing, conflicting or incomplete migration records remain protected. No new data migration is required. (#519)
-- Information, warnings and errors no longer push page controls down. Action feedback appears in a compact panel at the bottom right. Information and success messages close after 5 seconds, warnings after 12 seconds; longer texts receive up to 30 seconds. Reading with the pointer or keyboard focus pauses dismissal. Errors stay until dismissed or replaced. Form validation and confirmation dialogs keep their existing placement. (#523)
-- Restore Tests keeps Save and Test now side by side in both languages. Saving and starting show progress inside the buttons; feedback no longer adds a line that shifts the table. (#523)
-
-### Improvements
-
-- Restore several files and folders from one archive in a single operation. Browse an expandable folder tree, filter the current folder and keep your selection while navigating. Review every source, planned action and destination in a separate restore-plan table before starting. (#521)
-    - Keep large selections manageable with a collapsible, searchable selection list. The target step explains conflict handling; the final review uses a compact summary, clear planned-operation labels and a green confirmation area when checked.
-    - The first archive opening skips single-folder chains automatically, so you reach the contents without entering a full path.
-    - Folder structure below the common parent is retained; overlapping selections are restored only once.
-    - The technical precheck lists every selected entry and its destination, and clearly distinguishes metadata validation from the actual dry run or restore.
-    - The existing dry-run option now performs a Borg simulation without restoring or replacing files, with a clear result in the live view and history.
 
 ]]>
 </CHANGES>
@@ -81,7 +84,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="bc2b6818085a85202df1099e23ee8605"
+EXPECTED_MD5="b5c2e7288b9564632c61b23c41f19909"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
