@@ -108,22 +108,22 @@ def list_restore_test_plan(config: dict) -> dict:
 
         next_due = ""
         is_overdue = False
+        cron = str(eff.get("cron") or "")
         if mode == "scheduled":
-            interval_days = max(1, _safe_int(eff.get("interval_days"), interval_default))
+            due_days = max(1, _safe_int(eff.get("validity_days" if cron else "interval_days"), interval_default))
             if test_data and last_result != "success":
                 next_due = last_test_date
                 is_overdue = True
             elif dt is None:
                 is_overdue = True
             else:
-                due_ts = dt.timestamp() + (interval_days * 86400)
+                due_ts = dt.timestamp() + (due_days * 86400)
                 next_due = datetime.fromtimestamp(due_ts).strftime("%Y-%m-%d %H:%M:%S")
                 if due_ts <= now_ts:
                     is_overdue = True
             if is_overdue:
                 counts["overdue"] += 1
 
-        cron = str(eff.get("cron") or "")
         scheduler_state = "off"
         next_run = ""
         if mode == "scheduled" and bool(job.get("enabled", True)):
@@ -133,8 +133,6 @@ def list_restore_test_plan(config: dict) -> dict:
                 scheduler_state = "active" if expected in installed else "not_installed"
                 next_dt = _next_expected_run(cron, datetime.now())
                 next_run = next_dt.strftime("%Y-%m-%d %H:%M:%S") if next_dt else ""
-                # Freshness is independent of the fixed next start time.
-                is_overdue = bool(job.get("restore_verification_is_overdue")) or not test_data
             elif legacy_schedule.get("enabled", True) and legacy_schedule.get("cron"):
                 expected = restore_test_cron_line(config, "restore_test", legacy_schedule["cron"])
                 scheduler_state = "legacy" if expected in installed else "not_installed"
@@ -324,7 +322,8 @@ def build_restore_verification_map(config: dict, jobs: List[dict]) -> Dict[str, 
                     if dt is not None:
                         expiry = dt.timestamp() + (validity_days * 86400)
                         valid_until = datetime.fromtimestamp(expiry).strftime("%Y-%m-%d %H:%M:%S")
-                    if age_days is not None and age_days > validity_days:
+                    expired = (dt is not None and datetime.now().timestamp() >= expiry) if policy.get("cron") else (age_days is not None and age_days > validity_days)
+                    if expired:
                         status = "stale"
                         reason = "validity_expired"
                         is_overdue = True

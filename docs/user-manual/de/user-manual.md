@@ -701,6 +701,8 @@ Beim Speichern wird der Cron-Eintrag erstellt oder aktualisiert. Beim Start werd
 
 **Repository-Konflikte:** Backup und Restore-Test dürfen nicht gleichzeitig dasselbe Repository verwenden, auch wenn unterschiedliche Jobs darauf verweisen. Der später gestartete Vorgang wird mit Begründung im Log und in der History bzw. im Prüfbericht übersprungen. Bei einem übersprungenen Test bleibt der vorherige Testnachweis erhalten. Die Sperre gilt bis einschließlich Aufräumen und wird bei Abschluss oder Fehler freigegeben. Die bestehende Schutzlogik für SMB-Mounts gilt ebenfalls. Andere Repositorys werden durch die Repository-Sperre nicht blockiert.
 
+Bei festen Zeitplänen richten sich Überfälligkeit und Reminder nach der Nachweisgültigkeit. Der nächste Cron-Termin verschiebt diese Frist nicht. Ein übersprungener Test erneuert den Nachweis nicht; ein erfolgreicher Test erneuert ihn. Vorhandene Benachrichtigungskanäle und Reminder-Abstände gelten weiter. Ohne bisherigen Testbericht wird kein Überfälligkeits-Reminder versendet.
+
 Verpasste oder übersprungene Kalendertermine werden nicht automatisch nachgeholt. Nutzen Sie **Jetzt testen** oder warten Sie auf den nächsten Termin. Vor- und Nachlaufzeitfenster sind nicht erforderlich.
 
 ### 8.3 Testlevel

@@ -2,7 +2,7 @@
 import json
 import subprocess
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -267,3 +267,75 @@ def test_simultaneous_same_job_starts_do_not_replace_active_process(tmp_path, mo
     for thread in threads: thread.join(timeout=5)
     assert sum(results) == len(launched) == 1
     assert manager.get_state('restore_test_example')['running']
+
+
+@pytest.mark.parametrize("old_interval", [1, 30])
+@pytest.mark.parametrize("seconds_after_expiry, overdue", [(-1, False), (0, True), (1, True)])
+def test_calendar_reminder_due_date_matches_evidence_validity(scheduled_config, monkeypatch, seconds_after_expiry, overdue, old_interval):
+    cfg, _ = scheduled_config
+    key = job_id("flash_local")
+    now = datetime(2026, 9, 17, 12, 0, 0)
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now if tz is None else now.astimezone(tz)
+    monkeypatch.setattr(restore_tests_api, "datetime", Clock)
+    restore_tests_api.update_restore_test_policy(cfg, key, {
+        "mode": "scheduled", "cron": "0 20 1 * *", "validity_days": 7, "interval_days": old_interval,
+    })
+    last = now - timedelta(days=7, seconds=seconds_after_expiry)
+    reports = Path(cfg["RESTORE_TEST_STATUS_DIR"])
+    reports.mkdir()
+    (reports / f"{key}.test").write_text(json.dumps({
+        "test_result": "success", "test_date": last.strftime("%Y-%m-%d %H:%M:%S"),
+    }))
+    row = restore_tests_api.list_restore_test_plan(cfg)["jobs"][0]
+    assert row["next_due_at"] == (last + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    assert row["is_overdue"] is overdue
+    assert row["next_run_at"] == "2026-10-01 20:00:00"
+    assert row["verification_status"] == ("stale" if overdue else "verified")
+
+
+def test_calendar_overdue_reminder_survives_skip_is_throttled_and_stops_after_success(scheduled_config, monkeypatch):
+    import notification_reminder_api
+    cfg, _ = scheduled_config
+    cfg.update(NOTIFY_UNRAID_EVENTS="restore_test_overdue", NOTIFY_EMAIL_EVENTS="",
+               NOTIFY_APPRISE_EVENTS="", NOTIFY_REMINDER_INTERVAL_HOURS="24")
+    key = job_id("flash_local")
+    restore_tests_api.update_restore_test_policy(cfg, key, {
+        "mode": "scheduled", "cron": "0 20 1 * *", "validity_days": 7, "interval_days": 30,
+    })
+    reports = Path(cfg["RESTORE_TEST_STATUS_DIR"])
+    reports.mkdir()
+    report = reports / f"{key}.test"
+    last = datetime.now() - timedelta(days=8)
+    report.write_text(json.dumps({"test_result": "success", "test_date": last.strftime("%Y-%m-%d %H:%M:%S")}))
+    (reports / f"{key}.skip.test").write_text(json.dumps({
+        "test_result": "skipped", "failure_code": "RT_REPO_BUSY", "test_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }))
+    calls = []
+    monkeypatch.setattr("lib.notification_events.notify", lambda **kwargs: calls.append(kwargs["subject"]) or True)
+    first = notification_reminder_api.run_due_notification_reminders(cfg)
+    assert first["sent"] == 1
+    assert calls == ["Borg Backup UI: Restore test overdue"]
+    diagnostic = notification_reminder_api.get_notification_reminder_diagnostics(cfg)["restore_test_overdue"]["items"][0]
+    assert diagnostic["next_due_at"] == (last + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    assert diagnostic["state"] == "overdue_waiting"
+    assert notification_reminder_api.run_due_notification_reminders(cfg)["sent"] == 0
+    report.write_text(json.dumps({"test_result": "success", "test_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}))
+    assert notification_reminder_api.run_due_notification_reminders(cfg)["checked"] == 0
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("result", ["failed", "unavailable"])
+def test_calendar_failure_keeps_existing_reminder_eligibility(scheduled_config, result):
+    cfg, _ = scheduled_config
+    key = job_id("flash_local")
+    restore_tests_api.update_restore_test_policy(cfg, key, {"cron": "0 20 1 * *", "validity_days": 30})
+    reports = Path(cfg["RESTORE_TEST_STATUS_DIR"])
+    reports.mkdir()
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    (reports / f"{key}.test").write_text(json.dumps({"test_result": result, "test_date": stamp}))
+    row = restore_tests_api.list_restore_test_plan(cfg)["jobs"][0]
+    assert row["is_overdue"] is True
+    assert row["next_due_at"] == stamp

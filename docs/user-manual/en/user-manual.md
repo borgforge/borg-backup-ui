@@ -701,6 +701,8 @@ Saving creates or updates the cron entry. Startup reapplies the saved schedules 
 
 **Repository conflicts:** A backup and a restore test cannot run against the same repository simultaneously, including when different jobs refer to that repository. The later operation is skipped with a reason in its log and history/report. The previous test evidence is retained when a test is skipped. The lock lasts through cleanup and is released on completion or failure. Existing SMB mount protection also applies. Other repositories are not blocked by the repository lock.
 
+For calendar schedules, overdue status and reminders follow evidence validity. The next cron start does not postpone this deadline. A skipped test does not renew evidence; a successful test does. Existing notification channels and reminder intervals still apply. No overdue reminder is sent before the first test report exists.
+
 Missed or skipped calendar runs are not automatically retried. Use **Test now** or wait for the next scheduled time; no before/after safety windows are required.
 
 ### 8.3 Test Levels

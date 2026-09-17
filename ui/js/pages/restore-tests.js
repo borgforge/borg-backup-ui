@@ -763,6 +763,7 @@ function rtEvidenceStale(test) {
   if (!policy) return isStaleDate(test.test_date);
   if (policy.mode === 'manual_only' || policy.mode === 'off') return false;
   const timestamp = _rtTs(test);
+  if (policy.cron) return timestamp > 0 && Date.now() >= timestamp + Number(policy.validity_days || 30) * 86400000;
   return timestamp > 0 && Math.floor((Date.now() - timestamp) / 86400000) > Number(policy.validity_days || 30);
 }
 
