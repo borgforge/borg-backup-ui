@@ -1018,6 +1018,13 @@ class BackupJob:
             return "warning"
         return "failed"
 
+    def record_prestart_skip(self, reason: str) -> None:
+        """Persist a resource conflict without entering preparation or stopping services."""
+        self._start_time = time.time()
+        self._skip_reason = reason
+        self._persist_skip_status_once()
+        self._refresh_unraid_dashboard_widget_cache(self._last_status_file, "backup skipped")
+
     def _save_skip_status(self) -> None:
         """Speichert Skip-Läufe als Warning in den normalen Status-Dateien (History sichtbar)."""
         from lib.status import BackupStatus
@@ -1025,7 +1032,9 @@ class BackupJob:
         duration = max(0, int(time.time() - self._start_time))
         reason = self._skip_reason or "Backup was skipped"
         reason_low = reason.lower()
-        if reason_low.startswith("parity operation active"):
+        if reason_low.startswith("resource locked"):
+            reason_code = "resource_lock_unavailable"
+        elif reason_low.startswith("parity operation active"):
             reason_code = "parity_active"
         elif reason_low.startswith("usb is not mounted"):
             reason_code = "usb_not_mounted"

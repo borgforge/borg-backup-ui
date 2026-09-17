@@ -360,6 +360,7 @@ class JobInfo:
     retention_yearly: str = ""
     docker_control: dict = None
     vm_control: dict = None
+    restore_test_cron: str = ""
     restore_test_policy_mode: str = ""
     restore_test_interval_days: int = 30
     restore_test_validity_days: int = 30
@@ -410,6 +411,7 @@ class JobManager:
 
     def __init__(self) -> None:
         self._states: Dict[str, _JobState] = {}
+        self._start_lock = threading.Lock()
         self._lock = threading.Lock()
 
     @classmethod
@@ -422,7 +424,13 @@ class JobManager:
 
     # ── Job starten ──────────────────────────────────────────────────────────
 
-    def start(
+    def start(self, job_key: str, command: List[str], cwd: Path,
+              extra_env: Optional[Dict[str, str]] = None) -> tuple:
+        # Keep the check, process launch and state publication one operation.
+        with self._start_lock:
+            return self._start_locked(job_key, command, cwd, extra_env)
+
+    def _start_locked(
         self,
         job_key: str,
         command: List[str],
@@ -728,6 +736,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
         retention_weekly: str = "",
         retention_monthly: str = "",
         retention_yearly: str = "",
+        restore_test_cron: str = "",
         restore_test_policy_mode: str = "",
         restore_test_interval_days: int = 30,
         restore_test_validity_days: int = 30,
@@ -784,6 +793,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             retention_yearly=str(retention_yearly or "").strip(),
             docker_control=docker_control or default_docker_control,
             vm_control=vm_control or default_vm_control,
+            restore_test_cron=str(restore_test_cron or ""),
             restore_test_policy_mode=str(restore_test_policy_mode or "").strip().lower(),
             restore_test_interval_days=_safe_int(restore_test_interval_days, 30),
             restore_test_validity_days=_safe_int(restore_test_validity_days, 30),
@@ -864,6 +874,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 retention_yearly=str(retention.get("yearly") or "").strip(),
                 docker_control=docker_control,
                 vm_control=vm_control,
+                restore_test_cron=str(rt_policy.get("cron") or ""),
                 restore_test_policy_mode=str(rt_policy.get("mode") or "").strip().lower(),
                 restore_test_interval_days=_safe_int(rt_policy.get("interval_days"), 30),
                 restore_test_validity_days=_safe_int(rt_policy.get("validity_days") or rt_policy.get("interval_days"), 30),
@@ -993,6 +1004,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "repository_name": repository_name,
                 "repo_path": repo_path,
                 "restore_test_policy": {
+                    "cron": info.restore_test_cron,
                     "mode": info.restore_test_policy_mode,
                     "interval_days": info.restore_test_interval_days,
                     "validity_days": info.restore_test_validity_days,

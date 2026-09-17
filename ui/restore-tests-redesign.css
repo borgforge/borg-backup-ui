@@ -37,6 +37,10 @@
 #restore-tests-plan-content,
 #restore-tests-content { overflow-x: auto; }
 #restore-tests-plan-content > .history-table { min-width: 1100px; }
+#restore-tests-plan-content > .history-table th,
+#restore-tests-plan-content > .history-table td { padding-inline: var(--ui-space-2); white-space: nowrap; }
+#restore-tests-plan-content .badge,
+#restore-tests-plan-content .history-loc-chip { white-space: nowrap; }
 #restore-tests-content > .history-table { min-width: 1000px; }
 
 /* Keep actions stable across locales, busy states and save feedback (#523). */
@@ -130,3 +134,16 @@
   .rt-report-card .rt-step-row { grid-template-columns: 1.75rem minmax(0, 1fr); }
   .rt-report-card .rt-step-row > .rt-step-status, .rt-report-card .rt-step-duration { grid-column: 2; justify-self: start; }
 }
+
+/* Restore-test calendar schedules (#493). */
+.rt-plan-dialog { margin: auto; inset: 0; width: min(38rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); padding: 0; border: 1px solid var(--ui-color-border); color: var(--ui-color-text); }
+.rt-plan-dialog::backdrop { background: rgba(0, 0, 0, .5); }
+.rt-plan-dialog:not([open]) { display: none; }
+.rt-plan-dialog > form { width: 100%; overflow: auto; }
+.rt-plan-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-4); }
+.rt-plan-fields label { display: grid; align-content: start; gap: var(--ui-space-2); }
+.rt-plan-fields label[hidden] { display: none; }
+.rt-plan-fields input, .rt-plan-fields select { width: 100%; min-width: 0; }
+.rt-plan-help { margin-top: var(--ui-space-3); color: var(--ui-color-text-subtle); font-size: var(--ui-font-size-sm); }
+.rt-plan-schedule { font-variant-numeric: tabular-nums; }
+@media (max-width: 540px) { .rt-plan-fields { grid-template-columns: 1fr; } }

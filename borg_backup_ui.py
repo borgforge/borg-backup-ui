@@ -935,7 +935,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         elif path == "/api/jobs/log/download":
             self._handle_direct_api(lambda: self._download_activity_log(parsed.query))
         elif path == "/api/restore-tests/log/stream":
-            self._handle_direct_api(lambda: self._handle_sse("restore_test"))
+            self._handle_direct_api(lambda: self._handle_sse(self._restore_test_log_key(parsed.query)))
         elif path == "/api/restore/download":
             self._handle_direct_api(lambda: self._handle_restore_download(parsed))
         elif path == "/api/storage/check/stream":
@@ -1728,6 +1728,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         raw = json.loads(meta_file.read_text(encoding="utf-8"))
         raw["enabled"] = enabled
         meta_file.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        from jobs_api import invalidate_job_discovery_cache
+        invalidate_job_discovery_cache()
+        if (raw.get("restore_test_policy") or {}).get("cron"):
+            from schedule_api import apply_all_schedules
+            try:
+                apply_all_schedules(self.config)
+            except Exception as exc:
+                raise RuntimeError(f"Job saved but cron could not be applied: {exc}") from exc
         return {"saved": True, "job_key": job_key, "enabled": enabled}
 
     def _delete_job(self) -> dict:
@@ -2190,7 +2198,19 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_rt_running(self) -> dict:
         from jobs_api import JobManager
-        return JobManager.get().get_state("restore_test")
+        states = JobManager.get().get_all_states()
+        runs = [{**state, "run_key": key} for key, state in states.items()
+                if key == "restore_test" or key.startswith("restore_test_")]
+        runs.sort(key=lambda row: (bool(row.get("running")), row.get("start_time", "")), reverse=True)
+        return {**(runs[0] if runs else {"running": False}), "runs": runs}
+
+    def _restore_test_log_key(self, query: str) -> str:
+        requested = (parse_qs(query).get("job") or [""])[0]
+        if requested:
+            if requested != "restore_test" and not requested.startswith("restore_test_"):
+                raise ValueError("Invalid restore test run")
+            return requested
+        return self._get_rt_running().get("run_key", "restore_test")
 
     def _get_wizard_new_job_id(self) -> dict:
         from job_identity import new_job_id
@@ -2653,6 +2673,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     continue
                 policy = row.get("policy") if isinstance(row.get("policy"), dict) else {}
                 mode = str(policy.get("mode") or "").strip().lower()
+                if policy.get("cron"):
+                    continue  # Fixed schedules have their own cron trigger.
                 if mode != "scheduled":
                     skipped.append({"job_key": str(row.get("job_key") or ""), "reason": f"mode={mode or 'unknown'}"})
                     continue
@@ -2699,8 +2721,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             actor = "scheduler"
         if not actor and source == "api-token":
             actor = "api-token"
+        run_key = f"restore_test_{clean_job_keys[0]}" if len(clean_job_keys) == 1 else "restore_test"
         ok, err = JobManager.get().start(
-            "restore_test",
+            run_key,
             cmd,
             backup_scripts_dir,
             extra_env={
@@ -2718,7 +2741,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     "restore_test_already_running",
                 )
             raise RuntimeError(err)
-        state = JobManager.get().get_state("restore_test")
+        state = JobManager.get().get_state(run_key)
         emit_lifecycle(
             "RESTORE_TEST",
             "requested",
@@ -2735,6 +2758,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "started": True,
             "scheduled": scheduled,
             "auto_selected": auto_selected,
+            "run_key": run_key,
             "selected_jobs": clean_job_keys,
             "run_id": state.get("run_id", ""),
             "skipped_jobs": skipped,
@@ -2750,6 +2774,15 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         job_key = str(body.get("job_key", "")).strip()
         if not job_key:
             raise ValueError("job_key is required")
+        scheduled = bool(body.get("scheduled", False))
+        if scheduled:
+            from schedule_api import validate_restore_test_cron
+            jobs = list_jobs(self.config, {})
+            row = next((j for j in jobs if j.get("key") == job_key), None)
+            policy = row.get("restore_test_policy") or {} if row else {}
+            if not row or not row.get("enabled", True) or policy.get("mode") != "scheduled" or not policy.get("cron"):
+                return {"started": False, "reason": "schedule_disabled", "scheduled": True}
+            validate_restore_test_cron(policy["cron"])
         requested_level = str(body.get("level", "")).strip()
         effective_level = requested_level
         if not effective_level:
@@ -2761,7 +2794,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         run_body = {
             "job_keys": [job_key],
             "location": "all",
-            "scheduled": False,
+            "scheduled": scheduled,
             "smb_auto_mount": bool(body.get("smb_auto_mount", True)),
             "level": effective_level,
         }

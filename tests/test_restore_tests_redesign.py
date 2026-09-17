@@ -23,7 +23,7 @@ def test_restore_tests_keeps_sidebar_modes_and_actions() -> None:
     ):
         assert f'id="{element_id}"' in html
     for contract in (
-        "data-rt-sidebar-job", 'data-rt-plan-action="save"',
+        "data-rt-sidebar-job", 'data-rt-plan-action="edit"',
         'data-rt-plan-action="run"', "/api/restore-tests/policy",
         "/api/restore-tests/run-job", "/api/restore-tests/log/stream",
         "renderRTReportRow", "rtStepChecksumsBlock", "rtStepEntriesBlock",

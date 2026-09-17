@@ -680,26 +680,30 @@ The page manages:
 
 - restore test policies per job
 - test levels
-- intervals and due state
+- execution schedules and evidence validity
 - manual test starts
 - due scheduled tests
 - verification reports
 
 ### 8.2 Planning & Policy Tab
 
-**Planning & Policy** shows jobs and their restore test rules.
+Choose **Edit plan** for a job to configure its policy, test level and evidence validity.
 
-Fields and columns:
+- **Scheduled:** Choose a daily, weekly or monthly time. Monthly plans use days 1–28. Times use the Unraid server's local timezone.
+- **Manual / Off:** Disable automatic execution. **Test now** remains available for enabled backup jobs.
+- **Evidence valid (days):** How long a successful scheduled test remains current. This is separate from the execution schedule.
+- **Next test:** The next calendar start; a manual test does not shift it.
+- **Automatic:** **Active** means the saved trigger is actually installed in cron. **Inactive** means installation failed or the entry is missing; save the plan again to retry.
 
-- **Job:** Backup job.
-- **Location:** Location.
-- **Policy:** Scheduled, manual only, or not scheduled.
-- **Interval (days):** Distance between tests.
-- **Level:** Test depth.
-- **Last test:** Time of the last test.
-- **Next test:** Next due time.
-- **Scheduler:** Whether the test is automatically due.
-- **Actions:** Save or test now.
+Saving creates or updates the cron entry. Startup reapplies the saved schedules without duplicating entries or replacing unrelated cron jobs. If cron installation fails, the saved policy is retained and the error is displayed.
+
+**Existing installations:** Existing global restore-test cron times, job intervals, levels and reports are preserved. These are marked **Interval active**. Jobs that previously had a scheduled policy but no automatic trigger show **No schedule**. Choose a time to enable automatic execution; the update does not choose one for you. After switching a job to a fixed schedule, the old interval no longer delays its tests.
+
+**Repository conflicts:** A backup and a restore test cannot run against the same repository simultaneously, including when different jobs refer to that repository. The later operation is skipped with a reason in its log and history/report. The previous test evidence is retained when a test is skipped. The lock lasts through cleanup and is released on completion or failure. Existing SMB mount protection also applies. Other repositories are not blocked by the repository lock.
+
+For calendar schedules, overdue status and reminders follow evidence validity. The next cron start does not postpone this deadline. A skipped test does not renew evidence; a successful test does. Existing notification channels and reminder intervals still apply. No overdue reminder is sent before the first test report exists.
+
+Missed or skipped calendar runs are not automatically retried. Use **Test now** or wait for the next scheduled time; no before/after safety windows are required.
 
 ### 8.3 Test Levels
 
@@ -711,17 +715,9 @@ The application shows restore test levels as `L1`, `L2`, or `L3`.
 
 > **Note:** Higher test levels improve confidence but can take significantly longer depending on repository and data volume.
 
-### 8.4 Run Due Tests
+### 8.4 Start Tests
 
-1. Open **Restore Tests**.
-2. Review the plan overview.
-3. Click **Run due tests now**.
-4. Watch the live protocol.
-5. Review the reports afterwards.
-
-> **Note:** This action starts only due scheduled tests, not every job automatically.
-
-If a restore test is already running, Borg Backup UI does not start a second parallel run. Instead, it shows a conflict message and opens the existing live log.
+Use **Test now** next to a job to start it manually with its configured test level. Watch the live log and review **Test reports** afterwards. Fixed schedules run automatically through cron. If an existing global interval schedule is active, **Run due interval tests** remains available for its due jobs. Repeated manual starts of the same job open the existing run; repository conflicts are recorded as skipped.
 
 ### 8.5 Reports
 
@@ -873,7 +869,7 @@ The **Restore** section contains two subsections:
 
 #### Restore Tests
 
-This area manages defaults for restore tests, such as default test level, interval, runtime limits, and verification parameters.
+The **Existing batch and interval tests** section contains global defaults for test level, interval and location filtering. Saved job settings take precedence. Configure fixed times, test level and evidence validity per job under **Restore Tests → Edit plan**. The remaining settings still control global runtime limits, sampling and verification parameters.
 
 #### Browse & Restore
 
@@ -1021,7 +1017,7 @@ Subsections:
 - **Notification reminders:** Diagnostics for backup and restore test overdue notifications.
 - **Per-repository passphrases:** Overview of repository-specific passphrase assignments.
 
-Reminder diagnostics show when a run was expected, when it becomes overdue, when it was last sent, and when the next reminder is allowed. This view does not send notifications; it is diagnostic only.
+Reminder diagnostics show when a run was expected, when it becomes overdue, when it was last sent, and when the next reminder is allowed. For restore tests, **Next test** (cron time) and **Overdue after** (evidence deadline) are shown separately. Without a saved schedule, the next-test field reads **No schedule**. This view does not send notifications; it is diagnostic only.
 
 ### 9.12 Factory Reset
 

@@ -1515,7 +1515,7 @@ function _renderReminderTableRow(item) {
   const tone = state === 'overdue_ready' ? 'warn' : (state === 'overdue_waiting' ? 'warning' : (state === 'unsupported' || state === 'missing_due' || state === 'missing_status' ? 'error' : 'success'));
   const type = String(item?.type || '');
   const expected = type === 'backup_overdue' ? item.expected_run : item.next_due_at;
-  const nextScheduled = type === 'backup_overdue' ? item.next_scheduled_run : '';
+  const nextScheduled = type === 'backup_overdue' ? item.next_scheduled_run : item.next_run_at;
   const overdueAfter = type === 'backup_overdue' ? item.overdue_after : item.next_due_at;
   const latest = type === 'backup_overdue'
     ? (item.latest_status_at || item.latest_status)
@@ -1534,7 +1534,10 @@ function _renderReminderTableRow(item) {
         [settingsT('health.overdueAfter'), overdueAfterFormatted],
         ...(showNextScheduled ? [[settingsT('health.nextScheduledRun'), nextScheduledFormatted]] : []),
       ]
-    : [[settingsT('health.nextDueAt'), expectedFormatted]];
+    : [
+        [settingsT('health.nextRestoreTest'), nextScheduledFormatted || settingsT('health.noRestoreSchedule')],
+        [settingsT('health.overdueAfter'), overdueAfterFormatted],
+      ];
   const reminderRows = [
     [settingsT('health.sentAt'), sentFormatted],
     ...(item?.next_allowed_at ? [[settingsT('health.nextAllowedAt'), nextAllowedFormatted]] : []),
@@ -5722,20 +5725,21 @@ function renderSettingsRestoreTests(rt) {
     `<option value="${v}" ${(rt.RESTORE_TEST_LEVEL||'2')===v?'selected':''}>${v}</option>`
   ).join('');
   const locOpts = ['local','usb','smb','storagebox','all'].map(v =>
-    `<option value="${v}" ${(rt.RESTORE_TEST_LOCATION||'local')===v?'selected':''}>${locLabel(v)}</option>`
+    `<option value="${v}" ${(rt.RESTORE_TEST_LOCATION||'local')===v?'selected':''}>${v === 'all' ? settingsT('forms.allRestoreLocations') : locLabel(v)}</option>`
   ).join('');
   return settingsCard(settingsT('forms.restoreTests'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>`,
     `<div class="settings-body">
-      <h4 class="settings-subtitle">${settingsT('forms.basic')}</h4>
+      <h4 class="settings-subtitle">${settingsT('forms.legacyRestoreDefaultsTitle')}</h4>
+      <p class="muted">${settingsT('forms.legacyRestoreDefaultsHelp')}</p>
       <div class="two-col">
         <div class="form-group">
           <label class="form-label">${settingsT('forms.defaultTestLevel')}</label>
           <select class="form-select" data-key="RESTORE_TEST_LEVEL" onchange="markSettingsDirty()">${levelOpts}</select>
         </div>
-        ${fnum('RESTORE_TEST_INTERVAL_DAYS', settingsT('forms.intervalDays'), rt.RESTORE_TEST_INTERVAL_DAYS || '30')}
+        ${fnum('RESTORE_TEST_INTERVAL_DAYS', settingsT('forms.legacyRestoreInterval'), rt.RESTORE_TEST_INTERVAL_DAYS || '30')}
         <div class="form-group">
-          <label class="form-label">${settingsT('forms.defaultLocation')}</label>
+          <label class="form-label">${settingsT('forms.restoreBatchLocation')}</label>
           <select class="form-select" data-key="RESTORE_TEST_LOCATION" onchange="markSettingsDirty()">${locOpts}</select>
         </div>
       </div>
