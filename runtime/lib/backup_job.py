@@ -336,6 +336,7 @@ class BackupJob:
         logger.info("  Retention:   %s", retention_description(policy))
         logger.info("  Log-Dir:     %s (%d days)", cfg.log_dir, cfg.log_retention_days)
         logger.info("  Cache:       %s", cfg.borg_cache_dir)
+        logger.info("  Borg security: %s", os.environ.get("BORG_SECURITY_DIR", ""))
         if self.mail_config and self.mail_config.recipient:
             mail_events = "backup_failed"
             if self.notification_config:

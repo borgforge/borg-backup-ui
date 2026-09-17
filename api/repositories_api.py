@@ -831,27 +831,21 @@ def _repo_env(
     env = dict(os.environ)
     env["LC_ALL"] = "C"
     env["LANG"] = "C"
-    # Never inherit this safety acknowledgement globally. Borg may access an
-    # unknown unencrypted repository only when the canonical repository object
-    # explicitly identifies it as unencrypted.
-    env.pop("BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK", None)
     # Managed storage paths may legitimately change, for example when an SMB
     # profile receives a generated mount path. The repository identity still
     # has to match Borg's cache; this only acknowledges that changed location.
     env.pop("BORG_RELOCATED_REPO_ACCESS_IS_OK", None)
     env["BORG_RELOCATED_REPO_ACCESS_IS_OK"] = "yes"
-    if str(encryption or "").strip().lower() == "none":
-        env["BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK"] = "yes"
     if passphrase_file is not None:
         env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(passphrase_file))}"
     from borg_ssh import configure_borg_ssh
 
     configure_borg_ssh(env, storage)
-    if persistent_keys:
-        from borg_key_store import apply_borg_key_environment
+    from borg_environment import apply_borg_environment
 
-        env = apply_borg_key_environment(env, config or {})
-    return env
+    return apply_borg_environment(
+        env, config or {}, encryption=encryption, persistent_keys=persistent_keys,
+    )
 
 
 def _mask_repo_output(text: str, passphrase: str = "") -> str:
@@ -939,6 +933,7 @@ def _borg_info(
 
 
 def _borg_info_with_default_keys(
+    config: dict,
     storage: dict[str, Any],
     repo_path: str,
     passphrase_file: Path | None,
@@ -953,6 +948,7 @@ def _borg_info_with_default_keys(
         env=_repo_env(
             storage,
             passphrase_file,
+            config,
             persistent_keys=False,
             encryption=encryption,
         ),
@@ -2546,7 +2542,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
                     raise
                 try:
                     legacy_payload = _borg_info_with_default_keys(
-                        storage, repo_path, passphrase_file, encryption
+                        config, storage, repo_path, passphrase_file, encryption
                     )
                     legacy_fields = _borg_info_fields(legacy_payload)
                     from borg_key_store import import_default_key_if_present

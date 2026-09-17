@@ -445,10 +445,11 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
         ensure_ascii=False,
     )
     env.setdefault("STATUS_DIR_OVERRIDE", env.get("STATUS_DIR", "/mnt/user/backup-status"))
-    from borg_key_store import apply_borg_key_environment
+    from borg_environment import UNKNOWN_UNENCRYPTED, apply_borg_environment
 
-    env = apply_borg_key_environment(
-        env, {"BACKUP_SCRIPTS_DIR": str(data_root)}
+    env = apply_borg_environment(
+        env, {"BACKUP_SCRIPTS_DIR": str(data_root)},
+        encryption=repository_context.get("encryption", ""),
     )
 
     repo = env.get("BORG_REPO", "")
@@ -465,6 +466,10 @@ def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir:
     os.environ["BORG_REPO"] = env["BORG_REPO"]
     os.environ["BORG_CACHE_DIR"] = env["BORG_CACHE_DIR"]
     os.environ["BORG_KEYS_DIR"] = env["BORG_KEYS_DIR"]
+    os.environ["BORG_SECURITY_DIR"] = env["BORG_SECURITY_DIR"]
+    os.environ.pop(UNKNOWN_UNENCRYPTED, None)
+    if UNKNOWN_UNENCRYPTED in env:
+        os.environ[UNKNOWN_UNENCRYPTED] = env[UNKNOWN_UNENCRYPTED]
     os.environ["BORG_SCRIPT_DIR"] = str(backup_scripts_dir)
     os.environ["LC_ALL"] = "C"
     os.environ["LANG"] = "C"

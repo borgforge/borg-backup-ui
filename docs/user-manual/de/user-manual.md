@@ -1282,6 +1282,16 @@ Wenn die Rechte nach dem Neustart abweichen, dokumentieren Sie Unraid-Version
 und beide Ausgaben für die weitere Prüfung. Die Wiederherstellung durch Neustart
 ist hier für Unraid 7.4.0 Beta 2 bestätigt.
 
+### 13.7 Unverschlüsseltes Backup scheitert nach einem Neustart (#498)
+
+Ältere Versionen speicherten Borgs Repository-Sicherheitsstatus unter `/root/.config/borg/security`. Dieses Verzeichnis geht beim Unraid-Neustart verloren. Die Meldung `Attempting to access a previously unknown unencrypted repository` bedeutet in diesem Fall nicht, dass die Archive fehlen. Bis zur Installation des Fixes hilft **Repositories > Info aktualisieren** vor dem nächsten Backup.
+
+Der Fix speichert den Sicherheitsstatus dauerhaft unter `borg-security` im konfigurierten Plugin-Verzeichnis, standardmäßig `/boot/config/borg-backup/borg-security`. Backup, Wartung, Browse & Restore und Restore-Tests verwenden denselben Pfad. Der Cache und die separat gespeicherten Borg-Schlüssel behalten ihre bisherigen Pfade.
+
+Beim ersten Start übernimmt `borg_security_v1` vorhandene Sicherheitsdaten einschließlich Manifest- und Nonce-Stand. Die Migration sichert die Daten unter `config/migration-backups`, lässt die alte Kopie bestehen und protokolliert die Aktionen in `config/migrations.log.jsonl`. Bei unterschiedlichen Inhalten desselben Eintrags stoppt sie, ohne eine Kopie zu überschreiben. Prüfen Sie dann **Systemstatus & Migration** und den gemeldeten Pfad; löschen Sie keinen der Sicherheitsstände auf Verdacht.
+
+Fehlt der alte Status bereits, kann der nächste Zugriff auf ein ausdrücklich als unverschlüsselt konfiguriertes Repository ihn neu anlegen. Verlorene frühere Sicherheitsinformationen lassen sich dadurch nicht rekonstruieren. Einträge für verschlüsselte Repositories werden ebenfalls dauerhaft gespeichert; die vorhandenen Borg-Sicherheitsprüfungen bleiben aktiv. Im Backup-Log zeigt `Borg security:` den verwendeten Pfad.
+
 ## 14. FAQ
 
 ### Muss ich BorgBackup kennen?
