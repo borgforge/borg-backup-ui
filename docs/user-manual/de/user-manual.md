@@ -690,14 +690,14 @@ Die Seite verwaltet:
 Öffnen Sie **Plan bearbeiten** bei einem Job, um Policy, Testlevel und Nachweisgültigkeit festzulegen.
 
 - **Geplant:** Tägliche, wöchentliche oder monatliche Ausführung mit Uhrzeit. Monatliche Pläne verwenden die Tage 1–28. Es gilt die lokale Zeitzone des Unraid-Servers.
-- **Nur manuell / Nicht geplant:** Deaktiviert die automatische Ausführung. **Jetzt testen** bleibt für aktivierte Backup-Jobs verfügbar.
+- **Manuell / Aus:** Deaktiviert die automatische Ausführung. **Jetzt testen** bleibt für aktivierte Backup-Jobs verfügbar.
 - **Nachweis gültig (Tage):** Wie lange ein erfolgreicher geplanter Test als aktuell gilt. Diese Einstellung ist vom Ausführungszeitplan getrennt.
 - **Nächster Test:** Nächster Kalendertermin; ein manueller Test verschiebt ihn nicht.
-- **Scheduler:** **Aktiv** bedeutet, dass der gespeicherte Cron-Aufruf tatsächlich eingerichtet ist. Bei **Cron nicht aktiv** ist die Einrichtung fehlgeschlagen oder der Eintrag fehlt; speichern Sie den Plan erneut.
+- **Automatik:** **Aktiv** bedeutet, dass der gespeicherte Cron-Aufruf tatsächlich eingerichtet ist. Bei **Nicht aktiv** ist die Einrichtung fehlgeschlagen oder der Eintrag fehlt; speichern Sie den Plan erneut.
 
 Beim Speichern wird der Cron-Eintrag erstellt oder aktualisiert. Beim Start werden gespeicherte Zeitpläne ohne doppelte Einträge und unter Beibehaltung fremder Cron-Jobs wieder eingerichtet. Schlägt die Cron-Einrichtung fehl, bleibt die Policy gespeichert und der Fehler wird angezeigt.
 
-**Bestehende Installationen:** Vorhandene globale Restore-Test-Cron-Zeiten, Jobintervalle, Testlevel und Berichte bleiben erhalten. Sie erscheinen als **Bisheriger Plan aktiv**. Jobs mit einer bisherigen geplanten Policy ohne automatischen Aufruf zeigen **Zeitplan festlegen**. Wählen Sie eine Uhrzeit, um die automatische Ausführung einzurichten; das Update legt keine Zeit für Sie fest. Nach dem Wechsel auf einen festen Zeitplan verzögert das alte Intervall die Tests nicht mehr.
+**Bestehende Installationen:** Vorhandene globale Restore-Test-Cron-Zeiten, Jobintervalle, Testlevel und Berichte bleiben erhalten. Sie erscheinen als **Intervall aktiv**. Jobs mit einer bisherigen geplanten Policy ohne automatischen Aufruf zeigen **Plan fehlt**. Wählen Sie eine Uhrzeit, um die automatische Ausführung einzurichten; das Update legt keine Zeit für Sie fest. Nach dem Wechsel auf einen festen Zeitplan verzögert das alte Intervall die Tests nicht mehr.
 
 **Repository-Konflikte:** Backup und Restore-Test dürfen nicht gleichzeitig dasselbe Repository verwenden, auch wenn unterschiedliche Jobs darauf verweisen. Der später gestartete Vorgang wird mit Begründung im Log und in der History bzw. im Prüfbericht übersprungen. Bei einem übersprungenen Test bleibt der vorherige Testnachweis erhalten. Die Sperre gilt bis einschließlich Aufräumen und wird bei Abschluss oder Fehler freigegeben. Die bestehende Schutzlogik für SMB-Mounts gilt ebenfalls. Andere Repositorys werden durch die Repository-Sperre nicht blockiert.
 

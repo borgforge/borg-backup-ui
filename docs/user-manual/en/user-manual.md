@@ -690,14 +690,14 @@ The page manages:
 Choose **Edit plan** for a job to configure its policy, test level and evidence validity.
 
 - **Scheduled:** Choose a daily, weekly or monthly time. Monthly plans use days 1–28. Times use the Unraid server's local timezone.
-- **Manual only / Off:** Disable automatic execution. **Test now** remains available for enabled backup jobs.
+- **Manual / Off:** Disable automatic execution. **Test now** remains available for enabled backup jobs.
 - **Evidence valid (days):** How long a successful scheduled test remains current. This is separate from the execution schedule.
 - **Next test:** The next calendar start; a manual test does not shift it.
-- **Scheduler:** **Active** means the saved trigger is actually installed in cron. **Cron not active** means installation failed or the entry is missing; save the plan again to retry.
+- **Automatic:** **Active** means the saved trigger is actually installed in cron. **Inactive** means installation failed or the entry is missing; save the plan again to retry.
 
 Saving creates or updates the cron entry. Startup reapplies the saved schedules without duplicating entries or replacing unrelated cron jobs. If cron installation fails, the saved policy is retained and the error is displayed.
 
-**Existing installations:** Existing global restore-test cron times, job intervals, levels and reports are preserved. These are marked **Existing schedule active**. Jobs that previously had a scheduled policy but no automatic trigger show **Set a schedule**. Choose a time to enable automatic execution; the update does not choose one for you. After switching a job to a fixed schedule, the old interval no longer delays its tests.
+**Existing installations:** Existing global restore-test cron times, job intervals, levels and reports are preserved. These are marked **Interval active**. Jobs that previously had a scheduled policy but no automatic trigger show **No schedule**. Choose a time to enable automatic execution; the update does not choose one for you. After switching a job to a fixed schedule, the old interval no longer delays its tests.
 
 **Repository conflicts:** A backup and a restore test cannot run against the same repository simultaneously, including when different jobs refer to that repository. The later operation is skipped with a reason in its log and history/report. The previous test evidence is retained when a test is skipped. The lock lasts through cleanup and is released on completion or failure. Existing SMB mount protection also applies. Other repositories are not blocked by the repository lock.
 

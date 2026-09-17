@@ -520,7 +520,7 @@ function renderRestorePlan(plan) {
       : (state === 'legacy' ? restoreTestsT('legacySchedule', { days: p.interval_days, cron: j.legacy_cron }) : '—');
     return `<tr>
       <td>${escHtml(j.name || j.display_name || j.job_key)}</td>
-      <td><span class="history-loc-chip ${(j.location || '').toLowerCase()}">${escHtml(restoreTestsLocationLabel(j.location || ''))}</span></td>
+      <td><span class="history-loc-chip ${(j.location || '').toLowerCase()}" title="${escHtml(restoreTestsLocationLabel(j.location || ''))}">${escHtml(String(j.location || '').toLowerCase() === 'usb' ? 'USB' : restoreTestsLocationLabel(j.location || ''))}</span></td>
       <td>${escHtml(restoreTestsT(mode === 'manual_only' ? 'manualOnly' : mode))}</td>
       <td class="rt-plan-schedule">${escHtml(schedule)}</td>
       <td>L${Number(p.level || 2)}</td>
