@@ -398,6 +398,7 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
     context = resolve_job_repository_context(config, job_key)
     return {
         "repo": context["repository_path"],
+        "encryption": context.get("encryption", ""),
         "passphrase_file": context["passphrase_ref"] or None,
         "repository_key": context["repository_key"],
         "storage_key": context["storage_key"],
@@ -406,21 +407,21 @@ def _get_job_repo_info(config: dict, job_key: str) -> dict:
     }
 
 
-def _borg_env(config: dict, passphrase_file: str | None) -> dict:
-    from borg_key_store import apply_borg_key_environment
+def _borg_env(config: dict, passphrase_file: str | None, *, encryption: str = "") -> dict:
+    from borg_environment import apply_borg_environment
 
     env = dict(os.environ)
     if passphrase_file:
         pass_path = Path(passphrase_file)
         if pass_path.exists():
             env["BORG_PASSCOMMAND"] = f"cat {shlex.quote(str(pass_path))}"
-    return apply_borg_key_environment(env, config)
+    return apply_borg_environment(env, config, encryption=encryption)
 
 
 def _repository_borg_env(config: dict, info: dict) -> dict:
     from borg_ssh import configure_borg_ssh
 
-    env = _borg_env(config, info["passphrase_file"])
+    env = _borg_env(config, info["passphrase_file"], encryption=info.get("encryption", ""))
     configure_borg_ssh(env, info.get("storage"), str(info["repo"] or ""))
     return env
 

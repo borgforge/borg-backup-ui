@@ -141,7 +141,7 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
     end = start + per_page
 
     return {
-        "jobs": [{"job_id": job.key, "name": job.name or job.display_name} for job in jobs.values()],
+        "jobs": [{"job_id": job.key, "name": job.name or job.display_name, "location": job.location} for job in jobs.values()],
         "entries": entries[start:end],
         "total": total,
         "page": page,

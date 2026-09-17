@@ -4,6 +4,8 @@ import json
 import shlex
 import subprocess
 import sys
+import os
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 API_ROOT = ROOT / "api"
@@ -13,6 +15,12 @@ if str(API_ROOT) not in sys.path:
 import wizard_runner  # noqa: E402
 from repositories_api import write_repository_store  # noqa: E402
 from storage_objects_api import write_storage_store  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def isolated_worker_environment(monkeypatch):
+    # Worker configuration belongs to its subprocess, not subsequent tests.
+    monkeypatch.setattr(os, "environ", dict(os.environ))
 
 
 def test_standalone_runner_loads_shared_retention_from_any_directory(tmp_path: Path):

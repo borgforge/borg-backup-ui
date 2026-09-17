@@ -120,7 +120,8 @@ def test_restore_runner_tests_unencrypted_repository_without_passphrase(tmp_path
     repository.mkdir()
     passphrases = []
 
-    def fake_env(passphrase, _storage, _repository):
+    def fake_env(passphrase, _storage, _repository, *, encryption):
+        assert encryption == "none"
         passphrases.append(passphrase)
         return {}
 
@@ -310,7 +311,7 @@ def test_restore_probe_uses_size_and_regular_file_limits(tmp_path, monkeypatch, 
         else:
             raise AssertionError(args)
         return SimpleNamespace(returncode=0, stdout=output, stderr="")
-    monkeypatch.setattr(instance, "_env", lambda *_args: {})
+    monkeypatch.setattr(instance, "_env", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(instance, "_borg", fake_borg)
     monkeypatch.setattr(instance, "_write", lambda *args, **kwargs: results.append((args, kwargs)))
     result = instance.test_repo({"job_key": job_id("photos_local"), "type": "photos", "name": "Renamed job",

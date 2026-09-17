@@ -320,8 +320,8 @@ class RestoreTest:
         except Exception as exc:
             self.log(f"  notification event failed: {exc}")
 
-    def _env(self, passphrase: str | None, storage: dict | None = None, repository: str = "") -> dict:
-        from borg_key_store import apply_borg_key_environment
+    def _env(self, passphrase: str | None, storage: dict | None = None, repository: str = "", *, encryption: str = "") -> dict:
+        from borg_environment import apply_borg_environment
         from borg_ssh import configure_borg_ssh
 
         env = dict(os.environ)
@@ -329,7 +329,9 @@ class RestoreTest:
         env.pop("BORG_PASSCOMMAND", None)
         if passphrase is not None:
             env["BORG_PASSPHRASE"] = passphrase
-        env = apply_borg_key_environment(env, self.conf)
+        config = dict(self.conf)
+        config.setdefault("BACKUP_SCRIPTS_DIR", str(_repository_data_root()))
+        env = apply_borg_environment(env, config, encryption=encryption)
         configure_borg_ssh(env, storage, repository)
         return env
 
@@ -626,7 +628,7 @@ class RestoreTest:
                     self.log(f"  ERROR: {exc}")
                     return 1
 
-            env = self._env(passphrase, repo.get("storage"), path)
+            env = self._env(passphrase, repo.get("storage"), path, encryption=encryption)
             t0 = time.time()
 
             self.log("Level 1: Repository integrity")

@@ -48,3 +48,18 @@ def test_location_filter_keeps_complete_sidebar_counts(tmp_path: Path) -> None:
     assert result["total"] == 1
     assert result["location_total"] == 3
     assert result["location_counts"] == {"storagebox": 1, "usb": 1, "smb": 0, "local": 1}
+
+
+def test_same_name_job_filters_include_location_and_keep_id_selection(tmp_path: Path) -> None:
+    locations = ("local", "usb", "smb", "storagebox")
+    for location in locations:
+        _write_status(tmp_path, "2026-09-17 10:00:00", "appdata", location)
+    config = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "STATUS_DIR": str(tmp_path)}
+    expected = {
+        job_id("appdata_" + location): ("appdata", location) for location in locations
+    }
+
+    for selected in ("", *expected):
+        result = get_history_data(config, {"job_key": selected})
+        assert {job["job_id"]: (job["name"], job["location"]) for job in result["jobs"]} == expected
+        assert {entry["job_id"] for entry in result["entries"]} == ({selected} if selected else set(expected))

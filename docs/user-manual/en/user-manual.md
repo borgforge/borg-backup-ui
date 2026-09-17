@@ -1274,6 +1274,16 @@ set every directory to `755` or use recursive `chmod`. If permissions differ aft
 reboot, record the Unraid version and both captures for investigation. Reboot
 recovery is confirmed here for Unraid 7.4.0 Beta 2.
 
+### 13.7 Unencrypted Backup Fails After Reboot (#498)
+
+Older versions stored Borg's repository security state under `/root/.config/borg/security`. This directory disappears after an Unraid reboot. In this case, `Attempting to access a previously unknown unencrypted repository` does not mean the archives are missing. Until the fix is installed, use **Repositories > Refresh info** before the next backup.
+
+The fix persists this state in `borg-security` below the configured plugin configuration root, normally `/boot/config/borg-backup/borg-security`. Backup, maintenance, Browse & Restore and restore tests share this path. The cache and separately stored Borg keys retain their existing locations.
+
+On the first start, `borg_security_v1` adopts existing records, including manifest and nonce state. It saves a snapshot under `config/migration-backups`, preserves the original files and records its actions in `config/migrations.log.jsonl`. Different contents for the same record stop the migration without overwriting either copy. Check **System Status & Migration** and the reported path; do not delete security records to bypass the conflict.
+
+If the old state is already missing, the next access to an explicitly unencrypted managed repository can initialize it. This cannot reconstruct lost historical security information. Encrypted repository records are persisted too; existing Borg security checks remain active. The backup log shows the selected path next to `Borg security:`.
+
 ## 14. FAQ
 
 ### Do I Need BorgBackup Experience?

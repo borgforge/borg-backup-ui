@@ -1,5 +1,15 @@
 # Changelog
 
+## Pending - Persistent Borg security state (#498)
+
+- Share a canonical BORG_SECURITY_DIR below the configured plugin configuration root across backups, repository operations, maintenance, restore and restore tests.
+- Adopt existing Borg security records through the audited borg_security_v1 startup migration, preserving snapshots, nonce/manifest records and existing destination files. Resume interrupted copies from the snapshot; block conflicting state instead of overwriting it.
+- Recover missing state for explicitly unencrypted managed repositories without a manual info refresh; remove inherited blanket acknowledgements. Log the active security path in backup logs.
+
+## Pending - History job filter locations (#529)
+
+- Include job locations in History filter metadata and display localized name/location labels. Preserve UUID-based filtering and selection during refresh and language changes.
+
 ## Pending - Cache pool restore destinations (#527)
 
 - Accept explicitly configured /mnt/cache roots and subfolders consistently in settings, configuration validation and restore runtime. Keep the default and existing target roots unchanged, retain destination access and containment checks, and document cache-pool setup in both manuals.

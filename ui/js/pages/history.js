@@ -32,11 +32,6 @@ async function refreshHistory() {
     const res  = await fetch('/api/history?' + params.toString(), { credentials: 'include' });
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(apiErrorMessage(data, res.status));
-    const filter = document.getElementById('history-filter-type');
-    if (filter && Array.isArray(data.jobs)) {
-      filter.innerHTML = `<option value="">${escHtml(historyT('allTypes'))}</option>` + data.jobs.map((job) => `<option value="${escHtml(job.job_id)}">${escHtml(job.name)}</option>`).join('');
-      filter.value = type;
-    }
     historyState.data   = data;
     historyState.loaded = true;
     renderHistory(data);
@@ -55,6 +50,7 @@ function applyHistoryFilters() {
 }
 
 function renderHistory(data) {
+  renderHistoryJobFilter(data.jobs);
   renderHistoryLocationSidebar(data);
   const countEl = document.getElementById('history-count');
   if (countEl) countEl.textContent = historyT('entryCount', { count: data.total });
@@ -98,6 +94,14 @@ function renderHistory(data) {
       <button class="btn btn-secondary btn-sm" data-history-action="page-prev" ${prevDisabled}>${escHtml(historyT('previous'))}</button>
       <button class="btn btn-secondary btn-sm" data-history-action="page-next" ${nextDisabled}>${escHtml(historyT('next'))}</button>
     </div>`;
+}
+
+function renderHistoryJobFilter(jobs) {
+  const filter = document.getElementById('history-filter-type');
+  if (!filter || !Array.isArray(jobs)) return;
+  const selected = filter.value;
+  filter.innerHTML = `<option value="">${escHtml(historyT('allTypes'))}</option>` + jobs.map((job) => `<option value="${escHtml(job.job_id)}">${escHtml(job.name)} – ${escHtml(historyLocationLabel(job.location))}</option>`).join('');
+  filter.value = selected;
 }
 
 function historyLocationDetail(location) {
