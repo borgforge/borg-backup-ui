@@ -1,5 +1,12 @@
 # Changelog
 
+## Pending - Restore-test calendar schedules and repository exclusion (#493)
+
+- Store optional per-job cron expressions in restore_test_policy and render authenticated per-job triggers alongside existing backup/global restore schedules. Preserve legacy intervals and existing execution times without inventing an upgrade default. Expose installed-trigger status and next start separately from verification freshness.
+- Use configured levels/intervals in legacy scheduled batches and bypass interval gating for calendar runs. Track individual restore tests separately so independent repositories can run concurrently.
+- Hold the shared repository/SMB locks throughout testing and cleanup; serialize lock acquisition/recovery to close simultaneous-start races. Preserve verification evidence on a busy skip, record a separate skip report, and persist backup resource conflicts in normal history.
+- Add a bilingual planning dialog and document calendar, conflict and upgrade behavior.
+
 ## Pending - Persistent Borg security state (#498)
 
 - Share a canonical BORG_SECURITY_DIR below the configured plugin configuration root across backups, repository operations, maintenance, restore and restore tests.

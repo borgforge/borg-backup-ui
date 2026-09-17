@@ -142,7 +142,57 @@ def apply_all_schedules(config: dict) -> dict:
         line = f"{cron} {_build_schedule_command(url, body, token_file)} >/dev/null 2>&1"
         lines.append(line)
 
+    lines.extend(restore_test_cron_lines(config).values())
     return _update_crontab(lines)
+
+
+def validate_restore_test_cron(cron: str) -> str:
+    """Calendar schedules supported by the restore-test editor (server local time)."""
+    from notification_reminder_api import _next_expected_run
+    from datetime import datetime
+    cron = " ".join(str(cron or "").split())
+    _validate_cron(cron)
+    if _next_expected_run(cron, datetime.now()) is None:
+        raise ValueError("Restore test schedule requires a daily, weekly or monthly time")
+    return cron
+
+
+def restore_test_cron_line(config: dict, job_key: str, cron: str) -> str:
+    job_key = _validate_job_key_text(job_key)
+    if job_key != "restore_test":
+        cron = validate_restore_test_cron(cron)
+    else:
+        _validate_cron(cron)
+    port = _validate_port(config.get("PORT", "8765"))
+    token_file = str(_schedules_path(config).parent / ".api-token")
+    payload = {"scheduled": True} if job_key == "restore_test" else {"job_key": job_key, "scheduled": True}
+    endpoint = "run" if job_key == "restore_test" else "run-job"
+    body = json.dumps(payload, separators=(",", ":"))
+    command = _build_schedule_command(f"http://127.0.0.1:{port}/api/restore-tests/{endpoint}", body, token_file)
+    return f"{cron} {command} >/dev/null 2>&1"
+
+
+def restore_test_cron_lines(config: dict) -> dict[str, str]:
+    """Job metadata is the single source for per-job restore schedules."""
+    from job_identity import metadata_job_id
+    lines = {}
+    for path in sorted((_schedules_path(config).parent / "jobs").glob("*.json")):
+        job = json.loads(path.read_text(encoding="utf-8"))
+        policy = job.get("restore_test_policy") or {}
+        if not job.get("enabled", True) or policy.get("mode") != "scheduled" or not policy.get("cron"):
+            continue
+        key = metadata_job_id(job)
+        lines[key] = restore_test_cron_line(config, key, policy["cron"])
+    return lines
+
+
+def installed_schedule_lines() -> set[str]:
+    """Only report a schedule as active if its exact command is installed."""
+    try:
+        result = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=5)
+        return set(result.stdout.splitlines()) if result.returncode == 0 else set()
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
 
 
 def _update_crontab(lines: List[str]) -> dict:

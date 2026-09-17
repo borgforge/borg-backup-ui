@@ -75,7 +75,11 @@ def list_restore_tests(config: dict) -> List[dict]:
 def list_restore_test_plan(config: dict) -> dict:
     from jobs_api import list_jobs, resolve_data_root
 
+    from schedule_api import get_schedules, installed_schedule_lines, restore_test_cron_line
+    from notification_reminder_api import _next_expected_run
     jobs = list_jobs(config, {})
+    installed = installed_schedule_lines()
+    legacy_schedule = get_schedules(config).get("restore_test") or {}
     interval_default = max(1, _safe_int(config.get("RESTORE_TEST_INTERVAL_DAYS"), 30))
     level_default = _safe_int(config.get("RESTORE_TEST_LEVEL"), 2)
     if level_default not in {1, 2, 3}:
@@ -119,7 +123,28 @@ def list_restore_test_plan(config: dict) -> dict:
             if is_overdue:
                 counts["overdue"] += 1
 
+        cron = str(eff.get("cron") or "")
+        scheduler_state = "off"
+        next_run = ""
+        if mode == "scheduled" and bool(job.get("enabled", True)):
+            scheduler_state = "needs_schedule"
+            if cron:
+                expected = restore_test_cron_line(config, key, cron)
+                scheduler_state = "active" if expected in installed else "not_installed"
+                next_dt = _next_expected_run(cron, datetime.now())
+                next_run = next_dt.strftime("%Y-%m-%d %H:%M:%S") if next_dt else ""
+                # Freshness is independent of the fixed next start time.
+                is_overdue = bool(job.get("restore_verification_is_overdue")) or not test_data
+            elif legacy_schedule.get("enabled", True) and legacy_schedule.get("cron"):
+                expected = restore_test_cron_line(config, "restore_test", legacy_schedule["cron"])
+                scheduler_state = "legacy" if expected in installed else "not_installed"
+                next_dt = _next_expected_run(legacy_schedule["cron"], datetime.now())
+                next_run = next_dt.strftime("%Y-%m-%d %H:%M:%S") if next_dt else ""
+
         rows.append({
+            "scheduler_state": scheduler_state,
+            "next_run_at": next_run,
+            "legacy_cron": str(legacy_schedule.get("cron") or ""),
             "job_key": key,
             "display_name": job.get("display_name") or job.get("name") or key,
             "name": job.get("name") or job.get("display_name") or key,
@@ -141,6 +166,7 @@ def list_restore_test_plan(config: dict) -> dict:
             "job_meta_file": str((data_root / "config" / "jobs" / f"{key}.json")),
         })
 
+    counts["overdue"] = sum(bool(row["is_overdue"]) for row in rows)
     rows.sort(key=lambda r: str(r.get("name") or r.get("display_name") or "").casefold())
     return {
         "defaults": {
@@ -199,10 +225,36 @@ def update_restore_test_policy(config: dict, job_key: str, policy_raw: dict) -> 
 
     interval_default = max(1, _safe_int(config.get("RESTORE_TEST_INTERVAL_DAYS"), 30))
     location = raw.get("location", "")
-    normalized = _normalize_restore_policy(policy_raw, location, interval_default)
+    existing_policy = raw.get("restore_test_policy") or {}
+    merged_policy = {**existing_policy, **policy_raw}
+    cron = str(merged_policy.get("cron") or "").strip()
+    if cron:
+        from schedule_api import validate_restore_test_cron
+        merged_policy["cron"] = validate_restore_test_cron(cron)
+    if "validity_days" in policy_raw and _safe_int(policy_raw["validity_days"], 0) < 1:
+        raise ValueError("validity_days must be >= 1")
+    normalized = _normalize_restore_policy(merged_policy, location, interval_default)
     raw["restore_test_policy"] = normalized
     raw["updated_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    meta_file.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    from jobs_api import invalidate_job_discovery_cache
+    import os
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode="w", dir=meta_file.parent, prefix=".restore-policy-", delete=False, encoding="utf-8") as handle:
+        temporary = Path(handle.name)
+        try:
+            handle.write(json.dumps(raw, indent=2, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            temporary.replace(meta_file)
+        finally:
+            temporary.unlink(missing_ok=True)
+    invalidate_job_discovery_cache()
+    if cron or existing_policy.get("cron"):
+        from schedule_api import apply_all_schedules
+        try:
+            apply_all_schedules(config)
+        except Exception as exc:
+            raise RuntimeError(f"Policy saved but cron could not be applied: {exc}") from exc
     return {"saved": True, "job_key": key, "policy": normalized}
 
 
@@ -313,6 +365,7 @@ def delete_restore_test(config: dict, job_key: str) -> dict:
     if not target.exists():
         raise FileNotFoundError(f"Restore test not found: {target.name}")
     target.unlink()
+    (test_dir / f"{key}.skip.test").unlink(missing_ok=True)
     return {"deleted": True, "job_key": key}
 
 
@@ -392,6 +445,7 @@ def _normalize_restore_policy(raw_policy: Any, location: Any, default_interval: 
 
     return {
         "mode": mode,
+        "cron": str(policy.get("cron") or ""),
         "interval_days": interval_days,
         "validity_days": validity_days,
         "level": level,

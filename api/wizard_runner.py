@@ -6,6 +6,7 @@ api/wizard_runner.py - Scriptless Runner fuer Wizard-Jobs (Phase 4)
 from __future__ import annotations
 
 import json
+import fcntl
 import logging
 import os
 import shlex
@@ -240,6 +241,14 @@ class ResourceLockSet:
 
     def acquire(self, resources: list[str]) -> tuple[bool, str]:
         self.lock_dir.mkdir(parents=True, exist_ok=True)
+        # Serialize only lock acquisition/recovery, never the operation itself.
+        # Another starter must not treat a newly created, not-yet-written file
+        # as a corrupt stale lock and remove it.
+        with (self.lock_dir / ".acquire.guard").open("a") as guard:
+            fcntl.flock(guard, fcntl.LOCK_EX)
+            return self._acquire_locked(resources)
+
+    def _acquire_locked(self, resources: list[str]) -> tuple[bool, str]:
         for resource in resources:
             path = self._lock_path(resource)
             payload = self._payload(resource)
@@ -284,7 +293,9 @@ class ResourceLockSet:
                         if int(data.get("pid") or 0) != os.getpid():
                             continue
                         data["updated_at"] = now
-                        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                        temporary = path.with_suffix(f".heartbeat-{os.getpid()}")
+                        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                        temporary.replace(path)
                     except OSError:
                         continue
 
@@ -688,21 +699,8 @@ def main() -> int:
     resources = _build_resources(env, meta)
     ok, reason = lock_set.acquire(resources)
     if not ok:
-        emit_lifecycle(
-            "JOB",
-            "finished",
-            request_id=os.environ.get("BORG_UI_REQUEST_ID", ""),
-            source=os.environ.get("BORG_UI_REQUEST_SOURCE", "manual"),
-            actor=os.environ.get("BORG_UI_REQUEST_ACTOR", ""),
-            job_key=job_key,
-            run_id=run_id,
-            status="skipped",
-            exit_code=2,
-            duration_seconds=0,
-            log_file=str(job_config.log_file),
-            reason=reason,
-            failure_code="resource_lock_unavailable",
-        )
+        skipped_job = BackupJob(job_config, mail_config=mail_config, notification_config=env)
+        skipped_job.record_prestart_skip(reason)
         logging.warning("Job is being skipped: %s", reason)
         control.update_phase("skipped", cancel_allowed=False, finished=True, exit_code=2)
         return 2

@@ -680,26 +680,28 @@ Die Seite verwaltet:
 
 - Restore-Test-Policies pro Job
 - Testlevel
-- Intervalle und Fälligkeit
+- Ausführungszeitpläne und Nachweisgültigkeit
 - manuelle Teststarts
 - fällige geplante Tests
 - Prüfberichte
 
 ### 8.2 Reiter Planung & Policy
 
-In **Planung & Policy** werden Jobs und ihre Restore-Test-Regeln angezeigt.
+Öffnen Sie **Plan bearbeiten** bei einem Job, um Policy, Testlevel und Nachweisgültigkeit festzulegen.
 
-Felder und Spalten:
+- **Geplant:** Tägliche, wöchentliche oder monatliche Ausführung mit Uhrzeit. Monatliche Pläne verwenden die Tage 1–28. Es gilt die lokale Zeitzone des Unraid-Servers.
+- **Nur manuell / Nicht geplant:** Deaktiviert die automatische Ausführung. **Jetzt testen** bleibt für aktivierte Backup-Jobs verfügbar.
+- **Nachweis gültig (Tage):** Wie lange ein erfolgreicher geplanter Test als aktuell gilt. Diese Einstellung ist vom Ausführungszeitplan getrennt.
+- **Nächster Test:** Nächster Kalendertermin; ein manueller Test verschiebt ihn nicht.
+- **Scheduler:** **Aktiv** bedeutet, dass der gespeicherte Cron-Aufruf tatsächlich eingerichtet ist. Bei **Cron nicht aktiv** ist die Einrichtung fehlgeschlagen oder der Eintrag fehlt; speichern Sie den Plan erneut.
 
-- **Job:** Backup-Job.
-- **Ort:** Standort.
-- **Policy:** Geplant, nur manuell oder nicht geplant.
-- **Intervall (Tage):** Abstand zwischen Tests.
-- **Level:** Testtiefe.
-- **Letzter Test:** Zeitpunkt des letzten Tests.
-- **Nächster Test:** Nächste Fälligkeit.
-- **Scheduler:** Ob der Test automatisch fällig ist.
-- **Aktionen:** Speichern oder sofort testen.
+Beim Speichern wird der Cron-Eintrag erstellt oder aktualisiert. Beim Start werden gespeicherte Zeitpläne ohne doppelte Einträge und unter Beibehaltung fremder Cron-Jobs wieder eingerichtet. Schlägt die Cron-Einrichtung fehl, bleibt die Policy gespeichert und der Fehler wird angezeigt.
+
+**Bestehende Installationen:** Vorhandene globale Restore-Test-Cron-Zeiten, Jobintervalle, Testlevel und Berichte bleiben erhalten. Sie erscheinen als **Bisheriger Plan aktiv**. Jobs mit einer bisherigen geplanten Policy ohne automatischen Aufruf zeigen **Zeitplan festlegen**. Wählen Sie eine Uhrzeit, um die automatische Ausführung einzurichten; das Update legt keine Zeit für Sie fest. Nach dem Wechsel auf einen festen Zeitplan verzögert das alte Intervall die Tests nicht mehr.
+
+**Repository-Konflikte:** Backup und Restore-Test dürfen nicht gleichzeitig dasselbe Repository verwenden, auch wenn unterschiedliche Jobs darauf verweisen. Der später gestartete Vorgang wird mit Begründung im Log und in der History bzw. im Prüfbericht übersprungen. Bei einem übersprungenen Test bleibt der vorherige Testnachweis erhalten. Die Sperre gilt bis einschließlich Aufräumen und wird bei Abschluss oder Fehler freigegeben. Die bestehende Schutzlogik für SMB-Mounts gilt ebenfalls. Andere Repositorys werden durch die Repository-Sperre nicht blockiert.
+
+Verpasste oder übersprungene Kalendertermine werden nicht automatisch nachgeholt. Nutzen Sie **Jetzt testen** oder warten Sie auf den nächsten Termin. Vor- und Nachlaufzeitfenster sind nicht erforderlich.
 
 ### 8.3 Testlevel
 
@@ -711,17 +713,9 @@ Die Anwendung zeigt Restore-Testlevel als `L1`, `L2` oder `L3`.
 
 > **Hinweis:** Höhere Testlevel erhöhen die Aussagekraft, können aber je nach Repository und Datenmenge deutlich länger laufen.
 
-### 8.4 Fällige Tests ausführen
+### 8.4 Tests starten
 
-1. Öffnen Sie **Restore Tests**.
-2. Prüfen Sie die Planübersicht.
-3. Klicken Sie auf **Fällige Tests jetzt ausführen**.
-4. Beobachten Sie das Live-Protokoll.
-5. Prüfen Sie anschließend die Prüfberichte.
-
-> **Hinweis:** Diese Aktion startet nur fällige geplante Tests, nicht automatisch jeden Job.
-
-Läuft bereits ein Restore-Test, startet Borg Backup UI keinen zweiten parallelen Lauf. Stattdessen erscheint ein Konflikthinweis und das vorhandene Live-Protokoll wird geöffnet.
+Mit **Jetzt testen** neben einem Job starten Sie den Test manuell mit seinem konfigurierten Testlevel. Verfolgen Sie das Live-Protokoll und prüfen Sie anschließend die **Prüfberichte**. Feste Zeitpläne werden automatisch über Cron ausgeführt. Bei einem aktiven bisherigen globalen Intervallplan steht zusätzlich **Fällige Intervalltests ausführen** zur Verfügung. Wiederholte manuelle Starts desselben Jobs öffnen den vorhandenen Lauf; Repository-Konflikte werden als übersprungen protokolliert.
 
 ### 8.5 Prüfberichte
 

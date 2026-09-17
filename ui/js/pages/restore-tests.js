@@ -237,6 +237,7 @@ async function runRestoreTestNow() {
       await refreshRestorePlanOnly();
       return;
     }
+    restoreTestsState.runKey = data.run_key || '';
     _openRTLogPanel();
     startRTPolling();
     await refreshRestorePlanOnly();
@@ -262,7 +263,8 @@ function _openRTLogPanel() {
     clearTimeout(restoreTestsState.logTransportCheckTimer);
     restoreTestsState.logTransportCheckTimer = null;
   }
-  const es = new EventSource('/api/restore-tests/log/stream');
+  const query = restoreTestsState.runKey ? `?job=${encodeURIComponent(restoreTestsState.runKey)}` : '';
+  const es = new EventSource('/api/restore-tests/log/stream' + query);
   restoreTestsState.activeEventSource = es;
 
   es.addEventListener('open', () => {
@@ -281,7 +283,7 @@ function _openRTLogPanel() {
   };
   es.addEventListener('done', (e) => {
     const code = parseInt(e.data);
-    setRTLogStatus(code === 0 ? 'success' : 'error', code);
+    setRTLogStatus(code === 0 ? 'success' : code === 2 ? 'skipped' : 'error', code);
     es.close();
     restoreTestsState.activeEventSource = null;
     if (restoreTestsState.logTransportCheckTimer) {
@@ -316,7 +318,8 @@ function handleRTLogTransportError(es) {
     try {
       const res = await fetch('/api/restore-tests/running');
       if (!res.ok) return;
-      const state = await res.json().catch(() => ({}));
+      const snapshot = await res.json().catch(() => ({}));
+      const state = snapshot.runs?.find(run => run.run_key === restoreTestsState.runKey) || snapshot;
       if (state.running) {
         setRTLogStatus('running', null);
         return;
@@ -351,6 +354,9 @@ function setRTLogStatus(state, exitCode) {
     const dot = document.createElement('span');
     dot.className = 'badge-dot';
     badge.append(dot, document.createTextNode(restoreTestsT('finishedExit', { exit })));
+  } else if (state === 'skipped') {
+    badge.className = 'badge warning';
+    badge.textContent = restoreTestsT('skipped');
   } else if (state === 'unknown') {
     badge.className = 'badge warning';
     badge.textContent = restoreTestsT('logStatusUnknown');
@@ -435,6 +441,7 @@ async function refreshRestoreTests() {
     if (runningRes.ok) {
       const runningState = await runningRes.json().catch(() => ({}));
       if (runningState.running) {
+        restoreTestsState.runKey = runningState.run_key || '';
         resumeRestoreTestLiveLog('runningWithoutFinalLog');
       }
     }
@@ -496,107 +503,142 @@ function renderRestorePlan(plan) {
   });
   const planSummary = {
     total: sortedJobs.length,
-    scheduled: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'scheduled').length,
+    scheduled: sortedJobs.filter(job => ['active', 'legacy'].includes(job.scheduler_state)).length,
     manual: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'manual_only').length,
     off: sortedJobs.filter((job) => String(job.policy?.mode || 'off') === 'off').length,
     overdue: sortedJobs.filter((job) => job.is_overdue).length,
   };
   summaryEl.innerHTML = `<section class="rt-plan-summary"><header><div><strong>${escHtml(restoreTestsT('summaryTitle'))}</strong><small>${escHtml(restoreTestsT('summarySubtitle'))}</small></div></header><div><span><small>${escHtml(restoreTestsT('summaryTotal'))}</small><b>${planSummary.total}</b></span><span class="planned"><small>${escHtml(restoreTestsT('summaryScheduled'))}</small><b>${planSummary.scheduled}</b></span><span><small>${escHtml(restoreTestsT('summaryManual'))}</small><b>${planSummary.manual}</b></span><span><small>${escHtml(restoreTestsT('summaryOff'))}</small><b>${planSummary.off}</b></span><span class="attention ${planSummary.overdue > 0 ? 'has-value' : ''}"><small>${escHtml(restoreTestsT('summaryOverdue'))}</small><b>${planSummary.overdue}</b></span></div></section>`;
+  const legacyRun = document.getElementById('rt-run-btn');
+  if (legacyRun) legacyRun.classList.toggle('hidden', !plan.jobs.some(job => job.scheduler_state === 'legacy'));
   const rows = sortedJobs.map((j) => {
     const p = j.policy || {};
     const mode = String(p.mode || 'off');
-    const interval = Number(p.interval_days || plan.defaults?.interval_days || 30);
-    const level = Number(p.level || plan.defaults?.level || 2);
-    const disabled = j.enabled === false ? 'disabled' : '';
-    const due = j.next_due_at || (j.is_overdue ? restoreTestsT('due') : '—');
-    const schedState = mode !== 'scheduled'
-      ? restoreTestsT('no')
-      : (j.is_overdue ? restoreTestsT('yesDue') : restoreTestsT('yesWaiting'));
     const busy = restoreTestsState.rowBusy[j.job_key];
+    const state = j.scheduler_state || 'needs_schedule';
+    const schedule = p.cron ? rtScheduleLabel(p.cron)
+      : (state === 'legacy' ? restoreTestsT('legacySchedule', { days: p.interval_days, cron: j.legacy_cron }) : '—');
     return `<tr>
-      <td>${escHtml(j.display_name || j.job_key || '-')}</td>
+      <td>${escHtml(j.name || j.display_name || j.job_key)}</td>
       <td><span class="history-loc-chip ${(j.location || '').toLowerCase()}">${escHtml(restoreTestsLocationLabel(j.location || ''))}</span></td>
-      <td>
-        <select class="form-select" data-rt-plan-input="mode" data-job-key="${escHtml(j.job_key)}" style="min-width:130px" ${disabled}>
-          <option value="scheduled" ${mode === 'scheduled' ? 'selected' : ''}>${escHtml(restoreTestsT('scheduled'))}</option>
-          <option value="manual_only" ${mode === 'manual_only' ? 'selected' : ''}>${escHtml(restoreTestsT('manualOnly'))}</option>
-          <option value="off" ${mode === 'off' ? 'selected' : ''}>${escHtml(restoreTestsT('off'))}</option>
-        </select>
-      </td>
-      <td><input type="number" min="1" class="form-input" data-rt-plan-input="interval_days" data-job-key="${escHtml(j.job_key)}" value="${interval}" style="width:88px" ${disabled}></td>
-      <td>
-        <select class="form-select" data-rt-plan-input="level" data-job-key="${escHtml(j.job_key)}" style="min-width:78px" ${disabled}>
-          <option value="1" ${level === 1 ? 'selected' : ''}>L1</option>
-          <option value="2" ${level === 2 ? 'selected' : ''}>L2</option>
-          <option value="3" ${level === 3 ? 'selected' : ''}>L3</option>
-        </select>
-      </td>
+      <td>${escHtml(restoreTestsT(mode === 'manual_only' ? 'manualOnly' : mode))}</td>
+      <td class="rt-plan-schedule">${escHtml(schedule)}</td>
+      <td>L${Number(p.level || 2)}</td>
       <td>${escHtml(j.last_test_date || '—')}</td>
-      <td>${escHtml(due)}</td>
-      <td>${escHtml(schedState)}</td>
-      <td>
-        <div class="rt-plan-actions">
-          <button type="button" class="btn btn-secondary btn-sm" data-rt-plan-action="save" data-job-key="${escHtml(j.job_key)}" aria-busy="${busy === 'save'}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT(busy === 'save' ? 'saving' : 'save'))}</button>
-          <button type="button" class="btn btn-primary btn-sm" data-rt-plan-action="run" data-job-key="${escHtml(j.job_key)}" aria-busy="${busy === 'run'}" ${disabled} ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT(busy === 'run' ? 'startingTest' : 'testNow'))}</button>
-        </div>
-      </td>
+      <td>${escHtml(j.next_run_at || '—')}</td>
+      <td><span class="badge ${state === 'active' || state === 'legacy' ? 'success' : state === 'off' ? '' : 'warning'}">${escHtml(restoreTestsT(`schedulerStates.${state}`))}</span></td>
+      <td><div class="rt-plan-actions">
+        <button type="button" class="btn btn-secondary btn-sm" data-rt-plan-action="edit" data-job-key="${escHtml(j.job_key)}" ${busy ? 'disabled' : ''}>${escHtml(restoreTestsT('editPlan'))}</button>
+        <button type="button" class="btn btn-primary btn-sm" data-rt-plan-action="run" data-job-key="${escHtml(j.job_key)}" aria-busy="${busy === 'run'}" ${busy || j.enabled === false ? 'disabled' : ''}>${escHtml(restoreTestsT(busy === 'run' ? 'startingTest' : 'testNow'))}</button>
+      </div></td>
     </tr>`;
   }).join('');
-  contentEl.innerHTML = `
-    <table class="history-table">
-      <thead><tr><th>${escHtml(restoreTestsT('job'))}</th><th>${escHtml(restoreTestsT('location'))}</th><th>${escHtml(restoreTestsT('policy'))}</th><th>${escHtml(restoreTestsT('intervalDays'))}</th><th>${escHtml(restoreTestsT('level'))}</th><th>${escHtml(restoreTestsT('lastTest'))}</th><th>${escHtml(restoreTestsT('nextTest'))}</th><th>${escHtml(restoreTestsT('scheduler'))}</th><th>${escHtml(restoreTestsT('actions'))}</th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="9">${escHtml(restoreTestsT('noJobs'))}</td></tr>`}</tbody>
-    </table>`;
+  contentEl.innerHTML = `<table class="history-table"><thead><tr>${['job', 'location', 'policy', 'schedule', 'level', 'lastTest', 'nextTest', 'scheduler', 'actions'].map(key => `<th>${escHtml(restoreTestsT(key))}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="9">${escHtml(restoreTestsT('noJobs'))}</td></tr>`}</tbody></table>`;
 }
 
-function _getPlanInput(jobKey, field) {
-  return document.querySelector(`[data-rt-plan-input="${field}"][data-job-key="${CSS.escape(jobKey)}"]`);
+function rtScheduleLabel(cron) {
+  const [minute, hour, dom, month, dow] = String(cron).split(' ');
+  const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+  if (month !== '*') return cron;
+  if (dom !== '*') return restoreTestsT('monthlyAt', { day: dom, time });
+  if (dow !== '*') {
+    const day = restoreTestsT(`weekdays.${dow}`);
+    return day.includes('restoreTests.') ? cron : restoreTestsT('weeklyAt', { day, time });
+  }
+  return restoreTestsT('dailyAt', { time });
+}
+
+function editRestorePlan(jobKey) {
+  const row = restoreTestsState.plan?.jobs?.find(job => job.job_key === jobKey);
+  if (!row) return;
+  const p = row.policy || {};
+  const parts = String(p.cron || '').split(' ');
+  const frequency = p.cron ? (parts[2] !== '*' ? 'monthly' : parts[4] !== '*' ? 'weekly' : 'daily') : (row.legacy_cron ? 'legacy' : 'weekly');
+  const options = (values, selected, prefix = '') => values.map(value => `<option value="${value}" ${String(selected) === String(value) ? 'selected' : ''}>${escHtml(restoreTestsT(prefix + value))}</option>`).join('');
+  document.getElementById('rt-plan-dialog')?.remove();
+  const dialog = document.createElement('dialog');
+  dialog.id = 'rt-plan-dialog';
+  dialog.className = 'modal rt-plan-dialog';
+  dialog.setAttribute('aria-labelledby', 'rt-plan-dialog-title');
+  dialog.innerHTML = `<form>
+    <div class="modal-header"><h3 id="rt-plan-dialog-title">${escHtml(restoreTestsT('editPlan'))}</h3><button type="button" class="modal-close" data-close aria-label="${escHtml(restoreTestsT('close'))}">×</button></div>
+    <div class="modal-body">
+      <p><strong>${escHtml(row.name || row.display_name)}</strong></p>
+      <div class="rt-plan-fields">
+        <label>${escHtml(restoreTestsT('policy'))}<select name="mode" class="form-select">${options(['scheduled', 'manualOnly', 'off'], p.mode === 'manual_only' ? 'manualOnly' : p.mode)}</select></label>
+        <label>${escHtml(restoreTestsT('level'))}<select name="level" class="form-select">${[1,2,3].map(level => `<option value="${level}" ${level === p.level ? 'selected' : ''}>L${level}</option>`).join('')}</select></label>
+        <label>${escHtml(restoreTestsT('frequency'))}<select name="frequency" class="form-select">${options(row.legacy_cron && !p.cron ? ['legacy', 'daily', 'weekly', 'monthly'] : ['daily', 'weekly', 'monthly'], frequency)}</select></label>
+        <label>${escHtml(restoreTestsT('time'))}<input name="time" type="time" class="form-input" required value="${p.cron ? `${parts[1].padStart(2,'0')}:${parts[0].padStart(2,'0')}` : ''}"></label>
+        <label data-weekday>${escHtml(restoreTestsT('weekday'))}<select name="weekday" class="form-select">${options([1,2,3,4,5,6,0], p.cron ? parts[4] : 0, 'weekdays.')}</select></label>
+        <label data-monthday>${escHtml(restoreTestsT('monthday'))}<input name="monthday" type="number" class="form-input" min="1" max="28" value="${frequency === 'monthly' ? parts[2] : 1}"></label>
+        <label>${escHtml(restoreTestsT('validityDays'))}<input name="validity" type="number" class="form-input" min="1" required value="${Number(p.validity_days || 30)}"></label>
+      </div>
+      <p class="rt-plan-help">${escHtml(restoreTestsT('scheduleHelp'))}</p>
+      <p class="rt-plan-help">${escHtml(restoreTestsT('validityHelp'))}</p>
+      <p class="rt-plan-help">${escHtml(restoreTestsT('conflictHelp'))}</p>
+      <div class="message error hidden" data-error role="alert"></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-close>${escHtml(restoreTestsT('cancel'))}</button><button type="submit" class="btn btn-primary">${escHtml(restoreTestsT('save'))}</button></div>
+  </form>`;
+  const form = dialog.querySelector('form');
+  const update = () => {
+    const active = form.elements.mode.value === 'scheduled';
+    const freq = form.elements.frequency.value;
+    form.elements.frequency.disabled = !active;
+    form.elements.time.disabled = !active || freq === 'legacy';
+    form.elements.weekday.disabled = !active || freq !== 'weekly';
+    form.elements.monthday.disabled = !active || freq !== 'monthly';
+    dialog.querySelector('[data-weekday]').hidden = freq !== 'weekly';
+    dialog.querySelector('[data-monthday]').hidden = freq !== 'monthly';
+  };
+  form.addEventListener('change', update);
+  form.addEventListener('submit', event => { event.preventDefault(); saveRestorePlanPolicy(jobKey); });
+  dialog.querySelectorAll('[data-close]').forEach(button => button.onclick = () => dialog.close());
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.append(dialog);
+  update();
+  dialog.showModal();
 }
 
 async function saveRestorePlanPolicy(jobKey) {
-  const modeEl = _getPlanInput(jobKey, 'mode');
-  const intervalEl = _getPlanInput(jobKey, 'interval_days');
-  const levelEl = _getPlanInput(jobKey, 'level');
-  if (!modeEl || !intervalEl || !levelEl) return;
-  const interval = Number(intervalEl.value || 30);
-  const level = Number(levelEl.value || 2);
-  if (!Number.isFinite(interval) || interval < 1) {
-    showMsg('restore-tests-message', 'error', restoreTestsT('invalidInterval', { job: jobKey }));
-    return;
+  const dialog = document.getElementById('rt-plan-dialog');
+  const form = dialog?.querySelector('form');
+  if (!form || !form.reportValidity()) return;
+  const row = restoreTestsState.plan?.jobs?.find(job => job.job_key === jobKey);
+  const policy = { ...row.policy };
+  const fields = form.elements;
+  policy.mode = fields.mode.value === 'manualOnly' ? 'manual_only' : fields.mode.value;
+  policy.level = Number(fields.level.value);
+  policy.validity_days = Number(fields.validity.value);
+  if (policy.mode === 'scheduled' && fields.frequency.value !== 'legacy') {
+    const [hour, minute] = fields.time.value.split(':').map(Number);
+    policy.cron = `${minute} ${hour} ${fields.frequency.value === 'monthly' ? fields.monthday.value : '*'} * ${fields.frequency.value === 'weekly' ? fields.weekday.value : '*'}`;
   }
-  if (![1, 2, 3].includes(level)) {
-    showMsg('restore-tests-message', 'error', restoreTestsT('invalidLevel', { job: jobKey }));
-    return;
-  }
-  restoreTestsState.rowBusy[jobKey] = 'save';
-  renderRestorePlan(restoreTestsState.plan);
+  const submit = form.querySelector('[type="submit"]');
+  submit.disabled = true;
+  submit.textContent = restoreTestsT('saving');
   try {
     const res = await fetch('/api/restore-tests/policy', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        job_key: jobKey,
-        policy: { mode: modeEl.value, interval_days: Math.trunc(interval), validity_days: Math.trunc(interval), level, max_runtime_minutes: 0 },
-      }),
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_key: jobKey, policy }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      if (handleRestoreTestAlreadyRunning(data)) return;
-      throw new Error(apiErrorMessage(data, res.status));
-    }
-    const jobLabel = restoreTestsState.plan?.jobs?.find(job => job.job_key === jobKey)?.display_name || jobKey;
-    showMsg('restore-tests-message', 'success', restoreTestsT('policySaved', { job: jobLabel }));
+    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    dialog.close();
+    showMsg('restore-tests-message', 'success', restoreTestsT('policySaved', { job: row.display_name }));
     await refreshRestorePlanOnly();
   } catch (err) {
-    showMsg('restore-tests-message', 'error', restoreTestsT('policySaveFailed', { message: err.message }));
+    const error = dialog.querySelector('[data-error]');
+    error.textContent = restoreTestsT('policySaveFailed', { message: err.message });
+    error.classList.remove('hidden');
   } finally {
-    restoreTestsState.rowBusy[jobKey] = false;
-    renderRestorePlan(restoreTestsState.plan);
+    submit.disabled = false;
+    submit.textContent = restoreTestsT('save');
   }
 }
 
 async function runRestorePlanJob(jobKey) {
+  restoreTestsState.runKey = `restore_test_${jobKey}`;
   restoreTestsState.rowBusy[jobKey] = 'run';
   renderRestorePlan(restoreTestsState.plan);
   try {
@@ -607,9 +649,13 @@ async function runRestorePlanJob(jobKey) {
       body: JSON.stringify({ job_key: jobKey }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(apiErrorMessage(data, res.status));
+    if (!res.ok) {
+      if (handleRestoreTestAlreadyRunning(data)) return;
+      throw new Error(apiErrorMessage(data, res.status));
+    }
     const jobLabel = restoreTestsState.plan?.jobs?.find(job => job.job_key === jobKey)?.display_name || jobKey;
     showMsg('restore-tests-message', 'success', restoreTestsT('testStarted', { job: jobLabel }));
+    restoreTestsState.runKey = data.run_key || '';
     _openRTLogPanel();
     startRTPolling();
     await refreshRestorePlanOnly();
@@ -629,7 +675,7 @@ function onRestoreTestsPlanClick(event) {
   const action = btn.dataset.rtPlanAction || '';
   const jobKey = btn.dataset.jobKey || '';
   if (!jobKey) return;
-  if (action === 'save') return saveRestorePlanPolicy(jobKey);
+  if (action === 'edit') return editRestorePlan(jobKey);
   if (action === 'run') return runRestorePlanJob(jobKey);
 }
 
@@ -686,8 +732,8 @@ function renderRestoreTests(tests) {
   if (!summaryEl || !contentEl) return;
   const list = Array.isArray(tests) ? tests : [];
   const filtered = _getFilteredRTReports(list);
-  const stale = filtered.filter(t => t.test_result === 'success' && isStaleDate(t.test_date)).length;
-  const ok = filtered.filter(t => t.test_result === 'success' && !isStaleDate(t.test_date)).length;
+  const stale = filtered.filter(t => t.test_result === 'success' && rtEvidenceStale(t)).length;
+  const ok = filtered.filter(t => t.test_result === 'success' && !rtEvidenceStale(t)).length;
   const failed = filtered.filter(t => t.test_result === 'failed').length;
   const unavail = filtered.filter(t => t.test_result === 'unavailable').length;
   summaryEl.innerHTML = `
@@ -712,8 +758,17 @@ function renderRestoreTests(tests) {
   restoreTestsState.filteredReports = filtered;
 }
 
+function rtEvidenceStale(test) {
+  const policy = restoreTestsState.plan?.jobs?.find(job => job.job_key === test.job_key)?.policy;
+  if (!policy) return isStaleDate(test.test_date);
+  if (policy.mode === 'manual_only' || policy.mode === 'off') return false;
+  const timestamp = _rtTs(test);
+  return timestamp > 0 && Math.floor((Date.now() - timestamp) / 86400000) > Number(policy.validity_days || 30);
+}
+
 function _rtStatus(t) {
-  if (t.test_result === 'success' && isStaleDate(t.test_date)) return { className: 'warning', label: restoreTestsT('overdue') };
+  if (t.test_result === 'skipped') return { className: 'warning', label: restoreTestsT('skipped') };
+  if (t.test_result === 'success' && rtEvidenceStale(t)) return { className: 'warning', label: restoreTestsT('overdue') };
   if (t.test_result === 'success') return { className: 'success', label: restoreTestsT('verified') };
   if (t.test_result === 'failed') return { className: 'error', label: restoreTestsT('failed') };
   return { className: 'warning', label: restoreTestsT('unavailable') };
@@ -740,12 +795,12 @@ function _getFilteredRTReports(tests) {
     if (restoreTestsState.selectedJob !== 'all' && key !== String(restoreTestsState.selectedJob).toLowerCase()) return false;
     if (jobNeedle && !key.includes(jobNeedle)) return false;
     if (location !== 'all' && String(t.location || '').toLowerCase() !== location) return false;
-    const stale = t.test_result === 'success' && isStaleDate(t.test_date);
+    const stale = t.test_result === 'success' && rtEvidenceStale(t);
     if (status === 'success' && !(t.test_result === 'success' && !stale)) return false;
     if (status === 'failed' && t.test_result !== 'failed') return false;
     if (status === 'unavailable' && t.test_result !== 'unavailable') return false;
     if (status === 'stale' && !stale) return false;
-    if (problemOnly && !(t.test_result === 'failed' || t.test_result === 'unavailable' || stale)) return false;
+    if (problemOnly && !(t.test_result === 'failed' || t.test_result === 'unavailable' || t.test_result === 'skipped' || stale)) return false;
     if (range !== 'all' && rangeDays > 0) {
       const ts = _rtTs(t);
       if (!ts) return false;
@@ -846,7 +901,7 @@ function renderRTReportRow(t, idx) {
   const cov = Number(t.test_coverage_percentage || 0);
   const covTxt = formatCoveragePercent(cov);
   const stats = t.archive_stats_formatted || {};
-  const detailError = t.test_result === 'failed' || t.test_result === 'unavailable'
+  const detailError = ['failed', 'unavailable', 'skipped'].includes(t.test_result)
     ? restoreTestFailureMessage(t)
     : '';
   const dt = String(t.test_date || '—');

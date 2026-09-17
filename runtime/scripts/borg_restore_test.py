@@ -211,6 +211,7 @@ def discover_repos(conf: dict) -> list:
         seen.add(key)
         repos.append({
             "job_key": job_key,
+            "restore_test_policy": raw.get("restore_test_policy") or {},
             "type": "",
             "name": str(raw.get("name") or "Backup"),
             "location": location,
@@ -257,7 +258,7 @@ class RestoreTest:
 
         self.log_dir.mkdir(parents=True, exist_ok=True)
         date_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.log_path = self.log_dir / f"Borg-Restore-Test--{date_tag}.log"
+        self.log_path = self.log_dir / f"Borg-Restore-Test--{date_tag}-{os.getpid()}.log"
         self._fh = open(self.log_path, "w", buffering=1, encoding="utf-8")
         self.mail_config = self._load_notification_config()
 
@@ -466,7 +467,7 @@ class RestoreTest:
     # ── Intervall-Prüfung ──────────────────────────────────────────────────────
 
     def _should_test(self, key: str) -> bool:
-        if self.args.force:
+        if self.args.force or getattr(self, "_calendar_run", False):
             return True
         tf = self.status_dir / f"{key}.test"
         if not tf.exists():
@@ -563,6 +564,45 @@ class RestoreTest:
     # ── Haupttest ──────────────────────────────────────────────────────────────
 
     def test_repo(self, repo: dict) -> int:
+        from jobs_api import resolve_resource_lock_dir
+        from wizard_runner import ResourceLockSet
+        from restore_tests_api import _normalize_restore_policy
+        policy = _normalize_restore_policy(repo.get("restore_test_policy"), repo.get("location"),
+                                           int(self.conf.get("RESTORE_TEST_INTERVAL_DAYS", 30)))
+        self._calendar_run = bool(getattr(self.args, "scheduled", False) and policy.get("cron"))
+        if getattr(self.args, "scheduled", False):
+            if policy["mode"] != "scheduled":
+                self.log("SKIP: restore tests are no longer scheduled for this job")
+                return 2
+            self.test_level = policy["level"]
+            self.test_interval = policy["interval_days"]
+        self.log(f"Restore-test policy: job={repo['job_key']}; level=L{self.test_level}; "
+                 f"schedule={policy.get('cron') or str(policy['interval_days']) + ' days'}; "
+                 f"source={'schedule' if getattr(self.args, 'scheduled', False) else 'manual'}")
+        if self.args.dry_run or not self._should_test(repo["job_key"]):
+            return 2
+        config = dict(self.conf)
+        config.setdefault("BACKUP_SCRIPTS_DIR", str(_repository_data_root()))
+        locks = ResourceLockSet(resolve_resource_lock_dir(config), repo["job_key"],
+                                operation="restore_test", log_file=str(getattr(self, "log_path", "")),
+                                run_id=os.environ.get("BORG_UI_RUN_ID", ""))
+        resources = [f"repo:{repo['path']}"]
+        if repo.get("location") == "smb" and repo.get("profile_key"):
+            resources.append(f"smb-mount:{repo['profile_key']}")
+        acquired, reason = locks.acquire(resources)
+        if not acquired:
+            self.log(f"SKIP Restore test: {reason}")
+            self._write(repo["job_key"], repo, "skipped", 0, 0, 0, 0, "unknown", "", {}, [],
+                        exit_code=2, reason=reason, failure_code="RT_REPO_BUSY", failure_hint=reason)
+            emit_lifecycle("RESTORE_TEST", "skipped", job_key=repo["job_key"],
+                           run_id=os.environ.get("BORG_UI_RUN_ID", ""), status="skipped", reason=reason)
+            return 2
+        try:
+            return self._test_repo_locked(repo)
+        finally:
+            locks.release()
+
+    def _test_repo_locked(self, repo: dict) -> int:
         """0=OK, 1=Fehler, 2=übersprungen, 3=unavailable"""
         location = repo["location"]
         path     = repo["path"]
@@ -576,9 +616,6 @@ class RestoreTest:
 
         if self.args.dry_run:
             self.log("  [dry-run] Skipped")
-            return 2
-
-        if not self._should_test(key):
             return 2
 
         smb_mounted_by_me = False
@@ -958,7 +995,9 @@ class RestoreTest:
         from job_identity import validate_job_id
         key = validate_job_id(key)
         _ensure_status_storage_directory(self.status_dir)
-        test_file = self.status_dir / f"{key}.test"
+        # A busy repository is not a new verification result. Keep the prior evidence.
+        suffix = ".skip.test" if result_str == "skipped" else ".test"
+        test_file = self.status_dir / f"{key}{suffix}"
         now = datetime.now()
         start_ts = now.timestamp() - max(0, int(duration))
         overall_status = (
@@ -1015,6 +1054,8 @@ class RestoreTest:
             data["reason"] = reason
 
         test_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        if result_str != "skipped":
+            (self.status_dir / f"{key}.skip.test").unlink(missing_ok=True)
         self.log(f"  → Ergebnis: {test_file}")
         _refresh_unraid_dashboard_widget_cache(self.conf, "restore test result written", self.log)
         if result_str == "success":
@@ -1131,7 +1172,7 @@ def main() -> None:
         actor=actor,
         run_id=run_id,
         status=status,
-        exit_code=0 if fail == 0 else 1,
+        exit_code=1 if fail else (2 if not ok and skipped else 0),
         duration_seconds=max(0, int(time.time() - started_at)),
         log_file=str(tester.log_path),
         ok_count=ok,
@@ -1140,7 +1181,7 @@ def main() -> None:
         skipped_count=skipped,
     )
     tester.close()
-    sys.exit(0 if fail == 0 else 1)
+    sys.exit(1 if fail else (2 if not ok and skipped else 0))
 
 
 if __name__ == "__main__":

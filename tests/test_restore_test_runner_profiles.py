@@ -101,11 +101,11 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
     assert repos[0]["storage"]["storage_key"] == "storage_usb_test"
 
 
-def _restore_test_instance(runner, monkeypatch):
+def _restore_test_instance(runner, monkeypatch, tmp_path):
     instance = object.__new__(runner.RestoreTest)
     instance.args = SimpleNamespace(dry_run=False)
     instance.test_level = 1
-    instance.conf = {}
+    instance.conf = {"BACKUP_SCRIPTS_DIR": str(tmp_path), "BORG_RESOURCE_LOCK_DIR": str(tmp_path / "locks")}
     monkeypatch.setattr(instance, "_should_test", lambda _key: True)
     monkeypatch.setattr(instance, "_write", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(instance, "_cleanup_smb_mount", lambda *_args, **_kwargs: None)
@@ -115,7 +115,7 @@ def _restore_test_instance(runner, monkeypatch):
 
 def test_restore_runner_tests_unencrypted_repository_without_passphrase(tmp_path, monkeypatch) -> None:
     runner = _load_restore_runner()
-    instance = _restore_test_instance(runner, monkeypatch)
+    instance = _restore_test_instance(runner, monkeypatch, tmp_path)
     repository = tmp_path / "borg-backup-unencrypted"
     repository.mkdir()
     passphrases = []
@@ -169,7 +169,7 @@ def test_restore_runner_removes_inherited_passphrase_for_unencrypted_repository(
 
 def test_restore_runner_keeps_passphrase_requirement_for_encrypted_repository(tmp_path, monkeypatch) -> None:
     runner = _load_restore_runner()
-    instance = _restore_test_instance(runner, monkeypatch)
+    instance = _restore_test_instance(runner, monkeypatch, tmp_path)
     repository = tmp_path / "borg-backup-encrypted"
     repository.mkdir()
     messages = []
@@ -283,7 +283,7 @@ def test_restore_runner_auto_smb_mount_does_not_force_protocol(tmp_path, monkeyp
 ])
 def test_restore_probe_uses_size_and_regular_file_limits(tmp_path, monkeypatch, size_gb, file_count, directory_count, expected, chunked):
     runner = _load_restore_runner()
-    instance = _restore_test_instance(runner, monkeypatch)
+    instance = _restore_test_instance(runner, monkeypatch, tmp_path)
     instance.test_level = 2
     instance.min_coverage = 5
     instance.max_entries = 1000
@@ -293,7 +293,7 @@ def test_restore_probe_uses_size_and_regular_file_limits(tmp_path, monkeypatch, 
     instance.sample_size = 5
     instance.full_dryrun_max_archive_gb = 500
     # An old configuration entry must no longer force sampling below the size threshold.
-    instance.conf = {"RESTORE_TEST_FORCE_CHUNK_TYPES": "photos,vms"}
+    instance.conf["RESTORE_TEST_FORCE_CHUNK_TYPES"] = "photos,vms"
     rows = [{"type": "d", "path": f"folder-{i}"} for i in range(directory_count)]
     rows += [{"type": "-", "path": f"folder-{i % 10}/file-{i}"} for i in range(file_count)]
     rows += [{"type": "l", "path": "symbolic-link"}]
