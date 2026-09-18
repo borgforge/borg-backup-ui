@@ -895,6 +895,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        if path == "/metrics":
+            self._serve_prometheus_metrics()
+            return
         if path == "/setup-admin":
             self._serve_setup_admin_page()
             return
@@ -1074,6 +1077,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/auth/change-password": self._post_auth_change_password,
             "/api/auth/logout-all-sessions": self._post_auth_logout_all_sessions,
             "/api/settings/homepage-widget-token": self._post_homepage_widget_token,
+            "/api/settings/prometheus": self._post_prometheus_settings,
         }
         fn = routes.get(path)
         if fn is None:
@@ -2097,9 +2101,48 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def _get_settings(self) -> dict:
         from config_api import get_settings_data
+        from api.prometheus_api import settings_status
         data = get_settings_data(self.config)
         data["homepage_widget"] = _homepage_widget_token_status(self.config)
+        data["prometheus"] = settings_status(self.config)
         return data
+
+    def _post_prometheus_settings(self) -> dict:
+        from api.prometheus_api import update_settings
+        body = self._read_json_body()
+        result = update_settings(self.config, body)
+        action = "revoked" if body.get("revoke") else "rotated" if body.get("rotate") else "enabled" if result["enabled"] else "disabled"
+        self._security_audit("prometheus_settings", action)
+        return result
+
+    def _serve_prometheus_metrics(self) -> None:
+        from api.prometheus_api import cached_metrics, read_settings
+        settings = read_settings(self.config)
+        code, text = 404, "Prometheus metrics are disabled.\n"
+        if settings.get("enabled"):
+            token = settings.get("token", "")
+            auth = (self.headers.get("Authorization") or "").strip()
+            supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+            if not token or not supplied or not secrets.compare_digest(supplied.encode("utf-8"), token.encode("utf-8")):
+                code, text = 401, "A valid Prometheus bearer token is required.\n"
+            elif self._auth_store_failure() or _is_maintenance_mode(self.config):
+                code, text = 503, "Metrics unavailable while application recovery is required.\n"
+            else:
+                try:
+                    text = cached_metrics(self.config, APP_VERSION)
+                    code = 200
+                except Exception:
+                    code, text = 503, "Metrics collection unavailable.\n"
+        content = text.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if code == 401:
+            self.send_header("WWW-Authenticate", 'Bearer realm="prometheus"')
+        self.end_headers()
+        self.wfile.write(content)
 
     def _post_homepage_widget_token(self) -> dict:
         token = _rotate_homepage_widget_token(self.config)
@@ -3907,7 +3950,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/repositories/key-export", "/api/wizard/new-job-id"}
+                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/settings/prometheus", "/api/repositories/key-export", "/api/wizard/new-job-id"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)

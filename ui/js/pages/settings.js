@@ -38,6 +38,8 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   authStatus: null,
   authUsers: [],
   homepageWidgetToken: '',
+  prometheusToken: '',
+  prometheusBusy: false,
   appInfo: null,
   appriseProfiles: [],
   appriseProviders: [],
@@ -87,6 +89,7 @@ function settingsFmtBytes(value) {
 function getSettingsTabs() {
   const tabs = [
   { key: 'general', label: settingsT('tabs.general'), group: 'system', description: settingsT('menu.generalDescription'), icon: settingsMenuIcon('general') },
+  { key: 'integrations', label: settingsT('prometheus.integrations'), group: 'system', description: settingsT('prometheus.description'), icon: settingsMenuIcon('integrations') },
   { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: settingsMenuIcon('users') },
   { key: 'about', label: settingsT('tabs.about'), group: 'system', description: settingsT('menu.aboutDescription'), icon: settingsMenuIcon('about') },
   { key: 'notifications', label: settingsT('tabs.notifications'), group: 'operations', description: settingsT('menu.notificationsDescription'), icon: settingsMenuIcon('notifications') },
@@ -111,6 +114,7 @@ function getSettingsTabs() {
 
 function settingsMenuIcon(key) {
   const icons = {
+    integrations: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10m8 10V4m8 16v-8M2 20h20"/></svg>',
     general: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3v-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1 2.8-2.8.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3h4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.2v4h-.2a1.7 1.7 0 0 0-1.4 1z"/></svg>',
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M3 21v-2a6 6 0 0 1 12 0v2"/><path d="M16 4.5a4 4 0 0 1 0 7"/><path d="M18 15a5 5 0 0 1 3 4.6V21"/></svg>',
     about: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
@@ -158,6 +162,7 @@ async function refreshSettings() {
       health.notification_reminders = await reminderRes.json();
     }
     settingsState.homepageWidgetToken = '';
+    settingsState.prometheusToken = '';
     settingsState.data = data;
     settingsState.systemHealth = health;
     if (appriseProfilesRes?.ok) {
@@ -251,7 +256,7 @@ function renderSettings(data, systemHealth) {
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
   if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
-  const hideGlobalSave = profileTab || ['about', 'factory-reset'].includes(settingsState.activeTab);
+  const hideGlobalSave = profileTab || ['about', 'factory-reset', 'integrations'].includes(settingsState.activeTab);
   const saveBtn = document.getElementById('settings-save-btn');
   if (saveBtn) saveBtn.classList.toggle('hidden', hideGlobalSave);
   el.innerHTML = `
@@ -272,6 +277,9 @@ function renderSettings(data, systemHealth) {
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'about' ? '' : 'hidden'}" data-settings-panel="about">
       ${renderSettingsAbout()}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'integrations' ? '' : 'hidden'}" data-settings-panel="integrations">
+      ${renderSettingsPrometheus(data.prometheus || {})}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'notifications' ? '' : 'hidden'}" data-settings-panel="notifications">
       ${renderSettingsNotifications(data)}
@@ -380,7 +388,7 @@ function activateSettingsTab(tabKey) {
   if (description) description.textContent = active.description;
 
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(active.key);
-  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || ['about', 'factory-reset'].includes(active.key));
+  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || ['about', 'factory-reset', 'integrations'].includes(active.key));
   if (SETTINGS_PROFILE_CONFIG[previousTab]) syncSettingsProfileManager(previousTab);
   if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
   if (active.key === 'notifications') maybeLoadAppriseProviders();
@@ -2445,6 +2453,95 @@ function renderSettingsRepositoryInfoRefresh(refresh) {
         <div class="repository-refresh-detail-groups">${_renderRepositoryRefreshDetailGroups(details)}</div>
       </details>
     </div>`);
+}
+
+function prometheusScrapeYaml() {
+  const token = settingsState.prometheusToken || 'YOUR_PROMETHEUS_TOKEN';
+  return `scrape_configs:\n  - job_name: 'borg-backup-ui'\n    scrape_interval: 60s\n    scrape_timeout: 30s\n    metrics_path: /metrics\n    scheme: ${window.location.protocol === 'https:' ? 'https' : 'http'}\n    authorization:\n      type: Bearer\n      credentials: "${token}"\n    static_configs:\n      - targets: [${JSON.stringify(window.location.host)}]`;
+}
+
+function renderSettingsPrometheus(state) {
+  const token = settingsState.prometheusToken || '';
+  return settingsCard(settingsT('prometheus.title'), settingsMenuIcon('integrations'), `
+    <div class="settings-body prometheus-settings">
+      <p>${settingsT('prometheus.introduction')}</p>
+      <div class="prometheus-toolbar">
+        <button type="button" class="btn ${state.enabled ? 'btn-secondary' : 'btn-primary'}" role="switch" aria-checked="${!!state.enabled}" data-settings-action="prometheus-toggle">${settingsT(state.enabled ? 'prometheus.disable' : 'prometheus.enable')}</button>
+        <span class="badge ${state.enabled ? 'success' : ''}">${settingsT(state.enabled ? 'prometheus.enabled' : 'prometheus.disabled')}</span>
+        <small>${settingsT('prometheus.immediate')}</small>
+      </div>
+      <p class="form-help">${settingsT('prometheus.collection')}</p>
+      <div class="form-group">
+        <label class="form-label" for="prometheus-endpoint">${settingsT('prometheus.endpoint')}</label>
+        <div class="prometheus-field"><input class="form-input mono" id="prometheus-endpoint" value="${escAttr(window.location.origin + '/metrics')}" readonly>
+        <button type="button" class="btn btn-secondary" data-settings-action="prometheus-copy-endpoint">${settingsT('prometheus.copy')}</button></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="prometheus-token">${settingsT('prometheus.token')}</label>
+        ${token ? `<div class="prometheus-field"><input class="form-input mono" id="prometheus-token" value="${escAttr(token)}" readonly autocomplete="off">
+          <button type="button" class="btn btn-secondary" data-settings-action="prometheus-copy-token">${settingsT('prometheus.copy')}</button></div>
+          <small>${settingsT('prometheus.tokenOnce')}</small>` : `<p class="form-help">${settingsT(state.configured ? 'prometheus.tokenStored' : 'prometheus.noToken')}</p>`}
+        ${state.configured ? `<div class="prometheus-toolbar"><button type="button" class="btn btn-secondary" data-settings-action="prometheus-rotate">${settingsT('prometheus.rotate')}</button>
+          <button type="button" class="btn btn-secondary" data-settings-action="prometheus-revoke">${settingsT('prometheus.revoke')}</button></div>` : ''}
+      </div>
+      <details class="prometheus-setup" ${state.enabled ? 'open' : ''}>
+        <summary>${settingsT('prometheus.setup')}</summary>
+        <p>${settingsT('prometheus.setupHint')}</p>
+        <label class="form-label" for="prometheus-yaml">${settingsT('prometheus.yaml')}</label>
+        <textarea class="form-input mono" id="prometheus-yaml" rows="12" readonly>${escHtml(prometheusScrapeYaml())}</textarea>
+        <div class="prometheus-toolbar">
+          <button type="button" class="btn btn-secondary" data-settings-action="prometheus-copy-yaml">${settingsT('prometheus.copyYaml')}</button>
+          <a class="btn btn-secondary" href="/ui/integrations/borg-backup-ui-grafana.json" download="borg-backup-ui-grafana.json">${settingsT('prometheus.dashboard')}</a>
+        </div>
+        <p class="form-help">${settingsT('prometheus.history')}</p>
+      </details>
+      <div id="prometheus-message" class="status-message hidden"></div>
+    </div>`);
+}
+
+async function updatePrometheusSettings(action) {
+  if (settingsState.prometheusBusy) return;
+  if (action === 'rotate' || action === 'revoke') {
+    const confirmed = await _openSettingsDialog({
+      title: settingsT(`prometheus.${action}`), message: settingsT('prometheus.invalidate'),
+      confirmText: settingsT(`prometheus.${action}`), danger: true,
+    });
+    if (!confirmed) return;
+  }
+  settingsState.prometheusBusy = true;
+  const panel = document.querySelector('[data-settings-panel="integrations"]');
+  panel?.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+  try {
+    const body = action === 'toggle' ? { enabled: !settingsState.data.prometheus?.enabled } : { [action]: true };
+    const response = await fetch('/api/settings/prometheus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(result, response.status));
+    if (result.token) settingsState.prometheusToken = result.token;
+    if (action === 'revoke') settingsState.prometheusToken = '';
+    const { token, ...status } = result;
+    settingsState.data.prometheus = status;
+    if (panel) panel.innerHTML = renderSettingsPrometheus(status);
+    showMsg('prometheus-message', 'success', settingsT(result.token ? 'prometheus.created' : 'prometheus.saved'));
+  } catch (err) {
+    showMsg('prometheus-message', 'error', settingsT('prometheus.error', { message: err.message }));
+  } finally {
+    settingsState.prometheusBusy = false;
+    panel?.querySelectorAll('button').forEach((button) => { button.disabled = false; });
+  }
+}
+
+async function copyPrometheusField(id) {
+  const field = document.getElementById(id);
+  if (!field) return;
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(field.value);
+      copied = true;
+    }
+  } catch (_) { /* HTTP installations use the selection-based fallback. */ }
+  if (!copied) copied = copyHomepageWidgetFieldFallback(field, field.value);
+  showMsg('prometheus-message', copied ? 'success' : 'error', settingsT(copied ? 'prometheus.copied' : 'prometheus.copyFailed'));
 }
 
 function homepageWidgetYaml(token) {
@@ -6044,6 +6141,12 @@ async function onSettingsContentClick(event) {
     return;
   }
   if (action === 'homepage-widget-rotate') return rotateHomepageWidgetToken();
+  if (action === 'prometheus-toggle') return updatePrometheusSettings('toggle');
+  if (action === 'prometheus-rotate') return updatePrometheusSettings('rotate');
+  if (action === 'prometheus-revoke') return updatePrometheusSettings('revoke');
+  if (action === 'prometheus-copy-endpoint') return copyPrometheusField('prometheus-endpoint');
+  if (action === 'prometheus-copy-token') return copyPrometheusField('prometheus-token');
+  if (action === 'prometheus-copy-yaml') return copyPrometheusField('prometheus-yaml');
   if (action === 'homepage-widget-revoke') return revokeHomepageWidgetToken();
   if (action === 'homepage-widget-copy-token') return copyHomepageWidgetField('homepage-widget-token');
   if (action === 'homepage-widget-copy-yaml') return copyHomepageWidgetField('homepage-widget-yaml');

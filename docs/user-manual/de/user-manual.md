@@ -803,6 +803,20 @@ Die Reminder-Einstellungen gelten kanalübergreifend. Das Reminder-Intervall ver
 
 > **Hinweis:** Testnachrichten prüfen nur den Versandkanal. Sie ersetzen keinen echten Backup- oder Restore-Test.
 
+#### Prometheus und Grafana
+
+Unter **Einstellungen > Integrationen > Prometheus & Grafana** lässt sich der
+standardmäßig deaktivierte Metrik-Endpunkt aktivieren. Ein eigenes Token erlaubt
+nur das Lesen der Metriken. Kopieren Sie die Prometheus-Konfiguration und laden Sie
+das Grafana-Dashboard dort herunter. Prometheus und Grafana laufen separat; ein
+zusätzlicher Exporter ist nicht erforderlich.
+
+Die Erfassung verwendet bestehende Daten mit einem 60-Sekunden-Cache. Sie startet
+keine Borg-Befehle. Repository-Zahlen können älter sein; Ergebnis und Zeitpunkt des
+letzten Aktualisierungsversuchs werden angezeigt. Fehlende Daten sind kein Erfolg.
+Der Verlauf beginnt mit der Prometheus-Erfassung. Deaktivieren sperrt den Endpunkt
+sofort; Ersetzen oder Widerrufen macht das bisherige Token ungültig.
+
 #### Homepage-Widget
 
 Das Homepage-Widget stellt eine kompakte, token-geschützte Statusübersicht für das Projekt **Homepage** bereit. Die Oberfläche erzeugt eine YAML-Vorlage mit Status, erfolgreichen Backups, Restore-Tests und aktiven Läufen. Behandeln Sie den Widget-Token wie ein Passwort und geben Sie ihn nicht in Screenshots oder Support-Paketen weiter.
