@@ -3055,6 +3055,38 @@
       "transfer": "Import / Export",
       "advanced": "Erweitert",
       "factoryReset": "Werkseinstellungen"
+    },
+    "prometheus": {
+      "integrations": "Integrationen",
+      "description": "Externe Überwachungsdienste verbinden",
+      "title": "Prometheus & Grafana",
+      "introduction": "Backup- und Restore-Test-Metriken für Prometheus bereitstellen und in Grafana anzeigen. Ein zusätzlicher Exporter ist nicht erforderlich.",
+      "enable": "Metriken aktivieren",
+      "disable": "Metriken deaktivieren",
+      "enabled": "Aktiviert",
+      "disabled": "Deaktiviert",
+      "immediate": "Änderungen werden sofort gespeichert.",
+      "collection": "Metriken verwenden vorhandene Plugin-Daten und einen 60-Sekunden-Cache im Arbeitsspeicher. Abfragen führen weder Borg aus noch aktualisieren sie Repositories.",
+      "endpoint": "Metrik-Endpunkt",
+      "copy": "Kopieren",
+      "token": "Zugriffstoken (nur Lesen)",
+      "tokenOnce": "Das vollständige Token wird nur jetzt angezeigt. Kopiere es und bewahre es wie ein Passwort auf.",
+      "tokenStored": "Ein Token ist eingerichtet. Verwende dein gespeichertes Token oder erzeuge ein neues.",
+      "noToken": "Beim Aktivieren wird ein eigenes Zugriffstoken erstellt.",
+      "rotate": "Token ersetzen",
+      "revoke": "Zugriff widerrufen",
+      "setup": "Prometheus und Grafana einrichten",
+      "setupHint": "Betreibe Prometheus und Grafana separat. Ergänze diesen Job in der Prometheus-Konfiguration und verwende eine von Prometheus erreichbare Adresse. Ersetze gegebenenfalls den Token-Platzhalter. Verwende HTTPS beim Zugriff über nicht vertrauenswürdige Netze.",
+      "yaml": "Prometheus-Konfiguration",
+      "copyYaml": "Konfiguration kopieren",
+      "dashboard": "Grafana-Dashboard herunterladen",
+      "history": "Importiere das Dashboard in Grafana und wähle deine Prometheus-Datenquelle aus. Der Verlauf beginnt mit der Erfassung; alte Backup-Verläufe werden nicht importiert. Repository-Werte stammen aus ihrer letzten Aktualisierung und können älter sein.",
+      "invalidate": "Das bisherige Token wird ungültig. Passe angebundene Überwachungsdienste entsprechend an.",
+      "created": "Metrik-Token erstellt. Kopiere es, bevor du diese Seite verlässt.",
+      "saved": "Prometheus-Einstellungen gespeichert.",
+      "error": "Prometheus-Einstellungen konnten nicht gespeichert werden: {message}",
+      "copied": "In die Zwischenablage kopiert.",
+      "copyFailed": "Kopieren fehlgeschlagen. Bitte den Text markieren und manuell kopieren."
     }
   }
 }

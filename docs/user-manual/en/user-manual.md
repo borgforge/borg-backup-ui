@@ -803,6 +803,19 @@ Reminder settings apply across channels. The reminder interval prevents the same
 
 > **Note:** Test messages verify only the delivery channel. They do not replace a real backup or restore test.
 
+#### Prometheus and Grafana
+
+Under **Settings > Integrations > Prometheus & Grafana**, enable the metrics
+endpoint, which is disabled by default. A dedicated token allows only reading
+metrics. Copy the Prometheus configuration and download the Grafana dashboard
+there. Prometheus and Grafana run separately; no additional exporter is required.
+
+Collection uses existing data with a 60-second memory cache and never invokes
+Borg. Repository figures may be older; the last refresh attempt and its result
+are exposed. Missing evidence does not mean success. History starts with
+Prometheus collection. Disabling blocks the endpoint immediately; replacing or
+revoking a token invalidates the previous token.
+
 #### Homepage Widget
 
 The Homepage widget provides a compact, token-protected status summary for the **Homepage** project. The UI generates a YAML template containing health, successful backups, restore tests, and active runs. Treat the widget token like a password and do not expose it in screenshots or support bundles.

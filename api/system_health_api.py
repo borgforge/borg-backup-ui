@@ -473,6 +473,9 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         secret_candidates.append(api_token_file)
     if homepage_widget_token_file.exists():
         secret_candidates.append(homepage_widget_token_file)
+    prometheus_settings = config_dir / ".prometheus-exporter.json"
+    if prometheus_settings.exists():
+        secret_candidates.append(prometheus_settings)
     if ui_auth_file.exists():
         secret_candidates.append(ui_auth_file)
 

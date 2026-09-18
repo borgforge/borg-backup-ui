@@ -1146,3 +1146,12 @@
   .startup-migration-facts > div { border-right: 0; border-bottom: 1px solid var(--border); }
   .startup-migration-facts > div:last-child { border-bottom: 0; }
 }
+/* Optional integrations keep credentials/configuration within the workspace. */
+.prometheus-settings > p:first-child { margin-top: 0; }
+.prometheus-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0; }
+.prometheus-field { display: flex; align-items: center; gap: 8px; }
+.prometheus-field input { flex: 1; min-width: 0; }
+.prometheus-field button { flex-shrink: 0; }
+.prometheus-setup { margin-top: 18px; }
+.prometheus-setup summary { font-weight: 600; cursor: pointer; }
+.prometheus-settings textarea { width: 100%; resize: vertical; }
