@@ -5,6 +5,7 @@
 - Add an opt-in `/metrics` endpoint with a dedicated read-only bearer token, immediate disable/rotation/revocation, persistent mode-0600 settings and admin-only configuration.
 - Collect backup, repository, restore-verification and runtime gauges from existing local data with a 60-second in-memory cache. Avoid Borg calls, repository probes and inventory writes; expose missing evidence, collector failures and snapshot timestamps.
 - Add a German/English Integrations settings area, copyable scrape configuration, an importable Grafana dashboard and setup documentation. Keep metric credentials out of normal settings responses and configuration transfers.
+- Adopt the approved V4 dashboard as the bundled template: embedded plugin icon, active-job names near the top, equal-sized per-job cards, storage-efficiency panels and consolidated backup/restore tables followed by repository inventory. Preserve the standard dashboard UID and download URL, explain snapshot freshness and distinguish unavailable activity data from idle jobs.
 
 ## Pending - Restore-test calendar schedules and repository exclusion (#493)
 

@@ -272,10 +272,30 @@ def test_dashboard_queries_reference_exported_families(installation):
     config, _, _ = installation
     dashboard = json.loads((ROOT / 'ui/integrations/borg-backup-ui-grafana.json').read_text())
     families = set(re.findall(r'^# TYPE (\w+)', metrics.collect_metrics(config, 'test'), re.M))
-    for panel in dashboard['panels']:
-        for target in panel.get('targets', []):
-            assert set(re.findall(r'\bbbui_\w+', target['expr'])) <= families
-    assert {v['name'] for v in dashboard['templating']['list']} == {'instance', 'location', 'repository', 'backup_job'}
+    def panel_queries(panels):
+        for panel in panels:
+            yield from (target['expr'] for target in panel.get('targets', []))
+            yield from panel_queries(panel.get('panels', []))
+    variables = dashboard['templating']['list']
+    queries = list(panel_queries(dashboard['panels']))
+    for variable in variables:
+        query = variable.get('query', '')
+        queries.append(query['query'] if isinstance(query, dict) else query)
+    for query in queries:
+        assert set(re.findall(r'\bbbui_\w+', query)) <= families
+    assert {v['name'] for v in variables if not v.get('hide')} == {'instance', 'location', 'repository', 'backup_job'}
+
+
+def test_dashboard_download_serves_importable_template(http_server):
+    _, request = http_server
+    code, headers, body = request('/ui/integrations/borg-backup-ui-grafana.json', 'admin-test-token')
+    assert code == 200
+    assert 'application/json' in headers['Content-Type']
+    dashboard = json.loads(body)
+    assert dashboard == json.loads((ROOT / 'ui/integrations/borg-backup-ui-grafana.json').read_text())
+    assert dashboard['uid'] == 'borg-backup-ui'
+    assert dashboard['id'] is None
+    assert dashboard['__inputs'][0]['name'] == 'DS_PROMETHEUS'
 
 
 def test_ui_translations_complete():

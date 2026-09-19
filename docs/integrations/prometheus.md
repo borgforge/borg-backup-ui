@@ -16,6 +16,27 @@ Prometheus and Grafana run separately, for example in containers.
 4. Download the dashboard from settings, import it into Grafana, and select the
    Prometheus data source. Use the server, location, repository and job filters.
 
+The included **Borg Backup UI · Backup Overview** template uses the approved V4
+layout: an embedded plugin icon, active-job names near the top, equally sized
+job cards, storage-efficiency panels, and consolidated backup/recovery tables
+followed by repository inventory. It needs no additional Grafana plugins.
+The **Dashboard data** checks show whether information could be read, independently
+of whether a backup or restore test succeeded.
+
+To update an existing standard dashboard, import the newly downloaded JSON and
+confirm replacement of the dashboard with UID `borg-backup-ui`. Export any local
+customizations first. The separate preview dashboards use different UIDs and
+remain unchanged. The dashboard language is English; setup guidance in the
+plugin is available in German and English.
+
+**Running now** follows exporter, scrape and dashboard refresh intervals; short
+operations can finish between samples. **No active jobs** requires a reachable
+exporter, successful runtime collection and a snapshot less than three minutes
+old. Missing data does not mean idle. Select one server at a time; location,
+repository and job filters support multiple selections. The Job filter applies
+to job/archive/restore panels, while repository totals follow the Repository and
+Location filters. History starts when Prometheus begins collecting.
+
 Example (replace the address and token):
 
 ```yaml
@@ -112,6 +133,29 @@ separat betrieben; ein zusätzlicher Exporter ist nicht erforderlich.
 3. In Prometheus prüfen, dass das Ziel als UP angezeigt wird.
 4. Das Dashboard aus den Einstellungen herunterladen, in Grafana importieren und
    die Prometheus-Datenquelle auswählen. Nach Server, Ort, Repository und Job filtern.
+
+Die mitgelieferte Vorlage **Borg Backup UI · Backup Overview** verwendet das
+freigegebene V4-Layout: eingebettetes Plugin-Icon, aktive Jobs im oberen Bereich,
+gleich große Job-Kacheln, Speichereffizienz und zusammengeführte Backup-/Restore-
+Tabellen mit anschließendem Repository-Inventar. Zusätzliche Grafana-Plugins sind
+nicht erforderlich. **Dashboard data** zeigt, ob Informationen gelesen werden
+konnten; erfolgreiche Backups und Restore-Tests werden separat ausgewiesen.
+
+Zum Aktualisieren eines vorhandenen Standard-Dashboards die neu heruntergeladene
+JSON-Datei importieren und das Ersetzen des Dashboards mit der UID
+`borg-backup-ui` bestätigen. Eigene Anpassungen vorher exportieren. Die separaten
+Vorschau-Dashboards verwenden andere UIDs und bleiben erhalten. Das Dashboard
+ist englischsprachig; die Einrichtungshinweise im Plugin gibt es auf Deutsch
+und Englisch.
+
+**Running now** folgt den Intervallen von Exporter, Prometheus und Dashboard;
+kurze Vorgänge können zwischen zwei Abfragen liegen. **No active jobs** setzt
+einen erreichbaren Exporter, erfolgreich gelesene Laufzeitdaten und einen weniger
+als drei Minuten alten Datenstand voraus. Fehlende Daten bedeuten keinen
+Leerlauf. Es wird jeweils ein Server ausgewählt; Standort, Repository und Job
+erlauben Mehrfachauswahl. Der Job-Filter gilt für Job-/Archiv-/Restore-Panels;
+Repository-Summen folgen den Filtern Repository und Location. Verlaufsdaten
+entstehen erst ab Beginn der Prometheus-Erfassung.
 
 Das Token wird nur beim Erzeugen/Ersetzen vollständig angezeigt. Deaktivieren
 sperrt den Endpunkt sofort, behält das Token aber für eine spätere Aktivierung.
