@@ -5853,6 +5853,26 @@ body.wizard-modal-open {
   scrollbar-width: thin;
 }
 
+.wizard-source-fields {
+  flex: 1;
+  min-height: 0;
+}
+
+#wiz-source-path-list {
+  flex: 1 1 0;
+  min-height: 64px;
+  max-height: none;
+  align-items: flex-start;
+  overscroll-behavior-y: contain;
+  scrollbar-width: auto;
+  scrollbar-color: var(--text-muted) transparent;
+  scrollbar-gutter: stable;
+}
+
+#wiz-source-path-list .wizard-path-chip-del {
+  flex-shrink: 0;
+}
+
 .wizard-step2-field-hint:empty {
   display: none;
 }
@@ -6085,6 +6105,10 @@ body.wizard-modal-open {
   .wizard-step2-layout {
     grid-template-columns: 1fr;
     height: auto;
+  }
+  #wiz-source-path-list {
+    flex: 0 1 auto;
+    max-height: clamp(128px, 35vh, 280px);
   }
   .wizard-step2-checkboxes {
     grid-template-columns: 1fr;
