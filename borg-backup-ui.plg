@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.09.17.2204">
+<!ENTITY version   "2026.09.23.0926">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,15 @@
 
 <CHANGES>
 <![CDATA[
+###2026.09.23.0926###
+### Improvements
+
+- **Optional Prometheus and Grafana integration:** Enable read-only metrics in Settings > Integrations and import the included Grafana dashboard for backup results, sizes, repository statistics and restore-test evidence. (#534)
+    - Disabled by default, with a separate revocable access token and German/English setup guidance.
+    - Cached collection reads existing plugin data without running Borg or refreshing repositories. Missing evidence and collector failures remain visible.
+    - Redesigned Grafana dashboard with the plugin icon, active jobs, equal-sized job cards, storage efficiency and consolidated backup, recovery and repository details.
+- Browse & Restore can show all archives in the selected repository or use a custom archive name pattern, including archives from other applications. The job's current and historical archive prefixes remain the default. Backup names and retention rules are unchanged (#537).
+
 ###2026.09.17.2204###
 ### Migration and compatibility
 
@@ -49,16 +58,6 @@
 - Keep Borg repository security state across Unraid reboots so unencrypted backups no longer require a manual repository information refresh. Use the same persistent state for backup, maintenance and restore operations. (#498)
 - Show the storage location next to each job in the History filter so jobs with the same name can be distinguished. Keep the selected job when refreshing or changing language. (#529)
 
-###2026.09.16.1126###
-### Bug Fixes
-
-- Restores no longer rewrite status on the Unraid boot device for every extracted file. (#525)
-- Settings > Restore > Browse & Restore now accepts /mnt/cache and its subfolders as explicitly allowed restore destinations. Existing target settings are preserved. (#527)
-
-### Improvements
-
-- Browse & Restore now shows a compact status with source, destination, restore mode, elapsed time and processing phase. The temporary extraction folder is explained, and completed restores show file and folder counts, including zero. Successful runs are marked in green. Simulations, skipped selections and failures remain clearly distinguished. (#525)
-
 ]]>
 </CHANGES>
 
@@ -84,7 +83,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="b5c2e7288b9564632c61b23c41f19909"
+EXPECTED_MD5="979976f344a20c718f82aee1df6c187b"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
