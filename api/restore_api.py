@@ -518,7 +518,7 @@ def _archive_prefixes_for_restore_job(job_key: str, info: dict) -> list[str]:
 def _run_borg_archive_list(repo: str, env: dict, archive_filter: str = "") -> dict:
     cmd = ["borg", "list", "--json"]
     if archive_filter:
-        cmd.extend(["--glob-archives", archive_filter])
+        cmd.append(f"--glob-archives={archive_filter}")
     cmd.append(repo)
     r = subprocess.run(
         cmd,
@@ -560,32 +560,40 @@ def _get_max_runtime_hours(config: dict) -> int:
         return 0
 
 
-def list_archives_with_context(config: dict, job_key: str) -> dict:
+def list_archives_with_context(config: dict, job_key: str, *, filter_mode: str = "job",
+                               archive_filter: str = "") -> dict:
     job_key = _validate_job_key(job_key)
+    if filter_mode not in ("job", "all", "custom"):
+        raise ValueError("Invalid archive filter mode")
+    if filter_mode == "custom" and (
+        not isinstance(archive_filter, str) or not archive_filter.strip()
+        or len(archive_filter) > 256
+        or any(ord(char) < 32 or ord(char) == 127 for char in archive_filter)
+    ):
+        raise ValueError("Archive filter must contain 1-256 characters without control characters")
     from smb_mount import ensure_smb_mount_for_job
     guard = ensure_smb_mount_for_job(config, job_key)
     try:
         info = _get_job_repo_info(config, job_key)
         ensure_restore_repository_available(config, info)
         env = _repository_borg_env(config, info)
-        archive_filters = _archive_filter_rows_for_restore_job(job_key, info)
-        prefixes = [str(row["prefix"]) for row in archive_filters]
+        archive_filters = _archive_filter_rows_for_restore_job(job_key, info) if filter_mode == "job" else []
+        patterns = [str(row["filter"]) for row in archive_filters]
+        if filter_mode == "custom":
+            patterns = [archive_filter]
 
         archives: list[dict] = []
-        if prefixes:
-            for prefix in prefixes:
-                archives.extend(_archive_rows_from_borg_payload(
-                    _run_borg_archive_list(info["repo"], env, f"{prefix}-*")
-                ))
-        else:
+        for pattern in patterns or [""]:
             archives.extend(_archive_rows_from_borg_payload(
-                _run_borg_archive_list(info["repo"], env)
+                _run_borg_archive_list(info["repo"], env, pattern)
             ))
 
         by_name = {str(row.get("name") or ""): row for row in archives if str(row.get("name") or "")}
         return {
             "archives": sorted(by_name.values(), key=lambda row: str(row.get("start") or ""), reverse=True),
             "archive_filters": archive_filters,
+            "filter_mode": filter_mode,
+            "archive_filter": archive_filter if filter_mode == "custom" else "",
         }
     finally:
         guard.cleanup()

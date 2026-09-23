@@ -212,7 +212,7 @@ def test_factory_reset_is_the_last_maintenance_area() -> None:
         'data-settings-panel="advanced"', 1
     )[0]
     assert "renderSettingsFactoryReset()" not in transfer_panel
-    assert "const hideGlobalSave = profileTab || ['about', 'factory-reset'].includes(settingsState.activeTab);" in script
+    assert "const hideGlobalSave = profileTab || ['about', 'factory-reset', 'integrations'].includes(settingsState.activeTab);" in script
 
 
 def test_profile_pages_use_master_detail_and_explicit_edit_mode() -> None:
@@ -409,7 +409,7 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert "aboutLicenses" in script
     assert "maybeLoadAboutLicenses()" in script
     assert "if (active.key === 'about') maybeLoadAboutLicenses();" in script
-    assert "profileTab || ['about', 'factory-reset'].includes(active.key)" in script
+    assert "profileTab || ['about', 'factory-reset', 'integrations'].includes(active.key)" in script
     assert "(!hasLicenseContent && !licenseError)" in script
     assert "fetch('/api/licenses?id=project'" in script
     assert "fetch('/api/licenses?id=third-party'" in script

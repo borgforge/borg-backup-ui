@@ -571,7 +571,13 @@ Select the job whose archive you want to browse. The sidebar groups jobs by loca
 
 #### Step 2: Select Archive
 
-Select an archive from the repository. The list is limited to archive prefixes belonging to the job. The current pattern, for example `testdata-backup-*`, is shown above the list. If the job's type ID was changed previously, a compact information popover also shows the stored historical patterns. This keeps older archives in the currently assigned repository available without offering archives from other jobs in a shared repository.
+Select an archive from the repository assigned to the job. **Show archives** offers three options:
+
+- **Archives of this job** (default): Uses the job's current and stored historical prefixes, for example `testdata-backup-*`. The information popover shows historical patterns.
+- **All archives in repository**: Shows archives regardless of their name or creating application.
+- **Custom filter**: Enter a Borg name pattern and select **Apply** or press **Enter**. `*` matches any number of characters, `?` matches one character. For example, `documents-*` matches `documents-2026-09-22`; `202*` matches names starting with `202`. The pattern is used as entered, without adding a hyphen or wildcard.
+
+The filter applies only to this restore selection. Backup names and retention rules stay unchanged. Changing the filter clears the selected archive, files and precheck. Selecting another job or reopening the page resets the filter to **Archives of this job**. External archives still require a job assigned to their repository and valid repository credentials.
 
 If no archives are visible, check repository access, passphrase, storage status, and the displayed archive pattern. After a job repository change, older archives remain in the previous repository and do not appear here; the change neither moves nor copies them.
 
@@ -802,6 +808,19 @@ Configurable events can include:
 Reminder settings apply across channels. The reminder interval prevents the same overdue condition from being reported repeatedly. The backup overdue tolerance defines when a scheduled backup run is considered overdue after its expected start time.
 
 > **Note:** Test messages verify only the delivery channel. They do not replace a real backup or restore test.
+
+#### Prometheus and Grafana
+
+Under **Settings > Integrations > Prometheus & Grafana**, enable the metrics
+endpoint, which is disabled by default. A dedicated token allows only reading
+metrics. Copy the Prometheus configuration and download the Grafana dashboard
+there. Prometheus and Grafana run separately; no additional exporter is required.
+
+Collection uses existing data with a 60-second memory cache and never invokes
+Borg. Repository figures may be older; the last refresh attempt and its result
+are exposed. Missing evidence does not mean success. History starts with
+Prometheus collection. Disabling blocks the endpoint immediately; replacing or
+revoking a token invalidates the previous token.
 
 #### Homepage Widget
 

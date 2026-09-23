@@ -1,5 +1,19 @@
 # Changelog
 
+## Pending - Restore archive filter options (#537)
+
+- Add job, repository-wide and custom Borg glob modes to Browse & Restore. Keep historical job prefixes as the default and pass custom patterns unchanged, without adding a hyphen or wildcard.
+- Reset archive/file selection and precheck on filter edits, discard stale list responses, and restore the job default when changing jobs or reopening the page. Document the modes in German and English.
+- Use the neutral `documents-*` example and keep pattern guidance directly below the input field, with responsive two-column controls.
+- Restrict the change to archive listing; backup naming, retention and stored job configuration are unchanged. No migration is required.
+
+## Pending - Optional Prometheus metrics and Grafana dashboard (#534)
+
+- Add an opt-in `/metrics` endpoint with a dedicated read-only bearer token, immediate disable/rotation/revocation, persistent mode-0600 settings and admin-only configuration.
+- Collect backup, repository, restore-verification and runtime gauges from existing local data with a 60-second in-memory cache. Avoid Borg calls, repository probes and inventory writes; expose missing evidence, collector failures and snapshot timestamps.
+- Add a German/English Integrations settings area, copyable scrape configuration, an importable Grafana dashboard and setup documentation. Keep metric credentials out of normal settings responses and configuration transfers.
+- Adopt the approved V4 dashboard as the bundled template: embedded plugin icon, active-job names near the top, equal-sized per-job cards, storage-efficiency panels and consolidated backup/restore tables followed by repository inventory. Preserve the standard dashboard UID and download URL, explain snapshot freshness and distinguish unavailable activity data from idle jobs.
+
 ## Pending - Restore-test calendar schedules and repository exclusion (#493)
 
 - Store optional per-job cron expressions in restore_test_policy and render authenticated per-job triggers alongside existing backup/global restore schedules. Preserve legacy intervals and existing execution times without inventing an upgrade default. Expose installed-trigger status and next start separately from verification freshness.

@@ -31,6 +31,8 @@ window.BBUI.restoreState = window.BBUI.restoreState || {
   jobs: [],
   archives: [],
   archiveFilters: [],
+  archiveFilterMode: 'job',
+  archiveFilterPattern: '',
   sourceRequest: 0,
   filesRequest: 0,
   runs: [],
@@ -216,10 +218,11 @@ function renderRestoreArchiveList() {
   if (filtersEl) {
     const filters = Array.isArray(restoreState.archiveFilters) ? restoreState.archiveFilters : [];
     const current = filters.find((item) => item?.current) || filters[0] || null;
-    const currentFilter = String(current?.filter || '').trim();
+    const custom = restoreState.archiveFilterMode === 'custom';
+    const currentFilter = custom ? restoreState.archiveFilterPattern : String(current?.filter || '').trim();
     filtersEl.hidden = !currentFilter;
     filtersEl.innerHTML = currentFilter
-      ? `<span>${escHtml(restoreT('archiveFilterLabel'))}</span><code class="restore-archive-filter-chip is-current">${escHtml(currentFilter)}</code>${restoreArchiveFilterPopover(filters)}`
+      ? `<span>${escHtml(restoreT('archiveFilterLabel'))}</span><code class="restore-archive-filter-chip is-current">${escHtml(currentFilter)}</code>${custom ? '' : restoreArchiveFilterPopover(filters)}`
       : '';
   }
   list.innerHTML = restoreState.archives.map((archive) => {
@@ -915,6 +918,9 @@ async function restoreInit() {
   const selectedJob = restoreState.job;
   const request = ++restoreState.sourceRequest;
   restoreState.job = '';
+  restoreState.archiveFilterMode = 'job';
+  restoreState.archiveFilterPattern = '';
+  restoreRenderArchiveFilterControls();
   restoreClearArchives();
   restoreState.completed = false;
   restoreSetLiveMode(false);
@@ -981,9 +987,57 @@ async function restoreInit() {
   }
 }
 
+function restoreRenderArchiveFilterControls() {
+  const mode = document.getElementById('restore-archive-filter-mode');
+  const input = document.getElementById('restore-archive-filter-pattern');
+  const custom = restoreState.archiveFilterMode === 'custom';
+  if (mode) mode.value = restoreState.archiveFilterMode;
+  if (input) {
+    input.value = restoreState.archiveFilterPattern;
+    input.disabled = !custom;
+  }
+  document.getElementById('restore-archive-filter-custom')?.classList.toggle('hidden', !custom);
+}
+
+function restoreChangeArchiveFilter() {
+  restoreState.archiveFilterMode = document.getElementById('restore-archive-filter-mode').value;
+  restoreRenderArchiveFilterControls();
+  // Switching to custom mode requires an explicit Apply, even if a previous
+  // pattern remains in the input. Never show archives from the previous mode.
+  if (restoreState.archiveFilterMode === 'custom') {
+    restoreEditArchiveFilter();
+    document.getElementById('restore-archive-filter-pattern')?.focus();
+    return;
+  }
+  return restoreLoadArchives();
+}
+
+function restoreEditArchiveFilter() {
+  restoreState.sourceRequest++;
+  restoreState.archiveFilterPattern = '';
+  restoreClearArchives();
+  _restoreMsg('');
+  document.getElementById('restore-archive-list').innerHTML =
+    `<div class="restore-sidebar-empty">${escHtml(restoreT('archiveFilterApplyHint'))}</div>`;
+}
+
+function restoreApplyArchiveFilter() {
+  const pattern = document.getElementById('restore-archive-filter-pattern').value;
+  if (!pattern.trim() || pattern.length > 256 || /[\x00-\x1f\x7f]/.test(pattern)) {
+    return _restoreMsg(restoreT('archiveFilterInvalid'), true);
+  }
+  restoreState.archiveFilterPattern = pattern;
+  return restoreLoadArchives();
+}
+
 async function restoreLoadArchives() {
   const request = ++restoreState.sourceRequest;
   const jobKey = document.getElementById('restore-job-sel').value;
+  if (jobKey !== restoreState.job) {
+    restoreState.archiveFilterMode = 'job';
+    restoreState.archiveFilterPattern = '';
+  }
+  restoreRenderArchiveFilterControls();
   restoreState.job = jobKey;
   restoreClearArchives();
   _restoreMsg('');
@@ -993,12 +1047,21 @@ async function restoreLoadArchives() {
     _restoreRenderSelectedBox();
     return;
   }
+  if (restoreState.archiveFilterMode === 'custom' && !restoreState.archiveFilterPattern) {
+    restoreEditArchiveFilter();
+    return;
+  }
   renderRestoreJobSidebar();
   renderRestoreSelectedJob();
   _restoreMsg(restoreT('loadingArchives'));
 
   try {
-    const res = await fetch(`/api/restore/archives?job=${encodeURIComponent(jobKey)}`, { credentials: 'include' });
+    let query = `job=${encodeURIComponent(jobKey)}`;
+    if (restoreState.archiveFilterMode !== 'job') {
+      query += `&filter_mode=${encodeURIComponent(restoreState.archiveFilterMode)}`;
+      if (restoreState.archiveFilterMode === 'custom') query += `&archive_filter=${encodeURIComponent(restoreState.archiveFilterPattern)}`;
+    }
+    const res = await fetch(`/api/restore/archives?${query}`, { credentials: 'include' });
     const data = await res.json();
     if (request !== restoreState.sourceRequest) return;
     if (!res.ok || data.error) { _restoreMsg(restoreT('error', { message: apiErrorMessage(data, res.status) }), true); return; }
