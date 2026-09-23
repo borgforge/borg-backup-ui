@@ -392,11 +392,12 @@ class StatusStore:
 
     def load(self, move_to_archive: bool = False) -> List[BackupStatus]:
         """
-        Lädt alle .status Dateien.
+        Load all status files, returning an empty list if storage is unavailable.
 
-        Args:
-            move_to_archive: Wenn True, werden Dateien nach dem Lesen ins
-                             Archiv-Verzeichnis verschoben (für Summary-Mail).
+        With ``move_to_archive=True`` and a configured archive directory,
+        successfully read files are moved after parsing. Individual move
+        failures are logged; an unavailable archive mount raises
+        StatusStorageUnavailableError.
         """
         reason = status_storage_unavailable_reason(self.status_dir)
         if reason:

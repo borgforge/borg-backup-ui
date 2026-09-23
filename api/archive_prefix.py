@@ -8,6 +8,7 @@ _ARCHIVE_PREFIX_RX = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
 def validate_archive_prefix(value: object) -> str:
+    """Return a nonempty safe archive prefix or raise ValueError."""
     prefix = str(value or "").strip()
     if not prefix or not _ARCHIVE_PREFIX_RX.fullmatch(prefix):
         raise ValueError("Archive prefix may contain only letters, digits, dots, underscores and hyphens")
@@ -15,10 +16,12 @@ def validate_archive_prefix(value: object) -> str:
 
 
 def archive_prefix_from_metadata(meta: dict) -> str:
+    """Validate and return the primary archive prefix stored in job metadata."""
     return validate_archive_prefix(meta.get("archive_prefix"))
 
 
 def job_archive_prefixes(meta: dict) -> list[str]:
+    """Return primary and additional validated prefixes without duplicates."""
     return list(dict.fromkeys([
         archive_prefix_from_metadata(meta),
         *(validate_archive_prefix(value) for value in meta.get("archive_prefixes", [])),
@@ -43,6 +46,7 @@ def validate_prefix_ownership(candidate: dict, other_jobs: Iterable[dict]) -> No
 
 
 def archive_prefix_from_backup_type(backup_type: str) -> str:
+    """Derive a legacy backup prefix, or an empty string for a blank type."""
     backup_type = str(backup_type or "").strip()
     return f"{backup_type}-backup" if backup_type else ""
 
@@ -59,6 +63,7 @@ def archive_prefix_from_job_key(job_key: str) -> str:
 
 
 def normalize_archive_prefixes(prefixes: Iterable[str]) -> list[str]:
+    """Keep unique safe nonempty prefixes in their input order."""
     seen: set[str] = set()
     out: list[str] = []
     for raw in prefixes:

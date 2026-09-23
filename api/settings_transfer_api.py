@@ -44,6 +44,7 @@ class EncryptedExportError(ValueError):
 
 
 class ConfigurationExportError(ValueError):
+    """The supplied job/profile export format is unsupported or inconsistent."""
     api_code = "configuration_export_unsupported"
 
     def __init__(self):
@@ -51,6 +52,10 @@ class ConfigurationExportError(ValueError):
 
 
 def _validate_jobs_bundle(bundle: dict) -> None:
+    """Require a supported bundle and valid canonical job metadata.
+
+    Raises ConfigurationExportError before import writes any job data.
+    """
     from job_identity import metadata_job_id
     from job_settings import JOB_SETTINGS_SCHEMA, explicit_job_settings
     from archive_prefix import job_archive_prefixes
@@ -112,6 +117,12 @@ def _schedules_path(config: dict) -> Path:
 
 
 def export_jobs_bundle(config: dict, selected_keys: List[str] | None = None) -> dict:
+    """Build a JSON job bundle with linked repositories, storage and schedules.
+
+    ``selected_keys`` limits exported jobs when nonempty. Returns the bundle,
+    serialized text, suggested filename and job count. This plain export
+    records passphrase metadata, not passphrase file contents.
+    """
     selected = set((selected_keys or []))
     jobs_dir = _jobs_dir(config)
     schedules = get_schedules(config)
@@ -392,6 +403,10 @@ def _job_preview_rows(config: dict, bundle: dict) -> list[dict]:
 
 
 def preview_jobs_bundle(config: dict, bundle: dict) -> dict:
+    """Validate a bundle and report its job/settings import preview.
+
+    Invalid or unsupported bundles raise ConfigurationExportError.
+    """
     _validate_jobs_bundle(bundle)
     normalized_bundle = dict(bundle)
     normalized_bundle["jobs"] = _canonical_import_jobs(
@@ -774,6 +789,12 @@ def import_jobs_bundle(
     selected_jobs: list[str] | None = None, per_job_mode: dict | None = None,
     settings_mode: str = "merge", per_profile_mode: dict | None = None,
 ) -> dict:
+    """Import or preview a validated bundle under the inventory lock.
+
+    ``dry_run`` defaults to a preview of the imported objects; the inventory
+    directory may still be created. Mode and per-item selections are passed
+    to the locked importer. Invalid bundles raise ConfigurationExportError.
+    """
     _validate_jobs_bundle(bundle)
     from inventory_store import inventory_lock
     with inventory_lock(_jobs_dir(config).parent):
@@ -1127,6 +1148,12 @@ def _encryption_preview_metadata(encryption_format: str) -> dict:
 
 
 def export_secrets_backup(password: str) -> dict:
+    """Encrypt approved secret files into an authenticated export payload.
+
+    Returns a suggested filename, base64 ciphertext and file count. Passwords
+    shorter than eight characters raise ValueError; filesystem/crypto errors
+    propagate.
+    """
     pw = str(password or "")
     if len(pw) < 8:
         raise ValueError("Password must contain at least 8 characters")
@@ -1164,6 +1191,11 @@ def export_secrets_backup(password: str) -> dict:
 
 
 def preview_secrets_backup(password: str, payload_b64: str) -> dict:
+    """Decrypt a secrets export and compare its entries with local files.
+
+    Returns per-file match status without installing secrets. Invalid format
+    or encrypted payload raises an error from the validation/decryption path.
+    """
     enc = _decode_encrypted_export_payload(payload_b64)
     plaintext, encryption_format = _decrypt_encrypted_export(enc, str(password or ""))
     payload = _decode_encrypted_json_payload(plaintext)

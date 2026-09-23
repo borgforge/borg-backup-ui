@@ -14,10 +14,12 @@ MAX_LINE_BYTES = 4096
 
 
 class ExclusionError(ValueError):
+    """Invalid marker or managed exclusion-file data for a job."""
     api_code = "job_exclusions_invalid"
 
 
 def marker_names(raw=None):
+    """Validate at most 32 unique filename-only exclusion markers."""
     if raw is None:
         return []
     if not isinstance(raw, list) or len(raw) > 32:
@@ -34,6 +36,11 @@ def marker_names(raw=None):
 
 
 def validate_bytes(data):
+    """Validate UTF-8 exclusion content and regular-expression lines.
+
+    Returns the original bytes or raises ExclusionError for size, encoding,
+    control-character or pattern violations.
+    """
     if not data or len(data) > MAX_FILE_BYTES or b'\0' in data:
         raise ExclusionError("Exclusion file must contain 1 to 65536 bytes without NUL")
     try:
@@ -74,6 +81,10 @@ def validate_file_metadata(payload):
 
 
 def upload_bytes(payload):
+    """Decode uploaded base64 content and verify its filename, size and digest.
+
+    Returns ``(content_bytes, metadata)`` or raises ExclusionError.
+    """
     if not isinstance(payload, dict) or not isinstance(payload.get('content_b64'), str):
         raise ExclusionError("Exclusion file content is missing")
     encoded = payload['content_b64']
@@ -107,6 +118,11 @@ def _folder(jobs_dir, job_id, create=False):
 
 
 def read_file(payload, jobs_dir, job_id):
+    """Read and verify an immutable job-owned exclusion file without following links.
+
+    Raises ExclusionError if ownership, file type, content or digest disagrees
+    with ``payload``.
+    """
     validate_file_metadata(payload)
     expected = f"{job_id}/{payload['sha256']}.txt"
     if payload.get('managed_file') != expected:
@@ -126,6 +142,12 @@ def read_file(payload, jobs_dir, job_id):
 
 
 def prepare_file(payload, jobs_dir, job_id):
+    """Validate an existing managed file or store a new uploaded exclusion file.
+
+    Returns normalized metadata, or None for no file. New content is stored
+    under the job's private exclusion directory; invalid data raises
+    ExclusionError.
+    """
     if payload is None:
         return None
     if not isinstance(payload, dict):

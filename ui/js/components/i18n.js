@@ -61,6 +61,12 @@
       : (typeof fallback === 'string' ? fallback : key);
   }
 
+  /**
+   * Resolve a translation with English/key fallback and named placeholders.
+   * @param {string} key Dotted resource key.
+   * @param {object} [params] Placeholder values.
+   * @returns {string} Translated text or the original key.
+   */
   function t(key, params = {}) {
     return interpolate(resolveTranslation(key), params);
   }
@@ -78,6 +84,7 @@
     });
   }
 
+  /** Apply current-language text and accessible attributes beneath a DOM root. */
   function translate(root = document) {
     if (root instanceof Element && root.matches('[data-i18n], [data-i18n-title], [data-i18n-placeholder], [data-i18n-aria-label]')) {
       translateElement(root);
@@ -91,6 +98,12 @@
     if (selector && selector.value !== activeLanguage) selector.value = activeLanguage;
   }
 
+  /**
+   * Activate a supported language and optionally persist the selection.
+   * @param {string} language Requested language or locale.
+   * @param {{persist?: boolean}} [options] Set `persist` false for a transient change.
+   * @returns {string} Effective language code.
+   */
   function setLanguage(language, options = {}) {
     activeLanguage = normalizeLanguage(language) || defaultLanguage;
     if (options.persist !== false) {
@@ -131,6 +144,7 @@
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
+  /** Load language resources once, detect preference and observe new DOM content. */
   function init() {
     if (initPromise) return initPromise;
     initPromise = Promise.allSettled(supportedLanguages.map(loadResource)).then(() => {

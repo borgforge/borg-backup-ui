@@ -22,6 +22,11 @@ _RUN = re.compile(r"^[A-Za-z0-9_.-]{8,96}$")
 
 
 def activity_log_path(directory: Path, job_key: str, run_id: str, *, job_name: str = "", location: str = "") -> Path:
+    """Derive a log path from validated job/run identity, never a client path.
+
+    Named jobs use the current log filename scheme; otherwise the legacy
+    activity filename is returned. Invalid identities raise ValueError.
+    """
     if not _KEY.fullmatch(job_key) or not _RUN.fullmatch(run_id):
         raise ValueError("Invalid activity log identity")
     if job_name or location:
@@ -31,6 +36,10 @@ def activity_log_path(directory: Path, job_key: str, run_id: str, *, job_name: s
 
 
 def open_activity_file(path: Path):
+    """Open a regular activity file for binary reading without following links.
+
+    Raises ValueError for a non-regular file and propagates OS open errors.
+    """
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     if not stat.S_ISREG(os.fstat(fd).st_mode):
         os.close(fd)
@@ -86,6 +95,12 @@ def _find_saved_activity_run(status_dir: str, archive_dir: str, log_dir: Path,
 
 
 def resolve_activity_run(config: dict, job_key: str, run_id: str = "") -> tuple[Path, dict]:
+    """Resolve a running or retained activity log and its current run state.
+
+    ``run_id`` defaults to the current run. Exact job/run identities allow
+    reconnecting after completion; ambiguous historical matches raise
+    ValueError. The returned path may point to active capture or saved storage.
+    """
     from jobs_api import JobManager, durable_running_states, _runtime_log_dir
     from job_control import read_control_state
 
@@ -136,6 +151,11 @@ def resolve_activity_run(config: dict, job_key: str, run_id: str = "") -> tuple[
 
 @contextmanager
 def open_activity_run(config: dict, job_key: str, run_id: str = ""):
+    """Yield the resolved path, state and open binary log handle.
+
+    Retries once if an active log moves to retained storage between resolution
+    and opening. The handle closes when the context exits.
+    """
     # RAM can be released between resolving its path and opening it. The saved
     # location is published first, allowing a retry without resetting cursors.
     for attempt in range(2):

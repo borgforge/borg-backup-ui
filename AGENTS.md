@@ -49,6 +49,23 @@ Neue Funktionen duerfen implementiert werden, sofern sie mit der bestehenden Arc
 * Build- und Packaging-Anpassungen
 * Neue Funktionen fuer das Unraid-Plugin
 
+## Code-Dokumentation
+
+Neue relevante Funktionen, Methoden, Klassen und Schnittstellen verwenden den
+etablierten Dokumentationsstandard ihrer Programmiersprache (z. B. Python-
+Docstrings, JSDoc, PHPDoc oder Shell-Funktionskommentare).
+
+Die Dokumentation beschreibt knapp Zweck, Parameter, Rueckgabewerte, relevante
+Fehlerfaelle und wichtige Seiteneffekte, soweit sie fuer Aufrufer von Bedeutung
+sind. Sie muss das tatsaechliche Verhalten abbilden und darf keine Garantien
+behaupten, die der Code nicht einloest. Offensichtliche Implementierungsdetails
+werden nicht wiederholt.
+
+Bei jeder Codeaenderung pruefen, ob zugehoerige Dokumentation angepasst werden
+muss. Aenderungen an Funktionalitaet, Parametern, Rueckgabewerten, Fehlerverhalten
+oder relevanten Seiteneffekten erfordern die Dokumentationsanpassung im selben
+Change.
+
 ---
 
 ## Architekturregeln

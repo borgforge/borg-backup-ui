@@ -40,6 +40,7 @@ function closeMobileNav() {
   document.getElementById('mobile-backdrop').classList.remove('visible');
 }
 
+/** Register or remove a page callback without depending on module load order. */
 function setCoreAction(name, fn) {
   const key = String(name || '').trim();
   if (!key) return;
@@ -50,6 +51,7 @@ function setCoreAction(name, fn) {
   }
 }
 
+/** Run a registered page action if its module has provided one. */
 function runCoreAction(name) {
   const fn = coreActions[String(name || '').trim()];
   if (typeof fn !== 'function') return;
@@ -72,6 +74,12 @@ function isMaintenancePageAllowed(page) {
   return MAINTENANCE_ALLOWED_PAGES.has(String(page || ''));
 }
 
+/**
+ * Load setup status with a ten-second client cache.
+ * @param {boolean} [force] Bypass a current cached response.
+ * @returns {Promise<object>} Parsed setup status.
+ * @throws {Error} When the HTTP response is not successful.
+ */
 async function fetchSetupStatus(force = false) {
   const now = Date.now();
   let data = setupStatusCache.data;
@@ -89,6 +97,10 @@ function maintenanceFallbackPage() {
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 
+/**
+ * Activate a page and its refresh/polling actions, honoring role and setup gates.
+ * @param {string} page Requested page identifier.
+ */
 function navigate(page) {
   if (page === 'settings' && state.currentRole !== 'admin') {
     page = 'dashboard';

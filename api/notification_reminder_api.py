@@ -7,7 +7,11 @@ from typing import Any
 
 
 def get_notification_reminder_diagnostics(config: dict) -> dict[str, Any]:
-    """Return read-only reminder diagnostics for system health."""
+    """Return read-only backup and restore-test reminder diagnostics.
+
+    The result includes active delivery channels, interval/tolerance settings
+    and monitored items. It does not send notifications or start jobs.
+    """
     from config_api import read_expanded_conf
     from jobs_api import list_jobs
     from restore_tests_api import list_restore_test_plan
@@ -96,7 +100,11 @@ def get_notification_reminder_diagnostics(config: dict) -> dict[str, Any]:
 
 
 def run_due_notification_reminders(config: dict) -> dict[str, Any]:
-    """Send configured overdue reminders without starting backup or restore jobs."""
+    """Send due backup and restore-test reminders without starting jobs.
+
+    Cleans old reminder state and returns checked/sent/skipped counts plus
+    per-item results. Channel delivery follows configured notification policy.
+    """
     from config_api import read_expanded_conf
     from restore_tests_api import list_restore_test_plan
     from lib.notifications import MailConfig, build_restore_test_notification_message

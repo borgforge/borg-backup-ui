@@ -129,6 +129,7 @@ function settingsMenuIcon(key) {
   return icons[key] || icons.general;
 }
 
+/** Load settings and system health before rendering the selected settings tab. */
 async function refreshSettings() {
   hideEl('settings-message');
   _renderSettingsLoading();

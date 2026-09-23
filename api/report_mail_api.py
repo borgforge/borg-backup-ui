@@ -20,6 +20,7 @@ _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 
 
 def get_weekly_report_settings(config: dict) -> dict:
+    """Return effective weekly-report enablement, day, time and recipient."""
     return {
         "enabled":   config.get("WEEKLY_REPORT_ENABLED", "false").lower() == "true",
         "day":       config.get("WEEKLY_REPORT_DAY", "1"),
@@ -29,7 +30,11 @@ def get_weekly_report_settings(config: dict) -> dict:
 
 
 def apply_weekly_report_cron(config: dict) -> None:
-    """Installiert oder entfernt den Cron-Eintrag für den wöchentlichen Report."""
+    """Replace the managed weekly-report crontab block.
+
+    Disabled settings remove the block. Raises RuntimeError when crontab
+    rejects the update; malformed enabled day/time values may raise.
+    """
     settings = get_weekly_report_settings(config)
 
     try:
@@ -80,7 +85,12 @@ def apply_weekly_report_cron(config: dict) -> None:
 
 
 def send_weekly_report(config: dict, recipient: str = "") -> dict:
-    """Generiert und sendet den HTML-Status-Report."""
+    """Build and send the HTML status report to the selected recipient.
+
+    ``recipient`` overrides configured addresses. Missing SMTP settings,
+    report generation failures and delivery errors return ``success=False``
+    with a message code; successful delivery returns ``success=True``.
+    """
     import smtplib
     import ssl
     from email.message import EmailMessage

@@ -45,6 +45,11 @@ def homepage_widget_token_status(config: dict) -> dict:
 
 
 def rotate_homepage_widget_token(config: dict) -> str:
+    """Create a new private widget token and atomically replace the old one.
+
+    Returns the new token for the settings response. The token file is written
+    with restrictive permissions; filesystem errors propagate.
+    """
     token_file = homepage_widget_token_file(config)
     token_file.parent.mkdir(parents=True, exist_ok=True)
     token = secrets.token_hex(32)
@@ -67,6 +72,7 @@ def rotate_homepage_widget_token(config: dict) -> str:
 
 
 def revoke_homepage_widget_token(config: dict) -> bool:
+    """Delete the optional widget token and report whether one existed."""
     token_file = homepage_widget_token_file(config)
     if not token_file.exists():
         return False
@@ -75,6 +81,11 @@ def revoke_homepage_widget_token(config: dict) -> bool:
 
 
 def load_or_create_api_token(config: dict) -> str:
+    """Read the internal API token or create one if absent or empty.
+
+    Token creation writes persistent state; file read/write errors during
+    creation propagate to the caller.
+    """
     token_file = api_token_file(config)
     token_file.parent.mkdir(parents=True, exist_ok=True)
     if token_file.exists():
@@ -131,6 +142,11 @@ def default_sessions_store() -> dict:
 
 
 def read_users_store(config: dict) -> dict:
+    """Read the authentication store or supply defaults when absent.
+
+    Raises UsersStoreError for an existing unreadable or invalid store rather
+    than replacing it.
+    """
     fp = users_file(config)
     if not fp.exists():
         return default_users_store()

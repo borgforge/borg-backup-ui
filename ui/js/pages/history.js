@@ -13,6 +13,7 @@ function historyLocale() {
   return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en-US' : 'de-DE';
 }
 
+/** Fetch the filtered history page and update results or show an API error. */
 async function refreshHistory() {
   const btn = document.getElementById('history-refresh-btn');
   if (btn) btn.disabled = true;
@@ -43,12 +44,14 @@ async function refreshHistory() {
   }
 }
 
+/** Reset pagination and reload history after a filter changes. */
 function applyHistoryFilters() {
   historyState.loaded = false;
   historyState.page = 1;
   refreshHistory();
 }
 
+/** Render history rows, location navigation and pagination from an API result. */
 function renderHistory(data) {
   renderHistoryJobFilter(data.jobs);
   renderHistoryLocationSidebar(data);

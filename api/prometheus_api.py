@@ -22,10 +22,12 @@ _cache: dict[tuple, tuple[float, str]] = {}
 
 
 def settings_file(config: dict) -> Path:
+    """Return the private exporter settings path under the plugin data root."""
     return data_root(config) / "config" / ".prometheus-exporter.json"
 
 
 def read_settings(config: dict) -> dict:
+    """Read enabled state and token, returning an empty mapping on invalid data."""
     try:
         value = json.loads(settings_file(config).read_text(encoding="utf-8"))
         if not isinstance(value, dict):
@@ -36,13 +38,20 @@ def read_settings(config: dict) -> dict:
 
 
 def settings_status(config: dict) -> dict:
+    """Return public exporter state without exposing the bearer token."""
     value = read_settings(config)
     return {"enabled": value.get("enabled", False), "configured": bool(value.get("token")),
             "cache_seconds": CACHE_SECONDS}
 
 
 def update_settings(config: dict, body: dict) -> dict:
-    """Admin-only settings operation; the token is returned only on creation."""
+    """Validate and atomically persist exporter enable/rotate/revoke settings.
+
+    ``body`` accepts boolean ``enabled``, ``rotate`` and ``revoke`` fields.
+    Returns public status plus the token only when a new token is created.
+    Raises ValueError for invalid or conflicting input; callers enforce admin
+    authorization before invoking this operation.
+    """
     if not isinstance(body, dict) or set(body) - {"enabled", "rotate", "revoke"} or not body:
         raise ValueError("Invalid Prometheus settings")
     if any(type(value) is not bool for value in body.values()):
@@ -103,10 +112,16 @@ def _escape(value) -> str:
 
 
 class Metrics:
+    """Accumulate finite gauge samples in Prometheus text format."""
+
     def __init__(self):
         self.families: dict[str, tuple[str, list[str]]] = {}
 
     def add(self, name: str, help_text: str, value, **labels) -> None:
+        """Append a ``bbui_`` gauge sample, omitting absent/nonfinite values.
+
+        ``labels`` are escaped and sorted for stable output.
+        """
         if value is None:
             return
         number = float(value)
@@ -118,6 +133,7 @@ class Metrics:
         samples.append(f"{name}{suffix} {number:.17g}")
 
     def render(self) -> str:
+        """Render metric families with HELP and TYPE declarations."""
         return "".join(f"# HELP {name} {help_text}\n# TYPE {name} gauge\n" + "\n".join(samples) + "\n"
                        for name, (help_text, samples) in sorted(self.families.items()))
 
@@ -241,6 +257,12 @@ def _running(metrics: Metrics, config: dict, jobs: list[dict], now: datetime) ->
 
 
 def collect_metrics(config: dict, version: str) -> str:
+    """Read cached plugin state into a Prometheus snapshot without running Borg.
+
+    Configuration failure returns only base metrics and a failed collector flag.
+    Each later collector fails independently and contributes its own status;
+    exceptions are intentionally omitted from the public metrics response.
+    """
     from config_api import read_expanded_conf
     now = datetime.now().astimezone()
     metrics = Metrics()
@@ -271,6 +293,10 @@ def collect_metrics(config: dict, version: str) -> str:
 
 
 def cached_metrics(config: dict, version: str) -> str:
+    """Return a snapshot cached for at most ``CACHE_SECONDS`` under a lock.
+
+    The cache key includes configured data/status roots and plugin version.
+    """
     key = (str(data_root(config)), str(config.get("STATUS_DIR")), str(config.get("RESTORE_TEST_STATUS_DIR")), version)
     with _guard:
         stamp, text = _cache.get(key, (0.0, ""))

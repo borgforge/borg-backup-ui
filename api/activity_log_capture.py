@@ -18,6 +18,7 @@ def file_identity(info) -> str:
 
 
 def read_record(path: Path) -> dict:
+    """Read a valid capture record or return an empty mapping on bad data."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         required = ("job_key", "run_id", "active_file", "retained_file", "active_file_id", "started_at")
@@ -64,6 +65,11 @@ def open_capture_file(record_path: Path):
 
 
 def prepare_capture(job_key: str, run_id: str, destination: Path, *, job_name: str = "", location: str = "") -> tuple[Path, Path]:
+    """Create an exclusive RAM log and capture record for a validated run.
+
+    Returns active log and record paths. The retained destination is recorded
+    for later persistence, but is not created by this function.
+    """
     from activity_log import activity_log_path
 
     retained = activity_log_path(destination, job_key, run_id, job_name=job_name, location=location)
@@ -81,7 +87,12 @@ def prepare_capture(job_key: str, run_id: str, destination: Path, *, job_name: s
 
 
 def retain_capture(record_path: Path, exit_code: int) -> bool:
-    """Copy in bounded blocks, then release RAM. Never replace an existing log."""
+    """Persist a completed RAM log in bounded blocks without overwriting files.
+
+    Returns False and marks the record failed on OS copy errors. On success,
+    publishes the retained path before deleting the RAM copy so readers can
+    reconnect; returns True even if removing the RAM file fails.
+    """
     from activity_log import open_activity_file
 
     record = read_record(record_path)

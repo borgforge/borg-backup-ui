@@ -5,6 +5,13 @@
   window.BBUI.components = window.BBUI.components || {};
   const t = (key) => window.BBUI?.components?.i18n?.t?.(key) || key;
 
+  /**
+   * Route a message to page feedback or the browser alert fallback.
+   * @param {string} targetId Feedback element ID when available.
+   * @param {string} type Message severity.
+   * @param {string} message Text to show; blank input is ignored.
+   * @param {string} [fallbackTitle] Alert title when feedback is unavailable.
+   */
   function notify(targetId, type, message, fallbackTitle = '') {
     const text = String(message || '').trim();
     if (!text) return;

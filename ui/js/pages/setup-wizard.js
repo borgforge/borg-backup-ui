@@ -33,6 +33,11 @@
     return !!closeSnapshot && modalSnapshot() !== closeSnapshot;
   }
 
+  /**
+   * Load setup status through the core cache when available.
+   * @param {boolean} [force] Request a fresh core status response.
+   * @returns {Promise<object>} Current setup status, also stored in the namespace.
+   */
   async function fetchStatus(force = false) {
     if (core()?.fetchSetupStatus) {
       currentStatus = await core().fetchSetupStatus(force);

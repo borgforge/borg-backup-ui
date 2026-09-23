@@ -12,6 +12,7 @@ function truncate(s, n) {
   return s && s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
+/** Escape text for insertion into HTML markup; falsy input becomes empty. */
 function escHtml(s) {
   if (!s) return '';
   return String(s)
@@ -37,6 +38,11 @@ function locationIcon(location) {
   return icons[String(location || '').toLowerCase()] || icons.local;
 }
 
+/**
+ * Render the supported description subset as escaped HTML.
+ * @param {string} text Plain text with optional lists and inline emphasis/code.
+ * @returns {string} HTML containing paragraphs/lists, or empty for blank input.
+ */
 function renderDescriptionMarkdown(text) {
   const raw = String(text || '').replace(/\r\n?/g, '\n').trim();
   if (!raw) return '';

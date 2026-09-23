@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 
 def normalize_usb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Keep usable USB profiles, assigning unique keys where absent."""
     out: List[Dict[str, str]] = []
     seen: set[str] = set()
     for idx, row in enumerate(rows or []):
@@ -34,6 +35,10 @@ def get_usb_profile_job_refs(ui_config: dict) -> Dict[str, List[str]]:
 
 
 def validate_usb_profile_usage_before_save(ui_config: dict, next_rows: List[Dict[str, str]]) -> None:
+    """Reject removal or incomplete edits of USB profiles still used by jobs.
+
+    Raises ValueError naming the affected profile and missing fields.
+    """
     refs = get_usb_profile_job_refs(ui_config)
     next_by_key = {
         str(r.get("key") or "").strip().lower(): r

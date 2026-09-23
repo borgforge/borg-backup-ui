@@ -10,6 +10,7 @@ function reportsT(key, params = {}) {
 // BERICHTE PAGE
 // ══════════════════════════════════════════════════════════════════════════════
 
+/** Load report-capable jobs and populate the report selector/sidebar. */
 async function berichtInit() {
   const sel = document.getElementById('bericht-job-sel');
   if (!sel) return;
@@ -54,6 +55,7 @@ async function berichtInit() {
   }
 }
 
+/** Fetch and render the selected job report, or reset to the empty state. */
 async function berichtLoad() {
   const jobKey = document.getElementById('bericht-job-sel').value;
   document.getElementById('bericht-body').style.display = 'none';

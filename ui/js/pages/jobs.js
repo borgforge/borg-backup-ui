@@ -93,6 +93,12 @@ function _isDataDirReady() {
   return window.BBUI.core.isGlobalDataDirReady();
 }
 
+/**
+ * Normalize Docker/VM control, falling back to legacy enable flags.
+ * @param {object} job Job metadata from the API.
+ * @param {'docker'|'vm'} kind Runtime type.
+ * @returns {{mode: string, selected: string[]}} Effective control selection.
+ */
 function jobRuntimeControl(job, kind) {
   const legacyEnabled = kind === 'docker' ? !!job?.has_docker : !!job?.has_vm;
   const raw = job?.[`${kind}_control`] && typeof job[`${kind}_control`] === 'object'
@@ -128,6 +134,7 @@ function jobRuntimeWarningText(job, kind) {
 
 // ── Jobs laden ────────────────────────────────────────────────────────────────
 
+/** Load jobs, run status and schedules, then refresh the jobs workspace. */
 async function refreshJobs() {
   const btn = document.getElementById('jobs-refresh-btn');
   if (btn) btn.classList.add('loading');

@@ -30,6 +30,12 @@ def _fmt_duration(secs):
 
 
 def get_history_data(config: dict, filters: dict | None = None) -> dict:
+    """Read and paginate known jobs' backup status history.
+
+    ``filters`` may constrain job, type, status, location and page size.
+    Unreadable status files and records without a discovered job are omitted;
+    the result includes filtered entries, job choices and location counts.
+    """
     status_dir = Path(config["STATUS_DIR"])
     filters = filters or {}
     try:

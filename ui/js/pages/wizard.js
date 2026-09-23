@@ -43,6 +43,12 @@ function wizardT(key, params = {}) {
   return window.BBUI?.components?.i18n?.t?.(key, params) || key;
 }
 
+/**
+ * Resolve wizard-specific validation codes before the generic API message.
+ * @param {object|null} payload Error response body.
+ * @param {number} [status] HTTP status for the fallback message.
+ * @returns {string} User-visible localized or server-provided error.
+ */
 function wizardApiErrorMessage(payload, status = 0) {
   const data = payload && typeof payload === 'object' ? payload : {};
   if (data.code === 'job_exclusions_invalid') return wizardT('wizard.exclusionInvalid');
@@ -63,6 +69,7 @@ function _wizardModalHelpers() {
   return window.BBUI?.components?.modal || {};
 }
 
+/** Capture form and dynamic selections as a comparable JSON string. */
 function _wizardCloseSnapshotPayload() {
   const modal = document.getElementById('wizard-modal');
   return JSON.stringify({
@@ -125,6 +132,10 @@ function _wizardArchivePrefix(prefix) {
   return /^[A-Za-z0-9_.-]+$/.test(clean) ? clean : '';
 }
 
+/**
+ * Build unique current/historical prefix rows for the archive filter UI.
+ * @returns {Array<{prefix: string, filter: string, current: boolean}>}
+ */
 function wizardArchivePrefixRows() {
   const currentPrefix = _wizardArchivePrefix(document.getElementById('wiz-archive-prefix')?.value || '');
   const prefixes = _wizardUniqueList([

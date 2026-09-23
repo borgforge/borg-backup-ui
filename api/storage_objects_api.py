@@ -43,6 +43,7 @@ def _hash_suffix(value: str) -> str:
 
 
 def storage_key_for(storage_type: str, identity: str) -> str:
+    """Derive a stable storage key from target type and identity hash."""
     clean_type = "".join(ch if ch.isalnum() else "_" for ch in str(storage_type or "").strip().lower()).strip("_")
     clean_type = clean_type or "storage"
     return f"storage_{clean_type}_{_hash_suffix(identity)}"
@@ -121,6 +122,7 @@ def _settings_profiles(settings: dict[str, Any] | None) -> tuple[dict[str, dict[
 
 
 def normalize_storages(rows: Any) -> list[dict[str, Any]]:
+    """Normalize valid storage rows and drop duplicate or unusable keys."""
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in rows if isinstance(rows, list) else []:
@@ -180,6 +182,7 @@ def normalize_storages(rows: Any) -> list[dict[str, Any]]:
 
 
 def read_storage_store(config: dict) -> dict[str, Any]:
+    """Read the canonical storage inventory and normalize its objects."""
     path = storages_file(config)
     from inventory_store import read_cached_inventory
     payload = read_cached_inventory(path)

@@ -62,7 +62,12 @@ def _control_state_for_run(run_id: str) -> dict:
 
 
 def cancel_job(config: dict, job_key: str, run_id: str, requested_by: str = "") -> dict:
-    """Request cooperative cancellation for the currently active run."""
+    """Request cancellation only for the selected job's current active run.
+
+    Returns updated control state. Raises FileNotFoundError if no run is active,
+    ValueError for mismatched identity, or RuntimeError in an uncancellable
+    recovery phase.
+    """
     key = _validate_job_key(job_key)
     runtime = get_job_runtime_state(config, key)
     active_run_id = str(runtime.get("run_id") or "").strip()
@@ -339,6 +344,7 @@ def migrate_jobs_metadata_dir(scripts_dir: Path, data_root: Path | None = None) 
 
 @dataclass
 class JobInfo:
+    """Static job metadata plus settings used by API lists and scheduler views."""
     key: str
     backup_type: str
     location: str
@@ -406,6 +412,11 @@ class _JobState:
 
 
 class JobManager:
+    """Process-local manager for starting and observing backup subprocesses.
+
+    One active process is retained per job key; launch is serialized to avoid
+    duplicate concurrent starts for the same key.
+    """
     _instance: Optional["JobManager"] = None
     _init_lock = threading.Lock()
 
@@ -426,6 +437,11 @@ class JobManager:
 
     def start(self, job_key: str, command: List[str], cwd: Path,
               extra_env: Optional[Dict[str, str]] = None) -> tuple:
+        """Launch a backup subprocess, returning ``(started, error_message)``.
+
+        ``extra_env`` augments the process environment; an already running job
+        returns a failure tuple rather than starting a duplicate.
+        """
         # Keep the check, process launch and state publication one operation.
         with self._start_lock:
             return self._start_locked(job_key, command, cwd, extra_env)

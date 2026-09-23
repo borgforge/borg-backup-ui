@@ -190,6 +190,11 @@ def _storage_context(ui_config: dict, profile_key: str = "") -> dict:
 
 
 def get_storagebox_setup_status(ui_config: dict, profile_key: str = "", *, probe_auth: bool = True) -> dict:
+    """Report SSH profile/key readiness and optionally probe remote access.
+
+    ``probe_auth=False`` avoids SSH and target detection; the response marks
+    whether authentication was actually checked.
+    """
     p = _storage_context(ui_config, profile_key)
     key_file = Path(p["ssh_key"]) if p.get("ssh_key") else Path("")
     pub_file = Path(str(key_file) + ".pub") if str(key_file) else Path("")

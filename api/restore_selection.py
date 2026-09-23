@@ -7,6 +7,11 @@ MAX_SELECTIONS = 256
 
 
 def normalize_paths(source_path, source_paths=None):
+    """Validate and deduplicate one to 256 literal archive paths.
+
+    ``source_paths`` takes precedence over ``source_path`` when supplied.
+    Raises ValueError for invalid count, type or path segments.
+    """
     values = [source_path] if source_paths is None else source_paths
     if not isinstance(values, list) or not 1 <= len(values) <= MAX_SELECTIONS:
         raise ValueError(f"Select between 1 and {MAX_SELECTIONS} files or folders")
@@ -23,6 +28,11 @@ def normalize_paths(source_path, source_paths=None):
 
 
 def selected_entries(repo, archive, env, paths):
+    """Resolve selected paths against a Borg archive and remove covered descendants.
+
+    Returns path/type records. Raises ValueError when a selected path is absent;
+    archive indexing may also fail if Borg cannot read the archive.
+    """
     from archive_browser import build_archive_index
     index = build_archive_index(repo, archive, env)
     entries = []
@@ -41,7 +51,13 @@ def selected_entries(repo, archive, env, paths):
 
 
 def destination_plan(entries, target, mode):
-    """Keep paths below the common parent; retain single-directory behavior."""
+    """Map archive entries beneath ``target`` while preserving their relative layout.
+
+    A single directory matching the target name restores its contents directly.
+    Returns planned items, the shared parent and Borg strip count; ``skip`` mode
+    marks existing destinations. Raises ValueError for unsafe symlink or
+    non-directory destination components.
+    """
     parents = [str(PurePosixPath(e["path"]).parent) for e in entries]
     common = os.path.commonpath(parents)
     common = "" if common == "." else common

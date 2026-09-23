@@ -67,6 +67,10 @@ function restoreStatusIcon(status) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[status] || icons.warning}</svg>`;
 }
 
+/**
+ * Show a clamped restore wizard step and update navigation/precheck state.
+ * @param {number} step Requested step from one through five.
+ */
 function restoreSetStep(step) {
   const next = Math.max(1, Math.min(5, Number(step) || 1));
   restoreState.step = next;
@@ -107,6 +111,7 @@ function restoreSetStep(step) {
   _restoreRenderSelectionSummary();
 }
 
+/** Switch step five between precheck and running/completed restore views. */
 function restoreSetLiveMode(enabled) {
   restoreState.liveMode = !!enabled;
   const panel = document.getElementById('restore-step-panel-5');
@@ -125,6 +130,7 @@ function restoreSetLiveMode(enabled) {
   }
 }
 
+/** Open the restore wizard or history, loading history when selected. */
 function restoreSwitchView(view) {
   const next = view === 'history' ? 'history' : 'wizard';
   if (restoreState.view !== next) window.BBUI?.utils?.dom?.clearPageFeedback?.();

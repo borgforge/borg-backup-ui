@@ -8,6 +8,7 @@ MAX_COUNT = 1_000_000
 
 
 class RetentionError(ValueError):
+    """Invalid retention policy, with an API-facing error code."""
     def __init__(self, message, code="retention_invalid"):
         super().__init__(message)
         self.api_code = code
@@ -21,6 +22,13 @@ def _count(value):
 
 
 def normalize_retention(source):
+    """Validate a retention mapping and return normalized Borg policy fields.
+
+    Supports tiered, last-N and keep-all modes. Preserves the old four-field
+    representation when no extended fields are supplied. Raises
+    RetentionError for invalid counts, intervals or a tiered policy that would
+    keep no archives.
+    """
     if not isinstance(source, dict):
         raise RetentionError("Job retention is missing")
     mode = source.get("mode", "tiered")
@@ -55,6 +63,10 @@ def normalize_retention(source):
 
 
 def prune_arguments(source):
+    """Convert a valid policy into Borg prune arguments.
+
+    Keep-all mode raises RetentionError because no prune should run.
+    """
     policy = normalize_retention(source)
     if policy.get("mode") == "all":
         raise RetentionError("Prune is disabled: this job keeps all archives", "retention_keep_all")
@@ -70,6 +82,7 @@ def prune_arguments(source):
 
 
 def retention_description(source):
+    """Return a readable description of a validated retention policy."""
     policy = normalize_retention(source)
     if policy.get("mode") == "all":
         return "Keep all archives; prune disabled"

@@ -3,6 +3,13 @@
 window.BBUI = window.BBUI || {};
 window.BBUI.api = window.BBUI.api || {};
 
+/**
+ * Resolve a structured API message through the active locale.
+ * @param {object|null} payload API response body, possibly with message/error codes.
+ * @param {string} [fallback] Text used when no translation exists.
+ * @param {object} [extraParams] Additional interpolation values.
+ * @returns {string} Translated or fallback message.
+ */
 function apiMessage(payload, fallback = '', extraParams = {}) {
   const data = payload && typeof payload === 'object' ? payload : {};
   const i18n = window.BBUI?.components?.i18n;
@@ -19,6 +26,13 @@ function apiMessage(payload, fallback = '', extraParams = {}) {
   return fallback || i18n?.t?.('api.errors.unknown') || 'Request failed.';
 }
 
+/**
+ * Resolve an API error with an HTTP-status fallback.
+ * @param {object|null} payload Parsed error response.
+ * @param {number} [status] HTTP response status.
+ * @param {string} [fallback] Optional caller-supplied fallback.
+ * @returns {string} Localized error text.
+ */
 function apiErrorMessage(payload, status = 0, fallback = '') {
   const i18n = window.BBUI?.components?.i18n;
   const resolvedFallback = fallback || (i18n?.t?.('api.errors.http', { status }) || `HTTP ${status}`);
@@ -54,6 +68,12 @@ window.BBUI.api.errorMessage = apiErrorMessage;
     return String(url).includes('/api/auth/login');
   }
 
+  /**
+   * Preserve native fetch behavior while redirecting once on API session expiry.
+   * @param {RequestInfo|URL} input Fetch request target.
+   * @param {RequestInit} [init] Native fetch options.
+   * @returns {Promise<Response>} The original response when fetch succeeds.
+   */
   window.fetch = async function bbuiFetchWith401(input, init) {
     const response = await nativeFetch(input, init);
     if (

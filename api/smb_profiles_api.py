@@ -43,7 +43,11 @@ def _profile_slug(value: str, *, fallback: str = "smb") -> str:
 
 
 def generate_smb_mount_path(profile_name: str, *, suffix: str = "") -> str:
-    """Return a managed SMB mount path for a new profile."""
+    """Create the managed SMB mount base and return a unique-looking path.
+
+    A provided ``suffix`` is sanitized and truncated; otherwise a random
+    suffix is generated. The returned leaf itself is not mounted here.
+    """
     SMB_MANAGED_MOUNT_BASE.mkdir(parents=True, exist_ok=True)
     clean_suffix = re.sub(r"[^a-z0-9]+", "", str(suffix or "").strip().lower())[:8]
     if not clean_suffix:
@@ -108,6 +112,11 @@ def normalize_smb_profile_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any
 
 
 def validate_smb_profiles_json(raw_value: str) -> List[Dict[str, Any]]:
+    """Decode and normalize SMB profiles, rejecting incomplete entries.
+
+    Raises ValueError for invalid JSON, non-list payloads, missing required
+    fields or nonabsolute credential-file paths.
+    """
     try:
         decoded = json.loads(str(raw_value or "[]"))
     except (json.JSONDecodeError, TypeError, ValueError):

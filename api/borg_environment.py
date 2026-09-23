@@ -12,6 +12,7 @@ UNKNOWN_UNENCRYPTED = "BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK"
 
 
 def borg_security_dir(config: dict) -> Path:
+    """Return the persistent plugin-owned Borg security directory."""
     return data_root(config) / "borg-security"
 
 
@@ -27,6 +28,11 @@ def legacy_security_dir() -> Path:
 
 
 def ensure_borg_security_dir(config: dict) -> Path:
+    """Validate writable security storage and create its directory if needed.
+
+    Raises ValueError for a relative path and OSError for unavailable storage
+    or a symbolic-link directory. Newly created directories use mode 0700.
+    """
     try:
         from status import status_storage_unavailable_reason
     except ImportError:  # Standalone restore-test worker exposes runtime/lib as lib.
@@ -48,6 +54,12 @@ def ensure_borg_security_dir(config: dict) -> Path:
 def apply_borg_environment(
     env: dict[str, str], config: dict, *, encryption: str = "", persistent_keys: bool = True,
 ) -> dict[str, str]:
+    """Return an isolated Borg environment with persistent security state.
+
+    Only explicitly unencrypted repositories get Borg's unknown-repository
+    acknowledgment. ``persistent_keys`` additionally configures key storage;
+    security-directory validation can raise ValueError or OSError.
+    """
     out = dict(env)
     out["BORG_SECURITY_DIR"] = str(ensure_borg_security_dir(config))
     # Missing state can be acknowledged only for an explicitly unencrypted
