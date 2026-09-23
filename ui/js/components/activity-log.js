@@ -7,6 +7,10 @@
   const BLOCK_BYTES = 65536 + 4;
   const t = (key, params = {}) => window.BBUI.components.i18n.t(`jobs.${key}`, params);
 
+  /**
+   * Keep a bounded set of DOM log windows while allowing navigation through
+   * the complete server-side activity file and following new output.
+   */
   class ActivityLog {
     constructor({ job, run, output, onStatus, onFollow }) {
       Object.assign(this, { job, run, output, onStatus, onFollow });
@@ -38,6 +42,7 @@
       this.bindings.push(() => el.removeEventListener(event, handler));
     }
 
+    /** Cancel the prior request and return a sequence token for stale-response checks. */
     begin(follow = this.follow) {
       clearTimeout(this.timer);
       this.controller?.abort();
@@ -49,6 +54,10 @@
       return this.sequence;
     }
 
+    /**
+     * Fetch a log window and update run metadata, returning null for an obsolete
+     * response. HTTP and API errors reject for the caller to display.
+     */
     async request(params, sequence) {
       const query = new URLSearchParams({ job: this.job, run: this.run || '', ...params });
       if (this.fileId) query.set('file_id', this.fileId);
@@ -75,6 +84,7 @@
       return data;
     }
 
+    /** Fetch and render a window, then schedule the next poll when appropriate. */
     async load(params, action, follow = this.follow) {
       if (this.closed) return;
       const sequence = this.begin(follow);
@@ -113,6 +123,10 @@
       }
     }
 
+    /**
+     * Insert or replace a contiguous window and evict distant DOM blocks while
+     * preserving the user's scroll position when follow mode is disabled.
+     */
     render(data, action) {
       const oldTop = this.output.scrollTop;
       const oldHeight = this.output.scrollHeight;
@@ -218,6 +232,7 @@
       this.schedule();
     }
 
+    /** Stop polling and detach listeners when the log panel is closed. */
     close() {
       this.closed = true;
       this.sequence += 1;

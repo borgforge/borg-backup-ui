@@ -25,6 +25,7 @@
     return window.BBUI?.components?.i18n?.t?.(key) || fallback || key;
   }
 
+  /** Register or remove a named modal callback supplied by a page module. */
   function setAction(name, fn) {
     const key = String(name || '').trim();
     if (!key) return;
@@ -50,6 +51,11 @@
     return String(el?.value || '');
   }
 
+  /**
+   * Serialize enabled form control values for unsaved-change detection.
+   * @param {Element|null} root Dialog containing the controls.
+   * @returns {string} JSON snapshot; `[]` when no root is available.
+   */
   function formSnapshot(root) {
     if (!root?.querySelectorAll) return '[]';
     const rows = Array.from(root.querySelectorAll('input, textarea, select'))
@@ -123,6 +129,12 @@
     if (confirmed && typeof action === 'function') action();
   }
 
+  /**
+   * Continue immediately for a clean form or open a discard confirmation.
+   * @param {boolean} dirty Whether unsaved changes exist.
+   * @param {Function} onConfirm Called only if the user confirms discarding.
+   * @returns {boolean} Whether the caller may close immediately.
+   */
   function confirmDiscardIfDirty(dirty, onConfirm) {
     if (!dirty) return true;
     openDiscardConfirm(onConfirm);

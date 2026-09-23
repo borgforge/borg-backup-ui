@@ -20,6 +20,7 @@ STARTUP_IMPORT_KEY = "startup_status_import_v1"
 
 
 def widget_cache_path(config: dict) -> Path:
+    """Resolve the configured or default JSON cache path for the Unraid tile."""
     raw = str(config.get("UNRAID_DASHBOARD_WIDGET_FILE") or "").strip()
     if raw:
         return Path(raw)
@@ -36,6 +37,10 @@ def write_unraid_dashboard_widget_cache(
     app_version: str = "",
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    """Build and atomically persist the tile cache from existing status data.
+
+    Returns the written payload. No Borg process or repository probe is run.
+    """
     payload = build_unraid_dashboard_widget_cache(
         config,
         status_data,

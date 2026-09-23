@@ -166,7 +166,12 @@ def _backup_conf_created_at_from_meta(meta: dict[str, Any], name: str, fallback_
 
 
 def backup_conf_snapshot(ui_config: dict, keep: int = 10, reason: str = "") -> Optional[Path]:
-    """Creates a timestamped backup of backup.conf before write operations."""
+    """Copy the current backup.conf to a timestamped, retained snapshot.
+
+    Returns the snapshot path or None when no config file exists. Older
+    snapshots beyond ``keep`` are removed; metadata/write cleanup failures
+    are tolerated where the implementation explicitly catches them.
+    """
     conf_file = Path(ui_config["BACKUP_SCRIPTS_DIR"]) / "config" / "backup.conf"
     if not conf_file.exists():
         return None
@@ -1088,10 +1093,12 @@ def _is_required_storage_mount_available(mount_path: Path) -> bool:
 
 
 def ensure_data_dirs(global_data_dir: str, *, read_only: bool = False) -> dict:
-    """Check storage, with a read-only mode for routine status requests.
+    """Validate required data storage and return its derived directories.
 
-    Routine status reads inspect existing directories and access permissions.
-    Setup and runtime writers retain the actual write probe by default.
+    Read-only mode checks existing directories and access permissions. Default
+    mode creates missing directories and writes/removes a status-dir probe.
+    Raises ValueError for a blank root and RuntimeError for unavailable mounts,
+    stopped array or unusable directories.
     """
     root = (global_data_dir or "").strip()
     if not root:

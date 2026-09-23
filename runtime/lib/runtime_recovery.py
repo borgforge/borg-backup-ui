@@ -15,6 +15,7 @@ _SCHEMA_VERSION = 1
 
 
 def runtime_recovery_file_from_env(env: dict[str, Any]) -> Path:
+    """Resolve the recovery-state path from the explicit setting or data root."""
     explicit = str(env.get("RUNTIME_RECOVERY_FILE") or "").strip()
     if explicit:
         return Path(explicit)
@@ -26,6 +27,11 @@ def runtime_recovery_file_from_env(env: dict[str, Any]) -> Path:
 
 
 def read_runtime_recovery_state(path: Path) -> dict[str, Any]:
+    """Read recovery entries, returning an empty state for missing data.
+
+    Unreadable or malformed JSON returns a state with ``read_error``; a
+    non-object payload returns the empty state.
+    """
     if not path.exists():
         return _empty_state()
     try:
@@ -46,6 +52,7 @@ def read_runtime_recovery_state(path: Path) -> dict[str, Any]:
 
 
 def pending_runtime_recovery_entries(path: Path) -> list[dict[str, Any]]:
+    """Return entries still pending restart or marked as restart failures."""
     state = read_runtime_recovery_state(path)
     return [
         entry for entry in state.get("entries", [])
@@ -64,6 +71,12 @@ def record_runtime_stopped(
     log_file: str,
     job_id: str = "",
 ) -> str:
+    """Persist stopped Docker/VM targets before backup processing continues.
+
+    Returns an entry ID, or an empty string when no valid targets remain.
+    ``targets`` are deduplicated by ID/name. The entry records the current PID
+    and stays pending until restart is marked or an operator acknowledges it.
+    """
     normalized_targets = _normalize_targets(targets)
     if not normalized_targets:
         return ""
@@ -94,6 +107,10 @@ def record_runtime_stopped(
 
 
 def mark_runtime_restarted(path: Path, entry_id: str, *, success: bool = True, message: str = "") -> None:
+    """Remove a successfully restarted entry or persist a restart failure.
+
+    A blank or unknown ID leaves the state unchanged.
+    """
     if not entry_id:
         return
 
@@ -121,6 +138,10 @@ def mark_runtime_restarted(path: Path, entry_id: str, *, success: bool = True, m
 
 
 def acknowledge_runtime_recovery(path: Path, entry_id: str) -> bool:
+    """Remove a recovery entry after operator acknowledgement.
+
+    Returns whether a matching entry was removed.
+    """
     clean_id = str(entry_id or "").strip()
     if not clean_id:
         return False
@@ -137,6 +158,11 @@ def acknowledge_runtime_recovery(path: Path, entry_id: str) -> bool:
 
 
 def summarize_runtime_recovery(path: Path) -> dict[str, Any]:
+    """Summarize pending and failed restarts for the health UI.
+
+    Entries with a live owner PID stay active; failed restarts or abandoned
+    entries appear in ``entries`` as needing attention.
+    """
     state = read_runtime_recovery_state(path)
     pending = pending_runtime_recovery_entries(path)
     attention = [e for e in pending if _entry_needs_attention(e)]
@@ -193,6 +219,7 @@ def _open_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _entry_needs_attention(entry: dict[str, Any]) -> bool:
+    """Flag failed restarts and pending entries whose owner PID is no longer live."""
     state = str(entry.get("state") or "").strip()
     if state == "restart_failed":
         return True
@@ -225,6 +252,11 @@ def _mutate_state(
     path: Path,
     mutate: Callable[[dict[str, Any]], tuple[Any, bool]],
 ) -> Any:
+    """Apply ``mutate`` under an exclusive file lock and write only if requested.
+
+    The callback returns ``(result, should_write)``; its result is passed back
+    to the caller. Directory and lock-file creation are intentional side effects.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = path.with_suffix(path.suffix + ".lock")
     with lock_path.open("a+", encoding="utf-8") as lock_handle:
@@ -251,6 +283,10 @@ def _write_state(path: Path, state: dict[str, Any]) -> None:
 
 
 def _write_state_unlocked(path: Path, state: dict[str, Any]) -> None:
+    """Atomically replace recovery JSON after updating schema and timestamp.
+
+    Callers are responsible for holding the state lock.
+    """
     state["schema_version"] = _SCHEMA_VERSION
     state["updated_at"] = _now()
     tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")

@@ -11,11 +11,16 @@ JOB_SCHEMA_VERSION = 4
 
 
 class JobIdConflictError(ValueError):
+    """A unique job UUID could not be allocated (HTTP conflict for API callers)."""
     api_code = "job_id_exists"
     api_status = 409
 
 
 def new_job_id(jobs_dir: Path | None = None) -> str:
+    """Generate an unused canonical UUID, checking ``jobs_dir`` when supplied.
+
+    Raises JobIdConflictError after 100 collisions.
+    """
     for _ in range(100):
         candidate = str(uuid.uuid4())
         if jobs_dir is None or not (jobs_dir / f"{candidate}.json").exists():
@@ -24,6 +29,7 @@ def new_job_id(jobs_dir: Path | None = None) -> str:
 
 
 def validate_job_id(value: object) -> str:
+    """Return a canonical nonzero UUID string or raise ValueError."""
     value = str(value or "").strip()
     try:
         parsed = uuid.UUID(value)
@@ -35,6 +41,7 @@ def validate_job_id(value: object) -> str:
 
 
 def metadata_job_id(meta: dict) -> str:
+    """Require matching canonical ``job_id`` and ``job_key`` metadata fields."""
     job_id = validate_job_id(meta.get("job_id"))
     if meta.get("job_key") != job_id:
         raise ValueError("Job ID and job key disagree")
@@ -42,6 +49,7 @@ def metadata_job_id(meta: dict) -> str:
 
 
 def active_job_ids(config: dict) -> set[str]:
+    """Discover IDs of configured jobs, or an empty set without a scripts root."""
     from jobs_api import discover_jobs, resolve_data_root, resolve_scripts_dir
     if not config.get("BACKUP_SCRIPTS_DIR"):
         return set()
@@ -65,6 +73,7 @@ def _filename_label(value: str, max_bytes: int, fallback: str) -> str:
 
 
 def job_file_component(job_name: str, location: str, job_id: str, *, name_bytes: int = 100) -> str:
+    """Build a filesystem-safe job label containing its validated identity."""
     identity = validate_job_id(job_id)
     place = _filename_label(location, 10, "unknown")
     name = _filename_label(job_name, min(100, name_bytes), "Job")
@@ -72,6 +81,10 @@ def job_file_component(job_name: str, location: str, job_id: str, *, name_bytes:
 
 
 def job_log_filename(job_name: str, location: str, job_id: str, run_label: str) -> str:
+    """Create a bounded activity-log filename for a job and run label.
+
+    Raises ValueError for an invalid run label or job UUID.
+    """
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", run_label):
         raise ValueError("Invalid log run label")
     # Longer activity run identifiers also fit the shared 255-byte limit.

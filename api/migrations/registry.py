@@ -40,6 +40,7 @@ def _config_dir(config: dict):
 
 
 def read_central_migration_state(config: dict) -> dict[str, Any]:
+    """Read the persisted central migration audit state."""
     return read_state(config)
 
 
@@ -86,6 +87,10 @@ def _failure_result(migration: Any, phase: str, exc: Exception) -> dict[str, Any
 
 
 def _validate_detection(migration_id: str, detected: Any) -> dict[str, Any]:
+    """Require a detection mapping with a boolean ``required`` field.
+
+    Raises MigrationContractError for malformed migration results.
+    """
     if not isinstance(detected, dict):
         raise MigrationContractError(
             f"Migration {migration_id} detect() must return a mapping."
@@ -98,6 +103,11 @@ def _validate_detection(migration_id: str, detected: Any) -> dict[str, Any]:
 
 
 def _validate_apply_result(migration: Any, result: Any) -> dict[str, Any]:
+    """Validate an apply result and normalize its identity/status fields.
+
+    Failure details are masked and bounded. Raises MigrationContractError for
+    an unsupported status, wrong migration ID or non-mapping return value.
+    """
     migration_id = str(migration.MIGRATION_ID)
     if not isinstance(result, dict):
         raise MigrationContractError(
@@ -216,6 +226,11 @@ def _read_proven_applied_times(config: dict) -> dict[str, str]:
 
 
 def _write_state_and_log(config: dict, summary: dict[str, Any]) -> None:
+    """Persist the startup summary while preserving established final states.
+
+    Writes migration state atomically. Effective results also append an audit
+    event; audit append errors are deliberately ignored after state is saved.
+    """
     ts = datetime.now().isoformat(timespec="seconds")
     previous = read_central_migration_state(config)
     previous_migrations = previous.get("migrations") if isinstance(previous.get("migrations"), dict) else {}
@@ -293,6 +308,13 @@ def _write_state_and_log(config: dict, summary: dict[str, Any]) -> None:
 
 
 def run_startup_migrations(config: dict) -> dict[str, Any]:
+    """Detect and apply registered startup migrations in declared order.
+
+    Final central-registry results are skipped unless marked for recheck.
+    Detection/apply exceptions become masked failure results; subsequent
+    migrations are blocked. Returns the per-migration summary and persists it
+    through the central state/audit writer.
+    """
     state = read_central_migration_state(config)
     results: dict[str, Any] = {}
     applied = []

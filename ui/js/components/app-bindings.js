@@ -48,6 +48,7 @@
     });
   }
 
+  /** Apply client-side role and maintenance affordances to the current DOM. */
   function applyRoleUiGates() {
     const role = _currentRole();
     const isViewer = role === 'viewer';
@@ -99,6 +100,7 @@
     roleUiObserver.observe(root, { childList: true, subtree: true });
   }
 
+  /** Register navigation handlers, including the unsaved-settings leave guard. */
   function bindCoreNavigation() {
     document.addEventListener('click', (event) => {
       const coreLink = event.target.closest('[data-core-action="goto-settings"]');
@@ -122,6 +124,7 @@
     });
   }
 
+  /** Register delegated and direct handlers for the application's main views. */
   function bindMainActions() {
     document.getElementById('mobile-backdrop')?.addEventListener('click', () => core()?.closeMobileNav?.());
     document.getElementById('mobile-nav-toggle-btn')?.addEventListener('click', () => core()?.toggleMobileNav?.());

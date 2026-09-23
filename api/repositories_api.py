@@ -116,6 +116,7 @@ def _repo_identity(path_or_uri: str) -> str:
 
 
 def repository_key_for(seed: str, identity: str) -> str:
+    """Derive a stable repository key from a readable seed and path/URI hash."""
     base = _slug(seed, "repository")
     if not base.startswith("repo_"):
         base = f"repo_{base}"
@@ -171,7 +172,11 @@ def _join_path(base: str, relative: str) -> str:
 
 
 def effective_repository_path(storage: dict[str, Any], relative_path: str) -> str:
-    """Build the effective Borg repository path/URI for a storage object."""
+    """Build the effective Borg path or URI for a storage and relative path.
+
+    Validates the target and path; raises ValueError when required storage
+    details are missing or the relative path contains unsafe segments.
+    """
     if not isinstance(storage, dict):
         raise ValueError("Storage target is missing")
     location = str(storage.get("location") or storage.get("storage_type") or "").strip().lower()
@@ -340,6 +345,11 @@ def enrich_repository_display_fields(repo: dict[str, Any]) -> dict[str, Any]:
 
 
 def read_repository_store(config: dict, *, preserve_legacy: bool = False) -> dict[str, Any]:
+    """Read and normalize the canonical repository inventory.
+
+    Cached data is used when available; otherwise the inventory is read under
+    its lock. ``preserve_legacy`` retains migration fields during normalization.
+    """
     path = repositories_file(config)
     from inventory_store import read_cached_inventory
     payload = read_cached_inventory(path)
@@ -378,6 +388,7 @@ def read_repository_store_for_api(config: dict) -> dict[str, Any]:
 
 
 def write_repository_store(config: dict, store: dict[str, Any], *, preserve_legacy: bool = False) -> None:
+    """Normalize and atomically replace repository inventory under its lock."""
     path = repositories_file(config)
     payload = {
         "schema_version": SCHEMA_VERSION,
@@ -1345,6 +1356,12 @@ def _borg_info_fields(payload: dict[str, Any], archive_payload: dict[str, Any] |
 
 
 def refresh_repository_info(config: dict, repository_key: str) -> dict[str, Any]:
+    """Read Borg info/list for one repository and persist refreshed metadata.
+
+    Returns the updated display object. Raises ValueError for missing metadata
+    or passphrase file and RepositoryBusyError when a resource lock is active;
+    Borg and storage failures propagate. Temporary SMB mounts are cleaned up.
+    """
     key = str(repository_key or "").strip()
     store = read_repository_store(config)
     rows = store["repositories"]
@@ -1959,6 +1976,12 @@ def get_repository_info_refresh_status(config: dict) -> dict[str, Any]:
 
 
 def get_repository_archives(config: dict, repository_key: str, limit: int = 100) -> dict[str, Any]:
+    """List newest Borg archives directly from a managed repository.
+
+    Returns repository ID, total archive count and at most 500 archive rows.
+    Raises ValueError for missing repository or passphrase metadata; Borg and
+    storage errors propagate. An SMB mount guard is cleaned up after the read.
+    """
     key = str(repository_key or "").strip()
     maximum = max(1, min(int(limit or 100), 500))
     store = read_repository_store(config)

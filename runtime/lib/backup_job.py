@@ -167,7 +167,13 @@ class BackupJobConfig:
 
     @classmethod
     def from_config(cls, env: dict) -> "BackupJobConfig":
-        """Liest Konfiguration aus Umgebungsvariablen."""
+        """Build job configuration from the runner's environment mapping.
+
+        Requires a canonical job UUID and at least one absolute source path in
+        ``BACKUP_PATHS_JSON``. Symlinked sources and matching exclusions are
+        resolved for Borg. Invalid required fields raise ValueError; malformed
+        optional exclusion JSON is ignored with a warning.
+        """
         from job_identity import validate_job_id
         job_id = validate_job_id(env.get("BORG_UI_JOB_KEY"))
         try:
@@ -260,14 +266,13 @@ class BackupJobConfig:
 
 class BackupJob:
     """
-    Context Manager für Borg Backup Jobs.
+    Context manager for backup lifecycle, cleanup and status persistence.
 
-    Ersetzt die Bash EXIT/ERR-Traps aus borg-common.sh. Der __exit__-Block
-    übernimmt Cleanup, Notifications, Status-Speicherung und Docker-Neustart.
-
-    Skip-Szenarien (check_usb_mount, check_parity) lösen SystemExit(0) aus.
-    __exit__ erkennt dies und überspringt Notifications/Status-Speicherung,
-    da die Skips bereits eigene Notifications senden.
+    Entering logs the run and acquires its lock. Exiting attempts Docker/VM
+    recovery, persists the run or skip status, releases the lock and refreshes
+    the dashboard cache. A SystemExit(0) from USB/parity preflight marks a
+    skipped run. Original failures are not suppressed; cleanup failure raises
+    RuntimeError when there was no original failure.
     """
 
     def __init__(
@@ -311,6 +316,7 @@ class BackupJob:
     # ------------------------------------------------------------------
 
     def __enter__(self) -> "BackupJob":
+        """Start the run, log effective settings and acquire its lock."""
         self._start_time = time.time()
         self._log_startup_banner()
         self._create_lock()
@@ -347,6 +353,11 @@ class BackupJob:
         logger.info("")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """Finalize status, recover stopped services and release the run lock.
+
+        Returns False so an original exception propagates. Cleanup failures
+        raise RuntimeError only when no original failure is being propagated.
+        """
         cleanup_errors: List[Tuple[str, Exception]] = []
         original_exception = exc_type is not None
         original_failure = original_exception and not (
@@ -495,7 +506,11 @@ class BackupJob:
         selected_names: Optional[List[str]] = None,
         exclude_names: Optional[List[str]] = None,
     ) -> None:
-        """Stoppt Docker-Container für das Backup."""
+        """Stop configured containers and record their pending recovery state.
+
+        ``exclude_names`` selects the stop-except path; otherwise
+        ``selected_names`` limits stopping, and None stops all containers.
+        """
         if self.docker_manager is not None:
             if exclude_names is not None:
                 self._docker_stop_result = self.docker_manager.stop_except_selected(
@@ -537,7 +552,12 @@ class BackupJob:
                 )
 
     def shutdown_vms(self, selected_names: Optional[List[str]] = None) -> None:
-        """Fährt VMs herunter (mit Vorwarnung). Tracking für Neustart in __exit__."""
+        """Shut down all or selected VMs and record the returned stop state.
+
+        The recorded VMs are restarted during explicit recovery or ``__exit__``.
+        Shutdown failures propagate from the VM manager; a partial shutdown
+        that raises before returning is not recorded here.
+        """
         if self.vm_manager is not None:
             if selected_names is None:
                 self._vm_shutdown_result = self.vm_manager.shutdown_all()

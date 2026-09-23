@@ -23,7 +23,11 @@ def resolve_restore_test_dir(config: dict) -> Path:
 
 
 def list_restore_tests(config: dict) -> List[dict]:
-    """Liest .test-Dateien aus konfiguriertem Restore-Test-Verzeichnis."""
+    """Load active jobs' restore-test reports from the configured directory.
+
+    Unreadable JSON and reports for unknown jobs are skipped. Returned rows
+    include formatted status/duration fields and are sorted by result/date.
+    """
     test_dir = resolve_restore_test_dir(config)
     if not test_dir.exists():
         return []
@@ -73,6 +77,11 @@ def list_restore_tests(config: dict) -> List[dict]:
 
 
 def list_restore_test_plan(config: dict) -> dict:
+    """Build per-job restore-test policy, evidence and scheduler diagnostics.
+
+    The response separates evidence validity from the next cron occurrence;
+    it also includes counts by mode and overdue state for the planning UI.
+    """
     from jobs_api import list_jobs, resolve_data_root
 
     from schedule_api import get_schedules, installed_schedule_lines, restore_test_cron_line

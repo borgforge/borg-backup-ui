@@ -39,7 +39,12 @@ def _runtime_modes(kind: str) -> set[str]:
 
 
 def list_source_directories(prefix: str = "", limit: int = 40, base_path: Path | None = None) -> list[dict]:
-    """Return safe directory suggestions below /mnt for backup sources."""
+    """Suggest existing source directories contained in the allowed base.
+
+    Defaults to /mnt; ``base_path`` can constrain a caller-specific tree.
+    Results are capped at 100 and paths resolving outside the base are omitted.
+    Invalid or inaccessible prefixes return an empty list.
+    """
     base = (base_path or Path("/mnt")).resolve()
     if not base.is_dir():
         return []

@@ -6,6 +6,12 @@ window.BBUI.utils.dom = window.BBUI.utils.dom || {};
 
 let pageFeedbackDismissal = null;
 
+/**
+ * Auto-dismiss non-error feedback after reading time, pausing on interaction.
+ * @param {HTMLElement} el Feedback container.
+ * @param {string} severity Normalized message severity.
+ * @param {string} text Message used to estimate reading time.
+ */
 function schedulePageFeedbackDismissal(el, severity, text) {
   if (severity === 'error') return;
   // Give longer messages reading time (20 characters/second), up to 30 seconds.
@@ -50,6 +56,12 @@ function schedulePageFeedbackDismissal(el, severity, text) {
   resume();
 }
 
+/**
+ * Show inline dialog feedback or a page notification without shifting controls.
+ * @param {string} elementId Target element ID.
+ * @param {string} type Requested severity (`warn` maps to `warning`).
+ * @param {string} text Message to show; blank text hides the target.
+ */
 function showMsg(elementId, type, text) {
   const el = document.getElementById(elementId);
   if (!el) return;
@@ -90,6 +102,7 @@ function showMsg(elementId, type, text) {
   schedulePageFeedbackDismissal(el, severity, text);
 }
 
+/** Hide feedback and cancel any dismissal timer for this element. */
 function hideEl(elementId) {
   if (pageFeedbackDismissal?.element.id === elementId) {
     pageFeedbackDismissal.cancel();
@@ -102,6 +115,7 @@ function hideEl(elementId) {
   }
 }
 
+/** Clear page notifications while leaving inline dialog messages intact. */
 function clearPageFeedback() {
   if (pageFeedbackDismissal) {
     pageFeedbackDismissal.cancel();

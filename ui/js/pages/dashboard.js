@@ -51,6 +51,7 @@ async function fetchDashboardSchedules() {
   }
 }
 
+/** Refresh dashboard status, job metadata, schedules and health together. */
 async function refreshStatus() {
   const btn = document.getElementById('refresh-btn');
   if (btn) btn.classList.add('loading');

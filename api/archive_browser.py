@@ -34,6 +34,7 @@ class ArchiveNotFoundError(ValueError):
 
 
 class ArchiveDirectoryNotFoundError(ValueError):
+    """A requested strict directory does not exist in the selected archive."""
     api_code = "restore_directory_unavailable"
     api_status = 404
 
@@ -45,7 +46,14 @@ def _prune_expired_cache_entries(now: float) -> None:
 
 
 def build_archive_index(repo: str, archive: str, env: dict[str, str]) -> dict[str, dict[str, dict[str, Any]]]:
-    """Load and briefly cache a parent-to-children index for one archive."""
+    """Index an archive's direct children by parent path and cache briefly.
+
+    Runs ``borg list --json-lines`` with ``env``; implicit parent directories
+    are synthesized for navigation. Raises TimeoutError after 300 seconds,
+    ArchiveNotFoundError for a confirmed absent archive, or RuntimeError for
+    other Borg failures and invalid archive data. Invalidation prevents an
+    in-flight load from repopulating the cache.
+    """
     key = (str(repo), str(archive))
     now = time.monotonic()
     with _CACHE_LOCK:
@@ -153,7 +161,12 @@ def list_archive_directory(
     *,
     strict: bool = False,
 ) -> list[dict[str, Any]]:
-    """Return the direct children of one directory in a Borg archive."""
+    """Return directories-first, name-sorted direct children of ``path``.
+
+    With ``strict=True``, a missing or non-directory path raises
+    ArchiveDirectoryNotFoundError. Listing errors from index construction
+    propagate to the caller.
+    """
     index = build_archive_index(repo, archive, env)
     current = str(path or "").rstrip("/")
     if strict and current:

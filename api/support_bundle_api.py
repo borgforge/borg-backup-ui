@@ -54,6 +54,7 @@ def _sanitize_scalar(value: Any) -> Any:
 
 
 def sanitize_data(value: Any) -> Any:
+    """Recursively mask secret/privacy fields and values in support data."""
     if isinstance(value, dict):
         out: Dict[str, Any] = {}
         for key, raw in value.items():
@@ -71,6 +72,7 @@ def sanitize_data(value: Any) -> Any:
 
 
 def sanitize_text(text: str) -> str:
+    """Mask known secret, URI and personal-data patterns in a text value."""
     return str(_sanitize_scalar(text))
 
 
@@ -174,6 +176,12 @@ def _arc_safe_path(prefix: str, path: Path) -> str:
 
 
 def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
+    """Collect sanitized configuration, status and bounded logs into a ZIP.
+
+    Returns a suggested filename, base64 ZIP payload, byte size and included
+    file list. Missing optional files are recorded in the archive's sanitizing
+    report; errors from required collection or ZIP creation propagate.
+    """
     from config_api import get_conf_file, read_expanded_conf
     from system_health_api import get_system_health_data
 

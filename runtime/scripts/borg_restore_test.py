@@ -230,6 +230,12 @@ def discover_repos(conf: dict) -> list:
 # ── Restore Tester ─────────────────────────────────────────────────────────────
 
 class RestoreTest:
+    """Run policy-aware Borg verification and persist per-job test evidence.
+
+    Construction opens a timestamped log. ``test_repo`` coordinates resource
+    locks and the selected verification level; callers close the log when the
+    run finishes.
+    """
     STEP_IDS = [
         "repo_reachable",
         "archive_readable",
@@ -564,6 +570,12 @@ class RestoreTest:
     # ── Haupttest ──────────────────────────────────────────────────────────────
 
     def test_repo(self, repo: dict) -> int:
+        """Verify one repository under its resource lock.
+
+        Scheduled calls adopt the job's policy and skip disabled/not-due runs.
+        Returns 0 for success, 1 for failure, 2 for skipped, or 3 for an
+        unavailable repository. Busy-lock skips are persisted as test results.
+        """
         from jobs_api import resolve_resource_lock_dir
         from wizard_runner import ResourceLockSet
         from restore_tests_api import _normalize_restore_policy

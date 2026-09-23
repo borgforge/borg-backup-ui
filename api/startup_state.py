@@ -25,6 +25,7 @@ def _safe_error(value: Any) -> str:
 
 
 def normal_startup_state(summary: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build nonblocking startup status, including migrations just applied."""
     data = summary if isinstance(summary, dict) else {}
     return {
         "mode": NORMAL_MODE,
@@ -45,6 +46,11 @@ def migration_maintenance_state(
     *,
     runner_error: BaseException | None = None,
 ) -> dict[str, Any]:
+    """Build blocking startup status from migration or runner failures.
+
+    Error text is secret-masked and bounded; the response includes failed IDs
+    and recovery recommendation codes for the UI.
+    """
     data = summary if isinstance(summary, dict) else {}
     failed = [str(item) for item in data.get("failed", []) if str(item).strip()]
     results = data.get("results") if isinstance(data.get("results"), dict) else {}
@@ -95,6 +101,7 @@ def migration_maintenance_state(
 
 
 def set_startup_state(config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and store process-local startup status in ``config``."""
     normalized = dict(state if isinstance(state, dict) else normal_startup_state())
     normalized["mode"] = (
         MAINTENANCE_MODE

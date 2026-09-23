@@ -49,7 +49,12 @@ def _safe_component(value: str, pattern: re.Pattern[str], label: str) -> str:
 
 
 class JobControl:
-    """Runner-owned state plus an API-owned cancellation marker."""
+    """Manage runner-owned phase state and an API-owned cancellation marker.
+
+    Constructing an instance validates job/run IDs and creates a private run
+    directory. An attached process receives SIGINT once when cancellation is
+    requested; callers must detach it when the process completes.
+    """
 
     def __init__(self, job_key: str, run_id: str, root: Path = CONTROL_ROOT) -> None:
         self.job_key = _safe_component(job_key, _JOB_KEY_RE, "job key")
@@ -77,6 +82,7 @@ class JobControl:
         finished: bool = False,
         exit_code: Optional[int] = None,
     ) -> Dict[str, Any]:
+        """Persist the current phase and cancellation policy, returning its state."""
         previous = read_control_state(self.run_id, self.run_dir.parent)
         data: Dict[str, Any] = {
             "schema_version": 1,
@@ -100,6 +106,7 @@ class JobControl:
         return self.cancel_file.is_file()
 
     def attach_process(self, process: Any) -> None:
+        """Monitor a live subprocess for cancellation and send one SIGINT."""
         with self._process_lock:
             self._active_process = process
         self._monitor_stop.clear()
@@ -127,6 +134,7 @@ class JobControl:
         self._monitor_thread.start()
 
     def detach_process(self) -> None:
+        """Stop the cancellation monitor and forget the attached process."""
         self._monitor_stop.set()
         if self._monitor_thread is not None:
             self._monitor_thread.join(timeout=1.0)
@@ -136,6 +144,11 @@ class JobControl:
 
 
 def read_control_state(run_id: str, root: Path = CONTROL_ROOT) -> Dict[str, Any]:
+    """Read a run's control JSON, returning an empty mapping if unavailable.
+
+    Raises ValueError for an invalid run ID. A present cancellation marker is
+    reflected in the returned state even if the JSON has not been updated.
+    """
     safe_run_id = _safe_component(run_id, _RUN_ID_RE, "run id")
     path = Path(root) / safe_run_id / "state.json"
     try:
@@ -156,6 +169,12 @@ def request_cancel(
     requested_by: str = "",
     root: Path = CONTROL_ROOT,
 ) -> Dict[str, Any]:
+    """Request cancellation by creating an idempotent marker for an active run.
+
+    Raises FileNotFoundError for an inactive run, ValueError for mismatched IDs,
+    or RuntimeError when its current phase forbids cancellation. Returns the
+    control state marked as cancellation requested.
+    """
     safe_job_key = _safe_component(job_key, _JOB_KEY_RE, "job key")
     safe_run_id = _safe_component(run_id, _RUN_ID_RE, "run id")
     state = read_control_state(safe_run_id, root)

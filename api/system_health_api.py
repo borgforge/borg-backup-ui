@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 
 def _read_migration_state(path: Path) -> Dict[str, Any]:
+    """Read current or legacy migration status with an unreadable-state fallback."""
     if not path.exists():
         return {
             "success": False,
@@ -368,6 +369,11 @@ def _notification_delivery_summary(config: dict, root: Path) -> dict[str, Any]:
 
 
 def get_system_health_data(config: dict) -> Dict[str, Any]:
+    """Build current storage, migration, startup and job health diagnostics.
+
+    Inventory read failures are included as diagnostic entries rather than
+    preventing the rest of the health response.
+    """
     try:
         from .startup_state import get_startup_state
     except ImportError:  # Runtime imports api modules directly from API_ROOT.

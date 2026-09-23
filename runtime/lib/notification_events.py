@@ -34,6 +34,7 @@ MAX_EMAIL_LOG_CHARS = 40_000
 
 @dataclass
 class NotificationEvent:
+    """Logical notification and backup context shared by all delivery channels."""
     event_type: str
     title: str
     message: str
@@ -54,12 +55,14 @@ class NotificationEvent:
 
 @dataclass
 class AppriseEventResult:
+    """Apprise delivery outcome and the profiles that accepted the event."""
     delivered: bool = False
     delivered_profiles: list[str] = field(default_factory=list)
     mode: str = "sync"
 
 
 def event_set(config: dict, key: str, default: set[str]) -> set[str]:
+    """Parse a comma-separated event setting or copy its default set."""
     raw = str(config.get(key, "") or "").strip()
     if not raw:
         return set(default)
@@ -67,6 +70,7 @@ def event_set(config: dict, key: str, default: set[str]) -> set[str]:
 
 
 def reminder_interval_hours(config: dict) -> int:
+    """Return the configured reminder interval, clamped to at least one hour."""
     raw = str(config.get("NOTIFY_REMINDER_INTERVAL_HOURS", str(DEFAULT_REMINDER_INTERVAL_HOURS)) or "")
     try:
         return max(1, int(raw.strip()))
@@ -80,7 +84,12 @@ def send_event(
     *,
     mail_config: Optional[MailConfig] = None,
 ) -> dict[str, bool]:
-    """Send one logical event to all configured channels, best-effort."""
+    """Dispatch an event to configured Unraid, email and Apprise channels.
+
+    Returns per-channel delivery booleans; an empty event type delivers
+    nothing. Email needs ``mail_config``. Apprise may queue asynchronously,
+    and the outcome is recorded in the lifecycle log when applicable.
+    """
     results = {"unraid": False, "email": False, "apprise": False}
     event_type = str(event.event_type or "").strip()
     if not event_type:

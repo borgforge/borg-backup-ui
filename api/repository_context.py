@@ -31,10 +31,16 @@ def _data_root(config: dict) -> Path:
 
 
 def jobs_dir(config: dict) -> Path:
+    """Return the canonical job-metadata directory beneath the configured data root."""
     return _data_root(config) / "config" / "jobs"
 
 
 def load_job_metadata(config: dict, job_key: str) -> dict[str, Any]:
+    """Load a job by canonical UUID, rejecting unreadable or mismatched metadata.
+
+    Raises ValueError for a malformed UUID and RepositoryContextError for
+    missing or inconsistent stored metadata.
+    """
     from job_identity import validate_job_id, metadata_job_id
     key = validate_job_id(job_key)
     if not key:
@@ -77,6 +83,10 @@ def repository_by_key(
     *,
     inventory: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
+    """Find an assigned repository in the supplied inventory or persistent store.
+
+    Raises RepositoryContextError for a missing key or repository.
+    """
     from repositories_api import read_repository_store
 
     key = str(repository_key or "").strip()
@@ -104,6 +114,10 @@ def storage_by_key(
     *,
     inventory: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
+    """Find a storage target by key, optionally using a preloaded inventory.
+
+    Raises RepositoryContextError when the assignment cannot be resolved.
+    """
     from storage_objects_api import read_storage_store
 
     key = str(storage_key or "").strip()
@@ -126,6 +140,10 @@ def storage_by_key(
 
 
 def repository_path(repository: dict[str, Any], storage: dict[str, Any]) -> str:
+    """Resolve the repository's relative path against its storage target.
+
+    Raises RepositoryContextError for an absent or invalid relative path.
+    """
     from repositories_api import effective_repository_path
 
     relative_path = str(repository.get("relative_path") or "").strip()
@@ -146,6 +164,13 @@ def resolve_job_repository_context(
     allow_legacy_job: bool = False,
     inventory: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
+    """Resolve a job to its repository, storage, location and Borg credentials.
+
+    ``job`` and ``inventory`` allow callers to reuse already loaded metadata.
+    By default legacy job fields and missing encrypted passphrase files are
+    rejected. Raises RepositoryContextError for incomplete or inconsistent
+    assignments; returns the resolved objects and connection metadata.
+    """
     metadata = dict(job) if isinstance(job, dict) else load_job_metadata(config, job_key)
     resolved_job_key = str(metadata.get("job_key") or job_key or "").strip()
     if not allow_legacy_job:
@@ -201,6 +226,11 @@ def resolve_job_repository_context(
 
 
 def profile_job_references(config: dict, location: str) -> dict[str, list[str]]:
+    """Group resolvable jobs at a location by referenced storage profile.
+
+    Unreadable or unresolved job files are omitted. Values are job IDs with an
+    optional display name for use by profile-deletion checks.
+    """
     wanted = str(location or "").strip().lower()
     references: dict[str, list[str]] = {}
     directory = jobs_dir(config)
@@ -237,6 +267,7 @@ def profile_job_references(config: dict, location: str) -> dict[str, list[str]]:
 
 
 def jobs_using_repository(config: dict, repository_key: str) -> list[str]:
+    """List job IDs assigned to a repository, skipping unreadable job files."""
     wanted = str(repository_key or "").strip()
     if not wanted:
         return []

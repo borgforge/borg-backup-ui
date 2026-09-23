@@ -33,6 +33,7 @@ _ARCHIVE_RX = re.compile(r"^[a-zA-Z0-9_.:-]+$")
 
 
 class RestoreRepositoryBusy(ValueError):
+    """The selected repository is held by another operation (HTTP conflict)."""
     def __init__(self, message: str, *, holder: str = "", resource: str = "") -> None:
         super().__init__(message)
         self.api_status = 409
@@ -115,6 +116,7 @@ def _is_safe_restore_root_text(raw: str) -> bool:
 
 
 def list_allowed_target_roots(config: dict) -> list[str]:
+    """Return deduplicated configured restore roots, defaulting to /mnt/user."""
     roots = _get_restore_allowed_roots(config)
     out: list[str] = []
     seen: set[str] = set()
@@ -467,6 +469,7 @@ def _raise_repository_busy(resource: str, holder: str) -> None:
 
 
 def ensure_restore_repository_available(config: dict, info: dict) -> None:
+    """Raise RestoreRepositoryBusy if another operation holds this repository."""
     resource = _repository_resource(info)
     lock = _active_repository_lock(config, info)
     if lock:
@@ -474,6 +477,11 @@ def ensure_restore_repository_available(config: dict, info: dict) -> None:
 
 
 def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, restore_id: str):
+    """Acquire a heartbeat resource lock for a restore run.
+
+    Returns the lock set for caller-managed release; raises
+    RestoreRepositoryBusy with holder details when acquisition fails.
+    """
     from jobs_api import resolve_resource_lock_dir
     from wizard_runner import ResourceLockSet
 
@@ -562,6 +570,12 @@ def _get_max_runtime_hours(config: dict) -> int:
 
 def list_archives_with_context(config: dict, job_key: str, *, filter_mode: str = "job",
                                archive_filter: str = "") -> dict:
+    """List a job's archives using its prefixes, all archives or a custom glob.
+
+    Returns sorted, deduplicated archives and filter metadata. Raises
+    ValueError for invalid filter input and propagates Borg/storage failures.
+    An SMB mount guard is cleaned up on every return path.
+    """
     job_key = _validate_job_key(job_key)
     if filter_mode not in ("job", "all", "custom"):
         raise ValueError("Invalid archive filter mode")
@@ -604,6 +618,11 @@ def list_archives(config: dict, job_key: str) -> List[dict]:
 
 
 def list_files(config: dict, job_key: str, archive: str, path: str) -> List[dict]:
+    """List direct children of a directory in a job's selected archive.
+
+    Rejects invalid identities, busy repositories and absent archive folders;
+    temporary SMB mount state is cleaned up before returning.
+    """
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
     from smb_mount import ensure_smb_mount_for_job
@@ -895,6 +914,13 @@ def restore_precheck(
     dry_run: bool = True,
     source_paths=None,
 ) -> dict:
+    """Validate a restore selection and destination without extracting files.
+
+    ``source_paths`` may supply multiple selections. Returns destination
+    planning, mount and free-space metadata. The historical ``dry_run`` input
+    does not trigger Borg extraction; the response reports a metadata-only
+    check with ``dry_run=False``. Validation and Borg errors propagate.
+    """
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
     from smb_mount import ensure_smb_mount_for_job
@@ -1215,6 +1241,12 @@ def start_restore_async(
     source_paths=None,
     dry_run: bool = False,
 ) -> dict:
+    """Register a restore run and start its daemon worker thread.
+
+    Returns ``started`` and a restore ID immediately. The worker records
+    progress and terminal results separately; invalid job/archive/selection
+    input raises before the thread starts.
+    """
     job_key = _validate_job_key(job_key)
     archive = _validate_archive_name(archive)
     paths = normalize_paths(source_path, source_paths)
@@ -1394,6 +1426,11 @@ def list_restore_runs(config: dict, limit: int = 20) -> dict:
 
 
 def list_restore_history(config: dict, limit: int = 20, offset: int = 0) -> dict:
+    """Return newest retained restore summaries and pagination metadata.
+
+    Nonpositive ``limit`` means all rows from ``offset``; positive limits are
+    capped at 1000. Invalid numeric inputs fall back to defaults.
+    """
     _ensure_restore_runs_loaded(config)
     try:
         limit = int(limit)
@@ -1417,6 +1454,7 @@ def list_restore_history(config: dict, limit: int = 20, offset: int = 0) -> dict
 
 
 def get_restore_history_detail(config: dict, restore_id: str) -> dict:
+    """Read one retained run detail by validated ID or raise ValueError."""
     _ensure_restore_runs_loaded(config)
     rid = str(restore_id or "").strip()
     if not rid:
@@ -1436,6 +1474,11 @@ def get_restore_history_detail(config: dict, restore_id: str) -> dict:
 
 
 def delete_restore_history_entry(config: dict, restore_id: str) -> dict:
+    """Remove a retained restore detail and its summary index entry.
+
+    Returns deletion flags and remaining count; invalid, missing or
+    undeletable entries raise ValueError. This does not remove restored files.
+    """
     _ensure_restore_runs_loaded(config)
     rid = str(restore_id or "").strip()
     if not rid:

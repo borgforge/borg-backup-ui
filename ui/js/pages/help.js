@@ -14,6 +14,7 @@ function helpLanguage() {
   return window.BBUI?.components?.i18n?.getLanguage?.() === 'en' ? 'en' : 'de';
 }
 
+/** Resolve a supported help document path for the selected locale and view. */
 function helpDocumentPath(language, view = _helpView) {
   if (view === 'manual') return `/ui/docs/manual/${language}/user-manual.md`;
   return language === 'en' ? '/ui/docs/help.en.md' : '/ui/docs/help.md';

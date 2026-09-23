@@ -5,6 +5,11 @@
   window.BBUI.components = window.BBUI.components || {};
   const t = (key, params = {}) => window.BBUI?.components?.i18n?.t?.(`api.messages.${key}`, params) || key;
 
+  /**
+   * Open a retained log by its server-recognized path in the viewer dialog.
+   * Fetch and missing-file errors are rendered in the dialog.
+   * @param {string} filePath Log identifier/path accepted by the history API.
+   */
   async function open(filePath) {
     const modal = document.getElementById('log-viewer-modal');
     const body  = document.getElementById('log-viewer-body');

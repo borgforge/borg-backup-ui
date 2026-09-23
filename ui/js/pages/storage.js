@@ -46,6 +46,7 @@ function storageModalSnapshot(modalId) {
   return storageModalHelpers().formSnapshot?.(modal) || '';
 }
 
+/** Compare the visible storage dialog with its captured form snapshot. */
 function storageModalDirty(modalId, snapshot) {
   const modal = document.getElementById(modalId);
   if (!modal || modal.classList.contains('hidden')) return false;

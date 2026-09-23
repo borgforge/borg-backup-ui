@@ -79,6 +79,7 @@ function restoreTestsJobIcon(job) {
   return `<span class="type-icon rt-sidebar-job-icon${colorClass}">${typeIcon(icon)}</span>`;
 }
 
+/** Render the job/location navigation for restore-test planning. */
 function renderRestoreTestsSidebar() {
   const list = document.getElementById('rt-sidebar-job-list');
   if (!list) return;

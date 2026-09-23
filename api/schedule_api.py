@@ -28,6 +28,7 @@ def _schedules_path(config: dict) -> Path:
 
 
 def get_schedules(config: dict) -> dict:
+    """Read stored backup schedules, returning an empty mapping if unavailable."""
     path = _schedules_path(config)
     if not path.exists():
         return {}
@@ -38,6 +39,11 @@ def get_schedules(config: dict) -> dict:
 
 
 def save_schedule(config: dict, job_key: str, cron: str, enabled: bool) -> dict:
+    """Validate, persist and install one job schedule into crontab.
+
+    Returns saved/applied flags and the apply result. A crontab failure raises
+    RuntimeError after ``schedules.json`` has already been written.
+    """
     job_key = validate_schedule_job_key(config, job_key)
     _validate_cron(cron)
     schedules = get_schedules(config)
@@ -51,6 +57,10 @@ def save_schedule(config: dict, job_key: str, cron: str, enabled: bool) -> dict:
 
 
 def delete_schedule(config: dict, job_key: str) -> dict:
+    """Remove a job schedule from storage and reinstall the managed crontab.
+
+    A crontab failure raises RuntimeError after the stored schedule is removed.
+    """
     job_key = _validate_job_key_text(job_key)
     schedules = get_schedules(config)
     schedules.pop(job_key, None)
@@ -104,6 +114,11 @@ def prune_orphaned_schedules(config: dict, log_fn=None) -> dict:
 
 
 def write_schedules(config: dict, schedules: dict, *, validate_known_jobs: bool = True) -> None:
+    """Validate and replace ``schedules.json`` with normalized schedule rows.
+
+    ``validate_known_jobs=False`` allows cleanup of orphaned entries without
+    requiring their deleted jobs to resolve. Invalid cron expressions raise.
+    """
     normalized: dict = {}
     for raw_key, raw_sched in (schedules or {}).items():
         key = validate_schedule_job_key(config, raw_key) if validate_known_jobs else _validate_job_key_text(raw_key)
@@ -119,7 +134,11 @@ def write_schedules(config: dict, schedules: dict, *, validate_known_jobs: bool 
 
 
 def apply_all_schedules(config: dict) -> dict:
-    """Schreibt alle aktiven Schedules in den Crontab (idempotent, sicher bei Fehler)."""
+    """Install enabled backup and per-job restore-test entries in crontab.
+
+    Validates keys, cron expressions and API port before updating the managed
+    crontab block. Returns the update result; failures propagate.
+    """
     schedules = get_schedules(config)
     port = _validate_port(config.get("PORT", "8765"))
     token_file = str(Path(config.get("BACKUP_SCRIPTS_DIR", "/boot/config/borg-backup")) / "config" / ".api-token")

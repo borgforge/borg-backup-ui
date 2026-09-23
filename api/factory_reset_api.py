@@ -170,6 +170,11 @@ def _active_operation_blockers(config: dict) -> list[dict[str, str]]:
 
 
 def factory_reset_status(config: dict) -> dict[str, Any]:
+    """Report reset roots and repository/operation blockers without deleting data.
+
+    Raises FactoryResetBlocked when the configured operational root is too
+    broad or blocker discovery cannot be trusted.
+    """
     root = _data_root(config)
     operational = _configured_operational_root(config)
     _validate_operational_root(operational)
@@ -191,6 +196,11 @@ def factory_reset_status(config: dict) -> dict[str, Any]:
 
 
 def validate_factory_reset_request(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
+    """Require all explicit confirmations and an unblocked current reset plan.
+
+    Returns the checked status. Raises ValueError for missing/mismatched user
+    confirmation and FactoryResetBlocked for repositories or active operations.
+    """
     if not isinstance(payload, dict):
         raise ValueError("Invalid factory reset request")
     status = factory_reset_status(config)
@@ -220,6 +230,11 @@ def schedule_factory_reset(
     request_id: str,
     script_dir: Path,
 ) -> dict[str, Any]:
+    """Write a private one-shot reset marker and launch the detached worker.
+
+    The caller supplies the previously validated ``status``. Returns scheduling status;
+    missing worker or an existing marker raises rather than launching twice.
+    """
     plugin_dir = Path(script_dir)
     worker = plugin_dir / "api" / "factory_reset_worker.py"
     if not worker.is_file():

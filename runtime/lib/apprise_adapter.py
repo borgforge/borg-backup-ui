@@ -35,6 +35,7 @@ class AppriseAdapterError(RuntimeError):
 
 @dataclass(frozen=True)
 class AppriseDeliveryResult:
+    """Provider-neutral delivery result and safe message code."""
     ok: bool
     message: str
     message_code: str = ""

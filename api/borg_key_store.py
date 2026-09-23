@@ -27,6 +27,7 @@ def borg_keys_dir(config: dict) -> Path:
 
 
 def ensure_borg_keys_dir(config: dict) -> Path:
+    """Create the persistent Borg key directory and restrict it to mode 0700."""
     path = borg_keys_dir(config)
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(path, 0o700)
@@ -61,6 +62,7 @@ def repository_id_from_key_file(path: Path) -> str:
 
 
 def find_key_file(directory: Path, repository_id: str) -> Path | None:
+    """Find a key file whose embedded repository ID matches, or return None."""
     expected = str(repository_id or "").strip().lower()
     if not expected or not directory.is_dir():
         return None
